@@ -1,6 +1,7 @@
 //! The pluggable index-kind contract: what a kind must implement to be built at write time and
 //! probed at read time.
 
+use std::any::Any;
 use std::fmt::Debug;
 use std::ops::Range;
 use std::sync::Arc;
@@ -17,11 +18,14 @@ use vortex_mask::Mask;
 use vortex_session::VortexSession;
 use vortex_session::registry::Id;
 
+use crate::layouts::indexed::reader::OpenArgs;
+use crate::layouts::indexed::reader::OpenIndex;
+use crate::layouts::indexed::reader::open_index;
+use crate::layouts::indexed::writer::IndexWriter;
+use crate::layouts::indexed::writer::TypedIndexWriter;
+
 /// Stable registry id of an index kind, e.g. `vortex.idx.reverse_index`.
 pub type IndexId = Id;
-
-/// Shared handle to a registered index kind.
-pub type IndexVTableRef = Arc<dyn IndexVTable>;
 
 /// A pluggable index kind.
 ///
@@ -29,16 +33,35 @@ pub type IndexVTableRef = Arc<dyn IndexVTable>;
 /// [`IndexSession`](crate::layouts::indexed::session::IndexSession) under a stable string id,
 /// which is what gets written into the layout metadata. A reader that does not have the kind
 /// registered drops the index child and reads the data child directly.
+///
+/// The associated types are what keeps repeated work out of the read path. A reader parses a
+/// spec's [`Options`](Self::Options) once, and decodes each chunk of the index child into a
+/// [`Chunk`](Self::Chunk) at most once, sharing it between every expression that probes the
+/// chunk. Each expression is reduced by [`plan`](Self::plan) to a [`Query`](Self::Query) that
+/// [`resolve`](Self::resolve) answers against those decoded chunks.
 pub trait IndexVTable: 'static + Send + Sync + Debug {
+    /// The kind's options, parsed from the self-versioned options blob.
+    type Options: 'static + Send + Sync;
+    /// Builds the index on the write path.
+    type Builder: IndexBuilder + 'static;
+    /// What [`plan`](Self::plan) reduced one expression to, answered by
+    /// [`resolve`](Self::resolve).
+    type Query: 'static + Send + Sync;
+    /// One chunk of the index child, decoded into whatever form the kind answers queries from.
+    type Chunk: 'static + Send + Sync;
+
     /// Stable string id, e.g. `vortex.idx.reverse_index`.
     fn id(&self) -> IndexId;
 
-    /// The dtype of the index child this kind builds over values of `dtype` with `options`, or
-    /// `None` if it cannot index them.
+    /// Parse an options blob, as configured on the write side or stored in a spec.
+    fn deserialize_options(&self, options: &[u8]) -> VortexResult<Self::Options>;
+
+    /// The dtype of the index child this kind builds over values of `dtype`, or `None` if it
+    /// cannot index them.
     ///
     /// This is the index's schema: the writer rejects a builder whose output differs from it, and
     /// the reader skips an index whose stored dtype no longer matches it.
-    fn index_dtype(&self, dtype: &DType, options: &[u8]) -> VortexResult<Option<DType>>;
+    fn index_dtype(&self, dtype: &DType, options: &Self::Options) -> Option<DType>;
 
     /// Construct a builder for the write path.
     ///
@@ -51,10 +74,10 @@ pub trait IndexVTable: 'static + Send + Sync + Debug {
     fn builder(
         &self,
         dtype: &DType,
-        options: &[u8],
+        options: &Self::Options,
         data_block_len: Option<u64>,
         session: &VortexSession,
-    ) -> VortexResult<Box<dyn IndexBuilder>>;
+    ) -> VortexResult<Self::Builder>;
 
     /// Decide whether this index can serve `expr`, a single conjunct scoped to the data child's
     /// `dtype`.
@@ -68,8 +91,101 @@ pub trait IndexVTable: 'static + Send + Sync + Debug {
         expr: &BoundExpression,
         dtype: &DType,
         index_dtype: &DType,
-        options: &[u8],
-    ) -> VortexResult<Option<IndexQueryPlan>>;
+        options: &Self::Options,
+    ) -> VortexResult<Option<IndexQueryPlan<Self::Query>>>;
+
+    /// Decode one chunk of the index child, in the index child's own schema.
+    ///
+    /// Called at most once per chunk per reader, however many expressions probe it.
+    fn decode(
+        &self,
+        chunk: ArrayRef,
+        options: &Self::Options,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Self::Chunk>;
+
+    /// Answer `query` from one partition's decoded chunks, as a locator local to the partition.
+    ///
+    /// `chunks` are in index-row order and omit every chunk the plan's
+    /// [`filter`](IndexQueryPlan::filter) ruled out, so they hold everything the query can match
+    /// in this partition. `data_row_count` is the partition's row count in the data child.
+    fn resolve(
+        &self,
+        query: &Self::Query,
+        chunks: &[Arc<Self::Chunk>],
+        data_row_count: u64,
+        options: &Self::Options,
+    ) -> VortexResult<RowLocator>;
+}
+
+/// Shared handle to a registered index kind, erasing its [`IndexVTable`] types.
+#[derive(Clone)]
+pub struct IndexVTableRef(Arc<dyn DynIndexVTable>);
+
+impl IndexVTableRef {
+    /// Erase an index kind so it can be registered and configured alongside others.
+    pub fn new<V: IndexVTable>(vtable: V) -> Self {
+        Self(Arc::new(vtable))
+    }
+
+    /// The kind's stable id.
+    pub fn id(&self) -> IndexId {
+        self.0.id()
+    }
+
+    /// The concrete kind, if it is a `V`.
+    pub fn as_opt<V: IndexVTable>(&self) -> Option<&V> {
+        self.0.as_any().downcast_ref()
+    }
+
+    /// Parse `options` once for writing.
+    pub(crate) fn open_writer(&self, options: &[u8]) -> VortexResult<Arc<dyn IndexWriter>> {
+        Arc::clone(&self.0).open_writer(options)
+    }
+
+    /// Parse a spec's options once for reading, or `None` if its stored dtype is not what the
+    /// kind now declares.
+    pub(crate) fn open_reader(&self, args: OpenArgs<'_>) -> VortexResult<Option<Arc<dyn OpenIndex>>> {
+        Arc::clone(&self.0).open_reader(args)
+    }
+}
+
+impl Debug for IndexVTableRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+/// The type-erased side of [`IndexVTable`], implemented for every kind.
+///
+/// Kept crate-private so the reader and writer can hand out their own typed state without it
+/// becoming public API; kinds only ever implement [`IndexVTable`].
+pub(crate) trait DynIndexVTable: 'static + Send + Sync + Debug {
+    fn id(&self) -> IndexId;
+
+    fn as_any(&self) -> &dyn Any;
+
+    fn open_writer(self: Arc<Self>, options: &[u8]) -> VortexResult<Arc<dyn IndexWriter>>;
+
+    fn open_reader(self: Arc<Self>, args: OpenArgs<'_>) -> VortexResult<Option<Arc<dyn OpenIndex>>>;
+}
+
+impl<V: IndexVTable> DynIndexVTable for V {
+    fn id(&self) -> IndexId {
+        IndexVTable::id(self)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn open_writer(self: Arc<Self>, options: &[u8]) -> VortexResult<Arc<dyn IndexWriter>> {
+        Ok(Arc::new(TypedIndexWriter::try_new(self, options)?))
+    }
+
+    fn open_reader(self: Arc<Self>, args: OpenArgs<'_>) -> VortexResult<Option<Arc<dyn OpenIndex>>> {
+        open_index(self, args)
+    }
 }
 
 /// Accumulates index content while the data stream is written.
@@ -179,29 +295,15 @@ impl RowLocator {
 
 /// How an index intends to answer one expression.
 ///
-/// The probe runs `filter` as an ordinary scan over the index child — inheriting its zone maps,
-/// lazy segment IO and compression — then hands the surviving index rows to `resolve`, which folds
-/// them into a locator over the data child's rows.
-pub struct IndexQueryPlan {
+/// The probe prunes the index child's chunks with `filter`, inheriting its zone maps, then decodes
+/// the surviving chunks (each at most once per reader) and hands them to
+/// [`IndexVTable::resolve`] to answer `query`.
+pub struct IndexQueryPlan<Q> {
     /// Whether the resulting mask is exact or a superset.
     pub exactness: IndexExactness,
-    /// Predicate bound to the index child's dtype, selecting the posting rows this query needs.
+    /// Predicate bound to the index child's dtype. Chunks it proves hold no matching index rows
+    /// are neither loaded nor decoded.
     pub filter: BoundExpression,
-    /// Folds the selected posting rows into a locator over the data child's row space.
-    pub resolve: Arc<dyn IndexResolve>,
-}
-
-/// Post-processes probed index rows into a [`RowLocator`].
-pub trait IndexResolve: 'static + Send + Sync {
-    /// `postings` are the index-child rows that survived [`IndexQueryPlan::filter`], projected in
-    /// the index child's own schema.
-    ///
-    /// For a partitioned index, `postings` come from a single partition, `data_row_count` is that
-    /// partition's row count, and the returned locator is local to the partition.
-    fn resolve(
-        &self,
-        postings: &ArrayRef,
-        data_row_count: u64,
-        ctx: &mut ExecutionCtx,
-    ) -> VortexResult<RowLocator>;
+    /// What [`IndexVTable::resolve`] answers from the decoded chunks.
+    pub query: Q,
 }

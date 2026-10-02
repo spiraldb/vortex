@@ -10,17 +10,18 @@ use futures::FutureExt;
 use futures::TryFutureExt;
 use futures::future::BoxFuture;
 use futures::future::Shared;
+use futures::future::try_join_all;
+use itertools::Itertools;
 use roaring::RoaringBitmap;
 use tracing::trace;
-use vortex_array::ArrayRef;
 use vortex_array::MaskFuture;
 use vortex_array::VortexSessionExecute;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldMask;
 use vortex_array::expr::BoundExpression;
-use vortex_array::stream::ArrayStreamExt;
 use vortex_buffer::BitBufferMut;
 use vortex_error::SharedVortexResult;
+use vortex_error::VortexError;
 use vortex_error::VortexResult;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
@@ -35,12 +36,12 @@ use crate::LazyReaderChildren;
 use crate::RowSplits;
 use crate::SplitRange;
 use crate::layouts::indexed::IndexSpec;
-use crate::layouts::indexed::IndexVTableRef;
 use crate::layouts::indexed::IndexedLayout;
 use crate::layouts::indexed::index::IndexExactness;
-use crate::layouts::indexed::index::IndexResolve;
+use crate::layouts::indexed::index::IndexId;
+use crate::layouts::indexed::index::IndexVTable;
 use crate::layouts::indexed::index::RowLocator;
-use crate::scan::scan_builder::ScanBuilder;
+use crate::scan::split_by::SplitBy;
 use crate::segments::SegmentSource;
 
 /// One partition's probe result, shared by every split that needs it.
@@ -48,18 +49,18 @@ type SharedProbe = Shared<BoxFuture<'static, SharedVortexResult<Arc<RowLocator>>
 
 /// A reader for the [`crate::layouts::indexed::Indexed`] layout.
 ///
-/// Probes happen once per expression per index partition: each partition's result is a cached
-/// shared future, and every split overlapping that partition slices its own rows out of it rather
-/// than re-probing. When more than one spec claims the same expression, the first `Exact` claim
-/// covering every partition wins outright; failing that, every claiming spec's locator is kept and
-/// intersected at evaluation time.
+/// Each index is opened once per reader, which parses its options and caches its decoded chunks,
+/// so expressions probing the same chunk share one decode. Probes happen once per expression per
+/// index partition: each partition's result is a cached shared future, and every split overlapping
+/// that partition slices its own rows out of it rather than re-probing. When more than one spec
+/// claims the same expression, the first `Exact` claim covering every partition wins outright;
+/// failing that, every claiming spec's locator is kept and intersected at evaluation time.
 pub struct IndexedReader {
     layout: IndexedLayout,
     name: Arc<str>,
     lazy_children: Arc<LazyReaderChildren>,
-    session: VortexSession,
-    /// The indexes this session can probe, by position in `layout.indexes()`.
-    probeable: Vec<(usize, IndexVTableRef)>,
+    /// The indexes this session can probe, each opened once.
+    indexes: Vec<Arc<dyn OpenIndex>>,
     /// Cached claims keyed by expression. `None` means no index claimed the expression, so the
     /// lookup is not retried.
     claims: DashMap<BoundExpression, Option<Claims>>,
@@ -92,8 +93,6 @@ impl IndexedReader {
             names.push(format!("{}.index:{}", name, spec.id()).into());
         }
 
-        let probeable = probeable_indexes(&layout)?;
-
         let lazy_children = Arc::new(LazyReaderChildren::new(
             Arc::clone(layout.children()),
             dtypes,
@@ -102,13 +101,13 @@ impl IndexedReader {
             session.clone(),
             ctx,
         ));
+        let indexes = open_indexes(&layout, &lazy_children, &session)?;
 
         Ok(Self {
             layout,
             name,
             lazy_children,
-            session,
-            probeable,
+            indexes,
             claims: DashMap::default(),
         })
     }
@@ -141,31 +140,13 @@ impl IndexedReader {
         let mut exact = None;
         let mut pruning = Vec::new();
 
-        for (idx, vtable) in &self.probeable {
-            let spec = &self.layout.indexes()[*idx];
-            let Some(plan) =
-                vtable.plan(expr, self.layout.dtype(), spec.index_dtype(), spec.options())?
-            else {
+        for index in &self.indexes {
+            let Some(claim) = Arc::clone(index).claim(expr)? else {
                 continue;
             };
+            let claim = Arc::new(claim);
 
-            trace!(index = %spec.id(), %expr, filter = %plan.filter, "index claimed expression");
-
-            let index_reader = Arc::clone(self.lazy_children.get(idx + 1)?);
-            let claim = Arc::new(Claim {
-                partitions: Partitions::new(
-                    spec,
-                    self.layout.row_count(),
-                    index_reader.row_count(),
-                ),
-                index_reader,
-                filter: plan.filter,
-                resolve: plan.resolve,
-                probes: DashMap::default(),
-                session: self.session.clone(),
-            });
-
-            if plan.exactness == IndexExactness::Exact {
+            if claim.exactness == IndexExactness::Exact {
                 if claim.partitions.declined.is_empty() {
                     // Already the best possible answer everywhere: no other spec's claim on this
                     // expression, exact or not, can sharpen it or needs combining with it.
@@ -187,36 +168,225 @@ impl IndexedReader {
     }
 }
 
-/// The indexes a reader may probe, decided once per reader rather than per expression.
+/// Open every index this session can probe, once per reader rather than per expression.
 ///
 /// Unregistered kinds are inert: their child is never read. So is an index whose stored dtype its
 /// kind no longer declares, say one written by an incompatible version of it, since its plans
 /// would be bound to a schema the child does not have.
-fn probeable_indexes(layout: &IndexedLayout) -> VortexResult<Vec<(usize, IndexVTableRef)>> {
-    let mut probeable = Vec::with_capacity(layout.indexes().len());
+fn open_indexes(
+    layout: &IndexedLayout,
+    children: &Arc<LazyReaderChildren>,
+    session: &VortexSession,
+) -> VortexResult<Vec<Arc<dyn OpenIndex>>> {
+    let mut indexes = Vec::with_capacity(layout.indexes().len());
     for (idx, spec) in layout.indexes().iter().enumerate() {
         let Some(vtable) = spec.vtable() else {
             trace!(index = %spec.id(), "index kind not registered, skipping");
             continue;
         };
-        let declared = vtable.index_dtype(layout.dtype(), spec.options())?;
-        if declared.as_ref() != Some(spec.index_dtype()) {
-            trace!(
+        let slot = idx + 1;
+        let partitions = Partitions::new(
+            spec,
+            layout.row_count(),
+            layout.children().child_row_count(slot),
+        );
+        let opened = vtable.open_reader(OpenArgs {
+            spec,
+            slot,
+            dtype: layout.dtype(),
+            children: Arc::clone(children),
+            partitions: Arc::new(partitions),
+            session,
+        })?;
+        match opened {
+            Some(index) => indexes.push(index),
+            None => trace!(
                 index = %spec.id(),
                 stored = %spec.index_dtype(),
                 "index dtype does not match what its kind declares, skipping"
-            );
-            continue;
+            ),
         }
-        probeable.push((idx, Arc::clone(vtable)));
     }
-    Ok(probeable)
+    Ok(indexes)
+}
+
+/// What a kind needs to open one of its indexes for reading.
+pub(crate) struct OpenArgs<'a> {
+    spec: &'a IndexSpec,
+    /// The index child's slot in the layout's children.
+    slot: usize,
+    /// The data child's dtype.
+    dtype: &'a DType,
+    children: Arc<LazyReaderChildren>,
+    partitions: Arc<Partitions>,
+    session: &'a VortexSession,
+}
+
+/// One index opened for reading, with its options parsed and its decoded chunks cached.
+pub(crate) trait OpenIndex: Send + Sync {
+    /// This index's claim on `expr`, or `None` if its kind has none.
+    fn claim(self: Arc<Self>, expr: &BoundExpression) -> VortexResult<Option<Claim>>;
+}
+
+/// Open a spec as a `V`, or `None` if its stored dtype is not what `V` now declares.
+pub(crate) fn open_index<V: IndexVTable>(
+    vtable: Arc<V>,
+    args: OpenArgs<'_>,
+) -> VortexResult<Option<Arc<dyn OpenIndex>>> {
+    let options = vtable.deserialize_options(args.spec.options())?;
+    let index_dtype = args.spec.index_dtype();
+    if vtable.index_dtype(args.dtype, &options).as_ref() != Some(index_dtype) {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(TypedOpenIndex {
+        id: args.spec.id(),
+        vtable,
+        options: Arc::new(options),
+        dtype: args.dtype.clone(),
+        index_dtype: index_dtype.clone(),
+        children: args.children,
+        slot: args.slot,
+        partitions: args.partitions,
+        chunks: DashMap::default(),
+        session: args.session.clone(),
+    })))
+}
+
+/// A decoded chunk of the index child, shared by every probe that reads it.
+type SharedChunk<C> = Shared<BoxFuture<'static, SharedVortexResult<Arc<C>>>>;
+
+struct TypedOpenIndex<V: IndexVTable> {
+    id: IndexId,
+    vtable: Arc<V>,
+    options: Arc<V::Options>,
+    dtype: DType,
+    index_dtype: DType,
+    children: Arc<LazyReaderChildren>,
+    slot: usize,
+    partitions: Arc<Partitions>,
+    /// Decoded chunks keyed by their index-child row range, each loaded at most once.
+    chunks: DashMap<(u64, u64), SharedChunk<V::Chunk>>,
+    session: VortexSession,
+}
+
+impl<V: IndexVTable> TypedOpenIndex<V> {
+    fn index_reader(&self) -> VortexResult<&LayoutReaderRef> {
+        self.children.get(self.slot)
+    }
+
+    /// Start (or reuse) loading and decoding the index child's `rows`.
+    ///
+    /// The future holds only what decoding needs, never `self`, which owns the cache it sits in.
+    fn chunk(&self, rows: Range<u64>) -> VortexResult<SharedChunk<V::Chunk>> {
+        match self.chunks.entry((rows.start, rows.end)) {
+            Entry::Occupied(entry) => Ok(entry.get().clone()),
+            Entry::Vacant(entry) => {
+                let len = usize::try_from(rows.end - rows.start)?;
+                let array = self.index_reader()?.projection_evaluation(
+                    &rows,
+                    &BoundExpression::new_root(self.index_dtype.clone()),
+                    MaskFuture::new_true(len),
+                )?;
+                let vtable = Arc::clone(&self.vtable);
+                let options = Arc::clone(&self.options);
+                let session = self.session.clone();
+                let chunk = async move {
+                    let array = array.await?;
+                    let mut ctx = session.create_execution_ctx();
+                    Ok(Arc::new(vtable.decode(array, &options, &mut ctx)?))
+                }
+                .map_err(Arc::new)
+                .boxed()
+                .shared();
+                entry.insert(chunk.clone());
+                Ok(chunk)
+            }
+        }
+    }
+}
+
+impl<V: IndexVTable> OpenIndex for TypedOpenIndex<V> {
+    fn claim(self: Arc<Self>, expr: &BoundExpression) -> VortexResult<Option<Claim>> {
+        let Some(plan) = self
+            .vtable
+            .plan(expr, &self.dtype, &self.index_dtype, &self.options)?
+        else {
+            return Ok(None);
+        };
+        trace!(index = %self.id, %expr, filter = %plan.filter, "index claimed expression");
+
+        Ok(Some(Claim {
+            exactness: plan.exactness,
+            partitions: Arc::clone(&self.partitions),
+            prober: Arc::new(TypedProber {
+                index: self,
+                filter: plan.filter,
+                query: Arc::new(plan.query),
+            }),
+            probes: DashMap::default(),
+        }))
+    }
+}
+
+/// Probes one claim's partitions: one expression against one opened index.
+trait Prober: Send + Sync {
+    fn probe(&self, partition: usize) -> VortexResult<SharedProbe>;
+}
+
+struct TypedProber<V: IndexVTable> {
+    index: Arc<TypedOpenIndex<V>>,
+    filter: BoundExpression,
+    query: Arc<V::Query>,
+}
+
+impl<V: IndexVTable> Prober for TypedProber<V> {
+    /// Prune the partition's index chunks with the plan's filter, so zone maps on the index child
+    /// still skip chunks that cannot hold the answer, then resolve the query from the decoded
+    /// survivors, decoding each at most once per reader.
+    fn probe(&self, partition: usize) -> VortexResult<SharedProbe> {
+        let index_rows = self.index.partitions.index_rows(partition);
+        let data_rows = self.index.partitions.data_rows(partition);
+
+        let mut chunks = Vec::new();
+        if !index_rows.is_empty() {
+            let reader = self.index.index_reader()?;
+            let bounds = SplitBy::Layout.splits(reader.as_ref(), &index_rows, &[FieldMask::All])?;
+            for (start, end) in bounds.into_iter().tuple_windows() {
+                let len = usize::try_from(end - start)?;
+                let pruned =
+                    reader.pruning_evaluation(&(start..end), &self.filter, Mask::new_true(len))?;
+                chunks.push((start..end, pruned));
+            }
+        }
+
+        let index = Arc::clone(&self.index);
+        let query = Arc::clone(&self.query);
+        Ok(async move {
+            let mut surviving = Vec::with_capacity(chunks.len());
+            for (rows, pruned) in chunks {
+                if !pruned.await?.all_false() {
+                    surviving.push(index.chunk(rows)?);
+                }
+            }
+            let decoded = try_join_all(surviving).await?;
+            let locator = index.vtable.resolve(
+                &query,
+                &decoded,
+                data_rows.end - data_rows.start,
+                &index.options,
+            )?;
+            Ok(Arc::new(locator))
+        }
+        .map_err(|err: VortexError| Arc::new(err))
+        .boxed()
+        .shared())
+    }
 }
 
 /// Where each of an index's partitions lives, in the data child and in the index child.
 ///
 /// An unpartitioned index is a single partition spanning both children entirely.
-struct Partitions {
+pub(crate) struct Partitions {
     len: u64,
     data_row_count: u64,
     index_ends: Arc<[u64]>,
@@ -276,13 +446,11 @@ impl Partitions {
 }
 
 /// One index's claim on one expression, probed a partition at a time as splits need them.
-struct Claim {
-    index_reader: LayoutReaderRef,
-    filter: BoundExpression,
-    resolve: Arc<dyn IndexResolve>,
-    partitions: Partitions,
+pub(crate) struct Claim {
+    exactness: IndexExactness,
+    partitions: Arc<Partitions>,
+    prober: Arc<dyn Prober>,
     probes: DashMap<usize, SharedProbe>,
-    session: VortexSession,
 }
 
 /// One overlapping partition's contribution to [`Claim::mask`].
@@ -371,53 +539,12 @@ impl Claim {
         match self.probes.entry(partition) {
             Entry::Occupied(entry) => Ok(entry.get().clone()),
             Entry::Vacant(entry) => {
-                let probe = probe_partition(
-                    Arc::clone(&self.index_reader),
-                    self.filter.clone(),
-                    self.partitions.index_rows(partition),
-                    Arc::clone(&self.resolve),
-                    self.partitions.data_rows(partition),
-                    self.session.clone(),
-                )?;
+                let probe = self.prober.probe(partition)?;
                 entry.insert(probe.clone());
                 Ok(probe)
             }
         }
     }
-}
-
-/// Run a claim's filter as a real scan over one partition's rows of the index child, then fold
-/// the surviving posting rows into a partition-local locator.
-///
-/// Going through [`ScanBuilder`] rather than calling the reader's evaluations directly is what
-/// makes the probe cheap. The row range confines the scan to the partition's slice of the index
-/// child, and within it the scan splits at the child's natural chunk boundaries and prunes each
-/// split before projecting it, so the sorted key column's zone map narrows the probe to the few
-/// chunks that can hold the query's keys and no other posting bytes are ever fetched.
-fn probe_partition(
-    index_reader: LayoutReaderRef,
-    filter: BoundExpression,
-    index_rows: Range<u64>,
-    resolve: Arc<dyn IndexResolve>,
-    data_rows: Range<u64>,
-    session: VortexSession,
-) -> VortexResult<SharedProbe> {
-    let postings = ScanBuilder::new(session.clone(), index_reader)
-        .with_filter(filter)
-        .with_row_range(index_rows)
-        .into_array_stream()?;
-
-    Ok(async move {
-        // Only the rows matching the plan's key predicate survive, one per query term, so
-        // collecting them into a single array is cheap regardless of index size.
-        let postings: ArrayRef = postings.read_all().await?;
-        let mut ctx = session.create_execution_ctx();
-        let locator = resolve.resolve(&postings, data_rows.end - data_rows.start, &mut ctx)?;
-        Ok(Arc::new(locator))
-    }
-    .map_err(Arc::new)
-    .boxed()
-    .shared())
 }
 
 impl LayoutReader for IndexedReader {

@@ -24,6 +24,7 @@ use std::sync::Arc;
 
 use roaring::RoaringBitmap;
 use vortex_array::ArrayRef;
+use vortex_array::Canonical;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
@@ -76,7 +77,6 @@ use vortex_layout::layouts::indexed::IndexConfig;
 use vortex_layout::layouts::indexed::IndexExactness;
 use vortex_layout::layouts::indexed::IndexId;
 use vortex_layout::layouts::indexed::IndexQueryPlan;
-use vortex_layout::layouts::indexed::IndexResolve;
 use vortex_layout::layouts::indexed::IndexSessionExt;
 use vortex_layout::layouts::indexed::IndexVTable;
 use vortex_layout::layouts::indexed::IndexVTableRef;
@@ -103,8 +103,8 @@ const POSTINGS_FIELD: &str = "postings";
 /// A value -> rows reverse index over a single column of any dtype.
 ///
 /// One row per distinct value, sorted by key, with a roaring posting list of the rows holding it.
-/// Sorting the key column gives it a useful zone map, so probing the index is a pruned scan rather
-/// than a full decode. Equality is answered exactly: [`IndexVTable::plan`] only claims
+/// Sorting the key column gives it a useful zone map, so a probe decodes only the index chunks that
+/// can hold its key, and each of those at most once however many values are looked up. Equality is answered exactly: [`IndexVTable::plan`] only claims
 /// `column == literal`, so the probe's mask is the answer, not just a filter to re-check.
 #[derive(Debug)]
 pub struct ReverseIndex;
@@ -113,40 +113,56 @@ impl ReverseIndex {
     /// A shared handle to this index kind, ready to register into an
     /// [`IndexSession`](vortex_layout::layouts::indexed::IndexSession).
     pub fn new_ref() -> IndexVTableRef {
-        Arc::new(Self)
+        IndexVTableRef::new(Self)
     }
 }
 
+/// One decoded chunk of the index: its sorted keys and their serialized posting lists.
+pub struct Entries {
+    keys: ArrayRef,
+    postings: VarBinViewArray,
+}
+
 impl IndexVTable for ReverseIndex {
+    type Options = ();
+    type Builder = Builder;
+    /// The value whose rows are wanted.
+    type Query = Scalar;
+    type Chunk = Entries;
+
     fn id(&self) -> IndexId {
         static ID: CachedId = CachedId::new(REVERSE_INDEX_ID);
         *ID
     }
 
-    fn index_dtype(&self, dtype: &DType, _options: &[u8]) -> VortexResult<Option<DType>> {
+    fn deserialize_options(&self, _options: &[u8]) -> VortexResult<()> {
+        Ok(())
+    }
+
+    fn index_dtype(&self, dtype: &DType, _options: &()) -> Option<DType> {
         // Every other dtype decodes to a `Scalar` and has a canonical `ArrayBuilder`; `Union` and
         // `Variant` do not yet, so decline rather than panic building their key column.
         if matches!(dtype, DType::Union(..) | DType::Variant(_)) {
-            return Ok(None);
+            return None;
         }
-        Ok(Some(DType::Struct(
+        Some(DType::Struct(
             index_fields(dtype.as_nonnullable()),
             NonNullable,
-        )))
+        ))
     }
 
     fn builder(
         &self,
         dtype: &DType,
-        _options: &[u8],
+        _options: &(),
         _data_block_len: Option<u64>,
         session: &VortexSession,
-    ) -> VortexResult<Box<dyn IndexBuilder>> {
-        Ok(Box::new(Builder {
+    ) -> VortexResult<Builder> {
+        Ok(Builder {
             dtype: dtype.clone(),
             postings: HashMap::new(),
             allocator: session.allocator(),
-        }))
+        })
     }
 
     fn plan(
@@ -154,8 +170,8 @@ impl IndexVTable for ReverseIndex {
         expr: &BoundExpression,
         dtype: &DType,
         index_dtype: &DType,
-        _options: &[u8],
-    ) -> VortexResult<Option<IndexQueryPlan>> {
+        _options: &(),
+    ) -> VortexResult<Option<IndexQueryPlan<Scalar>>> {
         // Only `<column> == <literal>`.
         if !expr.is::<Binary>() || *expr.as_::<Binary>() != Operator::Eq {
             return Ok(None);
@@ -180,8 +196,51 @@ impl IndexVTable for ReverseIndex {
         Ok(Some(IndexQueryPlan {
             exactness: IndexExactness::Exact,
             filter: eq(col(KEY_FIELD), lit(target.clone())).bind(index_dtype)?,
-            resolve: Arc::new(Resolve { target }),
+            query: target,
         }))
+    }
+
+    fn decode(
+        &self,
+        chunk: ArrayRef,
+        _options: &(),
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Entries> {
+        let entries = chunk.execute::<StructArray>(ctx)?;
+        Ok(Entries {
+            keys: entries
+                .unmasked_field_by_name(KEY_FIELD)?
+                .clone()
+                .execute::<Canonical>(ctx)?
+                .into_array(),
+            postings: entries
+                .unmasked_field_by_name(POSTINGS_FIELD)?
+                .clone()
+                .execute::<VarBinViewArray>(ctx)?,
+        })
+    }
+
+    fn resolve(
+        &self,
+        target: &Scalar,
+        chunks: &[Arc<Entries>],
+        _data_row_count: u64,
+        _options: &(),
+    ) -> VortexResult<RowLocator> {
+        // Keys are unique and sorted across the partition, so at most one chunk holds the target.
+        for chunk in chunks {
+            let Some(idx) = chunk
+                .keys
+                .search_sorted(target, SearchSortedSide::Left)?
+                .to_found()
+            else {
+                continue;
+            };
+            let bitmap = RoaringBitmap::deserialize_from(chunk.postings.bytes_at(idx).as_slice())
+                .map_err(|err| vortex_err!("Failed to deserialize postings: {err}"))?;
+            return Ok(RowLocator::Rows(bitmap));
+        }
+        Ok(RowLocator::empty_rows())
     }
 }
 
@@ -190,7 +249,7 @@ fn index_fields(key_dtype: DType) -> StructFields {
     StructFields::new(names, vec![key_dtype, DType::Binary(NonNullable)])
 }
 
-struct Builder {
+pub struct Builder {
     dtype: DType,
     /// Deduplicated by scalar equality; sorted into key order in `finish`, which is what gives
     /// the key column a useful zone map.
@@ -264,37 +323,6 @@ impl IndexBuilder for Builder {
             .values()
             .map(|bitmap| bitmap.serialized_size() as u64)
             .sum()
-    }
-}
-
-struct Resolve {
-    target: Scalar,
-}
-
-impl IndexResolve for Resolve {
-    fn resolve(
-        &self,
-        postings: &ArrayRef,
-        _data_row_count: u64,
-        ctx: &mut ExecutionCtx,
-    ) -> VortexResult<RowLocator> {
-        let entries = postings.clone().execute::<StructArray>(ctx)?;
-        let keys = entries.unmasked_field_by_name(KEY_FIELD)?;
-        let lists = entries
-            .unmasked_field_by_name(POSTINGS_FIELD)?
-            .clone()
-            .execute::<VarBinViewArray>(ctx)?;
-
-        let Some(idx) = keys
-            .search_sorted(&self.target, SearchSortedSide::Left)?
-            .to_found()
-        else {
-            return Ok(RowLocator::empty_rows());
-        };
-
-        let bitmap = RoaringBitmap::deserialize_from(lists.bytes_at(idx).as_slice())
-            .map_err(|err| vortex_err!("Failed to deserialize postings: {err}"))?;
-        Ok(RowLocator::Rows(bitmap))
     }
 }
 

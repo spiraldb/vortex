@@ -5,6 +5,7 @@
 //! [`exact_value::ExactValueIndex`] instead.
 
 use std::num::NonZeroU64;
+use std::num::NonZeroUsize;
 use std::ops::BitAnd;
 use std::ops::Range;
 use std::sync::Arc;
@@ -52,8 +53,11 @@ use crate::layouts::flat::writer::FlatLayoutStrategy;
 use crate::layouts::indexed::tests::exact_value::DecliningIndex;
 use crate::layouts::indexed::tests::exact_value::ExactValueIndex;
 use crate::layouts::indexed::tests::fixed_superset::FixedSupersetIndex;
+use crate::layouts::indexed::tests::fixed_superset::INDEX_ROWS;
 use crate::layouts::repartition::RepartitionStrategy;
 use crate::layouts::repartition::RepartitionWriterOptions;
+use crate::layouts::zoned::writer::ZonedLayoutOptions;
+use crate::layouts::zoned::writer::ZonedStrategy;
 use crate::scan::scan_builder::ScanBuilder;
 use crate::segments::SegmentFuture;
 use crate::segments::SegmentId;
@@ -689,6 +693,17 @@ impl CountingFixture {
         })
     }
 
+    /// How many index segment requests have been made so far, counting repeats.
+    fn index_requests(&self) -> usize {
+        let all_index: Vec<_> = self.partitions.iter().flatten().copied().collect();
+        self.counting
+            .requested
+            .lock()
+            .iter()
+            .filter(|id| all_index.contains(id))
+            .count()
+    }
+
     /// The index segments requested so far, sorted and deduplicated.
     fn index_requested(&self) -> Vec<SegmentId> {
         let all_index: Vec<_> = self.partitions.iter().flatten().copied().collect();
@@ -723,6 +738,117 @@ async fn probing_a_range_reads_only_its_partitions_index() -> VortexResult<()> {
         .await?;
     assert_eq!(mask, expected_rows(&row_range, ROWS[5])?);
     assert_eq!(fixture.index_requested(), fixture.partitions[1]);
+    Ok(())
+}
+
+/// An index chunk is decoded once per reader, not once per expression: a second value looked up in
+/// the same partition is answered from the chunk the first lookup decoded, with no further IO.
+#[tokio::test]
+async fn expressions_probing_the_same_partition_share_its_decoded_index() -> VortexResult<()> {
+    let fixture = CountingFixture::new().await?;
+    let reader = &fixture.reader;
+    let row_range = 4..8;
+
+    let mut requests = Vec::new();
+    for value in [ROWS[5], ROWS[6]] {
+        let mask = reader
+            .filter_evaluation(
+                &row_range,
+                &eq_filter(reader, value)?,
+                MaskFuture::new_true(4),
+            )?
+            .await?;
+        assert_eq!(mask, expected_rows(&row_range, value)?, "value {value:?}");
+        requests.push(fixture.index_requests());
+    }
+
+    assert_eq!(fixture.index_requested(), fixture.partitions[1]);
+    // The first lookup loaded partition 1's index; the second loaded nothing more.
+    assert!(requests[0] > 0);
+    assert_eq!(requests[1], requests[0]);
+    Ok(())
+}
+
+/// Decoding chunks rather than scanning must not cost the index child's zone maps: a probe still
+/// prunes the chunks its filter rules out, and loads only the one that can hold its key.
+#[tokio::test]
+async fn probing_loads_only_the_index_chunks_its_filter_cannot_prune() -> VortexResult<()> {
+    let session = new_session();
+    // Two index rows per chunk, with a zone per chunk.
+    let index = RepartitionStrategy::new(
+        ZonedStrategy::new(
+            ChunkedLayoutStrategy::new(FlatLayoutStrategy::default()),
+            FlatLayoutStrategy::default(),
+            ZonedLayoutOptions {
+                block_size: NonZeroUsize::new(2).ok_or_else(|| vortex_err!("non-zero"))?,
+                ..Default::default()
+            },
+        ),
+        RepartitionWriterOptions {
+            block_size_minimum: 0,
+            block_len_multiple: 2,
+            block_size_target: None,
+            canonicalize: false,
+        },
+    );
+    let rows = RoaringBitmap::from_iter([3u32]);
+    let (layout, segments) = write_with(
+        &session,
+        IndexedStrategy::new(
+            ChunkedLayoutStrategy::new(FlatLayoutStrategy::default()),
+            index,
+            vec![IndexConfig::with_defaults(FixedSupersetIndex::probing(
+                "test.idx.probing",
+                rows,
+                7,
+            ))],
+        ),
+    )
+    .await?;
+
+    let index = layout
+        .slot(1)?
+        .ok_or_else(|| vortex_err!("an index was configured"))?;
+    let chunks = index
+        .slot(0)?
+        .ok_or_else(|| vortex_err!("the zoned index child has data"))?;
+    let chunk_count = usize::try_from(INDEX_ROWS)? / 2;
+    assert_eq!(chunks.nslots(), chunk_count);
+    let chunk_segments = (0..chunk_count)
+        .map(|chunk| {
+            segment_ids(
+                &chunks
+                    .slot(chunk)?
+                    .ok_or_else(|| vortex_err!("chunk {chunk} exists"))?,
+            )
+        })
+        .collect::<VortexResult<Vec<_>>>()?;
+
+    let counting = Arc::new(CountingSegments {
+        inner: segments,
+        requested: Mutex::new(Vec::new()),
+    });
+    let reader = layout.new_reader(
+        "text".into(),
+        Arc::<CountingSegments>::clone(&counting),
+        &session,
+        &Default::default(),
+    )?;
+    assert_eq!(
+        superset_prune_mask(&reader).await?,
+        Mask::from_iter((0..ROWS.len()).map(|row| row == 3))
+    );
+
+    let requested = counting.requested.lock().clone();
+    let loaded: Vec<usize> = (0..chunk_count)
+        .filter(|chunk| {
+            chunk_segments[*chunk]
+                .iter()
+                .any(|id| requested.contains(id))
+        })
+        .collect();
+    // Index row 7 sits in the chunk of rows 6..8.
+    assert_eq!(loaded, vec![3]);
     Ok(())
 }
 
@@ -904,7 +1030,6 @@ mod exact_value {
     use crate::layouts::indexed::IndexExactness;
     use crate::layouts::indexed::IndexId;
     use crate::layouts::indexed::IndexQueryPlan;
-    use crate::layouts::indexed::IndexResolve;
     use crate::layouts::indexed::IndexVTable;
     use crate::layouts::indexed::IndexVTableRef;
     use crate::layouts::indexed::RowLocator;
@@ -935,39 +1060,55 @@ mod exact_value {
 
     impl ExactValueIndex {
         pub fn new_ref() -> IndexVTableRef {
-            Arc::new(Self {
+            IndexVTableRef::new(Self {
                 decline_if_contains: None,
             })
         }
 
         pub fn declining_partitions_containing(value: &'static str) -> IndexVTableRef {
-            Arc::new(Self {
+            IndexVTableRef::new(Self {
                 decline_if_contains: Some(value),
             })
         }
     }
 
+    /// One decoded chunk of the index: its keys and their serialized posting lists.
+    pub struct Entries {
+        keys: VarBinViewArray,
+        postings: VarBinViewArray,
+    }
+
     impl IndexVTable for ExactValueIndex {
+        type Options = ();
+        type Builder = Builder;
+        /// The value whose rows are wanted.
+        type Query = String;
+        type Chunk = Entries;
+
         fn id(&self) -> IndexId {
             static ID: CachedId = CachedId::new(EXACT_VALUE_ID);
             *ID
         }
 
-        fn index_dtype(&self, dtype: &DType, _options: &[u8]) -> VortexResult<Option<DType>> {
-            Ok(matches!(dtype, DType::Utf8(_)).then(index_dtype))
+        fn deserialize_options(&self, _options: &[u8]) -> VortexResult<()> {
+            Ok(())
+        }
+
+        fn index_dtype(&self, dtype: &DType, _options: &()) -> Option<DType> {
+            matches!(dtype, DType::Utf8(_)).then(index_dtype)
         }
 
         fn builder(
             &self,
             _dtype: &DType,
-            _options: &[u8],
+            _options: &(),
             _data_block_len: Option<u64>,
             _session: &VortexSession,
-        ) -> VortexResult<Box<dyn IndexBuilder>> {
-            Ok(Box::new(Builder {
+        ) -> VortexResult<Builder> {
+            Ok(Builder {
                 postings: BTreeMap::new(),
                 decline_if_contains: self.decline_if_contains,
-            }))
+            })
         }
 
         fn plan(
@@ -975,8 +1116,8 @@ mod exact_value {
             expr: &BoundExpression,
             _dtype: &DType,
             index_dtype: &DType,
-            _options: &[u8],
-        ) -> VortexResult<Option<IndexQueryPlan>> {
+            _options: &(),
+        ) -> VortexResult<Option<IndexQueryPlan<String>>> {
             // Only `<column> == <utf8 literal>`.
             if !expr.is::<Binary>() || *expr.as_::<Binary>() != Operator::Eq {
                 return Ok(None);
@@ -992,12 +1133,52 @@ mod exact_value {
             Ok(Some(IndexQueryPlan {
                 exactness: IndexExactness::Exact,
                 filter: eq(col(KEY_FIELD), lit(value.clone())).bind(index_dtype)?,
-                resolve: Arc::new(Resolve { value }),
+                query: value,
             }))
+        }
+
+        fn decode(
+            &self,
+            chunk: ArrayRef,
+            _options: &(),
+            ctx: &mut ExecutionCtx,
+        ) -> VortexResult<Entries> {
+            let entries = chunk.execute::<StructArray>(ctx)?;
+            Ok(Entries {
+                keys: entries
+                    .unmasked_field_by_name(KEY_FIELD)?
+                    .clone()
+                    .execute::<VarBinViewArray>(ctx)?,
+                postings: entries
+                    .unmasked_field_by_name(POSTINGS_FIELD)?
+                    .clone()
+                    .execute::<VarBinViewArray>(ctx)?,
+            })
+        }
+
+        fn resolve(
+            &self,
+            query: &String,
+            chunks: &[Arc<Entries>],
+            _data_row_count: u64,
+            _options: &(),
+        ) -> VortexResult<RowLocator> {
+            for chunk in chunks {
+                for idx in 0..chunk.keys.len() {
+                    if chunk.keys.bytes_at(idx).as_slice() != query.as_bytes() {
+                        continue;
+                    }
+                    let bitmap =
+                        RoaringBitmap::deserialize_from(chunk.postings.bytes_at(idx).as_slice())
+                            .map_err(|err| vortex_err!("Failed to deserialize postings: {err}"))?;
+                    return Ok(RowLocator::Rows(bitmap));
+                }
+            }
+            Ok(RowLocator::empty_rows())
         }
     }
 
-    struct Builder {
+    pub struct Builder {
         /// Sorted by construction, which is what gives the key column a useful zone map.
         postings: BTreeMap<String, RoaringBitmap>,
         decline_if_contains: Option<&'static str>,
@@ -1078,28 +1259,37 @@ mod exact_value {
 
     impl DecliningIndex {
         pub fn new_ref() -> IndexVTableRef {
-            Arc::new(Self)
+            IndexVTableRef::new(Self)
         }
     }
 
     impl IndexVTable for DecliningIndex {
+        type Options = ();
+        type Builder = DecliningBuilder;
+        type Query = ();
+        type Chunk = ();
+
         fn id(&self) -> IndexId {
             static ID: CachedId = CachedId::new(DECLINING_ID);
             *ID
         }
 
-        fn index_dtype(&self, dtype: &DType, _options: &[u8]) -> VortexResult<Option<DType>> {
-            Ok(matches!(dtype, DType::Utf8(_)).then(index_dtype))
+        fn deserialize_options(&self, _options: &[u8]) -> VortexResult<()> {
+            Ok(())
+        }
+
+        fn index_dtype(&self, dtype: &DType, _options: &()) -> Option<DType> {
+            matches!(dtype, DType::Utf8(_)).then(index_dtype)
         }
 
         fn builder(
             &self,
             _dtype: &DType,
-            _options: &[u8],
+            _options: &(),
             _data_block_len: Option<u64>,
             _session: &VortexSession,
-        ) -> VortexResult<Box<dyn IndexBuilder>> {
-            Ok(Box::new(DecliningBuilder))
+        ) -> VortexResult<DecliningBuilder> {
+            Ok(DecliningBuilder)
         }
 
         fn plan(
@@ -1107,13 +1297,27 @@ mod exact_value {
             _expr: &BoundExpression,
             _dtype: &DType,
             _index_dtype: &DType,
-            _options: &[u8],
-        ) -> VortexResult<Option<IndexQueryPlan>> {
+            _options: &(),
+        ) -> VortexResult<Option<IndexQueryPlan<()>>> {
             Ok(None)
+        }
+
+        fn decode(&self, _chunk: ArrayRef, _options: &(), _ctx: &mut ExecutionCtx) -> VortexResult<()> {
+            Ok(())
+        }
+
+        fn resolve(
+            &self,
+            _query: &(),
+            _chunks: &[Arc<()>],
+            _data_row_count: u64,
+            _options: &(),
+        ) -> VortexResult<RowLocator> {
+            Ok(RowLocator::empty_rows())
         }
     }
 
-    struct DecliningBuilder;
+    pub struct DecliningBuilder;
 
     impl IndexBuilder for DecliningBuilder {
         fn push(
@@ -1131,40 +1335,6 @@ mod exact_value {
 
         fn buffered_bytes(&self) -> u64 {
             0
-        }
-    }
-
-    struct Resolve {
-        value: String,
-    }
-
-    impl IndexResolve for Resolve {
-        fn resolve(
-            &self,
-            postings: &ArrayRef,
-            _data_row_count: u64,
-            ctx: &mut ExecutionCtx,
-        ) -> VortexResult<RowLocator> {
-            let entries = postings.clone().execute::<StructArray>(ctx)?;
-            let keys = entries
-                .unmasked_field_by_name(KEY_FIELD)?
-                .clone()
-                .execute::<VarBinViewArray>(ctx)?;
-            let lists = entries
-                .unmasked_field_by_name(POSTINGS_FIELD)?
-                .clone()
-                .execute::<VarBinViewArray>(ctx)?;
-
-            for idx in 0..keys.len() {
-                if keys.bytes_at(idx).as_slice() != self.value.as_bytes() {
-                    continue;
-                }
-                let bitmap = RoaringBitmap::deserialize_from(lists.bytes_at(idx).as_slice())
-                    .map_err(|err| vortex_err!("Failed to deserialize postings: {err}"))?;
-                return Ok(RowLocator::Rows(bitmap));
-            }
-
-            Ok(RowLocator::empty_rows())
         }
     }
 }
@@ -1199,10 +1369,12 @@ mod fixed_superset {
     use crate::layouts::indexed::IndexExactness;
     use crate::layouts::indexed::IndexId;
     use crate::layouts::indexed::IndexQueryPlan;
-    use crate::layouts::indexed::IndexResolve;
     use crate::layouts::indexed::IndexVTable;
     use crate::layouts::indexed::IndexVTableRef;
     use crate::layouts::indexed::RowLocator;
+
+    /// Rows of the index child, holding `0..INDEX_ROWS` as `i32`s.
+    pub const INDEX_ROWS: i32 = 12;
 
     #[derive(Debug)]
     pub struct FixedSupersetIndex {
@@ -1210,6 +1382,9 @@ mod fixed_superset {
         rows: RoaringBitmap,
         /// What [`IndexVTable::index_dtype`] claims; the builder always writes `i32`s regardless.
         declared: DType,
+        /// The index row value the plan's filter selects, so a zone-mapped index child can prune
+        /// every chunk but the one holding it.
+        probe: i32,
     }
 
     impl FixedSupersetIndex {
@@ -1221,27 +1396,52 @@ mod fixed_superset {
         /// emits something other than it declared, or a newer version of a kind whose schema has
         /// changed since a file was written.
         pub fn declaring(id: &'static str, rows: RoaringBitmap, declared: DType) -> IndexVTableRef {
-            Arc::new(Self { id, rows, declared })
+            IndexVTableRef::new(Self {
+                id,
+                rows,
+                declared,
+                probe: 0,
+            })
+        }
+
+        /// A kind whose plans select only the index row holding `probe`.
+        pub fn probing(id: &'static str, rows: RoaringBitmap, probe: i32) -> IndexVTableRef {
+            IndexVTableRef::new(Self {
+                id,
+                rows,
+                declared: DType::Primitive(PType::I32, Nullability::NonNullable),
+                probe,
+            })
         }
     }
 
     impl IndexVTable for FixedSupersetIndex {
+        type Options = ();
+        type Builder = Builder;
+        /// The fixed rows to answer with.
+        type Query = RoaringBitmap;
+        type Chunk = ();
+
         fn id(&self) -> IndexId {
             IndexId::from(self.id)
         }
 
-        fn index_dtype(&self, dtype: &DType, _options: &[u8]) -> VortexResult<Option<DType>> {
-            Ok(matches!(dtype, DType::Utf8(_)).then(|| self.declared.clone()))
+        fn deserialize_options(&self, _options: &[u8]) -> VortexResult<()> {
+            Ok(())
+        }
+
+        fn index_dtype(&self, dtype: &DType, _options: &()) -> Option<DType> {
+            matches!(dtype, DType::Utf8(_)).then(|| self.declared.clone())
         }
 
         fn builder(
             &self,
             _dtype: &DType,
-            _options: &[u8],
+            _options: &(),
             _data_block_len: Option<u64>,
             _session: &VortexSession,
-        ) -> VortexResult<Box<dyn IndexBuilder>> {
-            Ok(Box::new(Builder))
+        ) -> VortexResult<Builder> {
+            Ok(Builder)
         }
 
         fn plan(
@@ -1249,21 +1449,33 @@ mod fixed_superset {
             _expr: &BoundExpression,
             _dtype: &DType,
             index_dtype: &DType,
-            _options: &[u8],
-        ) -> VortexResult<Option<IndexQueryPlan>> {
+            _options: &(),
+        ) -> VortexResult<Option<IndexQueryPlan<RoaringBitmap>>> {
             Ok(Some(IndexQueryPlan {
                 exactness: IndexExactness::Superset,
-                filter: eq(root(), lit(0i32)).bind(index_dtype)?,
-                resolve: Arc::new(Resolve {
-                    rows: self.rows.clone(),
-                }),
+                filter: eq(root(), lit(self.probe)).bind(index_dtype)?,
+                query: self.rows.clone(),
             }))
+        }
+
+        fn decode(&self, _chunk: ArrayRef, _options: &(), _ctx: &mut ExecutionCtx) -> VortexResult<()> {
+            Ok(())
+        }
+
+        fn resolve(
+            &self,
+            query: &RoaringBitmap,
+            _chunks: &[Arc<()>],
+            _data_row_count: u64,
+            _options: &(),
+        ) -> VortexResult<RowLocator> {
+            Ok(RowLocator::Rows(query.clone()))
         }
     }
 
-    /// Writes one dummy row so the layout has real content for `plan`'s filter to select; the
-    /// value itself is never inspected.
-    struct Builder;
+    /// Writes `0..INDEX_ROWS` so the layout has real content for `plan`'s filter to select; the
+    /// values themselves are never decoded.
+    pub struct Builder;
 
     impl IndexBuilder for Builder {
         fn push(
@@ -1276,27 +1488,12 @@ mod fixed_superset {
         }
 
         fn finish(self: Box<Self>) -> VortexResult<Option<(SendableArrayStream, Vec<u8>)>> {
-            let array = PrimitiveArray::from_iter([0i32]).into_array();
+            let array = PrimitiveArray::from_iter(0..INDEX_ROWS).into_array();
             Ok(Some((array.to_array_stream().boxed(), vec![])))
         }
 
         fn buffered_bytes(&self) -> u64 {
             0
-        }
-    }
-
-    struct Resolve {
-        rows: RoaringBitmap,
-    }
-
-    impl IndexResolve for Resolve {
-        fn resolve(
-            &self,
-            _postings: &ArrayRef,
-            _data_row_count: u64,
-            _ctx: &mut ExecutionCtx,
-        ) -> VortexResult<RowLocator> {
-            Ok(RowLocator::Rows(self.rows.clone()))
         }
     }
 }

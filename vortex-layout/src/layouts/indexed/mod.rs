@@ -21,8 +21,10 @@
 //! ```
 //!
 //! Index content is written through an ordinary layout strategy, so it is chunked, zone-mapped,
-//! and compressed by the same machinery as data. Probing an index is therefore just a pruned scan
-//! over the index child: a sorted key column's zone map narrows the probe to a handful of zones.
+//! and compressed by the same machinery as data. Probing an index prunes the index child's chunks
+//! through the generic reader, so a sorted key column's zone map narrows the probe to a handful of
+//! chunks, and each surviving chunk is decoded at most once per reader, however many expressions
+//! probe it.
 //!
 //! # Nesting
 //!
@@ -39,10 +41,10 @@
 //!   independently indexed, or two stacked `vortex.indexed` layers with different index kinds,
 //!   both work without this layout knowing about it.
 //! - **Index child.** Index content is written through the same kind of `Arc<dyn LayoutStrategy>`
-//!   and probed by running an ordinary scan (`ScanBuilder`) over it, so it too can be chunked,
-//!   zone-mapped, or itself wrapped in `vortex.indexed`. Wrapping an index child in another index
-//!   (for example, a small index over keys that point into a large posting list) prunes the probe
-//!   scan the same way it would prune a plain data scan.
+//!   and probed through the generic reader trait, so it too can be chunked, zone-mapped, or itself
+//!   wrapped in `vortex.indexed`. Wrapping an index child in another index (for example, a small
+//!   index over keys that point into a large posting list) prunes the probe the same way it would
+//!   prune a plain data scan.
 //! - **`vortex.indexed` as someone else's child.** Since it is an ordinary [`LayoutRef`], this
 //!   layout is not restricted to the top of a file — it can equally be a struct field, one chunk
 //!   of a chunked layout, or the child of any other layout that composes over children.
@@ -84,7 +86,6 @@ pub use self::index::IndexBuilder;
 pub use self::index::IndexExactness;
 pub use self::index::IndexId;
 pub use self::index::IndexQueryPlan;
-pub use self::index::IndexResolve;
 pub use self::index::IndexVTable;
 pub use self::index::IndexVTableRef;
 pub use self::index::RowLocator;

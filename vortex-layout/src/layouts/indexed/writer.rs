@@ -32,6 +32,7 @@ use crate::layouts::indexed::IndexPartitioning;
 use crate::layouts::indexed::IndexSpec;
 use crate::layouts::indexed::IndexedLayout;
 use crate::layouts::indexed::index::IndexBuilder;
+use crate::layouts::indexed::index::IndexVTable;
 use crate::layouts::indexed::index::IndexVTableRef;
 use crate::segments::SegmentSinkRef;
 use crate::sequence::SendableSequentialStream;
@@ -110,6 +111,50 @@ impl IndexedStrategy {
     }
 }
 
+/// An index kind with its configured options parsed, once per write.
+pub(crate) trait IndexWriter: Send + Sync {
+    fn index_dtype(&self, dtype: &DType) -> Option<DType>;
+
+    fn builder(
+        &self,
+        dtype: &DType,
+        data_block_len: Option<u64>,
+        session: &VortexSession,
+    ) -> VortexResult<Box<dyn IndexBuilder>>;
+}
+
+pub(crate) struct TypedIndexWriter<V: IndexVTable> {
+    vtable: Arc<V>,
+    options: V::Options,
+}
+
+impl<V: IndexVTable> TypedIndexWriter<V> {
+    pub(crate) fn try_new(vtable: Arc<V>, options: &[u8]) -> VortexResult<Self> {
+        let options = vtable.deserialize_options(options)?;
+        Ok(Self { vtable, options })
+    }
+}
+
+impl<V: IndexVTable> IndexWriter for TypedIndexWriter<V> {
+    fn index_dtype(&self, dtype: &DType) -> Option<DType> {
+        self.vtable.index_dtype(dtype, &self.options)
+    }
+
+    fn builder(
+        &self,
+        dtype: &DType,
+        data_block_len: Option<u64>,
+        session: &VortexSession,
+    ) -> VortexResult<Box<dyn IndexBuilder>> {
+        Ok(Box::new(self.vtable.builder(
+            dtype,
+            &self.options,
+            data_block_len,
+            session,
+        )?))
+    }
+}
+
 /// Everything needed to start another partition's builder mid-stream.
 struct BuilderFactory {
     dtype: DType,
@@ -118,12 +163,8 @@ struct BuilderFactory {
 }
 
 impl BuilderFactory {
-    fn builder(
-        &self,
-        vtable: &IndexVTableRef,
-        options: &[u8],
-    ) -> VortexResult<Box<dyn IndexBuilder>> {
-        vtable.builder(&self.dtype, options, self.data_block_len, &self.session)
+    fn builder(&self, writer: &dyn IndexWriter) -> VortexResult<Box<dyn IndexBuilder>> {
+        writer.builder(&self.dtype, self.data_block_len, &self.session)
     }
 }
 
@@ -133,8 +174,8 @@ type PartitionOutput = Option<(SendableArrayStream, Vec<u8>)>;
 /// One configured index, built partition by partition.
 struct IndexState {
     vtable: IndexVTableRef,
-    /// The configured options, handed to every partition's builder.
-    options: Vec<u8>,
+    /// The kind with its configured options parsed, starting every partition's builder.
+    writer: Arc<dyn IndexWriter>,
     /// What the kind declared it builds, which every partition's output must match.
     index_dtype: DType,
     partition_len: Option<u64>,
@@ -178,7 +219,7 @@ impl IndexState {
             start = end;
 
             if self.partition_rows == partition_len {
-                let next = factory.builder(&self.vtable, &self.options)?;
+                let next = factory.builder(self.writer.as_ref())?;
                 self.finish_partition(next)?;
             }
         }
@@ -363,14 +404,15 @@ impl LayoutStrategy for IndexedStrategy {
         };
         let mut indexes = Vec::with_capacity(self.configs.len());
         for config in self.configs.iter() {
-            let Some(index_dtype) = config.vtable.index_dtype(&dtype, &config.options)? else {
+            let writer = config.vtable.open_writer(&config.options)?;
+            let Some(index_dtype) = writer.index_dtype(&dtype) else {
                 continue;
             };
             indexes.push(IndexState {
-                builder: factory.builder(&config.vtable, &config.options)?,
+                builder: factory.builder(writer.as_ref())?,
+                writer,
                 index_dtype,
-                vtable: Arc::clone(&config.vtable),
-                options: config.options.clone(),
+                vtable: config.vtable.clone(),
                 partition_len: config.partition_len.map(NonZeroU64::get),
                 partition_rows: 0,
                 finished: Vec::new(),
@@ -431,7 +473,7 @@ impl LayoutStrategy for IndexedStrategy {
         let mut index_layouts = Vec::with_capacity(indexes.len());
         let mut specs = Vec::with_capacity(indexes.len());
         for index in indexes {
-            let vtable = Arc::clone(&index.vtable);
+            let vtable = index.vtable.clone();
             let partition_len = index.partition_len;
             let declared = index.index_dtype.clone();
             // An index whose every partition declined leaves no trace: no child, no spec, and no
