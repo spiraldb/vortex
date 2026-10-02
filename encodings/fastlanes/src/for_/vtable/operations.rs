@@ -13,6 +13,7 @@ use vortex_error::vortex_err;
 
 use super::FoR;
 use crate::FL_CHUNK_SIZE;
+use crate::FoRReferences;
 use crate::for_::array::FoRArrayExt;
 use crate::for_::array::FoRSlots;
 impl OperationsVTable<FoR> for FoR {
@@ -29,11 +30,16 @@ impl OperationsVTable<FoR> for FoR {
             .ok_or_else(|| vortex_err!("FoR encoded slot is missing"))?
             .execute_scalar(index, ctx)?;
         let encoded_pvalue = encoded_pvalue.as_primitive();
-        let chunk = (usize::from(array.offset()) + index) / FL_CHUNK_SIZE;
-        let reference = state
-            .slot(FoRSlots::REFERENCES)?
-            .ok_or_else(|| vortex_err!("FoR references slot is missing"))?
-            .execute_scalar(chunk, ctx)?;
+        let reference = match array.references() {
+            FoRReferences::Global(reference) => reference.clone(),
+            FoRReferences::Blocked(_) => {
+                let chunk = (usize::from(array.offset()) + index) / FL_CHUNK_SIZE;
+                state
+                    .slot(FoRSlots::BLOCKED_REFERENCES)?
+                    .ok_or_else(|| vortex_err!("FoR blocked references slot is missing"))?
+                    .execute_scalar(chunk, ctx)?
+            }
+        };
         let reference = reference.as_primitive();
 
         Ok(match_each_integer_ptype!(array.ptype(), |P| {
