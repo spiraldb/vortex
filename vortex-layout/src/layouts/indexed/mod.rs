@@ -26,6 +26,25 @@
 //! chunks, and each surviving chunk is decoded at most once per reader, however many expressions
 //! probe it.
 //!
+//! # Serialization
+//!
+//! An indexed layout is serialized in three layers, each with one place that defines it:
+//!
+//! - **The layout's own metadata**, the [`IndexedMetadata`] protobuf behind a version byte: one
+//!   spec per index child, recording the kind's id, its options blob, the index child's dtype and
+//!   its partitioning. Pinned by the `indexed.metadata` goldenfile.
+//! - **Each kind's options and content**, defined by the kind's [`IndexVTable`] and nothing else:
+//!   `serialize_options`/`deserialize_options`, the schema `index_dtype`, and `encode`/`decode`
+//!   between the kind's chunks and rows of that schema. Builders hand the writer chunks, never
+//!   bytes. `test_harness::check_roundtrip` checks a kind's pairs without writing a layout.
+//! - **The index child's layout**, which is whatever layout strategy the writer chose, serialized
+//!   like any other layout. Any layout is allowed, so long as its dtype is the spec's.
+//!
+//! The dtype is what ties the layers together, and it is checked at every boundary: the writer
+//! rejects an encoded chunk that differs from the kind's declared dtype, deserializing rejects an
+//! index child that differs from its spec's dtype, and a reader skips an index whose spec's dtype
+//! the kind no longer declares, so a kind can change its schema without misreading old files.
+//!
 //! # Nesting
 //!
 //! Both child slots hold an ordinary [`LayoutRef`], so nesting is not special-cased anywhere in
@@ -63,6 +82,8 @@
 pub mod index;
 pub(crate) mod reader;
 pub mod session;
+#[cfg(any(test, feature = "_test-harness"))]
+pub mod test_harness;
 pub mod writer;
 
 use std::sync::Arc;

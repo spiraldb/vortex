@@ -11,7 +11,6 @@ use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::dtype::DType;
 use vortex_array::expr::BoundExpression;
-use vortex_array::stream::SendableArrayStream;
 use vortex_buffer::BitBufferMut;
 use vortex_error::VortexResult;
 use vortex_mask::Mask;
@@ -39,11 +38,25 @@ pub type IndexId = Id;
 /// [`Chunk`](Self::Chunk) at most once, sharing it between every expression that probes the
 /// chunk. Each expression is reduced by [`plan`](Self::plan) to a [`Query`](Self::Query) that
 /// [`resolve`](Self::resolve) answers against those decoded chunks.
+///
+/// # Serialization
+///
+/// A kind's on-disk format is exactly three things, and nothing else a kind does reaches the file:
+///
+/// - [`serialize_options`](Self::serialize_options) and
+///   [`deserialize_options`](Self::deserialize_options), for the options blob stored in the spec.
+///   The blob is the kind's to version.
+/// - [`index_dtype`](Self::index_dtype), the schema of the index child.
+/// - [`encode`](Self::encode) and [`decode`](Self::decode), between a [`Chunk`](Self::Chunk) and
+///   rows of that schema.
+///
+/// Builders produce chunks and options, never bytes, so these pairs can be tested without
+/// writing a layout. Re-encoding a decoded chunk must reproduce its encoding.
 pub trait IndexVTable: 'static + Send + Sync + Debug {
     /// The kind's options, parsed from the self-versioned options blob.
     type Options: 'static + Send + Sync;
     /// Builds the index on the write path.
-    type Builder: IndexBuilder + 'static;
+    type Builder: IndexBuilder<Options = Self::Options, Chunk = Self::Chunk> + 'static;
     /// What [`plan`](Self::plan) reduced one expression to, answered by
     /// [`resolve`](Self::resolve).
     type Query: 'static + Send + Sync;
@@ -52,6 +65,9 @@ pub trait IndexVTable: 'static + Send + Sync + Debug {
 
     /// Stable string id, e.g. `vortex.idx.reverse_index`.
     fn id(&self) -> IndexId;
+
+    /// Serialize options into the blob stored in the spec.
+    fn serialize_options(&self, options: &Self::Options) -> Vec<u8>;
 
     /// Parse an options blob, as configured on the write side or stored in a spec.
     fn deserialize_options(&self, options: &[u8]) -> VortexResult<Self::Options>;
@@ -94,9 +110,20 @@ pub trait IndexVTable: 'static + Send + Sync + Debug {
         options: &Self::Options,
     ) -> VortexResult<Option<IndexQueryPlan<Self::Query>>>;
 
-    /// Decode one chunk of the index child, in the index child's own schema.
+    /// Encode a chunk a builder produced as rows of the index child, of the declared
+    /// [`index_dtype`](Self::index_dtype).
+    fn encode(
+        &self,
+        chunk: &Self::Chunk,
+        options: &Self::Options,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<ArrayRef>;
+
+    /// Decode rows of the index child, in its own schema, back into a chunk.
     ///
-    /// Called at most once per chunk per reader, however many expressions probe it.
+    /// The index child's layout strategy may chunk it differently than it was encoded, so this
+    /// must accept any contiguous run of encoded rows. Called at most once per chunk per reader,
+    /// however many expressions probe it.
     fn decode(
         &self,
         chunk: ArrayRef,
@@ -190,6 +217,11 @@ impl<V: IndexVTable> DynIndexVTable for V {
 
 /// Accumulates index content while the data stream is written.
 pub trait IndexBuilder: Send {
+    /// The kind's options, as finally chosen by the build.
+    type Options;
+    /// The content the kind's [`IndexVTable::encode`] writes out.
+    type Chunk;
+
     /// Chunks arrive in stream order with their row offset within this builder's partition, which
     /// for an unpartitioned index is the whole layout.
     fn push(
@@ -199,17 +231,18 @@ pub trait IndexBuilder: Send {
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<()>;
 
-    /// Emit the index content as an array stream, to be written through a child layout strategy.
+    /// Emit the index content as chunks, which the writer encodes and writes through a child
+    /// layout strategy in order.
     ///
-    /// Returns the final serialized options alongside it, so builders can record normalization
-    /// choices or block sizes discovered during the build.
+    /// Returns the final options alongside them, so builders can record normalization choices or
+    /// block sizes discovered during the build.
     ///
     /// `None` declines: nothing worth keeping was built, so no index child and no spec are written,
     /// and the wrapper collapses to the plain data layout if every builder declines. This is the
     /// only point at which size can be judged — a builder is constructed before the first chunk
     /// arrives, so row count and cardinality are not knowable earlier. Declining is always safe: an
     /// absent index reads exactly like an unregistered one.
-    fn finish(self: Box<Self>) -> VortexResult<Option<(SendableArrayStream, Vec<u8>)>>;
+    fn finish(self) -> VortexResult<Option<(Vec<Self::Chunk>, Self::Options)>>;
 
     /// Bytes currently buffered, reported up through the write context's buffered-bytes tracker.
     fn buffered_bytes(&self) -> u64;

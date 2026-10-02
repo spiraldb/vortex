@@ -52,7 +52,6 @@ use vortex_array::scalar_fn::fns::operators::Operator;
 use vortex_array::search_sorted::SearchSorted;
 use vortex_array::search_sorted::SearchSortedSide;
 use vortex_array::stream::ArrayStreamExt;
-use vortex_array::stream::SendableArrayStream;
 use vortex_array::validity::Validity;
 use vortex_buffer::ByteBufferMut;
 use vortex_edition::Edition;
@@ -117,10 +116,10 @@ impl ReverseIndex {
     }
 }
 
-/// One decoded chunk of the index: its sorted keys and their serialized posting lists.
+/// A run of index entries: sorted, distinct, non-null keys and the rows holding each.
 pub struct Entries {
     keys: ArrayRef,
-    postings: VarBinViewArray,
+    postings: Vec<RoaringBitmap>,
 }
 
 impl IndexVTable for ReverseIndex {
@@ -133,6 +132,10 @@ impl IndexVTable for ReverseIndex {
     fn id(&self) -> IndexId {
         static ID: CachedId = CachedId::new(REVERSE_INDEX_ID);
         *ID
+    }
+
+    fn serialize_options(&self, _options: &()) -> Vec<u8> {
+        vec![]
     }
 
     fn deserialize_options(&self, _options: &[u8]) -> VortexResult<()> {
@@ -200,6 +203,33 @@ impl IndexVTable for ReverseIndex {
         }))
     }
 
+    fn encode(
+        &self,
+        chunk: &Entries,
+        _options: &(),
+        _ctx: &mut ExecutionCtx,
+    ) -> VortexResult<ArrayRef> {
+        let mut lists = Vec::with_capacity(chunk.postings.len());
+        for bitmap in &chunk.postings {
+            let mut buffer = Vec::with_capacity(bitmap.serialized_size());
+            bitmap
+                .serialize_into(&mut buffer)
+                .map_err(|err| vortex_err!("Failed to serialize postings: {err}"))?;
+            lists.push(buffer);
+        }
+
+        Ok(StructArray::try_new_with_dtype(
+            vec![
+                chunk.keys.clone(),
+                VarBinViewArray::from_iter_bin(lists).into_array(),
+            ],
+            index_fields(chunk.keys.dtype().clone()),
+            chunk.keys.len(),
+            Validity::NonNullable,
+        )?
+        .into_array())
+    }
+
     fn decode(
         &self,
         chunk: ArrayRef,
@@ -207,16 +237,23 @@ impl IndexVTable for ReverseIndex {
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<Entries> {
         let entries = chunk.execute::<StructArray>(ctx)?;
+        let lists = entries
+            .unmasked_field_by_name(POSTINGS_FIELD)?
+            .clone()
+            .execute::<VarBinViewArray>(ctx)?;
+        let postings = (0..lists.len())
+            .map(|idx| {
+                RoaringBitmap::deserialize_from(lists.bytes_at(idx).as_slice())
+                    .map_err(|err| vortex_err!("Failed to deserialize postings: {err}"))
+            })
+            .collect::<VortexResult<_>>()?;
         Ok(Entries {
             keys: entries
                 .unmasked_field_by_name(KEY_FIELD)?
                 .clone()
                 .execute::<Canonical>(ctx)?
                 .into_array(),
-            postings: entries
-                .unmasked_field_by_name(POSTINGS_FIELD)?
-                .clone()
-                .execute::<VarBinViewArray>(ctx)?,
+            postings,
         })
     }
 
@@ -229,16 +266,13 @@ impl IndexVTable for ReverseIndex {
     ) -> VortexResult<RowLocator> {
         // Keys are unique and sorted across the partition, so at most one chunk holds the target.
         for chunk in chunks {
-            let Some(idx) = chunk
+            if let Some(idx) = chunk
                 .keys
                 .search_sorted(target, SearchSortedSide::Left)?
                 .to_found()
-            else {
-                continue;
-            };
-            let bitmap = RoaringBitmap::deserialize_from(chunk.postings.bytes_at(idx).as_slice())
-                .map_err(|err| vortex_err!("Failed to deserialize postings: {err}"))?;
-            return Ok(RowLocator::Rows(bitmap));
+            {
+                return Ok(RowLocator::Rows(chunk.postings[idx].clone()));
+            }
         }
         Ok(RowLocator::empty_rows())
     }
@@ -258,6 +292,9 @@ pub struct Builder {
 }
 
 impl IndexBuilder for Builder {
+    type Options = ();
+    type Chunk = Entries;
+
     fn push(
         &mut self,
         chunk: &ArrayRef,
@@ -277,12 +314,12 @@ impl IndexBuilder for Builder {
         Ok(())
     }
 
-    fn finish(self: Box<Self>) -> VortexResult<Option<(SendableArrayStream, Vec<u8>)>> {
+    fn finish(self) -> VortexResult<Option<(Vec<Entries>, ())>> {
         let Builder {
             dtype,
             postings,
             allocator,
-        } = *self;
+        } = self;
 
         let mut entries: Vec<(Scalar, RoaringBitmap)> = postings.into_iter().collect();
         entries.sort_by(|(a, _), (b, _)| {
@@ -291,31 +328,22 @@ impl IndexBuilder for Builder {
         });
 
         let key_dtype = dtype.as_nonnullable();
-        let mut key_builder = builder_with_capacity_in(&key_dtype, entries.len(), &allocator);
-        let mut lists = Vec::with_capacity(entries.len());
-        for (key, bitmap) in &entries {
+        let mut keys = builder_with_capacity_in(&key_dtype, entries.len(), &allocator);
+        let mut bitmaps = Vec::with_capacity(entries.len());
+        for (key, bitmap) in entries {
             // Keys are never null (`push` skips them), but may carry the source column's nullable
             // dtype; the key column itself is non-nullable, so normalize before appending.
-            key_builder.append_scalar(&key.cast(&key_dtype)?)?;
-            let mut buffer = Vec::with_capacity(bitmap.serialized_size());
-            bitmap
-                .serialize_into(&mut buffer)
-                .map_err(|err| vortex_err!("Failed to serialize postings: {err}"))?;
-            lists.push(buffer);
+            keys.append_scalar(&key.cast(&key_dtype)?)?;
+            bitmaps.push(bitmap);
         }
 
-        let len = entries.len();
-        let array = StructArray::try_new_with_dtype(
-            vec![
-                key_builder.finish(),
-                VarBinViewArray::from_iter_bin(lists).into_array(),
-            ],
-            index_fields(key_dtype),
-            len,
-            Validity::NonNullable,
-        )?;
-
-        Ok(Some((array.into_array().to_array_stream().boxed(), vec![])))
+        Ok(Some((
+            vec![Entries {
+                keys: keys.finish(),
+                postings: bitmaps,
+            }],
+            (),
+        )))
     }
 
     fn buffered_bytes(&self) -> u64 {

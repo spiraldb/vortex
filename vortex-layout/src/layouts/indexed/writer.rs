@@ -14,7 +14,6 @@ use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::VortexSessionExecute;
 use vortex_array::dtype::DType;
-use vortex_array::stream::ArrayStream;
 use vortex_array::stream::ArrayStreamAdapter;
 use vortex_array::stream::ArrayStreamExt;
 use vortex_array::stream::SendableArrayStream;
@@ -115,17 +114,85 @@ impl IndexedStrategy {
 pub(crate) trait IndexWriter: Send + Sync {
     fn index_dtype(&self, dtype: &DType) -> Option<DType>;
 
+    /// A builder for one partition, whose output must be of `index_dtype`.
     fn builder(
         &self,
         dtype: &DType,
+        index_dtype: &DType,
         data_block_len: Option<u64>,
         session: &VortexSession,
-    ) -> VortexResult<Box<dyn IndexBuilder>>;
+    ) -> VortexResult<Box<dyn PartitionBuilder>>;
 }
 
 pub(crate) struct TypedIndexWriter<V: IndexVTable> {
     vtable: Arc<V>,
     options: V::Options,
+}
+
+/// One partition's builder, with the kind's types erased. This is where a kind's content and
+/// options become bytes, through [`IndexVTable::encode`] and [`IndexVTable::serialize_options`].
+pub(crate) trait PartitionBuilder: Send {
+    fn push(&mut self, chunk: &ArrayRef, row_offset: u64, ctx: &mut ExecutionCtx)
+    -> VortexResult<()>;
+
+    fn finish(self: Box<Self>) -> VortexResult<PartitionOutput>;
+
+    fn buffered_bytes(&self) -> u64;
+}
+
+struct TypedPartitionBuilder<V: IndexVTable> {
+    vtable: Arc<V>,
+    builder: V::Builder,
+    index_dtype: DType,
+    session: VortexSession,
+}
+
+impl<V: IndexVTable> PartitionBuilder for TypedPartitionBuilder<V> {
+    fn push(
+        &mut self,
+        chunk: &ArrayRef,
+        row_offset: u64,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<()> {
+        self.builder.push(chunk, row_offset, ctx)
+    }
+
+    fn finish(self: Box<Self>) -> VortexResult<PartitionOutput> {
+        let Self {
+            vtable,
+            builder,
+            index_dtype,
+            session,
+        } = *self;
+        let Some((chunks, options)) = builder.finish()? else {
+            return Ok(None);
+        };
+
+        let mut ctx = session.create_execution_ctx();
+        let arrays = chunks
+            .iter()
+            .map(|chunk| {
+                let array = vtable.encode(chunk, &options, &mut ctx)?;
+                vortex_ensure!(
+                    array.dtype() == &index_dtype,
+                    "Index {} encoded a chunk of dtype {}, but the index kind declared {index_dtype}",
+                    vtable.id(),
+                    array.dtype()
+                );
+                Ok(array)
+            })
+            .collect::<VortexResult<Vec<_>>>()?;
+
+        let content = ArrayStreamAdapter::new(index_dtype, stream::iter(arrays.into_iter().map(Ok)));
+        Ok(Some((
+            ArrayStreamExt::boxed(content),
+            vtable.serialize_options(&options),
+        )))
+    }
+
+    fn buffered_bytes(&self) -> u64 {
+        self.builder.buffered_bytes()
+    }
 }
 
 impl<V: IndexVTable> TypedIndexWriter<V> {
@@ -143,15 +210,18 @@ impl<V: IndexVTable> IndexWriter for TypedIndexWriter<V> {
     fn builder(
         &self,
         dtype: &DType,
+        index_dtype: &DType,
         data_block_len: Option<u64>,
         session: &VortexSession,
-    ) -> VortexResult<Box<dyn IndexBuilder>> {
-        Ok(Box::new(self.vtable.builder(
-            dtype,
-            &self.options,
-            data_block_len,
-            session,
-        )?))
+    ) -> VortexResult<Box<dyn PartitionBuilder>> {
+        Ok(Box::new(TypedPartitionBuilder {
+            vtable: Arc::clone(&self.vtable),
+            builder: self
+                .vtable
+                .builder(dtype, &self.options, data_block_len, session)?,
+            index_dtype: index_dtype.clone(),
+            session: session.clone(),
+        }))
     }
 }
 
@@ -163,8 +233,12 @@ struct BuilderFactory {
 }
 
 impl BuilderFactory {
-    fn builder(&self, writer: &dyn IndexWriter) -> VortexResult<Box<dyn IndexBuilder>> {
-        writer.builder(&self.dtype, self.data_block_len, &self.session)
+    fn builder(
+        &self,
+        writer: &dyn IndexWriter,
+        index_dtype: &DType,
+    ) -> VortexResult<Box<dyn PartitionBuilder>> {
+        writer.builder(&self.dtype, index_dtype, self.data_block_len, &self.session)
     }
 }
 
@@ -179,7 +253,7 @@ struct IndexState {
     /// What the kind declared it builds, which every partition's output must match.
     index_dtype: DType,
     partition_len: Option<u64>,
-    builder: Box<dyn IndexBuilder>,
+    builder: Box<dyn PartitionBuilder>,
     /// Rows the current builder has seen, which is also the next row's partition-local offset.
     partition_rows: u64,
     finished: Vec<PartitionOutput>,
@@ -219,14 +293,14 @@ impl IndexState {
             start = end;
 
             if self.partition_rows == partition_len {
-                let next = factory.builder(self.writer.as_ref())?;
+                let next = factory.builder(self.writer.as_ref(), &self.index_dtype)?;
                 self.finish_partition(next)?;
             }
         }
         Ok(())
     }
 
-    fn finish_partition(&mut self, next: Box<dyn IndexBuilder>) -> VortexResult<()> {
+    fn finish_partition(&mut self, next: Box<dyn PartitionBuilder>) -> VortexResult<()> {
         let done = std::mem::replace(&mut self.builder, next);
         self.finished_bytes += done.buffered_bytes();
         self.finished.push(done.finish()?);
@@ -288,9 +362,8 @@ struct IndexContent {
 }
 
 impl IndexContent {
-    /// Concatenate the built partitions, or `None` if every partition declined.
-    ///
-    /// Every built partition must produce the `dtype` its kind declared.
+    /// Concatenate the built partitions, each already of the declared `dtype`, or `None` if every
+    /// partition declined.
     fn assemble(
         id: impl std::fmt::Display,
         dtype: DType,
@@ -306,11 +379,6 @@ impl IndexContent {
                 declined.insert(u32::try_from(partition)?);
                 continue;
             };
-            vortex_ensure!(
-                content.dtype() == &dtype,
-                "Index {id} partition {partition} produced dtype {}, but the index kind declared {dtype}",
-                content.dtype()
-            );
             match &options {
                 None => options = Some(partition_options),
                 // One spec records one options blob, so partitions may not disagree about it.
@@ -409,7 +477,7 @@ impl LayoutStrategy for IndexedStrategy {
                 continue;
             };
             indexes.push(IndexState {
-                builder: factory.builder(writer.as_ref())?,
+                builder: factory.builder(writer.as_ref(), &index_dtype)?,
                 writer,
                 index_dtype,
                 vtable: config.vtable.clone(),

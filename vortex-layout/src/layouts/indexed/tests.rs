@@ -29,6 +29,7 @@ use vortex_array::expr::like;
 use vortex_array::expr::lit;
 use vortex_array::expr::root;
 use vortex_array::stream::ArrayStreamExt;
+use vortex_array::test_harness::check_metadata;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
@@ -43,6 +44,7 @@ use super::IndexSessionExt;
 use super::Indexed;
 use super::IndexedLayout;
 use super::IndexedStrategy;
+use super::test_harness::check_roundtrip;
 use crate::LayoutChildType;
 use crate::LayoutReaderRef;
 use crate::LayoutRef;
@@ -51,6 +53,7 @@ use crate::layouts::chunked::writer::ChunkedLayoutStrategy;
 use crate::layouts::flat::Flat;
 use crate::layouts::flat::writer::FlatLayoutStrategy;
 use crate::layouts::indexed::tests::exact_value::DecliningIndex;
+use crate::layouts::indexed::tests::exact_value::Entries;
 use crate::layouts::indexed::tests::exact_value::ExactValueIndex;
 use crate::layouts::indexed::tests::fixed_superset::FixedSupersetIndex;
 use crate::layouts::indexed::tests::fixed_superset::INDEX_ROWS;
@@ -556,6 +559,77 @@ async fn index_whose_stored_dtype_no_longer_matches_its_kind_is_skipped() -> Vor
     Ok(())
 }
 
+/// A kind's serialized form is a contract with every file already written, so each test kind's
+/// content and options must survive their own encoding.
+#[rstest]
+#[case::empty(vec![])]
+#[case::one(vec![("alpha", RoaringBitmap::from_iter([0u32]))])]
+#[case::several(vec![
+    ("alpha", RoaringBitmap::from_iter([0u32, 7])),
+    ("beta", RoaringBitmap::new()),
+    ("gamma", RoaringBitmap::from_iter([3u32, 4, 5, 100_000])),
+])]
+fn exact_value_index_roundtrips(
+    #[case] entries: Vec<(&'static str, RoaringBitmap)>,
+) -> VortexResult<()> {
+    let vtable = ExactValueIndex::new_ref();
+    let kind = vtable
+        .as_opt::<ExactValueIndex>()
+        .ok_or_else(|| vortex_err!("new_ref makes an ExactValueIndex"))?;
+    let mut ctx = new_session().create_execution_ctx();
+    check_roundtrip(
+        kind,
+        &DType::Utf8(Nullability::Nullable),
+        &Entries::new(entries),
+        &(),
+        &mut ctx,
+    )
+}
+
+#[test]
+fn fixed_superset_index_roundtrips() -> VortexResult<()> {
+    let vtable = FixedSupersetIndex::new_ref("test.idx.fixed", RoaringBitmap::new());
+    let kind = vtable
+        .as_opt::<FixedSupersetIndex>()
+        .ok_or_else(|| vortex_err!("new_ref makes a FixedSupersetIndex"))?;
+    let mut ctx = new_session().create_execution_ctx();
+    check_roundtrip(
+        kind,
+        &DType::Utf8(Nullability::NonNullable),
+        &(),
+        &(),
+        &mut ctx,
+    )
+}
+
+/// Pins the indexed layout's own metadata: one spec per index with its id, options, index dtype
+/// and partitioning. Covers both an unpartitioned index and a partitioned one with a declined
+/// partition, so any change to how specs serialize shows up as a diff against the checked-in file.
+#[cfg_attr(miri, ignore)]
+#[tokio::test]
+async fn indexed_layout_metadata() -> VortexResult<()> {
+    let session = session_with_exact_index();
+    let (layout, _segments) = write_with(
+        &session,
+        partitioned_strategy(vec![
+            partitioned(
+                IndexConfig::with_defaults(ExactValueIndex::declining_partitions_containing(
+                    ROWS[5],
+                )),
+                BLOCK_LEN as u64,
+            )?,
+            IndexConfig::with_defaults(FixedSupersetIndex::new_ref(
+                "test.idx.fixed",
+                RoaringBitmap::from_iter([2u32]),
+            )),
+        ]),
+    )
+    .await?;
+
+    check_metadata("indexed.metadata", &layout.metadata());
+    Ok(())
+}
+
 /// Rows where `ROWS[row] == value`, over `row_range`.
 fn expected_rows(row_range: &Range<u64>, value: &str) -> VortexResult<Mask> {
     let rows = usize::try_from(row_range.start)?..usize::try_from(row_range.end)?;
@@ -1018,10 +1092,9 @@ mod exact_value {
     use vortex_array::scalar_fn::fns::binary::Binary;
     use vortex_array::scalar_fn::fns::literal::Literal;
     use vortex_array::scalar_fn::fns::operators::Operator;
-    use vortex_array::stream::ArrayStreamExt;
-    use vortex_array::stream::SendableArrayStream;
     use vortex_array::validity::Validity;
     use vortex_error::VortexResult;
+    use vortex_error::vortex_bail;
     use vortex_error::vortex_err;
     use vortex_session::VortexSession;
     use vortex_session::registry::CachedId;
@@ -1072,10 +1145,21 @@ mod exact_value {
         }
     }
 
-    /// One decoded chunk of the index: its keys and their serialized posting lists.
+    /// A run of index entries: sorted, distinct keys and the rows holding each.
+    #[derive(Debug)]
     pub struct Entries {
-        keys: VarBinViewArray,
-        postings: VarBinViewArray,
+        keys: Vec<String>,
+        postings: Vec<RoaringBitmap>,
+    }
+
+    impl Entries {
+        pub fn new(entries: impl IntoIterator<Item = (&'static str, RoaringBitmap)>) -> Self {
+            let (keys, postings) = entries
+                .into_iter()
+                .map(|(key, rows)| (key.to_string(), rows))
+                .unzip();
+            Self { keys, postings }
+        }
     }
 
     impl IndexVTable for ExactValueIndex {
@@ -1088,6 +1172,10 @@ mod exact_value {
         fn id(&self) -> IndexId {
             static ID: CachedId = CachedId::new(EXACT_VALUE_ID);
             *ID
+        }
+
+        fn serialize_options(&self, _options: &()) -> Vec<u8> {
+            vec![]
         }
 
         fn deserialize_options(&self, _options: &[u8]) -> VortexResult<()> {
@@ -1137,6 +1225,33 @@ mod exact_value {
             }))
         }
 
+        fn encode(
+            &self,
+            chunk: &Entries,
+            _options: &(),
+            _ctx: &mut ExecutionCtx,
+        ) -> VortexResult<ArrayRef> {
+            let mut lists = Vec::with_capacity(chunk.postings.len());
+            for bitmap in &chunk.postings {
+                let mut buffer = Vec::with_capacity(bitmap.serialized_size());
+                bitmap
+                    .serialize_into(&mut buffer)
+                    .map_err(|err| vortex_err!("Failed to serialize postings: {err}"))?;
+                lists.push(buffer);
+            }
+
+            Ok(StructArray::try_new_with_dtype(
+                vec![
+                    VarBinViewArray::from_iter_str(&chunk.keys).into_array(),
+                    VarBinViewArray::from_iter_bin(lists).into_array(),
+                ],
+                index_fields(),
+                chunk.keys.len(),
+                Validity::NonNullable,
+            )?
+            .into_array())
+        }
+
         fn decode(
             &self,
             chunk: ArrayRef,
@@ -1144,16 +1259,29 @@ mod exact_value {
             ctx: &mut ExecutionCtx,
         ) -> VortexResult<Entries> {
             let entries = chunk.execute::<StructArray>(ctx)?;
-            Ok(Entries {
-                keys: entries
-                    .unmasked_field_by_name(KEY_FIELD)?
-                    .clone()
-                    .execute::<VarBinViewArray>(ctx)?,
-                postings: entries
-                    .unmasked_field_by_name(POSTINGS_FIELD)?
-                    .clone()
-                    .execute::<VarBinViewArray>(ctx)?,
-            })
+            let keys = entries
+                .unmasked_field_by_name(KEY_FIELD)?
+                .clone()
+                .execute::<VarBinViewArray>(ctx)?;
+            let lists = entries
+                .unmasked_field_by_name(POSTINGS_FIELD)?
+                .clone()
+                .execute::<VarBinViewArray>(ctx)?;
+
+            let mut decoded = Entries {
+                keys: Vec::with_capacity(keys.len()),
+                postings: Vec::with_capacity(keys.len()),
+            };
+            for idx in 0..keys.len() {
+                decoded
+                    .keys
+                    .push(String::from_utf8_lossy(keys.bytes_at(idx).as_slice()).into_owned());
+                decoded.postings.push(
+                    RoaringBitmap::deserialize_from(lists.bytes_at(idx).as_slice())
+                        .map_err(|err| vortex_err!("Failed to deserialize postings: {err}"))?,
+                );
+            }
+            Ok(decoded)
         }
 
         fn resolve(
@@ -1164,14 +1292,8 @@ mod exact_value {
             _options: &(),
         ) -> VortexResult<RowLocator> {
             for chunk in chunks {
-                for idx in 0..chunk.keys.len() {
-                    if chunk.keys.bytes_at(idx).as_slice() != query.as_bytes() {
-                        continue;
-                    }
-                    let bitmap =
-                        RoaringBitmap::deserialize_from(chunk.postings.bytes_at(idx).as_slice())
-                            .map_err(|err| vortex_err!("Failed to deserialize postings: {err}"))?;
-                    return Ok(RowLocator::Rows(bitmap));
+                if let Ok(idx) = chunk.keys.binary_search(query) {
+                    return Ok(RowLocator::Rows(chunk.postings[idx].clone()));
                 }
             }
             Ok(RowLocator::empty_rows())
@@ -1185,6 +1307,9 @@ mod exact_value {
     }
 
     impl IndexBuilder for Builder {
+        type Options = ();
+        type Chunk = Entries;
+
         fn push(
             &mut self,
             chunk: &ArrayRef,
@@ -1209,37 +1334,15 @@ mod exact_value {
             Ok(())
         }
 
-        fn finish(self: Box<Self>) -> VortexResult<Option<(SendableArrayStream, Vec<u8>)>> {
+        fn finish(self) -> VortexResult<Option<(Vec<Entries>, ())>> {
             if self
                 .decline_if_contains
                 .is_some_and(|value| self.postings.contains_key(value))
             {
                 return Ok(None);
             }
-
-            let mut keys = Vec::with_capacity(self.postings.len());
-            let mut lists = Vec::with_capacity(self.postings.len());
-            for (key, bitmap) in self.postings {
-                let mut buffer = Vec::with_capacity(bitmap.serialized_size());
-                bitmap
-                    .serialize_into(&mut buffer)
-                    .map_err(|err| vortex_err!("Failed to serialize postings: {err}"))?;
-                keys.push(key);
-                lists.push(buffer);
-            }
-
-            let len = keys.len();
-            let array = StructArray::try_new_with_dtype(
-                vec![
-                    VarBinViewArray::from_iter_str(keys).into_array(),
-                    VarBinViewArray::from_iter_bin(lists).into_array(),
-                ],
-                index_fields(),
-                len,
-                Validity::NonNullable,
-            )?;
-
-            Ok(Some((array.into_array().to_array_stream().boxed(), vec![])))
+            let (keys, postings) = self.postings.into_iter().unzip();
+            Ok(Some((vec![Entries { keys, postings }], ())))
         }
 
         fn buffered_bytes(&self) -> u64 {
@@ -1274,6 +1377,10 @@ mod exact_value {
             *ID
         }
 
+        fn serialize_options(&self, _options: &()) -> Vec<u8> {
+            vec![]
+        }
+
         fn deserialize_options(&self, _options: &[u8]) -> VortexResult<()> {
             Ok(())
         }
@@ -1302,6 +1409,10 @@ mod exact_value {
             Ok(None)
         }
 
+        fn encode(&self, _chunk: &(), _options: &(), _ctx: &mut ExecutionCtx) -> VortexResult<ArrayRef> {
+            vortex_bail!("a declining index never builds content to encode")
+        }
+
         fn decode(&self, _chunk: ArrayRef, _options: &(), _ctx: &mut ExecutionCtx) -> VortexResult<()> {
             Ok(())
         }
@@ -1320,6 +1431,9 @@ mod exact_value {
     pub struct DecliningBuilder;
 
     impl IndexBuilder for DecliningBuilder {
+        type Options = ();
+        type Chunk = ();
+
         fn push(
             &mut self,
             _chunk: &ArrayRef,
@@ -1329,7 +1443,7 @@ mod exact_value {
             Ok(())
         }
 
-        fn finish(self: Box<Self>) -> VortexResult<Option<(SendableArrayStream, Vec<u8>)>> {
+        fn finish(self) -> VortexResult<Option<(Vec<()>, ())>> {
             Ok(None)
         }
 
@@ -1360,8 +1474,6 @@ mod fixed_superset {
     use vortex_array::expr::eq;
     use vortex_array::expr::lit;
     use vortex_array::expr::root;
-    use vortex_array::stream::ArrayStreamExt;
-    use vortex_array::stream::SendableArrayStream;
     use vortex_error::VortexResult;
     use vortex_session::VortexSession;
 
@@ -1426,6 +1538,10 @@ mod fixed_superset {
             IndexId::from(self.id)
         }
 
+        fn serialize_options(&self, _options: &()) -> Vec<u8> {
+            vec![]
+        }
+
         fn deserialize_options(&self, _options: &[u8]) -> VortexResult<()> {
             Ok(())
         }
@@ -1458,6 +1574,10 @@ mod fixed_superset {
             }))
         }
 
+        fn encode(&self, _chunk: &(), _options: &(), _ctx: &mut ExecutionCtx) -> VortexResult<ArrayRef> {
+            Ok(PrimitiveArray::from_iter(0..INDEX_ROWS).into_array())
+        }
+
         fn decode(&self, _chunk: ArrayRef, _options: &(), _ctx: &mut ExecutionCtx) -> VortexResult<()> {
             Ok(())
         }
@@ -1473,11 +1593,14 @@ mod fixed_superset {
         }
     }
 
-    /// Writes `0..INDEX_ROWS` so the layout has real content for `plan`'s filter to select; the
-    /// values themselves are never decoded.
+    /// Builds one chunk that encodes as `0..INDEX_ROWS`, so the layout has real content for `plan`'s
+    /// filter to select; the values themselves are never decoded.
     pub struct Builder;
 
     impl IndexBuilder for Builder {
+        type Options = ();
+        type Chunk = ();
+
         fn push(
             &mut self,
             _chunk: &ArrayRef,
@@ -1487,9 +1610,8 @@ mod fixed_superset {
             Ok(())
         }
 
-        fn finish(self: Box<Self>) -> VortexResult<Option<(SendableArrayStream, Vec<u8>)>> {
-            let array = PrimitiveArray::from_iter(0..INDEX_ROWS).into_array();
-            Ok(Some((array.to_array_stream().boxed(), vec![])))
+        fn finish(self) -> VortexResult<Option<(Vec<()>, ())>> {
+            Ok(Some((vec![()], ())))
         }
 
         fn buffered_bytes(&self) -> u64 {

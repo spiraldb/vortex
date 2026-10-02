@@ -1,17 +1,26 @@
 //! End-to-end tests: write a column indexed by [`ReverseIndex`], then probe it.
 
+use std::io::Write;
 use std::sync::Arc;
+
+use goldenfile::Mint;
+use roaring::RoaringBitmap;
+use rstest::rstest;
 
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::MaskFuture;
 use vortex_array::VortexSessionExecute;
 use vortex_array::array_session;
+use vortex_array::assert_arrays_eq;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinViewArray;
 use vortex_array::arrays::struct_::StructArrayExt;
+use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldPath;
+use vortex_array::dtype::Nullability;
+use vortex_array::dtype::PType;
 use vortex_array::expr::col;
 use vortex_array::expr::eq;
 use vortex_array::expr::lit;
@@ -39,6 +48,7 @@ use vortex_layout::layouts::flat::writer::FlatLayoutStrategy;
 use vortex_layout::layouts::indexed::INDEXED_LAYOUT_ID;
 use vortex_layout::layouts::indexed::IndexConfig;
 use vortex_layout::layouts::indexed::IndexSessionExt;
+use vortex_layout::layouts::indexed::IndexVTable;
 use vortex_layout::layouts::indexed::IndexedStrategy;
 use vortex_layout::layouts::repartition::RepartitionStrategy;
 use vortex_layout::layouts::repartition::RepartitionWriterOptions;
@@ -46,6 +56,7 @@ use vortex_layout::session::LayoutSession;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
 
+use crate::Entries;
 use crate::ReverseIndex;
 
 /// Small enough that a 12-row file spans three blocks, making the row/block granularity
@@ -348,3 +359,55 @@ async fn string_valued_column_is_indexed_exactly() -> VortexResult<()> {
     );
     Ok(())
 }
+
+/// `ReverseIndex`'s content is a contract with every file already written: it must encode as the
+/// declared index dtype, and re-encoding its decoding must reproduce that encoding.
+///
+/// This is `vortex_layout::layouts::indexed::test_harness::check_roundtrip`, which kinds in other
+/// crates can call by enabling `vortex-layout`'s `_test-harness` feature; an example in the same
+/// package cannot enable it for itself. The goldenfile pins the encoded rows themselves, so a
+/// change to how keys or postings are laid out shows up as a diff against the checked-in file.
+#[rstest]
+#[case::i32(
+    "reverse_index_i32.txt",
+    PrimitiveArray::from_iter([10i32, 20, 30]).into_array(),
+    DType::Primitive(PType::I32, Nullability::Nullable),
+)]
+#[case::utf8(
+    "reverse_index_utf8.txt",
+    VarBinViewArray::from_iter_str(["alpha", "beta", "gamma"]).into_array(),
+    DType::Utf8(Nullability::NonNullable),
+)]
+fn reverse_index_roundtrips(
+    #[case] golden: &str,
+    #[case] keys: ArrayRef,
+    #[case] data_dtype: DType,
+) -> VortexResult<()> {
+    let mut ctx = session().create_execution_ctx();
+    let entries = Entries {
+        keys,
+        postings: vec![
+            RoaringBitmap::from_iter([0u32, 9]),
+            RoaringBitmap::new(),
+            RoaringBitmap::from_iter([3u32, 4, 100_000]),
+        ],
+    };
+
+    let encoded = ReverseIndex.encode(&entries, &(), &mut ctx)?;
+    assert_eq!(
+        Some(encoded.dtype()),
+        ReverseIndex.index_dtype(&data_dtype, &()).as_ref()
+    );
+    let decoded = ReverseIndex.decode(encoded.clone(), &(), &mut ctx)?;
+    assert_arrays_eq!(
+        ReverseIndex.encode(&decoded, &(), &mut ctx)?,
+        encoded,
+        &mut ctx
+    );
+
+    let mut mint = Mint::new("goldenfiles/");
+    let mut file = mint.new_goldenfile(golden)?;
+    writeln!(file, "{}", encoded.display_values())?;
+    Ok(())
+}
+
