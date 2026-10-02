@@ -38,7 +38,6 @@ use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure_eq;
 use vortex_error::vortex_panic;
 use vortex_session::VortexSession;
-use vortex_session::registry::CachedId;
 
 use crate::BitPackedArrayExt;
 use crate::BitPackedData;
@@ -55,6 +54,7 @@ use crate::bitpacking::array::BitPackedSlotsView;
 use crate::bitpacking::array::PATCH_SLOTS;
 use crate::bitpacking::array::validate_block_offsets;
 use crate::bitpacking::vtable::rules::RULES;
+use crate::bitpacked_v2_id;
 mod kernels;
 mod operations;
 mod rules;
@@ -92,8 +92,7 @@ impl VTable for BitPacked {
     type ValidityVTable = Self;
 
     fn id(&self) -> ArrayId {
-        static ID: CachedId = CachedId::new("fastlanes.bitpacked");
-        *ID
+        bitpacked_v2_id()
     }
 
     fn validate(
