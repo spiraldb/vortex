@@ -169,7 +169,7 @@ impl VortexWriteOptions {
     }
 
     /// Exclude legacy top-level-only statistics (`field_stats`) from the file, computing and
-    /// writing only the full nested post-order statistics (`nested_field_aggregates`).
+    /// writing only the full nested post-order statistics (`entry_sets` and `partials`).
     ///
     /// Readers built before nested file stats existed only look at `field_stats` and validate its
     /// length against the number of top-level struct fields; omitting it means those readers find
