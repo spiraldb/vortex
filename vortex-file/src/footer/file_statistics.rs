@@ -6,6 +6,7 @@
 //! File statistics provide metadata about the data in the file, such as min/max values,
 //! null counts, and other statistical information that can be used for query optimization
 //! and data exploration.
+use std::hash::Hash;
 use std::sync::Arc;
 
 use flatbuffers::FlatBufferBuilder;
@@ -25,6 +26,7 @@ use vortex_array::stats::StatsSet;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
+use vortex_error::vortex_ensure;
 use vortex_error::vortex_ensure_eq;
 use vortex_error::vortex_err;
 use vortex_layout::layouts::file_stats::AggregateStat;
@@ -143,29 +145,57 @@ impl FileStatistics {
         file_dtype: &DType,
         session: &VortexSession,
     ) -> VortexResult<Self> {
-        if let Some(nested_field_aggregates) = fb.nested_field_aggregates() {
+        if let Some(entry_sets) = fb.entry_sets() {
             let aggregate_fns: Vec<Option<AggregateFnRef>> = fb
                 .aggregate_specs()
                 .iter()
                 .flat_map(|specs| specs.iter())
                 .map(|spec| aggregate_fn_from_spec(&spec, session))
                 .try_collect()?;
+            let aggregate_sets: Vec<Vec<u16>> = fb
+                .aggregate_sets()
+                .iter()
+                .flat_map(|sets| sets.iter())
+                .map(|set| {
+                    set.specs()
+                        .iter()
+                        .map(|spec| {
+                            vortex_ensure!(
+                                usize::from(spec) < aggregate_fns.len(),
+                                "aggregate spec index {spec} out of range for {} specs",
+                                aggregate_fns.len()
+                            );
+                            Ok(spec)
+                        })
+                        .collect()
+                })
+                .try_collect()?;
             let layout = postorder_stats_layout(file_dtype);
-            vortex_ensure_eq!(nested_field_aggregates.len(), layout.len());
+            vortex_ensure_eq!(entry_sets.len(), layout.len());
 
+            let mut partials =
+                PartialsReader::new(fb.partials().map(|p| p.bytes()).unwrap_or_default());
             let mut aggregates = Vec::with_capacity(layout.len());
             let mut dtypes = Vec::with_capacity(layout.len());
             let mut paths = Vec::with_capacity(layout.len());
-            for (field_aggregates, (path, dtype)) in nested_field_aggregates.iter().zip(layout) {
-                aggregates.push(aggregate_stats_from_flatbuffer(
-                    &field_aggregates,
+            for (set, (path, dtype)) in entry_sets.iter().zip(layout) {
+                let set = aggregate_sets.get(usize::from(set)).ok_or_else(|| {
+                    vortex_err!(
+                        "aggregate set index {set} out of range for {} sets",
+                        aggregate_sets.len()
+                    )
+                })?;
+                aggregates.push(aggregate_stats_from_partials(
+                    set,
                     &aggregate_fns,
+                    &mut partials,
                     &dtype,
                     session,
                 )?);
                 dtypes.push(dtype);
                 paths.push(path);
             }
+            partials.finish()?;
 
             return Ok(Self::from_parts(
                 aggregates.into(),
@@ -309,38 +339,132 @@ fn aggregate_fn_from_spec(
     Ok(Some(aggregate_fn))
 }
 
-fn aggregate_stats_from_flatbuffer(
-    field_aggregates: &fb::FieldAggregates<'_>,
+/// Reads one entry's partial states, one per spec in `set`, from `partials`.
+///
+/// `set`'s spec indices must already be checked against `aggregate_fns`.
+fn aggregate_stats_from_partials(
+    set: &[u16],
     aggregate_fns: &[Option<AggregateFnRef>],
+    partials: &mut PartialsReader<'_>,
     dtype: &DType,
     session: &VortexSession,
 ) -> VortexResult<AggregateStats> {
-    let mut aggregates = Vec::new();
-    for state in field_aggregates.aggregates().unwrap_or_default() {
-        let spec = usize::from(state.aggregate_spec());
-        let Some(aggregate_fn) = aggregate_fns.get(spec).ok_or_else(|| {
-            vortex_err!(
-                "aggregate spec index {spec} out of range for {} specs",
-                aggregate_fns.len()
-            )
-        })?
-        else {
+    let mut aggregates = Vec::with_capacity(set.len());
+    for &spec in set {
+        // Read the partial even for an unknown aggregate, to stay in step with the stream.
+        let bytes = partials.next_partial()?;
+        let Some(aggregate_fn) = &aggregate_fns[usize::from(spec)] else {
             continue;
         };
-        let aggregate_fn = aggregate_fn.clone();
         let partial_dtype = aggregate_fn.state_dtype(dtype).ok_or_else(|| {
             vortex_err!("aggregate {aggregate_fn} does not support field dtype {dtype}")
         })?;
-        let partial =
-            ScalarValue::from_proto_bytes(state.partial().bytes(), &partial_dtype, session)?;
+        let partial = ScalarValue::from_proto_bytes(bytes, &partial_dtype, session)?;
         let partial = Scalar::try_new(partial_dtype, partial)?;
         aggregates.push(AggregateStat::try_from_partial(
-            aggregate_fn,
+            aggregate_fn.clone(),
             partial,
             dtype,
         )?);
     }
     Ok(AggregateStats::new(aggregates))
+}
+
+/// The maximum length of an unsigned LEB128 encoding of a `u64`.
+const MAX_VARINT_LEN: usize = 10;
+
+/// Appends `value` to `out` as an unsigned LEB128 varint.
+fn write_varint(out: &mut Vec<u8>, mut value: u64) {
+    while value >= 0x80 {
+        out.push((value as u8) | 0x80);
+        value >>= 7;
+    }
+    out.push(value as u8);
+}
+
+/// Reads the length-prefixed partial states of `FileStatistics.partials` in order.
+struct PartialsReader<'a> {
+    remaining: &'a [u8],
+}
+
+impl<'a> PartialsReader<'a> {
+    fn new(bytes: &'a [u8]) -> Self {
+        Self { remaining: bytes }
+    }
+
+    /// Returns the bytes of the next partial state.
+    fn next_partial(&mut self) -> VortexResult<&'a [u8]> {
+        let len = self.next_varint()?;
+        let len = usize::try_from(len)
+            .ok()
+            .filter(|&len| len <= self.remaining.len())
+            .ok_or_else(|| {
+                vortex_err!(
+                    "file statistics partial of {len} bytes exceeds the {} remaining bytes",
+                    self.remaining.len()
+                )
+            })?;
+        let (partial, rest) = self.remaining.split_at(len);
+        self.remaining = rest;
+        Ok(partial)
+    }
+
+    fn next_varint(&mut self) -> VortexResult<u64> {
+        let mut value = 0u64;
+        for (i, &byte) in self.remaining.iter().take(MAX_VARINT_LEN).enumerate() {
+            let bits = u64::from(byte & 0x7f);
+            // The tenth byte holds only the top bit of a `u64`.
+            vortex_ensure!(
+                i < MAX_VARINT_LEN - 1 || bits <= 1,
+                "file statistics partial length overflows u64"
+            );
+            value |= bits << (7 * i);
+            if byte & 0x80 == 0 {
+                self.remaining = &self.remaining[i + 1..];
+                return Ok(value);
+            }
+        }
+        vortex_bail!("truncated or overlong file statistics partial length")
+    }
+
+    /// Fails unless every partial state has been read.
+    fn finish(self) -> VortexResult<()> {
+        vortex_ensure!(
+            self.remaining.is_empty(),
+            "{} unread bytes after the last file statistics partial",
+            self.remaining.len()
+        );
+        Ok(())
+    }
+}
+
+/// Assigns each distinct value a `u16` index in order of first appearance.
+struct Dictionary<K> {
+    values: Vec<K>,
+    indices: HashMap<K, u16>,
+    kind: &'static str,
+}
+
+impl<K: Clone + Eq + Hash> Dictionary<K> {
+    fn new(kind: &'static str) -> Self {
+        Self {
+            values: Vec::new(),
+            indices: HashMap::default(),
+            kind,
+        }
+    }
+
+    fn intern(&mut self, value: K) -> VortexResult<u16> {
+        if let Some(&index) = self.indices.get(&value) {
+            return Ok(index);
+        }
+        let index = u16::try_from(self.values.len()).map_err(|_| {
+            vortex_err!("file statistics exceed {} distinct {}", u16::MAX, self.kind)
+        })?;
+        self.values.push(value.clone());
+        self.indices.insert(value, index);
+        Ok(index)
+    }
 }
 
 impl<'a> IntoIterator for &'a FileStatistics {
@@ -371,54 +495,29 @@ impl WriteFlatBuffer for FileStatistics {
             .collect::<VortexResult<Vec<_>>>()?;
         let field_stats = fbb.create_vector(field_stats.as_slice());
 
-        // Aggregate functions are dictionary-encoded, like the footer's array and layout IDs, so
-        // each distinct function and its options are written once.
-        let mut specs: Vec<&AggregateFnRef> = Vec::new();
-        let mut spec_indices: HashMap<&AggregateFnRef, u16> = HashMap::default();
-        let mut nested_field_aggregates = Vec::with_capacity(self.aggregates.len());
+        // Aggregate functions and the lists of them recorded per entry are dictionary-encoded, so
+        // each distinct function and list is written once however many entries use it.
+        let mut specs = Dictionary::<&AggregateFnRef>::new("aggregate functions");
+        let mut sets = Dictionary::<Vec<u16>>::new("aggregate sets");
+        let mut entry_sets = Vec::with_capacity(self.aggregates.len());
+        let mut partials = Vec::new();
         for field_aggregates in self.aggregates.iter() {
-            let mut states = Vec::new();
+            let mut set = Vec::new();
             // Values without a partial state (e.g. from legacy statistics) can't be written.
             for stat in field_aggregates.iter() {
                 let Some(partial) = stat.partial() else {
                     continue;
                 };
-                let aggregate_fn = stat.aggregate_fn();
-                let aggregate_spec = match spec_indices.get(aggregate_fn) {
-                    Some(&index) => index,
-                    None => {
-                        let index = u16::try_from(specs.len()).map_err(|_| {
-                            vortex_err!(
-                                "file statistics exceed {} distinct aggregate functions",
-                                u16::MAX
-                            )
-                        })?;
-                        specs.push(aggregate_fn);
-                        spec_indices.insert(aggregate_fn, index);
-                        index
-                    }
-                };
-                let partial =
-                    fbb.create_vector(&ScalarValue::to_proto_bytes::<Vec<u8>>(partial.value()));
-                states.push(fb::AggregateState::create(
-                    fbb,
-                    &fb::AggregateStateArgs {
-                        aggregate_spec,
-                        partial: Some(partial),
-                    },
-                ));
+                set.push(specs.intern(stat.aggregate_fn())?);
+                let partial = ScalarValue::to_proto_bytes::<Vec<u8>>(partial.value());
+                write_varint(&mut partials, partial.len() as u64);
+                partials.extend_from_slice(&partial);
             }
-            let aggregates = fbb.create_vector(states.as_slice());
-            nested_field_aggregates.push(fb::FieldAggregates::create(
-                fbb,
-                &fb::FieldAggregatesArgs {
-                    aggregates: Some(aggregates),
-                },
-            ));
+            entry_sets.push(sets.intern(set)?);
         }
-        let nested_field_aggregates = fbb.create_vector(nested_field_aggregates.as_slice());
 
         let aggregate_specs = specs
+            .values
             .into_iter()
             .map(|aggregate_fn| {
                 let options = aggregate_fn.options().serialize()?.ok_or_else(|| {
@@ -428,24 +527,37 @@ impl WriteFlatBuffer for FileStatistics {
                     )
                 })?;
                 let id = fbb.create_string(aggregate_fn.id().as_ref());
-                let options = fbb.create_vector(options.as_slice());
+                let options = (!options.is_empty()).then(|| fbb.create_vector(options.as_slice()));
                 Ok(fb::AggregateSpec::create(
                     fbb,
                     &fb::AggregateSpecArgs {
                         id: Some(id),
-                        options: Some(options),
+                        options,
                     },
                 ))
             })
             .collect::<VortexResult<Vec<_>>>()?;
         let aggregate_specs = fbb.create_vector(aggregate_specs.as_slice());
+        let aggregate_sets = sets
+            .values
+            .iter()
+            .map(|set| {
+                let specs = fbb.create_vector(set.as_slice());
+                fb::AggregateSet::create(fbb, &fb::AggregateSetArgs { specs: Some(specs) })
+            })
+            .collect::<Vec<_>>();
+        let aggregate_sets = fbb.create_vector(aggregate_sets.as_slice());
+        let entry_sets = fbb.create_vector(entry_sets.as_slice());
+        let partials = fbb.create_vector(partials.as_slice());
 
         Ok(fb::FileStatistics::create(
             fbb,
             &fb::FileStatisticsArgs {
                 field_stats: Some(field_stats),
                 aggregate_specs: Some(aggregate_specs),
-                nested_field_aggregates: Some(nested_field_aggregates),
+                aggregate_sets: Some(aggregate_sets),
+                entry_sets: Some(entry_sets),
+                partials: Some(partials),
             },
         ))
     }
@@ -456,6 +568,7 @@ mod tests {
     use std::num::NonZeroUsize;
 
     use flatbuffers::FlatBufferBuilder;
+    use rstest::rstest;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
     use vortex_array::aggregate_fn::AggregateFnVTableExt;
@@ -555,7 +668,7 @@ mod tests {
     }
 
     #[test]
-    fn aggregate_specs_are_written_once_per_function_and_options() -> VortexResult<()> {
+    fn specs_and_sets_are_written_once() -> VortexResult<()> {
         let file_dtype = DType::struct_(
             [("a", i32_dtype()), ("b", i32_dtype()), ("c", i32_dtype())],
             Nullability::NonNullable,
@@ -590,11 +703,15 @@ mod tests {
             .map(|spec| {
                 (
                     spec.id().to_string(),
-                    spec.options().map(|options| options.bytes().to_vec()),
+                    spec.options()
+                        .map(|options| options.bytes().to_vec())
+                        .unwrap_or_default(),
                 )
             })
             .collect::<Vec<_>>();
-        let options = |aggregate_fn: &AggregateFnRef| aggregate_fn.options().serialize();
+        let options = |aggregate_fn: &AggregateFnRef| -> VortexResult<Vec<u8>> {
+            Ok(aggregate_fn.options().serialize()?.unwrap_or_default())
+        };
         assert_eq!(
             specs,
             [
@@ -606,6 +723,21 @@ mod tests {
                 ("vortex.min".to_string(), options(&min_including_nans)?),
             ]
         );
+
+        // "a" and "b" record the same aggregates, so they share a set.
+        let sets = fb
+            .aggregate_sets()
+            .vortex_expect("aggregate sets")
+            .iter()
+            .map(|set| set.specs().iter().collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        assert_eq!(sets, [vec![0, 1], vec![2]]);
+        let entry_sets = fb
+            .entry_sets()
+            .vortex_expect("entry sets")
+            .iter()
+            .collect::<Vec<_>>();
+        assert_eq!(entry_sets, [0, 0, 1]);
 
         let read_back = read_back(&file_stats, &file_dtype)?;
         let (b, _) = read_back
@@ -666,65 +798,93 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn unknown_aggregates_are_skipped() -> VortexResult<()> {
-        let file_dtype = DType::struct_([("col", i32_dtype())], Nullability::NonNullable);
-        let known = min(7);
-        let partial = ScalarValue::to_proto_bytes::<Vec<u8>>(
-            known.partial().vortex_expect("has a partial").value(),
+    /// Hand-assembles the aggregate-based sections of a `FileStatistics` flatbuffer, so tests can
+    /// write footers this writer never would.
+    fn raw_file_stats(
+        specs: &[(&str, &[u8])],
+        sets: &[&[u16]],
+        entry_sets: &[u16],
+        partials: &[u8],
+    ) -> Vec<u8> {
+        let mut fbb = FlatBufferBuilder::new();
+        let specs = specs
+            .iter()
+            .map(|(id, options)| {
+                let id = fbb.create_string(id);
+                let options = fbb.create_vector(options);
+                fb::AggregateSpec::create(
+                    &mut fbb,
+                    &fb::AggregateSpecArgs {
+                        id: Some(id),
+                        options: Some(options),
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        let specs = fbb.create_vector(&specs);
+        let sets = sets
+            .iter()
+            .map(|set| {
+                let specs = fbb.create_vector(set);
+                fb::AggregateSet::create(&mut fbb, &fb::AggregateSetArgs { specs: Some(specs) })
+            })
+            .collect::<Vec<_>>();
+        let sets = fbb.create_vector(&sets);
+        let entry_sets = fbb.create_vector(entry_sets);
+        let partials = fbb.create_vector(partials);
+        let root = fb::FileStatistics::create(
+            &mut fbb,
+            &fb::FileStatisticsArgs {
+                field_stats: None,
+                aggregate_specs: Some(specs),
+                aggregate_sets: Some(sets),
+                entry_sets: Some(entry_sets),
+                partials: Some(partials),
+            },
         );
+        fbb.finish_minimal(root);
+        fbb.finished_data().to_vec()
+    }
 
+    fn read_raw(bytes: &[u8], file_dtype: &DType) -> VortexResult<FileStatistics> {
+        let fb = flatbuffers::root::<fb::FileStatistics>(bytes).vortex_expect("valid flatbuffer");
+        FileStatistics::from_flatbuffer(&fb, file_dtype, &array_session())
+    }
+
+    /// The options of `min` and its partial state for `value`, length-prefixed as in `partials`.
+    fn min_spec_and_partial(value: i32) -> VortexResult<(Vec<u8>, Vec<u8>)> {
+        let known = min(value);
         let options = known
             .aggregate_fn()
             .options()
             .serialize()?
             .vortex_expect("serializable options");
-
-        // Spec 0 is an aggregate no session knows, spec 1 is the known `min`.
-        let mut fbb = FlatBufferBuilder::new();
-        let aggregate_specs = ["test.unknown", known.aggregate_fn().id().as_ref()].map(|id| {
-            let id = fbb.create_string(id);
-            let options = fbb.create_vector(options.as_slice());
-            fb::AggregateSpec::create(
-                &mut fbb,
-                &fb::AggregateSpecArgs {
-                    id: Some(id),
-                    options: Some(options),
-                },
-            )
-        });
-        let aggregate_specs = fbb.create_vector(&aggregate_specs);
-        let states = [0u16, 1].map(|aggregate_spec| {
-            let partial = fbb.create_vector(partial.as_slice());
-            fb::AggregateState::create(
-                &mut fbb,
-                &fb::AggregateStateArgs {
-                    aggregate_spec,
-                    partial: Some(partial),
-                },
-            )
-        });
-        let aggregates = fbb.create_vector(&states);
-        let field_aggregates = fb::FieldAggregates::create(
-            &mut fbb,
-            &fb::FieldAggregatesArgs {
-                aggregates: Some(aggregates),
-            },
+        let partial = ScalarValue::to_proto_bytes::<Vec<u8>>(
+            known.partial().vortex_expect("has a partial").value(),
         );
-        let nested_field_aggregates = fbb.create_vector(&[field_aggregates]);
-        let root = fb::FileStatistics::create(
-            &mut fbb,
-            &fb::FileStatisticsArgs {
-                field_stats: None,
-                aggregate_specs: Some(aggregate_specs),
-                nested_field_aggregates: Some(nested_field_aggregates),
-            },
-        );
-        fbb.finish_minimal(root);
-        let bytes = fbb.finished_data().to_vec();
+        let mut prefixed = Vec::new();
+        write_varint(&mut prefixed, partial.len() as u64);
+        prefixed.extend_from_slice(&partial);
+        Ok((options, prefixed))
+    }
 
-        let fb = flatbuffers::root::<fb::FileStatistics>(&bytes).vortex_expect("valid flatbuffer");
-        let read_back = FileStatistics::from_flatbuffer(&fb, &file_dtype, &array_session())?;
+    #[test]
+    fn unknown_aggregates_are_skipped_by_length() -> VortexResult<()> {
+        let file_dtype = DType::struct_([("col", i32_dtype())], Nullability::NonNullable);
+        let (options, known_partial) = min_spec_and_partial(7)?;
+
+        // Spec 0 is an aggregate no session knows, recorded before the known `min`. Its partial is
+        // bytes this reader can't interpret, which it has to skip to reach `min`'s.
+        let mut partials = vec![3, 0xde, 0xad, 0xbe];
+        partials.extend_from_slice(&known_partial);
+        let bytes = raw_file_stats(
+            &[("test.unknown", &[]), ("vortex.min", &options)],
+            &[&[0, 1]],
+            &[0],
+            &partials,
+        );
+
+        let read_back = read_raw(&bytes, &file_dtype)?;
         let (aggregates, _) = read_back
             .get_by_path(&FieldPath::from_name("col"))
             .expect("col aggregates");
@@ -734,6 +894,64 @@ mod tests {
             Precision::exact(ScalarValue::from(7i32))
         );
         Ok(())
+    }
+
+    #[rstest]
+    #[case::set_index_out_of_range(vec![vec![0]], vec![1], None, "aggregate set index 1 out of range")]
+    #[case::spec_index_out_of_range(vec![vec![1]], vec![0], None, "aggregate spec index 1 out of range")]
+    #[case::wrong_entry_count(vec![vec![0]], vec![0, 0], None, "")]
+    #[case::partial_missing(vec![vec![0]], vec![0], Some(vec![]), "truncated or overlong")]
+    #[case::truncated_varint(vec![vec![0]], vec![0], Some(vec![0x80]), "truncated or overlong")]
+    #[case::overlong_varint(vec![vec![0]], vec![0], Some(vec![0x80; 11]), "truncated or overlong")]
+    #[case::varint_overflows(
+        vec![vec![0]],
+        vec![0],
+        Some(vec![0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x02]),
+        "overflows u64"
+    )]
+    #[case::length_past_end(vec![vec![0]], vec![0], Some(vec![5, 0]), "exceeds the 1 remaining bytes")]
+    #[case::trailing_bytes(vec![vec![]], vec![0], Some(vec![0]), "1 unread bytes")]
+    fn malformed_aggregate_statistics_are_rejected(
+        #[case] sets: Vec<Vec<u16>>,
+        #[case] entry_sets: Vec<u16>,
+        #[case] partials: Option<Vec<u8>>,
+        #[case] message: &str,
+    ) -> VortexResult<()> {
+        let file_dtype = DType::struct_([("col", i32_dtype())], Nullability::NonNullable);
+        let (options, valid_partial) = min_spec_and_partial(7)?;
+        let sets = sets.iter().map(Vec::as_slice).collect::<Vec<_>>();
+        let bytes = raw_file_stats(
+            &[("vortex.min", &options)],
+            &sets,
+            &entry_sets,
+            &partials.unwrap_or(valid_partial),
+        );
+
+        let error = read_raw(&bytes, &file_dtype)
+            .err()
+            .vortex_expect("malformed statistics must be rejected");
+        assert!(
+            error.to_string().contains(message),
+            "unexpected error: {error}"
+        );
+        Ok(())
+    }
+
+    #[rstest]
+    #[case(0)]
+    #[case(1)]
+    #[case(127)]
+    #[case(128)]
+    #[case(300)]
+    #[case(u64::from(u32::MAX))]
+    #[case(u64::MAX)]
+    fn varints_round_trip(#[case] value: u64) -> VortexResult<()> {
+        let mut bytes = Vec::new();
+        write_varint(&mut bytes, value);
+        assert!(bytes.len() <= MAX_VARINT_LEN);
+        let mut reader = PartialsReader::new(&bytes);
+        assert_eq!(reader.next_varint()?, value);
+        reader.finish()
     }
 
     #[test]
@@ -770,8 +988,8 @@ mod tests {
 
     #[test]
     fn legacy_non_nested_footer_still_parses() -> VortexResult<()> {
-        // Simulates a footer written before nested field stats existed:
-        // `nested_field_aggregates` is absent, and `field_stats` holds one entry per top-level
+        // Simulates a footer written before aggregate-based stats existed: `entry_sets` is
+        // absent, and `field_stats` holds one entry per top-level
         // struct field.
         let session = array_session();
         let file_dtype = DType::struct_([("col", i32_dtype())], Nullability::NonNullable);
@@ -786,15 +1004,14 @@ mod tests {
             &mut fbb,
             &fb::FileStatisticsArgs {
                 field_stats: Some(field_stats),
-                aggregate_specs: None,
-                nested_field_aggregates: None,
+                ..Default::default()
             },
         );
         fbb.finish_minimal(root);
         let bytes = fbb.finished_data().to_vec();
 
         let fb = flatbuffers::root::<fb::FileStatistics>(&bytes).vortex_expect("valid flatbuffer");
-        assert!(fb.nested_field_aggregates().is_none());
+        assert!(fb.entry_sets().is_none());
 
         let read_back = FileStatistics::from_flatbuffer(&fb, &file_dtype, &session)?;
         let path = FieldPath::from_name("col");
