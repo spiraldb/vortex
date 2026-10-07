@@ -526,7 +526,7 @@ mod tests {
             &VarBinViewArray::from_iter_str(["c"]).into_array(),
             &mut ctx,
         )?;
-        acc.combine_partials(source.partial_scalar()?)?;
+        acc.combine_partials(&source.partial_scalar()?)?;
         assert_eq!(
             acc.can_satisfy(&requested),
             AggregateFnSatisfaction::Approximate
