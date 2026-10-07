@@ -105,7 +105,7 @@ impl AggregateStat {
         dtype: &DType,
     ) -> VortexResult<Self> {
         let mut accumulator = aggregate_fn.accumulator(dtype)?;
-        accumulator.combine_partials(partial.clone())?;
+        accumulator.combine_partials(&partial)?;
         let value = Precision::exact(accumulator.final_scalar()?);
         Ok(Self {
             aggregate_fn,
