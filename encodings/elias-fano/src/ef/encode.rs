@@ -31,20 +31,23 @@ pub struct Encoded {
 
 /// Encode a non-decreasing sequence of elements spanning `0..=span`.
 ///
-/// An *element* is a value with the sequence's reference already subtracted, so `span` is the last
-/// element.
+/// An *element* is a value with the sequence's reference already subtracted, so `span` is usually
+/// the last element. A larger `span` is allowed and sizes the layout for the whole of `0..=span`.
 ///
 /// A caller holding values must check monotonicity **in the value domain** before subtracting: an
 /// element is a modular difference, so an unsorted sequence can still yield non-decreasing elements
 /// after wrapping, which nothing here can detect afterwards.
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics in debug builds if `elements` is empty, or if it is not non-decreasing, or if its last
-/// element is not `span`. A release build produces a layout no reader will accept.
+/// Returns [`Error::Empty`] for an empty sequence, [`Error::Decreasing`] or [`Error::AboveSpan`]
+/// for an element out of order or past `span`, and a layout error for a universe too wide to
+/// represent.
 pub fn encode(elements: impl ExactSizeIterator<Item = u64>, span: u64) -> Result<Encoded, Error> {
     let n = elements.len();
-    debug_assert!(n > 0, "the empty sequence has no layout to build");
+    if n == 0 {
+        return Err(Error::Empty);
+    }
 
     let lower_width = lower_width(span, n);
     let upper_len = upper_len(span, n, lower_width)?;
@@ -57,8 +60,17 @@ pub fn encode(elements: impl ExactSizeIterator<Item = u64>, span: u64) -> Result
     let mut previous = 0u64;
 
     for (index, element) in elements.enumerate() {
-        debug_assert!(element >= previous, "elements must be non-decreasing");
-        debug_assert!(element <= span, "element {element} exceeds the span {span}");
+        // Checked in every build: `push` needs increasing positions inside the upper array.
+        if element < previous {
+            return Err(Error::Decreasing { index });
+        }
+        if element > span {
+            return Err(Error::AboveSpan {
+                index,
+                element,
+                span,
+            });
+        }
         previous = element;
 
         let rank = index as u64;
@@ -67,7 +79,6 @@ pub fn encode(elements: impl ExactSizeIterator<Item = u64>, span: u64) -> Result
     }
 
     debug_assert_eq!(lower.len(), n, "ExactSizeIterator yielded the wrong count");
-    debug_assert_eq!(previous, span, "the last element is the span");
 
     let (upper, samples) = upper.finish(n as u64, upper_len);
     Ok(Encoded {

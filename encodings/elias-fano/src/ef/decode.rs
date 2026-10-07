@@ -27,7 +27,9 @@ impl<'a> Decoder<'a> {
     /// Open a decoder over `words`, the window's bits as whole `u64`s at a zero bit offset.
     ///
     /// Checks what the per-element loop relies on once rather than `len` times: `len` set bits in
-    /// the window, and `start > first_rank` so every position exceeds its own rank.
+    /// the window, and `start > first_rank` so every position exceeds its own rank. `lower_width`
+    /// must be at most 63, as [`validate_layout`](super::validate_layout) guarantees for a stored
+    /// layout.
     pub fn new(
         words: &'a [u64],
         start: usize,

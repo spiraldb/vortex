@@ -23,8 +23,9 @@ use super::upper_len;
 
 /// Check that a stored layout describes the universe it claims.
 ///
-/// `samples` is the shared table, zero-samples first; the seam between the two is derived here
-/// rather than stored, so a buffer too short to reach it fails as a count mismatch.
+/// `upper` must hold exactly `stored_upper_len` bits rounded up to whole bytes. `samples` is the
+/// shared table, zero-samples first; the seam between the two is derived here rather than stored,
+/// so a buffer too short to reach it fails as a count mismatch.
 ///
 /// An empty sequence is accepted unconditionally, having no geometry to check.
 pub fn validate_layout(
@@ -32,6 +33,7 @@ pub fn validate_layout(
     n: usize,
     stored_lower_width: u8,
     stored_upper_len: u64,
+    upper: &[u8],
     samples: &[u8],
 ) -> Result<(), Malformed> {
     if n == 0 {
@@ -51,6 +53,15 @@ pub fn validate_layout(
         return Err(Malformed::UpperLen {
             expected: expected_upper_len,
             found: stored_upper_len,
+        });
+    }
+
+    // Readers wrap the whole array in a `Bits`, which asserts that the bytes hold it.
+    let expected_bytes = expected_upper_len.div_ceil(8);
+    if upper.len() as u64 != expected_bytes {
+        return Err(Malformed::UpperBytes {
+            expected: expected_bytes,
+            found: upper.len() as u64,
         });
     }
 

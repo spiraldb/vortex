@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Random access over an encoded sequence, in `O(1)`.
+//! Random access over an encoded sequence, in expected `O(1)`; the [module docs](super) give the
+//! worst case.
 //!
 //! Reading element `i` is one sampled `select1` for its high part and one read of its low part.
 
@@ -47,7 +48,8 @@ impl<'a> Layout<'a> {
     ///
     /// `upper` is the whole upper array, not the window's part of it: the sample table holds
     /// absolute positions. `first_rank` is where this window starts within the encoded sequence and
-    /// `len` how many elements it covers.
+    /// `len` how many elements it covers. `lower_width` must be at most 63, as
+    /// [`validate_layout`](super::validate_layout) guarantees for a stored layout.
     pub fn new(
         upper: Bits<'a>,
         samples1: &'a [u8],
@@ -76,7 +78,8 @@ impl<'a> Layout<'a> {
 
     /// The bit position of the set bit belonging to absolute rank `rank`, as a sampled `select1`.
     ///
-    /// `samples1` bounds the search window at `1 << LOG_SAMPLING1` ones, about one cache line.
+    /// `samples1` bounds the window at `1 << LOG_SAMPLING1` ones; the unset bits between them are
+    /// unbounded, so a gap in the values widens it.
     fn position_of_rank(&self, rank: u64) -> Result<usize, Malformed> {
         position_of_rank(self.upper, self.samples1, rank)
     }
@@ -111,6 +114,10 @@ impl<'a> Layout<'a> {
 
 /// The bit position of the set bit belonging to absolute rank `rank`, taking the upper array and
 /// its sample table directly, for a caller that has no [`Layout`] to hand.
+///
+/// A corrupt sample table can pass [`validate_layout`](super::validate_layout) yet return
+/// positions out of rank order, so check a window's bounds before
+/// [`window_words`](super::window_words), which panics on a reversed one.
 pub fn position_of_rank(upper: Bits<'_>, samples1: &[u8], rank: u64) -> Result<usize, Malformed> {
     let end = upper.len();
     sampled_select(upper, samples1, LOG_SAMPLING1, rank, end, false)

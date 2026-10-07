@@ -11,8 +11,9 @@ use super::Error;
 
 /// One zero-sample is stored per `1 << LOG_SAMPLING0` unset bits of the upper array.
 ///
-/// The upper array is roughly 50% dense, so 512 zeros span about 512 bits — eight words, a window
-/// short enough for [`select_zero_range`](super::select_zero_range) to walk without vectorising.
+/// The upper array is roughly 50% dense, so 512 zeros span about 1,024 bits — sixteen words, a
+/// window short enough for [`select_zero_range`](super::select_zero_range) to walk without
+/// vectorising.
 /// [`LOG_SAMPLING1`] is sized the same way.
 pub const LOG_SAMPLING0: usize = 9;
 
@@ -81,9 +82,11 @@ pub fn num_zeros(upper_len: u64, n: usize) -> u64 {
 /// its two tables without the seam being stored.
 #[inline]
 pub fn num_samples0(span: u64, lower_width: u8) -> u64 {
-    // Saturating because `lower_width` arrives from metadata: a corrupt zero against a full-width
-    // span would otherwise overflow here rather than at the buffer-length check that catches it.
-    ((span >> lower_width).saturating_add(1)) >> LOG_SAMPLING0
+    // Checked because `lower_width` arrives from metadata: a corrupt width of 64 or more, or a
+    // corrupt zero against a full-width span, would otherwise overflow here rather than at the
+    // checks that catch it.
+    let buckets = span.checked_shr(u32::from(lower_width)).unwrap_or(0);
+    buckets.saturating_add(1) >> LOG_SAMPLING0
 }
 
 /// The number of one-samples the layout calls for.

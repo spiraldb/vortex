@@ -12,8 +12,13 @@
 //! share a high part, so reading element `i` is a `select1` and the inverse is
 //! `high = position - rank - 1`. The `+ 1` sentinel aligns the unset bits with the high parts,
 //! giving `rank1(select0(h)) == select0(h) - h`, so one `select0` counts the elements below a high
-//! part with no rank directory stored. [`LOG_SAMPLING1`] and [`LOG_SAMPLING0`] bound the scans over
-//! that array.
+//! part with no rank directory stored. Two sample tables, one position per 256 set bits and one per
+//! 512 unset bits, bound the scans over that array.
+//!
+//! Each table bounds only the bits it counts. A `select1` scan also walks the unset bits between
+//! its set bits, and a gap of `g` in the values puts about `g >> l` of them in one place;
+//! duplicates do the same to `select0`. Random access is `O(1)` in expectation, but one large gap
+//! can stretch nearby scans to the whole upper array.
 //!
 //! The low parts live outside these buffers, supplied through [`LowBits`]: they compress better
 //! under a dedicated encoding than anything here would manage.
@@ -39,39 +44,54 @@ mod tests;
 pub use decode::Decoder;
 pub use encode::Encoded;
 pub use encode::encode;
-pub use params::LOG_SAMPLING0;
-pub use params::LOG_SAMPLING1;
-pub use params::MAX_LOWER_WIDTH;
-pub use params::lower_mask;
-pub use params::lower_width;
+pub(crate) use params::LOG_SAMPLING0;
+pub(crate) use params::LOG_SAMPLING1;
+pub(crate) use params::lower_mask;
+pub(crate) use params::lower_width;
 pub use params::num_samples0;
-pub use params::num_samples1;
-pub use params::num_zeros;
-pub use params::upper_len;
+pub(crate) use params::num_samples1;
+pub(crate) use params::num_zeros;
+pub(crate) use params::upper_len;
 pub use read::Layout;
 pub use read::LowBits;
 pub use read::element_at;
 pub use read::position_of_rank;
 pub use select::Bits;
-pub use select::select_range;
-pub use select::select_zero_range;
+pub(crate) use select::select_range;
+pub(crate) use select::select_zero_range;
 pub use select::window_words;
-pub use upper::Ones;
-pub use upper::UpperBuilder;
-pub use upper::element_of;
-pub use upper::high_of;
-pub use upper::position_of;
-pub use upper::read_sample;
-pub use upper::sampled_select;
+pub(crate) use upper::Ones;
+pub(crate) use upper::UpperBuilder;
+pub(crate) use upper::element_of;
+pub(crate) use upper::high_of;
+pub(crate) use upper::position_of;
+pub(crate) use upper::read_sample;
+pub(crate) use upper::sampled_select;
 pub use validate::validate_layout;
 
-/// A sequence whose layout cannot be represented, i.e. bad arguments to the encoder.
+/// Bad arguments to the encoder: a sequence it cannot encode or whose layout it cannot represent.
 ///
-/// Both variants need a universe of very nearly `2^64`, so neither is reachable from a sequence
-/// held in memory. The same geometry is re-derived from untrusted metadata, where they are.
+/// The two layout variants need a universe of nearly `2^64`, which only untrusted metadata can
+/// claim.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
+    /// The sequence is empty.
+    Empty,
+    /// An element is below its predecessor.
+    Decreasing {
+        /// The element's index.
+        index: usize,
+    },
+    /// An element exceeds the span the layout is sized for.
+    AboveSpan {
+        /// The element's index.
+        index: usize,
+        /// The element.
+        element: u64,
+        /// The span the encoder was given.
+        span: u64,
+    },
     /// The upper array's length overflows a `u64`.
     UpperLenOverflow {
         /// Number of elements.
@@ -91,6 +111,18 @@ pub enum Error {
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
+            Self::Empty => f.write_str("an empty sequence has no layout"),
+            Self::Decreasing { index } => {
+                write!(f, "the element at index {index} is below its predecessor")
+            }
+            Self::AboveSpan {
+                index,
+                element,
+                span,
+            } => write!(
+                f,
+                "the element {element} at index {index} exceeds the span {span}"
+            ),
             Self::UpperLenOverflow {
                 n,
                 span,
@@ -141,7 +173,7 @@ pub enum Malformed {
         /// The rank that has no set bit.
         rank: u64,
     },
-    /// A set bit sits at or below its own rank, so [`high_of`] cannot invert it.
+    /// A set bit sits at or below its own rank, so its high part cannot be recovered.
     PositionAtOrBelowRank {
         /// The element's rank.
         rank: u64,
@@ -167,6 +199,13 @@ pub enum Malformed {
         /// The length the universe implies.
         expected: u64,
         /// The length stored.
+        found: u64,
+    },
+    /// The upper array's buffer is not `upper_len` bits rounded up to whole bytes.
+    UpperBytes {
+        /// How many bytes the layout calls for.
+        expected: u64,
+        /// How many are stored.
         found: u64,
     },
     /// The samples buffer holds a different number of entries than the layout calls for.
@@ -223,6 +262,9 @@ impl Display for Malformed {
                 f,
                 "upper_len {found} does not match the {expected} its universe implies"
             ),
+            Self::UpperBytes { expected, found } => {
+                write!(f, "upper array is {found} bytes, expected {expected}")
+            }
             Self::SampleCount { expected, found } => {
                 write!(f, "holds {found} samples, expected {expected}")
             }

@@ -5,8 +5,9 @@
 //! the scan its lower bound.
 //!
 //! Reads the backing bytes directly, so a lookup allocates nothing. [`LOG_SAMPLING0`] and
-//! [`LOG_SAMPLING1`] cap a window at 512 unset or 256 set bits — eight to sixteen words — which a
-//! scalar walk covers without vectorising.
+//! [`LOG_SAMPLING1`] cap a window at 512 unset or 256 set bits, but not the bits of the other kind
+//! in between. On evenly spread data that is eight to sixteen words, which a scalar walk covers
+//! without vectorising.
 //!
 //! [`LOG_SAMPLING0`]: super::LOG_SAMPLING0
 //! [`LOG_SAMPLING1`]: super::LOG_SAMPLING1

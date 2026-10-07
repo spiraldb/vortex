@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Microbenchmarks for the Elias-Fano codec in [`vortex_elias_fano::ef`], with no Vortex array in
-//! the way.
+//! Microbenchmarks for the [`vortex_elias_fano::ef`] codec on its own.
 //!
-//! Low bits are served from the encoder's own `Vec`, so nothing here measures how a host stores
-//! them. `encode` and `decode` cover the two batch paths, `element_at` the per-element read, and
-//! `select_zero` the bucket lookup a rank or predecessor search starts from.
+//! Low bits come from the encoder's own `Vec`, so only the codec is measured. `encode` and `decode`
+//! cover the batch paths and `element_at` the per-element read.
 //!
 //! Three shapes, because the layout behaves differently in each:
 //!
@@ -57,8 +55,8 @@ const ELEMENTS_PER_VALUE: usize = 64;
 /// Lookups per iteration, held fixed across shapes so the figures compare.
 const PROBES: usize = 4096;
 
-/// A non-decreasing sequence of [`LEN`] elements starting at zero, as the encoder sees one once a
-/// host has subtracted its reference.
+/// [`LEN`] sorted elements starting at zero, as the encoder sees them once the reference is
+/// subtracted.
 fn sequence(shape: Shape) -> Vec<u64> {
     let mut rng = StdRng::seed_from_u64(0);
     let mut values: Vec<u64> = match shape {
@@ -84,7 +82,7 @@ fn probes<T>(mut draw: impl FnMut(&mut StdRng) -> T) -> Vec<T> {
     (0..PROBES).map(|_| draw(&mut rng)).collect()
 }
 
-/// An encoded sequence, holding everything a reader borrows from it.
+/// An encoded sequence and everything a reader borrows from it.
 struct Fixture {
     upper: Vec<u8>,
     /// Both sample tables as little-endian bytes, zeros first.
@@ -95,7 +93,6 @@ struct Fixture {
     lower_width: u8,
     upper_len: usize,
     len: usize,
-    span: u64,
 }
 
 impl Fixture {
@@ -118,16 +115,11 @@ impl Fixture {
             lower_width: encoded.lower_width,
             upper_len: usize::try_from(encoded.upper_len).unwrap(),
             len: elements.len(),
-            span,
         }
     }
 
     fn bits(&self) -> ef::Bits<'_> {
         ef::Bits::new(&self.upper, 0, self.upper_len)
-    }
-
-    fn samples0(&self) -> &[u8] {
-        &self.samples[..self.seam]
     }
 
     fn samples1(&self) -> &[u8] {
@@ -178,8 +170,8 @@ fn element_at(bencher: Bencher, shape: Shape) {
         });
 }
 
-/// Whole-sequence decode the way a host runs it: two sampled selects bound the window, the window
-/// is copied out as whole words, and the `Decoder` walks it once against every low part.
+/// Whole-sequence decode as a host runs it: bound the window with two selects, copy it out as
+/// words, then walk it with the `Decoder`.
 #[divan::bench(args = SHAPES)]
 fn decode(bencher: Bencher, shape: Shape) {
     let fixture = Fixture::new(shape);
@@ -199,24 +191,5 @@ fn decode(bencher: Bencher, shape: Shape) {
             decoder.segment(lows, |index, element| out[index] = element);
             decoder.finish().unwrap();
             out
-        });
-}
-
-/// Bucket lookups: one sampled `select0` per high part, which less the high part counts the
-/// elements below it.
-#[divan::bench(args = SHAPES)]
-fn select_zero(bencher: Bencher, shape: Shape) {
-    let fixture = Fixture::new(shape);
-    let max_high = fixture.span >> fixture.lower_width;
-    let highs = probes(|rng| rng.random_range(0..=max_high));
-    bencher
-        .with_inputs(|| (fixture.bits(), fixture.samples0(), &highs))
-        .bench_values(|(bits, samples0, highs)| {
-            for &high in highs {
-                divan::black_box(
-                    ef::sampled_select(bits, samples0, ef::LOG_SAMPLING0, high, bits.len(), true)
-                        .unwrap(),
-                );
-            }
         });
 }

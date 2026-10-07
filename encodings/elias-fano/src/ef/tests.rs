@@ -455,7 +455,10 @@ struct RoundTrip {
 
 impl RoundTrip {
     fn encode(elements: &[u64]) -> Self {
-        let span = elements[elements.len() - 1];
+        Self::encode_with_span(elements, elements[elements.len() - 1])
+    }
+
+    fn encode_with_span(elements: &[u64], span: u64) -> Self {
         let encoded = encode(elements.iter().copied(), span).expect("representable");
 
         // The two sample tables share one buffer and the seam is derived, never stored.
@@ -486,6 +489,17 @@ impl RoundTrip {
             self.lower_width,
             0,
             self.len,
+        )
+    }
+
+    fn validate(&self) -> Result<(), Malformed> {
+        validate_layout(
+            self.span,
+            self.len,
+            self.lower_width,
+            self.upper_len as u64,
+            &self.upper,
+            &self.samples,
         )
     }
 }
@@ -548,17 +562,95 @@ fn codec_reads_back_every_element(#[case] elements: Vec<u64>) {
 #[case::duplicates(duplicates())]
 #[case::single_wide(vec![u64::MAX])]
 fn encoder_output_validates(#[case] elements: Vec<u64>) {
-    let round_trip = RoundTrip::encode(&elements);
+    assert_eq!(RoundTrip::encode(&elements).validate(), Ok(()));
+}
+
+/// Each check in `validate_layout` rejects the corruption it guards against.
+#[test]
+fn test_validate_layout_rejects_corrupt_layouts() {
+    // Both sample tables hold several entries, zero-samples first.
+    let round_trip = RoundTrip::encode(&spread());
+    let (span, n) = (round_trip.span, round_trip.len);
+    let (width, upper_len) = (round_trip.lower_width, round_trip.upper_len as u64);
+    let (upper, samples) = (&round_trip.upper, &round_trip.samples);
+    let check = |width: u8, upper_len: u64, upper: &[u8], samples: &[u8]| {
+        validate_layout(span, n, width, upper_len, upper, samples)
+    };
+
+    assert!(matches!(
+        check(width + 1, upper_len, upper, samples),
+        Err(Malformed::LowerWidth { .. })
+    ));
+    assert!(matches!(
+        check(width, upper_len + 1, upper, samples),
+        Err(Malformed::UpperLen { .. })
+    ));
+    assert!(matches!(
+        check(width, upper_len, &upper[1..], samples),
+        Err(Malformed::UpperBytes { .. })
+    ));
+    assert!(matches!(
+        check(width, upper_len, upper, &samples[8..]),
+        Err(Malformed::SampleCount { .. })
+    ));
+
+    let mut out_of_range = samples.clone();
+    out_of_range[..8].copy_from_slice(&u64::MAX.to_le_bytes());
+    assert!(matches!(
+        check(width, upper_len, upper, &out_of_range),
+        Err(Malformed::SampleOutOfRange { .. })
+    ));
+
+    // The second zero-sample's value is in range for the first, but repeats it.
+    let mut repeated = samples.clone();
+    repeated.copy_within(8..16, 0);
+    assert!(matches!(
+        check(width, upper_len, upper, &repeated),
+        Err(Malformed::SamplesNotIncreasing { .. })
+    ));
+}
+
+/// A rank past the last element is an error, whether or not the sample table reaches it.
+#[rstest]
+#[case::no_one_samples(256)]
+#[case::one_one_sample(300)]
+fn test_position_of_rank_past_the_end(#[case] n: u64) {
+    let round_trip = RoundTrip::encode(&(0..n).collect::<Vec<_>>());
+    let (_, samples1) = round_trip.samples.split_at(round_trip.seam);
+    let bits = Bits::new(&round_trip.upper, 0, round_trip.upper_len);
     assert_eq!(
-        validate_layout(
-            round_trip.span,
-            round_trip.len,
-            round_trip.lower_width,
-            round_trip.upper_len as u64,
-            &round_trip.samples,
-        ),
-        Ok(())
+        position_of_rank(bits, samples1, n),
+        Err(Malformed::NoElementOfRank { rank: n })
     );
+}
+
+/// A span above the last element is valid and reads back.
+#[test]
+fn test_encode_accepts_span_above_last() {
+    let elements = [0u64, 3, 7];
+    let round_trip = RoundTrip::encode_with_span(&elements, 10);
+    assert_eq!(round_trip.validate(), Ok(()));
+
+    let mut lows = VecLows(round_trip.lows.0.clone());
+    for (index, &expected) in elements.iter().enumerate() {
+        assert_eq!(
+            element_at(round_trip.layout(), index, &mut lows),
+            Ok(expected)
+        );
+    }
+}
+
+/// Bad input is an error in every build, not a panic.
+#[rstest]
+#[case::empty(vec![], 0, Error::Empty)]
+#[case::decreasing(vec![3, 1], 3, Error::Decreasing { index: 1 })]
+#[case::above_span(vec![0, 1000], 10, Error::AboveSpan { index: 1, element: 1000, span: 10 })]
+fn test_encode_rejects_bad_input(
+    #[case] elements: Vec<u64>,
+    #[case] span: u64,
+    #[case] expected: Error,
+) {
+    assert_eq!(encode(elements.into_iter(), span), Err(expected));
 }
 
 /// The bulk decoder has to reproduce the sequence from the same buffers the reader walks.
@@ -581,7 +673,9 @@ fn decoder_reproduces_the_sequence(#[case] elements: Vec<u64>) {
     let mut decoder = Decoder::new(&words, start, 0, elements.len(), round_trip.lower_width)
         .expect("well-formed");
     let mut decoded = vec![0u64; elements.len()];
-    decoder.segment(Some(&round_trip.lows.0), |index, element| {
+    // At width zero a host has no low bits to pass.
+    let lows = (round_trip.lower_width > 0).then_some(round_trip.lows.0.as_slice());
+    decoder.segment(lows, |index, element| {
         decoded[index] = element;
     });
     assert_eq!(decoder.finish(), Ok(()));

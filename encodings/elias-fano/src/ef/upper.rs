@@ -52,8 +52,9 @@ pub fn read_sample(table: &[u8], index: usize) -> u64 {
 /// `zeros`, found through the sample table that brackets it.
 ///
 /// `table` holds one position per `1 << log_sampling` bits of the kind being counted, from rank 1
-/// upward; rank 0 is never stored, since the search starts at bit zero anyway. The sample lower-
-/// bounds the scan, so it costs the sampling rate rather than the length of the array.
+/// upward; rank 0 is never stored, since the search starts at bit zero anyway. The sample bounds
+/// the scan to fewer than `1 << log_sampling` bits of the kind being counted, but not the other
+/// kind in between: a gap in the values makes a long run of unset bits, duplicates of set bits.
 ///
 /// Returns the absolute position, not one relative to the window. `inline(always)` because both
 /// callers pass `log_sampling` and `zeros` as constants, which measurably do not fold otherwise.
@@ -68,10 +69,11 @@ pub fn sampled_select(
     zeros: bool,
 ) -> Option<usize> {
     let sample = usize::try_from(target >> log_sampling).ok()?;
-    let start = if sample == 0 {
-        0
-    } else {
-        usize::try_from(read_sample(table, sample - 1)).ok()?
+    let start = match sample.checked_sub(1) {
+        None => 0,
+        // Past the last sample is past the last bit of this kind, so there is nothing to find.
+        Some(index) if index >= table.len() / size_of::<u64>() => return None,
+        Some(index) => usize::try_from(read_sample(table, index)).ok()?,
     };
     let nth = usize::try_from(target - ((sample as u64) << log_sampling)).ok()?;
     let offset = if zeros {
