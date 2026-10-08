@@ -107,8 +107,6 @@ void copy_to_finalize(ClientContext &, FunctionData &, GlobalFunctionData &gstat
     global.written_stats->row_count = file_stats.row_count;
     global.written_stats->file_size_bytes = file_stats.file_size_bytes;
     global.written_stats->footer_size_bytes = Value::UBIGINT(file_stats.footer_size_bytes);
-    // One entry per leaf column: nested struct fields are reported at their full path and structs
-    // get no entry of their own, as in parquet.
     for (idx_t i = 0; i < file_stats.num_columns; i++) {
         duckdb_vx_written_column_statistics col_stats {};
         duckdb_vx_error col_error = nullptr;

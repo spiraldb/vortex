@@ -238,10 +238,8 @@ pub(crate) fn written_column_stats(
     .map(Some)
 }
 
-/// The indices of the leaf entries of `file_stats`, which are the columns statistics are reported
-/// for. Like parquet, which reports one entry per leaf column writer, struct columns get no entry of
-/// their own; nested fields are reported at their full path. Lists and maps are opaque leaves of the
-/// statistics layout, so they are reported at their own path rather than per element.
+/// The indices of the leaf entries of `file_stats`.
+/// One entry per leaf column writer.
 fn leaf_stats_columns(file_stats: &FileStatistics) -> Vec<usize> {
     file_stats
         .dtypes()
@@ -252,14 +250,12 @@ fn leaf_stats_columns(file_stats: &FileStatistics) -> Vec<usize> {
         .collect()
 }
 
-/// DuckLake keys column statistics by a quoted, dot-separated path (see
-/// `DuckLakeUtil::ParseQuotedList`). This matches the parquet writer, which quotes each name with
-/// `KeywordHelper::WriteQuoted(name, '"')`, escaping embedded quotes by doubling them. A list
-/// element is named `element`, as in parquet's list encoding.
+/// DuckLake keys column statistics by a quoted, dot-separated path.
 fn ducklake_column_key(path: &FieldPath) -> String {
     path.parts()
         .iter()
         .map(|part| {
+            // List element is the only case where a part will be empty.
             let name = part.as_name().unwrap_or("element");
             format!("\"{}\"", name.replace('"', "\"\""))
         })
