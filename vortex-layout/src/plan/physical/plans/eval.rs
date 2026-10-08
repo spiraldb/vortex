@@ -3,11 +3,13 @@
 
 use std::borrow::Cow;
 use std::fmt;
+use std::ops::Range;
 
 use vortex_array::EmptyMetadata;
 use vortex_array::expr::BoundExpression;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
+use vortex_mask::Mask;
 use vortex_session::registry::CachedId;
 
 use crate::plan::physical::Plan;
@@ -17,7 +19,12 @@ use crate::plan::physical::PlanParts;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::PlanVTable;
 use crate::plan::physical::check_child_count;
+use crate::plan::physical::operators::EvalStage;
 use crate::plan::physical::optimizer::PlanReduceRule;
+use crate::plan::physical::pipeline::Chain;
+use crate::plan::physical::pipeline::Compiler;
+use crate::plan::physical::pipeline::Reach;
+use crate::segments::SegmentId;
 
 /// Applies an expression to the output of its child.
 #[derive(Clone, Debug)]
@@ -112,6 +119,25 @@ impl PlanVTable for Eval {
         } else {
             Cow::Owned(format!("child[{index}]"))
         }
+    }
+
+    fn compile(
+        plan: &Plan<Self>,
+        rows: Range<u64>,
+        mask: &Mask,
+        compiler: &mut Compiler<'_>,
+    ) -> VortexResult<Option<Chain>> {
+        let chain = compiler.compile(&plan.child_plan()?, rows, mask)?;
+        Ok(chain.map(|chain| chain.with(EvalStage::new(plan.expression().clone()))))
+    }
+
+    fn reach(
+        plan: &Plan<Self>,
+        rows: Range<u64>,
+        at: &Reach,
+        visit: &mut dyn FnMut(SegmentId, Range<u64>),
+    ) -> VortexResult<()> {
+        plan.child_plan()?.reach(rows, at, visit)
     }
 }
 
