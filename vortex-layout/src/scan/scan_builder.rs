@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::cmp;
+use std::iter;
 use std::ops::Range;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -8,9 +10,15 @@ use std::task::Context;
 use std::task::Poll;
 use std::task::ready;
 
+use futures::Future;
+use futures::FutureExt;
 use futures::Stream;
+use futures::StreamExt;
+use futures::future;
 use futures::future::BoxFuture;
+use futures::stream;
 use futures::stream::BoxStream;
+use itertools::Either;
 use itertools::Itertools;
 use vortex_array::ArrayRef;
 use vortex_array::dtype::DType;
@@ -24,24 +32,31 @@ use vortex_array::stream::ArrayStream;
 use vortex_array::stream::ArrayStreamAdapter;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
+use vortex_error::vortex_bail;
 use vortex_io::runtime::BlockingRuntime;
 use vortex_io::runtime::Task;
 use vortex_io::session::RuntimeSessionExt;
 use vortex_metrics::MetricsRegistry;
+use vortex_scan::row_mask::RowMask;
 use vortex_scan::selection::Selection;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
+use vortex_utils::parallelism::get_available_parallelism;
 
 use crate::LayoutReader;
 use crate::LayoutReaderRef;
 use crate::layouts::row_idx::RowIdx;
 use crate::layouts::row_idx::RowIdxLayoutReader;
+use crate::scan::filter::FilterExpr;
 use crate::scan::limit::RowLimit;
 use crate::scan::limit::ScanLimit;
-use crate::scan::repeated_scan::RepeatedScan;
 use crate::scan::split_by::SplitBy;
 use crate::scan::splits::Splits;
 use crate::scan::splits::attempt_split_ranges;
+use crate::scan::tasks::SplitFuture;
+use crate::scan::tasks::TaskContext;
+use crate::scan::tasks::split_exec;
+use crate::scan::tasks::split_projection;
 
 /// Builder for scanning a [`LayoutReader`] into arrays, streams, iterators, or mapped outputs.
 ///
@@ -67,13 +82,13 @@ pub struct ScanBuilder<A> {
     selection: Selection,
     /// How to split the file for concurrent processing.
     split_by: SplitBy,
-    /// Precomputed full-file natural split boundaries; when set, [`prepare`](Self::prepare)
+    /// Precomputed full-file natural split boundaries; when set, [`build`](Self::build)
     /// uses them instead of walking the layout.
     natural_splits: Option<Arc<[u64]>>,
     /// The number of splits to make progress on concurrently **per-thread**.
     concurrency: usize,
     /// Function to apply to each [`ArrayRef`] within the spawned split tasks.
-    map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
+    map_fn: MapFn<A>,
     metrics_registry: Option<Arc<dyn MetricsRegistry>>,
     /// Maximal number of rows to read after filtering.
     limit: Option<ScanLimit>,
@@ -190,7 +205,7 @@ impl<A: 'static + Send> ScanBuilder<A> {
     }
 
     /// Supply precomputed full-file natural split boundaries (see
-    /// [`full_file_splits`](Self::full_file_splits)) so [`prepare`](Self::prepare) reuses them
+    /// [`full_file_splits`](Self::full_file_splits)) so [`build`](Self::build) reuses them
     /// instead of walking the layout. Callers translating external partitions into row ranges
     /// can compute the boundaries once per file and share them across partitions.
     ///
@@ -208,9 +223,9 @@ impl<A: 'static + Send> ScanBuilder<A> {
     /// Compute the full-file natural split boundaries for the fields referenced by this scan's
     /// projection and filter, ignoring any configured row range.
     ///
-    /// These are the boundaries [`prepare`](Self::prepare) derives for a whole-file scan; hand
+    /// These are the boundaries [`build`](Self::build) derives for a whole-file scan; hand
     /// them back via [`with_natural_splits`](Self::with_natural_splits) to skip the layout walk
-    /// in `prepare`.
+    /// when building.
     pub fn full_file_splits(&self) -> VortexResult<Vec<u64>> {
         let field_mask = referenced_field_masks(&self.projection, self.filter.as_ref())?;
         self.split_by.splits(
@@ -246,16 +261,12 @@ impl<A: 'static + Send> ScanBuilder<A> {
     }
 
     /// Add or clear the maximum number of rows returned after filtering.
-    ///
-    /// A prepared [`RepeatedScan`] applies the limit to each of its executions independently.
     pub fn with_some_limit(mut self, limit: Option<u64>) -> Self {
         self.limit = limit.map(ScanLimit::PerExecution);
         self
     }
 
     /// Set the maximum number of rows returned after filtering.
-    ///
-    /// A prepared [`RepeatedScan`] applies the limit to each of its executions independently.
     pub fn with_limit(self, limit: u64) -> Self {
         self.with_some_limit(Some(limit))
     }
@@ -300,14 +311,11 @@ impl<A: 'static + Send> ScanBuilder<A> {
         }
     }
 
-    /// Rewrite range comparisons in the filter into betweens, compute split ranges, and return an
-    /// executable repeated scan.
-    pub fn prepare(self) -> VortexResult<RepeatedScan<A>> {
-        let dtype = self.dtype()?;
-
-        // Spin up the root layout reader, and wrap it in a FilterLayoutReader to perform
-        // conjunction splitting if a filter is provided.
-        let mut layout_reader = self.layout_reader;
+    /// The context shared by the scan's split tasks, and the row ranges of its splits.
+    ///
+    /// Range comparisons in the filter are rewritten into betweens.
+    fn split_plan(&self) -> VortexResult<(Arc<TaskContext>, Vec<Range<u64>>)> {
+        let mut layout_reader = Arc::clone(&self.layout_reader);
 
         // Enrich the layout reader to support RowIdx expressions if scan uses #row_idx.
         // Note that this is applied below the filter layout reader since it can perform
@@ -324,18 +332,16 @@ impl<A: 'static + Send> ScanBuilder<A> {
             ));
         }
 
-        let bound_projection = self.projection;
-        let bound_filter = self.filter.map(find_between).transpose()?;
+        let filter = self.filter.clone().map(find_between).transpose()?;
 
-        // Compute the row splits of the scan.
         let splits =
             if let Some(ranges) = attempt_split_ranges(&self.selection, self.row_range.as_ref()) {
                 Splits::Ranges(ranges)
-            } else if let Some(boundaries) = self.natural_splits {
-                // Caller-supplied full-file boundaries; execution clamps them to the row range.
-                Splits::Natural(boundaries)
+            } else if let Some(boundaries) = &self.natural_splits {
+                // Caller-supplied full-file boundaries; they are clamped to the row range below.
+                Splits::Natural(Arc::clone(boundaries))
             } else {
-                let field_mask = referenced_field_masks(&bound_projection, bound_filter.as_ref())?;
+                let field_mask = referenced_field_masks(&self.projection, filter.as_ref())?;
                 let split_range = self
                     .row_range
                     .clone()
@@ -346,29 +352,114 @@ impl<A: 'static + Send> ScanBuilder<A> {
                         .into(),
                 )
             };
+        let row_range = intersect_ranges(self.row_range.as_ref(), selection_range(&self.selection));
 
-        Ok(RepeatedScan::new(
-            self.session.clone(),
-            layout_reader,
-            bound_projection,
-            bound_filter,
-            self.ordered,
-            self.row_range,
-            self.selection,
-            splits,
-            self.concurrency,
-            self.map_fn,
-            self.limit,
-            dtype,
-        ))
+        let ctx = Arc::new(TaskContext {
+            filter: filter.map(|filter| Arc::new(FilterExpr::new(filter))),
+            reader: layout_reader,
+            projection: self.projection.clone(),
+        });
+        Ok((ctx, split_ranges(&splits, row_range)))
     }
 
     /// Constructs a task per row split of the scan, returned as a vector of futures.
     ///
+    /// No tasks are spawned. Each future returns the mapped split, or `None` when its split is
+    /// filtered out. The futures may be polled independently in any order.
+    ///
     /// Scans with row limits must use [`Self::into_stream`] or [`Self::into_iter`] so the scan
     /// can coordinate the limit across splits.
     pub fn build(self) -> VortexResult<Vec<BoxFuture<'static, VortexResult<Option<A>>>>> {
-        self.prepare()?.execute(None)
+        if self.limit.is_some() {
+            vortex_bail!("Split futures do not support row limits; use a scan stream or iterator");
+        }
+
+        let (ctx, ranges) = self.split_plan()?;
+        split_masks(&self.selection, ranges)
+            .map(|row_mask| Ok(map_split(split_exec(&ctx, row_mask)?, &self.map_fn)))
+            .collect()
+    }
+
+    /// Execute the scan as a stream of the mapped split arrays, spawning split tasks onto the
+    /// session's runtime handle.
+    ///
+    /// The stream ends after yielding its first error.
+    fn split_stream(self) -> VortexResult<BoxStream<'static, VortexResult<A>>> {
+        let concurrency = self.concurrency * get_available_parallelism().unwrap_or(1);
+        let handle = self.session.handle();
+        let ordered = self.ordered;
+        let (ctx, ranges) = self.split_plan()?;
+
+        let map_fn = &self.map_fn;
+
+        let arrays = match self.limit.as_ref().map(ScanLimit::budget) {
+            // With a filter, a split's output row count is unknown until its filter has run.
+            // Splits therefore filter and project ahead of the consumer, and the rows they
+            // return are taken from the limit as they are emitted, discarding the excess. Split
+            // tasks are built lazily so that no new splits start once the budget is spent. The
+            // map function needs the trimmed arrays, so it runs in a second stage of CPU tasks.
+            Some(limit) if ctx.filter.is_some() => {
+                let gate = limit.clone();
+                let selection = self.selection.clone();
+                let split_handle = handle.clone();
+                let tasks = stream::iter(ranges)
+                    .take_while(move |_| future::ready(!gate.is_exhausted()))
+                    .map(move |row_range| {
+                        let ctx = Arc::clone(&ctx);
+                        let selection = selection.clone();
+                        split_handle.spawn_nested(move |handle| async move {
+                            let task = handle
+                                .spawn_cpu(move || {
+                                    let row_mask = selection.row_mask(&row_range);
+                                    if row_mask.mask().all_false() {
+                                        return Ok(None);
+                                    }
+                                    split_exec(&ctx, row_mask).map(Some)
+                                })
+                                .await?;
+                            match task {
+                                Some(task) => task.await,
+                                None => Ok(None),
+                            }
+                        })
+                    });
+                let map_fn = Arc::clone(map_fn);
+                let arrays = buffer(tasks, ordered, concurrency)
+                    .filter_map(|array| future::ready(array.transpose()))
+                    .boxed();
+                let mapped = limit_rows(arrays, limit).map(move |array| {
+                    let map_fn = Arc::clone(&map_fn);
+                    handle.spawn_cpu(move || map_fn(array?))
+                });
+                buffer(mapped, ordered, concurrency)
+            }
+            limit => {
+                // Build eagerly to register I/O up front. Without a filter, selected row counts
+                // are exact, so a limit can also be reserved here in split order.
+                let mut tasks = Vec::new();
+                for row_mask in split_masks(&self.selection, ranges) {
+                    let task = if let Some(limit) = &limit {
+                        if limit.is_exhausted() {
+                            break;
+                        }
+                        let mask = limit.limit(row_mask.mask().clone());
+                        split_projection(&ctx, &row_mask.row_range(), mask)?
+                    } else {
+                        split_exec(&ctx, row_mask)?
+                    };
+                    tasks.push(map_split(task, map_fn));
+                }
+                buffer(
+                    stream::iter(tasks).map(move |task| handle.spawn(task)),
+                    ordered,
+                    concurrency,
+                )
+                .filter_map(|array| future::ready(array.transpose()))
+                .boxed()
+            }
+        };
+
+        Ok(stop_on_error(arrays))
     }
 
     /// Returns a [`Stream`] with tasks spawned onto the session's runtime handle.
@@ -426,7 +517,7 @@ impl<A: 'static + Send> Stream for LazyScanStream<A> {
                     // task: poll_next must only wait for and poll an already-constructed stream.
                     // This also keeps construction errors on the Preparing -> Error path rather
                     // than running construction on the caller's executor.
-                    let task = handle.spawn_cpu(move || builder.prepare()?.execute_stream(None));
+                    let task = handle.spawn_cpu(move || builder.split_stream());
                     self.state = LazyScanState::Preparing(task);
                 }
                 LazyScanState::Preparing(task) => match ready!(Pin::new(task).poll(cx)) {
@@ -437,6 +528,164 @@ impl<A: 'static + Send> Stream for LazyScanStream<A> {
                 LazyScanState::Error(err) => return Poll::Ready(err.take().map(Err)),
             }
         }
+    }
+}
+
+/// A function applied to each projected split array.
+type MapFn<A> = Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>;
+
+/// The smallest row range covering an index selection.
+fn selection_range(selection: &Selection) -> Option<Range<u64>> {
+    match selection {
+        Selection::IncludeByIndex(buf) if !buf.is_empty() => Some(buf[0]..buf[buf.len() - 1] + 1),
+        Selection::IncludeRoaring(roaring) if !roaring.is_empty() => {
+            Some(roaring.min().vortex_expect("empty")..roaring.max().vortex_expect("empty") + 1)
+        }
+        _ => None,
+    }
+}
+
+/// The ranges of `splits`, clamped to `row_range`.
+fn split_ranges(splits: &Splits, row_range: Option<Range<u64>>) -> Vec<Range<u64>> {
+    match splits {
+        Splits::Natural(vec) => {
+            debug_assert!(vec.is_sorted());
+            let splits_iter = match row_range {
+                None => Either::Left(vec.iter().copied()),
+                Some(range) => {
+                    if range.is_empty() {
+                        return Vec::new();
+                    }
+                    let lo = vec.partition_point(|&x| x <= range.start);
+                    let hi = vec.partition_point(|&x| x < range.end);
+                    Either::Right(
+                        iter::once(range.start)
+                            .chain(vec[lo..hi].iter().copied())
+                            .chain(iter::once(range.end)),
+                    )
+                }
+            };
+
+            splits_iter
+                .tuple_windows()
+                .map(|(start, end)| start..end)
+                .collect()
+        }
+        Splits::Ranges(ranges) => match row_range {
+            None => ranges.to_vec(),
+            Some(range) => {
+                if range.is_empty() {
+                    return Vec::new();
+                }
+                ranges
+                    .iter()
+                    .filter_map(move |r| {
+                        let start = cmp::max(r.start, range.start);
+                        let end = cmp::min(r.end, range.end);
+                        (start < end).then_some(start..end)
+                    })
+                    .collect()
+            }
+        },
+    }
+}
+
+/// The non-empty row masks of the split ranges, in split order.
+fn split_masks(
+    selection: &Selection,
+    ranges: Vec<Range<u64>>,
+) -> impl Iterator<Item = RowMask> + '_ {
+    ranges
+        .into_iter()
+        .filter(|range| range.start < range.end)
+        .map(|range| selection.row_mask(&range))
+        .filter(|row_mask| !row_mask.mask().all_false())
+}
+
+/// Apply `map_fn` to a split's array within the split's task.
+fn map_split<A: 'static + Send>(
+    task: SplitFuture,
+    map_fn: &MapFn<A>,
+) -> BoxFuture<'static, VortexResult<Option<A>>> {
+    let map_fn = Arc::clone(map_fn);
+    task.map(move |array| array?.map(|array| map_fn(array)).transpose())
+        .boxed()
+}
+
+/// Trim arrays to the budget and drop upstream work as soon as it is exhausted.
+fn limit_rows(
+    arrays: BoxStream<'static, VortexResult<ArrayRef>>,
+    limit: RowLimit,
+) -> BoxStream<'static, VortexResult<ArrayRef>> {
+    let mut arrays = Some(arrays);
+    stream::poll_fn(move |cx| {
+        loop {
+            if limit.is_exhausted() {
+                arrays = None;
+            }
+            let Some(stream) = arrays.as_mut() else {
+                return Poll::Ready(None);
+            };
+            let array = match ready!(stream.poll_next_unpin(cx)) {
+                Some(Ok(array)) => array,
+                end => {
+                    arrays = None;
+                    return Poll::Ready(end);
+                }
+            };
+            let granted = limit.take(array.len());
+            if limit.is_exhausted() {
+                arrays = None;
+            }
+            if granted != 0 {
+                return Poll::Ready(Some(if granted < array.len() {
+                    array.slice(0..granted)
+                } else {
+                    Ok(array)
+                }));
+            }
+        }
+    })
+    .boxed()
+}
+
+/// Yield the first error and drop upstream without polling it again.
+fn stop_on_error<T: Send + 'static>(
+    stream: BoxStream<'static, VortexResult<T>>,
+) -> BoxStream<'static, VortexResult<T>> {
+    let mut stream = Some(stream);
+    stream::poll_fn(move |cx| {
+        let Some(input) = stream.as_mut() else {
+            return Poll::Ready(None);
+        };
+        let item = ready!(input.poll_next_unpin(cx));
+        if !matches!(item, Some(Ok(_))) {
+            stream = None;
+        }
+        Poll::Ready(item)
+    })
+    .boxed()
+}
+
+/// Run up to `concurrency` futures of `tasks` at once, in order when `ordered` is set.
+fn buffer<T: Send + 'static>(
+    tasks: impl Stream<Item = impl Future<Output = T> + Send + 'static> + Send + 'static,
+    ordered: bool,
+    concurrency: usize,
+) -> BoxStream<'static, T> {
+    if ordered {
+        tasks.buffered(concurrency).boxed()
+    } else {
+        tasks.buffer_unordered(concurrency).boxed()
+    }
+}
+
+fn intersect_ranges(left: Option<&Range<u64>>, right: Option<Range<u64>>) -> Option<Range<u64>> {
+    match (left, right) {
+        (None, None) => None,
+        (None, Some(r)) => Some(r),
+        (Some(l), None) => Some(l.clone()),
+        (Some(l), Some(r)) => Some(cmp::max(l.start, r.start)..cmp::min(l.end, r.end)),
     }
 }
 
@@ -475,8 +724,10 @@ mod test {
     use std::task::Poll;
     use std::time::Duration;
 
+    use futures::FutureExt;
     use futures::Stream;
     use futures::StreamExt;
+    use futures::stream;
     use futures::task::noop_waker_ref;
     use parking_lot::Mutex;
     use rstest::rstest;
@@ -514,7 +765,9 @@ mod test {
     use vortex_mask::Mask;
 
     use super::ScanBuilder;
+    use super::limit_rows;
     use super::referenced_field_masks;
+    use super::stop_on_error;
     use crate::ArrayFuture;
     use crate::LayoutReader;
     use crate::RowSplits;
@@ -887,11 +1140,7 @@ mod test {
         let builder = ScanBuilder::new(session, reader);
         let mut stream = if filtered {
             // Drive the prepared stream directly so its first poll must construct a split.
-            builder
-                .with_filter(filter)
-                .with_limit(1)
-                .prepare()?
-                .execute_stream(None)?
+            builder.with_filter(filter).with_limit(1).split_stream()?
         } else {
             builder.into_stream()?.boxed()
         };
@@ -1085,7 +1334,7 @@ mod test {
     }
 
     #[test]
-    fn prepared_scan_limits_filtered_results() -> VortexResult<()> {
+    fn scan_limits_filtered_results() -> VortexResult<()> {
         let runtime = SingleThreadRuntime::default();
         let session = session_with_handle(runtime.handle());
         let reader = Arc::new(
@@ -1095,11 +1344,11 @@ mod test {
         );
         let filter = root().bind(reader.dtype())?;
 
-        let scan = ScanBuilder::new(session, reader)
+        let iter = ScanBuilder::new(session, reader)
             .with_filter(filter)
             .with_limit(3)
-            .prepare()?;
-        let values = collect_scan_values(scan.execute_array_iter(None, &runtime)?)?;
+            .into_array_iter(&runtime)?;
+        let values = collect_scan_values(iter)?;
         drain_runtime(&runtime);
 
         assert_eq!(values, [1, 3, 5]);
@@ -1143,7 +1392,7 @@ mod test {
     }
 
     #[test]
-    fn prepared_scan_split_futures_can_be_polled_in_reverse() -> VortexResult<()> {
+    fn split_futures_can_be_polled_in_reverse() -> VortexResult<()> {
         let runtime = SingleThreadRuntime::default();
         let session = session_with_handle(runtime.handle());
         let projection_masks = Arc::new(Mutex::new(Vec::new()));
@@ -1154,10 +1403,10 @@ mod test {
                 .with_projection_masks(Arc::clone(&projection_masks)),
         );
         let filter = root().bind(reader.dtype())?;
-        let scan = ScanBuilder::new(session, reader)
+        let tasks = ScanBuilder::new(session, reader)
             .with_filter(filter)
-            .prepare()?;
-        let tasks = scan.execute(Some(1..7))?;
+            .with_row_range(1..7)
+            .build()?;
         assert!(projection_masks.lock().is_empty());
 
         let mut arrays = Vec::new();
@@ -1173,7 +1422,7 @@ mod test {
     #[rstest]
     #[case(false)]
     #[case(true)]
-    fn prepared_scan_split_futures_reject_limits(#[case] shared: bool) -> VortexResult<()> {
+    fn split_futures_reject_limits(#[case] shared: bool) -> VortexResult<()> {
         let reader = Arc::new(TestLayoutReader::new(8).with_split_size(2));
         let builder = ScanBuilder::new(SCAN_SESSION.clone(), reader);
         let builder = if shared {
@@ -1182,7 +1431,7 @@ mod test {
             builder.with_limit(1)
         };
 
-        assert!(builder.prepare()?.execute(None).is_err());
+        assert!(builder.build().is_err());
         Ok(())
     }
 
@@ -1330,5 +1579,58 @@ mod test {
         assert_eq!(values.as_ref(), [1, 2]);
 
         Ok(())
+    }
+
+    #[rstest]
+    #[case::whole_array(4)]
+    #[case::trimmed_array(2)]
+    fn limit_ends_before_pending_work(#[case] rows: usize) -> VortexResult<()> {
+        let array = PrimitiveArray::from_iter(0..4i32).into_array();
+        let alive = Arc::new(());
+        let dropped = Arc::downgrade(&alive);
+        let pending = stream::poll_fn(move |_| {
+            let _ = &alive;
+            Poll::Pending
+        });
+        let arrays = stream::iter([Ok(array)]).chain(pending).boxed();
+        let mut limited = limit_rows(arrays, RowLimit::new(rows as u64));
+
+        let array = limited
+            .next()
+            .now_or_never()
+            .expect("ready")
+            .expect("array")?;
+        assert_eq!(array.len(), rows);
+        assert!(dropped.upgrade().is_none());
+        assert!(matches!(limited.next().now_or_never(), Some(None)));
+        Ok(())
+    }
+
+    #[test]
+    fn exhausted_shared_limit_ends_before_pending_work() {
+        let limit = RowLimit::new(1);
+        let mut limited = limit_rows(stream::pending().boxed(), limit.clone());
+        assert!(limited.next().now_or_never().is_none());
+
+        assert_eq!(limit.take(1), 1);
+        assert!(matches!(limited.next().now_or_never(), Some(None)));
+    }
+
+    #[test]
+    fn zero_limit_does_not_poll_input() {
+        let arrays = stream::poll_fn(|_| panic!("zero limit must not poll input")).boxed();
+        let mut limited = limit_rows(arrays, RowLimit::new(0));
+        assert!(matches!(limited.next().now_or_never(), Some(None)));
+    }
+
+    #[test]
+    fn error_ends_before_pending_work() {
+        let arrays = stream::iter([Err::<(), _>(vortex_err!("scan failed"))])
+            .chain(stream::pending())
+            .boxed();
+        let mut stream = stop_on_error(arrays);
+
+        assert!(matches!(stream.next().now_or_never(), Some(Some(Err(_)))));
+        assert!(matches!(stream.next().now_or_never(), Some(None)));
     }
 }
