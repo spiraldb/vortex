@@ -385,14 +385,11 @@ impl<A: 'static + Send> RepeatedScan<A> {
 }
 
 fn can_prune_file(ctx: &TaskContext) -> VortexResult<bool> {
-    if let Some(filter) = &ctx.filter {
-        for idx in 0..filter.conjuncts().len() {
-            let version = filter.dynamic_updates(idx).map(|updates| updates.version());
-            if filter.can_prune_file(idx, version, ctx.reader.as_ref())? {
-                ctx.count::<true>(ScanCounters::prune_file);
-                return Ok(true);
-            }
-        }
+    if let Some(filter) = &ctx.filter
+        && filter.can_prune_file_any(ctx.reader.as_ref())?
+    {
+        ctx.count::<true>(ScanCounters::prune_file);
+        return Ok(true);
     }
     Ok(false)
 }
