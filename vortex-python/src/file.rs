@@ -199,7 +199,7 @@ fn open_memory_mapped(
         // while mapped gives wrong data or SIGBUS, as with any memory-mapped reader.
         let mmap = unsafe { Mmap::map(&file)? };
 
-        let mut options = session().open_options();
+        let mut options = session().open_options().with_layout_reader_cache();
         if let Some(footer) = footer {
             options = options.with_footer(footer);
         }
@@ -291,7 +291,8 @@ fn open_options(
     segment_cache: Option<&PySegmentCache>,
     cache_key: Option<&str>,
 ) -> PyResult<VortexOpenOptions> {
-    let options = session().open_options();
+    // Python scans of one file share a reader tree instead of rebuilding it per scan.
+    let options = session().open_options().with_layout_reader_cache();
 
     match (segment_cache, cache_key) {
         (Some(_), _) if without_segment_cache => Err(PyValueError::new_err(
