@@ -27,12 +27,12 @@ use datafusion::logical_expr::lit;
 use datafusion::physical_expr::planner::logical2physical;
 use datafusion::physical_expr_adapter::DefaultPhysicalExprAdapterFactory;
 use datafusion::scalar::ScalarValue;
+use datafusion_common::Statistics;
 use datafusion_common::stats::Precision;
 use datafusion_execution::cache::default_cache::DefaultCache;
 use datafusion_expr::Operator;
 use datafusion_physical_expr::PhysicalExpr;
 use datafusion_physical_expr::expressions as df_expr;
-use datafusion_physical_expr::expressions::DynamicFilterPhysicalExpr;
 use datafusion_physical_expr::projection::ProjectionExpr;
 use futures::FutureExt;
 use futures::TryStreamExt;
@@ -305,6 +305,7 @@ fn make_morselizer(
         df_metrics: ExecutionPlanMetricsSet::new(),
         layout_readers: Default::default(),
         natural_splits: Default::default(),
+        file_schemas: Default::default(),
         has_output_ordering: false,
         expression_convertor: Arc::new(DefaultExpressionConvertor::default()),
         file_metadata_cache: None,
@@ -450,52 +451,6 @@ async fn test_open_all_valid_nullable_columns_with_nonnullable_table_schema() ->
         assert_eq!(batches.len(), 1);
         assert_eq!(batches[0].schema().as_ref(), expected_schema.as_ref());
     }
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_file_pruning_replaces_partition_columns_without_file_statistics() -> anyhow::Result<()>
-{
-    let object_store = Arc::new(InMemory::new()) as Arc<dyn ObjectStore>;
-    let file_schema = Arc::new(Schema::new(vec![Field::new("a", DataType::Int32, false)]));
-    let table_schema = TableSchema::builder(Arc::clone(&file_schema))
-        .with_table_partition_cols(vec![Arc::new(Field::new("part", DataType::Int32, false))])
-        .build();
-
-    let partition_column = Arc::new(df_expr::Column::new("part", 1)) as PhysicalExprRef;
-    let predicate = Arc::new(df_expr::BinaryExpr::new(
-        Arc::clone(&partition_column),
-        Operator::Gt,
-        df_expr::lit(ScalarValue::Int32(Some(1))),
-    )) as PhysicalExprRef;
-    let dynamic_predicate = Arc::new(DynamicFilterPhysicalExpr::new(
-        vec![partition_column],
-        predicate,
-    )) as PhysicalExprRef;
-
-    let mut morselizer = make_morselizer(object_store, table_schema, None);
-    morselizer.file_pruning_predicate = Some(dynamic_predicate);
-    let df_metrics = morselizer.df_metrics.clone();
-
-    // The file does not exist and has no statistics. Replacing `part` with 1
-    // makes the predicate false, so pruning must happen before any file I/O.
-    let mut file = PartitionedFile::new("missing.vortex", 1);
-    file.partition_values = vec![ScalarValue::Int32(Some(1))];
-    let batches = morselizer
-        .open(file)?
-        .await?
-        .try_collect::<Vec<_>>()
-        .await?;
-
-    assert!(batches.is_empty());
-    assert_eq!(
-        df_metrics
-            .clone_inner()
-            .sum_by_name("num_predicate_creation_errors")
-            .map(|metric| metric.as_usize()),
-        Some(0)
-    );
 
     Ok(())
 }
@@ -689,6 +644,7 @@ async fn test_open_files_different_table_schema() -> anyhow::Result<()> {
         df_metrics: ExecutionPlanMetricsSet::new(),
         layout_readers: Default::default(),
         natural_splits: Default::default(),
+        file_schemas: Default::default(),
         has_output_ordering: false,
         expression_convertor: Arc::new(DefaultExpressionConvertor::default()),
         file_metadata_cache: None,
@@ -776,6 +732,7 @@ async fn test_schema_different_column_order() -> anyhow::Result<()> {
         df_metrics: ExecutionPlanMetricsSet::new(),
         layout_readers: Default::default(),
         natural_splits: Default::default(),
+        file_schemas: Default::default(),
         has_output_ordering: false,
         expression_convertor: Arc::new(DefaultExpressionConvertor::default()),
         file_metadata_cache: None,
@@ -925,6 +882,7 @@ async fn test_projection_bug_minimal_repro() -> anyhow::Result<()> {
         df_metrics: ExecutionPlanMetricsSet::new(),
         layout_readers: Default::default(),
         natural_splits: Default::default(),
+        file_schemas: Default::default(),
         has_output_ordering: false,
         expression_convertor: Arc::new(DefaultExpressionConvertor::default()),
         file_metadata_cache: None,
@@ -985,6 +943,7 @@ fn make_test_morselizer(
         df_metrics: ExecutionPlanMetricsSet::new(),
         layout_readers: Default::default(),
         natural_splits: Default::default(),
+        file_schemas: Default::default(),
         has_output_ordering: false,
         expression_convertor: Arc::new(DefaultExpressionConvertor::default()),
         file_metadata_cache: None,
@@ -1190,6 +1149,7 @@ async fn test_projection_expr_pushdown() -> anyhow::Result<()> {
         df_metrics: ExecutionPlanMetricsSet::new(),
         layout_readers: Default::default(),
         natural_splits: Default::default(),
+        file_schemas: Default::default(),
         has_output_ordering: false,
         expression_convertor: Arc::new(DefaultExpressionConvertor::default()),
         file_metadata_cache: None,

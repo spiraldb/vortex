@@ -17,10 +17,10 @@ use arrow_schema::SchemaRef;
 use datafusion_common::DataFusionError;
 use datafusion_common::Result as DFResult;
 use datafusion_common::ScalarValue;
-use datafusion_common::Statistics;
 use datafusion_common::arrow::array::AsArray;
 use datafusion_common::exec_datafusion_err;
 use datafusion_common::format::MetricCategory;
+use datafusion_common::tree_node::TreeNode;
 use datafusion_datasource::PartitionedFile;
 use datafusion_datasource::TableSchema;
 use datafusion_datasource::morsel::Morsel;
@@ -30,11 +30,11 @@ use datafusion_datasource::morsel::Morselizer;
 use datafusion_execution::cache::cache_manager::CachedFileMetadataEntry;
 use datafusion_execution::cache::cache_manager::FileMetadataCache;
 use datafusion_physical_expr::PhysicalExprRef;
+use datafusion_physical_expr::expressions::LambdaExpr;
 use datafusion_physical_expr::projection::ProjectionExprs;
 use datafusion_physical_expr::projection::Projector;
 use datafusion_physical_expr::simplifier::PhysicalExprSimplifier;
 use datafusion_physical_expr::split_conjunction;
-use datafusion_physical_expr::utils::collect_columns;
 use datafusion_physical_expr::utils::reassign_expr_columns;
 use datafusion_physical_expr_adapter::PhysicalExprAdapterFactory;
 use datafusion_physical_expr_adapter::replace_columns_with_literals;
@@ -47,6 +47,7 @@ use futures::stream::BoxStream;
 use object_store::path::Path;
 use tokio::sync::OnceCell;
 use tracing::Instrument;
+use vortex::array::ArrayRef;
 use vortex::array::VortexSessionExecute;
 use vortex::error::VortexError;
 use vortex::error::VortexExpect;
@@ -156,6 +157,8 @@ pub struct VortexMorselizer {
     pub layout_readers: Arc<DashMap<Path, Weak<dyn LayoutReader>>>,
     /// Shared full-file natural splits keyed by file path.
     pub(crate) natural_splits: Arc<NaturalSplitCache>,
+    /// Shared physical Arrow schemas of each file, keyed by file path.
+    pub file_schemas: Arc<DashMap<Path, SchemaRef>>,
     /// Whether the query has output ordering specified
     pub has_output_ordering: bool,
 
@@ -181,6 +184,7 @@ impl std::fmt::Debug for VortexMorselizer {
             .field("df_metrics", &self.df_metrics)
             .field("layout_readers", &self.layout_readers)
             .field("natural_splits", &self.natural_splits)
+            .field("file_schemas", &self.file_schemas)
             .field("has_output_ordering", &self.has_output_ordering)
             .field("file_metadata_cache", &self.file_metadata_cache)
             .field("projection_pushdown", &self.projection_pushdown)
@@ -236,6 +240,7 @@ impl VortexMorselPlanner {
         let limit = morselizer.limit;
         let layout_readers = Arc::clone(&morselizer.layout_readers);
         let natural_splits = Arc::clone(&morselizer.natural_splits);
+        let file_schemas = Arc::clone(&morselizer.file_schemas);
         let has_output_ordering = morselizer.has_output_ordering;
         let scan_concurrency = morselizer.scan_concurrency;
 
@@ -257,13 +262,6 @@ impl VortexMorselPlanner {
             .zip(file.partition_values.clone())
             .collect::<std::collections::HashMap<String, ScalarValue>>();
 
-        let predicate_uses_partition_columns =
-            file_pruning_predicate.as_ref().is_some_and(|predicate| {
-                collect_columns(predicate)
-                    .iter()
-                    .any(|column| literal_value_cols.contains_key(column.name()))
-            });
-
         if !literal_value_cols.is_empty() {
             projection = projection.try_map_exprs(|expr| {
                 replace_columns_with_literals(Arc::clone(&expr), &literal_value_cols)
@@ -276,26 +274,15 @@ impl VortexMorselPlanner {
                 .transpose()?;
         }
 
-        // FilePruner requires a statistics object even when the rewritten predicate
-        // only contains partition literals. Supply unknown file-column statistics in
-        // that case so static and dynamic partition predicates can still prune.
-        let synthetic_statistics = (!file.has_statistics() && predicate_uses_partition_columns)
-            .then(|| {
-                file.clone()
-                    .with_statistics(Arc::new(Statistics::new_unknown(&unified_file_schema)))
-            });
-        let pruning_file = synthetic_statistics.as_ref().unwrap_or(&file);
-
-        let file_pruner = file_pruning_predicate
-            .filter(|_| file.has_statistics() || predicate_uses_partition_columns)
-            .and_then(|predicate| {
-                FilePruner::try_new(
-                    Arc::clone(&predicate),
-                    &unified_file_schema,
-                    pruning_file,
-                    predicate_creation_errors,
-                )
-            });
+        // FilePruner now has all the logic to figure out if its worthwhile, and will return `None` if not.
+        let file_pruner = file_pruning_predicate.and_then(|predicate| {
+            FilePruner::try_new(
+                Arc::clone(&predicate),
+                &unified_file_schema,
+                &file,
+                predicate_creation_errors,
+            )
+        });
 
         Ok(Self {
             state: State::Start {
@@ -315,6 +302,7 @@ impl VortexMorselPlanner {
                     limit,
                     layout_readers,
                     natural_splits,
+                    file_schemas,
                     has_output_ordering,
                     expr_convertor,
                     projection_pushdown,
@@ -341,6 +329,7 @@ struct FileOpenState {
     limit: Option<u64>,
     layout_readers: Arc<DashMap<Path, Weak<dyn LayoutReader>>>,
     natural_splits: Arc<NaturalSplitCache>,
+    file_schemas: Arc<DashMap<Path, SchemaRef>>,
     has_output_ordering: bool,
     expr_convertor: Arc<dyn ExpressionConvertor>,
     projection_pushdown: bool,
@@ -349,7 +338,7 @@ struct FileOpenState {
 
 /// A scan with bound projection and filter, ready for split assignment and preparation.
 struct ScanState {
-    scan_builder: ScanBuilder,
+    scan_builder: ScanBuilder<ArrayRef>,
     file_pruner: Option<FilePruner>,
     output_schema: SchemaRef,
     session: VortexSession,
@@ -394,7 +383,7 @@ enum State {
         state: ScanState,
     },
     PreparedScan {
-        scan: RepeatedScan,
+        scan: RepeatedScan<ArrayRef>,
         file_pruner: Option<FilePruner>,
         output_schema: SchemaRef,
         session: VortexSession,
@@ -509,6 +498,7 @@ impl std::fmt::Debug for FileOpenState {
             .field("limit", &self.limit)
             .field("layout_readers", &self.layout_readers)
             .field("natural_splits", &self.natural_splits)
+            .field("file_schemas", &self.file_schemas)
             .field("has_output_ordering", &self.has_output_ordering)
             .field("expr_convertor", &"<expr_convertor>")
             .field("projection_pushdown", &self.projection_pushdown)
@@ -618,16 +608,25 @@ impl MorselPlanner for VortexMorselPlanner {
                     projection_pushdown,
                     scan_concurrency,
                     natural_splits,
+                    file_schemas,
                     ..
                 } = state;
 
                 // This is the expected arrow types of the actual columns in the file, which might have different types
-                // from the unified logical schema or miss
-                let this_file_schema = Arc::new(calculate_physical_schema(
-                    vxf.dtype(),
-                    &unified_file_schema,
-                    &session.arrow(),
-                )?);
+                // from the unified logical schema or miss. Every partition opening this file computes
+                // the same schema, so it is shared across them.
+                let this_file_schema = match file_schemas.get(&file.object_meta.location) {
+                    Some(schema) => Arc::clone(schema.value()),
+                    None => {
+                        let schema = Arc::new(calculate_physical_schema(
+                            vxf.dtype(),
+                            &unified_file_schema,
+                            &session.arrow(),
+                        )?);
+                        file_schemas.insert(file.object_meta.location.clone(), Arc::clone(&schema));
+                        schema
+                    }
+                };
 
                 let expr_adapter = expr_adapter_factory.create(
                     Arc::clone(&unified_file_schema),
@@ -648,6 +647,9 @@ impl MorselPlanner for VortexMorselPlanner {
                 let projection =
                     projection.try_map_exprs(|p| simplifier.simplify(expr_adapter.rewrite(p)?))?;
 
+                // TODO: support lambda pushdown.
+                let projection_pushdown = projection_pushdown && !contains_lambda(&projection)?;
+
                 let ProcessedProjection {
                     scan_projection,
                     leftover_projection,
@@ -666,8 +668,8 @@ impl MorselPlanner for VortexMorselPlanner {
                 // The schema of the stream returned from the vortex scan.
                 // We use a reference schema for types that don't roundtrip (Dictionary, Utf8, etc.).
                 let scan_projection = scan_projection
-                    .optimize_recursive(vxf.dtype())
-                    .and_then(|projection| projection.bind(vxf.dtype()))
+                    .bind(vxf.dtype())
+                    .and_then(|projection| projection.optimize_recursive())
                     .map_err(|_e| {
                         exec_datafusion_err!(
                             "Couldn't get the dtype for the underlying Vortex scan"
@@ -737,10 +739,13 @@ impl MorselPlanner for VortexMorselPlanner {
                     })
                     .transpose()?;
                 let filter = filter
-                    .map(|filter| filter.optimize_recursive(vxf.dtype())?.bind(vxf.dtype()))
+                    .map(|filter| filter.bind(vxf.dtype())?.optimize_recursive())
                     .transpose()
                     .map_err(|e| exec_datafusion_err!("Couldn't bind Vortex scan filter: {e}"))?;
 
+                // Applying the limit after our filter is only correct because pushed-down filters are
+                // reported as exact: DataFusion pushes a limit into the scan only when no `FilterExec`
+                // remains above it to drop further rows.
                 if let Some(limit) = limit {
                     scan_builder = scan_builder.with_limit(limit);
                 }
@@ -913,6 +918,19 @@ impl MorselPlanner for VortexMorselPlanner {
     }
 }
 
+/// Whether any expression in `projection` contains a lambda.
+fn contains_lambda(projection: &ProjectionExprs) -> DFResult<bool> {
+    for projection_expr in projection.iter() {
+        if projection_expr
+            .expr
+            .exists(|node| Ok(node.downcast_ref::<LambdaExpr>().is_some()))?
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 fn layout_reader_for_file(
     layout_readers: &DashMap<Path, Weak<dyn LayoutReader>>,
     path: &Path,
@@ -973,7 +991,7 @@ fn natural_split_cell_for_file(
 }
 
 fn compute_natural_splits(
-    scan_builder: &ScanBuilder,
+    scan_builder: &ScanBuilder<ArrayRef>,
     total_size: u64,
 ) -> DFResult<Arc<NaturalSplits>> {
     let row_boundaries = scan_builder
