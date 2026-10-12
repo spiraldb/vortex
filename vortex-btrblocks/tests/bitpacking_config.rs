@@ -13,10 +13,12 @@ use vortex_array::ArrayId;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
+use vortex_array::arrays::Patched;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::assert_arrays_eq;
 use vortex_array::serde::SerializeOptions;
 use vortex_array::serde::SerializedArray;
+use vortex_array::session::ArraySessionExt;
 use vortex_btrblocks::BtrBlocksCompressorBuilder;
 use vortex_btrblocks::schemes::integer::BitPackingScheme;
 use vortex_buffer::ByteBufferMut;
@@ -36,6 +38,7 @@ static BITPACKING_V1: BitPackingScheme = BitPackingScheme::v1();
 /// Registers the fastlanes encodings, and enables no editions.
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     let session = vortex_array::array_session();
+    session.arrays().register(Patched);
     vortex_fastlanes::initialize(&session);
     session
 });
@@ -101,13 +104,38 @@ fn bitpacking_only() -> BtrBlocksCompressorBuilder {
     BtrBlocksCompressorBuilder::empty().with_new_scheme(&BITPACKING_V1)
 }
 
-/// v2 produces per-block bit widths even when every block chooses the same width.
 #[rstest]
-#[case::drifting(drifting())]
-#[case::uniform(uniform())]
-fn v2_always_serializes_as_v2(#[case] array: ArrayRef) -> VortexResult<()> {
+#[case::drifting(drifting(), Some(bitpacked_v2_id()))]
+#[case::uniform(uniform(), Some(bitpacked_v1_id()))]
+#[case::uniform_with_patches(
+    PrimitiveArray::from_iter(
+        (0..8192u32).map(|i| if i % 1024 == 0 { 1 << 20 } else { i % 128 }),
+    )
+    .into_array(),
+    Some(bitpacked_v1_id())
+)]
+#[case::native_u8(
+    PrimitiveArray::from_iter((128u8..=u8::MAX).cycle().take(8192)).into_array(),
+    None
+)]
+#[case::native_u32(
+    PrimitiveArray::from_iter((0..8192u32).map(|i| (1 << 31) + i)).into_array(),
+    None
+)]
+#[case::empty(PrimitiveArray::from_iter(Vec::<u32>::new()).into_array(), None)]
+fn v2_selects_wire_format(
+    #[case] array: ArrayRef,
+    #[case] expected_id: Option<ArrayId>,
+) -> VortexResult<()> {
     let ids = compress_roundtrip(bitpacking_only(), &array)?;
-    assert!(ids.contains(&bitpacked_v2_id()));
+    assert_eq!(
+        ids.contains(&bitpacked_v1_id()),
+        expected_id == Some(bitpacked_v1_id())
+    );
+    assert_eq!(
+        ids.contains(&bitpacked_v2_id()),
+        expected_id == Some(bitpacked_v2_id())
+    );
     Ok(())
 }
 

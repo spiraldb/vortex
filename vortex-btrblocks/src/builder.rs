@@ -250,9 +250,12 @@ mod tests {
     use rstest::rstest;
     use vortex_array::ArrayId;
     use vortex_array::VTable;
+    use vortex_array::arrays::Patched;
     use vortex_array::arrays::VarBin;
     use vortex_decimal_byte_parts::DecimalByteParts;
     use vortex_decimal_byte_parts::decimal_byte_parts_v1_id;
+    use vortex_fastlanes::bitpacked_v1_id;
+    use vortex_fastlanes::bitpacked_v2_id;
     use vortex_fsst::FSST;
 
     use super::*;
@@ -265,6 +268,21 @@ mod tests {
     #[case::fsst_with_codes(&string::FSSTScheme, vec![FSST.id(), VarBin.id()], true)]
     #[case::decimal_v1_id(&DECIMAL_V1, vec![decimal_byte_parts_v1_id()], true)]
     #[case::decimal_both_ids(&DECIMAL_V2, vec![decimal_byte_parts_v1_id(), DecimalByteParts.id()], true)]
+    #[case::bitpacking_v1_id(
+        &integer::BITPACKING_V1,
+        vec![bitpacked_v1_id(), Patched.id()],
+        true
+    )]
+    #[case::bitpacking_both_ids(
+        &integer::BITPACKING_V1,
+        vec![bitpacked_v1_id(), bitpacked_v2_id(), Patched.id()],
+        true
+    )]
+    #[case::bitpacking_v2_only(
+        &integer::BITPACKING_V1,
+        vec![bitpacked_v2_id(), Patched.id()],
+        false
+    )]
     fn test_allowed_schemes(
         #[case] scheme: &'static dyn Scheme,
         #[case] allowed: Vec<ArrayId>,
