@@ -205,7 +205,10 @@ mod tests {
             let indices = (0..selected)
                 .map(|index| index * 1_024 / selected)
                 .collect::<Vec<_>>();
-            let expected = indices.iter().map(|&index| values[index]).collect::<Vec<_>>();
+            let expected = indices
+                .iter()
+                .map(|&index| values[index])
+                .collect::<Vec<_>>();
 
             let Mask::Values(mask) = Mask::from_indices(values.len(), indices) else {
                 unreachable!("the indices select some but not all values")
