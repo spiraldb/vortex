@@ -428,8 +428,12 @@ fn intersect_by_rank_indices(len: usize, self_indices: &[usize], mask_indices: &
     )
 }
 
-/// Below this density of `self` the portable path deposits with [`PortableLoop`]. See the
-/// `random_rotating` benchmark when changing it.
+/// Below this density of `self` the portable path deposits with [`PortableLoop`].
+///
+/// The crossover with [`Portable`] depends on the CPU. With random masks, it is at about 3.5 %
+/// on Neoverse V1 (Graviton3) and above 8 % on Neoverse N1 (Graviton2), where the network is
+/// slower. 1/16 is close to where the two balance. See the `random_rotating` benchmark when
+/// changing it.
 const PORTABLE_LOOP_MAX_DENSITY: f64 = 1.0 / 16.0;
 
 type IntersectBuffers = unsafe fn(&BitBuffer, &BitBuffer, usize) -> Mask;
