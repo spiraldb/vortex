@@ -19,8 +19,9 @@ use crate::plan::TakePlan;
 use crate::plan::pipeline::Blocked;
 use crate::plan::pipeline::Cx;
 use crate::plan::pipeline::DEFAULT_CAPACITY;
+use crate::plan::pipeline::Input;
+use crate::plan::pipeline::Operator;
 use crate::plan::pipeline::Source;
-use crate::plan::pipeline::Stage;
 use crate::plan::pipeline::Step;
 
 /// Wraps each batch of codes as a dictionary over the values, once the values inlet has ended.
@@ -99,14 +100,17 @@ impl WholeStage {
     }
 }
 
-impl Stage for WholeStage {
-    fn push(&mut self, batch: ArrayRef, _cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
-        self.batches.push(batch);
-        Ok(None)
-    }
-
-    fn finish(&mut self, _cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
-        let batches = std::mem::take(&mut self.batches);
-        Ok(Some(shared(join(&self.dtype, batches)?)))
+impl Operator for WholeStage {
+    fn compute(&mut self, input: Input, _cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
+        match input {
+            Input::Batch(batch) => {
+                self.batches.push(batch);
+                Ok(None)
+            }
+            Input::End => {
+                let batches = std::mem::take(&mut self.batches);
+                Ok(Some(shared(join(&self.dtype, batches)?)))
+            }
+        }
     }
 }

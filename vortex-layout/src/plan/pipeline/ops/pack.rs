@@ -16,8 +16,9 @@ use vortex_error::vortex_err;
 use super::take_rows;
 use crate::plan::pipeline::Blocked;
 use crate::plan::pipeline::Cx;
+use crate::plan::pipeline::Input;
+use crate::plan::pipeline::Operator;
 use crate::plan::pipeline::Source;
-use crate::plan::pipeline::Stage;
 use crate::plan::pipeline::Step;
 
 /// Zips its inlets, one per field and the validity last when nullable, into structs.
@@ -161,8 +162,11 @@ impl WrapStage {
     }
 }
 
-impl Stage for WrapStage {
-    fn push(&mut self, batch: ArrayRef, _cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
+impl Operator for WrapStage {
+    fn compute(&mut self, input: Input, _cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
+        let Input::Batch(batch) = input else {
+            return Ok(None);
+        };
         Ok(Some(
             assemble(&self.fields, vec![batch], Validity::NonNullable).into_array(),
         ))

@@ -11,7 +11,8 @@ use vortex_error::vortex_ensure;
 use vortex_mask::Mask;
 
 use crate::plan::pipeline::Cx;
-use crate::plan::pipeline::Stage;
+use crate::plan::pipeline::Input;
+use crate::plan::pipeline::Operator;
 
 /// The selected fraction of a predicate's batch at or above which it is executed whole and then
 /// filtered, as the default scan's flat reader does.
@@ -37,8 +38,11 @@ impl MaskStage {
     }
 }
 
-impl Stage for MaskStage {
-    fn push(&mut self, batch: ArrayRef, cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
+impl Operator for MaskStage {
+    fn compute(&mut self, input: Input, cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
+        let Input::Batch(batch) = input else {
+            return Ok(None);
+        };
         let end = self.cursor + batch.len();
         vortex_ensure!(
             end <= self.mask.len(),
