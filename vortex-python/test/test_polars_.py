@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+from __future__ import annotations
+
 import math
 import os
 from datetime import UTC, date, datetime, time
