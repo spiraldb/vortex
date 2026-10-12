@@ -947,8 +947,11 @@ mod tests {
     ) -> VortexResult<()> {
         let reader = layout.new_reader("".into(), segments, &SESSION, &Default::default())?;
         let filter = is_not_null(root()).bind(reader.dtype())?;
-        let future = reader.filter_evaluation(&(0..3), &filter, MaskFuture::new_true(3))?;
-        let result = block_on(|_| future)?;
+        let result = block_on(|_| {
+            reader
+                .filter_evaluation(&(0..3), &filter, MaskFuture::new_true(3))
+                .unwrap()
+        })?;
         assert_eq!(result, Mask::from_iter([false, true, true]));
         Ok(())
     }
@@ -959,8 +962,11 @@ mod tests {
     ) -> VortexResult<()> {
         let reader = layout.new_reader("".into(), segments, &SESSION, &Default::default())?;
         let filter = eq(get_item("a", root()), lit(7)).bind(reader.dtype())?;
-        let future = reader.filter_evaluation(&(0..3), &filter, MaskFuture::new_true(3))?;
-        let result = block_on(|_| future)?;
+        let result = block_on(|_| {
+            reader
+                .filter_evaluation(&(0..3), &filter, MaskFuture::new_true(3))
+                .unwrap()
+        })?;
         assert_eq!(result, Mask::from_iter([false, false, false]));
         Ok(())
     }
@@ -972,8 +978,11 @@ mod tests {
         let mut ctx = SESSION.create_execution_ctx();
         let reader = layout.new_reader("".into(), segments, &SESSION, &Default::default())?;
         let expr = is_null(root()).bind(reader.dtype())?;
-        let future = reader.projection_evaluation(&(0..3), &expr, MaskFuture::new_true(3))?;
-        let result = block_on(|_| future)?;
+        let result = block_on(|_| {
+            reader
+                .projection_evaluation(&(0..3), &expr, MaskFuture::new_true(3))
+                .unwrap()
+        })?;
         let expected = BoolArray::from_iter([true, false, false]);
         assert_arrays_eq!(result, expected, &mut ctx);
         Ok(())
@@ -986,9 +995,12 @@ mod tests {
         let mut ctx = SESSION.create_execution_ctx();
         let reader = layout.new_reader("".into(), segments, &SESSION, &Default::default())?;
         let expr = pack([("x", lit(1))], false.into()).bind(reader.dtype())?;
-        let future = reader.projection_evaluation(&(0..3), &expr, MaskFuture::new_true(3))?;
 
-        let result = block_on(|_| future)?;
+        let result = block_on(|_| {
+            reader
+                .projection_evaluation(&(0..3), &expr, MaskFuture::new_true(3))
+                .unwrap()
+        })?;
         let expected_x_dtype = DType::Primitive(PType::I32, false.into());
         let expected_fields = StructFields::from_iter([("x", expected_x_dtype)]);
         let expected_dtype = DType::Struct(expected_fields, false.into());
@@ -1008,8 +1020,11 @@ mod tests {
         let mut ctx = SESSION.create_execution_ctx();
         let reader = layout.new_reader("".into(), segments, &SESSION, &Default::default())?;
         let expr = root().bind(reader.dtype())?;
-        let future = reader.projection_evaluation(&(0..3), &expr, MaskFuture::new_true(3))?;
-        let result = block_on(|_| future)?;
+        let result = block_on(|_| {
+            reader
+                .projection_evaluation(&(0..3), &expr, MaskFuture::new_true(3))
+                .unwrap()
+        })?;
         assert_eq!(result.dtype(), reader.dtype());
 
         let mut probe = result.probe();
@@ -1052,8 +1067,11 @@ mod tests {
 
         let reader = layout.new_reader("".into(), segments, &SESSION, &Default::default())?;
         let expr = get_item(STRUCT_VALIDITY_NAME, root()).bind(reader.dtype())?;
-        let future = reader.projection_evaluation(&(0..3), &expr, MaskFuture::new_true(3))?;
-        let result = block_on(move |_| future);
+        let result = block_on(move |_| {
+            reader
+                .projection_evaluation(&(0..3), &expr, MaskFuture::new_true(3))
+                .unwrap()
+        });
 
         if will_error {
             assert!(result.is_err());
