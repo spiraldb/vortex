@@ -102,7 +102,12 @@ def _polars_to_vortex(expr: dict[str, Any]) -> ve.Expr:
         elif "Time" in scalar:
             return ve.literal(_dtype.time("ns"), scalar["Time"])
         elif "Decimal" in scalar:
-            value, precision, scale = scalar["Decimal"]
+            # Polars <1.35 omits the precision: [value, scale].
+            if len(scalar["Decimal"]) == 2:
+                value, scale = scalar["Decimal"]
+                precision = 38
+            else:
+                value, precision, scale = scalar["Decimal"]
             return ve.literal(_dtype.decimal(precision=precision, scale=scale), value)
         elif "Date" in scalar:
             return ve.literal(_dtype.date("days"), scalar["Date"])
