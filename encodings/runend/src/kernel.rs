@@ -73,22 +73,14 @@ fn slice(
         return Ok(ConstantArray::new(value, new_length).into_array());
     }
 
-    let ends = array.ends().slice(slice_begin..slice_end)?;
-    let values = array.values().slice(slice_begin..slice_end)?;
-    let offset = range.start + array.offset();
-    // SAFETY: we maintain the ends invariant in our slice implementation, and slicing whole runs
-    // preserves the alternation of their values.
+    // SAFETY: we maintain the ends invariant in our slice implementation
     Ok(unsafe {
-        match array.alternating_start() {
-            Some(start) => RunEnd::new_alternating_unchecked(
-                ends,
-                values,
-                start ^ (slice_begin % 2 == 1),
-                offset,
-                new_length,
-            ),
-            None => RunEnd::new_unchecked(ends, values, offset, new_length),
-        }
+        RunEnd::new_unchecked(
+            array.ends().slice(slice_begin..slice_end)?,
+            array.values().slice(slice_begin..slice_end)?,
+            range.start + array.offset(),
+            new_length,
+        )
         .into_array()
     })
 }

@@ -7,6 +7,7 @@ use std::fmt::Formatter;
 use std::hash::Hash;
 use std::hash::Hasher;
 
+use prost::Message;
 use vortex_array::AnyCanonical;
 use vortex_array::Array;
 use vortex_array::ArrayEq;
@@ -23,25 +24,22 @@ use vortex_array::TypedArrayRef;
 use vortex_array::VortexSessionExecute;
 use vortex_array::array_slots;
 use vortex_array::arrays::Bool;
-use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::DecimalArray;
 use vortex_array::arrays::ListViewArray;
 use vortex_array::arrays::Primitive;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::VarBinViewArray;
-use vortex_array::arrays::bool::BoolArrayExt;
 use vortex_array::arrays::listview::ListViewArraySlotsExt;
 use vortex_array::buffer::BufferHandle;
 use vortex_array::dtype::DType;
+use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
 use vortex_array::legacy_session;
-use vortex_array::match_each_unsigned_integer_ptype;
 use vortex_array::require_child;
 use vortex_array::serde::ArrayChildren;
 use vortex_array::validity::Validity;
 use vortex_array::vtable::VTable;
 use vortex_array::vtable::ValidityVTable;
-use vortex_buffer::BitBuffer;
 use vortex_error::VortexExpect as _;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
@@ -51,14 +49,12 @@ use vortex_error::vortex_panic;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
 
-use crate::compress::BoolRuns;
 use crate::compress::runend_decode_decimal;
 use crate::compress::runend_decode_primitive;
 use crate::compress::runend_decode_varbinview;
 use crate::compress::runend_encode;
 use crate::compress::runend_encode_bool;
 use crate::decompress_bool::runend_decode_bools;
-use crate::iter::trimmed_ends_iter;
 use crate::ops::find_physical_index;
 use crate::ops::find_slice_end_index;
 use crate::rules::RULES;
@@ -79,13 +75,12 @@ pub struct RunEndMetadata {
 impl ArrayHash for RunEndData {
     fn array_hash<H: Hasher>(&self, state: &mut H, _accuracy: EqMode) {
         self.offset.hash(state);
-        self.alternating_start.hash(state);
     }
 }
 
 impl ArrayEq for RunEndData {
     fn array_eq(&self, other: &Self, _accuracy: EqMode) -> bool {
-        self.offset == other.offset && self.alternating_start == other.alternating_start
+        self.offset == other.offset
     }
 }
 
@@ -115,12 +110,6 @@ impl VTable for RunEnd {
         let mut ctx = legacy_session().create_execution_ctx();
         RunEndData::validate_parts(ends, values, data.offset, len, &mut ctx)?;
         vortex_ensure_eq!(values.dtype(), dtype);
-        if data.alternating_start.is_some() {
-            vortex_ensure!(
-                dtype.is_boolean(),
-                "Only boolean RunEnd values can alternate, got {dtype}"
-            );
-        }
         Ok(())
     }
 
@@ -145,22 +134,45 @@ impl VTable for RunEnd {
     }
 
     fn serialize(
-        _array: ArrayView<'_, Self>,
+        array: ArrayView<'_, Self>,
         _session: &VortexSession,
     ) -> VortexResult<Option<Vec<u8>>> {
-        vortex_bail!("RunEnd serialization requires RunEndPlugin")
+        Ok(Some(
+            RunEndMetadata {
+                ends_ptype: PType::try_from(array.ends().dtype())
+                    .vortex_expect("Must be a valid PType") as i32,
+                num_runs: array.ends().len() as u64,
+                offset: array.offset() as u64,
+            }
+            .encode_to_vec(),
+        ))
     }
 
     fn deserialize(
         &self,
-        _dtype: &DType,
-        _len: usize,
-        _metadata: &[u8],
+        dtype: &DType,
+        len: usize,
+        metadata: &[u8],
         _buffers: &[BufferHandle],
-        _children: &dyn ArrayChildren,
+        children: &dyn ArrayChildren,
         _session: &VortexSession,
     ) -> VortexResult<ArrayParts<Self>> {
-        vortex_bail!("RunEnd deserialization requires RunEndPlugin")
+        let metadata = RunEndMetadata::decode(metadata)?;
+        let ends_dtype = DType::Primitive(metadata.ends_ptype(), Nullability::NonNullable);
+        let runs = usize::try_from(metadata.num_runs).vortex_expect("Must be a valid usize");
+        let ends = children.get(0, &ends_dtype, runs)?;
+
+        let values = children.get(1, dtype, runs)?;
+        let offset = usize::try_from(metadata.offset).vortex_expect("Offset must be a valid usize");
+        let slots = RunEndSlots { ends, values }.into_slots();
+        let data = RunEndData::new(offset);
+        Ok(ArrayParts::new(
+            self.clone(),
+            dtype.clone(),
+            len,
+            data,
+            slots,
+        ))
     }
 
     fn slot_name(_array: ArrayView<'_, Self>, idx: usize) -> String {
@@ -195,18 +207,11 @@ pub struct RunEndSlots {
 #[derive(Clone, Debug)]
 pub struct RunEndData {
     offset: usize,
-    /// When set, the values are booleans that alternate from run to run, beginning with this
-    /// value for the first physical run.
-    alternating_start: Option<bool>,
 }
 
 impl Display for RunEndData {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "offset: {}", self.offset)?;
-        if let Some(start) = self.alternating_start {
-            write!(f, ", alternating_start: {start}")?;
-        }
-        Ok(())
+        write!(f, "offset: {}", self.offset)
     }
 }
 
@@ -214,21 +219,11 @@ pub struct RunEndDataParts {
     pub ends: ArrayRef,
     pub values: ArrayRef,
     pub offset: usize,
-    pub alternating_start: Option<bool>,
 }
 
 pub trait RunEndArrayExt: RunEndArraySlotsExt {
     fn offset(&self) -> usize {
         self.offset
-    }
-
-    /// The value of the first physical run when the boolean values alternate between runs.
-    ///
-    /// Run `i` then holds `start ^ (i % 2 == 1)`, or null. Such arrays serialize without their
-    /// values as `vortex.runend.v2`. Boolean arrays with explicit values, which may repeat a
-    /// value in adjacent runs such as `[false, false, true]`, return `None`.
-    fn alternating_start(&self) -> Option<bool> {
-        self.alternating_start
     }
 
     fn dtype(&self) -> &DType {
@@ -300,67 +295,11 @@ impl RunEnd {
         Self::try_new(ends, values, ctx).vortex_expect("RunEndData is always valid")
     }
 
-    /// Build a new boolean [`RunEndArray`] whose run values alternate, beginning with `start`.
-    ///
-    /// `validity` holds one entry per run. The values of null runs still take part in the
-    /// alternation, so a valid run `i` holds `start ^ (i % 2 == 1)`.
-    pub fn try_new_alternating(
-        ends: ArrayRef,
-        start: bool,
-        validity: Validity,
-        ctx: &mut ExecutionCtx,
-    ) -> VortexResult<RunEndArray> {
-        let len = RunEndData::logical_len_from_ends(&ends, ctx)?;
-        Self::try_new_alternating_offset_length(ends, start, validity, 0, len, ctx)
-    }
-
-    /// Build a new boolean [`RunEndArray`] whose run values alternate, beginning with `start`,
-    /// covering `offset..offset + length` of the runs.
-    pub fn try_new_alternating_offset_length(
-        ends: ArrayRef,
-        start: bool,
-        validity: Validity,
-        offset: usize,
-        length: usize,
-        ctx: &mut ExecutionCtx,
-    ) -> VortexResult<RunEndArray> {
-        let values = alternating_values(start, ends.len(), validity)?.into_array();
-        RunEndData::validate_parts(&ends, &values, offset, length, ctx)?;
-        let dtype = values.dtype().clone();
-        let slots = RunEndSlots { ends, values }.into_slots();
-        let data = RunEndData {
-            offset,
-            alternating_start: Some(start),
-        };
-        Array::try_from_parts(ArrayParts::new(RunEnd, dtype, length, data, slots))
-    }
-
-    /// Build a new alternating boolean [`RunEndArray`] without validation.
-    ///
-    /// # Safety
-    /// See [`RunEndData::new_unchecked`] for preconditions. In addition, `values` must be booleans
-    /// whose valid entries alternate from run to run, with physical run 0 holding `start`.
-    pub(crate) unsafe fn new_alternating_unchecked(
-        ends: ArrayRef,
-        values: ArrayRef,
-        start: bool,
-        offset: usize,
-        length: usize,
-    ) -> RunEndArray {
-        let dtype = values.dtype().clone();
-        let slots = RunEndSlots { ends, values }.into_slots();
-        let data = RunEndData {
-            offset,
-            alternating_start: Some(start),
-        };
-        unsafe { Array::from_parts_unchecked(ArrayParts::new(RunEnd, dtype, length, data, slots)) }
-    }
-
     /// Run the array through run-end encoding.
     ///
-    /// Boolean arrays are encoded with explicit run values, which every reader of
-    /// `vortex.runend` understands. Pass the result to [`RunEnd::normalize_bool`] to drop the
-    /// values from the serialized form.
+    /// Boolean arrays keep an explicit value per run. Use [`RunEndBool::encode`] to omit them.
+    ///
+    /// [`RunEndBool::encode`]: crate::RunEndBool::encode
     pub fn encode(array: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<RunEndArray> {
         let len = array.len();
         let (ends, values) = if let Some(parray) = array.as_opt::<Primitive>() {
@@ -377,82 +316,13 @@ impl RunEnd {
         let data = unsafe { RunEndData::new_unchecked(0) };
         Array::try_from_parts(ArrayParts::new(RunEnd, dtype, len, data, slots))
     }
-
-    /// Normalize a boolean [`RunEndArray`] so that its values alternate between runs.
-    ///
-    /// Adjacent runs with the same value, such as the first two runs of `[false, false, true]`,
-    /// are merged, along with adjacent null runs, and the offset is folded into the ends. The
-    /// result is alternating, see [`RunEndArrayExt::alternating_start`], unless a null run sits
-    /// between two runs of the same value, as in `[true, null, true]`; those runs keep explicit
-    /// values.
-    pub fn normalize_bool(
-        array: &RunEndArray,
-        ctx: &mut ExecutionCtx,
-    ) -> VortexResult<RunEndArray> {
-        vortex_ensure!(
-            array.dtype().is_boolean(),
-            "Only boolean RunEnd arrays can be normalized, got {}",
-            array.dtype()
-        );
-        if array.alternating_start().is_some() {
-            return Ok(array.clone());
-        }
-
-        let nullability = array.dtype().nullability();
-        let runs = if array.is_empty() {
-            BoolRuns::default()
-        } else {
-            let ends = array.ends().clone().execute::<PrimitiveArray>(ctx)?;
-            let values = array.values().clone().execute::<BoolArray>(ctx)?;
-            let validity = values
-                .as_ref()
-                .validity()?
-                .execute_mask(values.len(), ctx)?;
-            let bits = values.to_bit_buffer();
-            let mut runs = BoolRuns::default();
-            match_each_unsigned_integer_ptype!(ends.ptype(), |E| {
-                for (run, end) in
-                    trimmed_ends_iter(ends.as_slice::<E>(), array.offset(), array.len()).enumerate()
-                {
-                    runs.push(end as u64, validity.value(run).then(|| bits.value(run)));
-                }
-            });
-            runs
-        };
-
-        let start = runs.alternating_start();
-        let (ends, values) = runs.into_arrays(nullability, start, ctx)?;
-        let data = RunEndData {
-            offset: 0,
-            alternating_start: start,
-        };
-        let slots = RunEndSlots {
-            ends: ends.into_array(),
-            values: values.into_array(),
-        }
-        .into_slots();
-        Array::try_from_parts(ArrayParts::new(
-            RunEnd,
-            array.dtype().clone(),
-            array.len(),
-            data,
-            slots,
-        ))
-    }
-}
-
-/// `num_runs` booleans that alternate, beginning with `start`.
-fn alternating_values(
-    start: bool,
-    num_runs: usize,
-    validity: Validity,
-) -> VortexResult<BoolArray> {
-    let bits = BitBuffer::from_iter((0..num_runs).map(|run| start ^ (run % 2 == 1)));
-    BoolArray::try_new(bits, validity)
 }
 
 impl RunEndData {
-    fn logical_len_from_ends(ends: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<usize> {
+    pub(crate) fn logical_len_from_ends(
+        ends: &ArrayRef,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<usize> {
         if ends.is_empty() {
             Ok(0)
         } else {
@@ -469,13 +339,23 @@ impl RunEndData {
         length: usize,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<()> {
+        vortex_ensure_eq!(ends.len(), values.len());
+        Self::validate_ends(ends, offset, length, ctx)
+    }
+
+    /// Validate that `ends` are run ends covering `offset..offset + length`.
+    pub(crate) fn validate_ends(
+        ends: &ArrayRef,
+        offset: usize,
+        length: usize,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<()> {
         // DType validation
         vortex_ensure!(
             ends.dtype().is_unsigned_int(),
             "run ends must be unsigned integers, was {}",
             ends.dtype(),
         );
-        vortex_ensure_eq!(ends.len(), values.len());
 
         // Handle empty run-ends
         if ends.is_empty() {
@@ -558,10 +438,7 @@ impl RunEndData {
     /// # }
     /// ```
     pub fn new(offset: usize) -> Self {
-        Self {
-            offset,
-            alternating_start: None,
-        }
+        Self { offset }
     }
 
     /// Build a new `RunEndArray` without validation.
@@ -574,10 +451,7 @@ impl RunEndData {
     ///
     /// See [`RunEnd::try_new_offset_length`] for the preconditions needed to build a new array.
     pub unsafe fn new_unchecked(offset: usize) -> Self {
-        Self {
-            offset,
-            alternating_start: None,
-        }
+        Self { offset }
     }
 
     /// Run the array through run-end encoding.
@@ -596,7 +470,6 @@ impl RunEndData {
             ends,
             values,
             offset: self.offset,
-            alternating_start: self.alternating_start,
         }
     }
 }
@@ -700,7 +573,6 @@ mod tests {
 
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::arrays::BoolArray;
     use vortex_array::arrays::DecimalArray;
     use vortex_array::arrays::DictArray;
     use vortex_array::arrays::ListArray;
@@ -720,8 +592,6 @@ mod tests {
     use vortex_session::VortexSession;
 
     use crate::RunEnd;
-    use crate::RunEndArrayExt;
-    use crate::RunEndArraySlotsExt;
 
     static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
         let session = vortex_array::array_session();
@@ -1042,43 +912,6 @@ mod tests {
         let decoded = sliced.execute::<DecimalArray>(&mut ctx)?;
         let expected = DecimalArray::from_iter([100i128, 200, 200, 300, 300, 300], decimal_dtype);
         assert_arrays_eq!(decoded, expected, &mut ctx);
-        Ok(())
-    }
-
-    #[test]
-    fn test_runend_normalize_bool_merges_repeated_runs() -> VortexResult<()> {
-        let mut ctx = SESSION.create_execution_ctx();
-        let arr = RunEnd::try_new_offset_length(
-            buffer![2u32, 3, 5, 7, 9].into_array(),
-            BoolArray::from_iter([true, false, false, true, true]).into_array(),
-            1,
-            7,
-            &mut ctx,
-        )?;
-        assert_eq!(arr.alternating_start(), None);
-
-        let normalized = RunEnd::normalize_bool(&arr, &mut ctx)?;
-        assert_eq!(normalized.alternating_start(), Some(true));
-        assert_eq!(normalized.offset(), 0);
-        assert_arrays_eq!(normalized.ends(), buffer![1u8, 4, 7].into_array(), &mut ctx);
-        assert_arrays_eq!(
-            normalized.values(),
-            BoolArray::from_iter([true, false, true]).into_array(),
-            &mut ctx
-        );
-        assert_arrays_eq!(normalized.into_array(), arr.into_array(), &mut ctx);
-        Ok(())
-    }
-
-    #[test]
-    fn test_runend_encode_bool() -> VortexResult<()> {
-        let mut ctx = SESSION.create_execution_ctx();
-        let bools =
-            BoolArray::from_iter([Some(true), Some(true), None, None, Some(false), Some(true)]);
-        let arr = RunEnd::encode(bools.clone().into_array(), &mut ctx)?;
-        assert_eq!(arr.alternating_start(), None);
-        assert_arrays_eq!(arr.ends(), buffer![2u8, 4, 5, 6].into_array(), &mut ctx);
-        assert_arrays_eq!(arr.into_array(), bools.into_array(), &mut ctx);
         Ok(())
     }
 
