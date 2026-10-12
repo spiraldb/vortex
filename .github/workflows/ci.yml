@@ -587,8 +587,9 @@ jobs:
   #   c6a (AMD Zen 3): AVX2 and BMI2, no AVX-512
   #   c6i (Intel Ice Lake): AVX-512 F/BW/VBMI2/VPOPCNTDQ
   #   c8g (Graviton4, Neoverse V2): SVE2 with BITPERM
-  # `VORTEX_EXPECT_CPU_FEATURES` makes vortex-buffer's `cpu_features` test fail if the
-  # instance does not expose exactly the expected tier.
+  # `VORTEX_EXPECT_CPU_FEATURES` lists every feature the instance must have; vortex-buffer's
+  # `cpu_features` test fails if any of them is missing or any other known feature (e.g.
+  # AVX-512 on the avx2 entry) is detected.
   rust-test-cpu-features:
     name: "Rust tests (cpu-features, ${{ matrix.config.name }})"
     if: github.repository == 'vortex-data/vortex'
@@ -601,12 +602,12 @@ jobs:
             runner: amd64-ci-medium
             family: c6a.2xlarge
             image: ubuntu24-full-x64-pre-v2
-            expect: "avx2,bmi2,!avx512f"
+            expect: "sse2,popcnt,bmi1,bmi2,avx,avx2"
           - name: avx512
             runner: amd64-ci-medium
             family: c6i.2xlarge
             image: ubuntu24-full-x64-pre-v2
-            expect: "avx2,bmi2,avx512f,avx512bw,avx512vbmi2,avx512vpopcntdq"
+            expect: "sse2,popcnt,bmi1,bmi2,avx,avx2,avx512f,avx512bw,avx512vbmi2,avx512vpopcntdq"
           - name: sve
             runner: arm64-medium
             family: c8g.2xlarge

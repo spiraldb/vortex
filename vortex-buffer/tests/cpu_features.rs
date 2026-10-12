@@ -4,10 +4,11 @@
 //! Guard for the CPU feature test matrix in CI.
 //!
 //! Each matrix entry runs the test suite on an instance family chosen for its CPU features
-//! and sets `VORTEX_EXPECT_CPU_FEATURES` to a comma-separated list such as
-//! `avx2,bmi2,!avx512f`. A plain name must be detected at runtime and a `!`-prefixed name
-//! must not be, so a runner that silently lands on a different CPU fails the job instead of
-//! testing the wrong kernels. Without the variable this test does nothing.
+//! and sets `VORTEX_EXPECT_CPU_FEATURES` to a comma-separated list such as `avx2,bmi2`.
+//! The check is exact over [`known_features`]: every listed feature must be detected at
+//! runtime and every unlisted one must not be, so a runner that silently lands on a
+//! different CPU (with fewer *or* more features) fails the job instead of testing the wrong
+//! kernels. Without the variable this test does nothing.
 
 #![expect(clippy::tests_outside_test_module)]
 
@@ -15,42 +16,43 @@
 use std::arch::is_aarch64_feature_detected as detected;
 #[cfg(target_arch = "x86_64")]
 use std::arch::is_x86_feature_detected as detected;
+use std::collections::BTreeSet;
 use std::env;
 use std::env::consts::ARCH;
 
 const EXPECT_VAR: &str = "VORTEX_EXPECT_CPU_FEATURES";
 
+/// The features that select a kernel somewhere in Vortex, with their runtime detection.
 #[cfg(target_arch = "x86_64")]
-fn is_detected(feature: &str) -> Option<bool> {
-    Some(match feature {
-        "sse2" => detected!("sse2"),
-        "popcnt" => detected!("popcnt"),
-        "bmi1" => detected!("bmi1"),
-        "bmi2" => detected!("bmi2"),
-        "avx" => detected!("avx"),
-        "avx2" => detected!("avx2"),
-        "avx512f" => detected!("avx512f"),
-        "avx512bw" => detected!("avx512bw"),
-        "avx512vbmi2" => detected!("avx512vbmi2"),
-        "avx512vpopcntdq" => detected!("avx512vpopcntdq"),
-        _ => return None,
-    })
+fn known_features() -> Vec<(&'static str, bool)> {
+    vec![
+        ("sse2", detected!("sse2")),
+        ("popcnt", detected!("popcnt")),
+        ("bmi1", detected!("bmi1")),
+        ("bmi2", detected!("bmi2")),
+        ("avx", detected!("avx")),
+        ("avx2", detected!("avx2")),
+        ("avx512f", detected!("avx512f")),
+        ("avx512bw", detected!("avx512bw")),
+        ("avx512vbmi2", detected!("avx512vbmi2")),
+        ("avx512vpopcntdq", detected!("avx512vpopcntdq")),
+    ]
 }
 
+/// The features that select a kernel somewhere in Vortex, with their runtime detection.
 #[cfg(target_arch = "aarch64")]
-fn is_detected(feature: &str) -> Option<bool> {
-    Some(match feature {
-        "neon" => detected!("neon"),
-        "sve" => detected!("sve"),
-        "sve2" => detected!("sve2"),
-        "sve2-bitperm" => detected!("sve2-bitperm"),
-        _ => return None,
-    })
+fn known_features() -> Vec<(&'static str, bool)> {
+    vec![
+        ("neon", detected!("neon")),
+        ("sve", detected!("sve")),
+        ("sve2", detected!("sve2")),
+        ("sve2-bitperm", detected!("sve2-bitperm")),
+    ]
 }
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-fn is_detected(_feature: &str) -> Option<bool> {
-    None
+fn known_features() -> Vec<(&'static str, bool)> {
+    Vec::new()
 }
 
 #[test]
@@ -58,23 +60,28 @@ fn expected_cpu_features_are_detected() {
     let Ok(expected) = env::var(EXPECT_VAR) else {
         return;
     };
+    let expected: BTreeSet<&str> = expected
+        .split(',')
+        .map(str::trim)
+        .filter(|e| !e.is_empty())
+        .collect();
+    let known = known_features();
 
-    let mut failures = Vec::new();
-    for entry in expected.split(',').map(str::trim).filter(|e| !e.is_empty()) {
-        let (want, feature) = match entry.strip_prefix('!') {
-            Some(feature) => (false, feature),
-            None => (true, entry),
-        };
-        match is_detected(feature) {
-            Some(got) if got == want => {}
-            Some(got) => failures.push(format!("{feature}: expected {want}, detected {got}")),
-            None => failures.push(format!("{feature}: unknown feature for {ARCH}")),
+    let mut failures: Vec<String> = expected
+        .iter()
+        .filter(|feature| !known.iter().any(|(name, _)| name == *feature))
+        .map(|feature| format!("{feature}: unknown feature for {ARCH}"))
+        .collect();
+    for (name, got) in &known {
+        let want = expected.contains(name);
+        if want != *got {
+            failures.push(format!("{name}: expected {want}, detected {got}"));
         }
     }
 
     assert!(
         failures.is_empty(),
-        "{EXPECT_VAR}={expected} does not match this CPU:\n{}",
+        "{EXPECT_VAR} does not match this CPU:\n{}",
         failures.join("\n")
     );
 }
