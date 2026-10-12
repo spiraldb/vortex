@@ -3,13 +3,12 @@
 
 //! Applying an expression to each batch.
 
+use vortex_array::ArrayRef;
 use vortex_array::expr::BoundExpression;
 use vortex_error::VortexResult;
 
 use crate::plan::pipeline::Cx;
-use crate::plan::pipeline::Input;
-use crate::plan::pipeline::Operator;
-use crate::plan::pipeline::Step;
+use crate::plan::pipeline::Stage;
 
 /// Applies an expression to each batch.
 pub(crate) struct EvalStage {
@@ -22,12 +21,8 @@ impl EvalStage {
     }
 }
 
-impl Operator for EvalStage {
-    fn compute(&mut self, input: Input, _cx: &mut Cx<'_>) -> VortexResult<Step> {
-        match input {
-            Input::Chunk(batch) => Ok(Step::Last(batch.apply_bound(&self.expression)?)),
-            Input::End => Ok(Step::Finished),
-            Input::None => Ok(Step::Consumed),
-        }
+impl Stage for EvalStage {
+    fn push(&mut self, batch: ArrayRef, _cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
+        Ok(Some(batch.apply_bound(&self.expression)?))
     }
 }

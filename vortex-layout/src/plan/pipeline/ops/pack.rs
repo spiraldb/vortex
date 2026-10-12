@@ -13,12 +13,11 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_ensure;
 use vortex_error::vortex_err;
 
-use super::*;
+use super::take_rows;
 use crate::plan::pipeline::Blocked;
 use crate::plan::pipeline::Cx;
-use crate::plan::pipeline::Input;
-use crate::plan::pipeline::Operator;
 use crate::plan::pipeline::Source;
+use crate::plan::pipeline::Stage;
 use crate::plan::pipeline::Step;
 
 /// Zips its inlets, one per field and the validity last when nullable, into structs.
@@ -62,6 +61,13 @@ impl PackSource {
         }
     }
 
+    /// Forgets what the scan saw, so the next one starts at the first inlet.
+    fn restart(&mut self) {
+        self.cursor = 0;
+        self.fewest = (usize::MAX, 0);
+        self.front = None;
+    }
+
     /// Finds whether every inlet holds rows, resuming at `cursor`.
     fn scan(&mut self, cx: &mut Cx<'_>) -> Option<Step> {
         while self.cursor < self.inlets {
@@ -86,8 +92,12 @@ impl PackSource {
     }
 }
 
-impl Operator for PackSource {
-    fn compute(&mut self, _input: Input, cx: &mut Cx<'_>) -> VortexResult<Step> {
+impl Source for PackSource {
+    fn inlet_count(&self) -> usize {
+        self.inlets
+    }
+
+    fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
         if let Some(index) = self.filling {
             let inlet = cx.inlet(index);
             if !inlet.full() && !inlet.closed() {
@@ -95,9 +105,7 @@ impl Operator for PackSource {
             }
             // Every inlet may have gained rows while the source waited.
             self.filling = None;
-            self.cursor = 0;
-            self.fewest = (usize::MAX, 0);
-            self.front = None;
+            self.restart();
         }
         if let Some(blocked) = self.scan(cx) {
             return Ok(blocked);
@@ -122,15 +130,10 @@ impl Operator for PackSource {
                     .unwrap_or(0)
             }
         };
-        self.cursor = 0;
-        self.fewest = (usize::MAX, 0);
-        self.front = None;
+        self.restart();
         let mut arrays = Vec::with_capacity(self.inlets);
-        let mut more = true;
         for index in 0..self.inlets {
-            let mut inlet = cx.inlet(index);
-            arrays.push(take_rows(&mut inlet, len)?);
-            more &= !inlet.is_empty();
+            arrays.push(take_rows(&mut cx.inlet(index), len)?);
         }
         let validity = if self.nullable {
             Validity::Array(
@@ -141,18 +144,9 @@ impl Operator for PackSource {
         } else {
             Validity::NonNullable
         };
-        let array = assemble(&self.fields, arrays, validity).into_array();
-        Ok(if more {
-            Step::More(array)
-        } else {
-            Step::Last(array)
-        })
-    }
-}
-
-impl Source for PackSource {
-    fn inlet_count(&self) -> usize {
-        self.inlets
+        Ok(Step::Batch(
+            assemble(&self.fields, arrays, validity).into_array(),
+        ))
     }
 }
 
@@ -167,15 +161,11 @@ impl WrapStage {
     }
 }
 
-impl Operator for WrapStage {
-    fn compute(&mut self, input: Input, _cx: &mut Cx<'_>) -> VortexResult<Step> {
-        match input {
-            Input::Chunk(batch) => Ok(Step::Last(
-                assemble(&self.fields, vec![batch], Validity::NonNullable).into_array(),
-            )),
-            Input::End => Ok(Step::Finished),
-            Input::None => Ok(Step::Consumed),
-        }
+impl Stage for WrapStage {
+    fn push(&mut self, batch: ArrayRef, _cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
+        Ok(Some(
+            assemble(&self.fields, vec![batch], Validity::NonNullable).into_array(),
+        ))
     }
 }
 
