@@ -205,11 +205,10 @@ struct ManyReads {
 }
 
 impl Source for ManyReads {
-    fn request(&mut self) -> Option<SegmentId> {
-        self.wanted.pop()
-    }
-
-    fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
+    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
+        if let Some(segment) = self.wanted.pop() {
+            return Ok(Step::Read(segment));
+        }
         if let Some((segment, _bytes)) = cx.take_segment() {
             self.left -= 1;
             return Ok(Step::Batch(indices([u64::from(*segment)])));
@@ -266,20 +265,22 @@ fn a_source_has_several_reads_in_flight() -> VortexResult<()> {
 /// waiting for the rest.
 struct FirstOf {
     wanted: Vec<SegmentId>,
+    done: bool,
 }
 
 impl Source for FirstOf {
-    fn request(&mut self) -> Option<SegmentId> {
-        self.wanted.pop()
-    }
-
-    fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
+    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
+        if self.done {
+            return Ok(Step::Finished);
+        }
+        if let Some(segment) = self.wanted.pop() {
+            return Ok(Step::Read(segment));
+        }
         Ok(match cx.take_segment() {
             Some((segment, _bytes)) => {
-                self.wanted.clear();
+                self.done = true;
                 Step::Batch(indices([u64::from(*segment)]))
             }
-            None if self.wanted.is_empty() => Step::Finished,
             None => Step::Blocked(Blocked::Io),
         })
     }
@@ -293,6 +294,7 @@ fn finishing_cancels_reads_in_flight() -> VortexResult<()> {
         let base = 10 * (u32::try_from(rows.start)? + 1);
         Ok(Some(Chain::new(FirstOf {
             wanted: (base..base + 3).map(SegmentId::from).collect(),
+            done: false,
         })))
     })
     .into_plan();
@@ -337,7 +339,7 @@ mod contract {
     }
 
     impl Source for Repeat {
-        fn next(&mut self, _cx: &mut Cx<'_>) -> VortexResult<Step> {
+        fn ready(&mut self, _cx: &mut Cx<'_>) -> VortexResult<Step> {
             Ok(match self.left.checked_sub(1) {
                 Some(left) => {
                     self.left = left;
@@ -352,15 +354,7 @@ mod contract {
     struct WaitsWhenFull;
 
     impl Source for WaitsWhenFull {
-        fn inlet_count(&self) -> usize {
-            1
-        }
-
-        fn capacity(&self, _inlet: usize) -> usize {
-            1
-        }
-
-        fn next(&mut self, _cx: &mut Cx<'_>) -> VortexResult<Step> {
+        fn ready(&mut self, _cx: &mut Cx<'_>) -> VortexResult<Step> {
             Ok(Step::Blocked(Blocked::Inlet(0)))
         }
     }
@@ -371,9 +365,11 @@ mod contract {
     #[should_panic(expected = "which is full")]
     fn waiting_on_a_full_inlet_is_caught() {
         let plan = SyntheticPlan::new(row_dtype(), 2, Vec::new(), |_, _, compiler| {
-            Ok(Some(
-                compiler.join(vec![Chain::new(Repeat { left: 2 })], WaitsWhenFull),
-            ))
+            Ok(Some(compiler.join_with(
+                vec![Chain::new(Repeat { left: 2 })],
+                |_| 1,
+                WaitsWhenFull,
+            )))
         })
         .into_plan();
         let mut scan = Scan::try_new(SESSION.clone(), plan, vec![Split::all(0..2)]).unwrap();

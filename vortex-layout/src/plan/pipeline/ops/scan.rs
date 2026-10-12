@@ -9,11 +9,11 @@ use vortex_array::ArrayRef;
 use vortex_array::buffer::BufferHandle;
 use vortex_array::serde::SerializedArray;
 use vortex_error::VortexResult;
-use vortex_error::vortex_err;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
 
 use crate::plan::SegmentScanPlan;
+use crate::plan::pipeline::Blocked;
 use crate::plan::pipeline::Cx;
 use crate::plan::pipeline::Input;
 use crate::plan::pipeline::Operator;
@@ -83,17 +83,16 @@ impl ScanSource {
 }
 
 impl Source for ScanSource {
-    fn request(&mut self) -> Option<SegmentId> {
-        self.unread.take()
-    }
-
-    fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
+    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
         if self.done {
             return Ok(Step::Finished);
         }
-        let (_, bytes) = cx
-            .take_segment()
-            .ok_or_else(|| vortex_err!("Segment scan ran without its bytes"))?;
+        if let Some(segment) = self.unread.take() {
+            return Ok(Step::Read(segment));
+        }
+        let Some((_, bytes)) = cx.take_segment() else {
+            return Ok(Step::Blocked(Blocked::Io));
+        };
         self.done = true;
         let array = decode(&self.plan, bytes, cx.session())?;
         Ok(Step::Batch(select(

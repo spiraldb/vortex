@@ -12,6 +12,7 @@ use vortex_error::VortexResult;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
 
+use super::DEFAULT_CAPACITY;
 use super::Operator;
 use super::Source;
 use super::ops::ConcatSource;
@@ -93,16 +94,28 @@ impl Compiler<'_> {
     }
 
     /// A chain reading `chains` through `source`: each chain becomes a pipeline writing a new
-    /// port, inlet `i` of `source` reading chain `i`, with the capacity `source` asks for.
+    /// port, inlet `i` of `source` reading chain `i`, holding [`DEFAULT_CAPACITY`] batches.
     pub fn join(&mut self, chains: Vec<Chain>, source: impl Source + 'static) -> Chain {
+        self.join_with(chains, |_| DEFAULT_CAPACITY, source)
+    }
+
+    /// [`join`](Self::join), with inlet `i` holding `capacity(i)` batches before its sink is
+    /// blocked: `usize::MAX` for an inlet the source needs whole. An empty inlet always has
+    /// room.
+    pub fn join_with(
+        &mut self,
+        chains: Vec<Chain>,
+        capacity: impl Fn(usize) -> usize,
+        source: impl Source + 'static,
+    ) -> Chain {
         let inlets = chains
             .into_iter()
             .enumerate()
             .map(|(index, chain)| {
-                let port =
-                    self.core
-                        .arena
-                        .create(source.capacity(index), None, SourceEnd::Unclaimed);
+                let port = self
+                    .core
+                    .arena
+                    .create(capacity(index), None, SourceEnd::Unclaimed);
                 self.core.add_pipeline(chain, smallvec::smallvec![port]);
                 port
             })

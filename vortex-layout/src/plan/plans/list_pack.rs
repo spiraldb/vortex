@@ -27,6 +27,7 @@ use crate::plan::pipeline::Compiler;
 use crate::plan::pipeline::Reach;
 use crate::plan::pipeline::ops::ListPackSource;
 use crate::plan::pipeline::ops::OnceSource;
+use crate::plan::pipeline::ops::UNBOUNDED;
 use crate::segments::SegmentId;
 
 const ELEMENTS: usize = 0;
@@ -181,7 +182,7 @@ impl PlanVTable for ListPack {
             );
         }
         let source = ListPackSource::new(plan.clone(), mask, validity.is_some());
-        Ok(Some(compiler.join(chains, source)))
+        Ok(Some(compiler.join_with(chains, |_| UNBOUNDED, source)))
     }
 
     fn reach(
