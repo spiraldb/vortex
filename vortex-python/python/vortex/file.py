@@ -353,14 +353,18 @@ class VortexFile:
 
             reader = self.to_arrow(projection=with_columns, expr=vx_predicate, limit=n_rows)
 
-            for batch in reader:
-                batch = pl.DataFrame._from_arrow(batch, rechunk=False)
-                # TODO(ngates): set sortedness on DataFrame based on stats?
-                yield batch
+            try:
+                for batch in reader:
+                    # TODO(ngates): set sortedness on DataFrame based on stats?
+                    yield pl.DataFrame(batch)
+            except pa.ArrowException as e:
+                # Polars 1 wraps exceptions raised by an IO source in a ComputeError, but Polars 2
+                # re-raises them unchanged. Raise a ComputeError on both.
+                raise pl.exceptions.ComputeError(str(e)) from e
 
             # Make sure we always yield at least one empty DataFrame
-            yield pl.DataFrame._from_arrow(
-                data=pa.RecordBatch.from_arrays(
+            yield pl.DataFrame(
+                pa.RecordBatch.from_arrays(
                     [pa.array([], type=field.type) for field in reader.schema],
                     schema=reader.schema,
                 ),
