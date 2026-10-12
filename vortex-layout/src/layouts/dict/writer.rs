@@ -322,9 +322,20 @@ impl DictStreamState {
         let mut res = Vec::new();
         let mut to_be_encoded = Some(chunk);
         while let Some(remaining) = to_be_encoded.take() {
+            if remaining.is_empty() {
+                // Nothing to encode; nothing more to do for this chunk.
+                continue;
+            }
             match self.encoder.take() {
                 None => match start_encoding(&self.constraints, &remaining, exec_ctx)? {
                     EncodingState::Continue((encoder, encoded)) => {
+                        if encoded.is_empty() {
+                            // The encoder refused every value (e.g. each value exceeds
+                            // `max_bytes` even for an empty dictionary). Drop the
+                            // encoder so the next chunk starts fresh, instead of
+                            // spinning forever on the same unencoded chunk.
+                            return Ok(res);
+                        }
                         let ptype = encoder.codes_ptype();
                         res.push(labeler.codes(encoded, ptype));
                         self.encoder = Some(encoder);
@@ -342,6 +353,15 @@ impl DictStreamState {
                     let ptype = encoder.codes_ptype();
                     match encode_chunk(encoder, &remaining, exec_ctx)? {
                         EncodingState::Continue((encoder, encoded)) => {
+                            if encoded.is_empty() {
+                                // The encoder refused every value in the chunk
+                                // (typically because each value is longer than
+                                // `max_bytes - 16`, the most an empty dictionary can
+                                // hold). Drop the encoder instead of letting the
+                                // outer loop re-feed the same unencoded chunk and
+                                // spin forever, leaking memory.
+                                return Ok(res);
+                            }
                             res.push(labeler.codes(encoded, ptype));
                             self.encoder = Some(encoder);
                         }
@@ -587,6 +607,9 @@ fn remainder(array: &ArrayRef, encoded_len: usize) -> VortexResult<Option<ArrayR
 #[cfg(test)]
 mod tests {
     use std::sync::LazyLock;
+    use std::sync::mpsc;
+    use std::thread;
+    use std::time::Duration;
 
     use futures::StreamExt;
     use vortex_array::IntoArray;
@@ -599,6 +622,8 @@ mod tests {
     use vortex_array::session::ArraySession;
     use vortex_session::VortexSession;
 
+    use super::DictChunkLabeler;
+    use super::DictStreamState;
     use super::DictionaryTransformer;
     use super::dict_encode_stream;
     use crate::sequence::SequenceId;
@@ -693,6 +718,56 @@ mod tests {
             codes_stream.dtype(),
             &DType::Primitive(PType::U16, NonNullable),
             "codes stream should use U16 dtype for dictionaries with >255 entries"
+        );
+    }
+
+    /// Regression test for the infinite-loop bug fixed in #10397.
+    ///
+    /// When every value in the input chunk is longer than `max_bytes - 16` (the
+    /// most an empty dictionary can hold, given the 16-byte `BinaryView` header),
+    /// `BytesDictBuilder::encode_value` returns `None` for every row. The dict
+    /// writer then encoded 0 rows, handed the same chunk back to itself, and
+    /// looped forever while growing `res` with empty codes/values chunks.
+    ///
+    /// Drives `DictStreamState::encode` directly on a 64-byte dictionary limit
+    /// and asserts it returns within a 2 s timeout (the thread exists only so
+    /// the test cannot hang the suite when the fix is missing).
+    fn dict_encode_finishes(value_len: usize) -> bool {
+        let (done_tx, done_rx) = mpsc::channel();
+        thread::spawn(move || {
+            let mut state = DictStreamState {
+                encoder: None,
+                constraints: DictConstraints {
+                    max_bytes: 64,
+                    max_len: 100,
+                },
+            };
+            let value = "x".repeat(value_len);
+            let chunk = VarBinArray::from(vec![value.as_str()]).into_array();
+            let mut labeler = DictChunkLabeler::new(SequenceId::root().advance());
+            let encoded = state.encode(&mut labeler, chunk, &mut SESSION.create_execution_ctx());
+            done_tx.send(encoded.is_ok()).ok();
+        });
+        done_rx.recv_timeout(Duration::from_secs(2)) == Ok(true)
+    }
+
+    /// A dictionary entry costs its bytes plus one 16-byte `BinaryView`, so a
+    /// 48-byte value is the longest that fits in a 64-byte dictionary.
+    #[test]
+    fn test_dict_stream_state_encodes_value_filling_an_empty_dictionary() {
+        assert!(
+            dict_encode_finishes(48),
+            "DictStreamState::encode failed to encode a 48-byte value under a 64-byte dict limit"
+        );
+    }
+
+    /// A value that exceeds `max_bytes - 16` cannot fit even an empty
+    /// dictionary. The writer must give up on the chunk instead of looping.
+    #[test]
+    fn test_dict_stream_state_does_not_loop_on_oversized_value() {
+        assert!(
+            dict_encode_finishes(49),
+            "DictStreamState::encode kept retrying a chunk it encoded 0 rows of (issue #10397)"
         );
     }
 }
