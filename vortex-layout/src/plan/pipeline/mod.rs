@@ -5,13 +5,14 @@
 //!
 //! A [`Scan`] runs a [`PlanRef`](crate::plan::PlanRef) over a list of splits, row ranges of the
 //! plan's domain. Each split is compiled into pipelines: a pipeline is one [`Source`], zero or
-//! more [`Operator`] stages, and the ports its last stage writes. The driver asks the source for
-//! a batch and pushes it through the stages into the ports. Every port has exactly one writer and
-//! one reader, and the reader's source declares how many batches it may hold.
+//! more [`Stage`]s, and the ports its last stage writes. The driver asks the source for a batch
+//! and pushes it through the stages into the ports. Every port runs from one pipeline's sink,
+//! the end that pushes into its outlets, to another's source, which reads it as an inlet, and
+//! that source declares how many batches it may hold.
 //!
-//! Only a source blocks, and only on one of three things: a segment read it requested, an empty
-//! inlet, or a full outlet, which the driver detects. The scheduler re-runs a blocked pipeline
-//! when that one condition clears.
+//! Only a source blocks, and only on a segment read it requested or an inlet it waits on, which
+//! it reports as a [`Blocked`]; a pipeline whose outlet is full is held back by the driver before
+//! its source runs. The scheduler re-runs a pipeline when the one condition it waits on clears.
 //!
 //! The owner of a scan answers reads: [`Scan::step`] returns each read as a [`Turn::Read`], and
 //! [`Scan::deliver`] hands its bytes back. Nothing in a scan awaits.
@@ -31,9 +32,10 @@
 //! more than once builds one pipeline that decodes it and fans the decoded array out into one
 //! single-use port per reader, tagged with the reader's split: a reader in the same stage, a
 //! later stage of a query, or a later split claims its own port. A split's ports it never
-//! claims, because its rows were pruned or a stage never ran, are dropped when it finishes, and
-//! a claimed port is dropped once its reader has drained it, so a decoded segment lives only as
-//! long as a split that may still read it.
+//! claims, because its rows were pruned or a stage never ran, leave the sharing pipeline's
+//! outlets and are freed when it finishes, so nothing is ever pushed into a port nobody will
+//! read, and a claimed port is dropped once its source has drained it, so a decoded segment
+//! lives only as long as a split that may still read it.
 
 mod compile;
 pub(crate) mod ops;
@@ -68,92 +70,82 @@ pub use self::stream::ScanStream;
 pub use self::stream::execute;
 use crate::segments::SegmentId;
 
-/// Batches an inlet holds before its writer is blocked, unless its reader says otherwise.
+/// Batches an inlet holds before its sink is blocked, unless its source says otherwise.
 pub const DEFAULT_CAPACITY: usize = 8;
 
-/// What a pipeline stage is handed on each call.
-#[derive(Debug)]
-pub enum Input {
-    /// One batch from the stage below.
-    Chunk(ArrayRef),
-    /// The stage below has finished. Flush whatever is held.
-    End,
-    /// Nothing new. Sent to a source on every call, and to a stage that returned
-    /// [`Step::More`].
-    None,
-}
-
-/// What a stage says back.
+/// What a source says back when asked for its next batch.
 #[derive(Debug)]
 pub enum Step {
-    /// A batch, and more is ready now without further input. The driver pushes the batch on
-    /// and calls again with [`Input::None`].
-    More(ArrayRef),
-    /// A batch, and the input is spent.
-    Last(ArrayRef),
-    /// The input was absorbed and nothing is ready.
-    Consumed,
-    /// Nothing can happen until the condition clears. Sources only.
+    /// A batch for the stage above. The source is asked again at once.
+    Batch(ArrayRef),
+    /// No batch until the condition clears. The source is not asked again before it does.
     Blocked(Blocked),
-    /// No more output will ever come. The driver sends [`Input::End`] to the next stage.
+    /// No batch will ever come again. The source is not asked again.
     Finished,
 }
 
-/// Why a pipeline cannot run.
+/// What a source waits for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Blocked {
-    /// A read was requested and has not been delivered.
+    /// A read it asked for has not arrived.
     Io,
-    /// The inlet is empty and its writer has not closed it.
+    /// Inlet `inlet` is open and has room, so its sink can still push into it or close it, either
+    /// of which wakes the source. It may already hold batches, as when a source waits for it to
+    /// fill. Waiting on a closed or full inlet waits forever; debug builds catch it.
     Inlet(usize),
-    /// An outlet is full. Produced by the driver, never by a stage.
-    Outlet,
 }
 
-/// A stage of a pipeline: takes one input at a time and pushes what it produces on.
-///
-/// A stage never blocks. A stage returning [`Step::More`] must eventually return something
-/// else when called again with [`Input::None`]. A stage that has returned [`Step::Finished`] is
-/// not called again. A stage receiving [`Input::End`] flushes, returning [`Step::More`] while it
-/// has more to flush.
-pub trait Operator: Send {
-    /// Takes `input` and says what happens next.
-    fn compute(&mut self, input: Input, cx: &mut Cx<'_>) -> VortexResult<Step>;
-}
-
-/// The start of a pipeline. Reads its inlets and requests segments rather than taking input
-/// from a stage below. Always called with [`Input::None`].
-pub trait Source: Operator {
+/// The start of a pipeline: produces batches from its inlets and the segments it asks to have
+/// read.
+pub trait Source: Send {
     /// The inlets this source reads, numbered from zero.
     fn inlet_count(&self) -> usize {
         0
     }
 
-    /// How many batches inlet `inlet` may hold before its writer is blocked. Asked once, when
+    /// How many batches inlet `inlet` may hold before its sink is blocked. Asked once, when
     /// the port is made. An empty port always has room.
     fn capacity(&self, inlet: usize) -> usize {
         let _ = inlet;
         DEFAULT_CAPACITY
     }
 
-    /// A segment this source wants read, asked until it answers `None` before every
-    /// [`compute`](Operator::compute), so a source may have several reads in flight. A source
-    /// that asked for any is not computed again until one of them arrives; the bytes come
-    /// through [`Cx::take_segment`] in the order they arrive.
+    /// A segment this source wants read. Asked until it answers `None` before every
+    /// [`next`](Self::next), so a source may have several reads in flight. A source that asked
+    /// for any is not asked for a batch again until one of them arrives; the bytes come through
+    /// [`Cx::take_segment`] in the order they arrive, and a source still waiting for a read it
+    /// asked for answers [`Blocked::Io`].
     fn request(&mut self) -> Option<SegmentId> {
         None
     }
+
+    /// The next batch, or why there is none.
+    fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step>;
 }
 
-/// What a stage may touch during one call: its pipeline's inlets, the bytes it asked for, and
-/// the session.
+/// A stage of a pipeline: transforms the batches pushed into it, one at a time, and never
+/// blocks.
+pub trait Stage: Send {
+    /// Takes `batch` from the stage below and returns what to push on, if anything.
+    fn push(&mut self, batch: ArrayRef, cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>>;
+
+    /// The stage below has finished. Returns whatever the stage still holds, if anything; it is
+    /// not called again after.
+    fn finish(&mut self, cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
+        let _ = cx;
+        Ok(None)
+    }
+}
+
+/// What a source or stage may touch during one call: its pipeline's inlets, the bytes the
+/// source asked for, and the session.
 pub struct Cx<'a> {
     arena: &'a mut Arena,
     inlets: &'a [PortId],
     bytes: &'a mut VecDeque<(SegmentId, BufferHandle)>,
     session: &'a VortexSession,
     exec: &'a mut ExecutionCtx,
-    /// The inlets read during this run, each once, so only their writers are checked for room
+    /// The inlets read during this run, each once, so only their sinks are checked for room
     /// after it, and whether each inlet is listed.
     touched: &'a mut Vec<usize>,
     listed: &'a mut [bool],
@@ -169,12 +161,7 @@ impl Cx<'_> {
         self.arena.inlet(self.inlets[index])
     }
 
-    /// The bytes of a segment the source asked for that has arrived, oldest arrival first.
-    pub fn take_bytes(&mut self) -> Option<BufferHandle> {
-        self.take_segment().map(|(_, bytes)| bytes)
-    }
-
-    /// Like [`take_bytes`](Self::take_bytes), with the segment the bytes are of.
+    /// A segment the source asked for that has arrived, oldest arrival first, with its bytes.
     pub fn take_segment(&mut self) -> Option<(SegmentId, BufferHandle)> {
         self.bytes.pop_front()
     }

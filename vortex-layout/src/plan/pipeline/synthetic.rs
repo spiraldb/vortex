@@ -29,8 +29,6 @@ use super::Blocked;
 use super::Chain;
 use super::Compiler;
 use super::Cx;
-use super::Input;
-use super::Operator;
 use super::Source;
 use super::Step;
 use crate::plan::Plan;
@@ -125,7 +123,7 @@ pub fn row_dtype() -> DType {
 }
 
 /// A source that emits its rows' indices, in order, cut into pieces of the given lengths, one
-/// piece per call, optionally after a round trip through the IO service.
+/// piece per call, optionally after a read of a segment it does not look at.
 ///
 /// A selected source emits only the rows its mask selects, as every plan does. A dense source
 /// ignores its mask and emits every row of its range, as a bare segment scan does. Piece
@@ -135,8 +133,10 @@ pub struct RowSource {
     remaining: Vec<u64>,
     /// Lengths of the pieces still to emit, last first.
     pieces: Vec<usize>,
-    /// A segment to read before emitting anything, standing in for a real read.
+    /// A segment to read before emitting anything, standing in for a real read, until it has
+    /// been asked for.
     segment: Option<SegmentId>,
+    /// The segment has been asked for and its bytes not yet taken.
     waiting: bool,
 }
 
@@ -172,11 +172,17 @@ impl RowSource {
     }
 }
 
-impl Operator for RowSource {
-    fn compute(&mut self, _input: Input, cx: &mut Cx<'_>) -> VortexResult<Step> {
+impl Source for RowSource {
+    fn request(&mut self) -> Option<SegmentId> {
+        let segment = self.segment.take()?;
+        self.waiting = true;
+        Some(segment)
+    }
+
+    fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
         if self.waiting {
             self.waiting = false;
-            cx.take_bytes()
+            cx.take_segment()
                 .ok_or_else(|| vortex_err!("RowSource ran without its bytes"))?;
         }
         if self.remaining.is_empty() {
@@ -188,20 +194,12 @@ impl Operator for RowSource {
             .unwrap_or(self.remaining.len())
             .min(self.remaining.len());
         let piece: Vec<u64> = self.remaining.drain(..len).collect();
-        Ok(Step::More(Buffer::from(piece).into_array()))
-    }
-}
-
-impl Source for RowSource {
-    fn request(&mut self) -> Option<SegmentId> {
-        let segment = self.segment.take()?;
-        self.waiting = true;
-        Some(segment)
+        Ok(Step::Batch(Buffer::from(piece).into_array()))
     }
 }
 
 /// What a [`Probe`] saw of its inlets on one call: for each, the batches queued and whether
-/// its writer had closed it.
+/// its sink had closed it.
 pub type ProbeRun = Vec<(usize, bool)>;
 
 /// A source over one inlet per child that records what it sees each time it runs, then passes
@@ -245,8 +243,16 @@ impl Probe {
     }
 }
 
-impl Operator for Probe {
-    fn compute(&mut self, _input: Input, cx: &mut Cx<'_>) -> VortexResult<Step> {
+impl Source for Probe {
+    fn inlet_count(&self) -> usize {
+        self.inlets
+    }
+
+    fn capacity(&self, _inlet: usize) -> usize {
+        self.capacity
+    }
+
+    fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
         let run: ProbeRun = (0..self.inlets)
             .map(|index| {
                 let inlet = cx.inlet(index);
@@ -260,7 +266,7 @@ impl Operator for Probe {
         let mut first = cx.inlet(0);
         let batch: Option<ArrayRef> = first.take();
         match batch {
-            Some(batch) => Ok(Step::Last(batch)),
+            Some(batch) => Ok(Step::Batch(batch)),
             None if first.closed() => {
                 for index in 1..self.inlets {
                     if !cx.inlet(index).closed() {
@@ -271,16 +277,6 @@ impl Operator for Probe {
             }
             None => Ok(Step::Blocked(Blocked::Inlet(0))),
         }
-    }
-}
-
-impl Source for Probe {
-    fn inlet_count(&self) -> usize {
-        self.inlets
-    }
-
-    fn capacity(&self, _inlet: usize) -> usize {
-        self.capacity
     }
 }
 

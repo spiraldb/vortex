@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Ports: single-writer, single-reader queues of batches, kept in an arena the scan owns so a
-//! port can outlive the stage or split that wrote it.
+//! Ports: queues of batches with one sink and one source, kept in an arena the scan owns so a
+//! port can outlive the pipeline or split at either end.
+//!
+//! A port has a consumer for as long as anything can be pushed into it: its source goes only
+//! once the sink has closed the port and the source has drained it, or once the port is
+//! detached from its sink's outlets, so no push ever reaches a port nobody will read.
 
 use std::collections::VecDeque;
 
@@ -16,58 +20,73 @@ pub(crate) type PortId = usize;
 /// Identifies a pipeline in the scan's table.
 pub(crate) type PipelineId = usize;
 
-/// Who reads a port.
+/// The source end of a port: who takes its batches.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Reader {
-    /// Nobody: a share's port waiting for the reader it was made for, or a port whose reader
-    /// has gone.
+pub(crate) enum SourceEnd {
+    /// Nobody yet: a share's port waiting for the pipeline it was made for, or a port whose
+    /// source has gone.
     Unclaimed,
-    /// A pipeline's source.
+    /// The source of this pipeline, which reads the port as one of its inlets.
     Pipeline(PipelineId),
-    /// The scan, for the output of a split's stage.
-    Split(usize),
+    /// The scan, reading the output of the split's stage running in this slot.
+    Scan(usize),
 }
 
-/// A queue of batches with one writer and one reader.
+/// A queue of batches with one sink and one source.
 ///
 /// Its buffer is allocated once, for the capacity. Only an unbounded port, a share's waiting for a
-/// reader compiled later, grows past the default.
+/// source compiled later, grows past the default.
 pub(crate) struct Queue {
     batches: VecDeque<ArrayRef>,
-    /// Batches the queue may hold before its writer is blocked.
+    /// Batches the queue may hold before its sink is blocked.
     capacity: usize,
-    /// The writer will push nothing more.
+    /// The sink will push nothing more.
     closed: bool,
-    pub(crate) writer: Option<PipelineId>,
-    pub(crate) reader: Reader,
-    /// The reader will take nothing more, so pushes are dropped.
-    reader_gone: bool,
+    /// The pipeline whose sink pushes into this port; none once closed.
+    pub(crate) sink: Option<PipelineId>,
+    pub(crate) source: SourceEnd,
+    /// The source will take nothing more. Set only once nothing more can be pushed, so the
+    /// slot is freed as soon as the port is also closed.
+    source_gone: bool,
     /// The slot is free for reuse.
     free: bool,
 }
 
 impl Queue {
-    fn new(capacity: usize, writer: Option<PipelineId>, reader: Reader) -> Self {
+    fn new(capacity: usize, sink: Option<PipelineId>, source: SourceEnd) -> Self {
         Self {
             batches: VecDeque::with_capacity(capacity.clamp(1, DEFAULT_CAPACITY)),
             capacity: capacity.max(1),
             closed: false,
-            writer,
-            reader,
-            reader_gone: false,
+            sink,
+            source,
+            source_gone: false,
             free: false,
         }
     }
 
     pub(crate) fn has_room(&self) -> bool {
-        self.reader_gone || self.batches.len() < self.capacity
+        self.batches.len() < self.capacity
     }
 
     pub(crate) fn closed(&self) -> bool {
         self.closed
     }
 
-    /// Whether the reader would find something new: a batch, or the close.
+    /// Whether the sink is never blocked by it.
+    pub(crate) fn unbounded(&self) -> bool {
+        self.capacity == usize::MAX
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.batches.len()
+    }
+
+    pub(crate) fn is_free(&self) -> bool {
+        self.free
+    }
+
+    /// Whether the source would find something new: a batch, or the close.
     pub(crate) fn readable(&self) -> bool {
         !self.batches.is_empty() || self.closed
     }
@@ -83,7 +102,7 @@ pub struct Inlet<'a> {
 }
 
 impl Inlet<'_> {
-    /// The oldest batch, in place, so the reader can slice it down without removing it.
+    /// The oldest batch, in place, so the source can slice it down without removing it.
     pub fn peek_mut(&mut self) -> Option<&mut ArrayRef> {
         self.queue.batches.front_mut()
     }
@@ -93,7 +112,7 @@ impl Inlet<'_> {
         self.queue.batches.pop_front()
     }
 
-    /// Whether the writer has finished. Closed and empty is the end of the inlet.
+    /// Whether the sink has finished. Closed and empty is the end of the inlet.
     pub fn closed(&self) -> bool {
         self.queue.closed
     }
@@ -108,8 +127,8 @@ impl Inlet<'_> {
         self.queue.batches.len()
     }
 
-    /// Whether the writer can push no more until the reader takes a batch. An unbounded inlet
-    /// counts as full at the default capacity, so a reader waiting for it to fill still runs.
+    /// Whether the sink can push no more until the source takes a batch. An unbounded inlet
+    /// counts as full at the default capacity, so a source waiting for it to fill still runs.
     pub fn full(&self) -> bool {
         self.queue.batches.len() >= self.queue.capacity.min(DEFAULT_CAPACITY)
     }
@@ -117,11 +136,6 @@ impl Inlet<'_> {
     /// Rows queued, over every batch.
     pub fn rows(&self) -> usize {
         self.queue.batches.iter().map(|batch| batch.len()).sum()
-    }
-
-    /// Whether the inlet has ended: closed with nothing queued.
-    pub fn finished(&self) -> bool {
-        self.queue.closed && self.queue.batches.is_empty()
     }
 }
 
@@ -179,7 +193,7 @@ impl<T> std::ops::IndexMut<usize> for Slab<T> {
     }
 }
 
-/// Every port of a scan. Slots are reused once a port's writer has closed it and its reader has
+/// Every port of a scan. Slots are reused once a port's sink has closed it and its source has
 /// gone, so no pipeline still refers to it.
 #[derive(Default)]
 pub(crate) struct Arena {
@@ -191,8 +205,8 @@ impl Arena {
     pub(crate) fn create(
         &mut self,
         capacity: usize,
-        writer: Option<PipelineId>,
-        reader: Reader,
+        sink: Option<PipelineId>,
+        source: SourceEnd,
     ) -> PortId {
         match self.free.pop() {
             Some(id) => {
@@ -202,13 +216,13 @@ impl Arena {
                 queue.batches.reserve_exact(capacity.min(DEFAULT_CAPACITY));
                 queue.capacity = capacity;
                 queue.closed = false;
-                queue.writer = writer;
-                queue.reader = reader;
-                queue.reader_gone = false;
+                queue.sink = sink;
+                queue.source = source;
+                queue.source_gone = false;
                 queue.free = false;
                 id
             }
-            None => self.queues.push(Queue::new(capacity, writer, reader)),
+            None => self.queues.push(Queue::new(capacity, sink, source)),
         }
     }
 
@@ -230,38 +244,64 @@ impl Arena {
         self.queues[id].has_room()
     }
 
-    /// Appends a batch, unless the reader has gone. Empty batches are dropped.
+    /// Appends a batch. Empty batches are dropped.
     pub(crate) fn push(&mut self, id: PortId, batch: ArrayRef) {
         let queue = &mut self.queues[id];
-        if !queue.reader_gone && !batch.is_empty() {
+        debug_assert!(
+            !queue.source_gone && !queue.closed,
+            "push into port {id} with no consumer"
+        );
+        if !batch.is_empty() {
             queue.batches.push_back(batch);
         }
     }
 
-    /// The writer will push nothing more.
+    /// The sink will push nothing more.
     pub(crate) fn close(&mut self, id: PortId) {
         let queue = &mut self.queues[id];
         queue.closed = true;
-        queue.writer = None;
+        queue.sink = None;
         self.maybe_free(id);
     }
 
-    /// The reader will take nothing more: what is queued is dropped, and so is what is pushed.
-    pub(crate) fn drop_reader(&mut self, id: PortId) {
+    /// The source will take nothing more: what is queued is dropped. Nothing more may be
+    /// pushed, so the sink must have closed the port or be about to, as a retiring pipeline's
+    /// inlets' sinks have.
+    pub(crate) fn drop_source(&mut self, id: PortId) {
         let queue = &mut self.queues[id];
-        queue.reader_gone = true;
-        queue.reader = Reader::Unclaimed;
+        queue.source_gone = true;
+        queue.source = SourceEnd::Unclaimed;
+        queue.batches.clear();
+        self.maybe_free(id);
+    }
+
+    /// Frees a port nobody will read, once it is no longer an outlet of any pipeline: a share's
+    /// port whose claimant never came. Closes it on the sink's behalf if the sink has not.
+    pub(crate) fn discard(&mut self, id: PortId) {
+        let queue = &mut self.queues[id];
+        debug_assert!(
+            queue.sink.is_none() && queue.source == SourceEnd::Unclaimed,
+            "discarding port {id} still attached to a pipeline"
+        );
+        queue.closed = true;
+        queue.source_gone = true;
         queue.batches.clear();
         self.maybe_free(id);
     }
 
     fn maybe_free(&mut self, id: PortId) {
         let queue = &mut self.queues[id];
-        if queue.closed && queue.reader_gone && !queue.free {
+        if queue.closed && queue.source_gone && !queue.free {
             queue.free = true;
             queue.batches.clear();
             self.free.push(id);
         }
+    }
+
+    /// Every port slot, free or not, with its id.
+    #[cfg(debug_assertions)]
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (PortId, &Queue)> {
+        self.queues.iter().enumerate()
     }
 
     /// Ports in use.
