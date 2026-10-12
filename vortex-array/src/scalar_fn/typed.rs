@@ -19,11 +19,13 @@ use std::hash::Hasher;
 use std::sync::Arc;
 
 use vortex_error::VortexResult;
+use vortex_error::vortex_bail;
 
 use crate::ArrayRef;
 use crate::ExecutionCtx;
 use crate::dtype::DType;
 use crate::expr::BoundExpression;
+use crate::expr::BoundLambda;
 use crate::expr::display::ExprDisplay;
 use crate::scalar_fn::Arity;
 use crate::scalar_fn::ArrayReduceNode;
@@ -93,6 +95,16 @@ pub(super) trait DynScalarFn: 'static + Send + Sync + super::sealed::Sealed {
     fn child_name(&self, child_idx: usize) -> ChildName;
     fn is_strict(&self) -> bool;
     fn is_infallible(&self) -> bool;
+
+    // Lambda arguments — options in self, see `ScalarFnVTable::higher_order`
+    fn is_higher_order(&self) -> bool;
+    fn lambda_params(
+        &self,
+        lambda_index: usize,
+        param_count: usize,
+        arg_dtypes: &[DType],
+    ) -> VortexResult<Vec<DType>>;
+    fn with_lambdas(&self, lambdas: Vec<BoundLambda>) -> VortexResult<ScalarFnRef>;
 
     // Expression methods — take expressions for tree traversal
     fn fmt_sql(&self, expression: &dyn ExprDisplay, f: &mut Formatter<'_>) -> fmt::Result;
@@ -197,6 +209,30 @@ impl<V: ScalarFnVTable> DynScalarFn for TypedScalarFnInstance<V> {
 
     fn is_infallible(&self) -> bool {
         V::is_infallible(&self.vtable, &self.options)
+    }
+
+    fn is_higher_order(&self) -> bool {
+        V::higher_order(&self.vtable).is_some()
+    }
+
+    fn lambda_params(
+        &self,
+        lambda_index: usize,
+        param_count: usize,
+        arg_dtypes: &[DType],
+    ) -> VortexResult<Vec<DType>> {
+        let Some(higher_order) = V::higher_order(&self.vtable) else {
+            vortex_bail!("{} does not take lambda arguments", V::id(&self.vtable));
+        };
+        higher_order.lambda_params(&self.options, lambda_index, param_count, arg_dtypes)
+    }
+
+    fn with_lambdas(&self, lambdas: Vec<BoundLambda>) -> VortexResult<ScalarFnRef> {
+        let Some(higher_order) = V::higher_order(&self.vtable) else {
+            vortex_bail!("{} does not take lambda arguments", V::id(&self.vtable));
+        };
+        let options = higher_order.with_lambdas(&self.options, lambdas)?;
+        Ok(TypedScalarFnInstance::new(self.vtable.clone(), options).erased())
     }
 
     fn fmt_sql(&self, expression: &dyn ExprDisplay, f: &mut Formatter<'_>) -> fmt::Result {

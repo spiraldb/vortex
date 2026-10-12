@@ -28,6 +28,7 @@ use crate::expr::Expression;
 use crate::expr::bound;
 use crate::expr::display::ExprDisplay;
 use crate::scalar::Scalar;
+use crate::scalar_fn::HigherOrderVTable;
 use crate::scalar_fn::ScalarFnId;
 use crate::scalar_fn::ScalarFnRef;
 use crate::scalar_fn::TypedScalarFnInstance;
@@ -276,6 +277,15 @@ pub trait ScalarFnVTable: 'static + Sized + Clone + Send + Sync {
     fn is_infallible(&self, options: &Self::Options) -> bool {
         _ = options;
         false
+    }
+
+    /// The lambda hooks of this function, if it takes lambda arguments.
+    ///
+    /// A function that returns `Some` can be applied to lambdas in an
+    /// [`Expression::HigherOrder`](crate::expr::Expression::HigherOrder) node. The default is
+    /// `None`, so an ordinary function rejects lambdas when such a node is built.
+    fn higher_order(&self) -> Option<&dyn HigherOrderVTable<Self>> {
+        None
     }
 }
 
