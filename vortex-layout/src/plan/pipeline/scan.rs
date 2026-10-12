@@ -105,6 +105,8 @@ pub(crate) struct Pipeline {
     outlets: SmallVec<[PortId; 1]>,
     /// The segments it asked for that have arrived, in order of arrival.
     bytes: VecDeque<(SegmentId, BufferHandle)>,
+    /// Segments its source asked for during the last run, issued after it.
+    asked: SmallVec<[SegmentId; 1]>,
     /// Reads it asked for that have not arrived, so retiring it cancels them only when any
     /// are left.
     pending: usize,
@@ -121,8 +123,6 @@ pub(crate) struct Pipeline {
 
 /// What one run of a pipeline came to.
 enum Progress {
-    /// The source wants these segments read.
-    Read(SmallVec<[SegmentId; 1]>),
     /// The source waits for this.
     Blocked(Blocked),
     /// An outlet is full.
@@ -131,7 +131,7 @@ enum Progress {
     Done,
 }
 
-/// Runs `pipe` until it blocks, finishes, or requests a read.
+/// Runs `pipe` until it blocks or finishes, collecting the reads its source asks for.
 fn drive(
     pipe: &mut Pipeline,
     arena: &mut Arena,
@@ -144,6 +144,7 @@ fn drive(
         inlets,
         outlets,
         bytes,
+        asked,
         finishing,
         touched,
         listed,
@@ -179,19 +180,12 @@ fn drive(
             }
             continue;
         }
-        if let Some(first) = source.request() {
-            let mut segments = SmallVec::new();
-            segments.push(first);
-            while let Some(segment) = source.request() {
-                segments.push(segment);
-            }
-            return Ok(Progress::Read(segments));
-        }
-        match source.next(&mut cx)? {
+        match source.ready(&mut cx)? {
             // A source's input is its inlets and reads, which nothing changes while it runs, so
             // it is asked again at once: it blocks or finishes without a trip through the
             // scheduler, and the outlets' room still bounds what it produces.
             Step::Batch(batch) => push(stages, batch, outlets, &mut cx)?,
+            Step::Read(segment) => asked.push(segment),
             Step::Blocked(blocked) => return Ok(Progress::Blocked(blocked)),
             Step::Finished => *finishing = Some(0),
         }
@@ -287,6 +281,7 @@ impl Core {
             inlets: chain.inlets,
             outlets,
             bytes: VecDeque::new(),
+            asked: SmallVec::new(),
             pending: 0,
             finishing: None,
             touched,
@@ -362,16 +357,16 @@ impl Core {
             .ok_or_else(|| vortex_err!("Pipeline {id} is not live"))?;
         pipe.queued = false;
         let progress = drive(pipe, &mut self.arena, &self.session, &mut self.exec)?;
+        for segment_id in std::mem::take(&mut self.pipeline_mut(id).asked) {
+            self.ask(id, segment_id);
+        }
         #[cfg(debug_assertions)]
         self.validate_progress(id, &progress);
         match &progress {
-            Progress::Read(segments) => {
-                for &segment_id in segments {
-                    self.read(id, segment_id);
-                }
-                let pipe = self.pipeline_mut(id);
-                pipe.pending += segments.len();
-                pipe.state = State::Blocked(Blocked::Io);
+            // Bytes already here, as of a segment read ahead, are taken at once: the source runs
+            // again.
+            Progress::Blocked(Blocked::Io) if !self.pipeline(id).bytes.is_empty() => {
+                self.make_runnable(id);
             }
             // Nothing changes a port while its source's pipeline runs, so the condition the run reported
             // holds until a neighbour wakes it.
@@ -384,6 +379,12 @@ impl Core {
             self.retire(id);
         }
         Ok(())
+    }
+
+    /// Issues a read of `segment_id`, which pipeline `id`'s source asked for.
+    fn ask(&mut self, id: PipelineId, segment_id: SegmentId) {
+        self.read(id, segment_id);
+        self.pipeline_mut(id).pending += 1;
     }
 
     /// Wakes the sources of what pipeline `id` pushed and the sinks of what it took.
