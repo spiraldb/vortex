@@ -24,8 +24,9 @@ use vortex_session::VortexSession;
 use super::Blocked;
 use super::Cx;
 use super::DEFAULT_CAPACITY;
+use super::Input;
+use super::Operator;
 use super::Source;
-use super::Stage;
 use super::Step;
 use super::compile::Chain;
 use super::port::Arena;
@@ -98,7 +99,7 @@ enum State {
 /// A source, its stages, and the ports they read and write.
 pub(crate) struct Pipeline {
     source: Box<dyn Source>,
-    stages: Vec<Box<dyn Stage>>,
+    stages: Vec<Box<dyn Operator>>,
     inlets: Vec<PortId>,
     outlets: SmallVec<[PortId; 1]>,
     /// The segments it asked for that have arrived, in order of arrival.
@@ -172,7 +173,7 @@ fn drive(
                 .split_first_mut()
                 .unwrap_or_else(|| unreachable!("stage {stage} finished twice"));
             *finishing = Some(stage + 1);
-            if let Some(batch) = this.finish(&mut cx)? {
+            if let Some(batch) = this.compute(Input::End, &mut cx)? {
                 push(rest, batch, outlets, &mut cx)?;
             }
             continue;
@@ -198,13 +199,13 @@ fn drive(
 
 /// Pushes `batch` through `stages` into `outlets`.
 fn push(
-    stages: &mut [Box<dyn Stage>],
+    stages: &mut [Box<dyn Operator>],
     mut batch: ArrayRef,
     outlets: &[PortId],
     cx: &mut Cx<'_>,
 ) -> VortexResult<()> {
     for stage in stages {
-        batch = match stage.push(batch, cx)? {
+        batch = match stage.compute(Input::Batch(batch), cx)? {
             Some(batch) => batch,
             None => return Ok(()),
         };
