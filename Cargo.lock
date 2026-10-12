@@ -13269,7 +13269,7 @@ dependencies = [
  "typed-path",
  "zeroize",
  "zopfli",
- "zstd 0.14.0",
+ "zstd 0.14.2",
 ]
 
 [[package]]
