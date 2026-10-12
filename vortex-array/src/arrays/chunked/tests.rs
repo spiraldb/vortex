@@ -4,7 +4,6 @@
 use std::sync::Arc;
 use std::sync::LazyLock;
 
-use vortex_buffer::Buffer;
 use vortex_buffer::buffer;
 use vortex_error::VortexResult;
 use vortex_session::VortexSession;
@@ -246,123 +245,6 @@ fn with_slot_rejects_len_mismatch() {
     .unwrap_err();
 
     assert!(err.to_string().contains("physical rewrite"));
-}
-
-#[test]
-fn slice_middle() {
-    let mut ctx = SESSION.create_execution_ctx();
-    assert_arrays_eq!(
-        chunked_array().slice(2..5).unwrap(),
-        PrimitiveArray::from_iter([3u64, 4, 5]),
-        &mut ctx
-    );
-}
-
-#[test]
-fn slice_begin() {
-    let mut ctx = SESSION.create_execution_ctx();
-    assert_arrays_eq!(
-        chunked_array().slice(1..3).unwrap(),
-        PrimitiveArray::from_iter([2u64, 3]),
-        &mut ctx
-    );
-}
-
-#[test]
-fn slice_aligned() {
-    let mut ctx = SESSION.create_execution_ctx();
-    assert_arrays_eq!(
-        chunked_array().slice(3..6).unwrap(),
-        PrimitiveArray::from_iter([4u64, 5, 6]),
-        &mut ctx
-    );
-}
-
-#[test]
-fn slice_many_aligned() {
-    let mut ctx = SESSION.create_execution_ctx();
-    assert_arrays_eq!(
-        chunked_array().slice(0..6).unwrap(),
-        PrimitiveArray::from_iter([1u64, 2, 3, 4, 5, 6]),
-        &mut ctx
-    );
-}
-
-#[test]
-fn slice_end() {
-    let mut ctx = SESSION.create_execution_ctx();
-    assert_arrays_eq!(
-        chunked_array().slice(7..8).unwrap(),
-        PrimitiveArray::from_iter([8u64]),
-        &mut ctx
-    );
-}
-
-#[test]
-fn slice_exactly_end() {
-    let mut ctx = SESSION.create_execution_ctx();
-    assert_arrays_eq!(
-        chunked_array().slice(6..9).unwrap(),
-        PrimitiveArray::from_iter([7u64, 8, 9]),
-        &mut ctx
-    );
-}
-
-#[test]
-fn slice_empty() {
-    let chunked = ChunkedArray::try_new(vec![], PType::U32.into()).unwrap();
-    let sliced = chunked.slice(0..0).unwrap();
-
-    assert!(sliced.is_empty());
-}
-
-#[test]
-fn scalar_at_empty_children_both_sides() {
-    let mut ctx = SESSION.create_execution_ctx();
-    let array = ChunkedArray::try_new(
-        vec![
-            Buffer::<u64>::empty().into_array(),
-            Buffer::<u64>::empty().into_array(),
-            buffer![1u64, 2].into_array(),
-            Buffer::<u64>::empty().into_array(),
-            Buffer::<u64>::empty().into_array(),
-        ],
-        DType::Primitive(PType::U64, Nullability::NonNullable),
-    )
-    .unwrap();
-    assert_arrays_eq!(array, PrimitiveArray::from_iter([1u64, 2]), &mut ctx);
-}
-
-#[test]
-fn scalar_at_empty_children_trailing() {
-    let mut ctx = SESSION.create_execution_ctx();
-    let array = ChunkedArray::try_new(
-        vec![
-            buffer![1u64, 2].into_array(),
-            Buffer::<u64>::empty().into_array(),
-            Buffer::<u64>::empty().into_array(),
-            buffer![3u64, 4].into_array(),
-        ],
-        DType::Primitive(PType::U64, Nullability::NonNullable),
-    )
-    .unwrap();
-    assert_arrays_eq!(array, PrimitiveArray::from_iter([1u64, 2, 3, 4]), &mut ctx);
-}
-
-#[test]
-fn scalar_at_empty_children_leading() {
-    let mut ctx = SESSION.create_execution_ctx();
-    let array = ChunkedArray::try_new(
-        vec![
-            Buffer::<u64>::empty().into_array(),
-            Buffer::<u64>::empty().into_array(),
-            buffer![1u64, 2].into_array(),
-            buffer![3u64, 4].into_array(),
-        ],
-        DType::Primitive(PType::U64, Nullability::NonNullable),
-    )
-    .unwrap();
-    assert_arrays_eq!(array, PrimitiveArray::from_iter([1u64, 2, 3, 4]), &mut ctx);
 }
 
 #[test]

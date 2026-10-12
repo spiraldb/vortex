@@ -23,6 +23,7 @@ mod tests {
     use crate::dtype::extension::ExtVTable;
     use crate::dtype::half::f16;
     use crate::scalar::PValue;
+    use crate::scalar::PrimitiveScalar;
     use crate::scalar::Scalar;
     use crate::scalar::ScalarValue;
 
@@ -226,18 +227,19 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
     fn test_coercion_with_overflow_protection() {
-        // Test that values too large for target type are not coerced.
-        let large_u64 = u64::MAX;
-
-        // This should NOT be coerced to F16 because it's too large.
+        // Legacy f16 storage accepts U64 values, but reading the bits must reject overflow.
         let scalar = Scalar::new(
             DType::Primitive(PType::F16, Nullability::NonNullable),
-            Some(ScalarValue::Primitive(PValue::U64(large_u64))),
+            Some(ScalarValue::Primitive(PValue::U64(u64::MAX))),
         );
 
-        let _ = scalar.as_primitive(); // Should panic
+        let error = PrimitiveScalar::try_new(scalar.dtype(), scalar.value()).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("Cannot coerce U64 value to f16: value out of range")
+        );
     }
 
     #[test]

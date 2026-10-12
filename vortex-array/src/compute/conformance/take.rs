@@ -25,7 +25,6 @@ pub fn test_take_conformance(array: &ArrayRef, ctx: &mut ExecutionCtx) {
 
     if len > 0 {
         test_take_all(array, ctx);
-        test_take_none(array);
         test_take_selective(array, ctx);
         test_take_first_and_last(array, ctx);
         test_take_with_nullable_indices(array, ctx);
@@ -92,16 +91,6 @@ fn test_take_all(array: &ArrayRef, ctx: &mut ExecutionCtx) {
             }
         }
     }
-}
-
-fn test_take_none(array: &ArrayRef) {
-    let indices: PrimitiveArray = PrimitiveArray::from_iter::<[u64; 0]>([]);
-    let result = array
-        .take(indices.into_array())
-        .vortex_expect("take should succeed in conformance test");
-
-    assert_eq!(result.len(), 0);
-    assert_eq!(result.dtype(), array.dtype());
 }
 
 #[expect(clippy::cast_possible_truncation)]

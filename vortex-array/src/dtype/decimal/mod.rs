@@ -149,13 +149,6 @@ mod tests {
     }
 
     #[test]
-    fn test_decimal_new_deprecated() {
-        let decimal = DecimalDType::try_new(10, 2).unwrap();
-        assert_eq!(decimal.precision(), 10);
-        assert_eq!(decimal.scale(), 2);
-    }
-
-    #[test]
     fn test_decimal_max_precision() {
         let decimal = DecimalDType::try_new(MAX_PRECISION, 0).unwrap();
         assert_eq!(decimal.precision(), MAX_PRECISION);

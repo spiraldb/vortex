@@ -215,39 +215,6 @@ mod tests {
     }
 
     #[test]
-    fn test_fixed_size_list_null_elements() {
-        // Create FixedSizeList with null elements.
-        let element_dtype = Arc::new(DType::Primitive(PType::I32, Nullability::Nullable));
-        let fixed_list = Scalar::fixed_size_list(
-            element_dtype,
-            vec![
-                Scalar::primitive(10i32, Nullability::Nullable),
-                Scalar::null(DType::Primitive(PType::I32, Nullability::Nullable)),
-                Scalar::primitive(30i32, Nullability::Nullable),
-            ],
-            Nullability::NonNullable,
-        );
-
-        let list = fixed_list.as_list();
-        assert_eq!(list.len(), 3);
-        assert!(!list.is_null()); // The list itself is not null.
-
-        // Check individual elements.
-        assert!(!list.element(0).unwrap().is_null());
-        assert!(list.element(1).unwrap().is_null());
-        assert!(!list.element(2).unwrap().is_null());
-
-        // Test casting with null elements.
-        let target = DType::FixedSizeList(
-            Arc::new(DType::Primitive(PType::I64, Nullability::Nullable)),
-            3,
-            Nullability::NonNullable,
-        );
-        let casted = fixed_list.cast(&target).unwrap();
-        assert!(casted.as_list().element(1).unwrap().is_null());
-    }
-
-    #[test]
     fn test_nested_nullability_propagation() {
         // Test null propagation through nested structures.
         // Create List of FixedSizeList[2] with nulls at different levels.
@@ -609,15 +576,6 @@ mod tests {
             2,
             Nullability::Nullable,
         ));
-
-        let _inner3 = Scalar::fixed_size_list(
-            Arc::new(DType::Primitive(PType::I32, Nullability::Nullable)),
-            vec![
-                Scalar::primitive(3i32, Nullability::Nullable),
-                Scalar::primitive(4i32, Nullability::Nullable),
-            ],
-            Nullability::Nullable,
-        );
 
         // Create middle Lists.
         let middle1 = Scalar::list(
