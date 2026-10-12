@@ -70,7 +70,8 @@ pub use self::stream::ScanStream;
 pub use self::stream::execute;
 use crate::segments::SegmentId;
 
-/// Batches an inlet holds before its sink is blocked, unless its source says otherwise.
+/// Batches an inlet holds before its sink is blocked, unless the plan joining it says
+/// otherwise; see [`Compiler::join_with`].
 pub const DEFAULT_CAPACITY: usize = 8;
 
 /// What a source says back when asked for its next batch.
@@ -78,6 +79,10 @@ pub const DEFAULT_CAPACITY: usize = 8;
 pub enum Step {
     /// A batch for the stage above. The source is asked again at once.
     Batch(ArrayRef),
+    /// A segment to read. The source is asked again at once, so it may have several reads in
+    /// flight; the bytes come through [`Cx::take_segment`] in the order they arrive, and while
+    /// none has, the source answers [`Blocked::Io`].
+    Read(SegmentId),
     /// No batch until the condition clears. The source is not asked again before it does.
     Blocked(Blocked),
     /// No batch will ever come again. The source is not asked again.
@@ -98,29 +103,9 @@ pub enum Blocked {
 /// The start of a pipeline: produces batches from its inlets and the segments it asks to have
 /// read.
 pub trait Source: Send {
-    /// The inlets this source reads, numbered from zero.
-    fn inlet_count(&self) -> usize {
-        0
-    }
-
-    /// How many batches inlet `inlet` may hold before its sink is blocked. Asked once, when
-    /// the port is made. An empty port always has room.
-    fn capacity(&self, inlet: usize) -> usize {
-        let _ = inlet;
-        DEFAULT_CAPACITY
-    }
-
-    /// A segment this source wants read. Asked until it answers `None` before every
-    /// [`next`](Self::next), so a source may have several reads in flight. A source that asked
-    /// for any is not asked for a batch again until one of them arrives; the bytes come through
-    /// [`Cx::take_segment`] in the order they arrive, and a source still waiting for a read it
-    /// asked for answers [`Blocked::Io`].
-    fn request(&mut self) -> Option<SegmentId> {
-        None
-    }
-
-    /// The next batch, or why there is none.
-    fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step>;
+    /// What the source has ready: a batch, a segment to read, why it has neither, or that it
+    /// has finished.
+    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step>;
 }
 
 /// What an operator is handed by the stage below it.

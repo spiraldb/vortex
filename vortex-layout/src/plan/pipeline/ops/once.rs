@@ -20,7 +20,7 @@ impl OnceSource {
 }
 
 impl Source for OnceSource {
-    fn next(&mut self, _cx: &mut Cx<'_>) -> VortexResult<Step> {
+    fn ready(&mut self, _cx: &mut Cx<'_>) -> VortexResult<Step> {
         Ok(match self.0.take() {
             Some(batch) => Step::Batch(batch),
             None => Step::Finished,

@@ -21,7 +21,6 @@ use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
 use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
-use vortex_error::vortex_err;
 use vortex_mask::Mask;
 use vortex_session::registry::CachedId;
 
@@ -173,17 +172,16 @@ impl RowSource {
 }
 
 impl Source for RowSource {
-    fn request(&mut self) -> Option<SegmentId> {
-        let segment = self.segment.take()?;
-        self.waiting = true;
-        Some(segment)
-    }
-
-    fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
+    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
+        if let Some(segment) = self.segment.take() {
+            self.waiting = true;
+            return Ok(Step::Read(segment));
+        }
         if self.waiting {
+            if cx.take_segment().is_none() {
+                return Ok(Step::Blocked(Blocked::Io));
+            }
             self.waiting = false;
-            cx.take_segment()
-                .ok_or_else(|| vortex_err!("RowSource ran without its bytes"))?;
         }
         if self.remaining.is_empty() {
             return Ok(Step::Finished);
@@ -206,7 +204,6 @@ pub type ProbeRun = Vec<(usize, bool)>;
 /// its first inlet through, one batch per call, and drops what the others hold.
 pub struct Probe {
     inlets: usize,
-    capacity: usize,
     runs: Arc<Mutex<Vec<ProbeRun>>>,
 }
 
@@ -233,10 +230,9 @@ impl Probe {
                 }
                 let probe = Probe {
                     inlets: chains.len(),
-                    capacity,
                     runs: Arc::clone(&runs),
                 };
-                Ok(Some(compiler.join(chains, probe)))
+                Ok(Some(compiler.join_with(chains, |_| capacity, probe)))
             },
         )
         .into_plan()
@@ -244,15 +240,7 @@ impl Probe {
 }
 
 impl Source for Probe {
-    fn inlet_count(&self) -> usize {
-        self.inlets
-    }
-
-    fn capacity(&self, _inlet: usize) -> usize {
-        self.capacity
-    }
-
-    fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
+    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
         let run: ProbeRun = (0..self.inlets)
             .map(|index| {
                 let inlet = cx.inlet(index);
