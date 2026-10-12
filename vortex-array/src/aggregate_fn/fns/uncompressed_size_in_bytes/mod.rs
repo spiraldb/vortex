@@ -66,13 +66,12 @@ use crate::scalar::Scalar;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum UncompressedSizePrecision {
     /// Count every byte of every buffer the canonical array holds, whether or not a row
-    /// references it. This is cheap, but a view array sliced from a larger one, or whose views
-    /// point into a buffer it shares, reports the whole buffer.
+    /// references it. Cheap, but a view array sharing or sliced from a larger buffer reports the
+    /// whole buffer.
     #[default]
     Inexact,
-    /// Count only the bytes the array's valid rows reference: the size the array would have once
-    /// rebuilt from its rows. This walks views and list offsets, so it costs a pass over the
-    /// array.
+    /// Count only the bytes the array's valid rows reference, which costs a pass over view and
+    /// list arrays.
     Exact,
 }
 
@@ -134,8 +133,8 @@ impl Display for UncompressedSizeOpts {
 /// Return the uncompressed size of an array in bytes.
 ///
 /// See [`UncompressedSizeInBytes`] for details and [`UncompressedSizeOpts`] for the choice of
-/// precision. The result is cached as a statistic on `array`, and on the children an aggregate
-/// over a nested array measures; see [`uncompressed_size_in_bytes_uncached`] to avoid that.
+/// precision. The result is cached as a statistic on `array` and on any children measured;
+/// see [`uncompressed_size_in_bytes_uncached`] to avoid that.
 pub fn uncompressed_size_in_bytes(
     array: &ArrayRef,
     opts: UncompressedSizeOpts,
@@ -149,10 +148,8 @@ pub fn uncompressed_size_in_bytes(
 
 /// Like [`uncompressed_size_in_bytes`], but records nothing on `array` or its children.
 ///
-/// Cached statistics are still read. A columnar array is measured directly; any other array is
-/// executed to one first, so prefer this for arrays that are already canonical or constant. Use
-/// it where a recorded statistic would be an unwanted side effect, such as on arrays whose
-/// metadata is about to be serialized.
+/// Cached statistics are still read. Use it where a recorded statistic would be an unwanted side
+/// effect, such as on arrays whose metadata is about to be serialized.
 pub fn uncompressed_size_in_bytes_uncached(
     array: &ArrayRef,
     opts: UncompressedSizeOpts,
@@ -170,8 +167,7 @@ fn uncompressed_size_in_bytes_u64(
     cache: bool,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<u64> {
-    // The stat slot holds the exact size as `Precision::Exact` and an inexact measurement as
-    // `Precision::Inexact`, an upper bound an inexact query is happy to reuse.
+    // An inexact query is happy to reuse an exact size or an inexact upper bound.
     let cached = match (
         opts.is_exact(),
         array.statistics().get(Stat::UncompressedSizeInBytes),
@@ -204,8 +200,7 @@ fn uncompressed_size_in_bytes_u64(
         .typed_value::<u64>()
         .vortex_expect("uncompressed_size_in_bytes result should not be null");
 
-    // An exact accumulator caches its result on `array` as the exact statistic. Cache an inexact
-    // one as an upper bound so exact queries still compute.
+    // An inexact result is cached as an upper bound, so exact queries still compute.
     if !opts.is_exact() {
         array.statistics().set(
             Stat::UncompressedSizeInBytes,
@@ -222,8 +217,8 @@ fn uncompressed_size_in_bytes_u64(
 ///
 /// By default the size is [inexact](UncompressedSizePrecision::Inexact): every buffer the
 /// canonical array holds counts in full. The [exact](UncompressedSizePrecision::Exact) size
-/// counts only the bytes the array's rows reference, which is what a writer needs to decide how
-/// many rows to pack into a block, at the cost of a pass over view and list arrays.
+/// counts only the bytes the array's rows reference, at the cost of a pass over view and list
+/// arrays.
 ///
 /// This is generally useful for various execution engines to pick better join orderings.
 #[derive(Clone, Debug)]
@@ -737,9 +732,8 @@ mod tests {
         let array =
             ListViewArray::new(elements, offsets, sizes, Validity::NonNullable).into_array();
 
-        // These lists are out of order and leave element 1 unreferenced, which the builder
-        // round-trip inside `materialized_uncompressed_size_in_bytes` now keeps. Compare against
-        // the exact layout instead, which is what "materialized" means here.
+        // The lists are out of order and leave element 1 unreferenced, so compare against the
+        // exact layout rather than a builder round-trip.
         let mut ctx = array_session().create_execution_ctx();
         let exact = array
             .clone()

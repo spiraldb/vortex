@@ -8,29 +8,20 @@ use vortex_array::Canonical;
 use vortex_array::CanonicalValidity;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
-use vortex_array::aggregate_fn::fns::uncompressed_size_in_bytes::UncompressedSizeInBytes;
-use vortex_array::aggregate_fn::fns::uncompressed_size_in_bytes::UncompressedSizeOpts;
-use vortex_array::aggregate_fn::fns::uncompressed_size_in_bytes::uncompressed_size_in_bytes_uncached;
 use vortex_array::arrays::Constant;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::ExtensionArray;
 use vortex_array::arrays::FixedSizeListArray;
-use vortex_array::arrays::ListView;
-use vortex_array::arrays::MapArray;
 use vortex_array::arrays::Masked;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::UnionArray;
-use vortex_array::arrays::VarBinView;
 use vortex_array::arrays::Variant;
 use vortex_array::arrays::VariantArray;
 use vortex_array::arrays::extension::ExtensionArrayExt;
 use vortex_array::arrays::fixed_size_list::FixedSizeListArrayExt;
 use vortex_array::arrays::fixed_size_list::FixedSizeListArraySlotsExt;
 use vortex_array::arrays::listview::ListViewArraySlotsExt;
-use vortex_array::arrays::listview::ListViewRebuildMode;
 use vortex_array::arrays::listview::list_from_list_view;
-use vortex_array::arrays::map::MapArrayExt;
-use vortex_array::arrays::map::MapArraySlotsExt;
 use vortex_array::arrays::masked::MaskedArraySlotsExt;
 use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::arrays::union::UnionArrayExt;
@@ -38,7 +29,6 @@ use vortex_array::arrays::union::UnionArraySlotsExt;
 use vortex_array::arrays::variant::VariantArraySlotsExt;
 use vortex_array::scalar::Scalar;
 use vortex_error::VortexResult;
-use vortex_error::vortex_err;
 
 use super::CascadingCompressor;
 use super::constant;
@@ -53,12 +43,7 @@ use crate::trace;
 impl CascadingCompressor {
     /// Compresses an array using cascading adaptive compression.
     ///
-    /// First canonicalizes and trims the array, then applies optimal compression schemes.
-    ///
-    /// The output never carries bytes the input's rows do not reference: a scheme that changes
-    /// the encoding rebuilds the data it keeps, and an array that stays in its canonical encoding
-    /// is compacted. The input is measured by its exact uncompressed size, so dead bytes in its
-    /// buffers neither inflate the baseline a scheme has to beat nor survive into the output.
+    /// First canonicalizes and compacts the array, then applies optimal compression schemes.
     ///
     /// # Errors
     ///
@@ -68,13 +53,13 @@ impl CascadingCompressor {
         array: &ArrayRef,
         exec_ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrayRef> {
-        let before_nbytes = exact_uncompressed_size(array, exec_ctx)?;
+        let before_nbytes = array.nbytes();
         let span = trace::compress_span(array.len(), array.dtype(), before_nbytes);
         let _enter = span.enter();
 
         let canonical = array.clone().execute::<CanonicalValidity>(exec_ctx)?.0;
-        let trimmed = trim(canonical, exec_ctx)?;
-        let compressed = self.compress_canonical(trimmed, CompressorContext::new(), exec_ctx)?;
+        let compact = canonical.compact(exec_ctx)?;
+        let compressed = self.compress_canonical(compact, CompressorContext::new(), exec_ctx)?;
 
         trace::record_compress_outcome(&span, before_nbytes, compressed.nbytes());
 
@@ -104,12 +89,12 @@ impl CascadingCompressor {
         }
 
         let canonical = child.clone().execute::<CanonicalValidity>(exec_ctx)?.0;
-        let trimmed = trim(canonical, exec_ctx)?;
+        let compact = canonical.compact(exec_ctx)?;
 
         let child_ctx = parent_ctx
             .clone()
             .descend_with_scheme(parent_id, child_index);
-        self.compress_canonical(trimmed, child_ctx, exec_ctx)
+        self.compress_canonical(compact, child_ctx, exec_ctx)
     }
 
     /// Compresses a canonical array by dispatching to type-specific logic.
@@ -241,9 +226,8 @@ impl CascadingCompressor {
     /// into a single [`GenerateStatsOptions`], and picks the winner by estimated compression
     /// ratio.
     ///
-    /// If a winner is found and its compressed output is actually smaller than the exact
-    /// uncompressed size, that output is returned. Otherwise, the original array is returned
-    /// in its canonical encoding, compacted if its buffers held bytes no row references.
+    /// If a winner is found and its compressed output is actually smaller, that output is
+    /// returned. Otherwise, the original array is returned unchanged.
     ///
     /// Empty, all-null, and constant arrays are handled by the compressor itself before any
     /// scheme evaluation (constant detection is skipped while compressing samples).
@@ -284,9 +268,7 @@ impl CascadingCompressor {
             return constant::compress_as_constant(array, exec_ctx);
         }
 
-        // Measure the bytes the rows reference, not the buffers the array holds, so a scheme
-        // competes against the compacted canonical array rather than against dead bytes.
-        let before_nbytes = exact_uncompressed_size(&array, exec_ctx)?;
+        let before_nbytes = array.nbytes();
 
         let merged_opts = eligible_schemes
             .iter()
@@ -298,13 +280,13 @@ impl CascadingCompressor {
         let data = ArrayAndStats::new(array, merged_opts);
 
         if eligible_schemes.is_empty() {
-            return without_dead_bytes(data.into_array(), before_nbytes, exec_ctx);
+            return Ok(data.into_array());
         }
 
         let Some((winner, winner_estimate)) =
             self.choose_best_scheme(&eligible_schemes, &data, compress_ctx.clone(), exec_ctx)?
         else {
-            return without_dead_bytes(data.into_array(), before_nbytes, exec_ctx);
+            return Ok(data.into_array());
         };
 
         // Run the winning scheme's `compress`. On failure, emit an ERROR event carrying the
@@ -335,72 +317,7 @@ impl CascadingCompressor {
         if accepted {
             Ok(compressed)
         } else {
-            without_dead_bytes(data.into_array(), before_nbytes, exec_ctx)
+            Ok(data.into_array())
         }
     }
-}
-
-/// The bytes `array`'s rows reference once canonical, reading the exact statistic the writer
-/// caches on each chunk before compression and computing it otherwise. A dtype that cannot be
-/// measured, such as variant, is sized by the bytes it holds.
-///
-/// Nothing is recorded on `array`: an uncompressed leaf is written out with its statistics, and
-/// a size the compressor measured for itself should not grow the file.
-pub(super) fn exact_uncompressed_size(
-    array: &ArrayRef,
-    exec_ctx: &mut ExecutionCtx,
-) -> VortexResult<u64> {
-    if !UncompressedSizeInBytes::supports_dtype(array.dtype()) {
-        return Ok(array.nbytes());
-    }
-    let size = uncompressed_size_in_bytes_uncached(array, UncompressedSizeOpts::exact(), exec_ctx)?;
-    u64::try_from(size).map_err(|e| vortex_err!("uncompressed size does not fit in u64: {e}"))
-}
-
-/// Zero-copy trimming before scheme selection: bool arrays drop bits outside their range and
-/// lists drop elements outside the ones they reference.
-///
-/// View buffers are left as they are. A scheme that changes the encoding drops their dead bytes
-/// for free, and [`without_dead_bytes`] compacts them only when the array stays a view array, so
-/// the copy is never paid twice.
-fn trim(canonical: Canonical, exec_ctx: &mut ExecutionCtx) -> VortexResult<Canonical> {
-    Ok(match canonical {
-        Canonical::Bool(array) => Canonical::Bool(array.trim_bits()?),
-        Canonical::List(array) => {
-            Canonical::List(array.rebuild(ListViewRebuildMode::TrimElements, exec_ctx)?)
-        }
-        Canonical::Map(array) => Canonical::Map(MapArray::new(
-            array.map_dtype().clone(),
-            array
-                .entries()
-                .as_::<ListView>()
-                .into_owned()
-                .rebuild(ListViewRebuildMode::TrimElements, exec_ctx)?,
-        )),
-        other => other,
-    })
-}
-
-/// Returns `array`, which stays in its canonical encoding, holding only the bytes its rows
-/// reference.
-///
-/// Only a view array can hold more than `uncompressed_size`: its views may point into buffers
-/// shared with other arrays, such as the decompressed pages Arrow's Parquet reader hands out, or
-/// left behind by slicing and taking. Buffers used end to end are kept, contiguous used ranges
-/// are sliced without copying, and the rest are rewritten.
-fn without_dead_bytes(
-    array: ArrayRef,
-    uncompressed_size: u64,
-    exec_ctx: &mut ExecutionCtx,
-) -> VortexResult<ArrayRef> {
-    if array.nbytes() <= uncompressed_size {
-        return Ok(array);
-    }
-    let Some(views) = array.as_opt::<VarBinView>() else {
-        return Ok(array);
-    };
-    Ok(views
-        .into_owned()
-        .compact_with_threshold(1.0, exec_ctx)?
-        .into_array())
 }
