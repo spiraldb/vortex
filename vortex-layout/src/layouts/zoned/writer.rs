@@ -113,6 +113,11 @@ impl LayoutStrategy for ZonedStrategy {
         // values the logical column does not contain: counts come out wrong and min/max come out
         // wider than the truth. Zone maps hold exact values only, so until the aggregates are
         // computed over the masked values no zone map is written for such a field.
+        //
+        // TODO(joe): write zone maps for fields under a nullable struct. The struct validity has
+        //  to travel with each chunk, since repartitioning below the struct writer re-chunks the
+        //  stream, and the aggregates then run over `chunk.mask(validity)` while the data child
+        //  still receives the unmasked chunk.
         if ctx.has_nullable_ancestor() {
             return self
                 .child
