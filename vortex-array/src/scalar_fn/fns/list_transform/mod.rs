@@ -44,7 +44,6 @@ use crate::scalar::Scalar;
 use crate::scalar_fn::Arity;
 use crate::scalar_fn::ChildName;
 use crate::scalar_fn::ExecutionArgs;
-use crate::scalar_fn::HigherOrderVTable;
 use crate::scalar_fn::ReduceNode;
 use crate::scalar_fn::ReduceNodeValidity;
 use crate::scalar_fn::ScalarFnId;
@@ -130,6 +129,34 @@ impl ScalarFnVTable for ListTransform {
         }
     }
 
+    fn lambda_params(
+        &self,
+        _options: &Self::Options,
+        lambda_index: usize,
+        param_count: usize,
+        arg_dtypes: &[DType],
+    ) -> VortexResult<Vec<DType>> {
+        vortex_ensure!(lambda_index == 0, "list_transform() takes one lambda");
+        let Some(list) = arg_dtypes.first() else {
+            vortex_bail!("list_transform() requires a list argument");
+        };
+        let element = element_dtype(list)?.clone();
+        match param_count {
+            1 => Ok(vec![element]),
+            2 => Ok(vec![element, index_dtype()]),
+            n => vortex_bail!("list_transform() lambda must take one or two parameters, got {n}"),
+        }
+    }
+
+    fn with_lambdas(
+        &self,
+        _options: &Self::Options,
+        mut lambdas: Vec<BoundLambda>,
+    ) -> VortexResult<Self::Options> {
+        vortex_ensure!(lambdas.len() == 1, "list_transform() takes one lambda");
+        Ok(lambdas.pop().vortex_expect("checked length").into())
+    }
+
     fn return_dtype(&self, options: &Self::Options, arg_dtypes: &[DType]) -> VortexResult<DType> {
         let lambda = options.bound()?;
         let Some((list, captures)) = arg_dtypes.split_first() else {
@@ -187,40 +214,6 @@ impl ScalarFnVTable for ListTransform {
 
     fn is_infallible(&self, options: &Self::Options) -> bool {
         options.lambda().is_some_and(BoundLambda::is_infallible)
-    }
-
-    fn higher_order(&self) -> Option<&dyn HigherOrderVTable<Self>> {
-        Some(self)
-    }
-}
-
-impl HigherOrderVTable<ListTransform> for ListTransform {
-    fn lambda_params(
-        &self,
-        _options: &ListLambdaOptions,
-        lambda_index: usize,
-        param_count: usize,
-        arg_dtypes: &[DType],
-    ) -> VortexResult<Vec<DType>> {
-        vortex_ensure!(lambda_index == 0, "list_transform() takes one lambda");
-        let Some(list) = arg_dtypes.first() else {
-            vortex_bail!("list_transform() requires a list argument");
-        };
-        let element = element_dtype(list)?.clone();
-        match param_count {
-            1 => Ok(vec![element]),
-            2 => Ok(vec![element, index_dtype()]),
-            n => vortex_bail!("list_transform() lambda must take one or two parameters, got {n}"),
-        }
-    }
-
-    fn with_lambdas(
-        &self,
-        _options: &ListLambdaOptions,
-        mut lambdas: Vec<BoundLambda>,
-    ) -> VortexResult<ListLambdaOptions> {
-        vortex_ensure!(lambdas.len() == 1, "list_transform() takes one lambda");
-        Ok(lambdas.pop().vortex_expect("checked length").into())
     }
 }
 
