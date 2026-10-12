@@ -638,7 +638,9 @@ struct Active {
 
 /// Runs a plan over a list of splits.
 ///
-/// The plan runs as one stage under each split's selection.
+/// A [`QueryPlan`] at the root is run as stages: zone pruning, then each conjunct under the rows
+/// the earlier ones kept, then the projection under the rows they all kept. Any other plan runs
+/// as one stage under each split's selection.
 ///
 /// Up to [`with_max_active`](Self::with_max_active) splits are compiled at once, in order, so
 /// reads of later splits are in flight while earlier ones compute.
