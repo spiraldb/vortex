@@ -371,16 +371,13 @@ fn compute_list_contains(
         .into_array());
     }
 
-    // An optimized node holds its list as a prepared set, shared with every other node of the
-    // expression. A constant list of a node that was not optimized is prepared here.
+    // The executor's reduce_parent step has already replaced a constant list with a prepared set.
+    // A literal list stays a `PreparedSetLiteral` when the applied expression was not optimized.
     if let Some(set) = array.as_opt::<PreparedSet>() {
         return set.contains(value, options, ctx);
     }
     if let Some(set) = prepared_literal(array) {
         return set.contains(value, options, ctx);
-    }
-    if let Some(list) = array.as_opt::<Constant>() {
-        return PreparedSetData::try_new(list.scalar().clone())?.contains(value, options, ctx);
     }
 
     let nullability = options.result_nullability(array.dtype(), value.dtype());
@@ -548,42 +545,62 @@ fn lists_contain_needles(
         .take(PrimitiveArray::new(gathered.element_idx, Validity::NonNullable).into_array())?;
     let needles =
         values.take(PrimitiveArray::new(gathered.row_idx, Validity::NonNullable).into_array())?;
-    let matches = Binary::try_new(elements, needles, Operator::Eq)?
-        .into_array()
-        .execute::<BoolArray>(ctx)?;
-    let compared = matches.validity()?.execute_mask(matches.len(), ctx)?;
-
-    let starts = PrimitiveArray::new(gathered.starts, Validity::NonNullable);
-    let lens = PrimitiveArray::new(gathered.lens, Validity::NonNullable);
-    let matched = Mask::from(matches.to_bit_buffer()) & &compared;
-    let any_true = process_matches::<u64, u64>(
-        BoolArray::new(matched.into_bit_buffer(), Validity::NonNullable),
+    // A valid list with elements gathered at least one comparison. A null list gathered none,
+    // and its row is null whatever its bit here.
+    let non_empty = BitBuffer::collect_bool_in(
         len,
-        starts.clone(),
-        lens.clone(),
-        ctx,
+        |row| gathered.lens[row] != 0,
+        ctx.allocator().clone(),
     );
+
+    // `any_null` is only read under SQL null semantics.
+    let comparisons = Binary::try_new(elements, needles, Operator::Eq)?.into_array();
+    let (any_true, any_null) = match comparisons.execute::<Columnar>(ctx)? {
+        // One answer for every comparison decides each row from whether it compared anything.
+        Columnar::Constant(constant) => match constant.scalar().as_bool().value() {
+            Some(true) => (non_empty.clone(), Mask::new_false(len)),
+            Some(false) => (BitBuffer::new_unset(len), Mask::new_false(len)),
+            None => (BitBuffer::new_unset(len), Mask::from(non_empty.clone())),
+        },
+        Columnar::Canonical(canonical) => {
+            let matches = canonical.into_bool();
+            let compared = matches.validity()?.execute_mask(matches.len(), ctx)?;
+            let starts = PrimitiveArray::new(gathered.starts, Validity::NonNullable);
+            let lens = PrimitiveArray::new(gathered.lens, Validity::NonNullable);
+
+            let matched = Mask::from(matches.to_bit_buffer()) & &compared;
+            let any_true = process_matches::<u64, u64>(
+                BoolArray::new(matched.into_bit_buffer(), Validity::NonNullable),
+                len,
+                starts.clone(),
+                lens.clone(),
+                ctx,
+            );
+
+            let any_null = if options.sql_null_semantics && !compared.all_true() {
+                Mask::from(process_matches::<u64, u64>(
+                    BoolArray::new((!&compared).into_bit_buffer(), Validity::NonNullable),
+                    len,
+                    starts,
+                    lens,
+                    ctx,
+                ))
+            } else {
+                Mask::new_false(len)
+            };
+            (any_true, any_null)
+        }
+    };
 
     // A null needle is null against a list with elements, but an empty list holds nothing to
     // compare it to unless the function is strict.
     let needle_valid = values.validity()?.execute_mask(len, ctx)?;
-    let mut decided = if options.sql_null_semantics {
-        needle_valid
+    let decided = if options.sql_null_semantics {
+        // A comparison with a null element leaves a non-match unknown.
+        needle_valid & &(Mask::from(any_true.clone()) | &!any_null)
     } else {
-        &needle_valid | &!Mask::from(non_empty_lists(&list_array, ctx)?)
+        &needle_valid | &!Mask::from(non_empty)
     };
-
-    // Under SQL null semantics a comparison with a null element leaves a non-match unknown.
-    if options.sql_null_semantics && !compared.all_true() {
-        let any_null = process_matches::<u64, u64>(
-            BoolArray::new((!&compared).into_bit_buffer(), Validity::NonNullable),
-            len,
-            starts,
-            lens,
-            ctx,
-        );
-        decided = decided & &(Mask::from(any_true.clone()) | &!Mask::from(any_null));
-    }
 
     // A non-nullable result has non-null lists and needles, and no null element that could leave
     // a row undecided.
