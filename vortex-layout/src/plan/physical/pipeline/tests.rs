@@ -38,6 +38,8 @@ use crate::OwnedLayoutChildren;
 use crate::layouts::chunked::ChunkedLayout;
 use crate::layouts::flat::FlatLayout;
 use crate::layouts::struct_::StructLayout;
+use crate::plan::physical::FilterPlan;
+use crate::plan::physical::PackPlan;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::SegmentScan;
 use crate::plan::physical::lower;
@@ -559,7 +561,7 @@ fn scan_keeps_the_selection_with_or_without_a_filter(#[case] sel: Sel) -> Vortex
     let values = PrimitiveArray::from_iter(0..ROWS as i32).into_array();
     let scan = lower(&store.flat(&values)?)?;
     assert!(scan.is::<SegmentScan>());
-    let filtered = crate::plan::physical::FilterPlan::new(scan.clone()).into_plan();
+    let filtered = FilterPlan::new(scan.clone()).into_plan();
 
     let rows = 3..9;
     let mask = sel.mask(6);
@@ -591,7 +593,7 @@ fn a_segment_two_readers_need_is_read_once() -> VortexResult<()> {
         .as_struct_fields_opt()
         .vortex_expect("struct")
         .clone();
-    let plan = crate::plan::physical::PackPlan::try_new(
+    let plan = PackPlan::try_new(
         fields,
         vortex_array::dtype::Nullability::NonNullable,
         ROWS,
