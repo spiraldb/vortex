@@ -36,7 +36,7 @@ use crate::plan::pipeline::Inlet;
 use crate::plan::pipeline::Step;
 
 /// An inlet capacity that never blocks the sink, for a source that needs its inlet whole.
-const UNBOUNDED: usize = usize::MAX;
+pub(crate) const UNBOUNDED: usize = usize::MAX;
 
 /// The oldest batch of inlet `index`, removed, or why there is none: blocked while the inlet is
 /// empty and open, finished once it is empty and closed.

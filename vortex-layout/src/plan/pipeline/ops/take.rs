@@ -35,22 +35,19 @@ impl TakeSource {
     pub(crate) fn new(plan: TakePlan, values: Option<ArrayRef>) -> Self {
         Self { plan, values }
     }
-}
 
-impl Source for TakeSource {
-    fn inlet_count(&self) -> usize {
-        if self.values.is_some() { 1 } else { 2 }
-    }
-
-    fn capacity(&self, inlet: usize) -> usize {
+    /// The batches inlet `inlet` holds: the values are taken whole, so they never block.
+    pub(crate) fn capacity(inlet: usize) -> usize {
         if inlet == VALUES {
             UNBOUNDED
         } else {
             DEFAULT_CAPACITY
         }
     }
+}
 
-    fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
+impl Source for TakeSource {
+    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
         let values = match &self.values {
             Some(values) => values.clone(),
             None => {
