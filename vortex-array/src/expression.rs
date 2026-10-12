@@ -70,9 +70,9 @@ impl ArrayRef {
             .collect::<VortexResult<SmallVec<[ArrayRef; 4]>>>()?;
 
         // And wrap the scalar function up in an array.
-        let scalar_fn = expr
-            .as_scalar()
-            .vortex_expect("root, variable and literal were handled above, so this is a scalar node");
+        let scalar_fn = expr.as_scalar().vortex_expect(
+            "root, variable and literal were handled above, so this is a scalar node",
+        );
         let array = ScalarFnArray::try_new_with_len(scalar_fn.clone(), children, len)?.into_array();
 
         // Optimize the resulting array's root.
