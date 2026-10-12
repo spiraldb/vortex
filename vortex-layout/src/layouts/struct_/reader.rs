@@ -420,6 +420,21 @@ impl LayoutReader for StructReader {
         expr: &BoundExpression,
         mask: MaskFuture,
     ) -> VortexResult<MaskFuture> {
+        if self.dtype().is_nullable() {
+            // Evaluate in the nullable struct scope: stepping into a field would discard
+            // parent validity before the predicate runs, including for non-strict functions.
+            let scope = root().bind(self.dtype())?;
+            let projected = self.projection_evaluation(row_range, &scope, mask.clone())?;
+            let expr = expr.clone();
+            let session = self.session.clone();
+            return Ok(MaskFuture::new(mask.len(), async move {
+                let (array, mask) = try_join!(projected, mask)?;
+                let mut ctx = session.create_execution_ctx();
+                let result = array.apply_bound(&expr)?.null_as_false().execute(&mut ctx)?;
+                Ok(mask.intersect_by_rank(&result))
+            }));
+        }
+
         // Partition the expression into expressions that can be evaluated over individual fields
         match &self.partition_expr(expr)? {
             Partitioned::Single(name, partition) => {
@@ -500,6 +515,8 @@ impl LayoutReader for StructReader {
             ),
         };
 
+        // A root projection must retain struct validity, even though expansion turns it into a pack.
+        let is_pack_merge = is_pack_merge && !expr.is_root();
         let session = self.session.clone();
         Ok(Box::pin(async move {
             if let Some(validity_fut) = validity_fut {
@@ -564,6 +581,7 @@ mod tests {
     use vortex_array::expr::eq;
     use vortex_array::expr::get_item;
     use vortex_array::expr::gt;
+    use vortex_array::expr::is_null;
     use vortex_array::expr::lit;
     use vortex_array::expr::or;
     use vortex_array::expr::pack;
@@ -572,6 +590,7 @@ mod tests {
     use vortex_array::scalar::Scalar;
     use vortex_array::validity::Validity;
     use vortex_buffer::buffer;
+    use vortex_error::VortexResult;
     use vortex_io::runtime::single::block_on;
     use vortex_io::session::RuntimeSessionExt;
     use vortex_mask::Mask;
@@ -874,6 +893,37 @@ mod tests {
             expected_b,
             &mut ctx
         );
+    }
+
+    #[rstest]
+    fn test_struct_layout_filter_null_parent(
+        #[from(null_struct_layout)] (segments, layout): (Arc<dyn SegmentSource>, LayoutRef),
+    ) -> VortexResult<()> {
+        let reader = layout.new_reader("".into(), segments, &SESSION, &Default::default())?;
+        let expr = gt(get_item("a", root()), lit(0i32)).bind(reader.dtype())?;
+        let filter = reader.filter_evaluation(&(0..3), &expr, MaskFuture::new_true(3))?;
+        let result = block_on(move |_| filter)?;
+        assert_eq!(result, Mask::from_iter([false, true, true]));
+
+        let filter = reader.filter_evaluation(
+            &(0..3),
+            &expr,
+            MaskFuture::ready(Mask::from_iter([true, false, true])),
+        )?;
+        let result = block_on(move |_| filter)?;
+        assert_eq!(result, Mask::from_iter([false, false, true]));
+
+        let expr = is_null(get_item("a", root())).bind(reader.dtype())?;
+        let filter = reader.filter_evaluation(&(0..3), &expr, MaskFuture::new_true(3))?;
+        assert_eq!(
+            block_on(move |_| filter)?,
+            Mask::from_iter([true, false, false])
+        );
+
+        let expr = or(gt(get_item("a", root()), lit(0i32)), lit(true)).bind(reader.dtype())?;
+        let filter = reader.filter_evaluation(&(0..3), &expr, MaskFuture::new_true(3))?;
+        assert_eq!(block_on(move |_| filter)?, Mask::new_true(3));
+        Ok(())
     }
 
     #[rstest]
