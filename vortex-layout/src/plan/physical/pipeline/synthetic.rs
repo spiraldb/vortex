@@ -179,7 +179,7 @@ impl Source for RowSource {
         if let Some(segment) = self.segment.take() {
             self.waiting = true;
             cx.request_read(segment);
-            return Ok(SourceReady::Read);
+            return Ok(SourceReady::Blocked(SourceBlocked::Io));
         }
         Ok(if self.waiting && !cx.has_bytes() {
             SourceReady::Blocked(SourceBlocked::Io)

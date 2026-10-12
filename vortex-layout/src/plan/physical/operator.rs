@@ -34,8 +34,6 @@ pub enum Step {
 pub enum SourceReady {
     /// The next compute call can produce output or finish without blocking.
     Ready,
-    /// New reads were queued through [`Cx::request_read`]. Run again when bytes are available.
-    Read,
     /// Nothing can happen until the condition clears.
     Blocked(SourceBlocked),
 }
@@ -43,7 +41,7 @@ pub enum SourceReady {
 /// Why a source cannot compute yet.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SourceBlocked {
-    /// A read was requested and has not been delivered.
+    /// Wait for bytes from newly queued or outstanding reads.
     Io,
     /// The inlet needs more batches or its sink to close it. It must be open and have room
     /// for its sink to push; debug builds check that the sink can still wake this source.
@@ -57,9 +55,10 @@ pub trait Source: Operator {
     /// Returning [`SourceReady::Ready`] guarantees that call can proceed without blocking.
     /// Any input or choice made here can be retained by the source for that call.
     ///
-    /// Queue one or more reads with [`Cx::request_read`] and return [`SourceReady::Read`] to
-    /// issue them. Readiness is checked again when bytes are available, including bytes already
-    /// delivered; they are available through [`Cx::take_segment`] in arrival order.
+    /// Queue reads with [`Cx::request_read`] and return
+    /// `SourceReady::Blocked(SourceBlocked::Io)`. The driver issues newly queued reads
+    /// before waiting. Readiness is checked again when bytes are available, including bytes
+    /// already delivered; they are available through [`Cx::take_segment`] in arrival order.
     fn ready(&mut self, _cx: &mut Cx<'_>) -> VortexResult<SourceReady> {
         Ok(SourceReady::Ready)
     }
@@ -153,7 +152,7 @@ pub struct Cx<'a> {
     pub(super) arena: &'a mut Arena,
     pub(super) inlets: &'a [PortId],
     pub(super) bytes: &'a mut VecDeque<(SegmentId, BufferHandle)>,
-    pub(super) reads: SmallVec<[SegmentId; 1]>,
+    pub(super) reads: &'a mut SmallVec<[SegmentId; 1]>,
     pub(super) session: &'a VortexSession,
     pub(super) exec: &'a mut ExecutionCtx,
     pub(super) touched: &'a mut InletSet,
@@ -169,8 +168,9 @@ impl Cx<'_> {
         self.changed.pop()
     }
 
-    /// Queues a segment read during [`Source::ready`]. Return [`SourceReady::Read`] after
-    /// queuing all the reads needed for this call.
+    /// Queues a segment read during [`Source::ready`]. Return
+    /// `SourceReady::Blocked(SourceBlocked::Io)` after queuing the reads needed for
+    /// this call.
     pub fn request_read(&mut self, segment: SegmentId) {
         self.reads.push(segment);
     }

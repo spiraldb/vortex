@@ -124,8 +124,6 @@ pub(crate) struct Pipeline {
 
 /// What one run of a pipeline came to.
 enum Progress {
-    /// The source wants these segments read.
-    Read(SmallVec<[SegmentId; 1]>),
     /// The source waits for this.
     Blocked(SourceBlocked),
     /// An outlet is full.
@@ -134,12 +132,13 @@ enum Progress {
     Done,
 }
 
-/// Runs `pipe` until it blocks, finishes, or requests a read.
+/// Runs `pipe` until it blocks or finishes, collecting any reads its source requests.
 fn drive(
     pipe: &mut Pipeline,
     arena: &mut Arena,
     session: &VortexSession,
     exec: &mut ExecutionCtx,
+    reads: &mut SmallVec<[SegmentId; 1]>,
 ) -> VortexResult<Progress> {
     let Pipeline {
         source,
@@ -158,7 +157,7 @@ fn drive(
         arena,
         inlets,
         bytes,
-        reads: SmallVec::new(),
+        reads,
         session,
         exec,
         touched,
@@ -190,12 +189,11 @@ fn drive(
             let ready = source.ready(&mut cx)?;
             cx.changed.clear();
             vortex_ensure!(
-                cx.reads.is_empty() == (ready != SourceReady::Read),
-                "A source must return Read exactly when it queues reads"
+                cx.reads.is_empty() || ready == SourceReady::Blocked(SourceBlocked::Io),
+                "A source that queues reads must block on IO"
             );
             match ready {
                 SourceReady::Ready => {}
-                SourceReady::Read => return Ok(Progress::Read(cx.reads)),
                 SourceReady::Blocked(blocked) => return Ok(Progress::Blocked(blocked)),
             }
         }
@@ -393,20 +391,20 @@ impl Core {
             .as_mut()
             .ok_or_else(|| vortex_err!("Pipeline {id} is not live"))?;
         pipe.queued = false;
-        let progress = drive(pipe, &mut self.arena, &self.session, &mut self.exec)?;
+        let mut reads = SmallVec::new();
+        let progress = drive(
+            pipe,
+            &mut self.arena,
+            &self.session,
+            &mut self.exec,
+            &mut reads,
+        )?;
+        for segment_id in reads {
+            self.ask(id, segment_id);
+        }
         #[cfg(debug_assertions)]
         self.validate_progress(id, &progress);
         match &progress {
-            Progress::Read(segments) => {
-                for &segment_id in segments {
-                    self.ask(id, segment_id);
-                }
-                if self.pipeline(id).bytes.is_empty() {
-                    self.pipeline_mut(id).state = State::Blocked(SourceBlocked::Io);
-                } else {
-                    self.make_runnable(id);
-                }
-            }
             // A read-ahead source can still have delivered bytes to consume.
             Progress::Blocked(SourceBlocked::Io) if !self.pipeline(id).bytes.is_empty() => {
                 self.make_runnable(id);
