@@ -5,7 +5,7 @@
 //!
 //! A [`Scan`] runs a [`PlanRef`](crate::plan::PlanRef) over a list of splits, row ranges of the
 //! plan's domain. Each split is compiled into pipelines: a pipeline is one [`Source`], zero or
-//! more [`Stage`]s, and the ports its last stage writes. The driver asks the source for a batch
+//! more [`Operator`]s, and the ports its last stage writes. The driver asks the source for a batch
 //! and pushes it through the stages into the ports. Every port runs from one pipeline's sink,
 //! the end that pushes into its outlets, to another's source, which reads it as an inlet, and
 //! that source declares how many batches it may hold.
@@ -118,18 +118,21 @@ pub trait Source: Send {
     fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step>;
 }
 
-/// A stage of a pipeline: transforms the batches pushed into it, one at a time, and never
-/// blocks.
-pub trait Stage: Send {
-    /// Takes `batch` from the stage below and returns what to push on, if anything.
-    fn push(&mut self, batch: ArrayRef, cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>>;
+/// What an operator is handed by the stage below it.
+#[derive(Debug)]
+pub enum Input {
+    /// The next batch.
+    Batch(ArrayRef),
+    /// The stage below has finished: nothing more comes. Handed over once, last.
+    End,
+}
 
-    /// The stage below has finished. Returns whatever the stage still holds, if anything; it is
-    /// not called again after.
-    fn finish(&mut self, cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
-        let _ = cx;
-        Ok(None)
-    }
+/// A stage of a pipeline after its source: transforms what the stage below hands it, one input
+/// at a time, and never blocks.
+pub trait Operator: Send {
+    /// Computes what to push on from `input`, if anything. At [`Input::End`] it returns whatever
+    /// it still holds; it is not called again after.
+    fn compute(&mut self, input: Input, cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>>;
 }
 
 /// What a source or stage may touch during one call: its pipeline's inlets, the bytes the
