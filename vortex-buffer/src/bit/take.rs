@@ -7,7 +7,7 @@ use vortex_error::VortexExpect;
 
 use crate::BitBuffer;
 use crate::BitBufferView;
-use crate::bit::get_bit;
+use crate::BufferMut;
 use crate::bit::get_bit_unchecked;
 
 // If you have less than a Linux memory page of bits, it pays to convert to a
@@ -101,32 +101,88 @@ where
         return taken;
     }
 
-    let ptr = validity.inner().as_ptr();
     if bits.len() <= COLLECT_TO_VEC {
-        let offset = validity.offset();
         let bools: Vec<bool> = bits.iter().collect();
-        return BitBuffer::collect_bool(indices.len(), |i| {
-            // SAFETY: we're already iterating over every index, a bound
-            // is excessive
-            let idx = unsafe { indices.get_unchecked(i).as_() };
-            // SAFETY: we're verified validity has same size as indices before
-            let mask_idx: usize = unsafe { get_bit_unchecked(ptr, offset + i) }.as_();
-            bools[idx & mask_idx.wrapping_neg()]
+        return take_with_validity(indices, validity, bits.len() - 1, |idx| unsafe {
+            // SAFETY: we clamp index so it's never out of bounds
+            *bools.get_unchecked(idx)
         });
     }
 
-    let validity_offset = validity.offset();
-    let buf = bits.inner();
+    let buf = bits.inner().as_ptr();
     let bits_offset = bits.offset();
-    BitBuffer::collect_bool(indices.len(), |i| {
-        // SAFETY: we're already iterating over every index, a bound
-        // is excessive
-        let idx = unsafe { indices.get_unchecked(i).as_() };
-        // SAFETY: we're verified validity has same size as indices before
-        let mask_idx: usize = unsafe { get_bit_unchecked(ptr, validity_offset + i) }.as_();
-        let masked_idx = idx & mask_idx.wrapping_neg();
-        get_bit(buf, bits_offset + masked_idx)
+    take_with_validity(indices, validity, bits.len() - 1, |idx| unsafe {
+        // SAFETY: we clamp index so it's never out of bounds
+        get_bit_unchecked(buf, bits_offset + idx)
     })
+}
+
+fn take_with_validity<I>(
+    indices: &[I],
+    validity: BitBufferView<'_>,
+    max_index: usize,
+    read: impl Fn(usize) -> bool,
+) -> BitBuffer
+where
+    I: AsPrimitive<usize>,
+{
+    let total = indices.len();
+    let groups = total / 8;
+
+    let validity_bytes = validity.inner();
+    let validity_offset = validity.offset();
+    let validity_shift = validity_offset % 8;
+    let validity_first_byte = validity_offset / 8;
+    let has_non_byte_shift = usize::from(validity_shift != 0);
+
+    let mut out = BufferMut::<u8>::with_capacity(total.div_ceil(8));
+    let mut violations = 0usize;
+    for group in 0..groups {
+        let byte = validity_first_byte + group;
+        let next_byte = byte + has_non_byte_shift;
+        // SAFETY: caller verified validity and indices length are equal
+        let lo: u16 = unsafe { *validity_bytes.get_unchecked(byte) }.as_();
+        let hi: u16 = unsafe { *validity_bytes.get_unchecked(next_byte) }.as_();
+        let valid = (lo | hi << 8) >> validity_shift;
+
+        let mut packed = 0u8;
+        for bit in 0..8 {
+            // SAFETY: full groups stay within indices
+            let idx = unsafe { indices.get_unchecked(group * 8 + bit) }.as_();
+            let keep = (usize::from(valid >> bit) & 1).wrapping_neg();
+            let masked = idx & keep;
+            let clamped = masked.min(max_index);
+            violations += usize::from(masked != clamped);
+            packed |= (read(clamped) as u8) << bit;
+        }
+        // SAFETY: out has sufficient capacity
+        unsafe { out.push_unchecked(packed) };
+    }
+
+    assert_eq!(violations, 0, "take index out of bounds");
+
+    let tail = total % 8;
+    if tail == 0 {
+        return BitBuffer::new(out.freeze(), total);
+    }
+
+    let start = groups * 8;
+    let ptr = validity_bytes.as_ptr();
+    let mut packed = 0u8;
+    for bit in 0..tail {
+        let pos = start + bit;
+        // SAFETY: pos stays within indices
+        let idx = unsafe { indices.get_unchecked(pos) }.as_();
+        // SAFETY: validity has same length as indices
+        let keep =
+            (unsafe { get_bit_unchecked(ptr, validity_offset + pos) } as usize).wrapping_neg();
+        let masked = idx & keep;
+        assert!(masked <= max_index, "take index out of bounds");
+        packed |= (read(masked) as u8) << bit;
+    }
+    // SAFETY: out has sufficient capacity
+    unsafe { out.push_unchecked(packed) };
+    BitBuffer::new(out.freeze(), total)
 }
 
 fn first_unset(bits: BitBufferView<'_>) -> Option<usize> {

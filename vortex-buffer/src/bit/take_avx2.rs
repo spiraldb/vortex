@@ -24,6 +24,8 @@ use std::arch::x86_64::_mm256_srli_epi32;
 use std::arch::x86_64::_mm256_srlv_epi32;
 use std::slice::from_raw_parts;
 
+use fearless_simd::Level;
+use fearless_simd::Simd;
 use num_traits::AsPrimitive;
 
 use crate::BitBuffer;
@@ -38,9 +40,7 @@ pub(super) fn take<I: AsPrimitive<usize>>(
     indices: &[I],
     validity: Option<BitBufferView<'_>>,
 ) -> Option<BitBuffer> {
-    if !is_x86_feature_detected!("avx2") {
-        return None;
-    }
+    let avx2 = Level::new().as_avx2()?;
     if bits.len() >= (1 << 31) - 8 {
         return None;
     }
@@ -66,7 +66,7 @@ pub(super) fn take<I: AsPrimitive<usize>>(
                 // 32-bit integers in __m256i
                 _mm256_cvtepu16_epi32(vector)
             };
-            return Some(take_group(bits, indices, validity, group));
+            return Some(avx2.vectorize(|| take_group(bits, indices, validity, group)));
         }
     }
     if size == size_of::<u32>() {
@@ -79,7 +79,7 @@ pub(super) fn take<I: AsPrimitive<usize>>(
                 // copy 256 bits into __m256i
                 _mm256_loadu_si256(group_ptr)
             };
-            return Some(take_group(bits, indices, validity, group));
+            return Some(avx2.vectorize(|| take_group(bits, indices, validity, group)));
         }
     }
     None
