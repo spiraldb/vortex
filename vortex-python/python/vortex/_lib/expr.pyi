@@ -2,15 +2,17 @@
 #  SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 from collections.abc import Iterable, Mapping, Sequence
-from datetime import date, datetime
+from datetime import date, datetime, time
+from decimal import Decimal
 from typing import Literal, TypeAlias, final
+from uuid import UUID
 
 from typing_extensions import override
 
 from .dtype import DType
 from .scalar import ScalarPyType
 
-IntoExpr: TypeAlias = Expr | bool | int | float | str | bytes | date | datetime | None
+IntoExpr: TypeAlias = Expr | bool | int | float | str | bytes | Decimal | date | datetime | time | UUID | None
 """A value accepted anywhere an expression is expected. Non-``Expr`` values become literals."""
 
 VariantPath: TypeAlias = str | int | Sequence[str | int]
@@ -120,3 +122,10 @@ def variant_get(child: IntoExpr, path: VariantPath, dtype: DType | None = None) 
 
 # Serialization
 def deserialize(data: bytes) -> Expr: ...
+def replace_time_zone(
+    child: IntoExpr,
+    time_zone: str | None,
+    *,
+    ambiguous: IntoExpr = "raise",
+    non_existent: Literal["raise", "null"] = "raise",
+) -> Expr: ...

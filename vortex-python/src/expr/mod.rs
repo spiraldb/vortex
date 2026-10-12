@@ -25,6 +25,7 @@ use vortex::scalar_fn::fns::between::StrictComparison;
 use vortex::scalar_fn::fns::binary::Binary;
 use vortex::scalar_fn::fns::merge::DuplicateHandling;
 use vortex::scalar_fn::fns::operators::Operator;
+use vortex::scalar_fn::fns::replace_time_zone::ReplaceTimeZoneOptions;
 use vortex::scalar_fn::fns::variant_get::VariantPath;
 use vortex::scalar_fn::fns::variant_get::VariantPathElement;
 
@@ -88,6 +89,9 @@ pub(crate) fn init(py: Python, parent: &Bound<PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(list_length, &m)?)?;
     m.add_function(wrap_pyfunction!(list_sum, &m)?)?;
 
+    // Temporal
+    m.add_function(wrap_pyfunction!(replace_time_zone, &m)?)?;
+
     // Conditionals and misc
     m.add_function(wrap_pyfunction!(case_when, &m)?)?;
     m.add_function(wrap_pyfunction!(zip_, &m)?)?;
@@ -141,8 +145,9 @@ impl PyExpr {
 /// A Python value that can be coerced into an [`Expression`].
 ///
 /// Accepts an existing [`PyExpr`], or any Python value convertible to a Vortex scalar (including
-/// `None`, `bool`, `int`, `float`, `str`, `bytes`, `list`, `dict`, and `vortex.Scalar`), which is
-/// wrapped in a literal expression.
+/// `None`, `bool`, `int`, `float`, `str`, `bytes`, `list`, `dict`, `decimal.Decimal`,
+/// `datetime.date`, `datetime.datetime`, `datetime.time`, `uuid.UUID`, and `vortex.Scalar`),
+/// which is wrapped in a literal expression.
 pub struct PyIntoExpr(Expression);
 
 impl PyIntoExpr {
@@ -1360,4 +1365,44 @@ fn variant_path(path: &Bound<'_, PyAny>) -> PyResult<VariantPath> {
         })
         .collect::<PyResult<Vec<_>>>()?;
     Ok(VariantPath::new(elements))
+}
+
+/// Replace a timestamp's timezone while preserving its local wall time and time unit.
+///
+/// Pass ``None`` to remove the timezone. ``ambiguous`` accepts an expression or one of
+/// ``"raise"``, ``"earliest"``, ``"latest"``, and ``"null"``. ``non_existent`` accepts
+/// ``"raise"`` or ``"null"``. Null inputs produce null outputs.
+#[pyfunction]
+#[pyo3(signature = (
+    child,
+    time_zone,
+    *,
+    ambiguous = PyIntoExpr(lit("raise")),
+    non_existent = "raise"
+))]
+pub fn replace_time_zone(
+    child: PyIntoExpr,
+    time_zone: Option<String>,
+    ambiguous: PyIntoExpr,
+    non_existent: &str,
+) -> PyResult<PyExpr> {
+    let null_on_non_existent = match non_existent {
+        "raise" => false,
+        "null" => true,
+        _ => {
+            return Err(PyValueError::new_err(
+                "non_existent must be 'raise' or 'null'",
+            ));
+        }
+    };
+    Ok(PyExpr {
+        inner: expr::replace_time_zone(
+            child.into_inner(),
+            ambiguous.into_inner(),
+            ReplaceTimeZoneOptions {
+                time_zone: time_zone.map(Into::into),
+                null_on_non_existent,
+            },
+        ),
+    })
 }
