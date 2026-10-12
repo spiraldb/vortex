@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-use num_traits::AsPrimitive;
 use num_traits::CheckedMul;
-use num_traits::ToPrimitive as NumToPrimitive;
 use vortex_buffer::Buffer;
 use vortex_buffer::BufferMut;
 use vortex_compute::lane_kernels::IndexedSourceExt;
@@ -36,6 +34,7 @@ use crate::dtype::ToI256;
 use crate::dtype::i256;
 use crate::match_each_decimal_value_type;
 use crate::match_each_integer_ptype;
+use crate::scalar::DecimalToFloatCast;
 use crate::scalar::DecimalToIntegerCast;
 use crate::scalar::DecimalValue;
 use crate::scalar::Scalar;
@@ -213,8 +212,7 @@ fn cast_to_f64(
         );
     }
 
-    let scale: i32 = scale.as_();
-    let inv_factor: f64 = 10f64.powi(-scale);
+    let cast = DecimalToFloatCast::new(scale);
 
     let buffer = match &mask {
         Mask::AllFalse(_) => BufferMut::<f64>::zeroed(n),
@@ -222,9 +220,7 @@ fn cast_to_f64(
             let values = array.buffer::<F>();
             let values = values.as_slice();
             let mut out = BufferMut::<f64>::with_capacity(n);
-            values.map_into(&mut out.spare_capacity_mut()[..n], |v: F| {
-                to_f64_lossy::<F>(v) * inv_factor
-            });
+            values.map_into(&mut out.spare_capacity_mut()[..n], |v: F| cast.cast(v));
             // SAFETY: map_into wrote every lane before returning.
             unsafe { out.set_len(n) };
             out
@@ -236,7 +232,7 @@ fn cast_to_f64(
             let write_result = values.try_map_masked_into(
                 mask_values.bit_buffer(),
                 &mut out.spare_capacity_mut()[..n],
-                |v: F| Some(to_f64_lossy::<F>(v) * inv_factor),
+                |v: F| Some(cast.cast(v)),
             );
             debug_assert!(write_result.is_ok());
             // SAFETY: try_map_masked_into wrote every lane before returning Ok.
@@ -246,11 +242,6 @@ fn cast_to_f64(
     };
 
     Ok(PrimitiveArray::new(buffer, validity).into_array())
-}
-
-#[inline]
-fn to_f64_lossy<F: NativeDecimalType>(value: F) -> f64 {
-    NumToPrimitive::to_f64(&value).unwrap_or(f64::NAN)
 }
 
 fn cast_decimal_values<F, T>(
@@ -562,6 +553,54 @@ mod tests {
             let scalar = Scalar::decimal(value.into(), decimal_dtype, Nullability::NonNullable);
             assert_eq!(scalar.cast(&target)?, Scalar::from(expected));
         }
+        Ok(())
+    }
+
+    #[rstest]
+    #[case::exact_scale(2)]
+    #[case::inexact_scale(30)]
+    #[case::past_i128_scale(39)]
+    #[case::max_scale(76)]
+    #[case::negative_scale(-5)]
+    #[case::extreme_negative_scale(-128)]
+    fn cast_decimal_to_f64_matches_scalar_cast(#[case] scale: i8) -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let decimal_dtype = DecimalDType::new(76, scale);
+        let beyond_i128 = i256::from_i128(i128::MAX) + i256::ONE;
+        let values = vec![
+            i256::ZERO,
+            i256::from_i128(12345),
+            i256::from_i128(-7),
+            i256::from_i128(i64::MAX.into()) + i256::ONE,
+            beyond_i128,
+            -beyond_i128,
+        ];
+        let array = DecimalArray::new(
+            values.iter().copied().collect(),
+            decimal_dtype,
+            Validity::NonNullable,
+        );
+
+        let target = DType::Primitive(PType::F64, Nullability::NonNullable);
+        let casted = array
+            .into_array()
+            .cast(target.clone())?
+            .execute::<PrimitiveArray>(&mut ctx)?;
+
+        for (value, array_value) in values.into_iter().zip(casted.as_slice::<f64>()) {
+            let scalar = Scalar::decimal(value.into(), decimal_dtype, Nullability::NonNullable);
+            let scalar_value = f64::try_from(&scalar.cast(&target)?)?;
+            assert!(
+                !array_value.is_nan(),
+                "{value} at scale {scale} cast to NaN"
+            );
+            assert_eq!(
+                array_value.to_bits(),
+                scalar_value.to_bits(),
+                "{value} at scale {scale}: array {array_value}, scalar {scalar_value}"
+            );
+        }
+
         Ok(())
     }
 
