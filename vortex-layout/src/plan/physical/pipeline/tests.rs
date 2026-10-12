@@ -614,7 +614,9 @@ fn a_segment_two_readers_need_is_read_once() -> VortexResult<()> {
 }
 
 #[rstest]
-fn pack_readiness_tracks_changes_and_consumption(#[values(2, 3)] second_len: u64) -> VortexResult<()> {
+fn pack_readiness_tracks_changes_and_consumption(
+    #[values(2, 3)] second_len: u64,
+) -> VortexResult<()> {
     let mut arena = Arena::default();
     let inlets = [
         arena.create(8, None, SourceEnd::Unclaimed),
@@ -641,7 +643,8 @@ fn pack_readiness_tracks_changes_and_consumption(#[values(2, 3)] second_len: u64
         SourceReady::Blocked(SourceBlocked::Inlet(_))
     ));
 
-    cx.arena.push(inlets[0], Buffer::from_iter(0_u64..2).into_array());
+    cx.arena
+        .push(inlets[0], Buffer::from_iter(0_u64..2).into_array());
     cx.arena.close(inlets[0]);
     cx.changed.insert(0);
     assert_eq!(
@@ -658,13 +661,16 @@ fn pack_readiness_tracks_changes_and_consumption(#[values(2, 3)] second_len: u64
         "unchanged inlets were scanned"
     );
 
-    cx.arena.push(inlets[1], Buffer::from_iter(0..second_len).into_array());
+    cx.arena
+        .push(inlets[1], Buffer::from_iter(0..second_len).into_array());
     cx.arena.close(inlets[1]);
     cx.changed.insert(1);
     assert_eq!(pack.ready(&mut cx)?, SourceReady::Ready);
     assert_eq!(cx.touched.indices(), &[1]);
     let Step::Final(array) = pack.compute(Input::None, &mut cx)? else {
-        return Err(vortex_err!("expected Pack's last currently available batch"));
+        return Err(vortex_err!(
+            "expected Pack's last currently available batch"
+        ));
     };
     let expected = StructArray::from_fields(&[
         ("a", Buffer::from_iter(0_u64..2).into_array()),

@@ -338,9 +338,11 @@ fn readiness_can_take_an_inlet_and_request_a_read() -> VortexResult<()> {
             let chain = compiler
                 .compile(&child, rows, mask)?
                 .ok_or_else(|| vortex_err!("child has no rows"))?;
-            Ok(Some(
-                compiler.join_with(vec![chain], |_| 1, ReadAfterInlet { batch: None }),
-            ))
+            Ok(Some(compiler.join_with(
+                vec![chain],
+                |_| 1,
+                ReadAfterInlet { batch: None },
+            )))
         },
     )
     .into_plan();
@@ -489,7 +491,10 @@ impl Operator for Copies {
         assert!(!self.ended, "a finished stage cannot run again");
         match input {
             Input::Batch(batch) => {
-                assert!(self.batch.is_none(), "new input arrived before draining More");
+                assert!(
+                    self.batch.is_none(),
+                    "new input arrived before draining More"
+                );
                 self.batch = Some(batch);
                 self.left = self.copies;
             }
@@ -628,9 +633,11 @@ mod contract {
     #[should_panic(expected = "which is full")]
     fn waiting_on_a_full_inlet_is_caught() {
         let plan = SyntheticPlan::new(row_dtype(), 2, Vec::new(), |_, _, compiler| {
-            Ok(Some(
-                compiler.join_with(vec![Chain::new(Repeat { left: 2 })], |_| 1, WaitsWhenFull),
-            ))
+            Ok(Some(compiler.join_with(
+                vec![Chain::new(Repeat { left: 2 })],
+                |_| 1,
+                WaitsWhenFull,
+            )))
         })
         .into_plan();
         let mut scan = Scan::try_new(SESSION.clone(), plan, vec![Split::all(0..2)]).unwrap();
