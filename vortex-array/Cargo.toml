@@ -258,6 +258,10 @@ name = "varbinview_try_new"
 harness = false
 
 [[bench]]
+name = "varbinview_fill_null"
+harness = false
+
+[[bench]]
 name = "bool_zip"
 harness = false
 
@@ -306,6 +310,10 @@ name = "filter_fixed_width"
 harness = false
 
 [[bench]]
+name = "filter_fsl"
+harness = false
+
+[[bench]]
 name = "filter_list"
 harness = false
 
@@ -331,8 +339,4 @@ harness = false
 
 [[bench]]
 name = "probe"
-harness = false
-
-[[bench]]
-name = "canonical_match"
 harness = false
