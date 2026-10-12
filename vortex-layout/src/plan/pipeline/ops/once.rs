@@ -7,6 +7,8 @@ use vortex_array::ArrayRef;
 use vortex_error::VortexResult;
 
 use crate::plan::pipeline::Cx;
+use crate::plan::pipeline::Input;
+use crate::plan::pipeline::Operator;
 use crate::plan::pipeline::Source;
 use crate::plan::pipeline::Step;
 
@@ -19,11 +21,13 @@ impl OnceSource {
     }
 }
 
-impl Source for OnceSource {
-    fn ready(&mut self, _cx: &mut Cx<'_>) -> VortexResult<Step> {
+impl Source for OnceSource {}
+
+impl Operator for OnceSource {
+    fn compute(&mut self, _input: Input, _cx: &mut Cx<'_>) -> VortexResult<Step> {
         Ok(match self.0.take() {
-            Some(batch) => Step::Batch(batch),
-            None => Step::Finished,
+            Some(batch) => Step::Final(batch),
+            None => Step::End,
         })
     }
 }

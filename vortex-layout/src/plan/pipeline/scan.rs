@@ -21,12 +21,14 @@ use vortex_error::vortex_err;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
 
-use super::Blocked;
 use super::Cx;
 use super::DEFAULT_CAPACITY;
+use super::InletSet;
 use super::Input;
 use super::Operator;
 use super::Source;
+use super::SourceBlocked;
+use super::SourceReady;
 use super::Step;
 use super::compile::Chain;
 use super::compile::Shares;
@@ -92,7 +94,7 @@ pub enum Turn {
 enum State {
     Runnable,
     /// What its source said it waits for.
-    Blocked(Blocked),
+    Blocked(SourceBlocked),
     /// Room in a full outlet, found by the driver before the source ran.
     Outlet,
 }
@@ -105,33 +107,35 @@ pub(crate) struct Pipeline {
     outlets: SmallVec<[PortId; 1]>,
     /// The segments it asked for that have arrived, in order of arrival.
     bytes: VecDeque<(SegmentId, BufferHandle)>,
-    /// Segments its source asked for during the last run, issued after it.
-    asked: SmallVec<[SegmentId; 1]>,
     /// Reads it asked for that have not arrived, so retiring it cancels them only when any
     /// are left.
     pending: usize,
     /// Once its source has finished, the next stage to finish: stages are finished one at a
     /// time, each when the outlets have room for what it flushes.
     finishing: Option<usize>,
-    /// The inlets the last run read, each once.
-    touched: Vec<usize>,
-    /// For each inlet, whether it is in `touched`.
-    listed: Vec<bool>,
+    /// Stages with more output for their current input, resumed deepest first.
+    continuing: Vec<usize>,
+    /// The source can compute again without checking readiness.
+    source_more: bool,
+    touched: InletSet,
+    changed: InletSet,
     state: State,
     queued: bool,
 }
 
 /// What one run of a pipeline came to.
 enum Progress {
+    /// The source wants these segments read.
+    Read(SmallVec<[SegmentId; 1]>),
     /// The source waits for this.
-    Blocked(Blocked),
+    Blocked(SourceBlocked),
     /// An outlet is full.
     Outlet,
     /// The pipeline has finished and closed its outlets.
     Done,
 }
 
-/// Runs `pipe` until it blocks or finishes, collecting the reads its source asks for.
+/// Runs `pipe` until it blocks, finishes, or requests a read.
 fn drive(
     pipe: &mut Pipeline,
     arena: &mut Arena,
@@ -144,24 +148,26 @@ fn drive(
         inlets,
         outlets,
         bytes,
-        asked,
         finishing,
+        continuing,
+        source_more,
         touched,
-        listed,
+        changed,
         ..
     } = pipe;
     let mut cx = Cx {
         arena,
         inlets,
         bytes,
+        reads: SmallVec::new(),
         session,
         exec,
         touched,
-        listed,
+        changed,
     };
     loop {
         // Closing needs no room, so a pipeline with nothing left to flush closes at once.
-        if *finishing == Some(stages.len()) {
+        if *finishing == Some(stages.len()) && continuing.is_empty() {
             for &outlet in outlets.iter() {
                 cx.arena.close(outlet);
             }
@@ -170,39 +176,78 @@ fn drive(
         if !outlets.iter().all(|&outlet| cx.arena.has_room(outlet)) {
             return Ok(Progress::Outlet);
         }
-        if let Some(stage) = *finishing {
-            let (this, rest) = stages[stage..]
-                .split_first_mut()
-                .unwrap_or_else(|| unreachable!("stage {stage} finished twice"));
-            *finishing = Some(stage + 1);
-            if let Some(batch) = this.compute(Input::End, &mut cx)? {
-                push(rest, batch, outlets, &mut cx)?;
-            }
+        if let Some(stage) = continuing.pop() {
+            let step = stages[stage].compute(Input::None, &mut cx)?;
+            push(stages, stage, step, continuing, outlets, &mut cx)?;
             continue;
         }
-        match source.ready(&mut cx)? {
-            // A source's input is its inlets and reads, which nothing changes while it runs, so
-            // it is asked again at once: it blocks or finishes without a trip through the
-            // scheduler, and the outlets' room still bounds what it produces.
-            Step::Batch(batch) => push(stages, batch, outlets, &mut cx)?,
-            Step::Read(segment) => asked.push(segment),
-            Step::Blocked(blocked) => return Ok(Progress::Blocked(blocked)),
-            Step::Finished => *finishing = Some(0),
+        if let Some(stage) = *finishing {
+            *finishing = Some(stage + 1);
+            let step = stages[stage].compute(Input::End, &mut cx)?;
+            push(stages, stage, step, continuing, outlets, &mut cx)?;
+            continue;
+        }
+        if !*source_more {
+            let ready = source.ready(&mut cx)?;
+            cx.changed.clear();
+            vortex_ensure!(
+                cx.reads.is_empty() == (ready != SourceReady::Read),
+                "A source must return Read exactly when it queues reads"
+            );
+            match ready {
+                SourceReady::Ready => {}
+                SourceReady::Read => return Ok(Progress::Read(cx.reads)),
+                SourceReady::Blocked(blocked) => return Ok(Progress::Blocked(blocked)),
+            }
+        }
+        let step = source.compute(Input::None, &mut cx)?;
+        *source_more = matches!(&step, Step::More(_));
+        match step {
+            Step::More(batch) | Step::Final(batch) => {
+                push_batch(stages, 0, batch, continuing, outlets, &mut cx)?;
+            }
+            Step::End => *finishing = Some(0),
         }
     }
 }
 
-/// Pushes `batch` through `stages` into `outlets`.
+/// Records a stage's continuation before pushing its output through the remaining stages.
 fn push(
     stages: &mut [Box<dyn Operator>],
-    mut batch: ArrayRef,
+    stage: usize,
+    step: Step,
+    continuing: &mut Vec<usize>,
     outlets: &[PortId],
     cx: &mut Cx<'_>,
 ) -> VortexResult<()> {
-    for stage in stages {
+    let batch = match step {
+        Step::End => return Ok(()),
+        Step::More(batch) => {
+            continuing.push(stage);
+            batch
+        }
+        Step::Final(batch) => batch,
+    };
+    push_batch(stages, stage + 1, batch, continuing, outlets, cx)
+}
+
+/// Pushes one batch, retaining continuations so outlet capacity bounds every output.
+fn push_batch(
+    stages: &mut [Box<dyn Operator>],
+    start: usize,
+    mut batch: ArrayRef,
+    continuing: &mut Vec<usize>,
+    outlets: &[PortId],
+    cx: &mut Cx<'_>,
+) -> VortexResult<()> {
+    for (index, stage) in stages.iter_mut().enumerate().skip(start) {
         batch = match stage.compute(Input::Batch(batch), cx)? {
-            Some(batch) => batch,
-            None => return Ok(()),
+            Step::More(batch) => {
+                continuing.push(index);
+                batch
+            }
+            Step::Final(batch) => batch,
+            Step::End => return Ok(()),
         };
     }
     push_out(batch, outlets, cx.arena);
@@ -273,19 +318,20 @@ impl Core {
         chain: Chain,
         outlets: SmallVec<[PortId; 1]>,
     ) -> PipelineId {
-        let listed = vec![false; chain.inlets.len()];
-        let touched = Vec::with_capacity(chain.inlets.len());
+        let touched = InletSet::new(chain.inlets.len());
+        let changed = InletSet::all(chain.inlets.len());
         let pipeline = Pipeline {
+            continuing: Vec::new(),
+            source_more: false,
             source: chain.source,
             stages: chain.stages,
             inlets: chain.inlets,
             outlets,
             bytes: VecDeque::new(),
-            asked: SmallVec::new(),
             pending: 0,
             finishing: None,
             touched,
-            listed,
+            changed,
             state: State::Runnable,
             queued: true,
         };
@@ -293,8 +339,8 @@ impl Core {
             Some(id) => id,
             None => self.pipelines.push(None),
         };
-        for &inlet in &pipeline.inlets {
-            self.arena.get_mut(inlet).source = SourceEnd::Pipeline(id);
+        for (index, &inlet) in pipeline.inlets.iter().enumerate() {
+            self.arena.get_mut(inlet).source = SourceEnd::Pipeline { id, inlet: index };
         }
         for &outlet in &pipeline.outlets {
             self.arena.get_mut(outlet).sink = Some(id);
@@ -357,15 +403,21 @@ impl Core {
             .ok_or_else(|| vortex_err!("Pipeline {id} is not live"))?;
         pipe.queued = false;
         let progress = drive(pipe, &mut self.arena, &self.session, &mut self.exec)?;
-        for segment_id in std::mem::take(&mut self.pipeline_mut(id).asked) {
-            self.ask(id, segment_id);
-        }
         #[cfg(debug_assertions)]
         self.validate_progress(id, &progress);
         match &progress {
-            // Bytes already here, as of a segment read ahead, are taken at once: the source runs
-            // again.
-            Progress::Blocked(Blocked::Io) if !self.pipeline(id).bytes.is_empty() => {
+            Progress::Read(segments) => {
+                for &segment_id in segments {
+                    self.ask(id, segment_id);
+                }
+                if self.pipeline(id).bytes.is_empty() {
+                    self.pipeline_mut(id).state = State::Blocked(SourceBlocked::Io);
+                } else {
+                    self.make_runnable(id);
+                }
+            }
+            // A read-ahead source can still have delivered bytes to consume.
+            Progress::Blocked(SourceBlocked::Io) if !self.pipeline(id).bytes.is_empty() => {
                 self.make_runnable(id);
             }
             // Nothing changes a port while its source's pipeline runs, so the condition the run reported
@@ -390,18 +442,17 @@ impl Core {
     /// Wakes the sources of what pipeline `id` pushed and the sinks of what it took.
     fn wake_neighbours(&mut self, id: PipelineId) {
         for index in 0..self.pipeline(id).outlets.len() {
-            let queue = self.arena.get(self.pipeline(id).outlets[index]);
-            if !queue.readable() {
+            let port = self.pipeline(id).outlets[index];
+            let queue = self.arena.get_mut(port);
+            if !queue.take_changed() {
                 continue;
             }
-            let port = self.pipeline(id).outlets[index];
             match queue.source {
-                SourceEnd::Pipeline(source) => {
-                    // A source waits on one inlet, so a batch on any other cannot unblock it.
-                    let source_pipe = self.pipeline(source);
-                    if let State::Blocked(Blocked::Inlet(waiting)) = source_pipe.state
-                        && source_pipe.inlets[waiting] == port
-                    {
+                SourceEnd::Pipeline { id: source, inlet } => {
+                    // Record every change, including inlets the source is not waiting on.
+                    let source_pipe = self.pipeline_mut(source);
+                    source_pipe.changed.insert(inlet);
+                    if source_pipe.state == State::Blocked(SourceBlocked::Inlet(inlet)) {
                         self.make_runnable(source);
                     }
                 }
@@ -411,8 +462,8 @@ impl Core {
         }
         // Only an inlet the run read can have gained room, so a source with many inlets, as a
         // concatenation of many chunks, pays for the inlets it read, not for all of them.
-        let touched = std::mem::take(&mut self.pipeline_mut(id).touched);
-        for &index in &touched {
+        let mut touched = std::mem::take(&mut self.pipeline_mut(id).touched);
+        for &index in touched.indices() {
             if let Some(sink) = self.arena.get(self.pipeline(id).inlets[index]).sink
                 && sink != id
                 && self.sink_has_room(sink)
@@ -420,13 +471,8 @@ impl Core {
                 self.make_runnable(sink);
             }
         }
-        let mut touched = touched;
-        let pipe = self.pipeline_mut(id);
-        for &index in &touched {
-            pipe.listed[index] = false;
-        }
         touched.clear();
-        pipe.touched = touched;
+        self.pipeline_mut(id).touched = touched;
     }
 
     /// Queues split slot `slot` for the scan to read its stage's output.
@@ -537,7 +583,7 @@ impl Core {
             .filter_map(|(id, pipe)| {
                 let pipe = pipe.as_ref()?;
                 Some(match pipe.state {
-                    State::Blocked(Blocked::Inlet(index)) => {
+                    State::Blocked(SourceBlocked::Inlet(index)) => {
                         let port = pipe.inlets[index];
                         let queue = self.arena.get(port);
                         format!(

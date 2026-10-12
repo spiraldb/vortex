@@ -12,7 +12,6 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use vortex_array::ArrayRef;
 use vortex_array::EmptyMetadata;
 use vortex_array::IntoArray;
 use vortex_array::buffer::BufferHandle;
@@ -21,14 +20,18 @@ use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
 use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
+use vortex_error::vortex_err;
 use vortex_mask::Mask;
 use vortex_session::registry::CachedId;
 
-use super::Blocked;
 use super::Chain;
 use super::Compiler;
 use super::Cx;
+use super::Input;
+use super::Operator;
 use super::Source;
+use super::SourceBlocked;
+use super::SourceReady;
 use super::Step;
 use crate::plan::Plan;
 use crate::plan::PlanChildren;
@@ -172,19 +175,29 @@ impl RowSource {
 }
 
 impl Source for RowSource {
-    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
+    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<SourceReady> {
         if let Some(segment) = self.segment.take() {
             self.waiting = true;
-            return Ok(Step::Read(segment));
+            cx.request_read(segment);
+            return Ok(SourceReady::Read);
         }
+        Ok(if self.waiting && !cx.has_bytes() {
+            SourceReady::Blocked(SourceBlocked::Io)
+        } else {
+            SourceReady::Ready
+        })
+    }
+}
+
+impl Operator for RowSource {
+    fn compute(&mut self, _input: Input, cx: &mut Cx<'_>) -> VortexResult<Step> {
         if self.waiting {
-            if cx.take_segment().is_none() {
-                return Ok(Step::Blocked(Blocked::Io));
-            }
             self.waiting = false;
+            cx.take_segment()
+                .ok_or_else(|| vortex_err!("RowSource ran without its bytes"))?;
         }
         if self.remaining.is_empty() {
-            return Ok(Step::Finished);
+            return Ok(Step::End);
         }
         let len = self
             .pieces
@@ -192,7 +205,7 @@ impl Source for RowSource {
             .unwrap_or(self.remaining.len())
             .min(self.remaining.len());
         let piece: Vec<u64> = self.remaining.drain(..len).collect();
-        Ok(Step::Batch(Buffer::from(piece).into_array()))
+        Ok(Step::Final(Buffer::from(piece).into_array()))
     }
 }
 
@@ -200,8 +213,8 @@ impl Source for RowSource {
 /// its sink had closed it.
 pub type ProbeRun = Vec<(usize, bool)>;
 
-/// A source over one inlet per child that records what it sees each time it runs, then passes
-/// its first inlet through, one batch per call, and drops what the others hold.
+/// A source over one inlet per child that records what it sees on each readiness check, then
+/// passes its first inlet through, one batch per call, and drops what the others hold.
 pub struct Probe {
     inlets: usize,
     runs: Arc<Mutex<Vec<ProbeRun>>>,
@@ -240,7 +253,7 @@ impl Probe {
 }
 
 impl Source for Probe {
-    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
+    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<SourceReady> {
         let run: ProbeRun = (0..self.inlets)
             .map(|index| {
                 let inlet = cx.inlet(index);
@@ -251,20 +264,28 @@ impl Source for Probe {
         for index in 1..self.inlets {
             while cx.inlet(index).take().is_some() {}
         }
-        let mut first = cx.inlet(0);
-        let batch: Option<ArrayRef> = first.take();
-        match batch {
-            Some(batch) => Ok(Step::Batch(batch)),
-            None if first.closed() => {
-                for index in 1..self.inlets {
-                    if !cx.inlet(index).closed() {
-                        return Ok(Step::Blocked(Blocked::Inlet(index)));
-                    }
-                }
-                Ok(Step::Finished)
-            }
-            None => Ok(Step::Blocked(Blocked::Inlet(0))),
+        let first = cx.inlet(0);
+        if !first.is_empty() {
+            return Ok(SourceReady::Ready);
         }
+        if first.closed() {
+            for index in 1..self.inlets {
+                if !cx.inlet(index).closed() {
+                    return Ok(SourceReady::Blocked(SourceBlocked::Inlet(index)));
+                }
+            }
+            return Ok(SourceReady::Ready);
+        }
+        Ok(SourceReady::Blocked(SourceBlocked::Inlet(0)))
+    }
+}
+
+impl Operator for Probe {
+    fn compute(&mut self, _input: Input, cx: &mut Cx<'_>) -> VortexResult<Step> {
+        Ok(match cx.inlet(0).take() {
+            Some(batch) => Step::Final(batch),
+            None => Step::End,
+        })
     }
 }
 

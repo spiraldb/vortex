@@ -14,38 +14,33 @@ use vortex_error::vortex_ensure;
 use vortex_error::vortex_err;
 
 use super::take_rows;
-use crate::plan::pipeline::Blocked;
 use crate::plan::pipeline::Cx;
+use crate::plan::pipeline::Inlet;
+use crate::plan::pipeline::InletSet;
 use crate::plan::pipeline::Input;
 use crate::plan::pipeline::Operator;
 use crate::plan::pipeline::Source;
+use crate::plan::pipeline::SourceBlocked;
+use crate::plan::pipeline::SourceReady;
 use crate::plan::pipeline::Step;
+
+#[derive(Clone, Copy)]
+enum InletState {
+    Waiting,
+    Ready,
+    Ended,
+}
 
 /// Zips its inlets, one per field and the validity last when nullable, into structs.
 ///
-/// When every inlet's front batch has the same length, the fields are chunked alike there and the
-/// struct takes those batches whole. Otherwise the struct takes as many rows as every inlet has
-/// queued, once the inlet with the fewest can queue no more, so fields chunked differently are
-/// joined, not cut at every boundary of every field.
-///
-/// Waiting costs nothing per wake. Queued rows only grow until the struct is built, so the source
-/// resumes at the first inlet it found empty instead of rescanning the others, and then waits on
-/// the one inlet with the fewest rows.
+/// Readiness updates only the inlets whose sinks changed them. Computing takes the shortest
+/// front batch's length from every inlet, retaining the remainder of longer batches.
 pub(crate) struct PackSource {
     fields: StructFields,
     nullable: bool,
-    inlets: usize,
-    /// Inlets before this one hold rows.
-    cursor: usize,
-    /// The fewest rows queued on an inlet before `cursor` when the scan saw it, and that inlet.
-    fewest: (usize, usize),
-    /// The length of the front batch of every inlet before `cursor`, while they agree.
-    front: Option<usize>,
-    /// Inlets before `cursor` that had ended.
+    states: Vec<InletState>,
+    waiting: InletSet,
     ended: usize,
-    /// Every inlet holds rows, and the source waits for this one, which holds the fewest, to
-    /// fill or close.
-    filling: Option<usize>,
 }
 
 impl PackSource {
@@ -53,84 +48,65 @@ impl PackSource {
         Self {
             fields,
             nullable,
-            inlets,
-            cursor: 0,
-            fewest: (usize::MAX, 0),
-            front: None,
+            states: vec![InletState::Waiting; inlets],
+            waiting: InletSet::all(inlets),
             ended: 0,
-            filling: None,
         }
     }
 
-    /// Forgets what the scan saw, so the next one starts at the first inlet.
-    fn restart(&mut self) {
-        self.cursor = 0;
-        self.fewest = (usize::MAX, 0);
-        self.front = None;
-    }
-
-    /// Finds whether every inlet holds rows, resuming at `cursor`.
-    fn scan(&mut self, cx: &mut Cx<'_>) -> Option<Step> {
-        while self.cursor < self.inlets {
-            let mut inlet = cx.inlet(self.cursor);
-            match inlet.peek_mut().map(|front| front.len()) {
-                None if inlet.closed() => self.ended += 1,
-                None => return Some(Step::Blocked(Blocked::Inlet(self.cursor))),
-                Some(front) => {
-                    self.front = match self.cursor {
-                        0 => Some(front),
-                        _ => self.front.filter(|&agreed| agreed == front),
-                    };
-                    let rows = inlet.rows();
-                    if rows < self.fewest.0 {
-                        self.fewest = (rows, self.cursor);
-                    }
-                }
-            }
-            self.cursor += 1;
-        }
-        None
+    fn observe(&mut self, index: usize, inlet: &Inlet<'_>) {
+        self.ended -= usize::from(matches!(self.states[index], InletState::Ended));
+        self.states[index] = if !inlet.is_empty() {
+            self.waiting.remove(index);
+            InletState::Ready
+        } else if inlet.closed() {
+            self.waiting.remove(index);
+            self.ended += 1;
+            InletState::Ended
+        } else {
+            self.waiting.insert(index);
+            InletState::Waiting
+        };
     }
 }
 
 impl Source for PackSource {
-    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
-        if let Some(index) = self.filling {
-            let inlet = cx.inlet(index);
-            if !inlet.full() && !inlet.closed() {
-                return Ok(Step::Blocked(Blocked::Inlet(index)));
-            }
-            // Every inlet may have gained rows while the source waited.
-            self.filling = None;
-            self.restart();
+    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<SourceReady> {
+        while let Some(index) = cx.changed_inlet() {
+            self.observe(index, &cx.inlet(index));
         }
-        if let Some(blocked) = self.scan(cx) {
-            return Ok(blocked);
+        let available = self.states.len() - self.waiting.indices().len() - self.ended;
+        vortex_ensure!(
+            self.ended == 0 || available == 0,
+            "Pack fields ended at different rows"
+        );
+        Ok(match self.waiting.indices().last() {
+            Some(&index) => SourceReady::Blocked(SourceBlocked::Inlet(index)),
+            None => SourceReady::Ready,
+        })
+    }
+}
+
+impl Operator for PackSource {
+    fn compute(&mut self, _input: Input, cx: &mut Cx<'_>) -> VortexResult<Step> {
+        if self.ended == self.states.len() {
+            return Ok(Step::End);
         }
-        if self.ended == self.inlets {
-            return Ok(Step::Finished);
+        // TODO: Revisit whether waiting to coalesce misaligned batches is worth producing
+        // fewer, larger structs instead of emitting at every field's batch boundary.
+        let mut len = usize::MAX;
+        for index in 0..self.states.len() {
+            let mut inlet = cx.inlet(index);
+            let front = inlet
+                .peek_mut()
+                .ok_or_else(|| vortex_err!("Pack computed before every inlet was ready"))?;
+            len = len.min(front.len());
         }
-        vortex_ensure!(self.ended == 0, "Pack fields ended at different rows");
-        let fewest = self.fewest.1;
-        let len = match self.front {
-            Some(front) => front,
-            None => {
-                let inlet = cx.inlet(fewest);
-                if !inlet.full() && !inlet.closed() {
-                    self.filling = Some(fewest);
-                    return Ok(Step::Blocked(Blocked::Inlet(fewest)));
-                }
-                // The counts the scan saw are lower bounds by now, so count again.
-                (0..self.inlets)
-                    .map(|index| cx.inlet(index).rows())
-                    .min()
-                    .unwrap_or(0)
-            }
-        };
-        self.restart();
-        let mut arrays = Vec::with_capacity(self.inlets);
-        for index in 0..self.inlets {
-            arrays.push(take_rows(&mut cx.inlet(index), len)?);
+        let mut arrays = Vec::with_capacity(self.states.len());
+        for index in 0..self.states.len() {
+            let mut inlet = cx.inlet(index);
+            arrays.push(take_rows(&mut inlet, len)?);
+            self.observe(index, &inlet);
         }
         let validity = if self.nullable {
             Validity::Array(
@@ -141,9 +117,8 @@ impl Source for PackSource {
         } else {
             Validity::NonNullable
         };
-        Ok(Step::Batch(
-            assemble(&self.fields, arrays, validity).into_array(),
-        ))
+        let array = assemble(&self.fields, arrays, validity).into_array();
+        Ok(Step::Final(array))
     }
 }
 
@@ -159,11 +134,11 @@ impl WrapStage {
 }
 
 impl Operator for WrapStage {
-    fn compute(&mut self, input: Input, _cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
+    fn compute(&mut self, input: Input, _cx: &mut Cx<'_>) -> VortexResult<Step> {
         let Input::Batch(batch) = input else {
-            return Ok(None);
+            return Ok(Step::End);
         };
-        Ok(Some(
+        Ok(Step::Final(
             assemble(&self.fields, vec![batch], Validity::NonNullable).into_array(),
         ))
     }

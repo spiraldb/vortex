@@ -3,7 +3,6 @@
 
 //! Keeping the selected rows of dense batches.
 
-use vortex_array::ArrayRef;
 use vortex_array::Canonical;
 use vortex_array::IntoArray;
 use vortex_error::VortexResult;
@@ -13,6 +12,7 @@ use vortex_mask::Mask;
 use crate::plan::pipeline::Cx;
 use crate::plan::pipeline::Input;
 use crate::plan::pipeline::Operator;
+use crate::plan::pipeline::Step;
 
 /// The selected fraction of a predicate's batch at or above which it is executed whole and then
 /// filtered, as the default scan's flat reader does.
@@ -39,9 +39,9 @@ impl MaskStage {
 }
 
 impl Operator for MaskStage {
-    fn compute(&mut self, input: Input, cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
+    fn compute(&mut self, input: Input, cx: &mut Cx<'_>) -> VortexResult<Step> {
         let Input::Batch(batch) = input else {
-            return Ok(None);
+            return Ok(Step::End);
         };
         let end = self.cursor + batch.len();
         vortex_ensure!(
@@ -51,16 +51,16 @@ impl Operator for MaskStage {
         let mask = self.mask.slice(self.cursor..end);
         self.cursor = end;
         if mask.all_true() {
-            return Ok(Some(batch));
+            return Ok(Step::Final(batch));
         }
         if self.predicate && mask.density() >= EXPR_EVAL_THRESHOLD {
-            return Ok(Some(
+            return Ok(Step::Final(
                 batch
                     .execute::<Canonical>(cx.exec())?
                     .into_array()
                     .filter(mask)?,
             ));
         }
-        Ok(Some(batch.filter(mask)?))
+        Ok(Step::Final(batch.filter(mask)?))
     }
 }

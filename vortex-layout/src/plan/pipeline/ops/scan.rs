@@ -9,15 +9,17 @@ use vortex_array::ArrayRef;
 use vortex_array::buffer::BufferHandle;
 use vortex_array::serde::SerializedArray;
 use vortex_error::VortexResult;
+use vortex_error::vortex_err;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
 
 use crate::plan::SegmentScanPlan;
-use crate::plan::pipeline::Blocked;
 use crate::plan::pipeline::Cx;
 use crate::plan::pipeline::Input;
 use crate::plan::pipeline::Operator;
 use crate::plan::pipeline::Source;
+use crate::plan::pipeline::SourceBlocked;
+use crate::plan::pipeline::SourceReady;
 use crate::plan::pipeline::Step;
 use crate::segments::SegmentId;
 
@@ -83,19 +85,30 @@ impl ScanSource {
 }
 
 impl Source for ScanSource {
-    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
-        if self.done {
-            return Ok(Step::Finished);
-        }
+    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<SourceReady> {
         if let Some(segment) = self.unread.take() {
-            return Ok(Step::Read(segment));
+            cx.request_read(segment);
+            return Ok(SourceReady::Read);
         }
-        let Some((_, bytes)) = cx.take_segment() else {
-            return Ok(Step::Blocked(Blocked::Io));
-        };
+        Ok(if self.done || cx.has_bytes() {
+            SourceReady::Ready
+        } else {
+            SourceReady::Blocked(SourceBlocked::Io)
+        })
+    }
+}
+
+impl Operator for ScanSource {
+    fn compute(&mut self, _input: Input, cx: &mut Cx<'_>) -> VortexResult<Step> {
+        if self.done {
+            return Ok(Step::End);
+        }
+        let (_, bytes) = cx
+            .take_segment()
+            .ok_or_else(|| vortex_err!("Segment scan ran without its bytes"))?;
         self.done = true;
         let array = decode(&self.plan, bytes, cx.session())?;
-        Ok(Step::Batch(select(
+        Ok(Step::Final(select(
             array,
             self.slice.as_ref(),
             self.filter.as_ref(),
@@ -116,11 +129,11 @@ impl SelectStage {
 }
 
 impl Operator for SelectStage {
-    fn compute(&mut self, input: Input, _cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
+    fn compute(&mut self, input: Input, _cx: &mut Cx<'_>) -> VortexResult<Step> {
         let Input::Batch(batch) = input else {
-            return Ok(None);
+            return Ok(Step::End);
         };
-        Ok(Some(select(
+        Ok(Step::Final(select(
             batch,
             self.slice.as_ref(),
             self.filter.as_ref(),

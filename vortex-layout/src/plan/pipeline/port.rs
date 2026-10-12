@@ -27,7 +27,7 @@ pub(crate) enum SourceEnd {
     /// source has gone.
     Unclaimed,
     /// The source of this pipeline, which reads the port as one of its inlets.
-    Pipeline(PipelineId),
+    Pipeline { id: PipelineId, inlet: usize },
     /// The scan, reading the output of the split's stage running in this slot.
     Scan(usize),
 }
@@ -42,6 +42,8 @@ pub(crate) struct Queue {
     capacity: usize,
     /// The sink will push nothing more.
     closed: bool,
+    /// The sink appended data or closed this port since its last run was settled.
+    changed: bool,
     /// The pipeline whose sink pushes into this port; none once closed.
     pub(crate) sink: Option<PipelineId>,
     pub(crate) source: SourceEnd,
@@ -58,6 +60,7 @@ impl Queue {
             batches: VecDeque::with_capacity(capacity.clamp(1, DEFAULT_CAPACITY)),
             capacity: capacity.max(1),
             closed: false,
+            changed: false,
             sink,
             source,
             source_gone: false,
@@ -88,9 +91,8 @@ impl Queue {
         self.free
     }
 
-    /// Whether the source would find something new: a batch, or the close.
-    pub(crate) fn readable(&self) -> bool {
-        !self.batches.is_empty() || self.closed
+    pub(crate) fn take_changed(&mut self) -> bool {
+        std::mem::take(&mut self.changed)
     }
 
     pub(crate) fn pop(&mut self) -> Option<ArrayRef> {
@@ -218,6 +220,7 @@ impl Arena {
                 queue.batches.reserve_exact(capacity.min(DEFAULT_CAPACITY));
                 queue.capacity = capacity;
                 queue.closed = false;
+                queue.changed = false;
                 queue.sink = sink;
                 queue.source = source;
                 queue.source_gone = false;
@@ -255,12 +258,14 @@ impl Arena {
         );
         if !batch.is_empty() {
             queue.batches.push_back(batch);
+            queue.changed = true;
         }
     }
 
     /// The sink will push nothing more.
     pub(crate) fn close(&mut self, id: PortId) {
         let queue = &mut self.queues[id];
+        queue.changed |= !queue.closed;
         queue.closed = true;
         queue.sink = None;
         self.maybe_free(id);

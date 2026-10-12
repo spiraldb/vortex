@@ -24,21 +24,7 @@ use vortex_array::arrays::ChunkedArray;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 
-use crate::plan::pipeline::Blocked;
-use crate::plan::pipeline::Cx;
 use crate::plan::pipeline::Inlet;
-use crate::plan::pipeline::Step;
-
-/// The oldest batch of inlet `index`, removed, or why there is none: blocked while the inlet is
-/// empty and open, finished once it is empty and closed.
-fn next_batch(cx: &mut Cx<'_>, index: usize) -> Step {
-    let mut inlet = cx.inlet(index);
-    match inlet.take() {
-        Some(batch) => Step::Batch(batch),
-        None if inlet.closed() => Step::Finished,
-        None => Step::Blocked(Blocked::Inlet(index)),
-    }
-}
 
 /// Takes the first `len` rows of the inlet, across as many batches as hold them, slicing the last
 /// and leaving its rest in place. Rows spanning batches come back chunked, not copied.
