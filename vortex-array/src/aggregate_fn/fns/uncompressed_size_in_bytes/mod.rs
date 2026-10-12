@@ -229,6 +229,13 @@ fn uncompressed_size_in_bytes_u64(
 #[derive(Clone, Debug)]
 pub struct UncompressedSizeInBytes;
 
+impl UncompressedSizeInBytes {
+    /// Whether arrays of `dtype` can be measured. Variant arrays cannot.
+    pub fn supports_dtype(dtype: &DType) -> bool {
+        supports_uncompressed_size_in_bytes(dtype)
+    }
+}
+
 impl AggregateFnVTable for UncompressedSizeInBytes {
     type Options = UncompressedSizeOpts;
     type Partial = u64;

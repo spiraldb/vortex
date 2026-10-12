@@ -8,6 +8,7 @@ use vortex_array::Canonical;
 use vortex_array::CanonicalValidity;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
+use vortex_array::aggregate_fn::fns::uncompressed_size_in_bytes::UncompressedSizeInBytes;
 use vortex_array::aggregate_fn::fns::uncompressed_size_in_bytes::UncompressedSizeOpts;
 use vortex_array::aggregate_fn::fns::uncompressed_size_in_bytes::uncompressed_size_in_bytes_uncached;
 use vortex_array::arrays::Constant;
@@ -340,7 +341,8 @@ impl CascadingCompressor {
 }
 
 /// The bytes `array`'s rows reference once canonical, reading the exact statistic the writer
-/// caches on each chunk before compression and computing it otherwise.
+/// caches on each chunk before compression and computing it otherwise. A dtype that cannot be
+/// measured, such as variant, is sized by the bytes it holds.
 ///
 /// Nothing is recorded on `array`: an uncompressed leaf is written out with its statistics, and
 /// a size the compressor measured for itself should not grow the file.
@@ -348,6 +350,9 @@ pub(super) fn exact_uncompressed_size(
     array: &ArrayRef,
     exec_ctx: &mut ExecutionCtx,
 ) -> VortexResult<u64> {
+    if !UncompressedSizeInBytes::supports_dtype(array.dtype()) {
+        return Ok(array.nbytes());
+    }
     let size = uncompressed_size_in_bytes_uncached(array, UncompressedSizeOpts::exact(), exec_ctx)?;
     u64::try_from(size).map_err(|e| vortex_err!("uncompressed size does not fit in u64: {e}"))
 }
