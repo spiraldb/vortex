@@ -130,7 +130,7 @@ fn is_dyn_dispatch_compatible(array: &ArrayRef) -> bool {
             _ => false,
         };
     }
-    (id == FoR.id() && matches!(array.as_::<FoR>().references(), FoRReferences::Global(_)))
+    (id == FoR.id() && array.as_::<FoR>().references().is_global())
         || id == ZigZag.id()
         || id == Primitive.id()
         || id == Slice.id()
@@ -174,7 +174,7 @@ pub fn has_standalone_kernel(array: &ArrayRef) -> bool {
     // FoR fuses with BitPacked (FFOR) and Slice(BitPacked) in one launch.
     if id == FoR.id() {
         let for_arr = array.as_::<FoR>();
-        if !matches!(for_arr.references(), FoRReferences::Global(_)) {
+        if !for_arr.references().is_global() {
             return false;
         }
         let child = for_arr.encoded();

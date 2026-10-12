@@ -53,6 +53,14 @@ pub enum FoRReferences<'a> {
     Blocked(&'a ArrayRef),
 }
 
+impl FoRReferences<'_> {
+    /// Returns `true` if every element shares one reference.
+    #[inline]
+    pub fn is_global(&self) -> bool {
+        matches!(self, Self::Global(_))
+    }
+}
+
 pub trait FoRArrayExt: FoRArraySlotsExt {
     /// The array's references.
     fn references(&self) -> FoRReferences<'_> {
