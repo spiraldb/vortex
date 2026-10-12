@@ -278,7 +278,7 @@ fn expand_struct_root(
     expanded_root: &BoundExpression,
     fields: &StructFields,
 ) -> VortexResult<BoundExpression> {
-    let (expanded_root, validity) = if expanded_root
+    let (packed, validity) = if expanded_root
         .as_scalar()
         .is_some_and(|scalar_fn| scalar_fn.is::<MaskFn>())
     {
@@ -317,7 +317,7 @@ fn expand_struct_root(
                 let idx = fields.find(field_name).ok_or_else(|| {
                     vortex_err!("Field {field_name} not found while expanding struct root")
                 })?;
-                let child = expanded_root.children()[idx].clone();
+                let child = packed.children()[idx].clone();
                 return Ok(Transformed {
                     value: with_validity(child),
                     changed: true,
@@ -333,7 +333,7 @@ fn expand_struct_root(
                         let idx = fields.find(name).vortex_expect(
                             "normalized selection fields must exist in the struct root",
                         );
-                        expanded_root.children()[idx].clone()
+                        packed.children()[idx].clone()
                     })
                     .collect();
                 return Ok(Transformed {
