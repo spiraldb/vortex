@@ -282,6 +282,20 @@ impl Arena {
         self.maybe_free(id);
     }
 
+    /// Frees a port nobody will read, once it is no longer an outlet of any pipeline: a share's
+    /// port whose claimant never came. Closes it on the sink's behalf if the sink has not.
+    pub(crate) fn discard(&mut self, id: PortId) {
+        let queue = &mut self.queues[id];
+        debug_assert!(
+            queue.sink.is_none() && queue.source == SourceEnd::Unclaimed,
+            "discarding port {id} still attached to a pipeline"
+        );
+        queue.closed = true;
+        queue.source_gone = true;
+        queue.batches.clear();
+        self.maybe_free(id);
+    }
+
     fn maybe_free(&mut self, id: PortId) {
         let queue = &mut self.queues[id];
         if queue.closed && queue.source_gone && !queue.free {

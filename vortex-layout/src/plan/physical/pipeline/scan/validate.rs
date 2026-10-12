@@ -44,10 +44,15 @@ impl Core {
                 );
             }
         }
+        let waiting: Vec<_> = self.shares.waiting().collect();
         for (port, queue) in self.arena.iter() {
+            if queue.is_free() || queue.source != SourceEnd::Unclaimed {
+                continue;
+            }
             assert!(
-                queue.is_free() || queue.source != SourceEnd::Unclaimed,
-                "port {port} has no reader, so its sink {:?} pushes into it for nothing",
+                waiting.contains(&port),
+                "port {port} has no reader and no split will claim it, so its sink {:?} \
+                 pushes into it for nothing",
                 queue.sink
             );
         }
