@@ -109,7 +109,7 @@ jobs:
           PYO3_ENVIRONMENT_SIGNATURE: "cpython3"
 
       - name: Upload wheels
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
         with:
           name: "wheels-${{ matrix.target.target }}.zip"
           path: dist/
@@ -130,7 +130,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: cargo build --release --package vortex-jni
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
         with:
           name: "libvortex_jni_aarch64-apple-darwin.zip"
           path: "target/release/libvortex_jni.dylib"
@@ -168,7 +168,7 @@ jobs:
       - name: Rename JNI library
         shell: bash
         run: cp target/release/vortex_jni.dll target/release/libvortex_jni.dll
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
         with:
           name: "libvortex_jni_x86_64-pc-windows-msvc.zip"
           path: "target/release/libvortex_jni.dll"
@@ -207,7 +207,7 @@ jobs:
         with:
           tool: cargo-zigbuild
       - run: cargo zigbuild --release --target ${{ matrix.target }}.2.31 --package vortex-jni
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
         with:
           name: "libvortex_jni_${{ matrix.target }}.zip"
           path: "target/${{ matrix.target }}/release/libvortex_jni.so"
