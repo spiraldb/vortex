@@ -3,17 +3,11 @@
 
 use std::ops::Range;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::sync::OnceLock;
 
-use futures::try_join;
 use itertools::Itertools;
-use vortex_array::ArrayRef;
-use vortex_array::IntoArray;
 use vortex_array::MaskFuture;
-use vortex_array::VortexSessionExecute;
-use vortex_array::arrays::StructArray;
-use vortex_array::arrays::struct_::StructArrayExt;
-use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldMask;
 use vortex_array::dtype::FieldName;
@@ -21,21 +15,26 @@ use vortex_array::dtype::Nullability;
 use vortex_array::dtype::StructFields;
 use vortex_array::expr::BoundExpression;
 use vortex_array::expr::ExactBoundExpr;
+use vortex_array::expr::analysis::AnnotationFn;
 use vortex_array::expr::bound::get_item;
+use vortex_array::expr::bound::is_not_null;
+use vortex_array::expr::bound::mask;
+use vortex_array::expr::bound::not;
 use vortex_array::expr::bound::pack;
 use vortex_array::expr::make_bound_free_field_annotator;
-use vortex_array::expr::root;
 use vortex_array::expr::transform::BoundPartitionedExpr;
 use vortex_array::expr::transform::partition_bound;
 use vortex_array::expr::traversal::NodeExt;
 use vortex_array::expr::traversal::Transformed;
 use vortex_array::expr::traversal::TraversalOrder;
 use vortex_array::scalar_fn::fns::get_item::GetItem;
-use vortex_array::scalar_fn::fns::merge::Merge;
-use vortex_array::scalar_fn::fns::pack::Pack;
+use vortex_array::scalar_fn::fns::is_not_null::IsNotNull;
+use vortex_array::scalar_fn::fns::is_null::IsNull;
+use vortex_array::scalar_fn::fns::mask::Mask as MaskFn;
 use vortex_array::scalar_fn::fns::select::Select;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
+use vortex_error::vortex_ensure;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
@@ -52,14 +51,20 @@ use crate::layouts::partitioned::BoundPartitionedExprEval;
 use crate::layouts::struct_::StructLayout;
 use crate::segments::SegmentSource;
 
+// Reserved name for a struct's validity virtual field if a struct is nullable
+const STRUCT_VALIDITY_NAME: &str = "__vortex_validity";
+static STRUCT_VALIDITY_FIELD: LazyLock<FieldName> =
+    LazyLock::new(|| FieldName::from(STRUCT_VALIDITY_NAME));
+
 pub struct StructReader {
     layout: StructLayout,
     name: Arc<str>,
     lazy_children: LazyReaderChildren,
     session: VortexSession,
 
-    /// A `pack` expression that holds each individual field of the root DType. This expansion
-    /// ensures we can correctly partition expressions over the fields of the struct.
+    /// For a non-nullable struct, pack(f: $.f, ...) for every f in struct
+    /// fields. For a nullable struct, mask(pack(f: $.f, ...), is_not_null($))
+    /// for every f in fields.
     expanded_root_expr: BoundExpression,
 
     field_lookup: Option<HashMap<FieldName, usize>>,
@@ -87,13 +92,19 @@ impl StructReader {
         });
 
         let nullable = layout.dtype().is_nullable();
+        if nullable {
+            vortex_ensure!(
+                struct_dt.find(STRUCT_VALIDITY_NAME).is_none(),
+                "{STRUCT_VALIDITY_NAME} is reserved in nullable structs"
+            );
+        }
         let extra = nullable as usize;
 
         let mut dtypes: Vec<DType> = Vec::with_capacity(struct_dt.nfields() + extra);
         let mut names: Vec<Arc<str>> = Vec::with_capacity(struct_dt.nfields() + extra);
         if nullable {
             dtypes.push(DType::Bool(Nullability::NonNullable));
-            names.push(Arc::from("validity"));
+            names.push(Arc::clone(STRUCT_VALIDITY_FIELD.inner()));
         }
         dtypes.extend(struct_dt.fields());
         names.extend(struct_dt.names().iter().map(|x| Arc::clone(x.inner())));
@@ -130,6 +141,11 @@ impl StructReader {
 
     /// Return the child reader for the field.
     fn field_reader(&self, name: &FieldName) -> VortexResult<&LayoutReaderRef> {
+        if name.as_ref() == STRUCT_VALIDITY_NAME
+            && let Some(validity_reader) = self.validity()?
+        {
+            return Ok(validity_reader);
+        }
         let idx = self
             .field_lookup
             .as_ref()
@@ -192,14 +208,16 @@ impl StructReader {
             expand_struct_root(expr.clone(), &self.expanded_root_expr, self.struct_fields())?;
 
         // Partition the expression into expressions that can be evaluated over individual fields
-        let mut partitioned = partition_bound(
-            expr.clone(),
-            make_bound_free_field_annotator(
-                self.dtype()
-                    .as_struct_fields_opt()
-                    .vortex_expect("We know it's a struct DType"),
-            ),
-        )?;
+        let dtype = self.dtype();
+        let fields = dtype.as_struct_fields_opt().vortex_expect("struct dtype");
+        let mut partitioned = if dtype.is_nullable() {
+            partition_bound(
+                expr.clone(),
+                make_bound_free_field_annotator_validity(fields),
+            )?
+        } else {
+            partition_bound(expr.clone(), make_bound_free_field_annotator(fields))?
+        };
 
         if partitioned.partitions.len() == 1 {
             // If there's only one partition, we step into the field scope of the original
@@ -244,10 +262,15 @@ fn expanded_struct_root(
         .iter()
         .map(|name| get_item(name.clone(), root.clone()))
         .collect::<Vec<_>>();
-    Ok(pack(
+    let packed = pack(
         fields.names().iter().cloned().zip(children),
         Nullability::NonNullable,
-    ))
+    );
+    if root_dtype.is_nullable() {
+        Ok(mask(packed, is_not_null(root)))
+    } else {
+        Ok(packed)
+    }
 }
 
 fn expand_struct_root(
@@ -255,6 +278,20 @@ fn expand_struct_root(
     expanded_root: &BoundExpression,
     fields: &StructFields,
 ) -> VortexResult<BoundExpression> {
+    let (expanded_root, validity) = if expanded_root
+        .as_scalar()
+        .is_some_and(|scalar_fn| scalar_fn.is::<MaskFn>())
+    {
+        let children = expanded_root.children();
+        (&children[0], Some(&children[1]))
+    } else {
+        (expanded_root, None)
+    };
+    let with_validity = |expr: BoundExpression| match validity {
+        Some(validity) => mask(expr, validity.clone()),
+        None => expr,
+    };
+
     Ok(expr
         .transform_down(|node| {
             if node.is_root() {
@@ -280,8 +317,9 @@ fn expand_struct_root(
                 let idx = fields.find(field_name).ok_or_else(|| {
                     vortex_err!("Field {field_name} not found while expanding struct root")
                 })?;
+                let child = expanded_root.children()[idx].clone();
                 return Ok(Transformed {
-                    value: expanded_root.children()[idx].clone(),
+                    value: with_validity(child),
                     changed: true,
                     order: TraversalOrder::Skip,
                 });
@@ -299,15 +337,55 @@ fn expand_struct_root(
                     })
                     .collect();
                 return Ok(Transformed {
-                    value: pack(names.into_iter().zip(children), Nullability::NonNullable),
+                    value: with_validity(pack(
+                        names.into_iter().zip(children),
+                        Nullability::NonNullable,
+                    )),
                     changed: true,
                     order: TraversalOrder::Skip,
                 });
             }
 
+            let Some(validity) = validity else {
+                return Ok(Transformed::no(node));
+            };
+
+            // You can alternatively call optimize_recursive but this is cheaper
+            if scalar_fn.is::<IsNotNull>() {
+                return Ok(Transformed {
+                    value: validity.clone(),
+                    changed: true,
+                    order: TraversalOrder::Skip,
+                });
+            }
+            if scalar_fn.is::<IsNull>() {
+                return Ok(Transformed {
+                    value: not(validity.clone()),
+                    changed: true,
+                    order: TraversalOrder::Skip,
+                });
+            }
             Ok(Transformed::no(node))
         })?
         .into_inner())
+}
+
+// Same as make_bound_free_field_annotator, but handles is_not_null($) as
+// struct's validity
+fn make_bound_free_field_annotator_validity(
+    scope: &StructFields,
+) -> impl AnnotationFn<BoundExpression, Annotation = FieldName> {
+    let free_fields = make_bound_free_field_annotator(scope);
+    move |expr: &BoundExpression| {
+        if expr
+            .as_scalar()
+            .is_some_and(|scalar_fn| scalar_fn.is::<IsNotNull>())
+            && expr.children()[0].is_root()
+        {
+            return vec![STRUCT_VALIDITY_FIELD.clone()];
+        }
+        free_fields(expr)
+    }
 }
 
 fn step_into_struct_field(
@@ -315,13 +393,15 @@ fn step_into_struct_field(
     field_name: &FieldName,
     field_dtype: DType,
 ) -> VortexResult<BoundExpression> {
+    let is_validity = field_name.as_ref() == STRUCT_VALIDITY_NAME;
     Ok(expr
         .transform_down(|node| {
-            let is_field_access = node
-                .as_scalar()
-                .and_then(|scalar_fn| scalar_fn.as_opt::<GetItem>())
-                .is_some_and(|name| name == field_name)
-                && node.children()[0].is_root();
+            let is_field_access = node.as_scalar().is_some_and(|scalar_fn| {
+                scalar_fn
+                    .as_opt::<GetItem>()
+                    .is_some_and(|name| name == field_name)
+                    || (is_validity && scalar_fn.is::<IsNotNull>())
+            }) && node.children()[0].is_root();
 
             if is_field_access {
                 Ok(Transformed {
@@ -334,11 +414,6 @@ fn step_into_struct_field(
             }
         })?
         .into_inner())
-}
-
-fn is_pack_or_merge(expr: &BoundExpression) -> bool {
-    expr.as_scalar()
-        .is_some_and(|scalar_fn| scalar_fn.is::<Pack>() || scalar_fn.is::<Merge>())
 }
 
 /// When partitioning an expression, in the case it only has a single partition we can avoid
@@ -461,31 +536,17 @@ impl LayoutReader for StructReader {
         expr: &BoundExpression,
         mask_fut: MaskFuture,
     ) -> VortexResult<ArrayFuture> {
-        let validity_fut = self
-            .validity()?
-            .map(|reader| {
-                let root = root().bind(reader.dtype())?;
-                reader.projection_evaluation(row_range, &root, mask_fut.clone())
-            })
-            .transpose()?;
-
         // Partition the expression into expressions that can be evaluated over individual fields
-        let (projected, is_pack_merge) = match &self.partition_expr(expr)? {
+        match &self.partition_expr(expr)? {
             Partitioned::Single(name, partition) => {
                 let reader = self.field_reader(name)?;
-                (
-                    reader
-                        .projection_evaluation(row_range, partition, mask_fut)
-                        .map_err(|err| {
-                            err.with_context(format!(
-                                "While evaluating projection partition {name}"
-                            ))
-                        })?,
-                    is_pack_or_merge(partition),
-                )
+                reader
+                    .projection_evaluation(row_range, partition, mask_fut)
+                    .map_err(|err| {
+                        err.with_context(format!("While evaluating projection partition {name}"))
+                    })
             }
-
-            Partitioned::Multi(partitioned) => (
+            Partitioned::Multi(partitioned) => {
                 Arc::clone(partitioned).into_array_future(mask_fut, |name, expr, mask| {
                     let reader = self.field_reader(name)?;
                     reader
@@ -495,41 +556,9 @@ impl LayoutReader for StructReader {
                                 "While evaluating projection partition {name}"
                             ))
                         })
-                })?,
-                is_pack_or_merge(&partitioned.root),
-            ),
-        };
-
-        let session = self.session.clone();
-        Ok(Box::pin(async move {
-            if let Some(validity_fut) = validity_fut {
-                let (array, validity) = try_join!(projected, validity_fut)?;
-
-                // If root expression was a pack, then we apply the validity to each child field
-                if is_pack_merge {
-                    let mut ctx = session.create_execution_ctx();
-                    let struct_array = array.execute::<StructArray>(&mut ctx)?;
-                    let masked_fields: Vec<ArrayRef> = struct_array
-                        .iter_unmasked_fields()
-                        .map(|a| a.clone().mask(validity.clone()))
-                        .try_collect()?;
-
-                    Ok(StructArray::try_new(
-                        struct_array.names().clone(),
-                        masked_fields,
-                        struct_array.len(),
-                        struct_array.validity()?,
-                    )?
-                    .into_array())
-                } else {
-                    // If the root expression was not a pack or merge, e.g. if it's something like
-                    // a get_item, then we apply the validity directly to the result
-                    array.mask(validity)
-                }
-            } else {
-                projected.await
+                })
             }
-        }))
+        }
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -564,6 +593,8 @@ mod tests {
     use vortex_array::expr::eq;
     use vortex_array::expr::get_item;
     use vortex_array::expr::gt;
+    use vortex_array::expr::is_not_null;
+    use vortex_array::expr::is_null;
     use vortex_array::expr::lit;
     use vortex_array::expr::or;
     use vortex_array::expr::pack;
@@ -572,6 +603,7 @@ mod tests {
     use vortex_array::scalar::Scalar;
     use vortex_array::validity::Validity;
     use vortex_buffer::buffer;
+    use vortex_error::VortexResult;
     use vortex_io::runtime::single::block_on;
     use vortex_io::session::RuntimeSessionExt;
     use vortex_mask::Mask;
@@ -579,6 +611,7 @@ mod tests {
     use crate::LayoutRef;
     use crate::LayoutStrategy;
     use crate::layouts::flat::writer::FlatLayoutStrategy;
+    use crate::layouts::struct_::reader::STRUCT_VALIDITY_NAME;
     use crate::layouts::table::TableStrategy;
     use crate::segments::SegmentSource;
     use crate::segments::TestSegments;
@@ -906,6 +939,130 @@ mod tests {
         );
         assert_nth_scalar!(result, 1, 2, &mut ctx);
         assert_nth_scalar!(result, 2, 3, &mut ctx);
+    }
+
+    #[rstest]
+    fn test_is_not_null_over_nullable_struct(
+        #[from(null_struct_layout)] (segments, layout): (Arc<dyn SegmentSource>, LayoutRef),
+    ) -> VortexResult<()> {
+        let reader = layout.new_reader("".into(), segments, &SESSION, &Default::default())?;
+        let filter = is_not_null(root()).bind(reader.dtype())?;
+        let future = reader.filter_evaluation(&(0..3), &filter, MaskFuture::new_true(3))?;
+        let result = block_on(|_| future)?;
+        assert_eq!(result, Mask::from_iter([false, true, true]));
+        Ok(())
+    }
+
+    #[rstest]
+    fn test_predicate_over_nullable_struct(
+        #[from(null_struct_layout)] (segments, layout): (Arc<dyn SegmentSource>, LayoutRef),
+    ) -> VortexResult<()> {
+        let reader = layout.new_reader("".into(), segments, &SESSION, &Default::default())?;
+        let filter = eq(get_item("a", root()), lit(7)).bind(reader.dtype())?;
+        let future = reader.filter_evaluation(&(0..3), &filter, MaskFuture::new_true(3))?;
+        let result = block_on(|_| future)?;
+        assert_eq!(result, Mask::from_iter([false, false, false]));
+        Ok(())
+    }
+
+    #[rstest]
+    fn test_is_null_projection_over_nullable_struct(
+        #[from(null_struct_layout)] (segments, layout): (Arc<dyn SegmentSource>, LayoutRef),
+    ) -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let reader = layout.new_reader("".into(), segments, &SESSION, &Default::default())?;
+        let expr = is_null(root()).bind(reader.dtype())?;
+        let future = reader.projection_evaluation(&(0..3), &expr, MaskFuture::new_true(3))?;
+        let result = block_on(|_| future)?;
+        let expected = BoolArray::from_iter([true, false, false]);
+        assert_arrays_eq!(result, expected, &mut ctx);
+        Ok(())
+    }
+
+    #[rstest]
+    fn test_constant_projection_over_nullable_struct(
+        #[from(null_struct_layout)] (segments, layout): (Arc<dyn SegmentSource>, LayoutRef),
+    ) -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let reader = layout.new_reader("".into(), segments, &SESSION, &Default::default())?;
+        let expr = pack([("x", lit(1))], false.into()).bind(reader.dtype())?;
+        let future = reader.projection_evaluation(&(0..3), &expr, MaskFuture::new_true(3))?;
+
+        let result = block_on(|_| future)?;
+        let expected_x_dtype = DType::Primitive(PType::I32, false.into());
+        let expected_fields = StructFields::from_iter([("x", expected_x_dtype)]);
+        let expected_dtype = DType::Struct(expected_fields, false.into());
+        assert_eq!(result.dtype(), &expected_dtype);
+
+        let result = result.execute::<StructArray>(&mut ctx)?;
+        let field = result.unmasked_field_by_name("x")?;
+        let expected = PrimitiveArray::from_iter([1i32, 1, 1]);
+        assert_arrays_eq!(field, expected, &mut ctx);
+        Ok(())
+    }
+
+    #[rstest]
+    fn test_root_projection_over_nullable_struct(
+        #[from(null_struct_layout)] (segments, layout): (Arc<dyn SegmentSource>, LayoutRef),
+    ) -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let reader = layout.new_reader("".into(), segments, &SESSION, &Default::default())?;
+        let expr = root().bind(reader.dtype())?;
+        let future = reader.projection_evaluation(&(0..3), &expr, MaskFuture::new_true(3))?;
+        let result = block_on(|_| future)?;
+        assert_eq!(result.dtype(), reader.dtype());
+
+        let mut probe = result.probe();
+        let scalar = probe.execute_scalar(0, &mut ctx)?;
+        assert!(scalar.is_null());
+
+        let scalar = probe.execute_scalar(1, &mut ctx)?;
+        let field = scalar.as_struct().field_by_idx(0).unwrap();
+        assert_eq!(field, Scalar::primitive(2, false.into()));
+        Ok(())
+    }
+
+    #[rstest]
+    #[case(
+        Validity::Array(BoolArray::from_iter([false, true, true]).into_array()),
+        true
+    )]
+    #[case(Validity::NonNullable, false)]
+    fn test_reserved_validity_name(
+        #[case] validity: Validity,
+        #[case] will_error: bool,
+    ) -> VortexResult<()> {
+        let fields = [(STRUCT_VALIDITY_NAME, buffer![10, 20, 30].into_array())];
+        let array = StructArray::try_from_iter_with_validity(fields, validity)?;
+
+        let ctx = ArrayContext::empty();
+        let segments = Arc::new(TestSegments::default());
+        let (ptr, eof) = SequenceId::root().split();
+        let strategy = TableStrategy::new(
+            Arc::new(FlatLayoutStrategy::default()),
+            Arc::new(FlatLayoutStrategy::default()),
+        );
+        let segments2 = Arc::<TestSegments>::clone(&segments);
+        let layout = block_on(|_| async move {
+            let array = array.into_array().to_array_stream().sequenced(ptr);
+            strategy
+                .write_stream(ctx.into(), segments2, array, eof, &SESSION)
+                .await
+        })?;
+
+        let reader = layout.new_reader("".into(), segments, &SESSION, &Default::default())?;
+        let expr = get_item(STRUCT_VALIDITY_NAME, root()).bind(reader.dtype())?;
+        let future = reader.projection_evaluation(&(0..3), &expr, MaskFuture::new_true(3))?;
+        let result = block_on(move |_| future);
+
+        if will_error {
+            assert!(result.is_err());
+        } else {
+            let mut ctx = SESSION.create_execution_ctx();
+            let expected = PrimitiveArray::from_iter([10i32, 20, 30]);
+            assert_arrays_eq!(result?, expected, &mut ctx);
+        }
+        Ok(())
     }
 
     #[rstest]
