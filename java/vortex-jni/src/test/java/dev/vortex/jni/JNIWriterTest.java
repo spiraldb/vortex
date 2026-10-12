@@ -345,8 +345,10 @@ public final class JNIWriterTest {
         // UUIDs order by their bytes; fixed-size lists order lexicographically.
         assertEquals(low, summary.columnStatistics().get(0).lowerBound().orElseThrow());
         assertEquals(high, summary.columnStatistics().get(0).upperBound().orElseThrow());
-        assertEquals(List.of(2, 9), summary.columnStatistics().get(1).lowerBound().orElseThrow());
-        assertEquals(List.of(3, 1), summary.columnStatistics().get(1).upperBound().orElseThrow());
+        assertEquals(
+                List.of(2, 9), summary.columnStatistics().get(1).lowerBound().orElseThrow());
+        assertEquals(
+                List.of(3, 1), summary.columnStatistics().get(1).upperBound().orElseThrow());
     }
 
     @Test
