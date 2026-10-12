@@ -8,6 +8,9 @@ use vortex_array::Canonical;
 use vortex_array::CanonicalValidity;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
+use vortex_array::aggregate_fn::fns::uncompressed_size_in_bytes::UncompressedSizeInBytes;
+use vortex_array::aggregate_fn::fns::uncompressed_size_in_bytes::UncompressedSizeOpts;
+use vortex_array::aggregate_fn::fns::uncompressed_size_in_bytes::uncompressed_size_in_bytes_uncached;
 use vortex_array::arrays::Constant;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::ExtensionArray;
@@ -29,6 +32,7 @@ use vortex_array::arrays::union::UnionArraySlotsExt;
 use vortex_array::arrays::variant::VariantArraySlotsExt;
 use vortex_array::scalar::Scalar;
 use vortex_error::VortexResult;
+use vortex_error::vortex_err;
 
 use super::CascadingCompressor;
 use super::constant;
@@ -53,7 +57,7 @@ impl CascadingCompressor {
         array: &ArrayRef,
         exec_ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrayRef> {
-        let before_nbytes = array.nbytes();
+        let before_nbytes = exact_uncompressed_size(array, exec_ctx)?;
         let span = trace::compress_span(array.len(), array.dtype(), before_nbytes);
         let _enter = span.enter();
 
@@ -226,8 +230,9 @@ impl CascadingCompressor {
     /// into a single [`GenerateStatsOptions`], and picks the winner by estimated compression
     /// ratio.
     ///
-    /// If a winner is found and its compressed output is actually smaller, that output is
-    /// returned. Otherwise, the original array is returned unchanged.
+    /// If a winner is found and its compressed output is actually smaller than the exact
+    /// uncompressed size, that output is returned. Otherwise, the original array is returned
+    /// unchanged.
     ///
     /// Empty, all-null, and constant arrays are handled by the compressor itself before any
     /// scheme evaluation (constant detection is skipped while compressing samples).
@@ -268,7 +273,8 @@ impl CascadingCompressor {
             return constant::compress_as_constant(array, exec_ctx);
         }
 
-        let before_nbytes = array.nbytes();
+        // A scheme competes against the bytes the rows reference, not dead bytes in the buffers.
+        let before_nbytes = exact_uncompressed_size(&array, exec_ctx)?;
 
         let merged_opts = eligible_schemes
             .iter()
@@ -320,4 +326,21 @@ impl CascadingCompressor {
             Ok(data.into_array())
         }
     }
+}
+
+/// The bytes `array`'s rows reference once canonical, read from the exact statistic the writer
+/// caches on each chunk and computed otherwise. A dtype that cannot be measured, such as variant,
+/// is sized by the bytes it holds.
+///
+/// Nothing is recorded on `array`: a size the compressor measured for itself should not grow the
+/// file.
+pub(super) fn exact_uncompressed_size(
+    array: &ArrayRef,
+    exec_ctx: &mut ExecutionCtx,
+) -> VortexResult<u64> {
+    if !UncompressedSizeInBytes::supports_dtype(array.dtype()) {
+        return Ok(array.nbytes());
+    }
+    let size = uncompressed_size_in_bytes_uncached(array, UncompressedSizeOpts::exact(), exec_ctx)?;
+    u64::try_from(size).map_err(|e| vortex_err!("uncompressed size does not fit in u64: {e}"))
 }

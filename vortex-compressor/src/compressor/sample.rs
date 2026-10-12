@@ -14,6 +14,7 @@ use vortex_array::arrays::ChunkedArray;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 
+use super::cascade::exact_uncompressed_size;
 use crate::CascadingCompressor;
 use crate::scheme::CompressorContext;
 use crate::scheme::EstimateScore;
@@ -178,7 +179,8 @@ pub(super) fn estimate_compression_ratio_with_sampling<S: Scheme + ?Sized>(
     };
 
     let after = compressed.nbytes();
-    let before = sample_data.array().nbytes();
+    // Sampled slices still hold the full array's buffers, so measure what their rows reference.
+    let before = exact_uncompressed_size(sample_data.array(), exec_ctx)?;
 
     let score = EstimateScore::from_sample_sizes(before, after);
 
