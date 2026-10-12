@@ -78,4 +78,8 @@ impl ExecutionArgs for BorrowedRowFnArgs<'_> {
     fn row_count(&self) -> usize {
         self.row_count
     }
+
+    fn inputs(&self) -> Option<&[ArrayRef]> {
+        Some(self.arrays)
+    }
 }

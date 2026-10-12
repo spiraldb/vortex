@@ -218,11 +218,11 @@ fn execute_filtered_rows<F: RowFn>(
     )
 }
 
-fn prepare_batch<F: RowFn>(
+fn prepare_batch<'a, F: RowFn>(
     function: &F,
     options: &F::Options,
-    args: &dyn ExecutionArgs,
-) -> VortexResult<RowFnExecutionArgs> {
+    args: &'a dyn ExecutionArgs,
+) -> VortexResult<RowFnExecutionArgs<'a>> {
     RowFnExecutionArgs::new(RowFn::id(function), args, |arg_dtypes| {
         function.dispatch(options, arg_dtypes, BatchPlanner::<F>::new(arg_dtypes))
     })
@@ -241,6 +241,7 @@ mod tests {
 
     use super::execute_rows;
     use super::row_fn_return_dtype;
+    use crate::ArrayRef;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::array_session;
@@ -248,6 +249,7 @@ mod tests {
     use crate::assert_arrays_eq;
     use crate::dtype::DType;
     use crate::scalar_fn::EmptyOptions;
+    use crate::scalar_fn::ExecutionArgs;
     use crate::scalar_fn::ScalarFnId;
     use crate::scalar_fn::VecExecutionArgs;
     use crate::scalar_fn::unstable::row::RowFn;
@@ -426,6 +428,42 @@ mod tests {
                 .contains("row input column has the wrong ptype"),
             "unexpected error: {error}",
         );
+        Ok(())
+    }
+
+    /// Arguments that do not expose their inputs as a slice, so batch execution must collect them.
+    struct UnsliceableArgs(VecExecutionArgs);
+
+    impl ExecutionArgs for UnsliceableArgs {
+        fn get(&self, index: usize) -> VortexResult<ArrayRef> {
+            self.0.get(index)
+        }
+
+        fn num_inputs(&self) -> usize {
+            self.0.num_inputs()
+        }
+
+        fn row_count(&self) -> usize {
+            self.0.row_count()
+        }
+    }
+
+    #[rstest]
+    #[case::no_nulls(Validity::NonNullable)]
+    #[case::partially_valid(Validity::from_iter([true, false, true]))]
+    fn test_borrowed_and_collected_inputs_agree(#[case] validity: Validity) -> VortexResult<()> {
+        let input = PrimitiveArray::new(vec![1_i64, 2, 3], validity).into_array();
+        let borrowed = VecExecutionArgs::new(vec![input.clone()], 3);
+        let collected = UnsliceableArgs(VecExecutionArgs::new(vec![input.clone()], 3));
+        let mut ctx = array_session().create_execution_ctx();
+
+        assert!(borrowed.inputs().is_some());
+        assert!(collected.inputs().is_none());
+        let from_borrowed = execute_rows(&IndexingRowFn, &EmptyOptions, &borrowed, &mut ctx)?;
+        let from_collected = execute_rows(&IndexingRowFn, &EmptyOptions, &collected, &mut ctx)?;
+
+        assert_arrays_eq!(&from_borrowed, &input, &mut ctx);
+        assert_arrays_eq!(&from_collected, &input, &mut ctx);
         Ok(())
     }
 

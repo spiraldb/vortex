@@ -12,7 +12,7 @@ use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::builtins::ArrayBuiltins;
 
-impl RowFnExecutionArgs {
+impl RowFnExecutionArgs<'_> {
     /// Resolve validity and try direct valid-row execution before filtered execution.
     pub(super) fn execute_valid_only(
         &self,

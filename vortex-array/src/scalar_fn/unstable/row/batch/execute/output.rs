@@ -15,7 +15,7 @@ use crate::dtype::DType;
 use crate::scalar::Scalar;
 use crate::scalar_fn::ScalarFnId;
 
-impl RowFnExecutionArgs {
+impl RowFnExecutionArgs<'_> {
     pub(super) fn all_null(&self) -> ArrayRef {
         ConstantArray::new(Scalar::null(self.result_dtype.clone()), self.row_count).into_array()
     }

@@ -34,16 +34,21 @@ pub(super) fn compare_primitive(
     op: CompareOperator,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<ArrayRef> {
-    execute_rows(&PrimitiveCompare, &op, &CompareArgs([lhs, rhs]), ctx)
+    execute_rows(
+        &PrimitiveCompare,
+        &op,
+        &CompareArgs([lhs.clone(), rhs.clone()]),
+        ctx,
+    )
 }
 
-/// Borrowed comparison operands, so a call does not allocate an argument vector.
-struct CompareArgs<'a>([&'a ArrayRef; 2]);
+/// The two comparison operands, stored contiguously so batch execution can borrow them.
+struct CompareArgs([ArrayRef; 2]);
 
-impl ExecutionArgs for CompareArgs<'_> {
+impl ExecutionArgs for CompareArgs {
     fn get(&self, index: usize) -> VortexResult<ArrayRef> {
         match self.0.get(index) {
-            Some(array) => Ok((*array).clone()),
+            Some(array) => Ok(array.clone()),
             None => vortex_bail!("a comparison has two operands, got index {index}"),
         }
     }
@@ -54,6 +59,10 @@ impl ExecutionArgs for CompareArgs<'_> {
 
     fn row_count(&self) -> usize {
         self.0[0].len()
+    }
+
+    fn inputs(&self) -> Option<&[ArrayRef]> {
+        Some(&self.0)
     }
 }
 

@@ -538,6 +538,14 @@ pub trait ExecutionArgs {
 
     /// Returns the row count of the execution scope.
     fn row_count(&self) -> usize;
+
+    /// Returns every input as one borrowed slice, if these arguments store them contiguously.
+    ///
+    /// When this returns `Some`, the slice **must** hold exactly the arrays that [`get`](Self::get)
+    /// returns, in input order. Callers can then borrow the inputs instead of cloning each one.
+    fn inputs(&self) -> Option<&[ArrayRef]> {
+        None
+    }
 }
 
 /// A concrete [`ExecutionArgs`] backed by a `Vec<ArrayRef>`.
@@ -570,6 +578,10 @@ impl ExecutionArgs for VecExecutionArgs {
 
     fn row_count(&self) -> usize {
         self.row_count
+    }
+
+    fn inputs(&self) -> Option<&[ArrayRef]> {
+        Some(&self.inputs)
     }
 }
 

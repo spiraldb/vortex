@@ -5,6 +5,7 @@ use smallvec::SmallVec;
 use vortex_error::VortexResult;
 use vortex_error::vortex_ensure_eq;
 
+use super::BatchInputs;
 use super::BatchPlan;
 use super::RowFnExecutionArgs;
 use super::args::BorrowedRowFnArgs;
@@ -14,36 +15,41 @@ use crate::scalar_fn::ExecutionArgs;
 use crate::scalar_fn::ScalarFnId;
 use crate::validity::Validity;
 
-impl RowFnExecutionArgs {
+impl<'a> RowFnExecutionArgs<'a> {
     /// Collect the inputs and derive their dtypes, validity, and execution policy.
     ///
     /// This constructor **must not** be used for a nullary function. With no input columns, there
     /// is no validity to propagate and the all-constant check would pass vacuously.
     pub(crate) fn new(
         id: ScalarFnId,
-        args: &dyn ExecutionArgs,
+        args: &'a dyn ExecutionArgs,
         plan: impl FnOnce(&[DType]) -> VortexResult<BatchPlan>,
     ) -> VortexResult<Self> {
         let row_count = args.row_count();
-        let num_inputs = args.num_inputs();
-        let mut inputs: SmallVec<[ArrayRef; 4]> = SmallVec::with_capacity(num_inputs);
-        let mut arg_dtypes: SmallVec<[DType; 4]> = SmallVec::with_capacity(num_inputs);
-        for index in 0..num_inputs {
-            let input = args.get(index)?;
+        let inputs = match args.inputs() {
+            Some(inputs) => BatchInputs::Borrowed(inputs),
+            None => BatchInputs::Owned(
+                (0..args.num_inputs())
+                    .map(|index| args.get(index))
+                    .collect::<VortexResult<_>>()?,
+            ),
+        };
+
+        let mut arg_dtypes: SmallVec<[DType; 4]> = SmallVec::with_capacity(inputs.len());
+        for (index, input) in inputs.iter().enumerate() {
             vortex_ensure_eq!(
                 input.len(),
                 row_count,
                 "the {id} input {index} has the wrong row count",
             );
             arg_dtypes.push(input.dtype().clone());
-            inputs.push(input);
         }
 
         let plan = plan(&arg_dtypes)?;
         let result_dtype = plan.result_dtype(&arg_dtypes);
 
         let mut validity = Validity::NonNullable;
-        for input in &inputs {
+        for input in inputs.iter() {
             validity = validity.and(input.validity()?)?;
         }
 

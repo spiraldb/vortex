@@ -31,7 +31,7 @@ use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::builtins::ArrayBuiltins;
 
-impl RowFnExecutionArgs {
+impl RowFnExecutionArgs<'_> {
     /// Filter the batch to valid rows, then execute the kernel into the original row domain.
     pub(super) fn execute_filtered(
         &self,

@@ -18,7 +18,7 @@ use crate::canonical::AnyCanonical;
 use crate::scalar_fn::unstable::row::execute::DenseAttempt;
 use crate::validity::Validity;
 
-impl RowFnExecutionArgs {
+impl RowFnExecutionArgs<'_> {
     /// Run every stored payload, then attach the input validity without materializing its mask.
     pub(super) fn execute_dense(
         &self,

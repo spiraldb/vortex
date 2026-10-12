@@ -13,6 +13,8 @@
 //! [`RowFnExecutionArgs`] applies that strategy, and [`BorrowedRowFnArgs`] pairs each kernel
 //! invocation with its planning metadata.
 
+use std::ops::Deref;
+
 use smallvec::SmallVec;
 
 use crate::ArrayRef;
@@ -32,7 +34,7 @@ pub(super) use super::visitor::BatchPlan;
 pub(super) use super::visitor::RowPolicy;
 
 /// The same-length input columns and metadata for one row-function execution.
-pub(crate) struct RowFnExecutionArgs {
+pub(crate) struct RowFnExecutionArgs<'a> {
     /// The function being executed, named in the errors this raises.
     id: ScalarFnId,
 
@@ -40,7 +42,7 @@ pub(crate) struct RowFnExecutionArgs {
     row_count: usize,
 
     /// The input columns, collected once for validity, constant folding, filtering, and execution.
-    inputs: SmallVec<[ArrayRef; 4]>,
+    inputs: BatchInputs<'a>,
 
     /// The input dtypes, collected with the columns and reused by both planning and execution.
     arg_dtypes: SmallVec<[DType; 4]>,
@@ -55,6 +57,26 @@ pub(crate) struct RowFnExecutionArgs {
 
     /// The storage dtype, output label, and null-handling policy selected while planning.
     plan: BatchPlan,
+}
+
+/// The input columns of a batch, borrowed from the caller's arguments when they are contiguous.
+enum BatchInputs<'a> {
+    /// The inputs as the caller's arguments store them.
+    Borrowed(&'a [ArrayRef]),
+
+    /// Inputs collected from arguments that do not store them contiguously.
+    Owned(SmallVec<[ArrayRef; 4]>),
+}
+
+impl Deref for BatchInputs<'_> {
+    type Target = [ArrayRef];
+
+    fn deref(&self) -> &[ArrayRef] {
+        match self {
+            Self::Borrowed(inputs) => inputs,
+            Self::Owned(inputs) => inputs,
+        }
+    }
 }
 
 #[cfg(test)]

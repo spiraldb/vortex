@@ -10,7 +10,7 @@ use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::arrays::ConstantArray;
 
-impl RowFnExecutionArgs {
+impl RowFnExecutionArgs<'_> {
     /// Execute all-constant inputs by evaluating one row and broadcasting the validated result.
     pub(super) fn execute_all_constant(
         &self,

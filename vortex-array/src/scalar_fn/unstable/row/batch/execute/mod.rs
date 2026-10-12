@@ -27,7 +27,7 @@ mod valid_only;
 mod output;
 pub(crate) use output::finalize_kernel_output;
 
-impl RowFnExecutionArgs {
+impl RowFnExecutionArgs<'_> {
     /// Apply constant folding and null handling around `kernel`.
     ///
     /// For a partially valid batch, `try_valid_rows` can avoid filtering. `Ok(None)` filters the
