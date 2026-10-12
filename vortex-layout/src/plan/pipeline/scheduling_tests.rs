@@ -3,6 +3,7 @@
 
 //! The runtime over hand-built sources: order, blocking, backpressure, and wakeups.
 
+use std::collections::VecDeque;
 use std::ops::Range;
 use std::sync::Arc;
 
@@ -131,7 +132,7 @@ fn masks_are_applied_by_the_source(#[values(false, true)] dense: bool) -> Vortex
     assert_rows(expected, run.arrays)
 }
 
-/// A source runs only when an inlet has changed: every run of the probe after its first finds
+/// A reader runs only when an inlet has changed: every run of the probe after its first finds
 /// a batch it has not seen, or an inlet newly closed.
 #[rstest]
 fn a_reader_runs_only_when_an_inlet_changed(
@@ -155,8 +156,8 @@ fn a_reader_runs_only_when_an_inlet_changed(
     Ok(())
 }
 
-/// A sink is blocked once its source's inlet holds as many batches as the source allows, so a
-/// fast pipeline never runs far ahead of a slow source.
+/// A writer is blocked once its reader's inlet holds as many batches as the reader allows, so
+/// a fast source never runs far ahead of a slow reader.
 #[test]
 fn a_full_inlet_blocks_its_writer() -> VortexResult<()> {
     let runs: Arc<Mutex<Vec<ProbeRun>>> = Arc::default();
@@ -205,26 +206,36 @@ struct ManyReads {
 }
 
 impl Source for ManyReads {
-    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
-        if let Some(segment) = self.wanted.pop() {
-            return Ok(Step::Read(segment));
+    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<SourceReady> {
+        if !self.wanted.is_empty() {
+            while let Some(segment) = self.wanted.pop() {
+                cx.request_read(segment);
+            }
+            return Ok(SourceReady::Read);
         }
+        Ok(if self.left == 0 || cx.has_bytes() {
+            SourceReady::Ready
+        } else {
+            SourceReady::Blocked(SourceBlocked::Io)
+        })
+    }
+}
+
+impl Operator for ManyReads {
+    fn compute(&mut self, _input: Input, cx: &mut Cx<'_>) -> VortexResult<Step> {
         if let Some((segment, _bytes)) = cx.take_segment() {
             self.left -= 1;
-            return Ok(Step::Batch(indices([u64::from(*segment)])));
+            return Ok(Step::Final(indices([u64::from(*segment)])));
         }
-        Ok(if self.left == 0 {
-            Step::Finished
-        } else {
-            Step::Blocked(Blocked::Io)
-        })
+        assert_eq!(self.left, 0, "computed while waiting for a read");
+        Ok(Step::End)
     }
 }
 
 /// A source has all its reads in flight at once, and takes each segment's bytes as they arrive,
 /// tagged with the segment.
-#[test]
-fn a_source_has_several_reads_in_flight() -> VortexResult<()> {
+#[rstest]
+fn a_source_has_several_reads_in_flight(#[values(1, 3)] deliveries: usize) -> VortexResult<()> {
     let plan = SyntheticPlan::new(row_dtype(), 3, Vec::new(), |_, _, _| {
         Ok(Some(Chain::new(ManyReads {
             wanted: [3_u32, 2, 1].into_iter().map(SegmentId::from).collect(),
@@ -250,15 +261,88 @@ fn a_source_has_several_reads_in_flight() -> VortexResult<()> {
                     first_wait = false;
                 }
                 // Deliver the last asked for first.
-                let read = inflight
-                    .pop()
-                    .ok_or_else(|| vortex_err!("no read in flight"))?;
-                scan.deliver(read.id, empty_segment())?;
+                for _ in 0..deliveries {
+                    let read = inflight
+                        .pop()
+                        .ok_or_else(|| vortex_err!("no read in flight"))?;
+                    scan.deliver(read.id, empty_segment())?;
+                }
             }
             Turn::Done => break,
         }
     }
     assert_rows(indices([3, 2, 1]), arrays)
+}
+
+/// Holds an inlet batch until a read chosen from that batch has arrived.
+struct ReadAfterInlet {
+    batch: Option<ArrayRef>,
+}
+
+impl Source for ReadAfterInlet {
+    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<SourceReady> {
+        if self.batch.is_some() {
+            return Ok(if cx.has_bytes() {
+                SourceReady::Ready
+            } else {
+                SourceReady::Blocked(SourceBlocked::Io)
+            });
+        }
+        let mut inlet = cx.inlet(0);
+        let Some(batch) = inlet.take() else {
+            return Ok(if inlet.closed() {
+                SourceReady::Ready
+            } else {
+                SourceReady::Blocked(SourceBlocked::Inlet(0))
+            });
+        };
+        cx.request_read(SegmentId::from(u32::try_from(batch.len())?));
+        self.batch = Some(batch);
+        Ok(SourceReady::Read)
+    }
+}
+
+impl Operator for ReadAfterInlet {
+    fn compute(&mut self, _input: Input, cx: &mut Cx<'_>) -> VortexResult<Step> {
+        let Some(batch) = self.batch.take() else {
+            let inlet = cx.inlet(0);
+            assert!(
+                inlet.closed() && inlet.is_empty(),
+                "computed before the inlet was ready"
+            );
+            return Ok(Step::End);
+        };
+        let (segment, _) = cx
+            .take_segment()
+            .ok_or_else(|| vortex_err!("computed before the read arrived"))?;
+        assert_eq!(*segment, u32::try_from(batch.len())?);
+        Ok(Step::Final(batch))
+    }
+}
+
+#[test]
+fn readiness_can_take_an_inlet_and_request_a_read() -> VortexResult<()> {
+    let child = RowSource::plan(6, vec![1, 2, 3], segment(9), false);
+    let plan = SyntheticPlan::new(
+        row_dtype(),
+        6,
+        vec![child.clone()],
+        move |rows, mask, compiler| {
+            let chain = compiler
+                .compile(&child, rows, mask)?
+                .ok_or_else(|| vortex_err!("child has no rows"))?;
+            Ok(Some(
+                compiler.join_with(vec![chain], |_| 1, ReadAfterInlet { batch: None }),
+            ))
+        },
+    )
+    .into_plan();
+    let run = run(&plan, 0..6, Mask::new_true(6), fifo)?;
+    assert_eq!(
+        run.events,
+        [Some(9), Some(1), None, Some(2), None, Some(3), None]
+    );
+    assert_rows(indices(0..6), run.arrays)
 }
 
 /// Asks for every segment at once, emits the id of the first to arrive, and finishes without
@@ -269,20 +353,34 @@ struct FirstOf {
 }
 
 impl Source for FirstOf {
-    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
+    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<SourceReady> {
         if self.done {
-            return Ok(Step::Finished);
+            return Ok(SourceReady::Ready);
         }
-        if let Some(segment) = self.wanted.pop() {
-            return Ok(Step::Read(segment));
-        }
-        Ok(match cx.take_segment() {
-            Some((segment, _bytes)) => {
-                self.done = true;
-                Step::Batch(indices([u64::from(*segment)]))
+        if !self.wanted.is_empty() {
+            while let Some(segment) = self.wanted.pop() {
+                cx.request_read(segment);
             }
-            None => Step::Blocked(Blocked::Io),
+            return Ok(SourceReady::Read);
+        }
+        Ok(if cx.has_bytes() {
+            SourceReady::Ready
+        } else {
+            SourceReady::Blocked(SourceBlocked::Io)
         })
+    }
+}
+
+impl Operator for FirstOf {
+    fn compute(&mut self, _input: Input, cx: &mut Cx<'_>) -> VortexResult<Step> {
+        if self.done {
+            return Ok(Step::End);
+        }
+        let (segment, _) = cx
+            .take_segment()
+            .ok_or_else(|| vortex_err!("FirstOf computed before a read arrived"))?;
+        self.done = true;
+        Ok(Step::Final(indices([u64::from(*segment)])))
     }
 }
 
@@ -328,6 +426,156 @@ fn finishing_cancels_reads_in_flight() -> VortexResult<()> {
     Ok(())
 }
 
+/// Emits pairs of batches, requiring readiness only between pairs.
+#[derive(Default)]
+struct Pairs {
+    next: u64,
+    ready: bool,
+}
+
+impl Source for Pairs {
+    fn ready(&mut self, _cx: &mut Cx<'_>) -> VortexResult<SourceReady> {
+        assert!(!self.ready, "More must skip readiness");
+        self.ready = true;
+        Ok(SourceReady::Ready)
+    }
+}
+
+impl Operator for Pairs {
+    fn compute(&mut self, input: Input, _cx: &mut Cx<'_>) -> VortexResult<Step> {
+        assert!(matches!(input, Input::None));
+        assert!(self.ready, "Final must check readiness again");
+        if self.next == 6 {
+            return Ok(Step::End);
+        }
+        let batch = indices([self.next]);
+        self.next += 1;
+        if self.next % 2 == 1 {
+            Ok(Step::More(batch))
+        } else {
+            self.ready = false;
+            Ok(Step::Final(batch))
+        }
+    }
+}
+
+struct Copies {
+    copies: usize,
+    left: usize,
+    batch: Option<ArrayRef>,
+    ended: bool,
+}
+
+impl Copies {
+    fn new(copies: usize) -> Self {
+        Self {
+            copies,
+            left: 0,
+            batch: None,
+            ended: false,
+        }
+    }
+}
+
+impl Operator for Copies {
+    fn compute(&mut self, input: Input, _cx: &mut Cx<'_>) -> VortexResult<Step> {
+        assert!(!self.ended, "a finished stage cannot run again");
+        match input {
+            Input::Batch(batch) => {
+                assert!(self.batch.is_none(), "new input arrived before draining More");
+                self.batch = Some(batch);
+                self.left = self.copies;
+            }
+            Input::None => assert!(self.batch.is_some(), "continued after Final"),
+            Input::End => {
+                assert!(self.batch.is_none(), "End arrived before draining More");
+                self.ended = true;
+                return Ok(Step::End);
+            }
+        }
+        self.left -= 1;
+        if self.left == 0 {
+            Ok(Step::Final(self.batch.take().expect("batch is present")))
+        } else {
+            Ok(Step::More(
+                self.batch.as_ref().expect("batch is present").clone(),
+            ))
+        }
+    }
+}
+
+/// Buffers every input, then flushes with either Final or End terminating the continuation.
+struct Buffered {
+    batches: VecDeque<ArrayRef>,
+    flushing: bool,
+    final_batch: bool,
+}
+
+impl Operator for Buffered {
+    fn compute(&mut self, input: Input, _cx: &mut Cx<'_>) -> VortexResult<Step> {
+        match input {
+            Input::Batch(batch) => {
+                assert!(!self.flushing);
+                self.batches.push_back(batch);
+                return Ok(Step::End);
+            }
+            Input::End => {
+                assert!(!self.flushing, "End must be supplied exactly once");
+                self.flushing = true;
+            }
+            Input::None => assert!(self.flushing),
+        }
+        Ok(match self.batches.pop_front() {
+            Some(batch) if self.final_batch && self.batches.is_empty() => Step::Final(batch),
+            Some(batch) => Step::More(batch),
+            None => Step::End,
+        })
+    }
+}
+
+#[rstest]
+fn more_drains_before_new_input(#[values(1, 2)] capacity: usize) -> VortexResult<()> {
+    let plan = SyntheticPlan::new(row_dtype(), 36, Vec::new(), move |_, _, _| {
+        let chain = Chain::new(Pairs::default())
+            .with(Copies::new(2))
+            .with(Copies::new(3));
+        Ok(Some(chain))
+    })
+    .into_plan();
+    let plan = Probe::plan(vec![plan], capacity, Arc::default());
+    let result = run(&plan, 0..36, Mask::new_true(36), fifo)?;
+    assert_eq!(result.arrays.len(), 36);
+    assert_rows(indices((0..6).flat_map(|row| [row; 6])), result.arrays)
+}
+
+#[rstest]
+fn more_flushes_before_ending_downstream(
+    #[values(1, 2)] capacity: usize,
+    #[values(false, true)] final_batch: bool,
+) -> VortexResult<()> {
+    let plan = SyntheticPlan::new(row_dtype(), 36, Vec::new(), move |_, _, _| {
+        let chain = Chain::new(Pairs::default())
+            .with(Buffered {
+                batches: VecDeque::new(),
+                flushing: false,
+                final_batch,
+            })
+            .with(Copies::new(2))
+            .with(Copies::new(3))
+            .with(Buffered {
+                batches: VecDeque::new(),
+                flushing: false,
+                final_batch,
+            });
+        Ok(Some(chain))
+    })
+    .into_plan();
+    let plan = Probe::plan(vec![plan], capacity, Arc::default());
+    let result = run(&plan, 0..36, Mask::new_true(36), fifo)?;
+    assert_eq!(result.arrays.len(), 36);
+    assert_rows(indices((0..6).flat_map(|row| [row; 6])), result.arrays)
+}
+
 /// Sources that break the scheduling contract, which debug builds catch.
 #[cfg(debug_assertions)]
 mod contract {
@@ -338,14 +586,16 @@ mod contract {
         left: usize,
     }
 
-    impl Source for Repeat {
-        fn ready(&mut self, _cx: &mut Cx<'_>) -> VortexResult<Step> {
+    impl Source for Repeat {}
+
+    impl Operator for Repeat {
+        fn compute(&mut self, _input: Input, _cx: &mut Cx<'_>) -> VortexResult<Step> {
             Ok(match self.left.checked_sub(1) {
                 Some(left) => {
                     self.left = left;
-                    Step::Batch(indices([0]))
+                    Step::Final(indices([0]))
                 }
-                None => Step::Finished,
+                None => Step::End,
             })
         }
     }
@@ -354,8 +604,14 @@ mod contract {
     struct WaitsWhenFull;
 
     impl Source for WaitsWhenFull {
-        fn ready(&mut self, _cx: &mut Cx<'_>) -> VortexResult<Step> {
-            Ok(Step::Blocked(Blocked::Inlet(0)))
+        fn ready(&mut self, _cx: &mut Cx<'_>) -> VortexResult<SourceReady> {
+            Ok(SourceReady::Blocked(SourceBlocked::Inlet(0)))
+        }
+    }
+
+    impl Operator for WaitsWhenFull {
+        fn compute(&mut self, _input: Input, _cx: &mut Cx<'_>) -> VortexResult<Step> {
+            Err(vortex_err!("a blocked source must not compute"))
         }
     }
 
@@ -365,11 +621,9 @@ mod contract {
     #[should_panic(expected = "which is full")]
     fn waiting_on_a_full_inlet_is_caught() {
         let plan = SyntheticPlan::new(row_dtype(), 2, Vec::new(), |_, _, compiler| {
-            Ok(Some(compiler.join_with(
-                vec![Chain::new(Repeat { left: 2 })],
-                |_| 1,
-                WaitsWhenFull,
-            )))
+            Ok(Some(
+                compiler.join_with(vec![Chain::new(Repeat { left: 2 })], |_| 1, WaitsWhenFull),
+            ))
         })
         .into_plan();
         let mut scan = Scan::try_new(SESSION.clone(), plan, vec![Split::all(0..2)]).unwrap();

@@ -7,10 +7,10 @@
 //! of full ports can form. A broken promise shows up much later as "Scan is stuck" or as a
 //! wrong result; these checks fail at the pipeline that broke it.
 
-use super::Blocked;
 use super::Core;
 use super::PipelineId;
 use super::Progress;
+use super::SourceBlocked;
 use super::SourceEnd;
 
 impl Core {
@@ -19,10 +19,11 @@ impl Core {
     pub(super) fn validate(&self) {
         for (id, pipe) in self.pipelines.iter().enumerate() {
             let Some(pipe) = pipe else { continue };
-            for &port in &pipe.inlets {
+            for (index, &port) in pipe.inlets.iter().enumerate() {
                 let source = self.arena.get(port).source;
                 assert!(
-                    source == SourceEnd::Pipeline(id) || self.arena.get(port).closed(),
+                    source == (SourceEnd::Pipeline { id, inlet: index })
+                        || self.arena.get(port).closed(),
                     "port {port} is an inlet of pipeline {id} but its source is {source:?}"
                 );
             }
@@ -57,7 +58,7 @@ impl Core {
     pub(super) fn validate_progress(&self, id: PipelineId, progress: &Progress) {
         let pipe = self.pipeline(id);
         match progress {
-            Progress::Blocked(Blocked::Inlet(index)) => {
+            Progress::Blocked(SourceBlocked::Inlet(index)) => {
                 assert!(
                     *index < pipe.inlets.len(),
                     "pipeline {id} waits on inlet {index} of {}",
@@ -78,7 +79,7 @@ impl Core {
                     queue.sink
                 );
             }
-            Progress::Blocked(Blocked::Io) => assert!(
+            Progress::Blocked(SourceBlocked::Io) => assert!(
                 pipe.pending > 0,
                 "pipeline {id} waits for a read with none in flight"
             ),
@@ -92,7 +93,7 @@ impl Core {
                     );
                 }
             }
-            Progress::Outlet => {}
+            Progress::Read(_) | Progress::Outlet => {}
         }
     }
 }
