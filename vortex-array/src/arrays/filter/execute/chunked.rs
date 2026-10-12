@@ -1,23 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Filtering of values that decode in fixed-size chunks.
-//!
-//! The mask is applied one chunk at a time, from the mask's cached slices when
-//! [`filter_buffer`](super::buffer::filter_buffer) would use them and otherwise from its bitmap.
-//! Each chunk takes the first matching strategy:
-//!
-//! | Selected values in the chunk       | Strategy                                          |
-//! | ---------------------------------- | ------------------------------------------------- |
-//! | none                               | skip the chunk                                    |
-//! | all                                | decode the chunk straight to the output           |
-//! | at most [`max_sparse_values`]      | decode only the selected values                   |
-//! | otherwise                          | decode to scratch, then compact the scratch       |
-//!
-//! The scratch buffer stays in cache. It is compacted by copying the slices, or with the same
-//! SIMD kernels that `filter_buffer` chooses for the chunk's density. When no SIMD kernel applies,
-//! runs of set bits that average at least [`MIN_RUN_BYTES`] are copied run by run, and shorter
-//! runs use byte compress or the bit walk.
+//! Filtering of values that decode in fixed-size chunks. See [`filter_chunked`].
 
 use std::mem::MaybeUninit;
 
@@ -47,7 +31,7 @@ const MAX_SPARSE_VALUES: usize = 160;
 
 /// Chunks with at most this many selected values decode only those values rather than the whole
 /// chunk. Wider values make a whole chunk more expensive to decode, so the threshold grows with
-/// the width. FastLanes and Vortex benchmarks set conservative crossovers for each width.
+/// the width. Benchmarks of FastLanes and Vortex set these conservative crossovers.
 const fn max_sparse_values<T>() -> usize {
     match size_of::<T>() {
         1 => 16,
@@ -83,8 +67,26 @@ pub unsafe trait ChunkDecoder<T> {
 /// values.
 ///
 /// Value `i` of the filtered array is value `offset + i` of the decoded chunks, so `offset` skips
-/// the values at the start of the first chunk. See the [module docs](self) for the strategy that
-/// each chunk takes.
+/// the values at the start of the first chunk.
+///
+/// The mask is applied one chunk at a time. The filter uses the cached slices of the mask when
+/// they are useful, and otherwise uses its bitmap. Each chunk takes the first strategy that
+/// matches:
+///
+/// | Selected values in the chunk | Strategy                                    |
+/// | ---------------------------- | ------------------------------------------- |
+/// | none                         | skip the chunk                              |
+/// | all                          | decode the chunk straight to the output     |
+/// | at most the sparse limit     | decode only the selected values             |
+/// | otherwise                    | decode to scratch, then compact the scratch |
+///
+/// The sparse limit is 16, 32, 64 or 160 for values of 1, 2, 4 or 8 bytes, because a wider
+/// chunk costs more to decode.
+///
+/// The scratch buffer stays in cache. The filter compacts it by copying the slices, or with the
+/// SIMD kernel that a plain buffer filter chooses for the density of the chunk. When no SIMD
+/// kernel applies, the filter copies each run of set bits if the runs are long, and otherwise
+/// uses byte compress or the bit walk.
 pub fn filter_chunked<T: NativePType>(
     decoder: &impl ChunkDecoder<T>,
     offset: usize,
