@@ -65,17 +65,18 @@ pub(super) fn select_kernel<T, const IN_PLACE: bool>(mask: &MaskValues) -> Optio
 }
 
 fn avx512f() -> bool {
-    is_x86_feature_detected!("avx512f")
+    is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("popcnt")
 }
 
 fn avx512_vbmi2() -> bool {
     is_x86_feature_detected!("avx512f")
         && is_x86_feature_detected!("avx512bw")
         && is_x86_feature_detected!("avx512vbmi2")
+        && is_x86_feature_detected!("popcnt")
 }
 
 fn avx2() -> bool {
-    is_x86_feature_detected!("avx2")
+    is_x86_feature_detected!("avx2") && is_x86_feature_detected!("popcnt")
 }
 
 /// Generate an AVX-512 kernel for one element width.
@@ -187,7 +188,7 @@ macro_rules! avx512_compress_kernel {
 
 avx512_compress_kernel!(
     compress_word_avx512_epi8, compress_avx512_epi8,
-    features: "avx512f,avx512bw,avx512vbmi2",
+    features: "avx512f,avx512bw,avx512vbmi2,popcnt",
     elem: i8,
     lanes: 64,
     kmask: u64,
@@ -200,7 +201,7 @@ avx512_compress_kernel!(
 
 avx512_compress_kernel!(
     compress_word_avx512_epi16, compress_avx512_epi16,
-    features: "avx512f,avx512bw,avx512vbmi2",
+    features: "avx512f,avx512bw,avx512vbmi2,popcnt",
     elem: i16,
     lanes: 32,
     kmask: u32,
@@ -213,7 +214,7 @@ avx512_compress_kernel!(
 
 avx512_compress_kernel!(
     compress_word_avx512_epi32, compress_avx512_epi32,
-    features: "avx512f",
+    features: "avx512f,popcnt",
     elem: i32,
     lanes: 16,
     kmask: u16,
@@ -226,7 +227,7 @@ avx512_compress_kernel!(
 
 avx512_compress_kernel!(
     compress_word_avx512_epi64, compress_avx512_epi64,
-    features: "avx512f",
+    features: "avx512f,popcnt",
     elem: i64,
     lanes: 8,
     kmask: u8,
@@ -329,7 +330,7 @@ macro_rules! avx2_compress_kernel {
             clippy::cast_possible_truncation,
             reason = "deliberate submask narrowing"
         )]
-        #[target_feature(enable = "avx2")]
+        #[target_feature(enable = "avx2,popcnt")]
         #[inline]
         unsafe fn $word_fn<const IN_PLACE: bool>(
             src: *const u8,
@@ -409,7 +410,7 @@ macro_rules! avx2_compress_kernel {
         /// The CPU must support AVX2 and the pointer contract of
         /// [`filter_slice_by_bitmap`](super::filter_slice_by_bitmap) /
         /// [`filter_slice_mut_by_bitmap`](super::filter_slice_mut_by_bitmap) must hold.
-        #[target_feature(enable = "avx2")]
+        #[target_feature(enable = "avx2,popcnt")]
         pub(super) unsafe fn $walk_fn<const IN_PLACE: bool>(
             src: *const u8,
             dst: *mut u8,

@@ -443,7 +443,9 @@ type IntersectRankIndices = unsafe fn(&BitBuffer, &[usize]) -> Mask;
 fn select_bit_buffers<P: DepositBits>() -> IntersectBuffers {
     #[cfg(target_arch = "x86_64")]
     {
-        if std::arch::is_x86_feature_detected!("bmi2") {
+        if std::arch::is_x86_feature_detected!("bmi2")
+            && std::arch::is_x86_feature_detected!("popcnt")
+        {
             return bmi2::intersect_bit_buffers_bmi2;
         }
     }
@@ -460,7 +462,9 @@ fn select_bit_buffers<P: DepositBits>() -> IntersectBuffers {
 fn select_rank_indices<P: DepositBits>() -> IntersectRankIndices {
     #[cfg(target_arch = "x86_64")]
     {
-        if std::arch::is_x86_feature_detected!("bmi2") {
+        if std::arch::is_x86_feature_detected!("bmi2")
+            && std::arch::is_x86_feature_detected!("popcnt")
+        {
             return bmi2::intersect_bit_buffer_by_rank_indices_bmi2;
         }
     }
@@ -523,8 +527,9 @@ where
     I: Iterator<Item = usize>,
 {
     #[cfg(target_arch = "x86_64")]
-    if std::arch::is_x86_feature_detected!("bmi2") {
-        // SAFETY: BMI2 was just detected.
+    if std::arch::is_x86_feature_detected!("bmi2") && std::arch::is_x86_feature_detected!("popcnt")
+    {
+        // SAFETY: BMI2 and POPCNT were just detected.
         return unsafe { bmi2::intersect_mask_driven_bmi2(self_buffer, mask_indices, true_count) };
     }
 
