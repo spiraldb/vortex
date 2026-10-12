@@ -12,7 +12,8 @@ use crate::arrays::extension::ExtensionArrayExt;
 pub(super) fn extension_uncompressed_size_in_bytes(
     array: &ExtensionArray,
     opts: UncompressedSizeOpts,
+    cache: bool,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<u64> {
-    uncompressed_size_in_bytes_u64(array.storage_array(), opts, ctx)
+    uncompressed_size_in_bytes_u64(array.storage_array(), opts, cache, ctx)
 }

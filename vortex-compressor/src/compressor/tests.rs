@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::sync::Arc;
 use std::sync::LazyLock;
 
 use parking_lot::Mutex;
@@ -10,11 +11,16 @@ use vortex_array::Canonical;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
+use vortex_array::aggregate_fn::fns::uncompressed_size_in_bytes::UncompressedSizeOpts;
+use vortex_array::aggregate_fn::fns::uncompressed_size_in_bytes::uncompressed_size_in_bytes;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::Constant;
 use vortex_array::arrays::Map;
 use vortex_array::arrays::NullArray;
 use vortex_array::arrays::PrimitiveArray;
+use vortex_array::arrays::VarBinView;
+use vortex_array::arrays::VarBinViewArray;
+use vortex_array::arrays::varbinview::BinaryView;
 use vortex_array::assert_arrays_eq;
 use vortex_array::builders::MapBuilder;
 use vortex_array::dtype::DType;
@@ -23,6 +29,8 @@ use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
 use vortex_array::scalar::Scalar;
 use vortex_array::validity::Validity;
+use vortex_buffer::Buffer;
+use vortex_buffer::ByteBuffer;
 use vortex_buffer::buffer;
 use vortex_error::VortexResult;
 use vortex_session::VortexSession;
@@ -842,6 +850,68 @@ fn map_compression_preserves_repeated_entry_children() -> VortexResult<()> {
 
     assert!(compressed.is::<Map>());
     assert_eq!(compressed.dtype(), array.dtype());
+    assert_arrays_eq!(&compressed, &array, &mut exec_ctx);
+    Ok(())
+}
+
+/// Distinct 27-byte strings whose views point into one 2 MiB buffer, of which they reference a
+/// small prefix, the way Arrow's Parquet reader shares a decompressed page between batches.
+fn views_into_shared_page(rows: u32) -> ArrayRef {
+    const VALUE_LEN: u32 = 27;
+    let mut page = vec![0u8; 2 << 20];
+    for row in 0..rows {
+        let value = format!("value-{row:021}");
+        let start = (row * VALUE_LEN) as usize;
+        page[start..start + VALUE_LEN as usize].copy_from_slice(value.as_bytes());
+    }
+    let page = ByteBuffer::from(page);
+    let views = (0..rows)
+        .map(|row| {
+            let start = (row * VALUE_LEN) as usize;
+            BinaryView::make_view(&page[start..start + VALUE_LEN as usize], 0, row * VALUE_LEN)
+        })
+        .collect::<Buffer<BinaryView>>();
+    // SAFETY: every view points at `VALUE_LEN` bytes inside the page.
+    unsafe {
+        VarBinViewArray::new_unchecked(
+            views,
+            Arc::from([page]),
+            DType::Utf8(Nullability::NonNullable),
+            Validity::NonNullable,
+        )
+    }
+    .into_array()
+}
+
+#[test]
+fn uncompressed_output_drops_dead_bytes() -> VortexResult<()> {
+    let mut exec_ctx = SESSION.create_execution_ctx();
+    let array = views_into_shared_page(2000);
+    let exact = uncompressed_size_in_bytes(&array, UncompressedSizeOpts::exact(), &mut exec_ctx)?;
+    assert!(array.nbytes() > exact as u64);
+
+    // No scheme can change the encoding, so the array must come back compacted.
+    let compressed = CascadingCompressor::new(vec![]).compress(&array, &mut exec_ctx)?;
+
+    assert!(compressed.is::<VarBinView>());
+    assert_eq!(compressed.nbytes(), exact as u64);
+    assert_arrays_eq!(&compressed, &array, &mut exec_ctx);
+    Ok(())
+}
+
+#[test]
+fn scheme_must_beat_referenced_bytes_not_held_bytes() -> VortexResult<()> {
+    let mut exec_ctx = SESSION.create_execution_ctx();
+    let array = views_into_shared_page(2000);
+    let exact = uncompressed_size_in_bytes(&array, UncompressedSizeOpts::exact(), &mut exec_ctx)?;
+
+    // Every value is distinct, so a dictionary is larger than the compacted strings. Measured
+    // against the 2 MiB the array holds it would look like a 20x win; measured against the
+    // bytes the rows reference it loses, and the compacted canonical array is returned.
+    let compressed = compressor().compress(&array, &mut exec_ctx)?;
+
+    assert!(compressed.is::<VarBinView>());
+    assert_eq!(compressed.nbytes(), exact as u64);
     assert_arrays_eq!(&compressed, &array, &mut exec_ctx);
     Ok(())
 }

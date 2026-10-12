@@ -14,13 +14,14 @@ use crate::arrays::struct_::StructArrayExt;
 pub(super) fn struct_uncompressed_size_in_bytes(
     array: &StructArray,
     opts: UncompressedSizeOpts,
+    cache: bool,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<u64> {
     let mut size = 0u64;
 
     for field in array.iter_unmasked_fields() {
         size = size
-            .checked_add(uncompressed_size_in_bytes_u64(field, opts, ctx)?)
+            .checked_add(uncompressed_size_in_bytes_u64(field, opts, cache, ctx)?)
             .ok_or_else(|| vortex_err!("uncompressed size in bytes overflowed u64"))?;
     }
 

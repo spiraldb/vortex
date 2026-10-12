@@ -134,13 +134,31 @@ impl Display for UncompressedSizeOpts {
 /// Return the uncompressed size of an array in bytes.
 ///
 /// See [`UncompressedSizeInBytes`] for details and [`UncompressedSizeOpts`] for the choice of
-/// precision.
+/// precision. The result is cached as a statistic on `array`, and on the children an aggregate
+/// over a nested array measures; see [`uncompressed_size_in_bytes_uncached`] to avoid that.
 pub fn uncompressed_size_in_bytes(
     array: &ArrayRef,
     opts: UncompressedSizeOpts,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<usize> {
-    let size = uncompressed_size_in_bytes_u64(array, opts, ctx)?;
+    let size = uncompressed_size_in_bytes_u64(array, opts, true, ctx)?;
+
+    usize::try_from(size)
+        .map_err(|e| vortex_err!("Failed to convert uncompressed size to usize: {e}"))
+}
+
+/// Like [`uncompressed_size_in_bytes`], but records nothing on `array` or its children.
+///
+/// Cached statistics are still read. A columnar array is measured directly; any other array is
+/// executed to one first, so prefer this for arrays that are already canonical or constant. Use
+/// it where a recorded statistic would be an unwanted side effect, such as on arrays whose
+/// metadata is about to be serialized.
+pub fn uncompressed_size_in_bytes_uncached(
+    array: &ArrayRef,
+    opts: UncompressedSizeOpts,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<usize> {
+    let size = uncompressed_size_in_bytes_u64(array, opts, false, ctx)?;
 
     usize::try_from(size)
         .map_err(|e| vortex_err!("Failed to convert uncompressed size to usize: {e}"))
@@ -149,6 +167,7 @@ pub fn uncompressed_size_in_bytes(
 fn uncompressed_size_in_bytes_u64(
     array: &ArrayRef,
     opts: UncompressedSizeOpts,
+    cache: bool,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<u64> {
     // The stat slot holds the exact size as `Precision::Exact` and an inexact measurement as
@@ -163,6 +182,17 @@ fn uncompressed_size_in_bytes_u64(
     if let Some(size_scalar) = cached {
         return u64::try_from(&size_scalar)
             .map_err(|e| vortex_err!("Failed to convert uncompressed size stat to u64: {e}"));
+    }
+
+    if !cache {
+        return match array.clone().execute::<Columnar>(ctx)? {
+            Columnar::Canonical(canonical) => {
+                canonical_uncompressed_size_in_bytes(&canonical, opts, false, ctx)
+            }
+            Columnar::Constant(constant) => {
+                constant_uncompressed_size_in_bytes(constant.as_view(), opts, false, ctx)
+            }
+        };
     }
 
     let mut acc = Accumulator::try_new(UncompressedSizeInBytes, opts, array.dtype().clone())?;
@@ -285,10 +315,10 @@ impl AggregateFnVTable for UncompressedSizeInBytes {
         let opts = *args.options;
         let size = match batch {
             Columnar::Canonical(canonical) => {
-                canonical_uncompressed_size_in_bytes(canonical, opts, ctx)?
+                canonical_uncompressed_size_in_bytes(canonical, opts, true, ctx)?
             }
             Columnar::Constant(constant) => {
-                constant_uncompressed_size_in_bytes(constant.as_view(), opts, ctx)?
+                constant_uncompressed_size_in_bytes(constant.as_view(), opts, true, ctx)?
             }
         };
         *partial = partial
@@ -314,9 +344,12 @@ impl AggregateFnVTable for UncompressedSizeInBytes {
     }
 }
 
+/// Measure a canonical array. `cache` says whether the sizes of nested children are recorded on
+/// them as statistics.
 pub(crate) fn canonical_uncompressed_size_in_bytes(
     canonical: &Canonical,
     opts: UncompressedSizeOpts,
+    cache: bool,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<u64> {
     match canonical {
@@ -325,18 +358,21 @@ pub(crate) fn canonical_uncompressed_size_in_bytes(
         Canonical::Primitive(array) => primitive_uncompressed_size_in_bytes(array, ctx),
         Canonical::Decimal(array) => decimal_uncompressed_size_in_bytes(array, ctx),
         Canonical::VarBinView(array) => varbinview_uncompressed_size_in_bytes(array, opts, ctx),
-        Canonical::List(array) => list_view_uncompressed_size_in_bytes(array, opts, ctx),
+        Canonical::List(array) => list_view_uncompressed_size_in_bytes(array, opts, cache, ctx),
         Canonical::Map(array) => list_view_uncompressed_size_in_bytes(
             &array.entries().as_::<ListView>().into_owned(),
             opts,
+            cache,
             ctx,
         ),
         Canonical::FixedSizeList(array) => {
-            fixed_size_list_uncompressed_size_in_bytes(array, opts, ctx)
+            fixed_size_list_uncompressed_size_in_bytes(array, opts, cache, ctx)
         }
-        Canonical::Struct(array) => struct_uncompressed_size_in_bytes(array, opts, ctx),
-        Canonical::Union(array) => union_uncompressed_size_in_bytes(array, opts, ctx),
-        Canonical::Extension(array) => extension_uncompressed_size_in_bytes(array, opts, ctx),
+        Canonical::Struct(array) => struct_uncompressed_size_in_bytes(array, opts, cache, ctx),
+        Canonical::Union(array) => union_uncompressed_size_in_bytes(array, opts, cache, ctx),
+        Canonical::Extension(array) => {
+            extension_uncompressed_size_in_bytes(array, opts, cache, ctx)
+        }
         Canonical::Variant(_) => {
             vortex_bail!("UncompressedSizeInBytes is not supported for Variant arrays")
         }
@@ -346,6 +382,7 @@ pub(crate) fn canonical_uncompressed_size_in_bytes(
 pub(crate) fn constant_uncompressed_size_in_bytes(
     array: ArrayView<'_, Constant>,
     opts: UncompressedSizeOpts,
+    cache: bool,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<u64> {
     let value_size = match array.dtype() {
@@ -374,7 +411,7 @@ pub(crate) fn constant_uncompressed_size_in_bytes(
         | DType::Union(..)
         | DType::Extension(_) => {
             let canonical = array.array().clone().execute::<Canonical>(ctx)?;
-            return canonical_uncompressed_size_in_bytes(&canonical, opts, ctx);
+            return canonical_uncompressed_size_in_bytes(&canonical, opts, cache, ctx);
         }
         DType::Variant(_) => {
             vortex_bail!("UncompressedSizeInBytes is not supported for Variant arrays")
@@ -482,6 +519,7 @@ mod tests {
     use crate::aggregate_fn::fns::uncompressed_size_in_bytes::UncompressedSizeInBytes;
     use crate::aggregate_fn::fns::uncompressed_size_in_bytes::UncompressedSizeOpts;
     use crate::aggregate_fn::fns::uncompressed_size_in_bytes::uncompressed_size_in_bytes;
+    use crate::aggregate_fn::fns::uncompressed_size_in_bytes::uncompressed_size_in_bytes_uncached;
     use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::arrays::ChunkedArray;
@@ -842,6 +880,34 @@ mod tests {
         assert_eq!(
             uncompressed_size_in_bytes(&sliced, UncompressedSizeOpts::inexact(), &mut ctx)?,
             exact
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn uncached_helper_records_nothing() -> VortexResult<()> {
+        let strings = views_into_shared_page(0..10)?;
+        let array = StructArray::try_new(
+            FieldNames::from(["strings"]),
+            vec![strings.clone()],
+            10,
+            Validity::NonNullable,
+        )?
+        .into_array();
+        let mut ctx = array_session().create_execution_ctx();
+
+        let uncached =
+            uncompressed_size_in_bytes_uncached(&array, UncompressedSizeOpts::exact(), &mut ctx)?;
+
+        for measured in [&array, &strings] {
+            assert_eq!(
+                measured.statistics().get(Stat::UncompressedSizeInBytes),
+                Precision::Absent
+            );
+        }
+        assert_eq!(
+            uncached,
+            uncompressed_size_in_bytes(&array, UncompressedSizeOpts::exact(), &mut ctx)?
         );
         Ok(())
     }

@@ -14,9 +14,10 @@ use crate::arrays::fixed_size_list::FixedSizeListArraySlotsExt;
 pub(super) fn fixed_size_list_uncompressed_size_in_bytes(
     array: &FixedSizeListArray,
     opts: UncompressedSizeOpts,
+    cache: bool,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<u64> {
-    let elements_size = uncompressed_size_in_bytes_u64(array.elements(), opts, ctx)?;
+    let elements_size = uncompressed_size_in_bytes_u64(array.elements(), opts, cache, ctx)?;
     let validity_size = validity_uncompressed_size_in_bytes(
         array
             .as_ref()

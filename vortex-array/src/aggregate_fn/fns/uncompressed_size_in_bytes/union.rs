@@ -14,13 +14,14 @@ use crate::arrays::union::UnionArraySlotsExt;
 pub(super) fn union_uncompressed_size_in_bytes(
     array: &UnionArray,
     opts: UncompressedSizeOpts,
+    cache: bool,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<u64> {
-    let mut size = uncompressed_size_in_bytes_u64(array.type_ids(), opts, ctx)?;
+    let mut size = uncompressed_size_in_bytes_u64(array.type_ids(), opts, cache, ctx)?;
 
     for child in array.iter_children() {
         size = size
-            .checked_add(uncompressed_size_in_bytes_u64(child, opts, ctx)?)
+            .checked_add(uncompressed_size_in_bytes_u64(child, opts, cache, ctx)?)
             .ok_or_else(|| vortex_err!("uncompressed size in bytes overflowed u64"))?;
     }
 
