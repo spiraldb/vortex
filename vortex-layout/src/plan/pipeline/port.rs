@@ -74,6 +74,7 @@ impl Queue {
     }
 
     /// Whether the sink is never blocked by it.
+    #[cfg(debug_assertions)]
     pub(crate) fn unbounded(&self) -> bool {
         self.capacity == usize::MAX
     }
@@ -82,6 +83,7 @@ impl Queue {
         self.batches.len()
     }
 
+    #[cfg(debug_assertions)]
     pub(crate) fn is_free(&self) -> bool {
         self.free
     }
