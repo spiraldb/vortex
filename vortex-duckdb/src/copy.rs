@@ -242,7 +242,7 @@ pub(crate) fn written_column_stats(
 /// One entry per leaf column writer.
 fn leaf_stats_columns(file_stats: &FileStatistics) -> Vec<usize> {
     file_stats
-        .dtypes()
+        .entry_dtypes()
         .iter()
         .enumerate()
         .filter(|(_, dtype)| !dtype.is_struct())
@@ -292,7 +292,7 @@ fn column_stats_from_summary(
             stats_columns.len()
         )
     })?;
-    let (aggregates, dtype) = file_stats.get(stats_index);
+    let (aggregates, dtype) = file_stats.entry(stats_index);
     let path = &file_stats.paths()[stats_index];
     let value =
         |aggregate_fn: AggregateFnRef| aggregates.get(&aggregate_fn).and_then(Scalar::into_value);
@@ -407,7 +407,7 @@ mod tests {
             let mut buf = ByteBufferMut::empty();
             let mut writer = SESSION
                 .write_options()
-                .with_file_statistics(file_statistics)
+                .with_file_aggregates(file_statistics)
                 .writer(&mut buf, array.dtype().clone());
             writer.push(array).await.unwrap();
             writer.finish().await.unwrap()
@@ -457,7 +457,7 @@ mod tests {
             let mut buf = ByteBufferMut::empty();
             let mut writer = SESSION
                 .write_options()
-                .with_file_statistics(pruning_aggregate_fns())
+                .with_file_aggregates(pruning_aggregate_fns())
                 .writer(&mut buf, outer.dtype().clone());
             writer.push(outer).await?;
             writer.finish().await

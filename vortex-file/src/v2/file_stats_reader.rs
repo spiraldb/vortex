@@ -213,7 +213,7 @@ mod tests {
                 Precision::exact(Scalar::from(max)),
             ),
         ]);
-        FileStatistics::new(
+        FileStatistics::from_entries(
             Arc::from([stats]),
             Arc::from([DType::Primitive(PType::I32, Nullability::NonNullable)]),
             Arc::from([FieldPath::from_name("col")]),
@@ -225,7 +225,7 @@ mod tests {
             NullCount.bind(EmptyOptions),
             Precision::exact(Scalar::from(null_count)),
         )]);
-        FileStatistics::new(
+        FileStatistics::from_entries(
             Arc::from([stats]),
             Arc::from([DType::Primitive(PType::I32, Nullability::Nullable)]),
             Arc::from([FieldPath::from_name("col")]),
@@ -391,7 +391,7 @@ mod tests {
                 NullCount.bind(EmptyOptions),
                 Precision::exact(Scalar::from(1u64)),
             )]);
-            let file_stats = FileStatistics::new(
+            let file_stats = FileStatistics::from_entries(
                 Arc::from([stats]),
                 Arc::from([ts_dtype]),
                 Arc::from([FieldPath::from_name("deleted_at")]),

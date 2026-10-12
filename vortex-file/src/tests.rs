@@ -72,6 +72,7 @@ use vortex_array::scalar::ScalarValue;
 use vortex_array::scalar_fn::ScalarFnVTableExt;
 use vortex_array::scalar_fn::fns::pack::Pack;
 use vortex_array::scalar_fn::fns::pack::PackOptions;
+use vortex_array::stats::PRUNING_STATS;
 use vortex_array::stream::ArrayStreamAdapter;
 use vortex_array::stream::ArrayStreamExt;
 use vortex_array::validity::Validity;
@@ -1483,7 +1484,7 @@ async fn write_nullable_top_level_struct() -> VortexResult<()> {
     let mut buf = ByteBufferMut::empty();
     let summary = SESSION
         .write_options()
-        .with_file_statistics(pruning_aggregate_fns())
+        .with_file_aggregates(pruning_aggregate_fns())
         .write(&mut buf, array.to_array_stream())
         .await?;
 
@@ -1520,14 +1521,14 @@ async fn exclude_legacy_statistics_omits_legacy_but_keeps_nested() -> VortexResu
     let mut buf_with_legacy = ByteBufferMut::empty();
     SESSION
         .write_options()
-        .with_file_statistics(pruning_aggregate_fns())
+        .with_file_aggregates(pruning_aggregate_fns())
         .write(&mut buf_with_legacy, array.to_array_stream())
         .await?;
 
     let mut buf_without_legacy = ByteBufferMut::empty();
     let summary = SESSION
         .write_options()
-        .with_file_statistics(pruning_aggregate_fns())
+        .with_file_aggregates(pruning_aggregate_fns())
         .exclude_legacy_statistics()
         .write(&mut buf_without_legacy, array.to_array_stream())
         .await?;
@@ -2250,7 +2251,7 @@ async fn test_writer_with_statistics() -> VortexResult<()> {
     let mut buf = ByteBufferMut::empty();
     let mut writer = SESSION
         .write_options()
-        .with_file_statistics(pruning_aggregate_fns())
+        .with_file_aggregates(pruning_aggregate_fns())
         .writer(&mut buf, array.dtype().clone());
 
     writer.push(array).await?;
@@ -2273,7 +2274,7 @@ async fn file_sum_is_absent_when_a_chunk_overflows() -> VortexResult<()> {
     let mut writer = SESSION
         .write_options()
         .disable_editions()
-        .with_file_statistics(vec![
+        .with_file_aggregates(vec![
             Stat::Sum
                 .aggregate_fn()
                 .vortex_expect("sum has an aggregate fn"),
@@ -2292,15 +2293,64 @@ async fn file_sum_is_absent_when_a_chunk_overflows() -> VortexResult<()> {
         .footer()
         .statistics()
         .vortex_expect("file statistics were requested");
-    let (numbers, _) = footer_stats.get(0);
+    let (numbers, _) = footer_stats.entry(0);
     assert!(stat_value(numbers, Stat::Sum).is_absent());
 
     let file = SESSION.open_options().open_buffer(buf)?;
     let file_stats = file
         .file_stats()
         .vortex_expect("file statistics were written");
-    let (numbers, _) = file_stats.get(0);
+    let (numbers, _) = file_stats.entry(0);
     assert!(stat_value(numbers, Stat::Sum).is_absent());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn stat_file_statistics_bound_strings_and_keep_the_top_level_view() -> VortexResult<()> {
+    // Requesting file statistics as `Stat`s byte-bounds string min/max like the defaults do, and
+    // the top-level `StatsSet` view stays available alongside the nested entries.
+    let long = "x".repeat(100);
+    let array = StructArray::from_fields(&[
+        (
+            "short",
+            VarBinViewArray::from_iter_str(["apple", "banana"]).into_array(),
+        ),
+        (
+            "long",
+            VarBinViewArray::from_iter_str(["a", long.as_str()]).into_array(),
+        ),
+    ])?
+    .into_array();
+
+    let mut buf = ByteBufferMut::empty();
+    SESSION
+        .write_options()
+        .with_file_statistics(PRUNING_STATS.to_vec())
+        .write(&mut buf, array.to_array_stream())
+        .await?;
+    let file = SESSION.open_options().open_buffer(ByteBuffer::from(buf))?;
+    let stats = file
+        .file_stats()
+        .expect("file statistics should be present");
+
+    let (long_stats, _) = stats.get_by_path(&field_path!(long)).expect("long stats");
+    let long_max = stat_value(long_stats, Stat::Max)
+        .as_inexact()
+        .expect("a truncated max is inexact");
+    assert!(
+        long_max.as_utf8().len() < long.len(),
+        "max should be truncated: {long_max:?}"
+    );
+
+    assert_eq!(stats.stats_sets().len(), 2);
+    let (short, dtype) = stats.get(0);
+    assert_eq!(dtype, &DType::Utf8(Nullability::NonNullable));
+    assert_eq!(
+        short.get(Stat::Max),
+        Precision::exact(ScalarValue::from("banana"))
+    );
+    assert_eq!(stats.into_iter().count(), 2);
 
     Ok(())
 }

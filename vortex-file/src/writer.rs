@@ -22,6 +22,7 @@ use vortex_array::ArrayRef;
 use vortex_array::aggregate_fn::AggregateFnRef;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldPath;
+use vortex_array::expr::stats::Stat;
 use vortex_array::iter::ArrayIterator;
 use vortex_array::iter::ArrayIteratorExt;
 use vortex_array::session::ArraySessionExt;
@@ -47,7 +48,8 @@ use vortex_layout::BufferedBytesTracker;
 use vortex_layout::LayoutContext;
 use vortex_layout::LayoutStrategy;
 use vortex_layout::LayoutWriterContext;
-use vortex_layout::layouts::file_stats::accumulate_stats;
+use vortex_layout::layouts::file_stats::FileStatsRequest;
+use vortex_layout::layouts::file_stats::accumulate_file_stats;
 use vortex_layout::sequence::SequenceId;
 use vortex_layout::sequence::SequentialStreamAdapter;
 use vortex_layout::sequence::SequentialStreamExt;
@@ -67,6 +69,9 @@ use crate::footer::MAX_METADATA_KEY_BYTES;
 use crate::footer::MAX_METADATA_SEGMENTS;
 use crate::segments::writer::BufferedSegmentSink;
 
+/// The byte bound of variable-length min/max file statistics requested as [`Stat`]s.
+const DEFAULT_MAX_VARIABLE_LENGTH_STATISTICS_SIZE: usize = 64;
+
 /// Configure a new writer, which can eventually be used to write an [`ArrayStream`] into a sink
 /// that implements [`VortexWrite`].
 ///
@@ -82,10 +87,7 @@ pub struct VortexWriteOptions {
     disable_editions: bool,
     buffered_bytes: BufferedBytesTracker,
     exclude_dtype: bool,
-    /// The aggregates to compute for file-level statistics.
-    ///
-    /// If unset, the writer chooses pruning aggregates from the file dtype.
-    file_statistics: Option<Vec<AggregateFnRef>>,
+    file_statistics: FileStatsRequest,
     write_legacy_statistics: bool,
     metadata: HashMap<String, ByteBuffer>,
 }
@@ -108,7 +110,7 @@ impl VortexWriteOptions {
             buffered_bytes: BufferedBytesTracker::new(),
             session,
             exclude_dtype: false,
-            file_statistics: None,
+            file_statistics: FileStatsRequest::Default,
             write_legacy_statistics: true,
             metadata: HashMap::default(),
         }
@@ -159,12 +161,28 @@ impl VortexWriteOptions {
     /// Configure which statistics to compute at the file level.
     ///
     /// Pass an empty vector to omit file-level statistics. If left unset, the writer chooses
+    /// pruning aggregates from the file dtype. `Stat::Min` and `Stat::Max` on variable-length
+    /// columns are byte-bounded, as the defaults are; to choose the bound, pass
+    /// `BoundedMin`/`BoundedMax` to [`Self::with_file_aggregates`] instead.
+    ///
+    /// Statistics the enabled editions don't include are left out, like the defaults.
+    pub fn with_file_statistics(mut self, file_statistics: Vec<Stat>) -> Self {
+        self.file_statistics = FileStatsRequest::Stats {
+            stats: file_statistics.into(),
+            max_variable_length_statistics_size: DEFAULT_MAX_VARIABLE_LENGTH_STATISTICS_SIZE,
+        };
+        self
+    }
+
+    /// Configure which aggregates to compute at the file level.
+    ///
+    /// Pass an empty vector to omit file-level statistics. If left unset, the writer chooses
     /// pruning aggregates from the file dtype.
     ///
     /// Like zone maps, file statistics only record aggregates the enabled editions include: the
     /// write fails if this asks for one they don't, while the defaults leave such aggregates out.
-    pub fn with_file_statistics(mut self, file_statistics: Vec<AggregateFnRef>) -> Self {
-        self.file_statistics = Some(file_statistics);
+    pub fn with_file_aggregates(mut self, file_aggregates: Vec<AggregateFnRef>) -> Self {
+        self.file_statistics = FileStatsRequest::Aggregates(file_aggregates.into());
         self
     }
 
@@ -291,12 +309,12 @@ impl VortexWriteOptions {
                 .map(move |result| result.map(|chunk| (ptr.advance(), chunk))),
         )
         .sendable();
-        // When unset, `accumulate_stats` resolves each leaf's own default from its dtype, the way
+        // When unset, each leaf resolves its own default from its dtype, the way
         // `default_zoned_aggregate_fns` does for zoned layouts (e.g. bounded min/max for
         // variable-length columns), rather than a single dtype-blind default applied uniformly.
-        let (file_stats, stream) = accumulate_stats(
+        let (file_stats, stream) = accumulate_file_stats(
             stream,
-            self.file_statistics.clone().map(Arc::from),
+            self.file_statistics.clone(),
             &self.session,
             self.write_legacy_statistics,
             &ctx,
@@ -342,10 +360,10 @@ impl VortexWriteOptions {
         let (layout, segment_specs) = layout_fut.await?;
 
         // Assemble the Footer object now that we have all the segments.
-        let statistics = if matches!(&self.file_statistics, Some(stats) if stats.is_empty()) {
+        let statistics = if self.file_statistics.is_empty() {
             None
         } else {
-            Some(FileStatistics::new_with_dtype(
+            Some(FileStatistics::from_postorder(
                 file_stats.aggregate_stats()?.into(),
                 file_stats.legacy_aggregate_stats()?.into(),
                 &dtype,
