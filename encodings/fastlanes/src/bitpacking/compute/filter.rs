@@ -24,6 +24,9 @@ use crate::BitPacked;
 use crate::BitPackedArrayExt;
 use crate::BitPackedData;
 use crate::BitWidthsView;
+use crate::FL_CHUNK_SIZE;
+
+const _: () = assert!(FL_CHUNK_SIZE == FILTER_CHUNK_LEN);
 
 /// Kernel to execute filtering directly on a bit-packed array.
 ///
@@ -80,7 +83,7 @@ fn filter_values<T: NativePType + BitPacking>(
     let chunks = PackedChunks {
         packed: array.packed_slice::<T>(),
         bit_width,
-        packed_chunk_len: 128 * bit_width / size_of::<T>(),
+        packed_chunk_len: FL_CHUNK_SIZE * bit_width / (8 * size_of::<T>()),
     };
     filter_chunked(&chunks, array.offset() as usize, mask)
 }
@@ -102,7 +105,7 @@ impl<T> PackedChunks<'_, T> {
 // SAFETY: the FastLanes unpack kernels initialize every value of `dst`.
 unsafe impl<T: BitPacking> ChunkDecoder<T> for PackedChunks<'_, T> {
     fn decode_chunk(&self, chunk_idx: usize, dst: &mut [MaybeUninit<T>; FILTER_CHUNK_LEN]) {
-        // SAFETY: the unpack only writes to `dst`, and the packed chunk holds `FILTER_CHUNK_LEN`
+        // SAFETY: the unpack only writes to `dst`, and the packed chunk holds `FL_CHUNK_SIZE`
         // values of `bit_width` bits.
         unsafe {
             BitPacking::unchecked_unpack(
@@ -114,7 +117,7 @@ unsafe impl<T: BitPacking> ChunkDecoder<T> for PackedChunks<'_, T> {
     }
 
     fn decode_indices(&self, chunk_idx: usize, indices: &[usize], dst: &mut [MaybeUninit<T>]) {
-        debug_assert!(indices.iter().all(|&index| index < FILTER_CHUNK_LEN));
+        debug_assert!(indices.iter().all(|&index| index < FL_CHUNK_SIZE));
         // SAFETY: every index is within the chunk, and `dst` holds one value for each index.
         unsafe {
             BitPacking::unchecked_unpack_indices(

@@ -118,9 +118,7 @@ struct ChunkedFilter<'a, T, D> {
     values: BufferMut<T>,
     true_count: usize,
     written: usize,
-    max_sparse: usize,
     scratch: Scratch<T>,
-    indices: [usize; MAX_SPARSE_VALUES],
 }
 
 impl<'a, T: NativePType, D: ChunkDecoder<T>> ChunkedFilter<'a, T, D> {
@@ -131,9 +129,7 @@ impl<'a, T: NativePType, D: ChunkDecoder<T>> ChunkedFilter<'a, T, D> {
             values: BufferMut::with_capacity(true_count + SLACK_BYTES / size_of::<T>()),
             true_count,
             written: 0,
-            max_sparse: max_sparse_values::<T>(),
             scratch: Scratch([const { MaybeUninit::uninit() }; FILTER_CHUNK_LEN]),
-            indices: [0; MAX_SPARSE_VALUES],
         }
     }
 
@@ -146,12 +142,11 @@ impl<'a, T: NativePType, D: ChunkDecoder<T>> ChunkedFilter<'a, T, D> {
         self.written += FILTER_CHUNK_LEN;
     }
 
-    /// Decodes the values at the first `len` of `self.indices` in chunk `chunk_idx` to the output.
-    fn push_indices(&mut self, chunk_idx: usize, len: usize) {
-        let dst = &mut self.values.spare_capacity_mut()[self.written..][..len];
-        self.decoder
-            .decode_indices(chunk_idx, &self.indices[..len], dst);
-        self.written += len;
+    /// Decodes the values at the sorted in-chunk `indices` of chunk `chunk_idx` to the output.
+    fn push_indices(&mut self, chunk_idx: usize, indices: &[usize]) {
+        let dst = &mut self.values.spare_capacity_mut()[self.written..][..indices.len()];
+        self.decoder.decode_indices(chunk_idx, indices, dst);
+        self.written += indices.len();
     }
 
     /// Filters chunk by chunk from the bitmap of `mask`.
@@ -160,6 +155,7 @@ impl<'a, T: NativePType, D: ChunkDecoder<T>> ChunkedFilter<'a, T, D> {
         let bits = mask.bit_buffer();
         let bits_bytes = bits.inner().as_slice();
         let mut words = [0u64; CHUNK_WORDS];
+        let mut indices = [0usize; MAX_SPARSE_VALUES];
 
         for chunk_idx in 0..(offset + len).div_ceil(FILTER_CHUNK_LEN) {
             // The range `start..end` of the array that falls within this chunk, which begins at
@@ -180,18 +176,17 @@ impl<'a, T: NativePType, D: ChunkDecoder<T>> ChunkedFilter<'a, T, D> {
 
             if selected == FILTER_CHUNK_LEN {
                 self.push_full_chunk(chunk_idx);
-            } else if selected <= self.max_sparse {
+            } else if selected <= max_sparse_values::<T>() {
                 let mut n = 0;
                 for (word_idx, &word) in words.iter().enumerate() {
                     let mut word = word;
                     while word != 0 {
-                        self.indices[n] =
-                            chunk_offset + word_idx * 64 + word.trailing_zeros() as usize;
+                        indices[n] = chunk_offset + word_idx * 64 + word.trailing_zeros() as usize;
                         n += 1;
                         word &= word - 1;
                     }
                 }
-                self.push_indices(chunk_idx, selected);
+                self.push_indices(chunk_idx, &indices[..selected]);
             } else {
                 let src =
                     &self.scratch.decode(self.decoder, chunk_idx)[chunk_offset..][..chunk_len];
@@ -212,6 +207,8 @@ impl<'a, T: NativePType, D: ChunkDecoder<T>> ChunkedFilter<'a, T, D> {
         // earlier chunk. Positions include `offset`.
         let mut next = 0;
         let mut resume = 0;
+        let mut indices = [0usize; MAX_SPARSE_VALUES];
+
         while let Some(&(first_start, _)) = slices.get(next) {
             let chunk_idx = (first_start + offset).max(resume) / FILTER_CHUNK_LEN;
             let chunk_start = chunk_idx * FILTER_CHUNK_LEN;
@@ -232,15 +229,14 @@ impl<'a, T: NativePType, D: ChunkDecoder<T>> ChunkedFilter<'a, T, D> {
 
             if selected == FILTER_CHUNK_LEN {
                 self.push_full_chunk(chunk_idx);
-            } else if selected <= self.max_sparse {
-                for (index, chunk_index) in self
-                    .indices
+            } else if selected <= max_sparse_values::<T>() {
+                for (index, chunk_index) in indices
                     .iter_mut()
                     .zip(runs.flat_map(|(start, end)| start..end))
                 {
                     *index = chunk_index;
                 }
-                self.push_indices(chunk_idx, selected);
+                self.push_indices(chunk_idx, &indices[..selected]);
             } else {
                 let src = self.scratch.decode(self.decoder, chunk_idx);
                 let dst = &mut self.values.spare_capacity_mut()[self.written..];
