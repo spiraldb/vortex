@@ -46,7 +46,7 @@ const ZONES: usize = 1;
 /// A zoned plan produces its data child's rows: it adds nothing to an execution. Its value is
 /// the zone table beside the data, which a [`Query`](crate::plan::Query) uses to skip the zones a
 /// conjunct cannot match. The optimizer pushes an expression over the plan into its data; a
-/// boolean one is kept as the plan's predicate, and [`ZonedPlan::pruning_plan`] turns it into a
+/// boolean one is kept as the plan's predicate, and `ZonedPlan::pruning_plan` turns it into a
 /// plan that tells, for every row, whether the row's zone may hold a match, from the zone table
 /// alone.
 ///
