@@ -15,8 +15,9 @@ use vortex_session::VortexSession;
 
 use crate::plan::SegmentScanPlan;
 use crate::plan::pipeline::Cx;
+use crate::plan::pipeline::Input;
+use crate::plan::pipeline::Operator;
 use crate::plan::pipeline::Source;
-use crate::plan::pipeline::Stage;
 use crate::plan::pipeline::Step;
 use crate::segments::SegmentId;
 
@@ -115,8 +116,11 @@ impl SelectStage {
     }
 }
 
-impl Stage for SelectStage {
-    fn push(&mut self, batch: ArrayRef, _cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
+impl Operator for SelectStage {
+    fn compute(&mut self, input: Input, _cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
+        let Input::Batch(batch) = input else {
+            return Ok(None);
+        };
         Ok(Some(select(
             batch,
             self.slice.as_ref(),
