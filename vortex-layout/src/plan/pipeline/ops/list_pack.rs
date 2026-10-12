@@ -5,6 +5,7 @@
 
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
+use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::ListArray;
 use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::scalar_fn::fns::operators::Operator as BinaryOperator;
@@ -14,12 +15,11 @@ use vortex_error::vortex_ensure;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
 
-use super::*;
+use super::UNBOUNDED;
+use super::join_inlet;
 use crate::plan::ListPackPlan;
 use crate::plan::pipeline::Blocked;
 use crate::plan::pipeline::Cx;
-use crate::plan::pipeline::Input;
-use crate::plan::pipeline::Operator;
 use crate::plan::pipeline::Source;
 use crate::plan::pipeline::Step;
 
@@ -53,17 +53,14 @@ impl ListPackSource {
 
     /// The lists, from the whole of every inlet.
     fn assemble(&self, cx: &mut Cx<'_>) -> VortexResult<ArrayRef> {
-        let offsets = join(self.plan.offsets()?.dtype(), drain(&mut cx.inlet(OFFSETS)))?;
+        let offsets = join_inlet(cx, OFFSETS, self.plan.offsets()?.dtype())?;
         vortex_ensure!(
             offsets.len() == self.mask.len() + 1,
             "Incomplete list offsets"
         );
         let first = offset(&offsets, 0, cx)?;
         let last = offset(&offsets, offsets.len() - 1, cx)?;
-        let elements = join(
-            self.plan.elements()?.dtype(),
-            drain(&mut cx.inlet(ELEMENTS)),
-        )?;
+        let elements = join_inlet(cx, ELEMENTS, self.plan.elements()?.dtype())?;
         vortex_ensure!(
             first <= last && last <= elements.len() as u64,
             "List element range {first}..{last} is out of bounds"
@@ -72,13 +69,13 @@ impl ListPackSource {
         let offsets = if first == 0 {
             offsets
         } else {
-            let base = vortex_array::arrays::ConstantArray::new(first, offsets.len())
+            let base = ConstantArray::new(first, offsets.len())
                 .into_array()
                 .cast(offsets.dtype().clone())?;
             offsets.binary(base, BinaryOperator::Sub)?
         };
         let validity = match self.plan.validity()? {
-            Some(plan) => Validity::Array(join(plan.dtype(), drain(&mut cx.inlet(VALIDITY)))?),
+            Some(plan) => Validity::Array(join_inlet(cx, VALIDITY, plan.dtype())?),
             None => Validity::NonNullable,
         };
         ListArray::try_new(elements, offsets, validity)?
@@ -96,8 +93,16 @@ fn offset(offsets: &ArrayRef, index: usize, cx: &mut Cx<'_>) -> VortexResult<u64
         .ok_or_else(|| vortex_err!("Invalid list offset at {index}"))
 }
 
-impl Operator for ListPackSource {
-    fn compute(&mut self, _input: Input, cx: &mut Cx<'_>) -> VortexResult<Step> {
+impl Source for ListPackSource {
+    fn inlet_count(&self) -> usize {
+        if self.has_validity { 3 } else { 2 }
+    }
+
+    fn capacity(&self, _inlet: usize) -> usize {
+        UNBOUNDED
+    }
+
+    fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
         if self.done {
             return Ok(Step::Finished);
         }
@@ -107,16 +112,6 @@ impl Operator for ListPackSource {
             }
         }
         self.done = true;
-        Ok(Step::Last(self.assemble(cx)?))
-    }
-}
-
-impl Source for ListPackSource {
-    fn inlet_count(&self) -> usize {
-        if self.has_validity { 3 } else { 2 }
-    }
-
-    fn capacity(&self, _inlet: usize) -> usize {
-        UNBOUNDED
+        Ok(Step::Batch(self.assemble(cx)?))
     }
 }

@@ -11,14 +11,16 @@ use vortex_array::arrays::SharedArray;
 use vortex_array::dtype::DType;
 use vortex_error::VortexResult;
 
-use super::*;
+use super::UNBOUNDED;
+use super::join;
+use super::join_inlet;
+use super::next_batch;
 use crate::plan::TakePlan;
 use crate::plan::pipeline::Blocked;
 use crate::plan::pipeline::Cx;
 use crate::plan::pipeline::DEFAULT_CAPACITY;
-use crate::plan::pipeline::Input;
-use crate::plan::pipeline::Operator;
 use crate::plan::pipeline::Source;
+use crate::plan::pipeline::Stage;
 use crate::plan::pipeline::Step;
 
 /// Wraps each batch of codes as a dictionary over the values, once the values inlet has ended.
@@ -27,6 +29,7 @@ use crate::plan::pipeline::Step;
 /// for this take alone are joined and shared here.
 pub(crate) struct TakeSource {
     plan: TakePlan,
+    /// The values, once their inlet has ended.
     values: Option<ArrayRef>,
 }
 
@@ -37,37 +40,6 @@ impl TakeSource {
     /// A take of its codes inlet's batches over its values inlet's.
     pub(crate) fn new(plan: TakePlan) -> Self {
         Self { plan, values: None }
-    }
-}
-
-impl Operator for TakeSource {
-    fn compute(&mut self, _input: Input, cx: &mut Cx<'_>) -> VortexResult<Step> {
-        let values = match &self.values {
-            Some(values) => values.clone(),
-            None => {
-                let mut inlet = cx.inlet(VALUES);
-                if !inlet.closed() {
-                    return Ok(Step::Blocked(Blocked::Inlet(VALUES)));
-                }
-                let values = shared(join(self.plan.values()?.dtype(), drain(&mut inlet))?);
-                self.values = Some(values.clone());
-                values
-            }
-        };
-        let mut codes = cx.inlet(CODES);
-        match codes.take() {
-            Some(batch) => {
-                let more = !codes.is_empty();
-                let array = DictArray::try_new(batch, values)?.into_array();
-                Ok(if more {
-                    Step::More(array)
-                } else {
-                    Step::Last(array)
-                })
-            }
-            None if codes.closed() => Ok(Step::Finished),
-            None => Ok(Step::Blocked(Blocked::Inlet(CODES))),
-        }
     }
 }
 
@@ -82,6 +54,24 @@ impl Source for TakeSource {
         } else {
             DEFAULT_CAPACITY
         }
+    }
+
+    fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
+        let values = match &self.values {
+            Some(values) => values.clone(),
+            None => {
+                if !cx.inlet(VALUES).closed() {
+                    return Ok(Step::Blocked(Blocked::Inlet(VALUES)));
+                }
+                let values = shared(join_inlet(cx, VALUES, self.plan.values()?.dtype())?);
+                self.values = Some(values.clone());
+                values
+            }
+        };
+        Ok(match next_batch(cx, CODES) {
+            Step::Batch(codes) => Step::Batch(DictArray::try_new(codes, values)?.into_array()),
+            step => step,
+        })
     }
 }
 
@@ -109,18 +99,14 @@ impl WholeStage {
     }
 }
 
-impl Operator for WholeStage {
-    fn compute(&mut self, input: Input, _cx: &mut Cx<'_>) -> VortexResult<Step> {
-        match input {
-            Input::Chunk(batch) => {
-                self.batches.push(batch);
-                Ok(Step::Consumed)
-            }
-            Input::End => {
-                let batches = std::mem::take(&mut self.batches);
-                Ok(Step::Last(shared(join(&self.dtype, batches)?)))
-            }
-            Input::None => Ok(Step::Consumed),
-        }
+impl Stage for WholeStage {
+    fn push(&mut self, batch: ArrayRef, _cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
+        self.batches.push(batch);
+        Ok(None)
+    }
+
+    fn finish(&mut self, _cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
+        let batches = std::mem::take(&mut self.batches);
+        Ok(Some(shared(join(&self.dtype, batches)?)))
     }
 }

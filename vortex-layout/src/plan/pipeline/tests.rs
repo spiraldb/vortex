@@ -253,9 +253,12 @@ fn drive(
             Turn::Done => break,
         }
     }
-    assert!(
-        batch.is_empty() && inflight.is_empty(),
-        "scan finished with reads in flight"
+    // Reads left in flight were read ahead for splits that emptied or cancelled with the
+    // pipeline that asked; nothing waits for them.
+    assert_eq!(
+        scan.awaited_reads(),
+        0,
+        "scan finished with a pipeline waiting for a read"
     );
     let leftover = (scan.live_ports(), scan.pending_shares());
     Ok(Run {
@@ -1036,6 +1039,36 @@ fn query_reads_a_shared_column_once(
     }
     Ok(())
 }
+/// A split whose conjunct keeps no rows never compiles its projection, so the ports made for it
+/// of the segments the projection shares with another split go unclaimed. The pipeline sharing
+/// them pushes to the other split alone, and the scan ends holding no port.
+#[rstest]
+fn unclaimed_share_ports_are_freed(
+    #[values(Delivery::Fifo, Delivery::Lifo)] order: Delivery,
+    #[values(1, 2)] active: usize,
+) -> VortexResult<()> {
+    let mut store = Store::default();
+    let (source, expected) = fixture(&mut store)?;
+    // `a` is below 5 only in the first split; `c` and `e.y`, projected, are flat segments
+    // both splits share.
+    let filter = lt(get_item("a", root()), lit(5_i32));
+    let (plan, check) = query_over(&source, Some(filter))?;
+    let splits = vec![Split::all(0..10), Split::all(10..ROWS)];
+    let scan = Scan::try_new(SESSION.clone(), plan, splits.clone())?.with_max_active(active);
+    let run = drive(&store, scan, delivery(order))?;
+    assert_eq!(run.leftover, (0, 0), "the unclaimed ports were freed");
+    assert_eq!(pieces(&run.events).iter().sum::<usize>(), 5);
+    for (index, split) in splits.iter().enumerate() {
+        check.assert_view(
+            &expected,
+            &split.rows,
+            &split.mask,
+            run.splits.get(index).cloned().unwrap_or_default(),
+        )?;
+    }
+    Ok(())
+}
+
 /// One `i32` column `1..=9`, written as three chunks of three rows with a zone map of
 /// three-row zones, lowered to a plan over a store of its segments.
 ///

@@ -131,7 +131,7 @@ fn masks_are_applied_by_the_source(#[values(false, true)] dense: bool) -> Vortex
     assert_rows(expected, run.arrays)
 }
 
-/// A reader runs only when an inlet has changed: every run of the probe after its first finds
+/// A source runs only when an inlet has changed: every run of the probe after its first finds
 /// a batch it has not seen, or an inlet newly closed.
 #[rstest]
 fn a_reader_runs_only_when_an_inlet_changed(
@@ -155,8 +155,8 @@ fn a_reader_runs_only_when_an_inlet_changed(
     Ok(())
 }
 
-/// A writer is blocked once its reader's inlet holds as many batches as the reader allows, so
-/// a fast source never runs far ahead of a slow reader.
+/// A sink is blocked once its source's inlet holds as many batches as the source allows, so a
+/// fast pipeline never runs far ahead of a slow source.
 #[test]
 fn a_full_inlet_blocks_its_writer() -> VortexResult<()> {
     let runs: Arc<Mutex<Vec<ProbeRun>>> = Arc::default();
@@ -204,23 +204,21 @@ struct ManyReads {
     left: usize,
 }
 
-impl Operator for ManyReads {
-    fn compute(&mut self, _input: Input, cx: &mut Cx<'_>) -> VortexResult<Step> {
+impl Source for ManyReads {
+    fn request(&mut self) -> Option<SegmentId> {
+        self.wanted.pop()
+    }
+
+    fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
         if let Some((segment, _bytes)) = cx.take_segment() {
             self.left -= 1;
-            return Ok(Step::More(indices([u64::from(*segment)])));
+            return Ok(Step::Batch(indices([u64::from(*segment)])));
         }
         Ok(if self.left == 0 {
             Step::Finished
         } else {
             Step::Blocked(Blocked::Io)
         })
-    }
-}
-
-impl Source for ManyReads {
-    fn request(&mut self) -> Option<SegmentId> {
-        self.wanted.pop()
     }
 }
 
@@ -262,4 +260,118 @@ fn a_source_has_several_reads_in_flight() -> VortexResult<()> {
         }
     }
     assert_rows(indices([3, 2, 1]), arrays)
+}
+
+/// Asks for every segment at once, emits the id of the first to arrive, and finishes without
+/// waiting for the rest.
+struct FirstOf {
+    wanted: Vec<SegmentId>,
+}
+
+impl Source for FirstOf {
+    fn request(&mut self) -> Option<SegmentId> {
+        self.wanted.pop()
+    }
+
+    fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
+        Ok(match cx.take_segment() {
+            Some((segment, _bytes)) => {
+                self.wanted.clear();
+                Step::Batch(indices([u64::from(*segment)]))
+            }
+            None if self.wanted.is_empty() => Step::Finished,
+            None => Step::Blocked(Blocked::Io),
+        })
+    }
+}
+
+/// A source that finishes with reads in flight has them cancelled: their bytes reach neither it
+/// nor the next split's pipeline, which reuses its id, and the scan is done without them.
+#[test]
+fn finishing_cancels_reads_in_flight() -> VortexResult<()> {
+    let plan = SyntheticPlan::new(row_dtype(), 2, Vec::new(), |rows, _, _| {
+        let base = 10 * (u32::try_from(rows.start)? + 1);
+        Ok(Some(Chain::new(FirstOf {
+            wanted: (base..base + 3).map(SegmentId::from).collect(),
+        })))
+    })
+    .into_plan();
+    let splits = vec![Split::all(0..1), Split::all(1..2)];
+    let mut scan = Scan::try_new(SESSION.clone(), plan, splits)?;
+    let mut by_split: Vec<Vec<ArrayRef>> = vec![Vec::new(); 2];
+    let mut inflight = Vec::new();
+    loop {
+        match scan.step()? {
+            Turn::Read(read) => inflight.push(read),
+            Turn::Output(split, array) => by_split[split].push(array),
+            Turn::Waiting => {
+                let read = inflight.remove(0);
+                scan.deliver(read.id, empty_segment())?;
+            }
+            Turn::Done => break,
+        }
+    }
+    assert!(
+        !inflight.is_empty(),
+        "the second split's other reads are never delivered"
+    );
+    assert_eq!(
+        scan.awaited_reads(),
+        0,
+        "no pipeline waits for the reads left over"
+    );
+    assert_rows(indices([12]), std::mem::take(&mut by_split[0]))?;
+    assert_rows(indices([22]), std::mem::take(&mut by_split[1]))?;
+    assert_eq!(scan.live_ports(), 0);
+    Ok(())
+}
+
+/// Emits `left` one-row batches.
+struct Repeat {
+    left: usize,
+}
+
+impl Source for Repeat {
+    fn next(&mut self, _cx: &mut Cx<'_>) -> VortexResult<Step> {
+        Ok(match self.left.checked_sub(1) {
+            Some(left) => {
+                self.left = left;
+                Step::Batch(indices([0]))
+            }
+            None => Step::Finished,
+        })
+    }
+}
+
+/// Waits on its one-batch inlet whatever it holds, so once the inlet is full nothing wakes it.
+struct WaitsWhenFull;
+
+impl Source for WaitsWhenFull {
+    fn inlet_count(&self) -> usize {
+        1
+    }
+
+    fn capacity(&self, _inlet: usize) -> usize {
+        1
+    }
+
+    fn next(&mut self, _cx: &mut Cx<'_>) -> VortexResult<Step> {
+        Ok(Step::Blocked(Blocked::Inlet(0)))
+    }
+}
+
+/// Debug builds catch a source waiting on an inlet its sink can no longer wake it through, at
+/// that source, instead of reporting the scan stuck.
+#[cfg(debug_assertions)]
+#[test]
+#[should_panic(expected = "which is full")]
+fn waiting_on_a_full_inlet_is_caught() {
+    let plan = SyntheticPlan::new(row_dtype(), 2, Vec::new(), |_, _, compiler| {
+        Ok(Some(
+            compiler.join(vec![Chain::new(Repeat { left: 2 })], WaitsWhenFull),
+        ))
+    })
+    .into_plan();
+    let mut scan = Scan::try_new(SESSION.clone(), plan, vec![Split::all(0..2)]).unwrap();
+    while !matches!(scan.step().unwrap(), Turn::Done) {}
 }

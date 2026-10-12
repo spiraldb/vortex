@@ -6,25 +6,24 @@
 use std::ops::Range;
 
 use vortex_array::ArrayRef;
+use vortex_array::buffer::BufferHandle;
 use vortex_array::serde::SerializedArray;
 use vortex_error::VortexResult;
-use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
 
 use crate::plan::SegmentScanPlan;
 use crate::plan::pipeline::Cx;
-use crate::plan::pipeline::Input;
-use crate::plan::pipeline::Operator;
 use crate::plan::pipeline::Source;
+use crate::plan::pipeline::Stage;
 use crate::plan::pipeline::Step;
 use crate::segments::SegmentId;
 
 /// Decodes the whole of a scan's segment.
-pub(crate) fn decode(
+fn decode(
     plan: &SegmentScanPlan,
-    segment: vortex_array::buffer::BufferHandle,
+    segment: BufferHandle,
     session: &VortexSession,
 ) -> VortexResult<ArrayRef> {
     let serialized = match plan.array_tree() {
@@ -55,18 +54,15 @@ fn select(
     }
 }
 
-enum ScanState {
-    Request,
-    Waiting,
-    Done,
-}
-
 /// Reads one segment, decodes it, and emits its rows of `slice`, filtered by `filter`.
 pub(crate) struct ScanSource {
     plan: SegmentScanPlan,
     slice: Option<Range<usize>>,
     filter: Option<Mask>,
-    state: ScanState,
+    /// The segment to read, until it has been asked for.
+    unread: Option<SegmentId>,
+    /// The segment has been emitted.
+    done: bool,
 }
 
 impl ScanSource {
@@ -76,44 +72,34 @@ impl ScanSource {
         filter: Option<Mask>,
     ) -> Self {
         Self {
+            unread: Some(plan.segment_id()),
             plan,
             slice,
             filter,
-            state: ScanState::Request,
-        }
-    }
-}
-
-impl Operator for ScanSource {
-    fn compute(&mut self, _input: Input, cx: &mut Cx<'_>) -> VortexResult<Step> {
-        match self.state {
-            ScanState::Request => vortex_bail!("Segment scan computed before its read"),
-            ScanState::Waiting => {
-                let bytes = cx
-                    .take_bytes()
-                    .ok_or_else(|| vortex_err!("Segment scan ran without its bytes"))?;
-                self.state = ScanState::Done;
-                let array = decode(&self.plan, bytes, cx.session())?;
-                Ok(Step::Last(select(
-                    array,
-                    self.slice.as_ref(),
-                    self.filter.as_ref(),
-                )?))
-            }
-            ScanState::Done => Ok(Step::Finished),
+            done: false,
         }
     }
 }
 
 impl Source for ScanSource {
     fn request(&mut self) -> Option<SegmentId> {
-        match self.state {
-            ScanState::Request => {
-                self.state = ScanState::Waiting;
-                Some(self.plan.segment_id())
-            }
-            ScanState::Waiting | ScanState::Done => None,
+        self.unread.take()
+    }
+
+    fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
+        if self.done {
+            return Ok(Step::Finished);
         }
+        let (_, bytes) = cx
+            .take_segment()
+            .ok_or_else(|| vortex_err!("Segment scan ran without its bytes"))?;
+        self.done = true;
+        let array = decode(&self.plan, bytes, cx.session())?;
+        Ok(Step::Batch(select(
+            array,
+            self.slice.as_ref(),
+            self.filter.as_ref(),
+        )?))
     }
 }
 
@@ -129,16 +115,12 @@ impl SelectStage {
     }
 }
 
-impl Operator for SelectStage {
-    fn compute(&mut self, input: Input, _cx: &mut Cx<'_>) -> VortexResult<Step> {
-        match input {
-            Input::Chunk(batch) => Ok(Step::Last(select(
-                batch,
-                self.slice.as_ref(),
-                self.filter.as_ref(),
-            )?)),
-            Input::End => Ok(Step::Finished),
-            Input::None => Ok(Step::Consumed),
-        }
+impl Stage for SelectStage {
+    fn push(&mut self, batch: ArrayRef, _cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
+        Ok(Some(select(
+            batch,
+            self.slice.as_ref(),
+            self.filter.as_ref(),
+        )?))
     }
 }

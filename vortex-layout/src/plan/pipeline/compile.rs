@@ -14,15 +14,15 @@ use vortex_error::VortexResult;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
 
-use super::Operator;
 use super::Source;
+use super::Stage;
+use super::ops::ConcatSource;
 use super::ops::OnceSource;
-use super::ops::PortSource;
 use super::ops::ScanSource;
 use super::ops::SelectStage;
 use super::ops::WholeStage;
 use super::port::PortId;
-use super::port::Reader;
+use super::port::SourceEnd;
 use super::scan::Core;
 use crate::plan::ConcatPlan;
 use crate::plan::PlanRef;
@@ -33,7 +33,7 @@ use crate::segments::SegmentId;
 /// parent plan can add stages before it becomes a pipeline.
 pub struct Chain {
     pub(crate) source: Box<dyn Source>,
-    pub(crate) stages: Vec<Box<dyn Operator>>,
+    pub(crate) stages: Vec<Box<dyn Stage>>,
     pub(crate) inlets: Vec<PortId>,
 }
 
@@ -50,14 +50,14 @@ impl Chain {
     /// A chain passing the batches of `port` through.
     pub(crate) fn port(port: PortId) -> Self {
         Self {
-            source: Box::new(PortSource),
+            source: Box::new(ConcatSource::new(1)),
             stages: Vec::new(),
             inlets: vec![port],
         }
     }
 
     /// This chain with `stage` after its last stage.
-    pub fn with(mut self, stage: impl Operator + 'static) -> Self {
+    pub fn with(mut self, stage: impl Stage + 'static) -> Self {
         self.stages.push(Box::new(stage));
         self
     }
@@ -103,10 +103,10 @@ impl Compiler<'_> {
             .into_iter()
             .enumerate()
             .map(|(index, chain)| {
-                let port = self
-                    .core
-                    .arena
-                    .create(source.capacity(index), None, Reader::Unclaimed);
+                let port =
+                    self.core
+                        .arena
+                        .create(source.capacity(index), None, SourceEnd::Unclaimed);
                 self.core.add_pipeline(chain, smallvec::smallvec![port]);
                 port
             })
@@ -183,9 +183,9 @@ impl Compiler<'_> {
         Ok(chain.with(WholeStage::new(plan.dtype().clone())))
     }
 
-    /// Claims the split compiling's reader of `key`: its port when `key` is shared, building
-    /// the pipeline `build` makes for the first reader with a port for every reader in every
-    /// split not yet finished, or `None` when this is its only reader.
+    /// Claims the split compiling's port for `key` when `key` is shared, building the pipeline
+    /// `build` makes for the first claimant with one port per reader in every split not yet
+    /// finished, or `None` when this split's reader is its only one.
     fn claim(
         &mut self,
         key: Shared,
@@ -207,26 +207,29 @@ impl Compiler<'_> {
         let Some(ranges) = shares.take_reaches(key) else {
             return Ok(None);
         };
-        let mut readers: SmallVec<[usize; 4]> = SmallVec::new();
+        let mut claimants: SmallVec<[usize; 4]> = SmallVec::new();
         for rows in &ranges {
-            readers.extend(
+            claimants.extend(
                 shares
                     .overlapping(rows)
-                    .filter(|&reader| !shares.finished[reader] && shares.overlaps(reader, rows)),
+                    .filter(|&split| !shares.finished[split] && shares.overlaps(split, rows)),
             );
         }
-        if readers.len() <= 1 {
+        if claimants.len() <= 1 {
             return Ok(None);
         }
-        let mut outlets: SmallVec<[PortId; 1]> = SmallVec::with_capacity(readers.len());
+        let mut outlets: SmallVec<[PortId; 1]> = SmallVec::with_capacity(claimants.len());
         let mut mine = None;
-        for reader in readers {
-            let port = self.core.arena.create(usize::MAX, None, Reader::Unclaimed);
+        for claimant in claimants {
+            let port = self
+                .core
+                .arena
+                .create(usize::MAX, None, SourceEnd::Unclaimed);
             outlets.push(port);
-            if reader == split && mine.is_none() {
+            if claimant == split && mine.is_none() {
                 mine = Some(port);
             } else {
-                self.core.shares.ports[reader]
+                self.core.shares.ports[claimant]
                     .entry(key)
                     .or_default()
                     .push(port);
@@ -389,15 +392,25 @@ impl Shares {
         (!ranges.is_empty()).then_some(ranges)
     }
 
-    /// Drops the ports split `split` did not claim: its readers that never came, as a chunk
-    /// its mask ruled out or a stage it never ran.
-    pub(crate) fn finish(&mut self, split: usize, arena: &mut super::port::Arena) {
+    /// Every port made for a reader that has not claimed it yet.
+    #[cfg(debug_assertions)]
+    pub(crate) fn waiting(&self) -> impl Iterator<Item = PortId> + '_ {
+        self.ports
+            .iter()
+            .flat_map(|ports| ports.values().flatten().copied())
+    }
+
+    /// Marks split `split` finished and returns the ports it never claimed: those of its
+    /// readers that never came, as a chunk its mask ruled out or a stage it never ran. Each is
+    /// still an outlet of the pipeline that shares it, which must stop pushing into it: a port
+    /// has a consumer until it is closed and drained, so the caller detaches each port from
+    /// its sink before discarding it. See [`Core::finish_split`].
+    pub(crate) fn finish(&mut self, split: usize) -> SmallVec<[PortId; 4]> {
         self.finished[split] = true;
-        for (_, ports) in std::mem::take(&mut self.ports[split]) {
-            for port in ports {
-                arena.drop_reader(port);
-            }
-        }
+        std::mem::take(&mut self.ports[split])
+            .into_values()
+            .flatten()
+            .collect()
     }
 }
 
