@@ -12,6 +12,7 @@
 
 mod children;
 mod display;
+#[cfg(test)]
 mod lower;
 pub mod operator;
 pub(crate) mod operators;
@@ -28,7 +29,8 @@ pub use display::PlanSummaryExtractor;
 pub use display::PlanTreeContext;
 pub use display::PlanTreeDisplay;
 pub use display::PlanTreeExtractor;
-pub use lower::lower;
+#[cfg(test)]
+use lower::lower;
 pub use optimize::optimize;
 pub use plans::Concat;
 pub use plans::ConcatData;

@@ -116,6 +116,12 @@ mod tests {
         #[case] patch_values: Buffer<T>,
         #[case] range: Range<usize>,
     ) {
+        let mut expected = inner.to_vec();
+        for (&index, &value) in patch_indices.iter().zip(patch_values.iter()) {
+            expected[index as usize] = value;
+        }
+        let expected = PrimitiveArray::from_iter(expected[range.clone()].iter().copied());
+
         // Create patched array.
         let patches = Patches::new(
             inner.len(),
@@ -132,22 +138,9 @@ mod tests {
             .unwrap()
             .into_array();
 
-        // Verify that applying slice first yields same result as applying slice at end.
-        let slice_first = patched_array
-            .slice(range.clone())
-            .unwrap()
-            .execute::<Canonical>(&mut ctx)
-            .unwrap()
-            .into_array();
+        let slice_first = patched_array.slice(range).unwrap();
 
-        let slice_last = patched_array
-            .execute::<Canonical>(&mut ctx)
-            .unwrap()
-            .into_primitive()
-            .slice(range)
-            .unwrap();
-
-        assert_arrays_eq!(slice_first, slice_last, &mut ctx);
+        assert_arrays_eq!(slice_first, &expected, &mut ctx);
     }
 
     #[test]
@@ -168,10 +161,7 @@ mod tests {
             .slice(1024..5000)
             .unwrap()
             .slice(1..2065)
-            .unwrap()
-            .execute::<Canonical>(&mut ctx)
-            .unwrap()
-            .into_array();
+            .unwrap();
 
         let mut expected = BufferMut::from_iter(1025u64..=3088);
         expected[1023] = 3;
@@ -180,6 +170,6 @@ mod tests {
 
         let expected = expected.into_array();
 
-        assert_arrays_eq!(expected, sliced, &mut ctx);
+        assert_arrays_eq!(sliced, expected, &mut ctx);
     }
 }

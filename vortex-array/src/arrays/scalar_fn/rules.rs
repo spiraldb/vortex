@@ -272,7 +272,12 @@ mod tests {
         .into_array();
 
         let expr = is_null(root());
-        array.apply(&expr).vortex_expect("expr evaluation");
+        let result = array.apply(&expr).vortex_expect("expr evaluation");
+        assert_arrays_eq!(
+            result,
+            BoolArray::from_iter([false]),
+            &mut array_session().create_execution_ctx()
+        );
     }
 
     #[test]

@@ -1726,9 +1726,14 @@ mod tests {
             .unwrap();
 
         let result = block_on(move |_| project).unwrap();
-        assert!(result.dtype().is_struct());
-
-        assert_eq!(result.len(), 5);
+        let expected = StructArray::try_new(
+            Vec::<FieldName>::new().into(),
+            vec![],
+            5,
+            Validity::AllValid,
+        )
+        .unwrap();
+        assert_arrays_eq!(result, expected, &mut SESSION.create_execution_ctx());
     }
 
     /// Regression test for https://github.com/vortex-data/vortex/issues/7808

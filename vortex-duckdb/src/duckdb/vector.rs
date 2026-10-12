@@ -604,6 +604,8 @@ mod tests {
         sel_slice[2] = 0;
 
         vector.dictionary(&dict, 2, &sel_vec, 3);
+        drop(dict);
+        drop(sel_vec);
         vector.flatten(3);
 
         assert_eq!(vector.as_slice_with_len::<i32>(3), &[100, 200, 100]);

@@ -55,7 +55,6 @@ mod tests {
         let mut expected = vec![999u64; 1000];
         expected[0] = 0;
 
-        let values = sliced.execute::<PrimitiveArray>(&mut ctx).unwrap();
-        assert_arrays_eq!(values, PrimitiveArray::from_iter(expected), &mut ctx);
+        assert_arrays_eq!(sliced, PrimitiveArray::from_iter(expected), &mut ctx);
     }
 }

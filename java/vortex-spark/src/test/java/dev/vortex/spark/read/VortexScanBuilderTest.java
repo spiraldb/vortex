@@ -5,8 +5,6 @@ package dev.vortex.spark.read;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.Map;
@@ -152,16 +150,14 @@ final class VortexScanBuilderTest {
     @DisplayName("pushedPredicates returns a defensive copy")
     void pushedPredicatesReturnsCopy() {
         VortexScanBuilder builder = builderWithColumns(new Transform[0], Column.create("id", DataTypes.IntegerType));
-        builder.pushPredicates(new Predicate[] {equality("id", 1)});
+        Predicate predicate = equality("id", 1);
+        builder.pushPredicates(new Predicate[] {predicate});
 
         Predicate[] first = builder.pushedPredicates();
-        Predicate[] second = builder.pushedPredicates();
-        assertNotSame(first, second);
 
         // Mutating one returned array must not leak into subsequent calls.
         first[0] = null;
-        assertEquals(1, builder.pushedPredicates().length);
-        assertNotNull(builder.pushedPredicates()[0]);
+        assertArrayEquals(new Predicate[] {predicate}, builder.pushedPredicates());
     }
 
     // --- build ---
@@ -171,6 +167,8 @@ final class VortexScanBuilderTest {
     void buildWithoutPathsThrows() {
         VortexScanBuilder builder = new VortexScanBuilder(Map.of());
         builder.addColumn(Column.create("id", DataTypes.IntegerType));
-        assertThrows(IllegalStateException.class, builder::build);
+        assertEquals(
+                "paths cannot be empty",
+                assertThrows(IllegalStateException.class, builder::build).getMessage());
     }
 }

@@ -88,12 +88,6 @@ fn test_cast_identity(array: &ArrayRef, ctx: &mut ExecutionCtx) {
 }
 
 fn test_cast_from_null(array: &ArrayRef, ctx: &mut ExecutionCtx) {
-    // Null can be cast to itself
-    let result = cast_and_execute(&array.clone(), DType::Null, ctx)
-        .vortex_expect("cast should succeed in conformance test");
-    assert_eq!(result.len(), array.len());
-    assert_eq!(result.dtype(), &DType::Null);
-
     // Null can also be cast to any nullable type
     let nullable_types = vec![
         DType::Bool(Nullability::Nullable),
@@ -133,7 +127,7 @@ fn test_cast_from_null(array: &ArrayRef, ctx: &mut ExecutionCtx) {
 
 fn test_cast_to_non_nullable(array: &ArrayRef, ctx: &mut ExecutionCtx) {
     // DType::Null has no non-nullable form
-    if &DType::Null == array.dtype() {
+    if &DType::Null == array.dtype() || !array.dtype().is_nullable() {
         return;
     }
 
@@ -174,11 +168,6 @@ fn test_cast_to_non_nullable(array: &ArrayRef, ctx: &mut ExecutionCtx) {
             );
         }
     } else {
-        if &DType::Null == array.dtype() {
-            // DType::Null has no non-nullable form. A null array can only
-            // be cast to DType::Null
-            return;
-        }
         cast_and_execute(&array.clone(), array.dtype().as_nonnullable(), ctx)
             .err()
             .unwrap_or_else(|| {
@@ -191,6 +180,10 @@ fn test_cast_to_non_nullable(array: &ArrayRef, ctx: &mut ExecutionCtx) {
 }
 
 fn test_cast_to_nullable(array: &ArrayRef, ctx: &mut ExecutionCtx) {
+    if array.dtype().is_nullable() {
+        return;
+    }
+
     let nullable = cast_and_execute(&array.clone(), array.dtype().as_nullable(), ctx)
         .vortex_expect("arrays without nulls can cast to nullable");
     assert_eq!(nullable.dtype(), &array.dtype().as_nullable());
@@ -292,18 +285,16 @@ fn test_cast_to_primitive(
     }
 
     // Otherwise, all values must fit.
-    let casted = cast_and_execute(
-        &array.clone(),
-        DType::Primitive(target_ptype, array.dtype().nullability()),
-        ctx,
-    )
-    .unwrap_or_else(|e| {
+    let target_dtype = DType::Primitive(target_ptype, array.dtype().nullability());
+    let casted = cast_and_execute(array, target_dtype.clone(), ctx).unwrap_or_else(|e| {
         vortex_panic!(
             "Cast must succeed because all values are within bounds. {} {}: {e}",
             target_ptype,
             array.display_values(),
         )
     });
+    assert_eq!(casted.dtype(), &target_dtype);
+    assert_eq!(casted.len(), array.len());
     assert_eq!(
         array
             .validity()
@@ -325,7 +316,7 @@ fn test_cast_to_primitive(
             .vortex_expect("scalar_at should succeed in conformance test");
         assert_eq!(
             original
-                .cast(casted.dtype())
+                .cast(&target_dtype)
                 .vortex_expect("cast should succeed in conformance test"),
             casted,
             "{i} {original} {casted}"

@@ -474,12 +474,9 @@ mod tests {
     use std::sync::LazyLock;
 
     use rstest::rstest;
-    use vortex_array::Canonical;
-    use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::assert_arrays_eq;
-    use vortex_error::VortexExpect;
     use vortex_session::VortexSession;
 
     use super::*;
@@ -507,17 +504,12 @@ mod tests {
         let values = PrimitiveArray::from_iter((0..size).map(|i| i as f32));
         let encoded = alp_encode(values.as_view(), None, &mut ctx).unwrap();
 
-        let result_canonical = {
-            encoded
-                .clone()
-                .into_array()
-                .execute::<Canonical>(&mut ctx)
-                .unwrap()
-        };
         // Compare against the traditional array-based decompress path
-        let expected = decompress_into_array(encoded, &mut SESSION.create_execution_ctx()).unwrap();
+        let expected =
+            decompress_into_array(encoded.clone(), &mut SESSION.create_execution_ctx()).unwrap();
 
-        assert_arrays_eq!(result_canonical.into_array(), expected, &mut ctx);
+        assert_arrays_eq!(expected, values, &mut ctx);
+        assert_arrays_eq!(encoded, values, &mut ctx);
     }
 
     #[rstest]
@@ -536,15 +528,12 @@ mod tests {
             alp_encode(values.as_view(), None, &mut SESSION.create_execution_ctx()).unwrap();
 
         let mut ctx = SESSION.create_execution_ctx();
-        let result_canonical = encoded
-            .clone()
-            .into_array()
-            .execute::<Canonical>(&mut ctx)
-            .unwrap();
         // Compare against the traditional array-based decompress path
-        let expected = decompress_into_array(encoded, &mut SESSION.create_execution_ctx()).unwrap();
+        let expected =
+            decompress_into_array(encoded.clone(), &mut SESSION.create_execution_ctx()).unwrap();
 
-        assert_arrays_eq!(result_canonical.into_array(), expected, &mut ctx);
+        assert_arrays_eq!(expected, values, &mut ctx);
+        assert_arrays_eq!(encoded, values, &mut ctx);
     }
 
     #[rstest]
@@ -569,15 +558,12 @@ mod tests {
         assert!(encoded.patches().unwrap().array_len() > 0);
 
         let mut ctx = SESSION.create_execution_ctx();
-        let result_canonical = encoded
-            .clone()
-            .into_array()
-            .execute::<Canonical>(&mut ctx)
-            .unwrap();
         // Compare against the traditional array-based decompress path
-        let expected = decompress_into_array(encoded, &mut SESSION.create_execution_ctx()).unwrap();
+        let expected =
+            decompress_into_array(encoded.clone(), &mut SESSION.create_execution_ctx()).unwrap();
 
-        assert_arrays_eq!(result_canonical.into_array(), expected, &mut ctx);
+        assert_arrays_eq!(expected, array, &mut ctx);
+        assert_arrays_eq!(encoded, array, &mut ctx);
     }
 
     #[rstest]
@@ -600,15 +586,12 @@ mod tests {
             alp_encode(array.as_view(), None, &mut SESSION.create_execution_ctx()).unwrap();
 
         let mut ctx = SESSION.create_execution_ctx();
-        let result_canonical = encoded
-            .clone()
-            .into_array()
-            .execute::<Canonical>(&mut ctx)
-            .unwrap();
         // Compare against the traditional array-based decompress path
-        let expected = decompress_into_array(encoded, &mut SESSION.create_execution_ctx()).unwrap();
+        let expected =
+            decompress_into_array(encoded.clone(), &mut SESSION.create_execution_ctx()).unwrap();
 
-        assert_arrays_eq!(result_canonical.into_array(), expected, &mut ctx);
+        assert_arrays_eq!(expected, array, &mut ctx);
+        assert_arrays_eq!(encoded, array, &mut ctx);
     }
 
     #[rstest]
@@ -634,15 +617,12 @@ mod tests {
         assert!(encoded.patches().unwrap().array_len() > 0);
 
         let mut ctx = SESSION.create_execution_ctx();
-        let result_canonical = encoded
-            .clone()
-            .into_array()
-            .execute::<Canonical>(&mut ctx)
-            .unwrap();
         // Compare against the traditional array-based decompress path
-        let expected = decompress_into_array(encoded, &mut SESSION.create_execution_ctx()).unwrap();
+        let expected =
+            decompress_into_array(encoded.clone(), &mut SESSION.create_execution_ctx()).unwrap();
 
-        assert_arrays_eq!(result_canonical.into_array(), expected, &mut ctx);
+        assert_arrays_eq!(expected, array, &mut ctx);
+        assert_arrays_eq!(encoded, array, &mut ctx);
     }
 
     #[rstest]
@@ -667,31 +647,11 @@ mod tests {
         let encoded = alp_encode(array.as_view(), None, &mut ctx).unwrap();
 
         let slice_end = size - slice_start;
-        let slice_len = slice_end - slice_start;
         let sliced_encoded = encoded.slice(slice_start..slice_end).unwrap();
 
-        let result_canonical = sliced_encoded.execute::<Canonical>(&mut ctx).unwrap();
-        let result_primitive = result_canonical.into_primitive();
-
-        for idx in 0..slice_len {
-            let expected_value = values[slice_start + idx];
-
-            let result_valid = result_primitive
-                .validity()
-                .vortex_expect("result validity should be derivable")
-                .execute_is_valid(idx, &mut ctx)
-                .unwrap();
-            assert_eq!(
-                result_valid,
-                expected_value.is_some(),
-                "Validity mismatch at idx={idx}",
-            );
-
-            if let Some(expected_val) = expected_value {
-                let result_val = result_primitive.as_slice::<f64>()[idx];
-                assert_eq!(result_val, expected_val, "Value mismatch at idx={idx}",);
-            }
-        }
+        let expected =
+            PrimitiveArray::from_option_iter(values[slice_start..slice_end].iter().copied());
+        assert_arrays_eq!(sliced_encoded, expected, &mut ctx);
     }
 
     #[rstest]
@@ -716,33 +676,11 @@ mod tests {
         let encoded = alp_encode(array.as_view(), None, &mut ctx).unwrap();
 
         let slice_end = size - slice_start;
-        let slice_len = slice_end - slice_start;
         let sliced_encoded = encoded.slice(slice_start..slice_end).unwrap();
 
-        let result_primitive = sliced_encoded.execute::<PrimitiveArray>(&mut ctx).unwrap();
-
-        for idx in 0..slice_len {
-            let expected_value = values[slice_start + idx];
-
-            let result_valid = result_primitive
-                .as_ref()
-                .validity()
-                .unwrap()
-                .execute_mask(result_primitive.as_ref().len(), &mut ctx)
-                .unwrap()
-                .value(idx);
-            assert_eq!(
-                result_valid,
-                expected_value.is_some(),
-                "Validity mismatch at idx={idx}",
-            );
-
-            if let Some(expected_val) = expected_value {
-                let buf = result_primitive.to_buffer::<f64>();
-                let result_val = buf.as_slice()[idx];
-                assert_eq!(result_val, expected_val, "Value mismatch at idx={idx}",);
-            }
-        }
+        let expected =
+            PrimitiveArray::from_option_iter(values[slice_start..slice_end].iter().copied());
+        assert_arrays_eq!(sliced_encoded, expected, &mut ctx);
     }
 
     /// Regression test for issue #5948: execute_decompress drops patches when chunk_offsets is

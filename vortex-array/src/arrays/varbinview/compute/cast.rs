@@ -81,6 +81,7 @@ mod tests {
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::arrays::VarBinViewArray;
+    use crate::assert_arrays_eq;
     use crate::builtins::ArrayBuiltins;
     use crate::compute::conformance::cast::test_cast_conformance;
     use crate::dtype::DType;
@@ -109,7 +110,11 @@ mod tests {
         let varbin = VarBinViewArray::from_iter(vec![Some("a"), Some("b"), Some("c")], source);
 
         let res = varbin.into_array().cast(target.clone());
-        assert_eq!(res.unwrap().dtype(), &target);
+        assert_arrays_eq!(
+            res.unwrap(),
+            VarBinViewArray::from_iter([Some("a"), Some("b"), Some("c")], target),
+            &mut SESSION.create_execution_ctx()
+        );
     }
 
     #[rstest]

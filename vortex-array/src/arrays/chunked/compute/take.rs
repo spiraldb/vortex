@@ -795,14 +795,16 @@ mod tests {
         let fsl = FixedSizeListArray::try_new(elements, 3, Validity::NonNullable, 6)?;
 
         let indices = buffer![4u64, 0, 2, 5, 1, 4].into_array();
-        let result = fsl.take(indices.clone())?;
+        let result = fsl.take(indices)?;
         let expected = FixedSizeListArray::try_new(
-            PrimitiveArray::from_iter(0i32..18).into_array(),
+            PrimitiveArray::from_iter([
+                12i32, 13, 14, 0, 1, 2, 6, 7, 8, 15, 16, 17, 3, 4, 5, 12, 13, 14,
+            ])
+            .into_array(),
             3,
             Validity::NonNullable,
             6,
-        )?
-        .take(indices)?;
+        )?;
 
         assert_arrays_eq!(result, expected, &mut ctx);
         Ok(())
@@ -846,14 +848,13 @@ mod tests {
         let arr = ChunkedArray::try_new(vec![c0.into_array(), c1.into_array()], dtype)?;
 
         let indices = buffer![4u64, 0, 3, 3, 1].into_array();
-        let result = arr.take(indices.clone())?;
+        let result = arr.take(indices)?;
         let expected = FixedSizeListArray::try_new(
-            PrimitiveArray::from_iter(0i32..10).into_array(),
+            PrimitiveArray::from_iter([8i32, 9, 0, 1, 6, 7, 6, 7, 2, 3]).into_array(),
             2,
             Validity::NonNullable,
             5,
-        )?
-        .take(indices)?;
+        )?;
 
         assert_arrays_eq!(result, expected, &mut ctx);
         Ok(())
@@ -879,14 +880,13 @@ mod tests {
 
         let indices =
             PrimitiveArray::from_option_iter([Some(4u64), None, Some(0), Some(1)]).into_array();
-        let result = arr.take(indices.clone())?;
+        let result = arr.take(indices)?;
         let expected = FixedSizeListArray::try_new(
-            PrimitiveArray::from_iter(0i32..10).into_array(),
+            PrimitiveArray::from_iter([8i32, 9, 0, 0, 0, 1, 0, 0]).into_array(),
             2,
-            Validity::Array(bitbuffer![1 0 1 1 1].into_array()),
-            5,
-        )?
-        .take(indices)?;
+            Validity::Array(bitbuffer![1 0 1 0].into_array()),
+            4,
+        )?;
 
         assert_arrays_eq!(result, expected, &mut ctx);
         Ok(())
@@ -914,14 +914,13 @@ mod tests {
         let arr = ChunkedArray::try_new(vec![c0.into_array(), nested.into_array()], dtype)?;
 
         let indices = buffer![4u64, 0, 3, 1].into_array();
-        let result = arr.take(indices.clone())?;
+        let result = arr.take(indices)?;
         let expected = FixedSizeListArray::try_new(
-            PrimitiveArray::from_iter(0i32..10).into_array(),
+            PrimitiveArray::from_iter([8i32, 9, 0, 1, 6, 7, 2, 3]).into_array(),
             2,
             Validity::NonNullable,
-            5,
-        )?
-        .take(indices)?;
+            4,
+        )?;
 
         assert_arrays_eq!(result, expected, &mut ctx);
         Ok(())
@@ -942,14 +941,13 @@ mod tests {
         let arr = ChunkedArray::try_new(vec![c0.into_array(), c1], dtype)?;
 
         let indices = buffer![4u64, 0, 3, 1].into_array();
-        let result = arr.take(indices.clone())?;
+        let result = arr.take(indices)?;
         let expected = FixedSizeListArray::try_new(
-            PrimitiveArray::from_iter(0i32..10).into_array(),
+            PrimitiveArray::from_iter([0i32, 0, 0, 1, 0, 0, 2, 3]).into_array(),
             2,
-            Validity::Array(bitbuffer![1 1 1 0 0].into_array()),
-            5,
-        )?
-        .take(indices)?;
+            Validity::Array(bitbuffer![0 1 0 1].into_array()),
+            4,
+        )?;
 
         assert_arrays_eq!(result, expected, &mut ctx);
         Ok(())
@@ -981,19 +979,27 @@ mod tests {
 
         // A monotonic run crossing the chunk boundary.
         let indices = contiguous_pieces(&[1], &[3])?;
-        assert_arrays_eq!(
-            arr.take(indices.clone())?,
-            reference.take(indices)?,
-            &mut ctx
-        );
+        let result = arr.take(indices.clone())?;
+        assert_arrays_eq!(&result, reference.take(indices)?, &mut ctx);
+        let expected = FixedSizeListArray::try_new(
+            PrimitiveArray::from_iter([2i32, 3, 4, 5, 6, 7]).into_array(),
+            2,
+            Validity::NonNullable,
+            3,
+        )?;
+        assert_arrays_eq!(result, expected, &mut ctx);
 
         // Out-of-order pieces forcing the reorder take.
         let indices = contiguous_pieces(&[3, 0], &[2, 2])?;
-        assert_arrays_eq!(
-            arr.take(indices.clone())?,
-            reference.take(indices)?,
-            &mut ctx
-        );
+        let result = arr.take(indices.clone())?;
+        assert_arrays_eq!(&result, reference.take(indices)?, &mut ctx);
+        let expected = FixedSizeListArray::try_new(
+            PrimitiveArray::from_iter([6i32, 7, 8, 9, 0, 1, 2, 3]).into_array(),
+            2,
+            Validity::NonNullable,
+            4,
+        )?;
+        assert_arrays_eq!(result, expected, &mut ctx);
         Ok(())
     }
 
@@ -1264,6 +1270,11 @@ mod tests {
 
         // Verify every element.
         let result = result.execute::<PrimitiveArray>(&mut ctx)?;
+        assert_eq!(
+            result.dtype(),
+            &DType::Primitive(PType::I32, Nullability::NonNullable)
+        );
+        assert_eq!(result.len(), indices.len());
         let result_vals = result.as_slice::<i32>();
         for (pos, &idx) in indices.iter().enumerate() {
             assert_eq!(

@@ -237,10 +237,7 @@ mod tests {
             assert!(!array.is_null());
 
             {
-                let array = vx_array::as_ref(array)
-                    .clone()
-                    .execute::<StructArray>(&mut ctx)
-                    .unwrap();
+                let array = vx_array::as_ref(array);
                 assert_arrays_eq!(array, struct_array, &mut ctx);
             }
 

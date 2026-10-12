@@ -33,13 +33,16 @@ fn filter_fallback_width_records() {
 
     // A uniquely owned buffer takes the in-place `copy_within` path.
     let owned = Buffer::from_iter(0u8..12);
+    let original_ptr = owned.as_ptr();
     let filtered = filter_records(owned, 3, &mask, BufferAllocatorRef::static_ref());
+    assert_eq!(filtered.as_ptr(), original_ptr);
     assert_eq!(filtered.as_slice(), &expected);
 
     // Retaining a second reference forces the copying path instead.
     let shared = Buffer::from_iter(0u8..12);
-    let _retained = shared.clone();
+    let retained = shared.clone();
     let filtered = filter_records(shared, 3, &mask, BufferAllocatorRef::static_ref());
+    assert_eq!(retained.as_slice(), &(0u8..12).collect::<Vec<_>>());
     assert_eq!(filtered.as_slice(), &expected);
 }
 

@@ -696,6 +696,10 @@ mod tests {
 
         let listview = builder.finish();
         assert_eq!(listview.len(), 0);
+        assert_eq!(
+            listview.dtype(),
+            &DType::List(Arc::new(I32.into()), NonNullable)
+        );
     }
 
     #[test]
@@ -765,6 +769,12 @@ mod tests {
             PrimitiveArray::from_iter([4i32, 5]),
             &mut ctx
         );
+        let expected = ListArray::new(
+            buffer![1i32, 2, 3, 4, 5].into_array(),
+            buffer![0u32, 3, 3, 3, 5].into_array(),
+            Validity::from_iter([true, true, false, true]),
+        );
+        assert_arrays_eq!(listview, expected, &mut ctx);
     }
 
     #[test]
@@ -906,6 +916,12 @@ mod tests {
             PrimitiveArray::from_iter([10i32, 20]),
             &mut ctx
         );
+        let expected = ListArray::new(
+            buffer![10i32, 20].into_array(),
+            buffer![0u32, 0, 0, 0, 0, 2].into_array(),
+            Validity::from_iter([true, true, false, false, true]),
+        );
+        assert_arrays_eq!(listview, expected, &mut ctx);
     }
 
     #[test]
@@ -989,6 +1005,12 @@ mod tests {
             PrimitiveArray::from_iter([4i32, 5]),
             &mut ctx
         );
+        let expected = ListArray::new(
+            buffer![0i32, 1, 2, 3, 4, 5].into_array(),
+            buffer![0u32, 1, 4, 4, 6].into_array(),
+            Validity::from_iter([true, true, false, true]),
+        );
+        assert_arrays_eq!(listview, expected, &mut ctx);
     }
 
     #[test]
@@ -1163,6 +1185,12 @@ mod tests {
             PrimitiveArray::from_iter([10i32]),
             &mut ctx
         );
+        let expected = ListArray::new(
+            buffer![10i32, 20, 10].into_array(),
+            buffer![0u32, 2, 2, 3].into_array(),
+            Validity::from_iter([true, false, true]),
+        );
+        assert_arrays_eq!(listview, expected, &mut ctx);
     }
 
     #[test]

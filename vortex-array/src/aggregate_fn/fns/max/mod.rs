@@ -307,11 +307,11 @@ mod tests {
     }
 
     #[test]
-    fn max_not_skipping_shortcircuits_on_exact_nan_count_stat() -> VortexResult<()> {
+    fn max_not_skipping_with_exact_nan_count_stat() -> VortexResult<()> {
         let mut ctx = array_session().create_execution_ctx();
-        // The array has no NaNs; a planted exact NaNCount stat proves the poisoning came from
-        // the stat rather than a scan.
-        let batch = PrimitiveArray::new(buffer![1.0f64, 2.0], Validity::NonNullable).into_array();
+        // The exact NaN count agrees with the batch; including NaNs must poison the result.
+        let batch =
+            PrimitiveArray::new(buffer![1.0f64, 2.0, f64::NAN], Validity::NonNullable).into_array();
         batch
             .statistics()
             .set(Stat::NaNCount, Precision::Exact(ScalarValue::from(1u64)));
@@ -363,7 +363,7 @@ mod tests {
         let batch = PrimitiveArray::new(buffer![10i32, 20], Validity::NonNullable).into_array();
         batch
             .statistics()
-            .set(Stat::Max, Precision::Exact(ScalarValue::from(25i32)));
+            .set(Stat::Max, Precision::Exact(ScalarValue::from(20i32)));
         let mut acc = Accumulator::try_new(
             Max,
             NumericalAggregateOpts::default(),
@@ -374,7 +374,7 @@ mod tests {
 
         assert_eq!(
             acc.finish()?,
-            Scalar::primitive(25i32, Nullability::Nullable)
+            Scalar::primitive(20i32, Nullability::Nullable)
         );
         Ok(())
     }

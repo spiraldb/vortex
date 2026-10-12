@@ -59,7 +59,7 @@ def vxf(tmpdir_factory) -> vx.VortexFile:
 
 def test_to_polars_with_limit(vxf: vx.VortexFile) -> None:
     df = vxf.to_polars().limit(100).collect()
-    assert len(df) == 100
+    assert df.to_dicts() == [{"index": x, "value": math.sqrt(x)} for x in range(100)]
 
 
 def test_to_polars_with_filter(vxf: vx.VortexFile) -> None:
@@ -71,13 +71,13 @@ def test_to_polars_with_filter(vxf: vx.VortexFile) -> None:
 def test_to_polars_with_projection(vxf: vx.VortexFile) -> None:
     df = vxf.to_polars().select("index").limit(10).collect()
     assert df.columns == ["index"]
-    assert len(df) == 10
+    assert df["index"].to_list() == list(range(10))
 
 
 def test_to_polars_with_projection_and_filter(vxf: vx.VortexFile) -> None:
     df = vxf.to_polars().select("index", "value").filter(pl.col("index") < 100).collect()
     assert df.columns == ["index", "value"]
-    assert len(df) == 100
+    assert df.to_dicts() == [{"index": x, "value": math.sqrt(x)} for x in range(100)]
 
 
 def test_polars_time_literals(tmp_path):

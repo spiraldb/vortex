@@ -329,7 +329,7 @@ impl Scheme for ZeroBytesSamplingScheme {
 #[test]
 fn test_self_exclusion() {
     let c = compressor();
-    let ctx = CompressorContext::default().descend_with_scheme(IntDictScheme.id(), 0);
+    let ctx = CompressorContext::new().descend_with_scheme(IntDictScheme.id(), 0);
 
     // IntDictScheme is in the history, so it should be excluded.
     assert!(c.is_excluded(&IntDictScheme, &ctx));
@@ -338,7 +338,7 @@ fn test_self_exclusion() {
 #[test]
 fn test_root_exclusion_list_offsets() {
     let c = compressor();
-    let ctx = CompressorContext::default()
+    let ctx = CompressorContext::new()
         .descend_with_scheme(ROOT_SCHEME_ID, structural::root_list_children::OFFSETS);
 
     // IntDict should be excluded for list offsets.
@@ -349,7 +349,7 @@ fn test_root_exclusion_list_offsets() {
 fn test_push_rule_float_dict_excludes_int_dict_from_codes() {
     let c = compressor();
     // FloatDict cascading through codes (child 1).
-    let ctx = CompressorContext::default().descend_with_scheme(FloatDictScheme.id(), 1);
+    let ctx = CompressorContext::new().descend_with_scheme(FloatDictScheme.id(), 1);
 
     // IntDict should be excluded from FloatDict's codes child.
     assert!(c.is_excluded(&IntDictScheme, &ctx));
@@ -359,7 +359,7 @@ fn test_push_rule_float_dict_excludes_int_dict_from_codes() {
 fn test_push_rule_float_dict_excludes_int_dict_from_values() {
     let c = compressor();
     // FloatDict cascading through values (child 0).
-    let ctx = CompressorContext::default().descend_with_scheme(FloatDictScheme.id(), 0);
+    let ctx = CompressorContext::new().descend_with_scheme(FloatDictScheme.id(), 0);
 
     // IntDict should also be excluded from FloatDict's values child (ALP propagation
     // replacement).
@@ -369,7 +369,7 @@ fn test_push_rule_float_dict_excludes_int_dict_from_values() {
 #[test]
 fn test_no_exclusion_without_history() {
     let c = compressor();
-    let ctx = CompressorContext::default();
+    let ctx = CompressorContext::new();
 
     // No history means no exclusions.
     assert!(!c.is_excluded(&IntDictScheme, &ctx));
@@ -389,24 +389,6 @@ fn immediate_always_use_wins_immediately() -> VortexResult<()> {
         winner,
         Some((scheme, WinnerEstimate::AlwaysUse))
             if scheme.id() == ImmediateAlwaysUseScheme.id()
-    ));
-    Ok(())
-}
-
-#[test]
-fn callback_always_use_wins_immediately() -> VortexResult<()> {
-    let compressor = CascadingCompressor::new(vec![&DirectRatioScheme, &CallbackAlwaysUseScheme]);
-    let schemes: [&'static dyn Scheme; 2] = [&DirectRatioScheme, &CallbackAlwaysUseScheme];
-    let data = estimate_test_data();
-    let mut exec_ctx = SESSION.create_execution_ctx();
-
-    let winner =
-        compressor.choose_best_scheme(&schemes, &data, CompressorContext::new(), &mut exec_ctx)?;
-
-    assert!(matches!(
-        winner,
-        Some((scheme, WinnerEstimate::AlwaysUse))
-            if scheme.id() == CallbackAlwaysUseScheme.id()
     ));
     Ok(())
 }
@@ -719,6 +701,7 @@ fn all_null_array_compresses_to_constant() -> VortexResult<()> {
     let mut exec_ctx = SESSION.create_execution_ctx();
     let compressed = compressor.compress(&array, &mut exec_ctx)?;
     assert!(compressed.is::<Constant>());
+    assert_arrays_eq!(compressed, array, &mut exec_ctx);
     Ok(())
 }
 

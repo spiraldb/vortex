@@ -552,10 +552,9 @@ mod tests {
     }
 
     fn round_trip(scalar: Scalar) {
-        assert_eq!(
-            scalar,
-            Scalar::from_proto(&pb::Scalar::from(&scalar), &session()).unwrap(),
-        );
+        let decoded = Scalar::from_proto(&pb::Scalar::from(&scalar), &session()).unwrap();
+        assert_eq!(decoded.dtype(), scalar.dtype());
+        assert_eq!(decoded, scalar);
     }
 
     #[test]
@@ -1054,8 +1053,7 @@ mod tests {
             );
         }
 
-        // Test cases where type changes but value is preserved.
-        // Unsigned integers consolidate to U64.
+        // The wire format widens integers; decoding must restore their original widths.
         let unsigned_cases = vec![
             (
                 "u8",
@@ -1083,6 +1081,7 @@ mod tests {
 
             match read_back.as_ref() {
                 Some(ScalarValue::Primitive(pv)) => {
+                    assert_eq!(pv.ptype(), dtype.as_ptype(), "{name} primitive width");
                     let v = match pv {
                         PValue::U8(v) => *v as u64,
                         PValue::U16(v) => *v as u64,
@@ -1099,7 +1098,7 @@ mod tests {
             }
         }
 
-        // Signed integers consolidate to I64.
+        // Signed integers must also recover their original widths.
         let signed_cases = vec![
             (
                 "i8",
@@ -1127,6 +1126,7 @@ mod tests {
 
             match read_back.as_ref() {
                 Some(ScalarValue::Primitive(pv)) => {
+                    assert_eq!(pv.ptype(), dtype.as_ptype(), "{name} primitive width");
                     let v = match pv {
                         PValue::I8(v) => *v as i64,
                         PValue::I16(v) => *v as i64,

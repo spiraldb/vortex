@@ -517,6 +517,7 @@ mod tests {
 
     fn assert_scalar(ptr: *mut vx_scalar, expected: Scalar) {
         assert!(!ptr.is_null());
+        assert_eq!(vx_scalar::as_ref(ptr).dtype(), expected.dtype());
         assert_eq!(vx_scalar::as_ref(ptr), &expected);
         unsafe { vx_scalar_free(ptr) };
     }
@@ -621,9 +622,8 @@ mod tests {
         unsafe {
             let scalar = vx_scalar_new_u8(7, false);
             let cloned = vx_scalar_clone(scalar);
-            assert_eq!(vx_scalar::as_ref(cloned), vx_scalar::as_ref(scalar));
-            vx_scalar_free(cloned);
             vx_scalar_free(scalar);
+            assert_scalar(cloned, Scalar::primitive(7u8, Nullability::NonNullable));
         }
     }
 
@@ -825,8 +825,14 @@ mod tests {
 
             let empty = vx_scalar_new_list(dtype, ptr::null(), 0, false, &raw mut error);
             assert_no_error(error);
-            assert!(!empty.is_null());
-            vx_scalar_free(empty);
+            assert_scalar(
+                empty,
+                Scalar::list(
+                    Arc::new(DType::Bool(Nullability::NonNullable)),
+                    Vec::new(),
+                    Nullability::NonNullable,
+                ),
+            );
             vx_dtype_free(dtype);
         }
     }
@@ -954,7 +960,11 @@ mod tests {
             assert_no_error(error);
             assert!(!vx_scalar_is_null(date));
             let roundtrip = vx_scalar_dtype(date);
-            assert!(matches!(vx_dtype::as_ref(roundtrip), DType::Extension(_)));
+            assert_eq!(vx_dtype::as_ref(roundtrip), vx_dtype::as_ref(date_dtype));
+            assert_eq!(
+                vx_scalar::as_ref(date).as_extension().to_storage_scalar(),
+                Scalar::primitive(20_000i32, Nullability::NonNullable)
+            );
             vx_dtype_free(roundtrip);
             vx_scalar_free(date);
 

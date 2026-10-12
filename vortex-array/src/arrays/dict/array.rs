@@ -499,13 +499,14 @@ mod test {
         len: usize,
         unique_values: usize,
         chunk_count: usize,
-    ) -> ArrayRef
+    ) -> (ArrayRef, Vec<T>)
     where
         StandardUniform: Distribution<T>,
     {
         let mut rng = StdRng::seed_from_u64(0);
 
-        (0..chunk_count)
+        let mut expected = Vec::with_capacity(len * chunk_count);
+        let array = (0..chunk_count)
             .map(|_| {
                 let values = (0..unique_values)
                     .map(|_| rng.random::<T>())
@@ -516,12 +517,16 @@ mod test {
                     })
                     .collect::<PrimitiveArray>();
 
+                expected.extend(codes.as_slice::<Code>().iter().map(|code| {
+                    values.as_slice::<T>()[<Code as num_traits::AsPrimitive<usize>>::as_(*code)]
+                }));
                 DictArray::try_new(codes.into_array(), values.into_array())
                     .vortex_expect("DictArray creation should succeed in arbitrary impl")
                     .into_array()
             })
             .collect::<ChunkedArray>()
-            .into_array()
+            .into_array();
+        (array, expected)
     }
 
     #[test]
@@ -548,7 +553,7 @@ mod test {
         let mut ctx = array_session().create_execution_ctx();
         let len = 2;
         let chunk_count = 2;
-        let array = make_dict_primitive_chunks::<u64, u64>(len, 2, chunk_count);
+        let (array, expected) = make_dict_primitive_chunks::<u64, u64>(len, 2, chunk_count);
 
         let mut builder = builder_with_capacity_in(
             &DType::Primitive(PType::U64, NonNullable),
@@ -560,10 +565,11 @@ mod test {
             &mut array_session().create_execution_ctx(),
         )?;
 
-        let into_prim = array.execute::<PrimitiveArray>(&mut ctx)?;
         let prim_into = builder.finish_into_canonical(&mut ctx).into_primitive();
 
-        assert_arrays_eq!(into_prim, prim_into, &mut ctx);
+        let expected = PrimitiveArray::from_iter(expected);
+        assert_arrays_eq!(array, expected, &mut ctx);
+        assert_arrays_eq!(prim_into, expected, &mut ctx);
         Ok(())
     }
 

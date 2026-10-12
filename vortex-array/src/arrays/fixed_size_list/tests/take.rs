@@ -62,7 +62,7 @@ fn test_take_basic_smoke_test() {
         Validity::NonNullable,
         3,
     );
-    assert_arrays_eq!(expected, result, &mut ctx);
+    assert_arrays_eq!(result, expected, &mut ctx);
 }
 
 // Parameterized test for FSL-specific degenerate (list_size=0) cases.
@@ -129,7 +129,7 @@ fn test_take_large_list_size() {
     // Expected: [[200..300], [0..100]]
     let expected_elems = PrimitiveArray::from_iter((200i32..300).chain(0..100)).into_array();
     let expected = FixedSizeListArray::new(expected_elems, 100, Validity::NonNullable, 2);
-    assert_arrays_eq!(expected, result, &mut ctx);
+    assert_arrays_eq!(result, expected, &mut ctx);
 }
 
 #[test]
@@ -149,7 +149,7 @@ fn test_take_fsl_with_null_indices_preserves_elements() {
         Validity::from_iter([true, false, true]),
         3,
     );
-    assert_arrays_eq!(expected, result, &mut ctx);
+    assert_arrays_eq!(result, expected, &mut ctx);
 }
 
 #[test]
@@ -171,7 +171,7 @@ fn test_take_fsl_null_index_ignores_out_of_bounds_payload() {
         Validity::from_iter([true, false, true]),
         3,
     );
-    assert_arrays_eq!(expected, result, &mut ctx);
+    assert_arrays_eq!(result, expected, &mut ctx);
 }
 
 fn contiguous_pieces(starts: &[u64], lengths: &[u64]) -> VortexResult<ArrayRef> {

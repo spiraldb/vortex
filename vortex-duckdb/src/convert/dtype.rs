@@ -490,6 +490,17 @@ mod tests {
             logical_type.as_type_id(),
             cpp::DUCKDB_TYPE::DUCKDB_TYPE_STRUCT
         );
+        assert_eq!(logical_type.struct_type_child_count(), 2);
+        assert_eq!(logical_type.struct_child_name(0).to_string(), "field1");
+        assert_eq!(logical_type.struct_child_name(1).to_string(), "field2");
+        assert_eq!(
+            logical_type.struct_child_type(0).as_type_id(),
+            cpp::DUCKDB_TYPE::DUCKDB_TYPE_INTEGER
+        );
+        assert_eq!(
+            logical_type.struct_child_type(1).as_type_id(),
+            cpp::DUCKDB_TYPE::DUCKDB_TYPE_VARCHAR
+        );
     }
 
     #[test]
@@ -513,6 +524,7 @@ mod tests {
             logical_type.as_type_id(),
             cpp::DUCKDB_TYPE::DUCKDB_TYPE_STRUCT
         );
+        assert_eq!(logical_type.struct_type_child_count(), 0);
     }
 
     #[test]
@@ -526,6 +538,7 @@ mod tests {
             logical_type.as_type_id(),
             cpp::DUCKDB_TYPE::DUCKDB_TYPE_DECIMAL
         );
+        assert_eq!(logical_type.as_decimal(), (18, 4));
     }
 
     #[test]
@@ -537,6 +550,10 @@ mod tests {
         assert_eq!(
             logical_type.as_type_id(),
             cpp::DUCKDB_TYPE::DUCKDB_TYPE_LIST
+        );
+        assert_eq!(
+            logical_type.list_child_type().as_type_id(),
+            cpp::DUCKDB_TYPE::DUCKDB_TYPE_INTEGER
         );
     }
 

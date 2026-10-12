@@ -55,6 +55,7 @@ mod tests {
     use crate::dtype::DType;
     use crate::dtype::Nullability;
     use crate::dtype::PType;
+    use crate::scalar::Scalar;
 
     fn chunked_array() -> ChunkedArray {
         ChunkedArray::try_new(
@@ -89,7 +90,11 @@ mod tests {
         let chunked = ChunkedArray::try_new(vec![], PType::U32.into()).unwrap();
         let sliced = chunked.slice(0..0).unwrap();
 
-        assert!(sliced.is_empty());
+        assert_arrays_eq!(
+            sliced,
+            PrimitiveArray::empty::<u32>(Nullability::NonNullable),
+            &mut array_session().create_execution_ctx()
+        );
     }
 
     #[test]
@@ -106,6 +111,12 @@ mod tests {
             DType::Primitive(PType::U64, Nullability::NonNullable),
         )
         .unwrap();
+        for (index, value) in [1u64, 2].into_iter().enumerate() {
+            assert_eq!(
+                array.execute_scalar(index, &mut ctx).unwrap(),
+                Scalar::from(value)
+            );
+        }
         assert_arrays_eq!(array, PrimitiveArray::from_iter([1u64, 2]), &mut ctx);
     }
 
@@ -122,6 +133,12 @@ mod tests {
             DType::Primitive(PType::U64, Nullability::NonNullable),
         )
         .unwrap();
+        for (index, value) in [1u64, 2, 3, 4].into_iter().enumerate() {
+            assert_eq!(
+                array.execute_scalar(index, &mut ctx).unwrap(),
+                Scalar::from(value)
+            );
+        }
         assert_arrays_eq!(array, PrimitiveArray::from_iter([1u64, 2, 3, 4]), &mut ctx);
     }
 
@@ -138,6 +155,12 @@ mod tests {
             DType::Primitive(PType::U64, Nullability::NonNullable),
         )
         .unwrap();
+        for (index, value) in [1u64, 2, 3, 4].into_iter().enumerate() {
+            assert_eq!(
+                array.execute_scalar(index, &mut ctx).unwrap(),
+                Scalar::from(value)
+            );
+        }
         assert_arrays_eq!(array, PrimitiveArray::from_iter([1u64, 2, 3, 4]), &mut ctx);
     }
 }

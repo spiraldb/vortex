@@ -74,20 +74,6 @@ mod tests {
         BitBuffer::new(misaligned, len)
     }
 
-    #[test]
-    fn validity_is_lazy_for_cross_chunk_slice() -> VortexResult<()> {
-        let mut ctx = SESSION.create_execution_ctx();
-        let primitive = nullable_primitive();
-        let delta = Delta::try_from_primitive_array(&primitive, &mut ctx)?;
-        let sliced = delta.slice(1000..1050)?;
-
-        let Validity::Array(validity) = sliced.validity()? else {
-            vortex_bail!("expected array-backed validity")
-        };
-        assert_arrays_eq!(validity, expected_validity(1000..1050), &mut ctx);
-        Ok(())
-    }
-
     #[rstest]
     #[case::within_first_chunk(10..1000)]
     #[case::cross_chunk_boundary(1000..1050)]

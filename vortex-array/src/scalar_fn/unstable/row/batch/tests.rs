@@ -704,7 +704,14 @@ fn test_finalize_kernel_output_rejects_nested_dtype_mismatch() -> VortexResult<(
     );
     let mut ctx = array_session().create_execution_ctx();
 
-    assert!(finalize_kernel_output(*ID, &result_dtype, 2, values, &mut ctx).is_err());
+    let error = finalize_kernel_output(*ID, &result_dtype, 2, values, &mut ctx)
+        .expect_err("nested nullability mismatch must fail output validation");
+    assert!(
+        error
+            .to_string()
+            .contains("output dtype must match the result dtype except for outer nullability"),
+        "unexpected error: {error}",
+    );
     Ok(())
 }
 

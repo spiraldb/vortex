@@ -332,6 +332,7 @@ pub(crate) fn spatial_metadata_from_arrow(metadata: &Metadata) -> SpatialMetadat
 #[cfg(test)]
 mod tests {
     use prost::Message;
+    use vortex_array::VortexSessionExecute;
     use vortex_array::dtype::DType;
     use vortex_arrow::ArrowSessionExt;
     use vortex_error::VortexResult;
@@ -378,6 +379,14 @@ mod tests {
             panic!("expected an extension dtype, got {}", scalar.dtype());
         };
         assert!(ext.is::<Point>());
+        assert_eq!(ext.metadata::<Point>(), &SpatialMetadata::default());
+        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let expected =
+            crate::test_harness::point_column(vec![1.0], vec![2.0])?.execute_scalar(0, &mut ctx)?;
+        let actual_storage = scalar.as_extension().to_storage_scalar();
+        let expected_storage = expected.as_extension().to_storage_scalar();
+        assert_eq!(actual_storage.dtype(), expected_storage.dtype());
+        assert_eq!(actual_storage, expected_storage);
         Ok(())
     }
 
@@ -400,6 +409,19 @@ mod tests {
             panic!("expected an extension dtype, got {}", scalar.dtype());
         };
         assert!(ext.is::<Polygon>());
+        assert_eq!(ext.metadata::<Polygon>(), &SpatialMetadata::default());
+        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let expected = crate::test_harness::polygon_column(vec![vec![vec![
+            (0.0, 0.0),
+            (1.0, 0.0),
+            (0.0, 1.0),
+            (0.0, 0.0),
+        ]]])?
+        .execute_scalar(0, &mut ctx)?;
+        let actual_storage = scalar.as_extension().to_storage_scalar();
+        let expected_storage = expected.as_extension().to_storage_scalar();
+        assert_eq!(actual_storage.dtype(), expected_storage.dtype());
+        assert_eq!(actual_storage, expected_storage);
         Ok(())
     }
 
@@ -421,6 +443,14 @@ mod tests {
             panic!("expected an extension dtype, got {}", scalar.dtype());
         };
         assert!(ext.is::<LineString>());
+        assert_eq!(ext.metadata::<LineString>(), &SpatialMetadata::default());
+        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let expected = crate::test_harness::linestring_column(vec![vec![(0.0, 0.0), (1.0, 1.0)]])?
+            .execute_scalar(0, &mut ctx)?;
+        let actual_storage = scalar.as_extension().to_storage_scalar();
+        let expected_storage = expected.as_extension().to_storage_scalar();
+        assert_eq!(actual_storage.dtype(), expected_storage.dtype());
+        assert_eq!(actual_storage, expected_storage);
         Ok(())
     }
 
@@ -445,6 +475,14 @@ mod tests {
             panic!("expected an extension dtype, got {}", scalar.dtype());
         };
         assert!(ext.is::<MultiPoint>());
+        assert_eq!(ext.metadata::<MultiPoint>(), &SpatialMetadata::default());
+        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let expected = crate::test_harness::multipoint_column(vec![vec![(0.0, 0.0), (1.0, 1.0)]])?
+            .execute_scalar(0, &mut ctx)?;
+        let actual_storage = scalar.as_extension().to_storage_scalar();
+        let expected_storage = expected.as_extension().to_storage_scalar();
+        assert_eq!(actual_storage.dtype(), expected_storage.dtype());
+        assert_eq!(actual_storage, expected_storage);
         Ok(())
     }
 
@@ -473,6 +511,20 @@ mod tests {
             panic!("expected an extension dtype, got {}", scalar.dtype());
         };
         assert!(ext.is::<MultiLineString>());
+        assert_eq!(
+            ext.metadata::<MultiLineString>(),
+            &SpatialMetadata::default()
+        );
+        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let expected = crate::test_harness::multilinestring_column(vec![vec![
+            vec![(0.0, 0.0), (1.0, 1.0)],
+            vec![(2.0, 2.0), (3.0, 3.0)],
+        ]])?
+        .execute_scalar(0, &mut ctx)?;
+        let actual_storage = scalar.as_extension().to_storage_scalar();
+        let expected_storage = expected.as_extension().to_storage_scalar();
+        assert_eq!(actual_storage.dtype(), expected_storage.dtype());
+        assert_eq!(actual_storage, expected_storage);
         Ok(())
     }
 }

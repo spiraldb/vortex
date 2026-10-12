@@ -442,8 +442,11 @@ mod tests {
         let result = list.apply(&list_sum(root()))?;
 
         let mut ctx = array_session().create_execution_ctx();
-        let result = result.execute::<PrimitiveArray>(&mut ctx)?;
-        assert_eq!(result.len(), 0);
+        assert_arrays_eq!(
+            result,
+            PrimitiveArray::from_option_iter::<i64, _>([]),
+            &mut ctx
+        );
         Ok(())
     }
 
@@ -478,6 +481,11 @@ mod tests {
         let mut ctx = array_session().create_execution_ctx();
         assert!(!result.is_valid(0, &mut ctx)?);
         assert!(!result.is_valid(1, &mut ctx)?);
+        assert_arrays_eq!(
+            result,
+            PrimitiveArray::from_option_iter([None::<i64>, None]),
+            &mut ctx
+        );
         Ok(())
     }
 
