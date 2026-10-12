@@ -694,6 +694,14 @@ async fn arrow_uuid_extension_roundtrip_nested_struct() -> anyhow::Result<()> {
 #[case::narrow_cast("id, CAST(a AS TINYINT) AS n", "TRUE")]
 #[case::case_branch("id, CASE WHEN b <> 0 THEN 12 / b ELSE 0 END AS n", "TRUE")]
 #[case::case_filter("id", "CASE WHEN b <> 0 THEN 12 / b ELSE 0 END = 6")]
+#[case::case_else("id, CASE WHEN b = 0 THEN 0 ELSE 12 / b END AS n", "TRUE")]
+#[case::case_later_condition(
+    "id, CASE WHEN b = 0 THEN 0 WHEN 12 / b > 1 THEN 12 / b ELSE 1 END AS n",
+    "TRUE"
+)]
+#[case::case_no_else("id, CASE WHEN b <> 0 THEN 12 / b END AS n", "TRUE")]
+#[case::case_selected_error("id, CASE WHEN b = 0 THEN 12 / b ELSE 0 END AS n", "TRUE")]
+#[case::not("id, NOT (a IN (1, 2, NULL)) AS n", "NOT (a = b)")]
 #[case::projection_alias("id, a + CAST(1 AS INT) AS a, abs(a) AS b", "id > 1")]
 #[case::unprojected("id", "CAST(a AS VARCHAR) = '1'")]
 #[case::decimal(

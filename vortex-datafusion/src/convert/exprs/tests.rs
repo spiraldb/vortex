@@ -27,10 +27,12 @@ use datafusion_physical_expr::projection::ProjectionExpr;
 use datafusion_physical_plan::expressions as df_expr;
 use insta::assert_snapshot;
 use rstest::rstest;
+use vortex::array::Canonical;
 use vortex::array::IntoArray;
 use vortex::array::arrays::ConstantArray;
 use vortex::array::arrays::PrimitiveArray;
-use vortex::extension::uuid::Uuid;
+use vortex::array::builtins::ArrayBuiltins;
+use vortex::encodings::uuid::Uuid;
 use vortex::scalar::Scalar;
 use vortex::scalar_fn::fns::literal::Literal;
 use vortex_array::assert_arrays_eq;
@@ -1201,7 +1203,8 @@ fn assert_native_matches(expr: Arc<dyn PhysicalExpr>, batch: RecordBatch) -> any
             }
             let actual = input
                 .apply(&converted)?
-                .execute::<vortex::array::ArrayRef>(&mut ctx);
+                .execute::<Canonical>(&mut ctx)
+                .map(IntoArray::into_array);
             let expected = expr
                 .evaluate(&batch)
                 .and_then(|value| value.into_array(batch.num_rows()));
@@ -1210,7 +1213,15 @@ fn assert_native_matches(expr: Arc<dyn PhysicalExpr>, batch: RecordBatch) -> any
                     let expected = session
                         .arrow()
                         .from_arrow_array(expected, expr.return_field(&batch.schema())?.as_ref())?;
-                    assert_arrays_eq!(actual, expected, &mut ctx);
+                    // CASE specializations can infer different nullability while producing
+                    // identical values. Widen both sides without changing their nulls.
+                    let actual_dtype = actual.dtype().as_nullable();
+                    let expected_dtype = expected.dtype().as_nullable();
+                    assert_arrays_eq!(
+                        actual.cast(actual_dtype)?,
+                        expected.cast(expected_dtype)?,
+                        &mut ctx
+                    );
                 }
                 (Err(_), Err(_)) => {}
                 (actual, expected) => anyhow::bail!(
@@ -1424,26 +1435,79 @@ fn test_native_decimal_arithmetic(#[case] op: DFOperator) -> anyhow::Result<()> 
     )
 }
 
-#[test]
-fn test_fallible_case_branch_is_residual() -> DFResult<()> {
-    let schema = Schema::new(vec![Field::new("a", DataType::Int32, true)]);
+#[rstest]
+#[case::then_branch("then")]
+#[case::else_branch("else")]
+#[case::later_condition("when")]
+#[case::no_else("no_else")]
+#[case::selected_error("error")]
+fn test_native_case_short_circuit(
+    #[case] branch: &str,
+    #[values(8, 512)] len: usize,
+    #[values(false, true)] contiguous: bool,
+) -> anyhow::Result<()> {
+    let values = [Some(0), Some(2), None, Some(-2)];
+    let values = (0..len)
+        .map(|i| values[if contiguous { i / (len / 4) } else { i % 4 }])
+        .collect::<Vec<_>>();
+    let batch = arrow_array::record_batch!(("a", Int32, values))?;
     let a: Arc<dyn PhysicalExpr> = Arc::new(df_expr::Column::new("a", 0));
+    let literal = |value| {
+        Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(value)))) as Arc<dyn PhysicalExpr>
+    };
+    let binary = |left, op, right| {
+        Arc::new(df_expr::BinaryExpr::new(left, op, right)) as Arc<dyn PhysicalExpr>
+    };
+    let division = binary(literal(12), DFOperator::Divide, Arc::clone(&a));
+    let is_zero = binary(Arc::clone(&a), DFOperator::Eq, literal(0));
+    let (pairs, otherwise) = match branch {
+        "then" | "no_else" => (
+            vec![(binary(a, DFOperator::NotEq, literal(0)), division)],
+            (branch == "then").then(|| literal(0)),
+        ),
+        "else" => (vec![(is_zero, literal(0))], Some(division)),
+        "when" => (
+            vec![
+                (is_zero, literal(7)),
+                (
+                    binary(Arc::clone(&division), DFOperator::Gt, literal(0)),
+                    division,
+                ),
+            ],
+            Some(literal(0)),
+        ),
+        "error" => (vec![(is_zero, division)], Some(literal(0))),
+        _ => unreachable!(),
+    };
+    let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::CaseExpr::try_new(None, pairs, otherwise)?);
+    assert_eq!(expr.evaluate(&batch).is_err(), branch == "error");
+    assert_native_matches(expr, batch)
+}
+
+#[rstest]
+fn test_case_unsupported_child_falls_back(#[values(0, 1, 2)] child: usize) -> DFResult<()> {
+    let schema = Schema::new(vec![Field::new("a", DataType::Int32, true)]);
     let zero: Arc<dyn PhysicalExpr> = Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(0))));
+    let unsupported: Arc<dyn PhysicalExpr> = Arc::new(df_expr::BinaryExpr::new(
+        Arc::new(df_expr::Column::new("a", 0)),
+        DFOperator::Modulo,
+        Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(2)))),
+    ));
+    let condition: Arc<dyn PhysicalExpr> = if child == 0 {
+        Arc::new(df_expr::IsNullExpr::new(Arc::clone(&unsupported)))
+    } else {
+        Arc::new(df_expr::Literal::new(ScalarValue::Boolean(Some(true))))
+    };
+    let then = if child == 1 {
+        Arc::clone(&unsupported)
+    } else {
+        Arc::clone(&zero)
+    };
+    let otherwise = if child == 2 { unsupported } else { zero };
     let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::CaseExpr::try_new(
         None,
-        vec![(
-            Arc::new(df_expr::BinaryExpr::new(
-                Arc::clone(&a),
-                DFOperator::NotEq,
-                Arc::clone(&zero),
-            )),
-            Arc::new(df_expr::BinaryExpr::new(
-                Arc::clone(&zero),
-                DFOperator::Divide,
-                a,
-            )),
-        )],
-        Some(zero),
+        vec![(condition, then)],
+        Some(otherwise),
     )?);
     assert!(!converts(&expr, &schema)?);
     Ok(())
@@ -1703,6 +1767,43 @@ fn test_native_case_null_conditions() -> anyhow::Result<()> {
         None,
     )?);
     assert_native_matches(expr, batch)
+}
+
+#[rstest]
+fn test_native_not(#[values(false, true)] nested: bool) -> anyhow::Result<()> {
+    let batch = arrow_array::record_batch!(("a", Boolean, vec![Some(true), Some(false), None]))?;
+    let mut expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::Column::new("a", 0));
+    if nested {
+        expr = Arc::new(df_expr::NotExpr::new(expr));
+    }
+    assert_native_matches(Arc::new(df_expr::NotExpr::new(expr)), batch)
+}
+
+#[test]
+fn test_not_unsupported_child_falls_back() -> DFResult<()> {
+    let schema = Schema::new(vec![Field::new("a", DataType::Int32, true)]);
+    let modulo: Arc<dyn PhysicalExpr> = Arc::new(df_expr::BinaryExpr::new(
+        Arc::new(df_expr::Column::new("a", 0)),
+        DFOperator::Modulo,
+        Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(2)))),
+    ));
+    let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::NotExpr::new(Arc::new(
+        df_expr::IsNullExpr::new(modulo),
+    )));
+    assert!(!converts(&expr, &schema)?);
+    Ok(())
+}
+
+#[test]
+fn test_not_non_boolean_operand_returns_error() {
+    let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::NotExpr::new(Arc::new(
+        df_expr::Literal::new(ScalarValue::Int32(Some(1))),
+    )));
+    assert!(
+        DefaultExpressionConverter::default()
+            .try_convert(&expr, &Schema::empty())
+            .is_err()
+    );
 }
 
 #[test]

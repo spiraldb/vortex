@@ -36,6 +36,7 @@ use vortex::expr::is_null;
 use vortex::expr::list_length;
 use vortex::expr::lit;
 use vortex::expr::nested_case_when;
+use vortex::expr::not;
 use vortex::expr::or_collect;
 use vortex::expr::pack;
 use vortex::expr::root;
@@ -199,6 +200,8 @@ type Conversion<T> = Result<T, Unconverted>;
 /// Nested struct field access also uses Vortex semantics: a null parent produces a null child,
 /// whereas DataFusion extracts the child without applying parent validity. These differences
 /// are accepted for both filters and projections.
+/// Searched `CASE WHEN` expressions preserve short-circuit evaluation: conditions and
+/// branch values only execute on the rows that reach them, including fallible branches.
 /// Other expressions require compatible SQL semantics or remain in DataFusion.
 pub struct DefaultExpressionConverter {
     /// Session used to resolve Arrow → Vortex dtypes through the extension
@@ -357,6 +360,17 @@ impl DefaultExpressionConverter {
                 return Err(Unconverted::Unsupported);
             }
             return Ok(cast(child, cast_dtype));
+        }
+
+        if let Some(not_expr) = expr.downcast_ref::<df_expr::NotExpr>() {
+            if not_expr.arg().data_type(schema)? != DataType::Boolean {
+                return Err(exec_datafusion_err!("NOT requires a Boolean operand: {expr}").into());
+            }
+            return Ok(not(self.convert_expr(
+                not_expr.arg(),
+                schema,
+                input_dtype,
+            )?));
         }
 
         if let Some(is_null_expr) = expr.downcast_ref::<df_expr::IsNullExpr>() {
@@ -551,12 +565,9 @@ impl DefaultExpressionConverter {
             .else_expr()
             .map(|e| self.convert_expr(e, schema, input_dtype))
             .transpose()?;
-        let case = nested_case_when(pairs, else_value);
-        // Vortex may evaluate branch values on rows excluded by the condition.
-        if !is_infallible(&case) {
-            return Err(Unconverted::Unsupported);
-        }
-        Ok(case)
+        // CASE evaluates conditions on remaining rows and values only on selected rows,
+        // so fallible children retain DataFusion's short-circuit behavior.
+        Ok(nested_case_when(pairs, else_value))
     }
 }
 

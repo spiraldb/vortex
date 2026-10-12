@@ -1122,7 +1122,15 @@ mod tests {
         let batch = record_batch!((
             "a",
             Int32,
-            vec![Some(1), Some(2), Some(3), Some(4), Some(5), Some(6), Some(7)]
+            vec![
+                Some(1),
+                Some(2),
+                Some(3),
+                Some(4),
+                Some(5),
+                Some(6),
+                Some(7)
+            ]
         ))
         .unwrap();
         let data_size =

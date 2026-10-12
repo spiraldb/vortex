@@ -8,6 +8,7 @@ use arrow_array::RecordBatch;
 use datafusion::assert_batches_eq;
 use datafusion::prelude::SessionContext;
 use datafusion_common::ScalarValue;
+use datafusion_common::arrow::compute::concat_batches;
 use datafusion_common::config::ConfigOptions;
 use datafusion_datasource::source::DataSource;
 use datafusion_datasource::source::DataSourceExec;
@@ -152,7 +153,7 @@ async fn projection_preserves_arrow_types(
             ("n", Int32, vec![3, 4, 5])
         )?
     };
-    let actual = datafusion_common::arrow::compute::concat_batches(&expected_schema, &batches)?;
+    let actual = concat_batches(&expected_schema, &batches)?;
     assert_eq!(actual.columns(), expected.columns());
     Ok(())
 }
