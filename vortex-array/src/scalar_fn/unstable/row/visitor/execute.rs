@@ -46,15 +46,19 @@ use crate::scalar_fn::unstable::row::execute::execute_sink_filtered;
 use crate::scalar_fn::unstable::row::execute::execute_sink_valid_rows;
 
 /// The runtime visit that decodes every column once and runs the selected row loop.
+///
+/// With an expected plan from an earlier planning visit, the visit first checks that it reproduced
+/// that plan. Otherwise the visit is the only dispatch for its batch, and it records the plan it
+/// selected as the batch plan.
 pub(crate) struct ExecuteRows<'args, 'ctx, F: RowFn> {
     /// The inputs for this kernel invocation.
     args: &'args dyn ExecutionArgs,
 
-    /// The input dtypes used by the planning visit.
+    /// The input dtypes used to select the row implementation.
     dtypes: &'args [DType],
 
-    /// The plan selected by the planning visit, which this visit must reproduce.
-    plan: &'args BatchPlan,
+    /// How this visit relates its plan to the batch plan.
+    plan: PlanCheck<'args>,
 
     /// The output dtype declared by [`RowVisitor::with_output_dtype`], if any.
     output_dtype: Option<DType>,
@@ -70,7 +74,7 @@ impl<'args, 'ctx, F: RowFn> ExecuteRows<'args, 'ctx, F> {
     pub(crate) fn new(
         args: &'args dyn ExecutionArgs,
         dtypes: &'args [DType],
-        plan: &'args BatchPlan,
+        plan: PlanCheck<'args>,
         ctx: &'ctx mut ExecutionCtx,
     ) -> Self {
         Self {
@@ -80,6 +84,28 @@ impl<'args, 'ctx, F: RowFn> ExecuteRows<'args, 'ctx, F> {
             output_dtype: None,
             ctx,
             function: PhantomData,
+        }
+    }
+}
+
+/// How an [`ExecuteRows`] visit relates the plan it selects to the batch plan.
+pub(crate) enum PlanCheck<'a> {
+    /// An earlier planning visit selected the batch plan, and this visit must reproduce it.
+    Expect(&'a BatchPlan),
+
+    /// This visit is the only dispatch for its batch and records the plan it selects.
+    Record(&'a mut Option<BatchPlan>),
+}
+
+impl PlanCheck<'_> {
+    /// Check or record the plan a visit selected.
+    fn apply(self, visited: BatchPlan) -> VortexResult<()> {
+        match self {
+            Self::Expect(expected_plan) => expected_plan.ensure_reproduced_by(&visited),
+            Self::Record(slot) => {
+                *slot = Some(visited);
+                Ok(())
+            }
         }
     }
 }
@@ -104,12 +130,11 @@ impl<F: RowFn> RowVisitor for ExecuteRows<'_, '_, F> {
         Out: OutputElement,
     {
         const { assert_owned_visit_contract::<F, Args, Out>() };
-        let visited = BatchPlan::new(
+        self.plan.apply(BatchPlan::new(
             validate_owned_visit::<Args, Out>(self.dtypes)?,
             self.output_dtype,
             RowPolicy::for_owned_output::<Args>(),
-        )?;
-        self.plan.ensure_reproduced_by(&visited)?;
+        )?)?;
 
         execute_owned_infallible::<Args, Out, Prepared>(self.args, self.ctx, prepare, apply)
     }
@@ -122,12 +147,11 @@ impl<F: RowFn> RowVisitor for ExecuteRows<'_, '_, F> {
         Args: IndexedElementTuple,
     {
         const { assert_owned_visit_contract::<F, Args, bool>() };
-        let visited = BatchPlan::new(
+        self.plan.apply(BatchPlan::new(
             validate_owned_visit::<Args, bool>(self.dtypes)?,
             self.output_dtype,
             RowPolicy::for_owned_output::<Args>(),
-        )?;
-        self.plan.ensure_reproduced_by(&visited)?;
+        )?)?;
 
         execute_owned_infallible_bool::<Args, MULTIVERSIONED>(self.args, self.ctx, apply)
     }
@@ -144,12 +168,11 @@ impl<F: RowFn> RowVisitor for ExecuteRows<'_, '_, F> {
         ApplyResult: SinkResult<WriteToken = Sink::WriteToken>,
     {
         const { assert_sink_visit_contract::<F, Args, ApplyResult>() };
-        let visited = BatchPlan::new(
+        self.plan.apply(BatchPlan::new(
             validate_sink_visit::<Args, Sink>(self.dtypes, &params)?,
             self.output_dtype,
             RowPolicy::for_sink::<Args, ApplyResult>(),
-        )?;
-        self.plan.ensure_reproduced_by(&visited)?;
+        )?)?;
 
         execute_sink::<Args, Prepared, Sink, ApplyResult>(
             self.args, &params, self.ctx, prepare, apply,
@@ -168,12 +191,11 @@ impl<F: RowFn> RowVisitor for ExecuteRows<'_, '_, F> {
         Fail: FailureEvidence,
     {
         const { assert_deferred_visit_contract::<F, Args, Out, Fail>() };
-        let visited = BatchPlan::new(
+        self.plan.apply(BatchPlan::new(
             validate_owned_visit::<Args, Out>(self.dtypes)?,
             self.output_dtype,
             RowPolicy::for_deferred_output::<Args>(),
-        )?;
-        self.plan.ensure_reproduced_by(&visited)?;
+        )?)?;
 
         execute_owned::<Args, Out, Prepared, Fail>(
             self.args,
@@ -195,12 +217,11 @@ impl<F: RowFn> RowVisitor for ExecuteRows<'_, '_, F> {
         Fail: FailureEvidence,
     {
         const { assert_deferred_visit_contract::<F, Args, bool, Fail>() };
-        let visited = BatchPlan::new(
+        self.plan.apply(BatchPlan::new(
             validate_owned_visit::<Args, bool>(self.dtypes)?,
             self.output_dtype,
             RowPolicy::for_deferred_output::<Args>(),
-        )?;
-        self.plan.ensure_reproduced_by(&visited)?;
+        )?)?;
 
         execute_owned_bool::<Args, Prepared, Fail, MULTIVERSIONED>(
             self.args,

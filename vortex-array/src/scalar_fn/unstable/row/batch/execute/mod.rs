@@ -12,9 +12,9 @@ use vortex_mask::MaskValuesRef;
 use super::RowFnExecutionArgs;
 use super::RowPolicy;
 use super::args::BorrowedRowFnArgs;
+use super::planning::is_null_constant;
 use crate::ArrayRef;
 use crate::ExecutionCtx;
-use crate::arrays::Constant;
 use crate::scalar_fn::unstable::row::execute::DenseAttempt;
 use crate::scalar_fn::unstable::row::types::batch_const;
 use crate::validity::Validity;
@@ -55,12 +55,7 @@ impl RowFnExecutionArgs {
     ) -> VortexResult<ArrayRef> {
         // Strictness: an all-null batch has no observable row work. Keep the literal-constant
         // check explicit alongside the conjoined validity invariant.
-        if matches!(self.validity, Validity::AllInvalid)
-            || self.inputs.iter().any(|input| {
-                input
-                    .as_opt::<Constant>()
-                    .is_some_and(|constant| constant.scalar().is_null())
-            })
+        if matches!(self.validity, Validity::AllInvalid) || self.inputs.iter().any(is_null_constant)
         {
             return Ok(self.all_null());
         }

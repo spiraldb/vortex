@@ -10,6 +10,7 @@
 
 use vortex_error::VortexResult;
 use vortex_error::vortex_ensure_eq;
+use vortex_error::vortex_err;
 use vortex_mask::MaskValuesRef;
 use vortex_session::VortexSession;
 
@@ -22,6 +23,7 @@ use super::visitor::ExecuteDenseWithRetry;
 use super::visitor::ExecuteFilteredRows;
 use super::visitor::ExecuteRows;
 use super::visitor::ExecuteValidRows;
+use super::visitor::PlanCheck;
 use crate::ArrayRef;
 use crate::ExecutionCtx;
 use crate::dtype::DType;
@@ -123,7 +125,31 @@ pub fn execute_rows<F: RowFn>(
         return execute_nullary_rows(function, options, args.row_count(), ctx);
     }
 
-    let batch = prepare_batch(function, options, args)?;
+    // When batch execution is certain to run the dense kernel, select the plan and execute in one
+    // dispatch rather than planning first and replaying the dispatch to execute.
+    let mut dense_values = None;
+    let batch = RowFnExecutionArgs::new(RowFn::id(function), args, |inputs| {
+        if !inputs.always_dense() {
+            return function.dispatch(
+                options,
+                inputs.dtypes(),
+                BatchPlanner::<F>::new(inputs.dtypes()),
+            );
+        }
+
+        let mut plan = None;
+        dense_values = Some(function.dispatch(
+            options,
+            inputs.dtypes(),
+            ExecuteRows::<F>::new(&inputs, inputs.dtypes(), PlanCheck::Record(&mut plan), ctx),
+        )?);
+
+        plan.ok_or_else(|| vortex_err!("a row dispatch must visit a row signature"))
+    })?;
+    if let Some(values) = dense_values {
+        return batch.finish_dense(values, ctx);
+    }
+
     batch.execute(
         |args, ctx| execute_row_kernel(function, options, args, ctx),
         |args, ctx| execute_dense_attempt(function, options, args, ctx),
@@ -172,7 +198,7 @@ fn execute_row_kernel<F: RowFn>(
     function.dispatch(
         options,
         args.dtypes(),
-        ExecuteRows::<F>::new(&args, args.dtypes(), args.plan(), ctx),
+        ExecuteRows::<F>::new(&args, args.dtypes(), PlanCheck::Expect(args.plan()), ctx),
     )
 }
 
@@ -218,16 +244,6 @@ fn execute_filtered_rows<F: RowFn>(
     )
 }
 
-fn prepare_batch<F: RowFn>(
-    function: &F,
-    options: &F::Options,
-    args: &dyn ExecutionArgs,
-) -> VortexResult<RowFnExecutionArgs> {
-    RowFnExecutionArgs::new(RowFn::id(function), args, |arg_dtypes| {
-        function.dispatch(options, arg_dtypes, BatchPlanner::<F>::new(arg_dtypes))
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
@@ -264,6 +280,33 @@ mod tests {
     struct ChangingDispatchRowFn {
         dispatches: Arc<AtomicUsize>,
         change: DispatchChange,
+    }
+
+    #[derive(Clone)]
+    struct CountingDispatchRowFn {
+        dispatches: Arc<AtomicUsize>,
+    }
+
+    impl RowFn for CountingDispatchRowFn {
+        type Options = EmptyOptions;
+
+        const ARG_NAMES: &'static [&'static str] = &["value"];
+        const INFALLIBLE: bool = true;
+
+        fn id(&self) -> ScalarFnId {
+            static ID: CachedId = CachedId::new("test.counting_dispatch_row_fn");
+            *ID
+        }
+
+        fn dispatch<V: RowVisitor>(
+            &self,
+            _options: &Self::Options,
+            _args: &[DType],
+            visitor: V,
+        ) -> VortexResult<V::VisitResult> {
+            self.dispatches.fetch_add(1, Ordering::Relaxed);
+            visitor.visit::<(i64,), i64>(|(value,)| value)
+        }
     }
 
     #[derive(Clone, Copy)]
@@ -384,7 +427,9 @@ mod tests {
             dispatches: Arc::new(AtomicUsize::new(0)),
             change: DispatchChange::Policy,
         };
-        let input = PrimitiveArray::new(vec![1_i64, 2], Validity::NonNullable).into_array();
+        // Only a batch with null rows plans and executes in separate dispatches.
+        let input =
+            PrimitiveArray::new(vec![1_i64, 2], Validity::from_iter([true, false])).into_array();
         let args = VecExecutionArgs::new(vec![input], 2);
         let mut ctx = array_session().create_execution_ctx();
 
@@ -411,7 +456,9 @@ mod tests {
             dispatches: Arc::new(AtomicUsize::new(0)),
             change: DispatchChange::Element,
         };
-        let input = PrimitiveArray::new(vec![1_i64, 2], Validity::NonNullable).into_array();
+        // Only a batch with null rows plans and executes in separate dispatches.
+        let input =
+            PrimitiveArray::new(vec![1_i64, 2], Validity::from_iter([true, false])).into_array();
         let args = VecExecutionArgs::new(vec![input], 2);
         let mut ctx = array_session().create_execution_ctx();
 
@@ -425,6 +472,32 @@ mod tests {
                 .to_string()
                 .contains("row input column has the wrong ptype"),
             "unexpected error: {error}",
+        );
+        Ok(())
+    }
+
+    #[rstest]
+    #[case::no_nulls(Validity::NonNullable, 1)]
+    #[case::all_valid(Validity::AllValid, 1)]
+    #[case::partially_valid(Validity::from_iter([true, false, true]), 2)]
+    fn test_dense_batch_dispatches_once(
+        #[case] validity: Validity,
+        #[case] expected_dispatches: usize,
+    ) -> VortexResult<()> {
+        let function = CountingDispatchRowFn {
+            dispatches: Arc::new(AtomicUsize::new(0)),
+        };
+        let input = PrimitiveArray::new(vec![1_i64, 2, 3], validity.clone()).into_array();
+        let args = VecExecutionArgs::new(vec![input], 3);
+        let mut ctx = array_session().create_execution_ctx();
+
+        let actual = execute_rows(&function, &EmptyOptions, &args, &mut ctx)?;
+        let expected = PrimitiveArray::new(vec![1_i64, 2, 3], validity).into_array();
+
+        assert_arrays_eq!(&actual, &expected, &mut ctx);
+        assert_eq!(
+            function.dispatches.load(Ordering::Relaxed),
+            expected_dispatches
         );
         Ok(())
     }

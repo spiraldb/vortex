@@ -19,6 +19,18 @@ use crate::scalar_fn::unstable::row::execute::DenseAttempt;
 use crate::validity::Validity;
 
 impl RowFnExecutionArgs {
+    /// Finish the values of a dense kernel that planning executed for a batch whose
+    /// [`PlanningInputs::always_dense`] held.
+    ///
+    /// [`PlanningInputs::always_dense`]: super::super::planning::PlanningInputs::always_dense
+    pub(crate) fn finish_dense(
+        &self,
+        values: ArrayRef,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<ArrayRef> {
+        self.finalize_dense_output(values, ctx)
+    }
+
     /// Run every stored payload, then attach the input validity without materializing its mask.
     pub(super) fn execute_dense(
         &self,

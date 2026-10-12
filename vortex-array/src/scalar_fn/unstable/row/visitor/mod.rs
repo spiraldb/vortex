@@ -12,6 +12,7 @@ mod execute;
 pub(super) use execute::ExecuteFilteredRows;
 pub(super) use execute::ExecuteRows;
 pub(super) use execute::ExecuteValidRows;
+pub(super) use execute::PlanCheck;
 
 mod retry;
 pub(super) use retry::ExecuteDenseWithRetry;

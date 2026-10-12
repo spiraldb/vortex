@@ -1455,7 +1455,9 @@ fn test_execution_rejects_a_changed_output_dtype() -> VortexResult<()> {
     let function = ChangingOutputDType {
         dispatches: Arc::new(AtomicUsize::new(0)),
     };
-    let input = PrimitiveArray::from_iter(vec![1_i64, 2]).into_array();
+    // Only a batch with null rows plans and executes in separate dispatches.
+    let input =
+        PrimitiveArray::new(vec![1_i64, 2], Validity::from_iter([true, false])).into_array();
     let args = VecExecutionArgs::new(vec![input], 2);
     let mut ctx = array_session().create_execution_ctx();
 
