@@ -10,6 +10,7 @@ use vortex_buffer::BufferMut;
 use vortex_mask::MaskValues;
 
 use super::buffer::byte_compress_density_threshold;
+use super::buffer::useful_cached_indices;
 use super::buffer::useful_cached_slices;
 use super::byte_compress;
 use super::simd_compress;
@@ -69,8 +70,8 @@ pub unsafe trait ChunkDecoder<T> {
 /// Value `i` of the filtered array is value `offset + i` of the decoded chunks, so `offset` skips
 /// the values at the start of the first chunk.
 ///
-/// The mask is applied one chunk at a time. The filter uses the cached slices of the mask when
-/// they are useful, and otherwise uses its bitmap. Each chunk takes the first strategy that
+/// The mask is applied one chunk at a time. The filter uses the cached slices or the cached
+/// indices of the mask when they are useful, in that order, and otherwise uses its bitmap. Each chunk takes the first strategy that
 /// matches:
 ///
 /// | Selected values in the chunk | Strategy                                    |
@@ -93,10 +94,14 @@ pub fn filter_chunked<T: NativePType>(
     mask: &MaskValues,
 ) -> Buffer<T> {
     let mut filter = ChunkedFilter::new(decoder, mask.true_count());
-    match useful_cached_slices(mask) {
-        Some(slices) => filter.push_slices(offset, slices),
-        None => filter.push_bitmap(offset, mask),
+    if let Some(slices) = useful_cached_slices(mask) {
+        filter.push_slices(offset, slices);
+    } else if let Some(indices) = useful_cached_indices(mask) {
+        filter.push_mask_indices(offset, indices);
+    } else {
+        filter.push_bitmap(offset, mask);
     }
+
     filter.finish()
 }
 
@@ -197,6 +202,40 @@ impl<'a, T: NativePType, D: ChunkDecoder<T>> ChunkedFilter<'a, T, D> {
                 // `chunk_len`, and the output has room for every selected value plus the slack.
                 let written = unsafe { compact_words(src, words, selected, dst) };
                 debug_assert_eq!(written, selected);
+                self.written += selected;
+            }
+        }
+    }
+
+    /// Filters chunk by chunk from the sorted, unique `mask_indices`.
+    fn push_mask_indices(&mut self, offset: usize, mask_indices: &[usize]) {
+        let mut indices = [0usize; MAX_SPARSE_VALUES];
+        let mut rest = mask_indices;
+
+        while let Some(&first) = rest.first() {
+            let chunk_idx = (first + offset) / FILTER_CHUNK_LEN;
+            let chunk_start = chunk_idx * FILTER_CHUNK_LEN;
+            let chunk_end = chunk_start + FILTER_CHUNK_LEN - offset;
+            let (chunk_indices, tail) = rest.split_at(rest.partition_point(|&i| i < chunk_end));
+            rest = tail;
+
+            // The in-chunk position of each selected value.
+            let positions = chunk_indices.iter().map(|&i| i + offset - chunk_start);
+            let selected = chunk_indices.len();
+
+            if selected == FILTER_CHUNK_LEN {
+                self.push_full_chunk(chunk_idx);
+            } else if selected <= max_sparse_values::<T>() {
+                for (index, position) in indices.iter_mut().zip(positions) {
+                    *index = position;
+                }
+                self.push_indices(chunk_idx, &indices[..selected]);
+            } else {
+                let src = self.scratch.decode(self.decoder, chunk_idx);
+                let dst = &mut self.values.spare_capacity_mut()[self.written..][..selected];
+                for (dst, position) in dst.iter_mut().zip(positions) {
+                    dst.write(src[position]);
+                }
                 self.written += selected;
             }
         }
@@ -390,6 +429,14 @@ mod tests {
     use super::filter_chunked;
     use crate::dtype::NativePType;
 
+    /// The representation that the test mask caches.
+    #[derive(Clone, Copy, Debug)]
+    enum Cached {
+        Bitmap,
+        Slices,
+        Indices,
+    }
+
     /// Decodes chunks of a plain slice, which holds whole chunks.
     struct SliceDecoder<'a, T>(&'a [T]);
 
@@ -407,7 +454,7 @@ mod tests {
         }
     }
 
-    fn check<T: NativePType + From<u8>>(bits: &BitBuffer, offset: usize, slices: bool) {
+    fn check<T: NativePType + From<u8>>(bits: &BitBuffer, offset: usize, cached: Cached) {
         let padded_len = (offset + bits.len()).next_multiple_of(FILTER_CHUNK_LEN);
         let values = (0..padded_len)
             .map(|i| {
@@ -420,10 +467,10 @@ mod tests {
             .filter_map(|(i, selected)| selected.then_some(values[offset + i]))
             .collect::<Vec<T>>();
 
-        let mask = if slices {
-            Mask::from_slices(bits.len(), bits.set_slices().collect())
-        } else {
-            Mask::from_buffer(bits.clone())
+        let mask = match cached {
+            Cached::Bitmap => Mask::from_buffer(bits.clone()),
+            Cached::Slices => Mask::from_slices(bits.len(), bits.set_slices().collect()),
+            Cached::Indices => Mask::from_indices(bits.len(), bits.set_indices()),
         };
         let Mask::Values(mask) = mask else {
             unreachable!("the patterns select some but not all values")
@@ -437,6 +484,7 @@ mod tests {
         #[values(0.001, 0.01, 0.05, 0.2, 0.5, 0.9, 0.999)] density: f64,
         #[values(0, 3, 1000)] offset: usize,
         #[values(0, 5)] bit_offset: usize,
+        #[values(Cached::Bitmap, Cached::Indices)] cached: Cached,
     ) {
         let mut rng = StdRng::seed_from_u64(42);
         let bits = (0..5000 + bit_offset)
@@ -444,10 +492,10 @@ mod tests {
             .collect::<BitBuffer>()
             .slice(bit_offset..5000 + bit_offset);
 
-        check::<u8>(&bits, offset, false);
-        check::<u16>(&bits, offset, false);
-        check::<u32>(&bits, offset, false);
-        check::<u64>(&bits, offset, false);
+        check::<u8>(&bits, offset, cached);
+        check::<u16>(&bits, offset, cached);
+        check::<u32>(&bits, offset, cached);
+        check::<u64>(&bits, offset, cached);
     }
 
     /// Runs long enough that the cached slices are used rather than the bitmap.
@@ -456,28 +504,29 @@ mod tests {
         #[values(9, 12, 200, 3000)] run_len: usize,
         #[values(1, 16, 64, 1500)] gap: usize,
         #[values(0, 3, 1000)] offset: usize,
-        #[values(false, true)] slices: bool,
+        #[values(Cached::Bitmap, Cached::Slices, Cached::Indices)] cached: Cached,
     ) {
         let bits = (0..5000)
             .map(|i| i % (run_len + gap) < run_len)
             .collect::<BitBuffer>();
 
-        check::<u8>(&bits, offset, slices);
-        check::<u16>(&bits, offset, slices);
-        check::<u32>(&bits, offset, slices);
-        check::<u64>(&bits, offset, slices);
+        check::<u8>(&bits, offset, cached);
+        check::<u16>(&bits, offset, cached);
+        check::<u32>(&bits, offset, cached);
+        check::<u64>(&bits, offset, cached);
     }
 
     #[rstest]
     fn filter_chunked_full_and_empty_chunks(#[values(0, 3)] offset: usize) {
-        // Whole chunks of selected values, alternating with whole chunks of unselected values.
+        // One whole chunk of selected values in every three chunks. The density stays low enough
+        // for the cached indices to be used.
         let bits = (0..5000)
-            .map(|i| ((i + offset) / FILTER_CHUNK_LEN).is_multiple_of(2))
+            .map(|i| ((i + offset) / FILTER_CHUNK_LEN).is_multiple_of(3))
             .collect::<BitBuffer>();
 
-        for slices in [false, true] {
-            check::<u8>(&bits, offset, slices);
-            check::<u64>(&bits, offset, slices);
+        for cached in [Cached::Bitmap, Cached::Slices, Cached::Indices] {
+            check::<u8>(&bits, offset, cached);
+            check::<u64>(&bits, offset, cached);
         }
     }
 }

@@ -66,9 +66,7 @@ fn filter_slice<T: Copy>(
         return slice::filter_slice_by_slices(values, slices, mask.true_count(), allocator);
     }
 
-    if mask.density() <= CACHED_INDICES_MAX_DENSITY
-        && let Some(indices) = mask.cached_indices()
-    {
+    if let Some(indices) = useful_cached_indices(mask) {
         return slice::filter_slice_by_indices(values, indices, allocator);
     }
 
@@ -88,9 +86,7 @@ fn filter_slice_in_place<T: Copy>(values: &mut [T], mask: &MaskValues) -> usize 
         return slice::filter_slice_mut_by_slices(values, slices);
     }
 
-    if mask.density() <= CACHED_INDICES_MAX_DENSITY
-        && let Some(indices) = mask.cached_indices()
-    {
+    if let Some(indices) = useful_cached_indices(mask) {
         return slice::filter_slice_mut_by_indices(values, indices);
     }
 
@@ -99,6 +95,14 @@ fn filter_slice_in_place<T: Copy>(values: &mut [T], mask: &MaskValues) -> usize 
     }
 
     slice::filter_slice_mut_by_bitmap(values, mask)
+}
+
+pub(super) fn useful_cached_indices(mask: &MaskValues) -> Option<&[usize]> {
+    if mask.density() <= CACHED_INDICES_MAX_DENSITY {
+        mask.cached_indices()
+    } else {
+        None
+    }
 }
 
 pub(super) fn useful_cached_slices(mask: &MaskValues) -> Option<&[(usize, usize)]> {
