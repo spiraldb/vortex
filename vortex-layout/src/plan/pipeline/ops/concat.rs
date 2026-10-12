@@ -5,16 +5,15 @@
 
 use vortex_error::VortexResult;
 
-use crate::plan::pipeline::Blocked;
+use super::next_batch;
 use crate::plan::pipeline::Cx;
-use crate::plan::pipeline::Input;
-use crate::plan::pipeline::Operator;
 use crate::plan::pipeline::Source;
 use crate::plan::pipeline::Step;
 
 /// Emits its inlets one after another, each to its end.
 pub(crate) struct ConcatSource {
     inlets: usize,
+    /// The inlet being emitted; those before it have ended.
     current: usize,
 }
 
@@ -24,28 +23,18 @@ impl ConcatSource {
     }
 }
 
-impl Operator for ConcatSource {
-    fn compute(&mut self, _input: Input, cx: &mut Cx<'_>) -> VortexResult<Step> {
-        while self.current < self.inlets {
-            let mut inlet = cx.inlet(self.current);
-            if let Some(batch) = inlet.take() {
-                return Ok(if inlet.is_empty() && !inlet.closed() {
-                    Step::Last(batch)
-                } else {
-                    Step::More(batch)
-                });
-            }
-            if !inlet.closed() {
-                return Ok(Step::Blocked(Blocked::Inlet(self.current)));
-            }
-            self.current += 1;
-        }
-        Ok(Step::Finished)
-    }
-}
-
 impl Source for ConcatSource {
     fn inlet_count(&self) -> usize {
         self.inlets
+    }
+
+    fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
+        while self.current < self.inlets {
+            match next_batch(cx, self.current) {
+                Step::Finished => self.current += 1,
+                step => return Ok(step),
+            }
+        }
+        Ok(Step::Finished)
     }
 }

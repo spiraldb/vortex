@@ -3,19 +3,19 @@
 
 //! The sources and stages plans compile to.
 //!
-//! Every operator does work proportional to the rows it is handed: no operator looks at a batch
-//! twice, holds more than the batches it must join, or scans inlets it does not read.
+//! Every source and stage does work proportional to the rows it is handed: none looks at a
+//! batch twice, holds more than the batches it must join, or scans inlets it does not read.
 
 mod concat;
 mod filter;
+mod once;
 mod pack;
-mod port;
 mod scan;
 
 pub(crate) use concat::*;
 pub(crate) use filter::*;
+pub(crate) use once::*;
 pub(crate) use pack::*;
-pub(crate) use port::*;
 pub(crate) use scan::*;
 use smallvec::SmallVec;
 use vortex_array::ArrayRef;
@@ -24,11 +24,25 @@ use vortex_array::arrays::ChunkedArray;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 
+use crate::plan::pipeline::Blocked;
+use crate::plan::pipeline::Cx;
 use crate::plan::pipeline::Inlet;
+use crate::plan::pipeline::Step;
+
+/// The oldest batch of inlet `index`, removed, or why there is none: blocked while the inlet is
+/// empty and open, finished once it is empty and closed.
+fn next_batch(cx: &mut Cx<'_>, index: usize) -> Step {
+    let mut inlet = cx.inlet(index);
+    match inlet.take() {
+        Some(batch) => Step::Batch(batch),
+        None if inlet.closed() => Step::Finished,
+        None => Step::Blocked(Blocked::Inlet(index)),
+    }
+}
 
 /// Takes the first `len` rows of the inlet, across as many batches as hold them, slicing the last
 /// and leaving its rest in place. Rows spanning batches come back chunked, not copied.
-pub(crate) fn take_rows(inlet: &mut Inlet<'_>, len: usize) -> VortexResult<ArrayRef> {
+fn take_rows(inlet: &mut Inlet<'_>, len: usize) -> VortexResult<ArrayRef> {
     let mut pieces: SmallVec<[ArrayRef; 2]> = SmallVec::new();
     let mut left = len;
     while left > 0 {
@@ -48,6 +62,6 @@ pub(crate) fn take_rows(inlet: &mut Inlet<'_>, len: usize) -> VortexResult<Array
         return Ok(pieces.swap_remove(0));
     }
     let dtype = pieces[0].dtype().clone();
-    // SAFETY: the pieces come from one inlet, whose batches share its writer's dtype.
+    // SAFETY: the pieces come from one inlet, whose batches share its sink's dtype.
     Ok(unsafe { ChunkedArray::new_unchecked(pieces, dtype) }.into_array())
 }
