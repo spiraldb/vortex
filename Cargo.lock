@@ -12144,6 +12144,7 @@ dependencies = [
  "rstest",
  "rustc-hash",
  "sketches-ddsketch",
+ "smallvec",
  "temp-env",
  "termtree",
  "tokio",
