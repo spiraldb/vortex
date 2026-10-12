@@ -20,12 +20,8 @@ use crate::optimizer::rules::ArrayReduceRule;
 use crate::scalar_fn::fns::list_contains::ListContains;
 use crate::scalar_fn::fns::list_contains::PreparedSetLiteral;
 
-/// Prepares the constant list of a [`ListContains`] as a set before any push-down runs.
-///
-/// A rule that pushes the function into the needle, for example into each chunk of a chunked
-/// array, then resizes a [`PreparedSetArray`] that shares the one set, rather than a constant that
-/// every chunk would prepare again. The set is built on the first probe, so this costs nothing
-/// until then.
+/// Replaces the constant list of a [`ListContains`] with a [`PreparedSetArray`], so that push-down
+/// rules share one set instead of preparing the constant again for each part of the needle.
 #[derive(Debug)]
 pub(crate) struct PrepareConstantListRule;
 

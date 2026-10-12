@@ -26,6 +26,7 @@ use vortex_buffer::BufferMut;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
+use vortex_mask::Mask;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
 
@@ -522,10 +523,7 @@ fn lists_contain_needles(
 ) -> VortexResult<ArrayRef> {
     let list_array = array.clone().execute::<ListViewArray>(ctx)?;
     let len = list_array.len();
-    let list_valid = list_array
-        .validity()?
-        .execute_mask(len, ctx)?
-        .to_bit_buffer();
+    let list_valid = list_array.validity()?.execute_mask(len, ctx)?;
 
     let offsets = list_array
         .offsets()
@@ -553,15 +551,13 @@ fn lists_contain_needles(
     let matches = Binary::try_new(elements, needles, Operator::Eq)?
         .into_array()
         .execute::<BoolArray>(ctx)?;
-    let compared = matches
-        .validity()?
-        .execute_mask(matches.len(), ctx)?
-        .to_bit_buffer();
+    let compared = matches.validity()?.execute_mask(matches.len(), ctx)?;
 
     let starts = PrimitiveArray::new(gathered.starts, Validity::NonNullable);
     let lens = PrimitiveArray::new(gathered.lens, Validity::NonNullable);
+    let matched = Mask::from(matches.to_bit_buffer()) & &compared;
     let any_true = process_matches::<u64, u64>(
-        BoolArray::new(&matches.to_bit_buffer() & &compared, Validity::NonNullable),
+        BoolArray::new(matched.into_bit_buffer(), Validity::NonNullable),
         len,
         starts.clone(),
         lens.clone(),
@@ -570,29 +566,32 @@ fn lists_contain_needles(
 
     // A null needle is null against a list with elements, but an empty list holds nothing to
     // compare it to unless the function is strict.
-    let needle_valid = values.validity()?.execute_mask(len, ctx)?.to_bit_buffer();
+    let needle_valid = values.validity()?.execute_mask(len, ctx)?;
     let mut decided = if options.sql_null_semantics {
         needle_valid
     } else {
-        &needle_valid | &!&non_empty_lists(&list_array, ctx)?
+        &needle_valid | &!Mask::from(non_empty_lists(&list_array, ctx)?)
     };
+
     // Under SQL null semantics a comparison with a null element leaves a non-match unknown.
-    if options.sql_null_semantics {
+    if options.sql_null_semantics && !compared.all_true() {
         let any_null = process_matches::<u64, u64>(
-            BoolArray::new(!&compared, Validity::NonNullable),
+            BoolArray::new((!&compared).into_bit_buffer(), Validity::NonNullable),
             len,
             starts,
             lens,
             ctx,
         );
-        decided = &decided & &(&any_true | &!&any_null);
+        decided = decided & &(Mask::from(any_true.clone()) | &!Mask::from(any_null));
     }
 
     // A non-nullable result has non-null lists and needles, and no null element that could leave
     // a row undecided.
     let validity = match nullability {
         Nullability::NonNullable => Validity::NonNullable,
-        Nullability::Nullable => list_array.validity()?.and(Validity::from(decided))?,
+        Nullability::Nullable => list_array
+            .validity()?
+            .and(Validity::from_mask(decided, Nullability::Nullable))?,
     };
     Ok(BoolArray::new(any_true, validity).into_array())
 }
@@ -613,7 +612,7 @@ impl GatheredLists {
     fn new<O: IntegerPType, S: IntegerPType>(
         offsets: &[O],
         sizes: &[S],
-        list_valid: &BitBuffer,
+        list_valid: &Mask,
         ctx: &mut ExecutionCtx,
     ) -> Self {
         let rows = sizes.len();
