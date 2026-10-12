@@ -164,14 +164,8 @@ impl ScalarFnRef {
         self.0.reduce_array(node)
     }
 
-    /// Whether this function takes lambda arguments.
-    /// See [`ScalarFnVTable::higher_order`].
-    pub fn is_higher_order(&self) -> bool {
-        self.0.is_higher_order()
-    }
-
     /// The parameter dtypes of a lambda argument.
-    /// See [`HigherOrderVTable::lambda_params`](crate::scalar_fn::HigherOrderVTable::lambda_params).
+    /// See [`ScalarFnVTable::lambda_params`].
     pub fn lambda_params(
         &self,
         lambda_index: usize,
@@ -182,7 +176,7 @@ impl ScalarFnRef {
     }
 
     /// This scalar function with its options holding the given bound lambdas.
-    /// See [`HigherOrderVTable::with_lambdas`](crate::scalar_fn::HigherOrderVTable::with_lambdas).
+    /// See [`ScalarFnVTable::with_lambdas`].
     pub fn with_lambdas(&self, lambdas: Vec<BoundLambda>) -> VortexResult<ScalarFnRef> {
         self.0.with_lambdas(lambdas)
     }

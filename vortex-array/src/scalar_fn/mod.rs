@@ -29,9 +29,6 @@ pub use plugin::*;
 mod foreign;
 pub use foreign::*;
 
-mod higher_order;
-pub use higher_order::*;
-
 mod typed;
 pub use typed::*;
 

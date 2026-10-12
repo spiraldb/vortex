@@ -158,8 +158,13 @@ fn ordinary_functions_cannot_take_lambdas() -> VortexResult<()> {
         .as_scalar()
         .cloned()
         .ok_or_else(|| vortex_error::vortex_err!("not is a scalar function"))?;
+    let expr = Expression::try_new_higher_order(not_fn, [lit(true)], [lambda(["x"], var("x"))?])?;
+    let error = expr
+        .bind(&row())
+        .expect_err("a function without lambda hooks must reject lambdas");
     assert!(
-        Expression::try_new_higher_order(not_fn, [lit(true)], [lambda(["x"], var("x"))?]).is_err()
+        error.to_string().contains("does not take lambda arguments"),
+        "{error}"
     );
     Ok(())
 }

@@ -19,7 +19,6 @@ use std::hash::Hasher;
 use std::sync::Arc;
 
 use vortex_error::VortexResult;
-use vortex_error::vortex_bail;
 
 use crate::ArrayRef;
 use crate::ExecutionCtx;
@@ -96,8 +95,7 @@ pub(super) trait DynScalarFn: 'static + Send + Sync + super::sealed::Sealed {
     fn is_strict(&self) -> bool;
     fn is_infallible(&self) -> bool;
 
-    // Lambda arguments — options in self, see `ScalarFnVTable::higher_order`
-    fn is_higher_order(&self) -> bool;
+    // Lambda arguments — options in self, see `ScalarFnVTable::lambda_params`
     fn lambda_params(
         &self,
         lambda_index: usize,
@@ -211,27 +209,23 @@ impl<V: ScalarFnVTable> DynScalarFn for TypedScalarFnInstance<V> {
         V::is_infallible(&self.vtable, &self.options)
     }
 
-    fn is_higher_order(&self) -> bool {
-        V::higher_order(&self.vtable).is_some()
-    }
-
     fn lambda_params(
         &self,
         lambda_index: usize,
         param_count: usize,
         arg_dtypes: &[DType],
     ) -> VortexResult<Vec<DType>> {
-        let Some(higher_order) = V::higher_order(&self.vtable) else {
-            vortex_bail!("{} does not take lambda arguments", V::id(&self.vtable));
-        };
-        higher_order.lambda_params(&self.options, lambda_index, param_count, arg_dtypes)
+        V::lambda_params(
+            &self.vtable,
+            &self.options,
+            lambda_index,
+            param_count,
+            arg_dtypes,
+        )
     }
 
     fn with_lambdas(&self, lambdas: Vec<BoundLambda>) -> VortexResult<ScalarFnRef> {
-        let Some(higher_order) = V::higher_order(&self.vtable) else {
-            vortex_bail!("{} does not take lambda arguments", V::id(&self.vtable));
-        };
-        let options = higher_order.with_lambdas(&self.options, lambdas)?;
+        let options = V::with_lambdas(&self.vtable, &self.options, lambdas)?;
         Ok(TypedScalarFnInstance::new(self.vtable.clone(), options).erased())
     }
 

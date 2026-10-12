@@ -49,8 +49,9 @@ pub enum Expression {
     Variable(Variable),
     /// A scalar function applied to child expressions and then to lambdas.
     ///
-    /// The function implements [`HigherOrderVTable`](crate::scalar_fn::HigherOrderVTable). Binding
-    /// produces an ordinary scalar node whose options hold the bound lambdas.
+    /// Binding asks the function for each lambda's parameter dtypes (see
+    /// [`ScalarFnVTable::lambda_params`]) and produces an ordinary scalar node whose options hold
+    /// the bound lambdas.
     HigherOrder {
         /// The scalar fn for this node.
         scalar_fn: ScalarFnRef,
@@ -89,11 +90,6 @@ impl Expression {
         lambdas: impl IntoIterator<Item = Lambda>,
     ) -> VortexResult<Self> {
         let children = Vec::from_iter(children);
-        vortex_ensure!(
-            scalar_fn.is_higher_order(),
-            "{} does not take lambda arguments",
-            scalar_fn.id()
-        );
         vortex_ensure!(
             scalar_fn.signature().arity().matches(children.len()),
             "Expression arity mismatch: expected {} children but got {}",
