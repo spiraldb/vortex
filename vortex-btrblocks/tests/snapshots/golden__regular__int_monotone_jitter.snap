@@ -4,6 +4,6 @@ expression: rendered
 ---
 input: u64, len=16384, nbytes=131072
 root: fastlanes.for.v2(u64, len=16384) nbytes=49152
-  metadata: global_reference: 1700000001036u64
+  metadata: global_reference: 1700000001036u64, offset: 0
   encoded: fastlanes.bitpacked.v2(u64, len=16384) nbytes=49152
     metadata: bit_width: 24, offset: 0

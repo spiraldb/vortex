@@ -88,7 +88,7 @@ impl<T: TypedArrayRef<crate::FoR>> FoRArrayExt for T {}
 impl Display for FoRData {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.global_reference {
-            Some(reference) => write!(f, "global_reference: {reference}"),
+            Some(reference) => write!(f, "global_reference: {reference}, offset: {}", self.offset),
             None => write!(f, "offset: {}", self.offset),
         }
     }
