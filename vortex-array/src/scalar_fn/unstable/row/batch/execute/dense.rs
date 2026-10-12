@@ -22,10 +22,26 @@ impl RowFnExecutionArgs {
     /// Run every stored payload, then attach the input validity without materializing its mask.
     pub(super) fn execute_dense(
         &self,
-        kernel: impl Fn(BorrowedRowFnArgs<'_>, &mut ExecutionCtx) -> VortexResult<ArrayRef>,
+        kernel: impl Fn(
+            BorrowedRowFnArgs<'_>,
+            &mut Option<Validity>,
+            &mut ExecutionCtx,
+        ) -> VortexResult<ArrayRef>,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrayRef> {
-        let values = kernel(self.execution_args(&self.inputs, self.row_count), ctx)?;
+        // Offer a partial validity to the kernel. A collector that takes it builds the output with
+        // that validity attached, so the output needs neither a second construction nor an
+        // all-valid check.
+        let mut validity =
+            matches!(self.validity, Validity::Array(_)).then(|| self.validity.clone());
+        let values = kernel(
+            self.execution_args(&self.inputs, self.row_count),
+            &mut validity,
+            ctx,
+        )?;
+        if validity.is_none() && matches!(self.validity, Validity::Array(_)) {
+            return self.finalize_output(values, self.row_count);
+        }
 
         self.finalize_dense_output(values, ctx)
     }

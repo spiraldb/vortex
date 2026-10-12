@@ -34,6 +34,7 @@ use crate::scalar_fn::ScalarFnId;
 use crate::scalar_fn::ScalarFnVTable;
 use crate::scalar_fn::union_child_validities;
 use crate::scalar_fn::unstable::row::execute::DenseAttempt;
+use crate::validity::Validity;
 
 impl<F: RowFn> ScalarFnVTable for F {
     type Options = F::Options;
@@ -125,7 +126,7 @@ pub fn execute_rows<F: RowFn>(
 
     let batch = prepare_batch(function, options, args)?;
     batch.execute(
-        |args, ctx| execute_row_kernel(function, options, args, ctx),
+        |args, validity, ctx| execute_row_kernel(function, options, args, validity, ctx),
         |args, ctx| execute_dense_attempt(function, options, args, ctx),
         |args, valid, ctx| try_execute_valid_rows(function, options, args, valid, ctx),
         |args, valid, ctx| execute_filtered_rows(function, options, args, valid, ctx),
@@ -146,7 +147,8 @@ fn execute_nullary_rows<F: RowFn>(
 
     // A nullary function has no input validity to propagate, so its kernel output is the finished
     // column and this path labels it directly.
-    let values = plan.relabel_output(execute_row_kernel(function, options, args, ctx)?)?;
+    let values =
+        plan.relabel_output(execute_row_kernel(function, options, args, &mut None, ctx)?)?;
 
     finalize_kernel_output(RowFn::id(function), &result_dtype, row_count, values, ctx)
 }
@@ -163,16 +165,21 @@ fn ensure_arity<F: RowFn>(function: &F, actual: usize) -> VortexResult<()> {
     Ok(())
 }
 
+/// Execute the row kernel over `args`.
+///
+/// A collector that can attach the validity in `validity` takes it and builds its output with it,
+/// leaving `None` behind. Otherwise the output is non-nullable and `validity` is left unchanged.
 fn execute_row_kernel<F: RowFn>(
     function: &F,
     options: &F::Options,
     args: BorrowedRowFnArgs<'_>,
+    validity: &mut Option<Validity>,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<ArrayRef> {
     function.dispatch(
         options,
         args.dtypes(),
-        ExecuteRows::<F>::new(&args, args.dtypes(), args.plan(), ctx),
+        ExecuteRows::<F>::new(&args, args.dtypes(), args.plan(), validity, ctx),
     )
 }
 
@@ -244,6 +251,7 @@ mod tests {
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::array_session;
+    use crate::arrays::BoolArray;
     use crate::arrays::PrimitiveArray;
     use crate::assert_arrays_eq;
     use crate::dtype::DType;
@@ -426,6 +434,46 @@ mod tests {
                 .contains("row input column has the wrong ptype"),
             "unexpected error: {error}",
         );
+        Ok(())
+    }
+
+    #[derive(Clone)]
+    struct GreaterThanTwo;
+
+    impl RowFn for GreaterThanTwo {
+        type Options = EmptyOptions;
+
+        const ARG_NAMES: &'static [&'static str] = &["value"];
+        const INFALLIBLE: bool = true;
+
+        fn id(&self) -> ScalarFnId {
+            static ID: CachedId = CachedId::new("test.greater_than_two");
+            *ID
+        }
+
+        fn dispatch<V: RowVisitor>(
+            &self,
+            _options: &Self::Options,
+            _args: &[DType],
+            visitor: V,
+        ) -> VortexResult<V::VisitResult> {
+            visitor.visit_bool::<(i64,), false>(|(value,)| value > 2)
+        }
+    }
+
+    #[test]
+    fn test_partially_valid_packed_bool_output_is_canonical() -> VortexResult<()> {
+        let validity = Validity::from_iter([true, false, true, true]);
+        let input = PrimitiveArray::new(vec![1_i64, 3, 3, 0], validity.clone()).into_array();
+        let args = VecExecutionArgs::new(vec![input], 4);
+        let mut ctx = array_session().create_execution_ctx();
+
+        let actual = execute_rows(&GreaterThanTwo, &EmptyOptions, &args, &mut ctx)?;
+        let expected =
+            BoolArray::new([false, true, true, false].into_iter().collect(), validity).into_array();
+
+        assert!(actual.is_canonical(), "{actual}");
+        assert_arrays_eq!(&actual, &expected, &mut ctx);
         Ok(())
     }
 
