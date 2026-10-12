@@ -4,6 +4,7 @@
 mod bool;
 mod decimal;
 mod extension;
+mod fixed_size_list;
 mod primitive;
 mod varbinview;
 
@@ -18,6 +19,7 @@ use vortex_session::registry::CachedId;
 use self::bool::accumulate_bool;
 use self::decimal::accumulate_decimal;
 use self::extension::accumulate_extension;
+use self::fixed_size_list::accumulate_fixed_size_list;
 use self::primitive::accumulate_primitive;
 use self::varbinview::accumulate_varbinview;
 use crate::ArrayRef;
@@ -46,6 +48,13 @@ use crate::partial_ord::partial_min;
 use crate::scalar::Scalar;
 
 static NAMES: LazyLock<FieldNames> = LazyLock::new(|| FieldNames::from(["min", "max"]));
+
+/// The largest fixed-size list value, in bytes, whose min and max [`min_max`] computes.
+///
+/// Statistics such as zone maps and file footers store the extrema of every chunk they cover, so
+/// the extrema of wide lists such as embedding vectors would grow them without enabling useful
+/// pruning. UUIDs (16 bytes) and small fixed-size vectors fit.
+const MAX_FIXED_SIZE_LIST_MIN_MAX_BYTES: usize = 64;
 
 /// The minimum and maximum non-null values of an array, or `None` if there are no non-null values.
 ///
@@ -297,19 +306,29 @@ fn minmax_supported_dtype(input_dtype: &DType) -> bool {
 
 /// Returns whether [`min_max`] can currently compute extrema for this logical dtype.
 ///
-/// This is intentionally narrower than [`minmax_supported_dtype`]. List and fixed-size-list
-/// extrema have a defined output dtype for aggregate expression lowering, but the accumulator does
-/// not yet implement lexicographic list comparison.
+/// This is intentionally narrower than [`minmax_supported_dtype`]. List extrema have a defined
+/// output dtype for aggregate expression lowering, but the accumulator does not yet compute them.
+/// Fixed-size lists are computed only over fixed-width scalar elements and only up to
+/// [`MAX_FIXED_SIZE_LIST_MIN_MAX_BYTES`] per value, so the extrema that statistics keep for every
+/// chunk stay small.
 fn minmax_compute_supported_dtype(input_dtype: &DType) -> bool {
-    matches!(
-        input_dtype,
+    match input_dtype {
         DType::Bool(_)
-            | DType::Primitive(..)
-            | DType::Decimal(..)
-            | DType::Utf8(..)
-            | DType::Binary(..)
-            | DType::Extension(..)
-    )
+        | DType::Primitive(..)
+        | DType::Decimal(..)
+        | DType::Utf8(..)
+        | DType::Binary(..)
+        | DType::Extension(..) => true,
+        DType::FixedSizeList(element_dtype, ..) => {
+            matches!(
+                element_dtype.as_ref(),
+                DType::Bool(_) | DType::Primitive(..) | DType::Decimal(..)
+            ) && input_dtype
+                .element_size()
+                .is_some_and(|bytes| bytes <= MAX_FIXED_SIZE_LIST_MIN_MAX_BYTES)
+        }
+        _ => false,
+    }
 }
 
 impl AggregateFnVTable for MinMax {
@@ -439,6 +458,12 @@ impl AggregateFnVTable for MinMax {
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<()> {
+        // Fixed-size lists that `min_max` does not compute, such as those over the size cap, have
+        // no extrema in any encoding.
+        if batch.dtype().is_fixed_size_list() && !minmax_compute_supported_dtype(batch.dtype()) {
+            return Ok(());
+        }
+
         match batch {
             Columnar::Constant(c) => {
                 if c.is_empty() {
@@ -473,6 +498,7 @@ impl AggregateFnVTable for MinMax {
                 Canonical::VarBinView(v) => accumulate_varbinview(args, partial, v, ctx),
                 Canonical::Decimal(d) => accumulate_decimal(args, partial, d, ctx),
                 Canonical::Extension(e) => accumulate_extension(args, partial, e, ctx),
+                Canonical::FixedSizeList(l) => accumulate_fixed_size_list(args, partial, l, ctx),
                 Canonical::Null(_) => Ok(()),
                 Canonical::Union(_) => {
                     vortex_bail!("TODO(connor)[Union]: implement min_max for Union arrays")
@@ -480,7 +506,6 @@ impl AggregateFnVTable for MinMax {
                 Canonical::Struct(_)
                 | Canonical::List(_)
                 | Canonical::Map(_)
-                | Canonical::FixedSizeList(_)
                 | Canonical::Variant(_) => {
                     vortex_bail!("Unsupported canonical type for min_max: {}", batch.dtype())
                 }
@@ -978,7 +1003,7 @@ mod tests {
     }
 
     #[test]
-    fn list_and_fixed_size_list_min_max_returns_none() -> VortexResult<()> {
+    fn list_min_max_returns_none() -> VortexResult<()> {
         let mut ctx = SESSION.create_execution_ctx();
 
         let list_array = ListArray::try_new(
@@ -991,10 +1016,21 @@ mod tests {
             min_max(&list_array, &mut ctx, NumericalAggregateOpts::default())?,
             None
         );
+        Ok(())
+    }
+
+    /// Fixed-size lists of variable-width elements are not computed, keeping extrema bounded.
+    #[test]
+    fn fixed_size_list_of_strings_min_max_returns_none() -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
 
         let fixed_size_list_array = FixedSizeListArray::try_new(
-            buffer![1i32, 2, 3, 4].into_array(),
-            2,
+            VarBinArray::from_iter(
+                [Some("b"), Some("a")],
+                DType::Utf8(Nullability::NonNullable),
+            )
+            .into_array(),
+            1,
             Validity::NonNullable,
             2,
         )?
@@ -1007,7 +1043,6 @@ mod tests {
             )?,
             None
         );
-
         Ok(())
     }
 
