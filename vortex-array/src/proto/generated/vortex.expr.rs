@@ -31,8 +31,8 @@ pub struct NumericalAggregateOpts {
     #[prost(bool, tag = "1")]
     pub skip_nans: bool,
 }
-/// Options for `vortex.uncompressed_size_in_bytes`, controlling whether the size counts every
-/// byte an array holds (inexact, the default) or only the bytes its rows reference (exact).
+/// Options for `vortex.uncompressed_size_in_bytes`: whether the size is an approximation from the
+/// buffers the array holds (the default) or the actual bytes its rows use.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct UncompressedSizeInBytesOpts {
     #[prost(bool, tag = "1")]
