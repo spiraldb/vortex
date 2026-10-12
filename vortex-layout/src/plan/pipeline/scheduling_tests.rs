@@ -326,52 +326,57 @@ fn finishing_cancels_reads_in_flight() -> VortexResult<()> {
     Ok(())
 }
 
-/// Emits `left` one-row batches.
-struct Repeat {
-    left: usize,
-}
-
-impl Source for Repeat {
-    fn next(&mut self, _cx: &mut Cx<'_>) -> VortexResult<Step> {
-        Ok(match self.left.checked_sub(1) {
-            Some(left) => {
-                self.left = left;
-                Step::Batch(indices([0]))
-            }
-            None => Step::Finished,
-        })
-    }
-}
-
-/// Waits on its one-batch inlet whatever it holds, so once the inlet is full nothing wakes it.
-struct WaitsWhenFull;
-
-impl Source for WaitsWhenFull {
-    fn inlet_count(&self) -> usize {
-        1
-    }
-
-    fn capacity(&self, _inlet: usize) -> usize {
-        1
-    }
-
-    fn next(&mut self, _cx: &mut Cx<'_>) -> VortexResult<Step> {
-        Ok(Step::Blocked(Blocked::Inlet(0)))
-    }
-}
-
-/// Debug builds catch a source waiting on an inlet its sink can no longer wake it through, at
-/// that source, instead of reporting the scan stuck.
+/// Sources that break the scheduling contract, which debug builds catch.
 #[cfg(debug_assertions)]
-#[test]
-#[should_panic(expected = "which is full")]
-fn waiting_on_a_full_inlet_is_caught() {
-    let plan = SyntheticPlan::new(row_dtype(), 2, Vec::new(), |_, _, compiler| {
-        Ok(Some(
-            compiler.join(vec![Chain::new(Repeat { left: 2 })], WaitsWhenFull),
-        ))
-    })
-    .into_plan();
-    let mut scan = Scan::try_new(SESSION.clone(), plan, vec![Split::all(0..2)]).unwrap();
-    while !matches!(scan.step().unwrap(), Turn::Done) {}
+mod contract {
+    use super::*;
+
+    /// Emits `left` one-row batches.
+    struct Repeat {
+        left: usize,
+    }
+
+    impl Source for Repeat {
+        fn next(&mut self, _cx: &mut Cx<'_>) -> VortexResult<Step> {
+            Ok(match self.left.checked_sub(1) {
+                Some(left) => {
+                    self.left = left;
+                    Step::Batch(indices([0]))
+                }
+                None => Step::Finished,
+            })
+        }
+    }
+
+    /// Waits on its one-batch inlet whatever it holds, so once the inlet is full nothing wakes it.
+    struct WaitsWhenFull;
+
+    impl Source for WaitsWhenFull {
+        fn inlet_count(&self) -> usize {
+            1
+        }
+
+        fn capacity(&self, _inlet: usize) -> usize {
+            1
+        }
+
+        fn next(&mut self, _cx: &mut Cx<'_>) -> VortexResult<Step> {
+            Ok(Step::Blocked(Blocked::Inlet(0)))
+        }
+    }
+
+    /// Debug builds catch a source waiting on an inlet its sink can no longer wake it through, at
+    /// that source, instead of reporting the scan stuck.
+    #[test]
+    #[should_panic(expected = "which is full")]
+    fn waiting_on_a_full_inlet_is_caught() {
+        let plan = SyntheticPlan::new(row_dtype(), 2, Vec::new(), |_, _, compiler| {
+            Ok(Some(
+                compiler.join(vec![Chain::new(Repeat { left: 2 })], WaitsWhenFull),
+            ))
+        })
+        .into_plan();
+        let mut scan = Scan::try_new(SESSION.clone(), plan, vec![Split::all(0..2)]).unwrap();
+        while !matches!(scan.step().unwrap(), Turn::Done) {}
+    }
 }
