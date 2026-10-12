@@ -3,10 +3,10 @@
 
 //! Guard for the CPU feature test matrix in CI.
 //!
-//! Each matrix entry runs the test suite on an emulated CPU and sets
-//! `VORTEX_EXPECT_CPU_FEATURES` to a comma-separated list such as `avx2,bmi2,!avx512f`.
-//! A plain name must be detected at runtime and a `!`-prefixed name must not be, so an
-//! emulator or runner that silently exposes a different CPU fails the job instead of
+//! Each matrix entry runs the test suite on an instance family chosen for its CPU features
+//! and sets `VORTEX_EXPECT_CPU_FEATURES` to a comma-separated list such as
+//! `avx2,bmi2,!avx512f`. A plain name must be detected at runtime and a `!`-prefixed name
+//! must not be, so a runner that silently lands on a different CPU fails the job instead of
 //! testing the wrong kernels. Without the variable this test does nothing.
 
 #![expect(clippy::tests_outside_test_module)]
