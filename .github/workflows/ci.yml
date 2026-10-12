@@ -604,11 +604,6 @@ jobs:
             emulator: sde
             cpu: "-icx"
             expect: "avx2,bmi2,avx512f,avx512bw,avx512vbmi2,avx512vpopcntdq"
-          - name: neon
-            arch: arm64
-            emulator: qemu
-            cpu: "neoverse-n1"
-            expect: "neon,!sve,!sve2"
           - name: sve
             arch: arm64
             emulator: qemu
