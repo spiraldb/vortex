@@ -15,7 +15,6 @@ use vortex_error::vortex_ensure;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
 
-use super::UNBOUNDED;
 use super::join_inlet;
 use crate::plan::ListPackPlan;
 use crate::plan::pipeline::Blocked;
@@ -93,16 +92,14 @@ fn offset(offsets: &ArrayRef, index: usize, cx: &mut Cx<'_>) -> VortexResult<u64
         .ok_or_else(|| vortex_err!("Invalid list offset at {index}"))
 }
 
-impl Source for ListPackSource {
+impl ListPackSource {
     fn inlet_count(&self) -> usize {
         if self.has_validity { 3 } else { 2 }
     }
+}
 
-    fn capacity(&self, _inlet: usize) -> usize {
-        UNBOUNDED
-    }
-
-    fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
+impl Source for ListPackSource {
+    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
         if self.done {
             return Ok(Step::Finished);
         }

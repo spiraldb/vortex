@@ -14,18 +14,11 @@ use super::Progress;
 use super::SourceEnd;
 
 impl Core {
-    /// Checks the graph after a compile: ports and pipelines agree on their ends, sources read
-    /// as many inlets as they declare, every port has a reader, and fan-out is unbounded.
+    /// Checks the graph after a compile: ports and pipelines agree on their ends, every port has
+    /// a reader, and fan-out is unbounded.
     pub(super) fn validate(&self) {
         for (id, pipe) in self.pipelines.iter().enumerate() {
             let Some(pipe) = pipe else { continue };
-            assert_eq!(
-                pipe.inlets.len(),
-                pipe.source.inlet_count(),
-                "pipeline {id} reads {} inlets but its source declares {}",
-                pipe.inlets.len(),
-                pipe.source.inlet_count()
-            );
             for &port in &pipe.inlets {
                 let source = self.arena.get(port).source;
                 assert!(
@@ -104,7 +97,7 @@ impl Core {
                     );
                 }
             }
-            Progress::Read(_) | Progress::Outlet => {}
+            Progress::Outlet => {}
         }
     }
 }

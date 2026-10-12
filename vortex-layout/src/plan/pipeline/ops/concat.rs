@@ -24,11 +24,7 @@ impl ConcatSource {
 }
 
 impl Source for ConcatSource {
-    fn inlet_count(&self) -> usize {
-        self.inlets
-    }
-
-    fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
+    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
         while self.current < self.inlets {
             match next_batch(cx, self.current) {
                 Step::Finished => self.current += 1,

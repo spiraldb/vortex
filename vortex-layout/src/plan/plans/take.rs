@@ -175,7 +175,11 @@ impl PlanVTable for Take {
         };
         let values = compiler.whole(&plan.values()?, plan.data().shareable)?;
         let source = TakeSource::new(plan.clone());
-        Ok(Some(compiler.join(vec![codes, values], source)))
+        Ok(Some(compiler.join_with(
+            vec![codes, values],
+            TakeSource::capacity,
+            source,
+        )))
     }
 
     fn reach(

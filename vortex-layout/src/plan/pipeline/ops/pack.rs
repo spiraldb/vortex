@@ -94,11 +94,7 @@ impl PackSource {
 }
 
 impl Source for PackSource {
-    fn inlet_count(&self) -> usize {
-        self.inlets
-    }
-
-    fn next(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
+    fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<Step> {
         if let Some(index) = self.filling {
             let inlet = cx.inlet(index);
             if !inlet.full() && !inlet.closed() {
