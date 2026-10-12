@@ -582,6 +582,76 @@ jobs:
           alert-title: "Rust tests (linux-arm64) failed on develop"
           deduplication-key: ci-rust-test-linux-arm64-failure
 
+  # Runs the crates with hand-written SIMD kernels on emulated CPUs, so that every
+  # runtime-dispatched kernel tier is exercised regardless of which CPU the runner has:
+  # Intel SDE pins the x86 CPU model and QEMU user mode pins the aarch64 one.
+  # `VORTEX_EXPECT_CPU_FEATURES` makes vortex-buffer's `cpu_features` test fail if the
+  # emulated CPU does not expose exactly the expected tier.
+  rust-test-cpu-features:
+    name: "Rust tests (cpu-features, ${{ matrix.config.name }})"
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - name: avx2
+            arch: amd64
+            emulator: sde
+            cpu: "-hsw"
+            expect: "avx2,bmi2,!avx512f"
+          - name: avx512
+            arch: amd64
+            emulator: sde
+            cpu: "-icx"
+            expect: "avx2,bmi2,avx512f,avx512bw,avx512vbmi2,avx512vpopcntdq"
+          - name: neon
+            arch: arm64
+            emulator: qemu
+            cpu: "neoverse-n1"
+            expect: "neon,!sve,!sve2"
+          - name: sve
+            arch: arm64
+            emulator: qemu
+            cpu: "max"
+            expect: "neon,sve,sve2,sve2-bitperm"
+    runs-on: >-
+      ${{ github.repository == 'vortex-data/vortex'
+          && (matrix.config.arch == 'amd64'
+            && format('runs-on={0}/runner=amd64-ci-medium/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=rust-test-cpu-features-{1}', github.run_id, matrix.config.name)
+            || format('runs-on={0}/runner=arm64-medium/image=ubuntu24-full-arm64-pre-v2/extras=s3-cache/tag=rust-test-cpu-features-{1}', github.run_id, matrix.config.name))
+          || (matrix.config.arch == 'amd64' && 'ubuntu-latest' || 'ubuntu-24.04-arm') }}
+    env:
+      VORTEX_EXPECT_CPU_FEATURES: ${{ matrix.config.expect }}
+    steps:
+      - parallel:
+          - uses: runs-on/action@v2
+            if: github.repository == 'vortex-data/vortex'
+            with:
+              sccache: s3
+          - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: ./.github/actions/setup-prebuild
+        with:
+          enable-sccache: "true"
+      - name: Install Intel SDE
+        if: matrix.config.emulator == 'sde'
+        uses: petarpetrovt/setup-sde@6d2773bc0ef3005fd52e0ae0bb91782321793aec  # v6.0
+      - name: Configure SDE test runner
+        if: matrix.config.emulator == 'sde'
+        run: |
+          echo "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER=$SDE_PATH/sde64 ${{ matrix.config.cpu }} --" >> "$GITHUB_ENV"
+      - name: Install QEMU and configure test runner
+        if: matrix.config.emulator == 'qemu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-user
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER=qemu-aarch64 -cpu ${{ matrix.config.cpu }}" >> "$GITHUB_ENV"
+      # `cargo test` rather than nextest: the emulator starts once per test binary
+      # instead of once per test. The `ci` profile is a debug build.
+      - name: Rust Tests
+        run: |
+          cargo test --profile ci --locked --no-fail-fast --tests \
+            -p vortex-buffer -p vortex-mask -p vortex-array
+
   btrblocks-golden:
     name: "Rust (btrblocks golden corpus)"
     timeout-minutes: 10
