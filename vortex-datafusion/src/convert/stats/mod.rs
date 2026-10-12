@@ -75,6 +75,7 @@ pub(crate) fn constant_distinct_count(
         None => {}
     }
 
+    // TODO: Replace this inference with IsConstant once file statistics aggregate and persist it.
     let supports_bounds = match dtype {
         DType::Bool(_)
         | DType::Primitive(..)
