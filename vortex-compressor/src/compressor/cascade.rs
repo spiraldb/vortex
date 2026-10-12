@@ -6,6 +6,7 @@
 use vortex_array::ArrayRef;
 use vortex_array::Canonical;
 use vortex_array::CanonicalValidity;
+use vortex_array::CompactOptions;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::aggregate_fn::fns::uncompressed_size_in_bytes::UncompressedSizeInBytes;
@@ -15,8 +16,6 @@ use vortex_array::arrays::Constant;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::ExtensionArray;
 use vortex_array::arrays::FixedSizeListArray;
-use vortex_array::arrays::ListView;
-use vortex_array::arrays::MapArray;
 use vortex_array::arrays::Masked;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::UnionArray;
@@ -27,10 +26,7 @@ use vortex_array::arrays::extension::ExtensionArrayExt;
 use vortex_array::arrays::fixed_size_list::FixedSizeListArrayExt;
 use vortex_array::arrays::fixed_size_list::FixedSizeListArraySlotsExt;
 use vortex_array::arrays::listview::ListViewArraySlotsExt;
-use vortex_array::arrays::listview::ListViewRebuildMode;
 use vortex_array::arrays::listview::list_from_list_view;
-use vortex_array::arrays::map::MapArrayExt;
-use vortex_array::arrays::map::MapArraySlotsExt;
 use vortex_array::arrays::masked::MaskedArraySlotsExt;
 use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::arrays::union::UnionArrayExt;
@@ -70,7 +66,10 @@ impl CascadingCompressor {
         let _enter = span.enter();
 
         let canonical = array.clone().execute::<CanonicalValidity>(exec_ctx)?.0;
-        let trimmed = trim(canonical, exec_ctx)?;
+        // Trimming is zero-copy. A scheme that changes the encoding drops a view array's dead
+        // bytes for free, and `without_dead_bytes` compacts one that keeps its encoding, so the
+        // copy is paid at most once.
+        let trimmed = canonical.compact_with(CompactOptions::trim(), exec_ctx)?;
         let compressed = self.compress_canonical(trimmed, CompressorContext::new(), exec_ctx)?;
 
         trace::record_compress_outcome(&span, before_nbytes, compressed.nbytes());
@@ -101,7 +100,7 @@ impl CascadingCompressor {
         }
 
         let canonical = child.clone().execute::<CanonicalValidity>(exec_ctx)?.0;
-        let trimmed = trim(canonical, exec_ctx)?;
+        let trimmed = canonical.compact_with(CompactOptions::trim(), exec_ctx)?;
 
         let child_ctx = parent_ctx
             .clone()
@@ -358,27 +357,6 @@ pub(super) fn exact_uncompressed_size(
     }
     let size = uncompressed_size_in_bytes_uncached(array, UncompressedSizeOpts::exact(), exec_ctx)?;
     u64::try_from(size).map_err(|e| vortex_err!("uncompressed size does not fit in u64: {e}"))
-}
-
-/// Zero-copy trimming before scheme selection: bool arrays drop bits outside their range and
-/// lists drop elements outside the ones they reference. View buffers are left as they are and
-/// compacted by [`without_dead_bytes`] only if the array stays a view array.
-fn trim(canonical: Canonical, exec_ctx: &mut ExecutionCtx) -> VortexResult<Canonical> {
-    Ok(match canonical {
-        Canonical::Bool(array) => Canonical::Bool(array.trim_bits()?),
-        Canonical::List(array) => {
-            Canonical::List(array.rebuild(ListViewRebuildMode::TrimElements, exec_ctx)?)
-        }
-        Canonical::Map(array) => Canonical::Map(MapArray::new(
-            array.map_dtype().clone(),
-            array
-                .entries()
-                .as_::<ListView>()
-                .into_owned()
-                .rebuild(ListViewRebuildMode::TrimElements, exec_ctx)?,
-        )),
-        other => other,
-    })
 }
 
 /// Returns the compressed string or binary `array` holding only the bytes its rows reference.

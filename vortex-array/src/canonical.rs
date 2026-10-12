@@ -278,6 +278,33 @@ impl Canonical {
     }
 }
 
+/// Options for [`Canonical::compact_with`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CompactOptions {
+    /// Whether the data buffers of a string or binary view array are rewritten to drop the
+    /// bytes no view references. This is the one step of compaction that copies data; the rest
+    /// is zero-copy trimming.
+    pub compact_views: bool,
+}
+
+impl Default for CompactOptions {
+    fn default() -> Self {
+        Self {
+            compact_views: true,
+        }
+    }
+}
+
+impl CompactOptions {
+    /// Zero-copy trimming only: bool arrays drop bits outside their range and lists drop
+    /// elements outside the ones they reference, but view buffers are left as they are.
+    pub const fn trim() -> Self {
+        Self {
+            compact_views: false,
+        }
+    }
+}
+
 impl Canonical {
     /// Performs a (potentially expensive) compaction operation on the array before it is complete.
     ///
@@ -285,11 +312,22 @@ impl Canonical {
     /// they can accumulate wasted space after slicing and taking operations.
     ///
     /// This operation can be very expensive and can result in things like allocations, full-scans
-    /// and copy operations.
+    /// and copy operations. See [`Canonical::compact_with`] to leave out the copying step.
     pub fn compact(&self, ctx: &mut ExecutionCtx) -> VortexResult<Canonical> {
+        self.compact_with(CompactOptions::default(), ctx)
+    }
+
+    /// Compacts the array as [`Canonical::compact`] does, with the steps `options` selects.
+    pub fn compact_with(
+        &self,
+        options: CompactOptions,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Canonical> {
         match self {
             Canonical::Bool(array) => Ok(Canonical::Bool(array.trim_bits()?)),
-            Canonical::VarBinView(array) => Ok(Canonical::VarBinView(array.compact_buffers(ctx)?)),
+            Canonical::VarBinView(array) if options.compact_views => {
+                Ok(Canonical::VarBinView(array.compact_buffers(ctx)?))
+            }
             Canonical::List(array) => Ok(Canonical::List(
                 array.rebuild(ListViewRebuildMode::TrimElements, ctx)?,
             )),
