@@ -113,6 +113,7 @@ pub(crate) fn unpack_into_primitive_builder_blocked<T: BitPackedUnpack>(
 
     decode_blocks(array, &offsets, uninit_slice);
 
+    // TODO: Apply patches as each block is decoded, while its output is still in cache.
     if let Some(patches) = array.patches() {
         apply_patches_to_uninit_range(&mut uninit_range, &patches, ctx, |v: T| v)?;
     }
