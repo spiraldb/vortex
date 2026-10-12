@@ -10,10 +10,10 @@ use vortex_error::VortexResult;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
 
-use super::Operator;
 use super::Source;
+use super::Stage;
 use super::port::PortId;
-use super::port::Reader;
+use super::port::SourceEnd;
 use super::scan::Core;
 use crate::plan::PlanRef;
 
@@ -21,7 +21,7 @@ use crate::plan::PlanRef;
 /// parent plan can add stages before it becomes a pipeline.
 pub struct Chain {
     pub(crate) source: Box<dyn Source>,
-    pub(crate) stages: Vec<Box<dyn Operator>>,
+    pub(crate) stages: Vec<Box<dyn Stage>>,
     pub(crate) inlets: Vec<PortId>,
 }
 
@@ -36,7 +36,7 @@ impl Chain {
     }
 
     /// This chain with `stage` after its last stage.
-    pub fn with(mut self, stage: impl Operator + 'static) -> Self {
+    pub fn with(mut self, stage: impl Stage + 'static) -> Self {
         self.stages.push(Box::new(stage));
         self
     }
@@ -82,10 +82,10 @@ impl Compiler<'_> {
             .into_iter()
             .enumerate()
             .map(|(index, chain)| {
-                let port = self
-                    .core
-                    .arena
-                    .create(source.capacity(index), None, Reader::Unclaimed);
+                let port =
+                    self.core
+                        .arena
+                        .create(source.capacity(index), None, SourceEnd::Unclaimed);
                 self.core.add_pipeline(chain, smallvec::smallvec![port]);
                 port
             })
