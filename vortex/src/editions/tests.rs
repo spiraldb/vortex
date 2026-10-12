@@ -46,6 +46,7 @@ use super::DEFAULT_CORE_EDITION;
 use super::DEFAULT_PREVIEW_EDITION;
 use super::EDITION_DECLARATIONS;
 use super::PREVIEW_2026_08_0;
+use super::PREVIEW_2026_10_0;
 
 fn session() -> VortexResult<EditionSession> {
     let session = EditionSession::empty();
@@ -147,6 +148,20 @@ fn preview_starts_empty() {
     ] {
         assert!(session.components_in(&PREVIEW_2026_08_0, kind).is_empty());
     }
+}
+
+#[test]
+fn preview_2026_10_adds_alternating_runend() {
+    let session = session().unwrap_or_else(|e| panic!("registering editions: {e}"));
+    let arrays = session.components_in(&PREVIEW_2026_10_0, ComponentKind::Array);
+    assert_eq!(arrays.len(), 1);
+    assert_eq!(arrays[0].component_id.as_str(), "vortex.runend.v2");
+    assert!(
+        session
+            .components_in(&DEFAULT_CORE_EDITION, ComponentKind::Array)
+            .iter()
+            .all(|inclusion| inclusion.component_id.as_str() != "vortex.runend.v2")
+    );
 }
 
 #[test]

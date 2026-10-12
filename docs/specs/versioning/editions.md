@@ -69,7 +69,11 @@ their own policy.
 
 ### `preview2026.08.0`
 
-This edition currently adds no components.
+This edition adds no components.
+
+### `preview2026.10.0`
+
+- `array`: `vortex.runend.v2`
 
 ### `tensor2026.04.0`
 
@@ -122,8 +126,7 @@ what readers must understand, the correction needs a new wire ID and a later edi
 
 After initial testing, the format can enter a new `preview` edition for broader opt-in use, then a
 later `core` edition for default use. Promotion changes which editions permit the format while
-preserving its contract and wire ID. The current `preview` edition is empty, so its first component
-must go into a new edition.
+preserving its contract and wire ID.
 
 ## Freezing an edition
 
