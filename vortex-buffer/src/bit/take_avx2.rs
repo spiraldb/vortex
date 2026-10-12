@@ -2,27 +2,26 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use std::arch::x86_64::__m128i;
+use std::arch::x86_64::__m256;
 use std::arch::x86_64::__m256i;
 use std::arch::x86_64::_mm_loadu_si128;
 use std::arch::x86_64::_mm256_add_epi32;
 use std::arch::x86_64::_mm256_and_si256;
-use std::arch::x86_64::_mm256_andnot_si256;
 use std::arch::x86_64::_mm256_castsi256_ps;
 use std::arch::x86_64::_mm256_cmpeq_epi32;
 use std::arch::x86_64::_mm256_cvtepu16_epi32;
 use std::arch::x86_64::_mm256_i32gather_epi32;
 use std::arch::x86_64::_mm256_loadu_si256;
 use std::arch::x86_64::_mm256_mask_i32gather_epi32;
+use std::arch::x86_64::_mm256_max_epu32;
 use std::arch::x86_64::_mm256_min_epu32;
 use std::arch::x86_64::_mm256_movemask_ps;
-use std::arch::x86_64::_mm256_or_si256;
 use std::arch::x86_64::_mm256_set1_epi32;
 use std::arch::x86_64::_mm256_setr_epi32;
 use std::arch::x86_64::_mm256_setzero_si256;
 use std::arch::x86_64::_mm256_slli_epi32;
 use std::arch::x86_64::_mm256_srli_epi32;
 use std::arch::x86_64::_mm256_srlv_epi32;
-use std::arch::x86_64::_mm256_testz_si256;
 use std::slice::from_raw_parts;
 
 use num_traits::AsPrimitive;
@@ -52,9 +51,10 @@ pub(super) fn take<I: AsPrimitive<usize>>(
 
     let size = size_of::<I>();
     if size == size_of::<u16>() {
-        // SAFETY: we clamp the index to be valid in take_lanes and check out of
-        // bound reads there as well, so any invalid index doesn't cause an out
-        // of bounds read and is reported via panic().
+        // SAFETY: if no validity is provided, caller has verified the indices
+        // are in bounds of "bits". If validity is provided, we clamp every
+        // index so it never produces an out of bound reads and panic if any
+        // clamped index isn't equal to original index.
         let indices = unsafe { from_raw_parts(indices.as_ptr().cast::<u16>(), indices.len()) };
         let indices_ptr: *const u16 = indices.as_ptr();
         unsafe {
@@ -103,13 +103,16 @@ unsafe fn take_group<I: AsPrimitive<usize>>(
 
     let Some(validity) = validity else {
         // If validity isn't present, caller has verified "indices" are valid
-        // offsets info "bits" (see min/max code in take.rs), so we can use
-        // unchecked access into "bits".
-        let gather = |_group: usize, dword: __m256i, _in_bounds: __m256i| -> (__m256i, __m256i) {
-            let gathered = unsafe { _mm256_i32gather_epi32::<4>(base.cast(), dword) };
+        // offsets into "bits" (see min/max code in take.rs), so we can use
+        // unchecked access.
+        let gather = |_group_idx: usize, indices: __m256i| -> (__m256i, __m256i) {
+            let gathered = unsafe { _mm256_i32gather_epi32::<4>(base.cast(), indices) };
             (gathered, zero)
         };
-        return unsafe { take_lanes(bits, indices, load_group, gather, None) };
+        // inside take_lanes we do min(x, max_index) to check out of bound
+        // reads. Without validity there can't be out of bound reads so we
+        // pass u32::MAX. LLVM therefore reduces min(x, MAX) to x.
+        return unsafe { take_lanes(bits, indices, load_group, gather, usize::MAX, None) };
     };
 
     // If validity is present, we can't trust "indices" are valid offsets.
@@ -123,8 +126,8 @@ unsafe fn take_group<I: AsPrimitive<usize>>(
 
     let lane_bits: __m256i = _mm256_setr_epi32(1, 2, 4, 8, 16, 32, 64, 128);
 
-    let gather = |group: usize, dword: __m256i, in_range: __m256i| -> (__m256i, __m256i) {
-        let byte = validity_first_byte + group;
+    let gather = |group_idx: usize, indices: __m256i| -> (__m256i, __m256i) {
+        let byte = validity_first_byte + group_idx;
         let next_byte = byte + has_non_byte_shift;
 
         // We've verified in take.rs validity read is in bounds
@@ -132,94 +135,103 @@ unsafe fn take_group<I: AsPrimitive<usize>>(
         let hi = unsafe { *valid_bytes.get_unchecked(next_byte) as u16 };
 
         let window = lo | (hi << 8);
-        let valid = ((window >> validity_shift) & 0xFF) as u8;
+        let valid = i32::from(window >> validity_shift);
 
-        // all 1 if element is valid, all 0 otherwise
-        let valid_vector = _mm256_set1_epi32(i32::from(valid));
-        // valid_vector & lane_bits
-        let selected = _mm256_and_si256(valid_vector, lane_bits);
-        // selected[i] == lane_bits[i]
+        // mask = "valid" in every element of vector
+        let mask = _mm256_set1_epi32(valid);
+        // selected = mask & lane_bits
+        let selected = _mm256_and_si256(mask, lane_bits);
+        // lanes = selected == lane_bits
         let lanes = _mm256_cmpeq_epi32(selected, lane_bits);
 
-        // !in_range & lanes. We have a valid index which is out of bounds
-        let violation = _mm256_andnot_si256(in_range, lanes);
-
-        let gathered = unsafe { _mm256_mask_i32gather_epi32::<4>(zero, base.cast(), dword, lanes) };
-        (gathered, violation)
+        let gathered =
+            unsafe { _mm256_mask_i32gather_epi32::<4>(zero, base.cast(), indices, lanes) };
+        (gathered, lanes)
     };
+
     unsafe {
         take_lanes(
             bits,
             indices,
             load_group,
             gather,
+            bits.len() - 1,
             Some((valid_bytes, validity_offset)),
         )
     }
 }
 
-#[expect(clippy::cast_possible_truncation)]
 #[target_feature(enable = "avx2")]
 unsafe fn take_lanes<I>(
     bits: BitBufferView<'_>,
     indices: &[I],
     load_group: impl Fn(usize) -> __m256i,
-    gather: impl Fn(usize, __m256i, __m256i) -> (__m256i, __m256i),
+    gather: impl Fn(usize, __m256i) -> (__m256i, __m256i),
+    max_index: usize,
     validity: Option<(&[u8], usize)>,
 ) -> BitBuffer
 where
     I: AsPrimitive<usize>,
 {
     let total = indices.len();
-    let full_groups = total / 8;
+    let groups = total / 8;
 
-    let bit_offset: __m256i = _mm256_set1_epi32(bits.offset() as i32);
+    let bit_offset: __m256i = _mm256_set1_epi32(bits.offset().as_());
     let low_bits: __m256i = _mm256_set1_epi32(31);
-    let max_index: __m256i = _mm256_set1_epi32((bits.len() - 1) as i32);
-    let mut out_of_bounds: __m256i = _mm256_setzero_si256();
+    let max_index: __m256i = _mm256_set1_epi32(max_index.as_());
+    let mut max_taken_index: __m256i = _mm256_setzero_si256();
 
     let mut out = BufferMut::<u8>::with_capacity(total.div_ceil(8));
-    for group in 0..full_groups {
-        let group_vector: __m256i = load_group(group);
+    for group in 0..groups {
+        let original_indices: __m256i = load_group(group);
+        // clamped = min(original_indices, max_index)
+        // "clamped" never reads beyond bits's buffer end
+        let clamped = _mm256_min_epu32(original_indices, max_index);
+        // clamped_shifted = clamped + bit_offset
+        let clamped_shifted = _mm256_add_epi32(clamped, bit_offset);
 
-        // group_vector[i] = min(group_vector[i], max_index[i])
-        // We clamp every index so it can never read over bits's buffer, and
-        // calculate violations separately. If we found a violation after
-        // looping< we panic.
-        let clamped = _mm256_min_epu32(group_vector, max_index);
+        // gather_indices = clamped_shifted / 32
+        // Gather can read only 32-bit words
+        let gather_indices = _mm256_srli_epi32::<5>(clamped_shifted);
+        let (gathered, lanes) = gather(group, gather_indices);
+        // taken_indices = original_indices & lanes
+        let taken_indices = _mm256_and_si256(original_indices, lanes);
+        // max_taken_index = max(max_taken_index, taken_indices)
+        max_taken_index = _mm256_max_epu32(max_taken_index, taken_indices);
 
-        // clamped == group_vector
-        let in_range = _mm256_cmpeq_epi32(clamped, group_vector);
-
-        let bitpos = _mm256_add_epi32(clamped, bit_offset);
-        let dword = _mm256_srli_epi32::<5>(bitpos);
-
-        let (gathered, violation) = gather(group, dword, in_range);
-        out_of_bounds = _mm256_or_si256(out_of_bounds, violation);
-
-        let shift = _mm256_and_si256(bitpos, low_bits);
+        // shift = clamped_shifted % 32
+        // Bit we need is now in position 0
+        let shift = _mm256_and_si256(clamped_shifted, low_bits);
+        // shifted = gathered >> shift
         let shifted = _mm256_srlv_epi32(gathered, shift);
-        let top = _mm256_slli_epi32::<31>(shifted);
-        let as_ps = _mm256_castsi256_ps(top);
-
-        let group_bits = _mm256_movemask_ps(as_ps);
-        let group_bits: u8 = (group_bits & 0xFF).as_();
+        // top = shifted << 31
+        // Bit we need is now in position 31
+        let top: __m256i = _mm256_slli_epi32::<31>(shifted);
+        // AVX2 doesn't have integral MSB for 32bit lanes, cast to floats
+        let top: __m256 = _mm256_castsi256_ps(top);
+        // per-element 1 if MSB is set, 0 otherwise
+        let msb: u8 = _mm256_movemask_ps(top).as_();
 
         // SAFETY: out has sufficient capacity
-        unsafe { out.push_unchecked(group_bits) };
+        unsafe { out.push_unchecked(msb) };
     }
 
-    assert!(
-        _mm256_testz_si256(out_of_bounds, out_of_bounds) != 0,
-        "index out of bounds"
-    );
+    // max_clamped = min(max_taken_index, max_index)
+    let max_clamped = _mm256_min_epu32(max_taken_index, max_index);
+    // in_bounds = max_clamped == max_taken_index
+    let in_bounds: __m256i = _mm256_cmpeq_epi32(max_clamped, max_taken_index);
+    // AVX2 doesn't have integral MSB for 32bit lanes, cast to floats
+    let in_bounds: __m256 = _mm256_castsi256_ps(in_bounds);
+    // per-element 1 if MSB is set, 0 otherwise
+    let msb = _mm256_movemask_ps(in_bounds);
+    assert_eq!(msb, 0xFF, "index out of bounds");
 
     let tail = total % 8;
     if tail == 0 {
         return BitBuffer::new(out.freeze(), total);
     }
 
-    let start = full_groups * 8;
+    let start = groups * 8;
     let inner = bits.inner();
     let mut byte = 0u8;
     for bit in 0..tail {

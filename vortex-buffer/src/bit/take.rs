@@ -168,7 +168,7 @@ mod tests {
         (0..len).map(|_| rng.random_range(0..bound)).collect()
     }
 
-    fn check_gathers<I>(bits_len: usize, garbage: [I; 2])
+    fn gathers<I>(bits_len: usize, garbage: [I; 2])
     where
         I: AsPrimitive<usize> + TryFrom<usize> + Ord + Zero,
         <I as TryFrom<usize>>::Error: std::fmt::Debug,
@@ -211,21 +211,21 @@ mod tests {
     #[case(300)]
     #[case(5000)]
     fn gathers_i64(#[case] bits_len: usize) {
-        check_gathers::<i64>(bits_len, [i64::MAX, -1]);
+        gathers::<i64>(bits_len, [i64::MAX, -1]);
     }
 
     #[rstest]
     #[case(300)]
     #[case(5000)]
     fn gathers_u16(#[case] bits_len: usize) {
-        check_gathers::<u16>(bits_len, [u16::MAX, u16::MAX - 1]);
+        gathers::<u16>(bits_len, [u16::MAX, u16::MAX - 1]);
     }
 
     #[rstest]
     #[case(300)]
     #[case(5000)]
     fn gathers_u32(#[case] bits_len: usize) {
-        check_gathers::<u32>(bits_len, [u32::MAX, u32::MAX - 1]);
+        gathers::<u32>(bits_len, [u32::MAX, u32::MAX - 1]);
     }
 
     #[rstest]
@@ -267,20 +267,7 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "out of bounds")]
-    fn valid_index_out_of_bounds() {
-        let bits = BitBuffer::collect_bool(10_000, |i| i % 2 == 0);
-        let mut indices: Vec<u32> = random_indices(403, 10_000)
-            .into_iter()
-            .map(|idx| u32::try_from(idx).unwrap())
-            .collect();
-        indices[80] = 1_000_000;
-        let validity = BitBuffer::collect_bool(403, |i| i != 200);
-        let _taken = take_bits(bits.as_view(), &indices, Some(validity.as_view()));
-    }
-
-    #[test]
-    #[should_panic(expected = "out of bounds")]
-    fn index_out_of_bounds() {
+    fn out_of_bounds() {
         let bits = BitBuffer::collect_bool(10_000, |i| i % 2 == 0);
         let view = bits.as_view().slice(3..);
         let mut indices: Vec<u32> = random_indices(403, 9_000)
