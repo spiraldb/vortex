@@ -2363,7 +2363,7 @@ dev = [
     { name = "pandas", extras = ["output-formatting"], specifier = ">=2.2.3" },
     { name = "pandas-stubs", specifier = ">=2.2.3.241126" },
     { name = "pcodec", specifier = ">=0.3.3" },
-    { name = "polars", specifier = ">=2.0.0" },
+    { name = "polars", specifier = ">=1.31.0" },
     { name = "protobuf", specifier = ">=6.33.5" },
     { name = "pyarrow-stubs", specifier = ">=17.16" },
     { name = "pytest-benchmark", specifier = ">=5.1.0" },
