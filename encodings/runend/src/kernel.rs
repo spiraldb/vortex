@@ -26,6 +26,7 @@ use crate::RunEnd;
 use crate::array::RunEndArrayExt;
 use crate::array::RunEndArraySlotsExt;
 use crate::compute::take_from::RunEndTakeFrom;
+use crate::ops::find_physical_range;
 
 pub(super) fn initialize(session: &VortexSession) {
     let kernels = session.kernels();
@@ -64,8 +65,11 @@ fn slice(
 ) -> VortexResult<ArrayRef> {
     let new_length = range.len();
 
-    let slice_begin = array.find_physical_index(range.start, ctx)?;
-    let slice_end = array.find_slice_end_index(range.end, ctx)?;
+    let offset = array.offset();
+    let Range {
+        start: slice_begin,
+        end: slice_end,
+    } = find_physical_range(array.ends(), range.start + offset..range.end + offset, ctx)?;
 
     // If the sliced range contains only a single run, opt to return a ConstantArray.
     if slice_begin + 1 == slice_end {

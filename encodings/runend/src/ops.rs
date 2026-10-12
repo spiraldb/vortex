@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::ops::Range;
+
 use vortex_array::ArrayRef;
 use vortex_array::ArrayView;
 use vortex_array::ExecutionCtx;
@@ -49,16 +51,7 @@ pub fn find_slice_end_index(
         SearchSortedPrimitiveArray::<T>::new(array, ctx)
             .search_sorted(&index, SearchSortedSide::Right)?
     });
-    Ok(match result {
-        SearchResult::Found(i) => i,
-        SearchResult::NotFound(i) => {
-            if i == array.len() {
-                i
-            } else {
-                i + 1
-            }
-        }
-    })
+    Ok(slice_end_index(result, array.len()))
 }
 
 /// Find the physical index (the run) that contains the logical `index`, given the run `ends`.
@@ -74,6 +67,41 @@ pub fn find_physical_index(
     })
 }
 
+/// Find the physical runs `begin..end` that cover the logical rows `start..end` of the run `ends`.
+///
+/// Both searches share one searcher, so the second reuses what the first decoded, such as the
+/// compressed pages on the common part of the binary search path.
+pub fn find_physical_range(
+    array: &ArrayRef,
+    range: Range<usize>,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<Range<usize>> {
+    match_each_unsigned_integer_ptype!(array.dtype().as_ptype(), |T| {
+        let searcher = SearchSortedPrimitiveArray::<T>::new(array, ctx);
+        let begin = searcher
+            .search_sorted(&range.start, SearchSortedSide::Right)?
+            .to_ends_index(array.len());
+        let end = slice_end_index(
+            searcher.search_sorted(&range.end, SearchSortedSide::Right)?,
+            array.len(),
+        );
+        Ok(begin..end)
+    })
+}
+
+fn slice_end_index(result: SearchResult, len: usize) -> usize {
+    match result {
+        SearchResult::Found(i) => i,
+        SearchResult::NotFound(i) => {
+            if i == len {
+                i
+            } else {
+                i + 1
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::LazyLock;
@@ -87,8 +115,12 @@ mod tests {
     use vortex_array::dtype::Nullability;
     use vortex_array::dtype::PType;
     use vortex_buffer::buffer;
+    use vortex_error::VortexResult;
     use vortex_session::VortexSession;
 
+    use super::find_physical_index;
+    use super::find_physical_range;
+    use super::find_slice_end_index;
     use crate::RunEnd;
 
     static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
@@ -96,6 +128,23 @@ mod tests {
         crate::initialize(&session);
         session
     });
+
+    #[test]
+    fn physical_range_matches_separate_searches() -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let ends = buffer![2u32, 5, 10, 11, 16].into_array();
+        for start in 0..=16 {
+            for end in start..=16 {
+                assert_eq!(
+                    find_physical_range(&ends, start..end, &mut ctx)?,
+                    find_physical_index(&ends, start, &mut ctx)?
+                        ..find_slice_end_index(&ends, end, &mut ctx)?,
+                    "range {start}..{end}"
+                );
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn slice_array() {
