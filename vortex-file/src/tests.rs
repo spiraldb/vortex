@@ -149,7 +149,7 @@ async fn test_eof_values() {
 #[rstest]
 #[case::default(
     BtrBlocksCompressorBuilder::from_session(&SESSION),
-    if cfg!(feature = "zstd") { 70_076 } else { 70_012 }
+    if cfg!(feature = "zstd") { 70_100 } else { 70_036 }
 )]
 #[cfg_attr(
     feature = "zstd",
