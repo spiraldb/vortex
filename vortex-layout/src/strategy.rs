@@ -183,8 +183,15 @@ pub trait LayoutStrategy: 'static + Send + Sync {
     /// with a sequence pointer that indicates its position in the overall array. By passing
     /// around these pointers (essentially vector clocks), the writer can support concurrent
     /// and parallel processing while maintaining a deterministic order of data in the file.
-    /// The `ctx` parameter carries both array serialization state and writer-scoped accounting
-    /// through every child strategy.
+    ///
+    /// # Writer context
+    ///
+    /// The `ctx` parameter carries array serialization state and writer-scoped accounting, and
+    /// also facts about the position of this write in the layout tree, such as the aggregates the
+    /// write may record and whether a nullable container above it hides some of its values. Those
+    /// facts only reach a child because its parent passed them on, so **strategies must hand the
+    /// `ctx` they received, or a clone of it, to every child they write**. Building a fresh
+    /// [`LayoutWriterContext`] inside a strategy silently discards them.
     ///
     /// The `eof` parameter is a guaranteed to be greater than all sequence pointers in the stream.
     ///
