@@ -8,7 +8,8 @@ use vortex_array::expr::BoundExpression;
 use vortex_error::VortexResult;
 
 use crate::plan::pipeline::Cx;
-use crate::plan::pipeline::Stage;
+use crate::plan::pipeline::Input;
+use crate::plan::pipeline::Operator;
 
 /// Applies an expression to each batch.
 pub(crate) struct EvalStage {
@@ -21,8 +22,11 @@ impl EvalStage {
     }
 }
 
-impl Stage for EvalStage {
-    fn push(&mut self, batch: ArrayRef, _cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
+impl Operator for EvalStage {
+    fn compute(&mut self, input: Input, _cx: &mut Cx<'_>) -> VortexResult<Option<ArrayRef>> {
+        let Input::Batch(batch) = input else {
+            return Ok(None);
+        };
         Ok(Some(batch.apply_bound(&self.expression)?))
     }
 }
