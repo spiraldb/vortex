@@ -32,6 +32,7 @@ impl SelectBit for Sve2Bdep {
 }
 
 /// SVE2 BDEP on the lowest lane, one chunk at a time as the rank reader yields them.
+#[inline]
 #[target_feature(enable = "sve2,sve2-bitperm")]
 unsafe fn bdep_sve2(source: u64, mask: u64) -> u64 {
     let result: u64;

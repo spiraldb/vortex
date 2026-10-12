@@ -22,6 +22,10 @@ mod bmi2;
 mod sve;
 
 trait DepositBits {
+    /// Deposit the low bits of `source` into the set bits of `mask`, as PDEP does.
+    ///
+    /// `mask_count` must equal `mask.count_ones()`. The portable implementations use it to
+    /// pick a closed form, so a wrong count gives a wrong result.
     fn deposit_bits(source: u64, mask: u64, mask_count: usize) -> u64;
 }
 
@@ -40,6 +44,8 @@ impl DepositBits for Portable {
     #[allow(clippy::inline_always)]
     #[inline(always)]
     fn deposit_bits(source: u64, mask: u64, mask_count: usize) -> u64 {
+        debug_assert_eq!(mask_count, mask.count_ones() as usize);
+
         match mask_count {
             0..=2 => deposit_two_lowest(source, mask),
             62.. => deposit_two_holes(source, mask),
@@ -62,6 +68,8 @@ struct PortableLoop;
 impl DepositBits for PortableLoop {
     #[inline]
     fn deposit_bits(mut source: u64, mut mask: u64, mask_count: usize) -> u64 {
+        debug_assert_eq!(mask_count, mask.count_ones() as usize);
+
         if mask_count <= 2 {
             return deposit_two_lowest(source, mask);
         }
