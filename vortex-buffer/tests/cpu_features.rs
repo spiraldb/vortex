@@ -57,15 +57,24 @@ fn known_features() -> Vec<(&'static str, bool)> {
 
 #[test]
 fn expected_cpu_features_are_detected() {
+    let known = known_features();
+    for (name, got) in &known {
+        println!(
+            "{ARCH} {name}: {}",
+            if *got { "detected" } else { "not detected" }
+        );
+    }
+
     let Ok(expected) = env::var(EXPECT_VAR) else {
+        println!("{EXPECT_VAR} is not set, skipping the check");
         return;
     };
+    println!("{EXPECT_VAR}={expected}");
     let expected: BTreeSet<&str> = expected
         .split(',')
         .map(str::trim)
         .filter(|e| !e.is_empty())
         .collect();
-    let known = known_features();
 
     let mut failures: Vec<String> = expected
         .iter()

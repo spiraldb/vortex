@@ -626,6 +626,11 @@ jobs:
       - uses: ./.github/actions/setup-prebuild
         with:
           enable-sccache: "true"
+      # Print the detected features and fail fast if the instance is not the expected tier.
+      - name: Check CPU features
+        run: |
+          cargo nextest run --cargo-profile ci --locked --no-capture \
+            -p vortex-buffer --test cpu_features
       # The `ci` profile is a debug build.
       - name: Rust Tests
         run: |
