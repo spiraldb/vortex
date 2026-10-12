@@ -133,7 +133,7 @@ jobs:
       # versions.
       - name: Pytest - Vortex (Polars 1.x floor)
         run: |
-          uv run --all-packages --with 'polars==1.31.0' \
+          uv run --all-packages --with 'polars==1.32.0' \
             pytest --benchmark-disable test/test_polars_.py test/test_dataset.py
         working-directory: vortex-python/
 

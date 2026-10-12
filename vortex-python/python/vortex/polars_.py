@@ -72,10 +72,6 @@ def _polars_to_vortex(expr: dict[str, Any]) -> ve.Expr:
     if "Scalar" in expr:
         scalar = expr["Scalar"]
 
-        # Polars <1.32 wraps the value as {"dtype": ..., "value": {<dtype>: <value>}}.
-        if "value" in scalar:
-            scalar = scalar["value"]
-
         if "Null" in scalar:
             value = None
             dtype = "Null"
