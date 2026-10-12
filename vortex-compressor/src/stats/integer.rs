@@ -393,14 +393,22 @@ where
     };
 
     // The nulls before the head are skipped or filled with the head, so the loop can start at 0.
-    for_each_chunk(buffer.as_slice(), &validity, |chunk, valid| match valid {
-        // All nulls -> no stats to update.
-        0 => {}
-        // Inner loop for when validity check can be elided.
-        u64::MAX => inner_loop_nonnull(chunk, count_distinct_values, &mut loop_state),
-        // Inner loop for when we need to check validity.
-        _ => inner_loop_nullable(chunk, count_distinct_values, valid, &mut loop_state),
-    });
+    // The closure is forced inline: left to itself, LLVM keeps it as a call per chunk, which
+    // costs about 5% on every integer_stats benchmark.
+    #[allow(clippy::inline_always)]
+    for_each_chunk(
+        buffer.as_slice(),
+        &validity,
+        #[inline(always)]
+        |chunk, valid| match valid {
+            // All nulls -> no stats to update.
+            0 => {}
+            // Inner loop for when validity check can be elided.
+            u64::MAX => inner_loop_nonnull(chunk, count_distinct_values, &mut loop_state),
+            // Inner loop for when we need to check validity.
+            _ => inner_loop_nullable(chunk, count_distinct_values, valid, &mut loop_state),
+        },
+    );
 
     if count_distinct_values {
         loop_state.flush();
