@@ -225,9 +225,12 @@ fn drive(
             Turn::Done => break,
         }
     }
-    assert!(
-        batch.is_empty() && inflight.is_empty(),
-        "scan finished with reads in flight"
+    // Reads left in flight were read ahead for splits that emptied or cancelled with the
+    // pipeline that asked; nothing waits for them.
+    assert_eq!(
+        scan.awaited_reads(),
+        0,
+        "scan finished with a pipeline waiting for a read"
     );
     let leftover = (scan.live_ports(), scan.pending_shares());
     Ok(Run {
