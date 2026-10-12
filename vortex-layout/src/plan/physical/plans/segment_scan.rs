@@ -8,12 +8,12 @@ use vortex_error::VortexResult;
 use vortex_session::registry::CachedId;
 use vortex_session::registry::ReadContext;
 
-use crate::plan::Plan;
-use crate::plan::PlanChildren;
-use crate::plan::PlanId;
-use crate::plan::PlanParts;
-use crate::plan::PlanVTable;
-use crate::plan::check_child_count;
+use crate::plan::physical::Plan;
+use crate::plan::physical::PlanChildren;
+use crate::plan::physical::PlanId;
+use crate::plan::physical::PlanParts;
+use crate::plan::physical::PlanVTable;
+use crate::plan::physical::check_child_count;
 use crate::segments::SegmentId;
 
 /// Reads one serialized array segment.

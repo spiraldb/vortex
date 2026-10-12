@@ -10,15 +10,15 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_session::registry::CachedId;
 
-use crate::plan::Eval;
-use crate::plan::EvalPlan;
-use crate::plan::Plan;
-use crate::plan::PlanChildren;
-use crate::plan::PlanId;
-use crate::plan::PlanParts;
-use crate::plan::PlanRef;
-use crate::plan::PlanVTable;
-use crate::plan::optimizer::PlanParentReduceRule;
+use crate::plan::physical::Eval;
+use crate::plan::physical::EvalPlan;
+use crate::plan::physical::Plan;
+use crate::plan::physical::PlanChildren;
+use crate::plan::physical::PlanId;
+use crate::plan::physical::PlanParts;
+use crate::plan::physical::PlanRef;
+use crate::plan::physical::PlanVTable;
+use crate::plan::physical::optimizer::PlanParentReduceRule;
 
 /// Concatenates its children row-wise.
 #[derive(Clone, Debug)]

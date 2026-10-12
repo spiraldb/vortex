@@ -22,16 +22,16 @@ use vortex_error::vortex_err;
 use vortex_session::registry::CachedId;
 
 use crate::layouts::row_idx::RowIdx as RowIdxFn;
-use crate::plan::EvalPlan;
-use crate::plan::PackPlan;
-use crate::plan::Plan;
-use crate::plan::PlanChildren;
-use crate::plan::PlanId;
-use crate::plan::PlanParts;
-use crate::plan::PlanRef;
-use crate::plan::PlanVTable;
-use crate::plan::check_child_count;
-use crate::plan::plans::pack::rewrite_partition_root;
+use crate::plan::physical::EvalPlan;
+use crate::plan::physical::PackPlan;
+use crate::plan::physical::Plan;
+use crate::plan::physical::PlanChildren;
+use crate::plan::physical::PlanId;
+use crate::plan::physical::PlanParts;
+use crate::plan::physical::PlanRef;
+use crate::plan::physical::PlanVTable;
+use crate::plan::physical::check_child_count;
+use crate::plan::physical::plans::pack::rewrite_partition_root;
 
 const ROW_IDX_PARTITION_NAME: &str = "row_idx";
 const CHILD_PARTITION_NAME: &str = "child";
