@@ -9,7 +9,6 @@ use std::sync::Weak;
 use arrow_array::RecordBatchOptions;
 use arrow_schema::DataType;
 use arrow_schema::Field;
-use arrow_schema::Schema;
 use arrow_schema::SchemaRef;
 use datafusion_common::DataFusionError;
 use datafusion_common::Result as DFResult;
@@ -402,8 +401,9 @@ impl FileOpener for VortexOpener {
                 scan_builder = vortex_plan.apply_to_builder(scan_builder);
             }
 
+            // Native scans apply limits after filtering. Residual filters still need the
+            // full scan output, with the limit enforced by DataFusion's file stream.
             if let Some(limit) = limit
-                && native_filter.is_none()
                 && residual_filter.is_none()
             {
                 scan_builder = scan_builder.with_limit(limit);
@@ -1122,7 +1122,7 @@ mod tests {
         let batch = record_batch!((
             "a",
             Int32,
-            vec![Some(1), Some(2), Some(3), Some(4), Some(5), Some(6)]
+            vec![Some(1), Some(2), Some(3), Some(4), Some(5), Some(6), Some(7)]
         ))
         .unwrap();
         let data_size =
@@ -1132,7 +1132,8 @@ mod tests {
         // `a > 3` excludes the first three rows, so a limit applied *before* filtering would take
         // rows [1, 2, 3] and filter them all out (yielding nothing), whereas a limit applied
         // *after* filtering yields the first three matching rows [4, 5, 6]. Asserting the values
-        // (not just the count) is what makes this test able to detect a pre-filter regression.
+        // (not just the count) detects a pre-filter regression; the extra matching row also
+        // ensures the limit is actually enforced.
         let filter = logical2physical(&col("a").gt(lit(3_i32)), table_schema.table_schema());
 
         let mut opener = make_opener(object_store, table_schema, Some(filter));

@@ -124,6 +124,7 @@ use vortex_utils::parallelism::get_available_parallelism;
 use crate::convert::exprs::DefaultExpressionConverter;
 use crate::convert::exprs::ExpressionConverter;
 use crate::convert::exprs::ProcessedProjection;
+use crate::convert::schema::calculate_physical_schema;
 use crate::convert::stats::stats_set_to_df;
 
 /// Builder for [`VortexDataSource`].
@@ -578,24 +579,23 @@ impl DataSource for VortexDataSource {
         // can't be pushed down (e.g., unsupported scalar functions, decimal binary).
         let ProcessedProjection {
             scan_projection,
+            scan_reference_schema,
             leftover_projection,
-            ..
         } = converter.split_projection(projection.clone(), input_schema, &projected_schema)?;
 
         // Compose with the initial projection so the scan operates on the original
         // source columns, not the initial projection's output columns.
         let scan_projection = replace(scan_projection, &root(), self.initial_projection.clone());
 
-        // Compute the scan output schema from the Vortex expression's return dtype.
+        // Retain Arrow storage types and metadata required by the leftover expressions.
         let scan_dtype = scan_projection
             .return_dtype(self.data_source.dtype())
             .map_err(|e| DataFusionError::External(Box::new(e)))?;
-        let scan_output_schema = Arc::new(
-            self.session
-                .arrow()
-                .to_arrow_schema(&scan_dtype)
-                .map_err(|e| DataFusionError::External(Box::new(e)))?,
-        );
+        let scan_output_schema = Arc::new(calculate_physical_schema(
+            &scan_dtype,
+            &scan_reference_schema,
+            &self.session.arrow(),
+        )?);
 
         // Remap the leftover column references to match the scan output schema.
         let leftover_projection = leftover_projection
