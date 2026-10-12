@@ -21,22 +21,22 @@ use vortex_error::vortex_err;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
 
-use super::Cx;
 use super::DEFAULT_CAPACITY;
-use super::InletSet;
-use super::Input;
-use super::Operator;
-use super::Source;
-use super::SourceBlocked;
-use super::SourceReady;
-use super::Step;
 use super::compile::Chain;
 use super::port::Arena;
 use super::port::PipelineId;
 use super::port::PortId;
 use super::port::Slab;
 use super::port::SourceEnd;
-use crate::plan::PlanRef;
+use crate::plan::physical::PlanRef;
+use crate::plan::physical::operator::Cx;
+use crate::plan::physical::operator::InletSet;
+use crate::plan::physical::operator::Input;
+use crate::plan::physical::operator::Operator;
+use crate::plan::physical::operator::Source;
+use crate::plan::physical::operator::SourceBlocked;
+use crate::plan::physical::operator::SourceReady;
+use crate::plan::physical::operator::Step;
 use crate::segments::SegmentId;
 
 #[cfg(debug_assertions)]

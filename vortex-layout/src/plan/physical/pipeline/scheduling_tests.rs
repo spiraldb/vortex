@@ -26,7 +26,14 @@ use super::synthetic::SyntheticPlan;
 use super::synthetic::empty_segment;
 use super::synthetic::row_dtype;
 use super::*;
-use crate::plan::PlanRef;
+use crate::plan::physical::PlanRef;
+use crate::plan::physical::operator::Cx;
+use crate::plan::physical::operator::Input;
+use crate::plan::physical::operator::Operator;
+use crate::plan::physical::operator::Source;
+use crate::plan::physical::operator::SourceBlocked;
+use crate::plan::physical::operator::SourceReady;
+use crate::plan::physical::operator::Step;
 use crate::segments::SegmentId;
 use crate::test::SESSION;
 

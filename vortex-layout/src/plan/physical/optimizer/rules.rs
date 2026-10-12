@@ -11,9 +11,9 @@ use vortex_error::VortexResult;
 #[cfg(debug_assertions)]
 use vortex_error::vortex_ensure_eq;
 
-use crate::plan::Plan;
-use crate::plan::PlanRef;
-use crate::plan::PlanVTable;
+use crate::plan::physical::Plan;
+use crate::plan::physical::PlanRef;
+use crate::plan::physical::PlanVTable;
 
 /// A rewrite over one concrete plan operator.
 ///

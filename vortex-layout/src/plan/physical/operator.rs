@@ -1,26 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Push-based execution of physical plans as pipelines.
-//!
-//! A [`Scan`] runs a [`PlanRef`](crate::plan::PlanRef) over a list of splits, row ranges of the
-//! plan's domain. Each split is compiled into pipelines: a pipeline is one [`Source`], zero or
-//! more [`Operator`]s, and the ports its last stage writes. The driver asks the source for a batch
-//! and pushes it through the stages into the ports. Every port runs from one pipeline's sink,
-//! the end that pushes into its outlets, to another's source, which reads it as an inlet, and
-//! the plan joining them declares how many batches each inlet may hold.
-//!
-//! A source checks its readiness before computing, waiting for a segment read or an inlet.
-//! The driver also blocks a pipeline when an outlet is full. The scheduler re-runs a blocked
-//! pipeline when that one condition clears.
-//!
-//! The owner of a scan answers reads: [`Scan::step`] returns each read as a [`Turn::Read`], and
-//! [`Scan::deliver`] hands its bytes back. Nothing in a scan awaits.
-
-mod compile;
-mod port;
-mod scan;
-pub mod synthetic;
+//! Contracts and execution context for pipeline sources and operators.
 
 use std::collections::VecDeque;
 
@@ -31,22 +12,10 @@ use vortex_array::buffer::BufferHandle;
 use vortex_error::VortexResult;
 use vortex_session::VortexSession;
 
-pub use self::compile::Chain;
-pub use self::compile::Compiler;
-pub use self::compile::Reach;
-use self::port::Arena;
-pub use self::port::Inlet;
-use self::port::PortId;
-pub use self::scan::ReadId;
-pub use self::scan::ReadRequest;
-pub use self::scan::Scan;
-pub use self::scan::Split;
-pub use self::scan::Turn;
+use super::pipeline::Arena;
+use super::pipeline::Inlet;
+use super::pipeline::PortId;
 use crate::segments::SegmentId;
-
-/// Batches an inlet holds before its sink is blocked, unless the plan joining it says
-/// otherwise; see [`Compiler::join_with`].
-pub const DEFAULT_CAPACITY: usize = 8;
 
 /// The output of one non-blocking compute call.
 #[derive(Debug)]
@@ -121,34 +90,34 @@ pub trait Operator: Send {
 
 /// Distinct inlet indices, with constant-time insertion and removal.
 #[derive(Default)]
-struct InletSet {
+pub(super) struct InletSet {
     indices: Vec<usize>,
     positions: Vec<usize>,
 }
 
 impl InletSet {
-    fn new(inlets: usize) -> Self {
+    pub(super) fn new(inlets: usize) -> Self {
         Self {
             indices: Vec::with_capacity(inlets),
             positions: vec![usize::MAX; inlets],
         }
     }
 
-    fn all(inlets: usize) -> Self {
+    pub(super) fn all(inlets: usize) -> Self {
         Self {
             indices: (0..inlets).collect(),
             positions: (0..inlets).collect(),
         }
     }
 
-    fn insert(&mut self, index: usize) {
+    pub(super) fn insert(&mut self, index: usize) {
         if self.positions[index] == usize::MAX {
             self.positions[index] = self.indices.len();
             self.indices.push(index);
         }
     }
 
-    fn remove(&mut self, index: usize) {
+    pub(super) fn remove(&mut self, index: usize) {
         let position = self.positions[index];
         if position == usize::MAX {
             return;
@@ -166,11 +135,11 @@ impl InletSet {
         Some(index)
     }
 
-    fn indices(&self) -> &[usize] {
+    pub(super) fn indices(&self) -> &[usize] {
         &self.indices
     }
 
-    fn clear(&mut self) {
+    pub(super) fn clear(&mut self) {
         for &index in &self.indices {
             self.positions[index] = usize::MAX;
         }
@@ -181,14 +150,14 @@ impl InletSet {
 /// What a source or stage may touch during one call: its pipeline's inlets, the bytes the
 /// source asked for, and the session.
 pub struct Cx<'a> {
-    arena: &'a mut Arena,
-    inlets: &'a [PortId],
-    bytes: &'a mut VecDeque<(SegmentId, BufferHandle)>,
-    reads: SmallVec<[SegmentId; 1]>,
-    session: &'a VortexSession,
-    exec: &'a mut ExecutionCtx,
-    touched: &'a mut InletSet,
-    changed: &'a mut InletSet,
+    pub(super) arena: &'a mut Arena,
+    pub(super) inlets: &'a [PortId],
+    pub(super) bytes: &'a mut VecDeque<(SegmentId, BufferHandle)>,
+    pub(super) reads: SmallVec<[SegmentId; 1]>,
+    pub(super) session: &'a VortexSession,
+    pub(super) exec: &'a mut ExecutionCtx,
+    pub(super) touched: &'a mut InletSet,
+    pub(super) changed: &'a mut InletSet,
 }
 
 impl Cx<'_> {
@@ -232,6 +201,3 @@ impl Cx<'_> {
         self.exec
     }
 }
-
-#[cfg(test)]
-mod scheduling_tests;

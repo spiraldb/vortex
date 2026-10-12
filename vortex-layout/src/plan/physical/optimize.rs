@@ -8,9 +8,9 @@
 
 use vortex_error::VortexResult;
 
-use crate::plan::PlanRef;
-use crate::plan::optimizer::reduce_parent;
-use crate::plan::optimizer::reduce_plan;
+use crate::plan::physical::PlanRef;
+use crate::plan::physical::optimizer::reduce_parent;
+use crate::plan::physical::optimizer::reduce_plan;
 
 fn reduce(plan: &PlanRef) -> VortexResult<Option<PlanRef>> {
     if let Some(rewritten) = reduce_plan(plan)? {

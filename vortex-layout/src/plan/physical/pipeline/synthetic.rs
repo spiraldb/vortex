@@ -26,19 +26,19 @@ use vortex_session::registry::CachedId;
 
 use super::Chain;
 use super::Compiler;
-use super::Cx;
-use super::Input;
-use super::Operator;
-use super::Source;
-use super::SourceBlocked;
-use super::SourceReady;
-use super::Step;
-use crate::plan::Plan;
-use crate::plan::PlanChildren;
-use crate::plan::PlanId;
-use crate::plan::PlanParts;
-use crate::plan::PlanRef;
-use crate::plan::PlanVTable;
+use crate::plan::physical::Plan;
+use crate::plan::physical::PlanChildren;
+use crate::plan::physical::PlanId;
+use crate::plan::physical::PlanParts;
+use crate::plan::physical::PlanRef;
+use crate::plan::physical::PlanVTable;
+use crate::plan::physical::operator::Cx;
+use crate::plan::physical::operator::Input;
+use crate::plan::physical::operator::Operator;
+use crate::plan::physical::operator::Source;
+use crate::plan::physical::operator::SourceBlocked;
+use crate::plan::physical::operator::SourceReady;
+use crate::plan::physical::operator::Step;
 use crate::segments::SegmentId;
 
 /// Compiles a [`SyntheticPlan`] over some rows, restricted to a mask.

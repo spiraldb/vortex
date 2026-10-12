@@ -11,12 +11,12 @@ use vortex_mask::Mask;
 use vortex_session::VortexSession;
 
 use super::DEFAULT_CAPACITY;
-use super::Operator;
-use super::Source;
 use super::port::PortId;
 use super::port::SourceEnd;
 use super::scan::Core;
-use crate::plan::PlanRef;
+use crate::plan::physical::PlanRef;
+use crate::plan::physical::operator::Operator;
+use crate::plan::physical::operator::Source;
 
 /// A pipeline under construction: a source and the stages after it, not yet given outlets, so a
 /// parent plan can add stages before it becomes a pipeline.
@@ -56,7 +56,7 @@ impl Core {
 }
 
 /// What a plan compiles its children through. See
-/// [`PlanVTable::compile`](crate::plan::PlanVTable::compile).
+/// [`PlanVTable::compile`](crate::plan::physical::PlanVTable::compile).
 pub struct Compiler<'a> {
     pub(crate) core: &'a mut Core,
 }

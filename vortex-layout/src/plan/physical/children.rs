@@ -8,7 +8,7 @@ use once_cell::sync::OnceCell;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 
-use crate::plan::PlanRef;
+use crate::plan::physical::PlanRef;
 
 type ChildInitializer = dyn Fn(usize) -> VortexResult<PlanRef> + 'static + Send + Sync;
 

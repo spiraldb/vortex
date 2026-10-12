@@ -12,7 +12,7 @@ use std::collections::VecDeque;
 
 use vortex_array::ArrayRef;
 
-use crate::plan::pipeline::DEFAULT_CAPACITY;
+use crate::plan::physical::pipeline::DEFAULT_CAPACITY;
 
 /// Identifies a port in the scan's arena.
 pub(crate) type PortId = usize;

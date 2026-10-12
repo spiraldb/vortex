@@ -20,13 +20,13 @@ use vortex_error::vortex_ensure;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
 
-use crate::plan::PlanChildren;
-use crate::plan::PlanId;
-use crate::plan::PlanVTable;
-use crate::plan::display::PlanTreeDisplay;
-use crate::plan::pipeline::Chain;
-use crate::plan::pipeline::Compiler;
-use crate::plan::pipeline::Reach;
+use crate::plan::physical::PlanChildren;
+use crate::plan::physical::PlanId;
+use crate::plan::physical::PlanVTable;
+use crate::plan::physical::display::PlanTreeDisplay;
+use crate::plan::physical::pipeline::Chain;
+use crate::plan::physical::pipeline::Compiler;
+use crate::plan::physical::pipeline::Reach;
 use crate::segments::SegmentId;
 
 /// The combined allocation behind [`PlanRef`].

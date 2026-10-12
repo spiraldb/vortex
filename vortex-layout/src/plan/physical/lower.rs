@@ -24,13 +24,13 @@ use crate::layouts::list::OFFSETS_CHILD_INDEX;
 use crate::layouts::list::VALIDITY_CHILD_INDEX;
 use crate::layouts::struct_::Struct;
 use crate::layouts::struct_::StructLayout;
-use crate::plan::ConcatPlan;
-use crate::plan::ListPackPlan;
-use crate::plan::PackPlan;
-use crate::plan::PlanChildren;
-use crate::plan::PlanRef;
-use crate::plan::SegmentScanPlan;
-use crate::plan::TakePlan;
+use crate::plan::physical::ConcatPlan;
+use crate::plan::physical::ListPackPlan;
+use crate::plan::physical::PackPlan;
+use crate::plan::physical::PlanChildren;
+use crate::plan::physical::PlanRef;
+use crate::plan::physical::SegmentScanPlan;
+use crate::plan::physical::TakePlan;
 
 /// Constructs a physical-plan fixture from `layout` for tests.
 ///

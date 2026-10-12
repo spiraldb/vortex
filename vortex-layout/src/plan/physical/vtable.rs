@@ -13,11 +13,11 @@ use vortex_error::vortex_bail;
 use vortex_mask::Mask;
 use vortex_session::registry::Id;
 
-use crate::plan::PlanChildren;
-use crate::plan::pipeline::Chain;
-use crate::plan::pipeline::Compiler;
-use crate::plan::pipeline::Reach;
-use crate::plan::typed::Plan;
+use crate::plan::physical::PlanChildren;
+use crate::plan::physical::pipeline::Chain;
+use crate::plan::physical::pipeline::Compiler;
+use crate::plan::physical::pipeline::Reach;
+use crate::plan::physical::typed::Plan;
 use crate::segments::SegmentId;
 
 /// A unique identifier for a plan operator.
@@ -35,7 +35,7 @@ pub type PlanId = Id;
 pub trait PlanVTable: 'static + Clone + Sized + Send + Sync + Debug {
     /// Operator-specific data, excluding children.
     ///
-    /// Children belong in [`PlanParts::children`](crate::plan::PlanParts::children) so that
+    /// Children belong in [`PlanParts::children`](crate::plan::physical::PlanParts::children) so that
     /// traversal and rewriting can discover them generically.
     type PlanData: 'static + Send + Sync + Clone + Debug;
 
