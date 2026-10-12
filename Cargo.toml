@@ -239,7 +239,7 @@ reqwest = { version = "0.13.0", features = [
     "rustls",
     "system-proxy",
 ], default-features = false }
-roaring = "0.11.0"
+roaring = "0.11.4"
 rstest = "0.26.1"
 rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"
@@ -289,7 +289,7 @@ uuid = "1.23"
 wasm-bindgen-futures = "0.4.58"
 wkb = "0.9.2"
 zigzag = "0.1.0"
-zip = "8.0.0"
+zip = "9.0.0"
 zstd = { version = "0.13.3", default-features = false, features = [
     "zdict_builder",
 ] }
