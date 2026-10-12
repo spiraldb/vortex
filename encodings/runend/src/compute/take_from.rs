@@ -69,6 +69,11 @@ impl ExecuteParentKernel<RunEnd> for RunEndTakeFrom {
 /// value per run and lets the run-end filter kernel select rows. The result holds no dictionary,
 /// so the dictionary filter rule cannot push the filter back into the codes.
 ///
+/// To keep that true, every result holds no [`Dict`]: the looked-up values are canonicalized
+/// before they become run values, and run-end arrays have no filter push-down rule. The
+/// `filtered_run_end_codes_look_up_per_run` test checks this, since a dictionary in the result
+/// would let the filter be pushed back down and this kernel fire again.
+///
 /// Sparse selections, which the run-end filter kernel serves by taking rows, keep the per-row
 /// lookup. Long boolean runs, or medium ones with a sparse selection, decode straight into the
 /// selected rows; otherwise boolean runs decode every row and then filter the bits.
@@ -192,6 +197,7 @@ mod tests {
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
     use vortex_array::arrays::BoolArray;
+    use vortex_array::arrays::Dict;
     use vortex_array::arrays::DictArray;
     use vortex_array::arrays::Filter;
     use vortex_array::arrays::PrimitiveArray;
@@ -338,6 +344,10 @@ mod tests {
         }
     }
 
+    fn contains_dict(array: &ArrayRef) -> bool {
+        array.is::<Dict>() || array.children_iter().any(contains_dict)
+    }
+
     #[rstest]
     #[case::bool_dense(BoolArray::from_iter([true, false, false, true]).into_array(), false, 2, true)]
     #[case::bool_moderate(BoolArray::from_iter([true, false, false, true]).into_array(), false, 15, true)]
@@ -374,7 +384,15 @@ mod tests {
         assert_eq!(looked_up.is_some(), applies || run_scale > 1);
 
         let expected = DictArray::try_new(primitive_codes.filter(mask)?, values)?.into_array();
+        assert!(contains_dict(&dict.clone().into_array()));
         if let Some(looked_up) = looked_up {
+            // A dictionary left in the result would let the filter be pushed back into its codes
+            // and this kernel fire again.
+            assert!(
+                !contains_dict(&looked_up),
+                "kernel result must not contain a dictionary:\n{}",
+                looked_up.display_tree_encodings_only()
+            );
             assert_arrays_eq!(looked_up, expected, &mut ctx);
         }
         assert_arrays_eq!(dict.into_array(), expected, &mut ctx);
