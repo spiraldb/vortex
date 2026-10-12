@@ -90,7 +90,6 @@ mod tests {
         let expected = canonical_uncompressed_size_in_bytes(
             &canonical,
             UncompressedSizeOpts::default(),
-            true,
             &mut ctx,
         )?;
 
