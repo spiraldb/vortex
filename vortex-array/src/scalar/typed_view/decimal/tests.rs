@@ -1480,3 +1480,17 @@ fn cast_decimal_to_narrow_float_uses_the_same_scale_factor() -> VortexResult<()>
     assert_eq!(f32_value, 100_000.0);
     Ok(())
 }
+
+#[test]
+fn cast_wide_i256_decimal_to_f64() -> VortexResult<()> {
+    let beyond_i128 = i256::from_i128(i128::MAX) + i256::ONE;
+    let scalar = Scalar::decimal(
+        DecimalValue::I256(beyond_i128),
+        DecimalDType::new(MAX_PRECISION, 2),
+        Nullability::NonNullable,
+    );
+    let value: f64 =
+        (&scalar.cast(&DType::Primitive(PType::F64, Nullability::NonNullable))?).try_into()?;
+    assert_eq!(value, 2f64.powi(127) / 100.0);
+    Ok(())
+}

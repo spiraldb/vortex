@@ -313,6 +313,11 @@ impl num_traits::ToPrimitive for i256 {
     fn to_u128(&self) -> Option<u128> {
         self.maybe_i128().and_then(|v| v.to_u128())
     }
+
+    // The default goes through `to_i64` and `to_u64`, which fail for any value outside `i64`.
+    fn to_f64(&self) -> Option<f64> {
+        self.0.to_f64()
+    }
 }
 
 macro_rules! define_as_primitive {
@@ -373,6 +378,15 @@ mod tests {
 
         let min_i128 = i256::from_i128(i128::MIN);
         assert_eq!(min_i128.maybe_i128(), Some(i128::MIN));
+    }
+
+    #[test]
+    fn test_i256_to_f64_beyond_i128() {
+        let beyond_i128 = i256::from_i128(i128::MAX) + i256::ONE;
+        assert_eq!(beyond_i128.to_f64(), Some(2f64.powi(127)));
+        assert_eq!((-beyond_i128).to_f64(), Some(-2f64.powi(127)));
+        assert_eq!(i256::MAX.to_f64(), Some(2f64.powi(255)));
+        assert_eq!(i256::MIN.to_f64(), Some(-2f64.powi(255)));
     }
 
     #[test]
