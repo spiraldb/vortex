@@ -218,7 +218,7 @@ impl Source for ManyReads {
             while let Some(segment) = self.wanted.pop() {
                 cx.request_read(segment);
             }
-            return Ok(SourceReady::Read);
+            return Ok(SourceReady::Blocked(SourceBlocked::Io));
         }
         Ok(if self.left == 0 || cx.has_bytes() {
             SourceReady::Ready
@@ -267,6 +267,10 @@ fn a_source_has_several_reads_in_flight(#[values(1, 3)] deliveries: usize) -> Vo
                     );
                     first_wait = false;
                 }
+                assert!(
+                    matches!(scan.step()?, Turn::Waiting),
+                    "waiting for IO must not reissue reads or compute before bytes arrive"
+                );
                 // Deliver the last asked for first.
                 for _ in 0..deliveries {
                     let read = inflight
@@ -305,7 +309,7 @@ impl Source for ReadAfterInlet {
         };
         cx.request_read(SegmentId::from(u32::try_from(batch.len())?));
         self.batch = Some(batch);
-        Ok(SourceReady::Read)
+        Ok(SourceReady::Blocked(SourceBlocked::Io))
     }
 }
 
@@ -370,7 +374,7 @@ impl Source for FirstOf {
             while let Some(segment) = self.wanted.pop() {
                 cx.request_read(segment);
             }
-            return Ok(SourceReady::Read);
+            return Ok(SourceReady::Blocked(SourceBlocked::Io));
         }
         Ok(if cx.has_bytes() {
             SourceReady::Ready

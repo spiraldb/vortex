@@ -85,8 +85,8 @@ impl Core {
                 );
             }
             Progress::Blocked(SourceBlocked::Io) => assert!(
-                pipe.pending > 0,
-                "pipeline {id} waits for a read with none in flight"
+                pipe.pending > 0 || !pipe.bytes.is_empty(),
+                "pipeline {id} waits for a read with none in flight or delivered"
             ),
             Progress::Done => {
                 for (index, &port) in pipe.inlets.iter().enumerate() {
@@ -98,7 +98,7 @@ impl Core {
                     );
                 }
             }
-            Progress::Read(_) | Progress::Outlet => {}
+            Progress::Outlet => {}
         }
     }
 }

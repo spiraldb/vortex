@@ -625,6 +625,7 @@ fn pack_readiness_tracks_changes_and_consumption(
         arena.create(8, None, SourceEnd::Unclaimed),
     ];
     let mut bytes = VecDeque::new();
+    let mut reads = Default::default();
     let mut exec = SESSION.create_execution_ctx();
     let mut touched = InletSet::new(2);
     let mut changed = InletSet::all(2);
@@ -632,7 +633,7 @@ fn pack_readiness_tracks_changes_and_consumption(
         arena: &mut arena,
         inlets: &inlets,
         bytes: &mut bytes,
-        reads: Default::default(),
+        reads: &mut reads,
         session: &SESSION,
         exec: &mut exec,
         touched: &mut touched,

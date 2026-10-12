@@ -88,7 +88,7 @@ impl Source for ScanSource {
     fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<SourceReady> {
         if let Some(segment) = self.unread.take() {
             cx.request_read(segment);
-            return Ok(SourceReady::Read);
+            return Ok(SourceReady::Blocked(SourceBlocked::Io));
         }
         Ok(if self.done || cx.has_bytes() {
             SourceReady::Ready
