@@ -146,12 +146,25 @@ impl ZoneMap {
         predicate: &BoundExpression,
         session: &VortexSession,
     ) -> VortexResult<Mask> {
+        let predicate = self.lower_stats(predicate.clone())?;
+        self.prune_lowered(&predicate, session)
+    }
+
+    /// Apply a predicate that [`Self::lower_stats`] already lowered to this zone map's
+    /// stats table.
+    ///
+    /// Lowering depends only on the column and stats-table dtypes, so callers that evaluate
+    /// the same predicate many times lower it once and call this function for each evaluation.
+    pub(super) fn prune_lowered(
+        &self,
+        predicate: &BoundExpression,
+        session: &VortexSession,
+    ) -> VortexResult<Mask> {
         let mut ctx = session.create_execution_ctx();
         let num_zones = self.array.len();
-        let predicate = self.lower_stats(predicate.clone())?;
 
         let array = self.array.clone().into_array();
-        let applied = array.apply_bound(&predicate)?;
+        let applied = array.apply_bound(predicate)?;
 
         if !contains_row_count(&applied) {
             return null_as_false_mask(applied, &mut ctx);
@@ -162,7 +175,8 @@ impl ZoneMap {
         null_as_false_mask(substituted, &mut ctx)
     }
 
-    fn lower_stats(&self, predicate: BoundExpression) -> VortexResult<BoundExpression> {
+    /// Rewrite the stats references in `predicate` into expressions over the stats table.
+    pub(super) fn lower_stats(&self, predicate: BoundExpression) -> VortexResult<BoundExpression> {
         let binder = ZoneMapStatsBinder { zone_map: self };
         bind_stats(predicate, &binder)
     }

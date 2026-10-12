@@ -102,13 +102,21 @@ impl PruningState {
                         Some(
                             async move {
                                 let zone_map = zone_map.await?;
-                                let initial_mask =
-                                    zone_map.prune(&predicate, &session).map_err(|err| {
-                                        err.with_context(format!(
+                                let lowered =
+                                    zone_map
+                                        .lower_stats(predicate.clone())
+                                        .and_then(|predicate| {
+                                            let mask =
+                                                zone_map.prune_lowered(&predicate, &session)?;
+                                            Ok((predicate, mask))
+                                        });
+                                let (predicate, initial_mask) = lowered.map_err(|err| {
+                                    err.with_context(format!(
                                         "While evaluating pruning predicate {} (derived from {})",
                                         predicate, expr
                                     ))
-                                    })?;
+                                })?;
+
                                 Ok(Arc::new(PruningResult {
                                     zone_map,
                                     predicate,
@@ -191,6 +199,7 @@ impl PruningState {
 
 pub(super) struct PruningResult {
     zone_map: ZoneMap,
+    // The pruning predicate, already lowered to the zone map's stats table.
     predicate: BoundExpression,
     dynamic_updates: Option<DynamicExprUpdates>,
     latest_result: RwLock<(u64, Mask)>,
@@ -225,7 +234,7 @@ impl PruningResult {
 
         let next_mask = self
             .zone_map
-            .prune(&self.predicate, &self.session)
+            .prune_lowered(&self.predicate, &self.session)
             .map_err(|err| {
                 err.with_context(format!(
                     "While evaluating pruning predicate {}",
