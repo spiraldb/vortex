@@ -58,7 +58,6 @@ use vortex_array::dtype::Nullability;
 use vortex_array::dtype::StructFields;
 use vortex_array::dtype::extension::ExtId;
 use vortex_array::extension::datetime::AnyTemporal;
-use vortex_array::extension::datetime::Duration;
 use vortex_array::validity::Validity;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
@@ -327,7 +326,7 @@ impl ArrowSession {
                     nullability.is_nullable(),
                 ))
             }
-            DType::Extension(ext) if !ext.is::<AnyTemporal>() && !ext.is::<Duration>() => {
+            DType::Extension(ext) if !ext.is::<AnyTemporal>() => {
                 for plugin in self.exporters_by_vortex(&ext.id()).iter() {
                     if let Some(field) =
                         plugin.to_arrow_field(name, &DType::Extension(ext.clone()), self)?

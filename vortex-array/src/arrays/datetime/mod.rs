@@ -27,7 +27,8 @@ use crate::extension::datetime::Timestamp;
 /// An array wrapper for primitive values that have an associated temporal meaning.
 ///
 /// This is a wrapper around ExtensionArrays containing numeric types, each of which corresponds to
-/// either a timestamp or julian date (both referenced to UNIX epoch), OR a time since midnight.
+/// either a timestamp or julian date (both referenced to UNIX epoch), a time since midnight, OR a
+/// duration.
 ///
 /// ## Arrow compatibility
 ///
@@ -37,6 +38,7 @@ use crate::extension::datetime::Timestamp;
 /// * `Timestamp`
 /// * `Date32`
 /// * `Date64`
+/// * `Duration`
 ///
 /// Anything that can be constructed and held in a `TemporalData` can also be zero-copy converted
 /// back to the relevant Arrow datatype.
