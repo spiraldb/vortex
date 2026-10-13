@@ -394,10 +394,10 @@ pub(crate) fn to_data_type_naive(dtype: &DType) -> VortexResult<DataType> {
             "DType::Variant requires Arrow Field metadata; use to_arrow_schema or a Field helper"
         ),
         DType::Extension(ext_dtype) => {
-            // NOTE: Temporal and Duration are the only builtin and default-loaded extension types,
-            // and they map directly onto non-extension Arrow physical encodings. For this reason,
-            // we choose to special-case them as part of this function rather than implementing
-            // them as an import/export VTable.
+            // NOTE: Temporal are the only builtin and default-loaded extension types, and they map
+            // directly onto non-extension Arrow physical encodings. For this reason, we
+            // choose to special-case them as part of this function rather than implementing them
+            // as an import/export VTable.
             if let Some(temporal) = ext_dtype.metadata_opt::<AnyTemporal>() {
                 return Ok(match temporal {
                     TemporalMetadata::Timestamp(unit, tz) => {
@@ -419,11 +419,11 @@ pub(crate) fn to_data_type_naive(dtype: &DType) -> VortexResult<DataType> {
                             vortex_panic!(InvalidArgument: "Invalid TimeUnit {} for {}", unit, ext_dtype.id())
                         }
                     },
+                    TemporalMetadata::Duration(unit) => {
+                        DataType::Duration(to_arrow_time_unit(*unit)?)
+                    }
                 });
             };
-            if let Some(unit) = ext_dtype.metadata_opt::<Duration>() {
-                return Ok(DataType::Duration(to_arrow_time_unit(*unit)?));
-            }
 
             vortex_bail!("Unsupported extension type \"{}\"", ext_dtype.id())
         }

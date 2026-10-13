@@ -38,7 +38,6 @@ use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::NativePType;
 use vortex_array::extension::datetime::AnyTemporal;
-use vortex_array::extension::datetime::Duration;
 use vortex_array::extension::datetime::TemporalMetadata;
 use vortex_array::extension::datetime::TimeUnit;
 use vortex_error::VortexResult;
@@ -110,21 +109,11 @@ pub(super) fn to_arrow_duration(
     target: &DataType,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<ArrowArrayRef> {
-    let DataType::Duration(arrow_unit) = target else {
+    validate_temporal_extension(&array, target)?;
+    let DataType::Duration(unit) = target else {
         unreachable!("to_arrow_duration called with non-Duration type {target}");
     };
-    if let Some(ext) = array.dtype().as_extension_opt() {
-        let Some(unit) = ext.metadata_opt::<Duration>() else {
-            vortex_bail!(
-                "Cannot convert extension {} to Arrow type {target}",
-                ext.id()
-            );
-        };
-        if crate::dtype::to_arrow_time_unit(*unit)? != *arrow_unit {
-            vortex_bail!("Cannot convert Duration({unit}) to Arrow {target}: unit mismatch");
-        }
-    }
-    Ok(match arrow_unit {
+    Ok(match unit {
         ArrowTimeUnit::Second => Arc::new(to_temporal_primitive::<DurationSecondType>(array, ctx)?),
         ArrowTimeUnit::Millisecond => Arc::new(to_temporal_primitive::<DurationMillisecondType>(
             array, ctx,
@@ -220,12 +209,22 @@ fn validate_temporal_extension(array: &ArrayRef, target: &DataType) -> VortexRes
             }
             Ok(())
         }
+        (TemporalMetadata::Duration(unit), DataType::Duration(arrow_unit)) => {
+            let src_arrow_unit = crate::dtype::to_arrow_time_unit(*unit)?;
+            if src_arrow_unit != *arrow_unit {
+                vortex_bail!(
+                    "Cannot convert Duration({unit}) to Arrow Duration({arrow_unit:?}): unit mismatch"
+                );
+            }
+            Ok(())
+        }
         (temporal, target) => vortex_bail!(
             "Cannot convert {} to Arrow type {target}",
             match temporal {
                 TemporalMetadata::Date(unit) => format!("Date({unit})"),
                 TemporalMetadata::Time(unit) => format!("Time({unit})"),
                 TemporalMetadata::Timestamp(unit, tz) => format!("Timestamp({unit}, tz={tz:?})"),
+                TemporalMetadata::Duration(unit) => format!("Duration({unit})"),
             }
         ),
     }

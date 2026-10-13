@@ -19,6 +19,7 @@ use crate::dtype::DType;
 use crate::dtype::extension::ExtDTypeRef;
 use crate::extension::datetime::AnyTemporal;
 use crate::extension::datetime::Date;
+use crate::extension::datetime::Duration;
 use crate::extension::datetime::TemporalMetadata;
 use crate::extension::datetime::Time;
 use crate::extension::datetime::TimeUnit;
@@ -27,7 +28,8 @@ use crate::extension::datetime::Timestamp;
 /// An array wrapper for primitive values that have an associated temporal meaning.
 ///
 /// This is a wrapper around ExtensionArrays containing numeric types, each of which corresponds to
-/// either a timestamp or julian date (both referenced to UNIX epoch), OR a time since midnight.
+/// either a timestamp or julian date (both referenced to UNIX epoch), a time since midnight, OR a
+/// duration.
 ///
 /// ## Arrow compatibility
 ///
@@ -37,6 +39,7 @@ use crate::extension::datetime::Timestamp;
 /// * `Timestamp`
 /// * `Date32`
 /// * `Date64`
+/// * `Duration`
 ///
 /// Anything that can be constructed and held in a `TemporalData` can also be zero-copy converted
 /// back to the relevant Arrow datatype.
@@ -116,6 +119,24 @@ impl TemporalData {
         Self {
             ext: ExtensionArray::new(
                 Timestamp::new_with_tz(time_unit, time_zone, array.dtype().nullability()).erased(),
+                array,
+            ),
+        }
+    }
+
+    /// Create a new `TemporalData` holding `i64` lengths of time in the given unit.
+    ///
+    /// This is equivalent to the data described by the `Duration` type from Arrow.
+    ///
+    /// # Panics
+    ///
+    /// If `array` does not hold Primitive i64 data, the function will panic.
+    ///
+    /// If the time_unit is days, the function will panic.
+    pub fn new_duration(array: ArrayRef, time_unit: TimeUnit) -> Self {
+        Self {
+            ext: ExtensionArray::new(
+                Duration::new(time_unit, array.dtype().nullability()).erased(),
                 array,
             ),
         }

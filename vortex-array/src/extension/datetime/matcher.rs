@@ -5,11 +5,13 @@ use std::fmt::Display;
 use std::sync::Arc;
 
 use vortex_error::VortexResult;
+use vortex_error::vortex_bail;
 
 use crate::dtype::extension::ExtDTypeRef;
 use crate::dtype::extension::ExtVTable;
 use crate::dtype::extension::Matcher;
 use crate::extension::datetime::Date;
+use crate::extension::datetime::Duration;
 use crate::extension::datetime::Time;
 use crate::extension::datetime::TimeUnit;
 use crate::extension::datetime::Timestamp;
@@ -30,6 +32,9 @@ impl Matcher for AnyTemporal {
         if let Some(opts) = item.metadata_opt::<Time>() {
             return Some(TemporalMetadata::Time(opts));
         }
+        if let Some(opts) = item.metadata_opt::<Duration>() {
+            return Some(TemporalMetadata::Duration(opts));
+        }
         None
     }
 }
@@ -43,6 +48,8 @@ pub enum TemporalMetadata<'a> {
     Date(&'a <Date as ExtVTable>::Metadata),
     /// Metadata for Time dtypes
     Time(&'a <Time as ExtVTable>::Metadata),
+    /// Metadata for Duration dtypes
+    Duration(&'a <Duration as ExtVTable>::Metadata),
 }
 
 // TODO(ngates): remove this logic in favor of having an ExtScalarVTable in vortex_array::scalar.
@@ -54,6 +61,7 @@ impl TemporalMetadata<'_> {
             TemporalMetadata::Time(unit) => **unit,
             TemporalMetadata::Date(unit) => **unit,
             TemporalMetadata::Timestamp(unit, _tz) => **unit,
+            TemporalMetadata::Duration(unit) => **unit,
         }
     }
 
@@ -77,6 +85,7 @@ impl TemporalMetadata<'_> {
                         .in_tz(tz.as_ref())?,
                 )),
             },
+            TemporalMetadata::Duration(_) => vortex_bail!("Duration values are not points in time"),
         }
     }
 }

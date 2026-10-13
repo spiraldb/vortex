@@ -144,6 +144,32 @@ test_fail_case!(
     TimeUnit::Milliseconds
 );
 
+// Duration conformance tests
+test_success_case!(
+    test_roundtrip_duration_second,
+    i64,
+    TemporalData::new_duration,
+    TimeUnit::Seconds
+);
+test_success_case!(
+    test_roundtrip_duration_nanosecond,
+    i64,
+    TemporalData::new_duration,
+    TimeUnit::Nanoseconds
+);
+test_fail_case!(
+    test_fail_duration_i32,
+    i32,
+    TemporalData::new_duration,
+    TimeUnit::Seconds
+);
+test_fail_case!(
+    test_fail_duration_days,
+    i64,
+    TemporalData::new_duration,
+    TimeUnit::Days
+);
+
 // We test Timestamp explicitly to avoid the macro getting too complex.
 #[test]
 fn test_timestamp() {

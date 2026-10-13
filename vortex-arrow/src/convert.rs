@@ -77,7 +77,6 @@ use vortex_array::IntoArray;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::DecimalArray;
 use vortex_array::arrays::DictArray;
-use vortex_array::arrays::ExtensionArray;
 use vortex_array::arrays::FixedSizeListArray;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::ListViewArray;
@@ -99,7 +98,6 @@ use vortex_array::dtype::NativePType;
 use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
 use vortex_array::dtype::i256;
-use vortex_array::extension::datetime::Duration;
 use vortex_array::extension::datetime::TimeUnit;
 use vortex_array::validity::Validity;
 use vortex_buffer::Alignment;
@@ -354,8 +352,7 @@ where
         DataType::Date32 => TemporalArray::new_date(arr, TimeUnit::Days).into(),
         DataType::Date64 => TemporalArray::new_date(arr, TimeUnit::Milliseconds).into(),
         DataType::Duration(time_unit) => {
-            let dtype = Duration::new(from_arrow_time_unit(*time_unit), arr.dtype().nullability());
-            ExtensionArray::new(dtype.erased(), arr).into_array()
+            TemporalArray::new_duration(arr, from_arrow_time_unit(*time_unit)).into()
         }
         DataType::Interval(_) => {
             vortex_bail!("Arrow {} arrays are not supported", value.data_type())
