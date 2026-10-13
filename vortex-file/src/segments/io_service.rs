@@ -717,16 +717,35 @@ impl Drop for FileIoSession {
 
 #[cfg(test)]
 mod tests {
+    use futures::TryStreamExt;
     use futures::future::BoxFuture;
+    use rstest::rstest;
+    use vortex_array::ArrayRef;
+    use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
+    use vortex_array::arrays::ChunkedArray;
+    use vortex_array::arrays::StructArray;
+    use vortex_array::assert_arrays_eq;
+    use vortex_array::expr::Expression;
+    use vortex_array::expr::get_item;
+    use vortex_array::expr::gt;
+    use vortex_array::expr::lit;
+    use vortex_array::expr::root;
+    use vortex_buffer::Buffer;
     use vortex_buffer::ByteBuffer;
+    use vortex_buffer::ByteBufferMut;
     use vortex_io::request::IoRequest;
     use vortex_io::session::RuntimeSession;
     use vortex_io::session::RuntimeSessionExt;
+    use vortex_layout::scan::v2;
     use vortex_layout::session::LayoutSession;
     use vortex_metrics::DefaultMetricsRegistry;
     use vortex_session::VortexSession;
 
     use super::*;
+    use crate::OpenOptionsSessionExt;
+    use crate::WriteOptionsSessionExt;
+    use crate::planning::scan_file;
 
     fn session() -> VortexSession {
         let session = vortex_array::array_session()
@@ -1026,6 +1045,71 @@ mod tests {
         assert_eq!(completions(&io, 1).await?, vec![(0, vec![0, 1, 2, 3])]);
         assert_eq!(reader.reads(), vec![(0, 4)]);
         drop(io);
+        assert!(service.0.table.lock().entries.is_empty());
+        Ok(())
+    }
+
+    /// Four 50,000-row chunks of `{a, b}`, with `a` over `0..200_000` and `b = a % 97`.
+    async fn write(session: &VortexSession) -> VortexResult<ByteBuffer> {
+        let chunks = (0..4)
+            .map(|chunk| {
+                let rows = chunk * 50_000..(chunk + 1) * 50_000;
+                let a = Buffer::from_iter(rows.clone()).into_array();
+                let b = Buffer::from_iter(rows.map(|a| a % 97)).into_array();
+                Ok(StructArray::from_fields(&[("a", a), ("b", b)])?.into_array())
+            })
+            .collect::<VortexResult<Vec<_>>>()?;
+        let dtype = chunks[0].dtype().clone();
+        let mut output = ByteBufferMut::empty();
+        session
+            .write_options()
+            .write(
+                &mut output,
+                ChunkedArray::try_new(chunks, dtype)?
+                    .into_array()
+                    .to_array_stream(),
+            )
+            .await?;
+        Ok(ByteBuffer::from(output))
+    }
+
+    /// A scan whose splits read through this service returns what the default scan returns.
+    #[rstest]
+    #[case::no_filter(None)]
+    #[case::filter(Some(gt(get_item("a", root()), lit(120_000_i32))))]
+    #[case::filter_matching_nothing(Some(gt(get_item("a", root()), lit(1_000_000_i32))))]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn scans_read_through_the_service(
+        #[case] filter: Option<Expression>,
+    ) -> VortexResult<()> {
+        let session = session();
+        let bytes = write(&session).await?;
+        let file = session.open_options().open_read(bytes.clone()).await?;
+        let service = FileIoService::open(
+            file.footer().segment_specs_with_metadata(),
+            bytes,
+            session.handle(),
+            metrics(),
+        );
+
+        let builder = || -> VortexResult<_> {
+            let builder = file.scan()?;
+            Ok(match &filter {
+                Some(filter) => builder.with_filter(filter.bind(file.dtype())?),
+                None => builder,
+            })
+        };
+        let dtype = builder()?.dtype()?;
+        let expected: Vec<ArrayRef> = builder()?.into_stream()?.try_collect().await?;
+        let mut scan = scan_file(&file);
+        scan.io = Some(Arc::new(service.clone()));
+        let actual: Vec<ArrayRef> = v2::into_stream(builder()?, scan)?.try_collect().await?;
+        assert_arrays_eq!(
+            ChunkedArray::try_new(actual, dtype.clone())?,
+            ChunkedArray::try_new(expected, dtype)?,
+            &mut session.create_execution_ctx()
+        );
+        // Every split has finished, so nothing is left registered or held.
         assert!(service.0.table.lock().entries.is_empty());
         Ok(())
     }
