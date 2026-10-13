@@ -85,3 +85,4 @@ wkb = { workspace = true }
 [dev-dependencies]
 insta = { workspace = true }
 rstest = { workspace = true }
+vortex-array = { workspace = true, features = ["_test-harness"] }

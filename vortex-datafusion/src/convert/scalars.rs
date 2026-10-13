@@ -408,6 +408,9 @@ mod tests {
     use vortex::dtype::StructFields;
     use vortex::dtype::UnionVariants;
     use vortex::dtype::i256;
+    use vortex::extension::datetime::Date;
+    use vortex::extension::datetime::Time;
+    use vortex::extension::datetime::Timestamp;
     use vortex::scalar::DecimalValue;
     use vortex::scalar::Scalar;
 
@@ -670,16 +673,52 @@ mod tests {
     ))]
     fn test_from_datafusion_temporals(#[case] df_scalar: ScalarValue) {
         let result = from_df(&df_scalar);
-
-        // All temporal types should convert to extension types
-        if let DType::Extension(_) = result.dtype() {
-            assert!(!result.is_null());
-        } else {
-            panic!(
-                "Expected extension type for temporal scalar, got: {:?}",
-                result.dtype()
-            );
-        }
+        let (dtype, value) = match df_scalar {
+            ScalarValue::Date32(_) => (
+                Date::new(TimeUnit::Days, Nullability::Nullable).erased(),
+                Scalar::from(18628i32),
+            ),
+            ScalarValue::Date64(_) => (
+                Date::new(TimeUnit::Milliseconds, Nullability::Nullable).erased(),
+                Scalar::from(1609459200000i64),
+            ),
+            ScalarValue::Time32Second(_) => (
+                Time::new(TimeUnit::Seconds, Nullability::Nullable).erased(),
+                Scalar::from(3661i32),
+            ),
+            ScalarValue::Time32Millisecond(_) => (
+                Time::new(TimeUnit::Milliseconds, Nullability::Nullable).erased(),
+                Scalar::from(3661000i32),
+            ),
+            ScalarValue::Time64Microsecond(_) => (
+                Time::new(TimeUnit::Microseconds, Nullability::Nullable).erased(),
+                Scalar::from(3661000000i64),
+            ),
+            ScalarValue::Time64Nanosecond(_) => (
+                Time::new(TimeUnit::Nanoseconds, Nullability::Nullable).erased(),
+                Scalar::from(3661000000000i64),
+            ),
+            ScalarValue::TimestampSecond(..) => (
+                Timestamp::new(TimeUnit::Seconds, Nullability::Nullable).erased(),
+                Scalar::from(1609459200i64),
+            ),
+            ScalarValue::TimestampMillisecond(..) => (
+                Timestamp::new(TimeUnit::Milliseconds, Nullability::Nullable).erased(),
+                Scalar::from(1609459200000i64),
+            ),
+            ScalarValue::TimestampMicrosecond(..) => (
+                Timestamp::new(TimeUnit::Microseconds, Nullability::Nullable).erased(),
+                Scalar::from(1609459200000000i64),
+            ),
+            ScalarValue::TimestampNanosecond(..) => (
+                Timestamp::new(TimeUnit::Nanoseconds, Nullability::Nullable).erased(),
+                Scalar::from(1609459200000000000i64),
+            ),
+            _ => unreachable!(),
+        };
+        let expected = Scalar::try_new(DType::Extension(dtype), value.into_value()).unwrap();
+        assert_eq!(result.dtype(), expected.dtype());
+        assert_eq!(result, expected);
     }
 
     #[rstest]
