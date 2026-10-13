@@ -587,7 +587,7 @@ jobs:
   #   c6a (AMD Zen 3): AVX2 and BMI2, no AVX-512
   #   c6i (Intel Ice Lake): AVX-512 F/BW/VBMI2/VPOPCNTDQ
   #   c8g (Graviton4, Neoverse V2): SVE2 with BITPERM
-  # `VORTEX_EXPECT_CPU_FEATURES` lists every feature the instance must have; vortex-buffer's
+  # `VORTEX_EXPECT_CPU_FEATURES` lists every feature the instance must have; vortex-array-macros'
   # `cpu_features` test fails if any of them is missing or any other known feature (e.g.
   # AVX-512 on the avx2 entry) is detected.
   rust-test-cpu-features:
@@ -614,7 +614,7 @@ jobs:
             image: ubuntu24-full-arm64-pre-v2
             expect: "neon,sve,sve2,sve2-bitperm"
     runs-on: >-
-      runs-on=${{ github.run_id }}/runner=${{ matrix.config.runner }}/family=${{ matrix.config.family }}/image=${{ matrix.config.image }}/extras=s3-cache/tag=rust-test-cpu-features-${{ matrix.config.name }}
+      runs-on=${{ github.run_id }}/runner=${{ matrix.config.runner }}/family=${{ matrix.config.family }}/spot=price-capacity-optimized/image=${{ matrix.config.image }}/extras=s3-cache/tag=rust-test-cpu-features-${{ matrix.config.name }}
     env:
       VORTEX_EXPECT_CPU_FEATURES: ${{ matrix.config.expect }}
     steps:
@@ -630,7 +630,7 @@ jobs:
       - name: Check CPU features
         run: |
           cargo nextest run --cargo-profile ci --locked --no-capture \
-            -p vortex-buffer --test cpu_features
+            -p vortex-array-macros --test cpu_features
       # The `ci` profile is a debug build.
       - name: Rust Tests
         run: |
