@@ -3,7 +3,6 @@
 
 use std::ops::Range;
 use std::sync::Arc;
-use std::sync::LazyLock;
 use std::sync::OnceLock;
 
 use itertools::Itertools;
@@ -34,7 +33,6 @@ use vortex_array::scalar_fn::fns::mask::Mask as MaskFn;
 use vortex_array::scalar_fn::fns::select::Select;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
-use vortex_error::vortex_ensure;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
@@ -51,10 +49,29 @@ use crate::layouts::partitioned::BoundPartitionedExprEval;
 use crate::layouts::struct_::StructLayout;
 use crate::segments::SegmentSource;
 
-// Reserved name for a struct's validity virtual field if a struct is nullable
-const STRUCT_VALIDITY_NAME: &str = "__vortex_validity";
-static STRUCT_VALIDITY_FIELD: LazyLock<FieldName> =
-    LazyLock::new(|| FieldName::from(STRUCT_VALIDITY_NAME));
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum Item {
+    Field(FieldName),
+    Validity,
+}
+
+impl std::fmt::Display for Item {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Item::Field(field_name) => write!(f, "{field_name}"),
+            Item::Validity => f.write_str("$__vortex_validity"),
+        }
+    }
+}
+
+impl From<Item> for FieldName {
+    fn from(item: Item) -> Self {
+        match item {
+            Item::Field(field_name) => field_name,
+            Item::Validity => FieldName::from("$validity"),
+        }
+    }
+}
 
 pub struct StructReader {
     layout: StructLayout,
@@ -92,19 +109,13 @@ impl StructReader {
         });
 
         let nullable = layout.dtype().is_nullable();
-        if nullable {
-            vortex_ensure!(
-                struct_dt.find(STRUCT_VALIDITY_NAME).is_none(),
-                "{STRUCT_VALIDITY_NAME} is reserved in nullable structs"
-            );
-        }
         let extra = nullable as usize;
 
         let mut dtypes: Vec<DType> = Vec::with_capacity(struct_dt.nfields() + extra);
         let mut names: Vec<Arc<str>> = Vec::with_capacity(struct_dt.nfields() + extra);
         if nullable {
             dtypes.push(DType::Bool(Nullability::NonNullable));
-            names.push(Arc::clone(STRUCT_VALIDITY_FIELD.inner()));
+            names.push(Arc::from("validity"));
         }
         dtypes.extend(struct_dt.fields());
         names.extend(struct_dt.names().iter().map(|x| Arc::clone(x.inner())));
@@ -139,13 +150,16 @@ impl StructReader {
         self.layout.struct_fields()
     }
 
-    /// Return the child reader for the field.
-    fn field_reader(&self, name: &FieldName) -> VortexResult<&LayoutReaderRef> {
-        if name.as_ref() == STRUCT_VALIDITY_NAME
-            && let Some(validity_reader) = self.validity()?
-        {
-            return Ok(validity_reader);
-        }
+    /// Return the child reader for the struct coordinate.
+    fn field_reader(&self, item: &Item) -> VortexResult<&LayoutReaderRef> {
+        let name = match item {
+            Item::Validity => {
+                return self
+                    .validity()?
+                    .ok_or_else(|| vortex_err!("Non-nullable struct layout has no validity"));
+            }
+            Item::Field(name) => name,
+        };
         let idx = self
             .field_lookup
             .as_ref()
@@ -207,31 +221,21 @@ impl StructReader {
         let expr =
             expand_struct_root(expr.clone(), &self.expanded_root_expr, self.struct_fields())?;
 
-        // Partition the expression into expressions that can be evaluated over individual fields
-        let dtype = self.dtype();
-        let fields = dtype.as_struct_fields_opt().vortex_expect("struct dtype");
-        let mut partitioned = if dtype.is_nullable() {
-            partition_bound(
-                expr.clone(),
-                make_bound_free_field_annotator_validity(fields),
-            )?
-        } else {
-            partition_bound(expr.clone(), make_bound_free_field_annotator(fields))?
-        };
+        // Partition the expression into expressions that can be evaluated
+        // over individual coordinates.
+        let fields = self
+            .dtype()
+            .as_struct_fields_opt()
+            .vortex_expect("struct dtype");
+        let mut partitioned = partition_bound(expr.clone(), make_struct_item_annotator(fields))?;
 
         if partitioned.partitions.len() == 1 {
             // If there's only one partition, we step into the field scope of the original
             // expression by replacing any `$.a` with `$`.
-            return Ok(Partitioned::Single(
-                partitioned.partition_names[0].clone(),
-                step_into_struct_field(
-                    expr,
-                    &partitioned.partition_names[0],
-                    self.field_reader(&partitioned.partition_names[0])?
-                        .dtype()
-                        .clone(),
-                )?,
-            ));
+            let item = partitioned.partition_annotations[0].clone();
+            let partition =
+                step_into_struct_field(expr, &item, self.field_reader(&item)?.dtype().clone())?;
+            return Ok(Partitioned::Single(item, partition));
         }
 
         // We now need to process the partitioned expressions to rewrite the root scope
@@ -240,9 +244,9 @@ impl StructReader {
         let partitions = partitioned
             .partitions
             .iter()
-            .zip_eq(partitioned.partition_names.iter())
-            .map(|(expr, name)| {
-                step_into_struct_field(expr.clone(), name, self.field_reader(name)?.dtype().clone())
+            .zip_eq(partitioned.partition_annotations.iter())
+            .map(|(expr, item)| {
+                step_into_struct_field(expr.clone(), item, self.field_reader(item)?.dtype().clone())
             })
             .try_collect::<_, Vec<_>, _>()?
             .into_boxed_slice();
@@ -370,11 +374,11 @@ fn expand_struct_root(
         .into_inner())
 }
 
-// Same as make_bound_free_field_annotator, but handles is_not_null($) as
-// struct's validity
-fn make_bound_free_field_annotator_validity(
+// Same as make_bound_free_field_annotator, but handles is_not_null($) as the
+// struct's own validity coordinate
+fn make_struct_item_annotator(
     scope: &StructFields,
-) -> impl AnnotationFn<BoundExpression, Annotation = FieldName> {
+) -> impl AnnotationFn<BoundExpression, Annotation = Item> {
     let free_fields = make_bound_free_field_annotator(scope);
     move |expr: &BoundExpression| {
         if expr
@@ -382,25 +386,24 @@ fn make_bound_free_field_annotator_validity(
             .is_some_and(|scalar_fn| scalar_fn.is::<IsNotNull>())
             && expr.children()[0].is_root()
         {
-            return vec![STRUCT_VALIDITY_FIELD.clone()];
+            return vec![Item::Validity];
         }
-        free_fields(expr)
+        free_fields(expr).into_iter().map(Item::Field).collect()
     }
 }
 
 fn step_into_struct_field(
     expr: BoundExpression,
-    field_name: &FieldName,
+    item: &Item,
     field_dtype: DType,
 ) -> VortexResult<BoundExpression> {
-    let is_validity = field_name.as_ref() == STRUCT_VALIDITY_NAME;
     Ok(expr
         .transform_down(|node| {
-            let is_field_access = node.as_scalar().is_some_and(|scalar_fn| {
-                scalar_fn
+            let is_field_access = node.as_scalar().is_some_and(|scalar_fn| match item {
+                Item::Field(field_name) => scalar_fn
                     .as_opt::<GetItem>()
-                    .is_some_and(|name| name == field_name)
-                    || (is_validity && scalar_fn.is::<IsNotNull>())
+                    .is_some_and(|name| name == field_name),
+                Item::Validity => scalar_fn.is::<IsNotNull>(),
             }) && node.children()[0].is_root();
 
             if is_field_access {
@@ -421,10 +424,10 @@ fn step_into_struct_field(
 // TODO(joe): this is a duplicate of the Partitioned enum in arrays/expr/vtable/rules
 #[derive(Clone)]
 enum Partitioned {
-    /// An expression which only operates over a single field
-    Single(FieldName, BoundExpression),
-    /// An expression which operates over multiple fields
-    Multi(Arc<BoundPartitionedExpr<FieldName>>),
+    /// An expression which only operates over a single coordinate
+    Single(Item, BoundExpression),
+    /// An expression which operates over multiple coordinates
+    Multi(Arc<BoundPartitionedExpr<Item>>),
 }
 
 impl LayoutReader for StructReader {
@@ -611,7 +614,6 @@ mod tests {
     use crate::LayoutRef;
     use crate::LayoutStrategy;
     use crate::layouts::flat::writer::FlatLayoutStrategy;
-    use crate::layouts::struct_::reader::STRUCT_VALIDITY_NAME;
     use crate::layouts::table::TableStrategy;
     use crate::segments::SegmentSource;
     use crate::segments::TestSegments;
@@ -1043,11 +1045,11 @@ mod tests {
         true
     )]
     #[case(Validity::NonNullable, false)]
-    fn test_reserved_validity_name(
+    fn test_validity_like_field_name(
         #[case] validity: Validity,
-        #[case] will_error: bool,
+        #[case] nullable: bool,
     ) -> VortexResult<()> {
-        let fields = [(STRUCT_VALIDITY_NAME, buffer![10, 20, 30].into_array())];
+        let fields = [("__vortex_validity", buffer![10, 20, 30].into_array())];
         let array = StructArray::try_from_iter_with_validity(fields, validity)?;
 
         let ctx = ArrayContext::empty();
@@ -1058,27 +1060,33 @@ mod tests {
             Arc::new(FlatLayoutStrategy::default()),
         );
         let segments2 = Arc::<TestSegments>::clone(&segments);
-        let layout = block_on(|_| async move {
-            let array = array.into_array().to_array_stream().sequenced(ptr);
-            strategy
-                .write_stream(ctx.into(), segments2, array, eof, &SESSION)
-                .await
+        let layout = block_on(|handle| {
+            let session = new_session().with_handle(handle);
+            async move {
+                let array = array.into_array().to_array_stream().sequenced(ptr);
+                strategy
+                    .write_stream(ctx.into(), segments2, array, eof, &session)
+                    .await
+            }
         })?;
 
         let reader = layout.new_reader("".into(), segments, &SESSION, &Default::default())?;
-        let expr = get_item(STRUCT_VALIDITY_NAME, root()).bind(reader.dtype())?;
-        let result = block_on(move |_| {
-            reader
-                .projection_evaluation(&(0..3), &expr, MaskFuture::new_true(3))
-                .unwrap()
-        });
+        let expr = get_item("__vortex_validity", root()).bind(reader.dtype())?;
+        let future = reader.projection_evaluation(&(0..3), &expr, MaskFuture::new_true(3))?;
+        let result = block_on(move |_| future)?;
 
-        if will_error {
-            assert!(result.is_err());
+        let mut ctx = SESSION.create_execution_ctx();
+        if nullable {
+            assert_eq!(
+                result.dtype(),
+                &DType::Primitive(PType::I32, Nullability::Nullable)
+            );
+            assert!(result.execute_scalar(0, &mut ctx)?.is_null());
+            assert_nth_scalar!(result, 1, 20, &mut ctx);
+            assert_nth_scalar!(result, 2, 30, &mut ctx);
         } else {
-            let mut ctx = SESSION.create_execution_ctx();
             let expected = PrimitiveArray::from_iter([10i32, 20, 30]);
-            assert_arrays_eq!(result?, expected, &mut ctx);
+            assert_arrays_eq!(result, expected, &mut ctx);
         }
         Ok(())
     }
