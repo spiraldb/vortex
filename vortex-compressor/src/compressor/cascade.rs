@@ -6,7 +6,7 @@
 use vortex_array::ArrayRef;
 use vortex_array::Canonical;
 use vortex_array::CanonicalValidity;
-use vortex_array::CompactOptions;
+use vortex_array::Compaction;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::aggregate_fn::fns::uncompressed_size_in_bytes::UncompressedSizeInBytes;
@@ -66,10 +66,10 @@ impl CascadingCompressor {
         let _enter = span.enter();
 
         let canonical = array.clone().execute::<CanonicalValidity>(exec_ctx)?.0;
-        // Trimming is zero-copy. A scheme that changes the encoding drops a view array's dead
-        // bytes for free, and `without_dead_bytes` compacts one that keeps its encoding, so the
-        // copy is paid at most once.
-        let trimmed = canonical.compact_with(CompactOptions::trim(), exec_ctx)?;
+        // Zero-copy compaction drops what slicing can. A scheme that changes the encoding drops a
+        // view array's remaining dead bytes for free, and `without_dead_bytes` compacts one that
+        // keeps its encoding, so the copy is paid at most once.
+        let trimmed = canonical.compact_with(Compaction::ZeroCopy, exec_ctx)?;
         let compressed = self.compress_canonical(trimmed, CompressorContext::new(), exec_ctx)?;
 
         trace::record_compress_outcome(&span, before_nbytes, compressed.nbytes());
@@ -100,7 +100,7 @@ impl CascadingCompressor {
         }
 
         let canonical = child.clone().execute::<CanonicalValidity>(exec_ctx)?.0;
-        let trimmed = canonical.compact_with(CompactOptions::trim(), exec_ctx)?;
+        let trimmed = canonical.compact_with(Compaction::ZeroCopy, exec_ctx)?;
 
         let child_ctx = parent_ctx
             .clone()
@@ -360,16 +360,13 @@ pub(super) fn exact_uncompressed_size(
 ///
 /// Only a view array can hold more than its uncompressed size: its views may point into buffers
 /// shared with other arrays, such as a decompressed Parquet page, or left behind by slicing and
-/// taking. Fully used buffers are kept, used ranges are sliced, and the rest are rewritten.
+/// taking. Exact compaction keeps fully used buffers, slices used runs, and rewrites the rest.
 fn without_dead_bytes(array: ArrayRef, exec_ctx: &mut ExecutionCtx) -> VortexResult<ArrayRef> {
     let Some(views) = array.as_opt::<VarBinView>() else {
         return Ok(array);
     };
-    if array.nbytes() <= exact_uncompressed_size(&array, exec_ctx)? {
-        return Ok(array);
-    }
     Ok(views
         .into_owned()
-        .compact_with_threshold(1.0, exec_ctx)?
+        .compact_buffers_with(Compaction::Exact, exec_ctx)?
         .into_array())
 }
