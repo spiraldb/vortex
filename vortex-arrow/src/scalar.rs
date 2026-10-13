@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use arrow_array::Scalar as ArrowScalar;
 use arrow_array::*;
+use arrow_buffer::IntervalMonthDayNano;
 use arrow_buffer::NullBuffer;
 use arrow_buffer::OffsetBuffer;
 use arrow_schema::Field;
@@ -15,6 +16,7 @@ use vortex_array::dtype::DType;
 use vortex_array::dtype::PType;
 use vortex_array::dtype::i256;
 use vortex_array::extension::datetime::AnyTemporal;
+use vortex_array::extension::datetime::IntervalValue;
 use vortex_array::extension::datetime::TemporalMetadata;
 use vortex_array::extension::datetime::TimeUnit;
 use vortex_array::scalar::BinaryScalar;
@@ -236,7 +238,8 @@ fn concat_scalar_arrays(
 
 /// Convert an [`ExtScalar`] to an Arrow [`Datum`].
 ///
-/// Currently only temporal extension types (timestamps, dates, times, and durations) are supported.
+/// Currently only temporal extension types (timestamps, dates, times, durations, and intervals) are
+/// supported.
 fn extension_to_arrow(scalar: ExtScalar<'_>) -> Result<Arc<dyn Datum>, VortexError> {
     let ext_dtype = scalar.ext_dtype();
     let Some(temporal) = ext_dtype.metadata_opt::<AnyTemporal>() else {
@@ -245,6 +248,16 @@ fn extension_to_arrow(scalar: ExtScalar<'_>) -> Result<Arc<dyn Datum>, VortexErr
             ext_dtype.id()
         )
     };
+
+    // Intervals are stored as a struct rather than a primitive.
+    if temporal == TemporalMetadata::Interval {
+        let value = scalar
+            .value()
+            .map(IntervalValue::try_from_storage)
+            .transpose()?
+            .map(|v| IntervalMonthDayNano::new(v.months, v.days, v.nanoseconds));
+        return value_to_arrow_scalar!(value, IntervalMonthDayNanoArray);
+    }
 
     let storage_scalar = scalar.to_storage_scalar();
     let primitive = storage_scalar
@@ -312,6 +325,7 @@ fn extension_to_arrow(scalar: ExtScalar<'_>) -> Result<Arc<dyn Datum>, VortexErr
                 }
             }
         }
+        TemporalMetadata::Interval => unreachable!("intervals are converted above"),
     }
 }
 
@@ -339,6 +353,8 @@ mod tests {
     use vortex_array::dtype::i256;
     use vortex_array::extension::datetime::Date;
     use vortex_array::extension::datetime::Duration;
+    use vortex_array::extension::datetime::Interval;
+    use vortex_array::extension::datetime::IntervalValue;
     use vortex_array::extension::datetime::Time;
     use vortex_array::extension::datetime::TimeUnit;
     use vortex_array::extension::datetime::Timestamp;
@@ -948,6 +964,27 @@ mod tests {
         assert!(is_scalar);
         assert_eq!(array.data_type(), &DataType::Duration(arrow_unit));
         assert_eq!(array.is_null(0), value.is_none());
+        Ok(())
+    }
+
+    #[rstest]
+    #[case(Some(IntervalValue::new(1, -2, 3)))]
+    #[case(None)]
+    fn test_interval_to_arrow(#[case] value: Option<IntervalValue>) -> VortexResult<()> {
+        let scalar = match value {
+            Some(value) => value.into_scalar(Nullability::Nullable),
+            None => Scalar::null(DType::Extension(
+                Interval::new(Nullability::Nullable).erased(),
+            )),
+        };
+        let datum = scalar.to_arrow_datum()?;
+        let (array, is_scalar) = datum.get();
+        assert!(is_scalar);
+        let expected =
+            arrow_array::IntervalMonthDayNanoArray::from(vec![value.map(|v| {
+                arrow_buffer::IntervalMonthDayNano::new(v.months, v.days, v.nanoseconds)
+            })]);
+        assert_eq!(array.to_data(), expected.to_data());
         Ok(())
     }
 

@@ -52,6 +52,9 @@ use arrow_array::types::Int8Type;
 use arrow_array::types::Int16Type;
 use arrow_array::types::Int32Type;
 use arrow_array::types::Int64Type;
+use arrow_array::types::IntervalDayTimeType;
+use arrow_array::types::IntervalMonthDayNanoType;
+use arrow_array::types::IntervalYearMonthType;
 use arrow_array::types::Time32MillisecondType;
 use arrow_array::types::Time32SecondType;
 use arrow_array::types::Time64MicrosecondType;
@@ -71,6 +74,7 @@ use arrow_buffer::ScalarBuffer;
 use arrow_buffer::buffer::NullBuffer;
 use arrow_buffer::buffer::OffsetBuffer;
 use arrow_schema::DataType;
+use arrow_schema::IntervalUnit;
 use arrow_schema::TimeUnit as ArrowTimeUnit;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
@@ -98,6 +102,7 @@ use vortex_array::dtype::NativePType;
 use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
 use vortex_array::dtype::i256;
+use vortex_array::extension::datetime::Interval;
 use vortex_array::extension::datetime::TimeUnit;
 use vortex_array::validity::Validity;
 use vortex_buffer::Alignment;
@@ -359,6 +364,58 @@ where
         }
         _ => vortex_panic!("Invalid temporal type: {}", value.data_type()),
     })
+}
+
+/// Conversion of an Arrow interval array into a Vortex [`Interval`] extension array.
+///
+/// Every Arrow interval unit converts without loss: year-month intervals become months, and
+/// day-time milliseconds become nanoseconds.
+pub fn from_arrow_interval(array: &dyn ArrowArray, nullable: bool) -> VortexResult<ArrayRef> {
+    let len = array.len();
+    let (months, days, nanoseconds): (Buffer<i32>, Buffer<i32>, Buffer<i64>) =
+        match array.data_type() {
+            DataType::Interval(IntervalUnit::YearMonth) => (
+                Buffer::from_arrow_scalar_buffer(
+                    array
+                        .as_primitive::<IntervalYearMonthType>()
+                        .values()
+                        .clone(),
+                ),
+                Buffer::zeroed(len),
+                Buffer::zeroed(len),
+            ),
+            DataType::Interval(IntervalUnit::DayTime) => {
+                let values = array.as_primitive::<IntervalDayTimeType>().values();
+                (
+                    Buffer::zeroed(len),
+                    values.iter().map(|v| v.days).collect(),
+                    values
+                        .iter()
+                        .map(|v| i64::from(v.milliseconds) * 1_000_000)
+                        .collect(),
+                )
+            }
+            DataType::Interval(IntervalUnit::MonthDayNano) => {
+                let values = array.as_primitive::<IntervalMonthDayNanoType>().values();
+                (
+                    values.iter().map(|v| v.months).collect(),
+                    values.iter().map(|v| v.days).collect(),
+                    values.iter().map(|v| v.nanoseconds).collect(),
+                )
+            }
+            dt => vortex_bail!("Invalid data type for interval array: {dt}"),
+        };
+    let storage = StructArray::try_new(
+        Interval::FIELD_NAMES.into(),
+        [
+            PrimitiveArray::new(months, Validity::NonNullable).into_array(),
+            PrimitiveArray::new(days, Validity::NonNullable).into_array(),
+            PrimitiveArray::new(nanoseconds, Validity::NonNullable).into_array(),
+        ],
+        len,
+        nulls(array.nulls(), nullable)?,
+    )?;
+    Ok(TemporalArray::new_interval(storage.into_array()).into())
 }
 
 /// Rebase a (possibly sliced) Arrow offset buffer to start at zero.
@@ -838,6 +895,7 @@ pub fn from_arrow_dyn(array: &dyn ArrowArray, nullable: bool) -> VortexResult<Ar
             }
             ArrowTimeUnit::Second | ArrowTimeUnit::Millisecond => unreachable!(),
         },
+        DataType::Interval(_) => from_arrow_interval(array, nullable),
         DataType::Duration(u) => match u {
             ArrowTimeUnit::Second => {
                 from_arrow_temporal(array.as_primitive::<DurationSecondType>(), nullable)

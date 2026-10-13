@@ -63,6 +63,7 @@ use vortex::error::vortex_ensure;
 use vortex::error::vortex_ensure_eq;
 use vortex::error::vortex_err;
 use vortex::extension::datetime::AnyTemporal;
+use vortex::extension::datetime::Interval;
 use vortex_onpair::OnPair;
 
 use crate::CudaBufferExt;
@@ -308,6 +309,9 @@ fn export_canonical(
             Canonical::Extension(extension) => {
                 if !extension.ext_dtype().is::<AnyTemporal>() {
                     vortex_bail!("only support temporal extension types currently");
+                }
+                if extension.ext_dtype().is::<Interval>() {
+                    vortex_bail!("Interval extension types aren't supported yet");
                 }
 
                 let values = extension

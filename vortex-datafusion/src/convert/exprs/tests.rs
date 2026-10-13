@@ -9,7 +9,6 @@ use arrow_array::RecordBatch;
 use arrow_array::StructArray;
 use arrow_schema::DataType;
 use arrow_schema::Field;
-use arrow_schema::IntervalUnit;
 use arrow_schema::Schema;
 use arrow_schema::TimeUnit as ArrowTimeUnit;
 use arrow_schema::extension::Uuid as ArrowUuid;
@@ -759,7 +758,6 @@ fn test_can_be_pushed_down_column_supported(test_schema: Schema) -> DFResult<()>
 }
 
 #[rstest]
-#[case::interval(DataType::Interval(IntervalUnit::YearMonth))]
 #[case::fixed_size_binary(DataType::FixedSizeBinary(16))]
 #[case::decimal32(DataType::Decimal32(1, 2))]
 #[case::decimal64(DataType::Decimal64(1, 2))]
@@ -808,11 +806,7 @@ fn test_literal_ignores_unreferenced_malformed_decimal() -> DFResult<()> {
 fn test_projection_ignores_unreferenced_unsupported_field() -> DFResult<()> {
     let schema = Schema::new(vec![
         Field::new("a", DataType::Int32, false),
-        Field::new(
-            "unsupported",
-            DataType::Interval(IntervalUnit::YearMonth),
-            true,
-        ),
+        Field::new("unsupported", DataType::FixedSizeBinary(16), true),
         Field::new("b", DataType::Int32, false),
     ]);
     let projection = ProjectionExprs::from(vec![ProjectionExpr::new(
@@ -909,7 +903,6 @@ fn test_can_be_pushed_down_literal_supported(test_schema: Schema) -> DFResult<()
 }
 
 #[rstest]
-#[case::interval(ScalarValue::IntervalYearMonth(Some(1)))]
 #[case::fixed_size_binary(ScalarValue::FixedSizeBinary(5, Some(vec![1, 2, 3, 4, 5])))]
 #[case::null_fixed_size_binary(ScalarValue::FixedSizeBinary(5, None))]
 fn test_can_be_pushed_down_literal_unsupported(

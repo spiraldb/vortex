@@ -22,6 +22,7 @@ use arrow_schema::DataType;
 use arrow_schema::Field;
 use arrow_schema::FieldRef;
 use arrow_schema::Fields;
+use arrow_schema::IntervalUnit;
 use arrow_schema::Schema;
 use arrow_schema::SchemaBuilder;
 use arrow_schema::SchemaRef;
@@ -35,6 +36,7 @@ use vortex_array::dtype::StructFields;
 use vortex_array::extension::datetime::AnyTemporal;
 use vortex_array::extension::datetime::Date;
 use vortex_array::extension::datetime::Duration;
+use vortex_array::extension::datetime::Interval;
 use vortex_array::extension::datetime::TemporalMetadata;
 use vortex_array::extension::datetime::Time;
 use vortex_array::extension::datetime::TimeUnit;
@@ -195,6 +197,7 @@ pub(crate) fn from_arrow_data_type(
         DataType::Duration(unit) => {
             DType::Extension(Duration::new(from_arrow_time_unit(*unit), nullability).erased())
         }
+        DataType::Interval(_) => DType::Extension(Interval::new(nullability).erased()),
         DataType::List(e)
         | DataType::LargeList(e)
         | DataType::ListView(e)
@@ -422,6 +425,7 @@ pub(crate) fn to_data_type_naive(dtype: &DType) -> VortexResult<DataType> {
                     TemporalMetadata::Duration(unit) => {
                         DataType::Duration(to_arrow_time_unit(*unit)?)
                     }
+                    TemporalMetadata::Interval => DataType::Interval(IntervalUnit::MonthDayNano),
                 });
             };
 
@@ -632,6 +636,25 @@ mod test {
         let arrow = DataType::Duration(arrow_unit);
         assert_eq!(to_data_type_naive(&dtype)?, arrow);
         assert_eq!(from_arrow_data_type(&arrow, Nullability::Nullable)?, dtype);
+        Ok(())
+    }
+
+    #[rstest]
+    #[case(IntervalUnit::YearMonth)]
+    #[case(IntervalUnit::DayTime)]
+    #[case(IntervalUnit::MonthDayNano)]
+    fn test_interval_dtype_converts_to_month_day_nano(
+        #[case] unit: IntervalUnit,
+    ) -> VortexResult<()> {
+        let dtype = from_arrow_data_type(&DataType::Interval(unit), Nullability::Nullable)?;
+        assert_eq!(
+            dtype,
+            DType::Extension(Interval::new(Nullability::Nullable).erased())
+        );
+        assert_eq!(
+            to_data_type_naive(&dtype)?,
+            DataType::Interval(IntervalUnit::MonthDayNano)
+        );
         Ok(())
     }
 
@@ -868,7 +891,6 @@ mod test {
     // Regression test for https://github.com/vortex-data/vortex/issues/8346: unsupported Arrow
     // types must return an error instead of panicking with `unimplemented!`.
     #[rstest]
-    #[case::interval(DataType::Interval(arrow_schema::IntervalUnit::DayTime))]
     #[case::fixed_size_binary(DataType::FixedSizeBinary(3))]
     fn test_try_from_arrow_unsupported_type_errors(#[case] data_type: DataType) {
         let err = DType::try_from_arrow((&data_type, Nullability::NonNullable))
