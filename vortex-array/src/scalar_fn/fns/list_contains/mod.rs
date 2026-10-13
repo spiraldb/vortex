@@ -527,11 +527,8 @@ fn lists_contain_needles(
         values.take(PrimitiveArray::new(gathered.row_idx, Validity::NonNullable).into_array())?;
     // A valid list with elements gathered at least one comparison. A null list gathered none,
     // and its row is null whatever its bit here.
-    let non_empty = BitBuffer::collect_bool_in(
-        len,
-        |row| gathered.lens[row] != 0,
-        ctx.allocator().clone(),
-    );
+    let non_empty =
+        BitBuffer::collect_bool_in(len, |row| gathered.lens[row] != 0, ctx.allocator().clone());
 
     // `any_null` is only read under SQL null semantics.
     let comparisons = Binary::try_new(elements, needles, Operator::Eq)?.into_array();

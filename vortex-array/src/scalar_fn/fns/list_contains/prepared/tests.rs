@@ -324,9 +324,7 @@ fn test_prepared_set_rows_are_the_constant_list() -> VortexResult<()> {
     let prepared = PreparedSet::set_of(&set).expect("prepared set");
     let sliced = set.slice(1..3)?.optimize()?;
     assert_eq!(sliced.len(), 2);
-    assert!(
-        PreparedSet::set_of(&sliced).is_some_and(|sliced| sliced.shares_set_with(prepared))
-    );
+    assert!(PreparedSet::set_of(&sliced).is_some_and(|sliced| sliced.shares_set_with(prepared)));
     let filtered = set
         .filter(Mask::from_iter([true, false, true, true]))?
         .optimize()?;

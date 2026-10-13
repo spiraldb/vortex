@@ -29,7 +29,10 @@ impl ListContainsElementReduce for Sequence {
         // Optimization prepares a constant list as a set, so the list is usually a prepared set.
         let Some(list_scalar) = PreparedSet::set_of(list)
             .map(PreparedSetData::list)
-            .or_else(|| list.as_opt::<Constant>().map(|constant| constant.data().scalar()))
+            .or_else(|| {
+                list.as_opt::<Constant>()
+                    .map(|constant| constant.data().scalar())
+            })
         else {
             return Ok(None);
         };
@@ -149,11 +152,7 @@ mod tests {
     }
 
     /// Applies `list_contains(set, root())` to `array`, as given or optimized first.
-    fn apply_list_contains(
-        array: ArrayRef,
-        set: Scalar,
-        optimize: bool,
-    ) -> VortexResult<ArrayRef> {
+    fn apply_list_contains(array: ArrayRef, set: Scalar, optimize: bool) -> VortexResult<ArrayRef> {
         let expr = list_contains(lit(set), root());
         if !optimize {
             return array.apply(&expr);
