@@ -205,9 +205,7 @@ pub(crate) fn execute_arrow_naive(
         DataType::Map(entries_field, keys_sorted) => {
             to_arrow_map(array, entries_field, *keys_sorted, exporter, ctx)
         }
-        DataType::FixedSizeBinary(_)
-        | DataType::Interval(_)
-        | DataType::Union(..) => {
+        DataType::FixedSizeBinary(_) | DataType::Interval(_) | DataType::Union(..) => {
             vortex_bail!("Conversion to Arrow type {resolved_type} is not supported");
         }
     }?;

@@ -126,12 +126,12 @@ pub(super) fn to_arrow_duration(
     }
     Ok(match arrow_unit {
         ArrowTimeUnit::Second => Arc::new(to_temporal_primitive::<DurationSecondType>(array, ctx)?),
-        ArrowTimeUnit::Millisecond => {
-            Arc::new(to_temporal_primitive::<DurationMillisecondType>(array, ctx)?)
-        }
-        ArrowTimeUnit::Microsecond => {
-            Arc::new(to_temporal_primitive::<DurationMicrosecondType>(array, ctx)?)
-        }
+        ArrowTimeUnit::Millisecond => Arc::new(to_temporal_primitive::<DurationMillisecondType>(
+            array, ctx,
+        )?),
+        ArrowTimeUnit::Microsecond => Arc::new(to_temporal_primitive::<DurationMicrosecondType>(
+            array, ctx,
+        )?),
         ArrowTimeUnit::Nanosecond => {
             Arc::new(to_temporal_primitive::<DurationNanosecondType>(array, ctx)?)
         }

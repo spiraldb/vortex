@@ -382,8 +382,9 @@ fn test_in_list_unsupported_input(
 
 #[test]
 fn test_in_list_unsupported_type() -> DFResult<()> {
-    let value: Arc<dyn PhysicalExpr> =
-        Arc::new(df_expr::Literal::new(ScalarValue::IntervalYearMonth(Some(1))));
+    let value: Arc<dyn PhysicalExpr> = Arc::new(df_expr::Literal::new(
+        ScalarValue::IntervalYearMonth(Some(1)),
+    ));
     let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::InListExpr::try_new(
         Arc::clone(&value),
         vec![value],
@@ -807,7 +808,11 @@ fn test_literal_ignores_unreferenced_malformed_decimal() -> DFResult<()> {
 fn test_projection_ignores_unreferenced_unsupported_field() -> DFResult<()> {
     let schema = Schema::new(vec![
         Field::new("a", DataType::Int32, false),
-        Field::new("unsupported", DataType::Interval(IntervalUnit::YearMonth), true),
+        Field::new(
+            "unsupported",
+            DataType::Interval(IntervalUnit::YearMonth),
+            true,
+        ),
         Field::new("b", DataType::Int32, false),
     ]);
     let projection = ProjectionExprs::from(vec![ProjectionExpr::new(
