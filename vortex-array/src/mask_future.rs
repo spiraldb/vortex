@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use futures::FutureExt;
 use futures::TryFutureExt;
+use futures::future;
 use futures::future::BoxFuture;
 use futures::future::Shared;
 use vortex_error::SharedVortexResult;
@@ -54,8 +55,20 @@ impl MaskFuture {
     }
 
     /// Create a MaskFuture from a ready mask.
+    ///
+    /// The future is already resolved, so [`Self::peek`] returns the mask.
     pub fn ready(mask: Mask) -> Self {
-        Self::new(mask.len(), async move { Ok(mask) })
+        let future = Self::new(mask.len(), future::ready(Ok(mask)));
+        // Polling a ready future resolves the shared future without doing any work.
+        drop(future.inner.clone().now_or_never());
+        future
+    }
+
+    /// Returns the mask if it has already been computed, without polling the future.
+    pub fn peek(&self) -> Option<VortexResult<Mask>> {
+        self.inner
+            .peek()
+            .map(|result| result.clone().map_err(VortexError::from))
     }
 
     /// Create a MaskFuture that resolves to a mask with all values set to true.
@@ -69,6 +82,10 @@ impl MaskFuture {
         // allocating another boxed, shared one that would await it only to hand the mask back.
         if range.start == 0 && range.end == self.len {
             return self.clone();
+        }
+        // Keep a computed mask computed, so that it can be peeked.
+        if let Some(Ok(mask)) = self.inner.peek() {
+            return Self::ready(mask.slice(range));
         }
 
         let inner = self.inner.clone();
@@ -122,5 +139,22 @@ mod tests {
             assert_eq!(partial.await?, mask.slice(0..mask.len() - 1));
             Ok(())
         })
+    }
+
+    /// Only computed masks can be peeked, and slicing a computed mask keeps it computed.
+    #[test]
+    fn peek_returns_only_computed_masks() -> VortexResult<()> {
+        let mask = Mask::from_buffer(BitBuffer::from_iter([true, false, true, true, false]));
+        let ready = MaskFuture::ready(mask.clone());
+        assert_eq!(ready.peek().transpose()?, Some(mask.clone()));
+        assert_eq!(
+            ready.slice(1..3).peek().transpose()?,
+            Some(mask.slice(1..3))
+        );
+
+        let pending = MaskFuture::new(mask.len(), async move { Ok(mask) });
+        assert!(pending.peek().is_none());
+        assert!(pending.slice(1..3).peek().is_none());
+        Ok(())
     }
 }

@@ -4,6 +4,7 @@
 use std::ops::BitAnd;
 use std::ops::Range;
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 use futures::FutureExt;
 use futures::future::BoxFuture;
@@ -17,6 +18,7 @@ use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldMask;
 use vortex_array::expr::BoundExpression;
+use vortex_array::serde::SegmentBufferRange;
 use vortex_array::serde::SerializedArray;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
@@ -47,6 +49,15 @@ const PARTIAL_READ_MAX_FRACTION: f64 = 0.5;
 /// Segments with fewer bytes of data than this are read whole: a partial read would save little.
 const PARTIAL_READ_MIN_SEGMENT_BYTES: usize = 32 * 1024;
 
+/// Many encodings decode rows in blocks of up to this many rows, such as FastLanes bit-packing, so
+/// reading one row of a block reads the whole block.
+const PARTIAL_READ_BLOCK_ROWS: usize = 1024;
+
+/// A partial read is only attempted if the selected rows fall in blocks covering at most this
+/// fraction of the layout's rows. Selections that touch more blocks, such as the scattered survivors
+/// of a filter, read most of the segment anyway, and planning the read would only add work.
+const PARTIAL_READ_MAX_BLOCK_FRACTION: f64 = 0.125;
+
 /// The most row ranges a partial read slices the array into. Selected runs separated by the
 /// smallest gaps are merged until this many remain, bounding the planning work.
 const PARTIAL_READ_MAX_RANGES: usize = 256;
@@ -56,6 +67,8 @@ pub struct FlatReader {
     name: Arc<str>,
     segment_source: Arc<dyn SegmentSource>,
     session: VortexSession,
+    /// Where each buffer lives in the segment, computed on the first partial read.
+    buffer_ranges: OnceLock<Option<Arc<[SegmentBufferRange]>>>,
 }
 
 impl FlatReader {
@@ -70,6 +83,7 @@ impl FlatReader {
             name,
             segment_source,
             session,
+            buffer_ranges: OnceLock::new(),
         }
     }
 
@@ -78,17 +92,22 @@ impl FlatReader {
         array_future(&self.layout, self.segment_source.as_ref(), &self.session)
     }
 
-    /// Start reading only the rows `mask` selects from `row_range`, if the mask is already known
-    /// and the layout has an inline array tree.
+    /// Start reading only the rows `mask` selects from `row_range`, if the mask has already been
+    /// computed and the layout has an inline array tree.
     ///
     /// Without an inline array tree, or while the mask is still being computed, we read the whole
     /// segment: its request is registered eagerly so that it can be coalesced with others.
     fn partial_read(&self, row_range: &Range<usize>, mask: &MaskFuture) -> Option<PartialRead> {
         self.layout.array_tree()?;
-        let mask = mask.clone().now_or_never()?.ok()?;
+        // Peek rather than poll: polling would compute a pending mask here, on the caller's thread.
+        let mask = mask.peek()?.ok()?;
         let whole_layout = row_range.start == 0
             && u64::try_from(row_range.end).is_ok_and(|end| end == self.layout.row_count());
         if mask.all_true() && whole_layout {
+            return None;
+        }
+        let row_count = usize::try_from(self.layout.row_count()).ok()?;
+        if !touches_few_blocks(&mask, row_range.start, row_count) {
             return None;
         }
 
@@ -97,7 +116,16 @@ impl FlatReader {
             .iter()
             .map(|rows| row_range.start + rows.start..row_range.start + rows.end)
             .collect::<Vec<_>>();
-        let read = match FlatRangeRead::try_new(&self.layout, row_ranges.clone(), &self.session) {
+        let buffer_ranges = self
+            .buffer_ranges
+            .get_or_init(|| FlatRangeRead::buffer_ranges(&self.layout).ok())
+            .clone()?;
+        let read = match FlatRangeRead::try_new_with_buffer_ranges(
+            &self.layout,
+            row_ranges.clone(),
+            &self.session,
+            buffer_ranges,
+        ) {
             Ok(read) => read,
             Err(err) => {
                 trace!("Flat partial read of {} not possible: {err}", self.name);
@@ -212,6 +240,47 @@ impl PartialRead {
         };
         Ok((array, self.mask))
     }
+}
+
+/// Whether the rows `mask` selects, starting at row `offset` of a layout of `row_count` rows, fall
+/// in few enough blocks for a partial read to pay off.
+fn touches_few_blocks(mask: &Mask, offset: usize, row_count: usize) -> bool {
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss,
+        clippy::cast_sign_loss,
+        reason = "a heuristic row budget"
+    )]
+    let max_rows = (row_count as f64 * PARTIAL_READ_MAX_BLOCK_FRACTION) as usize;
+    if mask.true_count() > max_rows {
+        return false;
+    }
+
+    let bits = match mask.bit_buffer() {
+        AllOr::All => {
+            let blocks = (offset + mask.len()).div_ceil(PARTIAL_READ_BLOCK_ROWS)
+                - offset / PARTIAL_READ_BLOCK_ROWS;
+            return blocks * PARTIAL_READ_BLOCK_ROWS <= max_rows;
+        }
+        AllOr::None => return true,
+        AllOr::Some(bits) => bits,
+    };
+
+    // Count the blocks holding a selected row, without materializing the selected ranges.
+    let mut touched_blocks = 0;
+    let mut start = 0;
+    while start < mask.len() {
+        let block = (offset + start) / PARTIAL_READ_BLOCK_ROWS;
+        let end = ((block + 1) * PARTIAL_READ_BLOCK_ROWS - offset).min(mask.len());
+        if bits.slice(start..end).true_count() > 0 {
+            touched_blocks += 1;
+            if touched_blocks * PARTIAL_READ_BLOCK_ROWS > max_rows {
+                return false;
+            }
+        }
+        start = end;
+    }
+    true
 }
 
 /// The ranges of rows `mask` selects, merging those separated by the smallest gaps until at most
@@ -441,12 +510,27 @@ mod test {
     use vortex_mask::Mask;
 
     use super::selected_ranges;
+    use super::touches_few_blocks;
     use crate::LayoutStrategy;
     use crate::layouts::flat::writer::FlatLayoutStrategy;
     use crate::segments::TestSegments;
     use crate::sequence::SequenceId;
     use crate::sequence::SequentialArrayStreamExt;
     use crate::test::new_session;
+
+    #[test]
+    fn touches_few_blocks_counts_distinct_blocks() {
+        let rows = 64 * 1024;
+        // A point and a short run touch two blocks.
+        let mask = Mask::from_slices(rows, vec![(5, 6), (40_000, 40_064)]);
+        assert!(touches_few_blocks(&mask, 0, rows));
+        // Every 997th row touches every block, though only 0.1% of rows are selected.
+        let scattered = Mask::from_indices(rows, (0..rows).step_by(997));
+        assert!(!touches_few_blocks(&scattered, 0, rows));
+        // Runs within the same block count it once.
+        let same_block = Mask::from_indices(rows, (0..1024).step_by(3));
+        assert!(touches_few_blocks(&same_block, 0, rows));
+    }
 
     #[test]
     fn selected_ranges_merges_smallest_gaps() {

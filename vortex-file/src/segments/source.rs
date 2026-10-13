@@ -277,6 +277,9 @@ impl<R: VortexReadAt> Stream for ReadDriver<R> {
     }
 }
 
+/// The most unrequested bytes a segment range request is coalesced across.
+const RANGE_COALESCE_DISTANCE: u64 = 8 * 1024;
+
 pub struct FileSegmentSource {
     segments: Arc<[SegmentSpec]>,
     /// A queue for sending read request events to the I/O stream.
@@ -364,7 +367,13 @@ impl FileSegmentSource {
 
 impl FileSegmentSource {
     /// Register a read of `length` bytes at file `offset`, returning a future for its result.
-    fn read(&self, offset: u64, length: usize, alignment: Alignment) -> SegmentFuture {
+    fn read(
+        &self,
+        offset: u64,
+        length: usize,
+        alignment: Alignment,
+        max_coalesce_distance: Option<u64>,
+    ) -> SegmentFuture {
         let (send, recv) = oneshot::channel();
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let event = ReadEvent::Request(ReadRequest {
@@ -372,6 +381,7 @@ impl FileSegmentSource {
             offset,
             length,
             alignment,
+            max_coalesce_distance,
             callback: send,
         });
 
@@ -402,7 +412,7 @@ impl SegmentSource for FileSegmentSource {
         let Some(spec) = self.segments.get(*id as usize) else {
             return future::ready(Err(vortex_err!("Missing segment: {}", id))).boxed();
         };
-        self.read(spec.offset, spec.length as usize, spec.alignment)
+        self.read(spec.offset, spec.length as usize, spec.alignment, None)
     }
 
     fn request_range(
@@ -421,7 +431,13 @@ impl SegmentSource for FileSegmentSource {
             )))
             .boxed();
         }
-        self.read(spec.offset + range.start as u64, range.len(), alignment)
+        // Coalescing a range across a large gap would read the bytes it was meant to skip.
+        self.read(
+            spec.offset + range.start as u64,
+            range.len(),
+            alignment,
+            Some(RANGE_COALESCE_DISTANCE),
+        )
     }
 }
 
@@ -623,6 +639,7 @@ mod tests {
             offset,
             length,
             alignment: Alignment::none(),
+            max_coalesce_distance: None,
             callback,
         })
     }

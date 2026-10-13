@@ -371,8 +371,10 @@ async fn patched_columns_read_part_of_their_segments() -> VortexResult<()> {
                 .await?
                 .expect("partial read succeeds");
             eprintln!(
-                "{} rows {rows:?}: {} of {segment_bytes} bytes in {} round trips\n{tree}",
+                "{} rows {}..{}: {} of {segment_bytes} bytes in {} round trips\n{tree}",
                 flat.dtype(),
+                rows.start,
+                rows.end,
                 read.nbytes(),
                 read.round_trips,
             );

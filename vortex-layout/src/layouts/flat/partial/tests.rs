@@ -260,7 +260,7 @@ fn requires_inline_array_tree() -> VortexResult<()> {
 /// The flat reader reads only the selected rows when the mask is known up front.
 #[rstest]
 #[case::point(Mask::from_indices(N, [4321]))]
-#[case::scattered(Mask::from_indices(N, (0..N).step_by(997)))]
+#[case::scattered(Mask::from_indices(N, [3, 30_000, 60_001, N - 1]))]
 #[case::run(Mask::from_slices(N, vec![(100, 200)]))]
 fn reader_reads_selected_rows(#[case] mask: Mask) -> VortexResult<()> {
     block_on(|handle| async move {
@@ -302,9 +302,11 @@ fn reader_reads_selected_rows(#[case] mask: Mask) -> VortexResult<()> {
     })
 }
 
-/// A dense mask reads the whole segment.
-#[test]
-fn reader_reads_whole_segment_for_dense_mask() -> VortexResult<()> {
+/// A mask whose rows touch most blocks reads the whole segment.
+#[rstest]
+#[case::dense(Mask::from_slices(N, vec![(0, N - 1)]))]
+#[case::scattered(Mask::from_indices(N, (0..N).step_by(997)))]
+fn reader_reads_whole_segment_for_dense_mask(#[case] mask: Mask) -> VortexResult<()> {
     block_on(|handle| async move {
         let session = new_session().with_handle(handle);
         let mut ctx = session.create_execution_ctx();
@@ -319,7 +321,6 @@ fn reader_reads_whole_segment_for_dense_mask() -> VortexResult<()> {
             &session,
             &Default::default(),
         )?;
-        let mask = Mask::from_slices(N, vec![(0, N - 1)]);
         let result = reader
             .projection_evaluation(
                 &(0..N as u64),
@@ -331,4 +332,37 @@ fn reader_reads_whole_segment_for_dense_mask() -> VortexResult<()> {
         assert_eq!(source.whole_segments.load(Ordering::Relaxed), 1);
         Ok(())
     })
+}
+
+#[test]
+fn segment_bytes_get_serves_only_read_ranges() {
+    use vortex_buffer::ByteBuffer;
+
+    use super::SegmentBytes;
+
+    let bytes = SegmentBytes::default();
+    bytes.insert(vec![
+        (
+            10..20,
+            ByteBuffer::copy_from((10u8..20).collect::<Vec<_>>()),
+        ),
+        (
+            20..25,
+            ByteBuffer::copy_from((20u8..25).collect::<Vec<_>>()),
+        ),
+        (
+            30..40,
+            ByteBuffer::copy_from((30u8..40).collect::<Vec<_>>()),
+        ),
+    ]);
+
+    let get = |range: Range<usize>| bytes.get(&range).map(|b| b.as_slice().to_vec());
+    assert_eq!(get(12..15), Some(vec![12, 13, 14]));
+    // Adjacent reads are copied together.
+    assert_eq!(get(18..23), Some(vec![18, 19, 20, 21, 22]));
+    // Ranges with unread bytes are not served.
+    assert_eq!(get(23..31), None);
+    assert_eq!(get(5..12), None);
+    assert_eq!(get(38..41), None);
+    assert_eq!(get(0..0), Some(vec![]));
 }

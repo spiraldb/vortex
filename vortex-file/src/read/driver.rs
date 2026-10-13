@@ -225,6 +225,12 @@ impl State {
         // Find the next valid request in priority order
         let first_req = self.next_uncoalesced()?;
 
+        // A request may limit how far it is coalesced, which then limits the whole range.
+        let limit = |req: &ReadRequest| {
+            req.max_coalesce_distance
+                .map_or(window.distance, |distance| distance.min(window.distance))
+        };
+        let mut distance = limit(&first_req);
         let mut requests = vec![first_req];
         let mut current_start = requests[0].offset;
         let mut current_end = requests[0].offset + requests[0].length as u64;
@@ -241,8 +247,8 @@ impl State {
             found_new_requests = false;
 
             // Find the range we should scan for coalescing in this iteration
-            let scan_start = current_start.saturating_sub(window.distance);
-            let scan_end = current_end.saturating_add(window.distance);
+            let scan_start = current_start.saturating_sub(distance);
+            let scan_end = current_end.saturating_add(distance);
 
             // Look for requests that can be coalesced with our current range
             for &(req_offset, req_id) in self
@@ -270,8 +276,9 @@ impl State {
 
                 // Check if this request is within coalescing distance of our current range
                 let req_end = req_offset + req.length as u64;
-                if (req_offset <= current_end + window.distance && req_end >= current_start)
-                    || (req_end + window.distance >= current_start && req_offset <= current_end)
+                let req_distance = distance.min(limit(req));
+                if (req_offset <= current_end + req_distance && req_end >= current_start)
+                    || (req_end + req_distance >= current_start && req_offset <= current_end)
                 {
                     // Calculate what the new range would be if we include this request
                     let new_start = current_start.min(req_offset);
@@ -286,6 +293,7 @@ impl State {
 
                     current_start = new_start;
                     current_end = new_end;
+                    distance = req_distance;
                     let req = self
                         .polled_requests
                         .remove(&req_id)
@@ -362,6 +370,7 @@ mod tests {
                 offset,
                 length,
                 alignment: Alignment::none(),
+                max_coalesce_distance: None,
                 callback: tx,
             },
             rx,
@@ -391,6 +400,37 @@ mod tests {
             metrics,
         );
         io_stream.concat().await
+    }
+
+    /// Requests with a coalescing limit are only merged across gaps within that limit.
+    #[rstest::rstest]
+    #[case::unlimited(None, None, 1)]
+    #[case::limited(Some(10), None, 2)]
+    #[case::other_limited(None, Some(10), 2)]
+    #[case::within_limit(Some(100), Some(100), 1)]
+    #[tokio::test]
+    async fn test_coalesce_distance_limit(
+        #[case] first_limit: Option<u64>,
+        #[case] second_limit: Option<u64>,
+        #[case] expected_reads: usize,
+    ) {
+        let (mut req1, _rx1) = create_request(1, 0, 10);
+        let (mut req2, _rx2) = create_request(2, 60, 10);
+        req1.max_coalesce_distance = first_limit;
+        req2.max_coalesce_distance = second_limit;
+        let events = vec![
+            ReadEvent::Request(req1),
+            ReadEvent::Request(req2),
+            ReadEvent::Polled(1),
+            ReadEvent::Polled(2),
+        ];
+
+        let window = CoalesceConfig {
+            distance: 1024,
+            max_size: 4096,
+        };
+        let outputs = collect_outputs(events, Some(window)).await;
+        assert_eq!(outputs.len(), expected_reads);
     }
 
     #[tokio::test]
@@ -559,6 +599,7 @@ mod tests {
             offset: 6,
             length: 5,
             alignment: Alignment::new(2),
+            max_coalesce_distance: None,
             callback: tx1,
         };
         let req2 = ReadRequest {
@@ -566,6 +607,7 @@ mod tests {
             offset: 12,
             length: 1,
             alignment: Alignment::new(4),
+            max_coalesce_distance: None,
             callback: tx2,
         };
 
@@ -634,6 +676,7 @@ mod tests {
             offset: 0,
             length: 10,
             alignment: Alignment::none(),
+            max_coalesce_distance: None,
             callback: tx1,
         };
         let req2 = ReadRequest {
@@ -641,6 +684,7 @@ mod tests {
             offset: 100,
             length: 10,
             alignment: Alignment::none(),
+            max_coalesce_distance: None,
             callback: tx2,
         };
 
@@ -670,6 +714,7 @@ mod tests {
             offset: 10,
             length: 4,
             alignment: Alignment::none(),
+            max_coalesce_distance: None,
             callback: tx1,
         };
         state.on_event(ReadEvent::Request(req1));
@@ -684,6 +729,7 @@ mod tests {
             offset: 20,
             length: 8,
             alignment: Alignment::none(),
+            max_coalesce_distance: None,
             callback: tx2,
         };
         state.on_event(ReadEvent::Request(req2));

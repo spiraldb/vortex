@@ -18,6 +18,7 @@
 //! only the bytes that are looked at.
 
 use std::any::Any;
+use std::backtrace::Backtrace;
 use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::hash::Hash;
@@ -34,6 +35,7 @@ use parking_lot::Mutex;
 use parking_lot::RwLock;
 use tracing::trace;
 use vortex_array::ArrayRef;
+use vortex_array::ArraySlots;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
@@ -64,6 +66,9 @@ use crate::segments::SegmentSource;
 /// The most IO round trips a partial read makes before giving up.
 const MAX_ROUND_TRIPS: usize = 4;
 
+/// Unread ranges separated by at most this many unread bytes are read with one request.
+const COALESCE_GAP_BYTES: usize = 8 * 1024;
+
 /// Buffers up to this size are read whole with the first request.
 const PREFETCH_BUFFER_BYTES: usize = 4096;
 
@@ -79,7 +84,7 @@ pub struct FlatRangeRead {
     layout: FlatLayout,
     row_ranges: Vec<Range<usize>>,
     session: VortexSession,
-    buffer_ranges: Vec<SegmentBufferRange>,
+    buffer_ranges: Arc<[SegmentBufferRange]>,
     max_bytes: usize,
 }
 
@@ -110,9 +115,25 @@ impl FlatRangeRead {
         row_ranges: Vec<Range<usize>>,
         session: &VortexSession,
     ) -> VortexResult<Self> {
+        let buffer_ranges = Self::buffer_ranges(layout)?;
+        Self::try_new_with_buffer_ranges(layout, row_ranges, session, buffer_ranges)
+    }
+
+    /// The location of each buffer of `layout` within its segment.
+    pub(crate) fn buffer_ranges(layout: &FlatLayout) -> VortexResult<Arc<[SegmentBufferRange]>> {
         let array_tree = layout
             .array_tree()
             .ok_or_else(|| vortex_err!("Partial flat layout reads require an inline array tree"))?;
+        Ok(SerializedArray::segment_buffer_ranges(array_tree.clone())?.into())
+    }
+
+    /// Like [`Self::try_new`], with the buffer ranges from [`Self::buffer_ranges`].
+    pub(crate) fn try_new_with_buffer_ranges(
+        layout: &FlatLayout,
+        row_ranges: Vec<Range<usize>>,
+        session: &VortexSession,
+        buffer_ranges: Arc<[SegmentBufferRange]>,
+    ) -> VortexResult<Self> {
         let row_count = usize::try_from(layout.row_count())?;
         for rows in &row_ranges {
             vortex_ensure!(
@@ -120,8 +141,6 @@ impl FlatRangeRead {
                 "Row range {rows:?} is out of bounds for a flat layout of {row_count} rows"
             );
         }
-        let buffer_ranges = SerializedArray::segment_buffer_ranges(array_tree.clone())?;
-
         Ok(Self {
             layout: layout.clone(),
             row_ranges,
@@ -157,14 +176,24 @@ impl FlatRangeRead {
     ) -> BoxFuture<'static, VortexResult<Option<PartialRows>>> {
         async move {
             let bytes = Arc::new(SegmentBytes::default());
+            // The array is decoded once, unless decoding itself needs bytes that must be read.
+            let mut decoded = None;
             for round_trip in 0..=MAX_ROUND_TRIPS {
                 // Some encodings read their buffers directly rather than through the buffer handle,
                 // such as to validate them while decoding, which panics on a placeholder. We read
                 // the whole segment for them instead.
-                let attempt = panic::catch_unwind(AssertUnwindSafe(|| self.plan(&bytes)))
-                    .unwrap_or_else(|_| {
-                        Err(vortex_err!("Decoding with placeholder buffers panicked"))
-                    });
+                let attempt = panic::catch_unwind(AssertUnwindSafe(|| {
+                    let array = match &decoded {
+                        Some(array) => ArrayRef::clone(array),
+                        None => {
+                            let array = self.decode(&bytes)?;
+                            decoded = Some(array.clone());
+                            array
+                        }
+                    };
+                    self.plan(&array)
+                }))
+                .unwrap_or_else(|_| Err(cheap_err("Decoding with placeholder buffers panicked")));
                 let (arrays, mut needed) = match attempt {
                     Ok(arrays) => {
                         let mut needed = Vec::new();
@@ -179,6 +208,7 @@ impl FlatRangeRead {
                             trace!("Partial flat read failed, reading whole segment: {err}");
                             return Ok(None);
                         }
+                        trace!("Partial flat read round {round_trip} needs more bytes: {err}");
                         (None, missing)
                     }
                 };
@@ -201,6 +231,11 @@ impl FlatRangeRead {
                         .iter()
                         .map(fill_placeholders)
                         .collect::<VortexResult<_>>()?;
+                    trace!(
+                        "Partial flat read of {} of {} bytes in {round_trip} round trips",
+                        bytes.nbytes(),
+                        self.segment_data_nbytes(),
+                    );
                     return Ok(Some(PartialRows {
                         arrays,
                         byte_ranges: bytes.read_ranges(),
@@ -212,6 +247,12 @@ impl FlatRangeRead {
                 if round_trip == MAX_ROUND_TRIPS
                     || bytes.nbytes().saturating_add(unread_bytes) > self.max_bytes
                 {
+                    trace!(
+                        "Partial flat read gave up after {round_trip} round trips, needing {} more \
+                         bytes beyond {}",
+                        unread_bytes,
+                        bytes.nbytes()
+                    );
                     return Ok(None);
                 }
 
@@ -231,8 +272,8 @@ impl FlatRangeRead {
         .boxed()
     }
 
-    /// Decode the array over placeholders for the bytes of `bytes`, and slice it to the rows.
-    fn plan(&self, bytes: &Arc<SegmentBytes>) -> VortexResult<Vec<ArrayRef>> {
+    /// Decode the array over placeholders for the bytes of `bytes`.
+    fn decode(&self, bytes: &Arc<SegmentBytes>) -> VortexResult<ArrayRef> {
         // Buffers already read are decoded from their bytes, so code that reads host memory
         // directly can use them.
         let buffers = self
@@ -253,14 +294,16 @@ impl FlatRangeRead {
             .layout
             .array_tree()
             .ok_or_else(|| vortex_err!("Missing inline array tree"))?;
-        let array = SerializedArray::from_flatbuffer_with_buffers(array_tree.clone(), buffers)?
-            .decode(
-                self.layout.dtype(),
-                row_count,
-                self.layout.array_ctx(),
-                &self.session,
-            )?;
+        SerializedArray::from_flatbuffer_with_buffers(array_tree.clone(), buffers)?.decode(
+            self.layout.dtype(),
+            row_count,
+            self.layout.array_ctx(),
+            &self.session,
+        )
+    }
 
+    /// Slice `array` to the rows, narrowing it to the bytes they need.
+    fn plan(&self, array: &ArrayRef) -> VortexResult<Vec<ArrayRef>> {
         // Attempt every row range, so that one round trip reads all the bytes they are missing.
         let mut ctx = self.session.create_execution_ctx();
         try_all(self.row_ranges.iter().map(|rows| {
@@ -311,23 +354,36 @@ impl SegmentBytes {
             return Some(first_bytes.slice_unaligned(start..start + range.len()));
         }
 
-        // Otherwise the range must be covered by adjacent reads, which we copy together.
-        let mut bytes = ByteBufferMut::with_capacity(range.len());
-        let mut pos = range.start;
-        for (read_range, read_bytes) in &read[first..] {
-            if pos == range.end {
+        // Otherwise the range must be covered by adjacent reads. Check that before copying them
+        // together, since this is also how callers learn that a range has not been read.
+        let mut covered = range.start;
+        let mut last = first;
+        for (idx, (read_range, _)) in read.iter().enumerate().skip(first) {
+            if covered >= range.end {
                 break;
             }
-            if read_range.start > pos {
+            if read_range.start > covered {
                 return None;
             }
-            let end = range.end.min(read_range.end);
-            bytes.extend_from_slice(
-                &read_bytes.as_slice()[pos - read_range.start..end - read_range.start],
-            );
-            pos = end;
+            covered = covered.max(read_range.end);
+            last = idx;
         }
-        (pos == range.end).then(|| bytes.freeze())
+        if covered < range.end {
+            return None;
+        }
+
+        let mut bytes = ByteBufferMut::with_capacity(range.len());
+        let mut pos = range.start;
+        for (read_range, read_bytes) in &read[first..=last] {
+            let end = range.end.min(read_range.end);
+            if end > pos {
+                bytes.extend_from_slice(
+                    &read_bytes.as_slice()[pos - read_range.start..end - read_range.start],
+                );
+                pos = end;
+            }
+        }
+        Some(bytes.freeze())
     }
 
     /// The parts of `ranges` not read yet, coalesced, each with the alignment of the buffer
@@ -351,7 +407,23 @@ impl SegmentBytes {
                 unread.push((pos..range.end, alignment_at(pos, &range, alignment)));
             }
         }
-        unread
+
+        // Merge ranges separated by small unread gaps: each request has a fixed cost that
+        // outweighs reading a few more bytes.
+        let mut merged: Vec<(Range<usize>, Alignment)> = Vec::with_capacity(unread.len());
+        for (range, alignment) in unread {
+            if let Some((last, _)) = merged.last_mut()
+                && range.start - last.end <= COALESCE_GAP_BYTES
+                && !read
+                    .iter()
+                    .any(|(read, _)| read.start < range.start && read.end > last.end)
+            {
+                last.end = range.end;
+            } else {
+                merged.push((range, alignment));
+            }
+        }
+        merged
     }
 
     fn insert(&self, reads: Vec<(Range<usize>, ByteBuffer)>) {
@@ -464,7 +536,7 @@ impl Placeholder {
                 self.aligned_pieces()
                     .filter(|(piece, _)| self.bytes.get(piece).is_none()),
             );
-            vortex_bail!("Bytes {:?} of the segment have not been read", self.pieces);
+            return Err(cheap_err("Bytes of the segment have not been read"));
         };
 
         if let [piece] = pieces.as_slice() {
@@ -559,14 +631,23 @@ fn map_tree(
 ) -> VortexResult<ArrayRef> {
     let mut array = array.clone();
     if array.nchildren() > 0 {
-        let slots = try_all(
+        let slots: ArraySlots = try_all(
             array
                 .slots()
                 .iter()
                 .map(|slot| slot.as_ref().map(|child| map_tree(child, f)).transpose()),
         )?;
-        // SAFETY: every rewrite applied by `f` preserves the logical values of the node.
-        array = unsafe { array.with_slots(slots)? };
+        let changed = slots
+            .iter()
+            .zip(array.slots())
+            .any(|(new, old)| match (new, old) {
+                (Some(new), Some(old)) => !ArrayRef::ptr_eq(new, old),
+                _ => false,
+            });
+        if changed {
+            // SAFETY: every rewrite applied by `f` preserves the logical values of the node.
+            array = unsafe { array.with_slots(slots)? };
+        }
     }
     f(array)
 }
@@ -595,18 +676,43 @@ fn push_down_slice(array: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<Arra
         return Ok(array);
     }
     // Slice kernels search positional children, such as patch indices or run ends, in host
-    // memory, so these must be read first.
-    if let Some(child) = array.nth_child(0) {
-        for (name, grandchild) in child.named_children() {
-            if is_positional(&name) {
-                require_read(&grandchild)?;
+    // memory, so these must be read first and swapped in.
+    let array = match array.nth_child(0) {
+        Some(child) => {
+            let mut slots = child.slots().to_vec();
+            let mut filled = false;
+            for (idx, slot) in child.slots().iter().enumerate() {
+                if let Some(grandchild) = slot
+                    && is_positional(&child.slot_name(idx))
+                {
+                    require_read(grandchild)?;
+                    slots[idx] = Some(fill_placeholders(grandchild)?);
+                    filled = true;
+                }
+            }
+            if filled {
+                // SAFETY: each positional child is replaced by itself with its bytes read.
+                let child = unsafe { child.clone().with_slots(slots.into_iter().collect())? };
+                // SAFETY: the child holds the same values.
+                unsafe { array.with_slot(0, child)? }
+            } else {
+                array
             }
         }
-    }
+        None => array,
+    };
     match array.execute_parent(ctx)? {
         Some(sliced) => map_tree(&sliced.optimize()?, &mut |node| narrow(node, ctx)),
         None => Ok(array),
     }
+}
+
+/// An error without a backtrace.
+///
+/// Failing to read a placeholder is how a plan learns which bytes it needs, so it happens on every
+/// partial read and must be cheap.
+fn cheap_err(message: &'static str) -> VortexError {
+    VortexError::Other(message.into(), Box::new(Backtrace::disabled()))
 }
 
 /// Whether a child slot holds positions that slicing searches.
@@ -630,7 +736,7 @@ fn require_read(array: &ArrayRef) -> VortexResult<()> {
         return Ok(());
     }
     state.missing.lock().extend(unread);
-    vortex_bail!("Positional children must be read before slicing")
+    Err(cheap_err("Positional children must be read before slicing"))
 }
 
 fn visit_placeholders(array: &ArrayRef, f: &mut dyn FnMut(&Placeholder)) {
