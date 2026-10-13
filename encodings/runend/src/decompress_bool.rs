@@ -148,6 +148,28 @@ fn decode_few_runs_no_offset<E: vortex_array::dtype::IntegerPType>(
     }
 }
 
+/// Decodes runs whose values alternate, beginning with `start`, into a bit buffer.
+///
+/// No per-run values are read: the buffer is prefilled with `false` and every `true` run filled.
+pub fn decode_alternating_bools(
+    run_ends: impl Iterator<Item = usize>,
+    start: bool,
+    length: usize,
+) -> BitBuffer {
+    let mut decoded = BitBufferMut::full(false, length);
+    let mut current_pos = 0usize;
+    let mut value = start;
+    for end in run_ends {
+        if value && end > current_pos {
+            // SAFETY: current_pos < end <= length == decoded.len()
+            unsafe { decoded.fill_range_unchecked(current_pos, end, true) };
+        }
+        current_pos = end;
+        value = !value;
+    }
+    decoded.freeze()
+}
+
 /// Decodes run-end encoded booleans when all values are valid (non-nullable).
 fn decode_bool_non_nullable(
     run_ends: impl Iterator<Item = usize>,

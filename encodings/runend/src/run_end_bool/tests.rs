@@ -53,6 +53,7 @@ fn bools(values: &[Option<bool>]) -> ArrayRef {
 #[case::non_nullable(&[Some(false), Some(false), Some(true), Some(true), Some(false)], false)]
 #[case::starts_true(&[Some(true), Some(false), Some(false)], true)]
 #[case::nulls_in_the_alternation(&[Some(true), None, None, Some(true), Some(false)], true)]
+#[case::null_between_equal_runs(&[Some(true), None, Some(true)], true)]
 #[case::leading_null(&[None, Some(true), Some(true), Some(false)], false)]
 #[case::all_null(&[None, None, None], false)]
 fn encode_roundtrip(#[case] values: &[Option<bool>], #[case] start: bool) -> VortexResult<()> {
@@ -73,9 +74,9 @@ fn encode_roundtrip(#[case] values: &[Option<bool>], #[case] start: bool) -> Vor
 }
 
 #[test]
-fn encode_rejects_nulls_between_equal_runs() -> VortexResult<()> {
+fn encode_rejects_runs_that_do_not_alternate() -> VortexResult<()> {
     let mut ctx = SESSION.create_execution_ctx();
-    let values = bools(&[Some(true), None, Some(true)]);
+    let values = bools(&[Some(true), None, Some(false)]);
     assert!(RunEndBool::encode(&values, &mut ctx)?.is_none());
     // RunEnd keeps explicit values for such arrays.
     assert_arrays_eq!(RunEnd::encode(values.clone(), &mut ctx)?, values, &mut ctx);
@@ -105,7 +106,7 @@ fn from_run_end_merges_repeated_runs() -> VortexResult<()> {
 #[case::whole(0..9)]
 #[case::from_second_run(3..9)]
 #[case::within_runs(1..7)]
-fn slice_keeps_the_encoding(#[case] range: Range<usize>) -> VortexResult<()> {
+fn slice_keeps_the_encoding(#[case] range: std::ops::Range<usize>) -> VortexResult<()> {
     let mut ctx = SESSION.create_execution_ctx();
     let array = RunEndBool::try_new(
         buffer![2u32, 4, 7, 9].into_array(),
@@ -120,7 +121,9 @@ fn slice_keeps_the_encoding(#[case] range: Range<usize>) -> VortexResult<()> {
         .into_array()
         .slice(range.clone())?;
 
-    let sliced = array.slice(range)?;
+    let sliced = array
+        .slice(range)?
+        .execute_until::<RunEndBool>(&mut ctx)?;
     assert!(sliced.is::<RunEndBool>());
     assert_arrays_eq!(sliced, expected, &mut ctx);
     assert_arrays_eq!(roundtrip(&sliced, &ArrayContext::empty())?, expected, &mut ctx);
