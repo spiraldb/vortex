@@ -13,11 +13,11 @@ use crate::IntoArray;
 use crate::builtins::ArrayBuiltins;
 use crate::validity::Validity;
 
-impl RowFnExecutionArgs {
+impl RowFnExecutionArgs<'_> {
     /// Resolve validity and try direct valid-row execution before filtered execution.
     pub(super) fn execute_valid_only(
         &self,
-        kernel: impl Fn(
+        kernel: impl FnOnce(
             BorrowedRowFnArgs<'_>,
             &mut Option<Validity>,
             &mut ExecutionCtx,
@@ -34,19 +34,23 @@ impl RowFnExecutionArgs {
         ) -> VortexResult<ArrayRef>,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrayRef> {
-        let validity = self.validity.clone().execute_mask(self.row_count, ctx)?;
+        let validity = self
+            .batch
+            .validity
+            .clone()
+            .execute_mask(self.batch.row_count, ctx)?;
 
         let valid_rows = match validity {
             // An empty mask is both all-valid and all-null. Preserve the all-valid behavior.
             Mask::AllTrue(_) | Mask::AllFalse(0) => {
                 let values = kernel(
-                    self.execution_args(&self.inputs, self.row_count),
+                    self.execution_args(&self.batch.inputs, self.batch.row_count),
                     &mut None,
                     ctx,
                 )?;
-                let values = self.validate_kernel_output(values, self.row_count, ctx)?;
+                let values = self.validate_kernel_output(values, self.batch.row_count, ctx)?;
 
-                return self.finalize_output(values, self.row_count);
+                return self.finalize_output(values, self.batch.row_count);
             }
             Mask::AllFalse(_) => return Ok(self.all_null()),
             Mask::Values(valid_rows) => valid_rows,
@@ -71,7 +75,7 @@ impl RowFnExecutionArgs {
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<Option<ArrayRef>> {
         let Some(values) = try_valid_rows(
-            self.execution_args(&self.inputs, self.row_count),
+            self.execution_args(&self.batch.inputs, self.batch.row_count),
             MaskValuesRef::clone(valid),
             ctx,
         )?

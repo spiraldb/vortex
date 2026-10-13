@@ -15,14 +15,14 @@ use crate::dtype::DType;
 use crate::dtype::NativePType;
 use crate::dtype::PType;
 use crate::match_each_native_ptype;
-use crate::scalar_fn::ExecutionArgs;
 use crate::scalar_fn::ScalarFnId;
 use crate::scalar_fn::ScalarFnVTable;
 use crate::scalar_fn::fns::binary::Binary;
 use crate::scalar_fn::fns::operators::CompareOperator;
 use crate::scalar_fn::unstable::row::RowFn;
+use crate::scalar_fn::unstable::row::RowInputs;
 use crate::scalar_fn::unstable::row::RowVisitor;
-use crate::scalar_fn::unstable::row::execute_rows;
+use crate::scalar_fn::unstable::row::execute_row_inputs;
 
 /// Compare two primitive arrays of the same [`PType`].
 ///
@@ -34,26 +34,23 @@ pub(super) fn compare_primitive(
     op: CompareOperator,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<ArrayRef> {
-    execute_rows(&PrimitiveCompare, &op, &CompareArgs([lhs, rhs]), ctx)
+    execute_row_inputs(&PrimitiveCompare, &op, &CompareArgs([lhs, rhs]), ctx)
 }
 
-/// Borrowed comparison operands, so a call does not allocate an argument vector.
+/// Borrowed comparison operands, so a call neither allocates nor clones them.
 struct CompareArgs<'a>([&'a ArrayRef; 2]);
 
-impl ExecutionArgs for CompareArgs<'_> {
-    fn get(&self, index: usize) -> VortexResult<ArrayRef> {
-        match self.0.get(index) {
-            Some(array) => Ok((*array).clone()),
-            None => vortex_bail!("a comparison has two operands, got index {index}"),
-        }
-    }
-
+impl RowInputs for CompareArgs<'_> {
     fn num_inputs(&self) -> usize {
         2
     }
 
     fn row_count(&self) -> usize {
         self.0[0].len()
+    }
+
+    fn input(&self, index: usize) -> &ArrayRef {
+        self.0[index]
     }
 }
 

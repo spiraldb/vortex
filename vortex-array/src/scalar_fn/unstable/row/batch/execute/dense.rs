@@ -18,11 +18,11 @@ use crate::canonical::AnyCanonical;
 use crate::scalar_fn::unstable::row::execute::DenseAttempt;
 use crate::validity::Validity;
 
-impl RowFnExecutionArgs {
+impl RowFnExecutionArgs<'_> {
     /// Run every stored payload, then attach the input validity without materializing its mask.
     pub(super) fn execute_dense(
         &self,
-        kernel: impl Fn(
+        kernel: impl FnOnce(
             BorrowedRowFnArgs<'_>,
             &mut Option<Validity>,
             &mut ExecutionCtx,
@@ -33,14 +33,14 @@ impl RowFnExecutionArgs {
         // that validity attached, so the output needs neither a second construction nor an
         // all-valid check.
         let mut validity =
-            matches!(self.validity, Validity::Array(_)).then(|| self.validity.clone());
+            matches!(self.batch.validity, Validity::Array(_)).then(|| self.batch.validity.clone());
         let values = kernel(
-            self.execution_args(&self.inputs, self.row_count),
+            self.execution_args(&self.batch.inputs, self.batch.row_count),
             &mut validity,
             ctx,
         )?;
-        if validity.is_none() && matches!(self.validity, Validity::Array(_)) {
-            return self.finalize_output(values, self.row_count);
+        if validity.is_none() && matches!(self.batch.validity, Validity::Array(_)) {
+            return self.finalize_output(values, self.batch.row_count);
         }
 
         self.finalize_dense_output(values, ctx)
@@ -69,8 +69,10 @@ impl RowFnExecutionArgs {
         ) -> VortexResult<ArrayRef>,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrayRef> {
-        let attempt =
-            execute_dense_attempt(self.execution_args(&self.inputs, self.row_count), ctx)?;
+        let attempt = execute_dense_attempt(
+            self.execution_args(&self.batch.inputs, self.batch.row_count),
+            ctx,
+        )?;
 
         match attempt {
             DenseAttempt::Values(values) => self.finalize_dense_output(values, ctx),
@@ -95,11 +97,15 @@ impl RowFnExecutionArgs {
         ) -> VortexResult<ArrayRef>,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrayRef> {
-        let valid_rows = match self.validity.execute_mask(self.row_count, ctx)? {
+        let valid_rows = match self
+            .batch
+            .validity
+            .execute_mask(self.batch.row_count, ctx)?
+        {
             // An array-backed validity can materialize to all valid even though the cheap checks
-            // in `RowFnExecutionArgs::execute` could not prove that. The deferred error therefore
-            // came from an observable row and remains terminal. An empty mask is both all-valid
-            // and all-null, so preserve the all-valid behavior.
+            // in `RowFnExecutionArgs::try_execute_without_retry` could not prove that. The
+            // deferred error therefore came from an observable row and remains terminal. An empty
+            // mask is both all-valid and all-null, so preserve the all-valid behavior.
             Mask::AllTrue(_) | Mask::AllFalse(0) => return Err(deferred_error),
             Mask::AllFalse(_) => return Ok(self.all_null()),
             Mask::Values(valid_rows) => valid_rows,
@@ -121,11 +127,11 @@ impl RowFnExecutionArgs {
         values: ArrayRef,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrayRef> {
-        let values = self.validate_kernel_output(values, self.row_count, ctx)?;
+        let values = self.validate_kernel_output(values, self.batch.row_count, ctx)?;
 
-        match self.validity.clone() {
+        match self.batch.validity.clone() {
             Validity::NonNullable | Validity::AllValid => {
-                self.finalize_output(values, self.row_count)
+                self.finalize_output(values, self.batch.row_count)
             }
             // A canonical kernel output takes the validity directly. Masking it lazily would add
             // a scalar-function node that the caller must execute again just to attach it.
@@ -139,7 +145,7 @@ impl RowFnExecutionArgs {
                     .into_array(),
                     None => values.mask(valid)?,
                 };
-                self.finalize_output(values, self.row_count)
+                self.finalize_output(values, self.batch.row_count)
             }
             Validity::AllInvalid => {
                 unreachable!("all-invalid validity is handled before dense row execution")

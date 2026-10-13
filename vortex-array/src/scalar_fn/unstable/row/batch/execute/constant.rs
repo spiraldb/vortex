@@ -11,11 +11,11 @@ use crate::IntoArray;
 use crate::arrays::ConstantArray;
 use crate::validity::Validity;
 
-impl RowFnExecutionArgs {
+impl RowFnExecutionArgs<'_> {
     /// Execute all-constant inputs by evaluating one row and broadcasting the validated result.
     pub(super) fn execute_all_constant(
         &self,
-        kernel: impl Fn(
+        kernel: impl FnOnce(
             BorrowedRowFnArgs<'_>,
             &mut Option<Validity>,
             &mut ExecutionCtx,
@@ -23,13 +23,13 @@ impl RowFnExecutionArgs {
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrayRef> {
         let result = self.validate_kernel_output(
-            kernel(self.execution_args(&self.inputs, 1), &mut None, ctx)?,
+            kernel(self.execution_args(&self.batch.inputs, 1), &mut None, ctx)?,
             1,
             ctx,
         )?;
         let result = self.finalize_output(result, 1)?;
         let scalar = result.execute_scalar(0, ctx)?;
 
-        Ok(ConstantArray::new(scalar, self.row_count).into_array())
+        Ok(ConstantArray::new(scalar, self.batch.row_count).into_array())
     }
 }
