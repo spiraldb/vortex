@@ -15,13 +15,18 @@ use std::path::Path;
 use std::sync::Arc;
 
 use futures::FutureExt;
+use futures::StreamExt;
 use futures::future::BoxFuture;
+use futures::stream;
 use vortex_array::buffer::BufferHandle;
 use vortex_array::memory::BufferAllocatorRef;
 use vortex_buffer::Alignment;
+use vortex_buffer::BufferMut;
 use vortex_error::VortexResult;
 
 use crate::CoalesceConfig;
+use crate::ReadAtRequest;
+use crate::ReadAtStream;
 use crate::VortexReadAt;
 use crate::runtime::Handle;
 
@@ -56,6 +61,9 @@ pub fn read_exact_at(file: &File, buffer: &mut [u8], offset: u64) -> io::Result<
         file_ref.read_exact(buffer)
     }
 }
+
+/// Reads of at most this many bytes in one [`VortexReadAt::read_ranges`] call share a blocking task.
+const BATCHED_READ_BYTES: usize = 64 * 1024;
 
 /// Default number of concurrent requests to allow for local file I/O.
 pub const DEFAULT_CONCURRENCY: usize = 32;
@@ -124,16 +132,76 @@ impl VortexReadAt for FileReadAt {
         let handle = self.handle.clone();
         let allocator = self.allocator.clone();
         async move {
+            // Allocate on the polling thread rather than in the blocking task. Blocking pool threads
+            // come and go, and a fresh thread's allocator must initialize new memory pages for
+            // every buffer, which costs more than reading a small range.
+            let buffer = allocator.with_capacity_aligned::<u8>(length, alignment);
             handle
-                .spawn_blocking(move || {
-                    let mut buffer = allocator.with_capacity_aligned::<u8>(length, alignment);
-                    // SAFETY: read_exact_at initializes every byte before the buffer is frozen.
-                    unsafe { buffer.set_len(length) };
-                    read_exact_at(&file, buffer.as_mut_slice(), offset)?;
-                    Ok(BufferHandle::new_host(buffer.freeze()))
-                })
+                .spawn_blocking(move || read_into(&file, buffer, offset, length))
                 .await
         }
         .boxed()
     }
+
+    /// Small reads are done one after another in a single blocking task, since handing each to
+    /// its own task costs more than the read. Larger reads each get a task, to run in parallel.
+    fn read_ranges(&self, requests: Arc<[ReadAtRequest]>) -> ReadAtStream {
+        let (small, large): (Vec<_>, Vec<_>) = requests
+            .iter()
+            .copied()
+            .partition(|request| request.length <= BATCHED_READ_BYTES);
+
+        let large = large
+            .into_iter()
+            .map(|request| {
+                let read = self.read_at(request.offset, request.length, request.alignment);
+                async move { (request, read.await) }
+            })
+            .collect::<Vec<_>>();
+        let large = stream::iter(large).buffer_unordered(self.concurrency().max(1));
+        if small.is_empty() {
+            return large.boxed();
+        }
+
+        let file = Arc::clone(&self.file);
+        let handle = self.handle.clone();
+        let allocator = self.allocator.clone();
+        let small = async move {
+            let buffers = small
+                .iter()
+                .map(|request| {
+                    allocator.with_capacity_aligned::<u8>(request.length, request.alignment)
+                })
+                .collect::<Vec<_>>();
+            let reads = handle
+                .spawn_blocking(move || {
+                    small
+                        .into_iter()
+                        .zip(buffers)
+                        .map(|(request, buffer)| {
+                            let read = read_into(&file, buffer, request.offset, request.length);
+                            (request, read)
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .await;
+            stream::iter(reads)
+        }
+        .flatten_stream();
+
+        stream::select(large, small).boxed()
+    }
+}
+
+/// Fill `buffer` with `length` bytes of `file` from `offset`.
+fn read_into(
+    file: &File,
+    mut buffer: BufferMut<u8>,
+    offset: u64,
+    length: usize,
+) -> VortexResult<BufferHandle> {
+    // SAFETY: read_exact_at initializes every byte before the buffer is frozen.
+    unsafe { buffer.set_len(length) };
+    read_exact_at(file, buffer.as_mut_slice(), offset)?;
+    Ok(BufferHandle::new_host(buffer.freeze()))
 }

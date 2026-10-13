@@ -10,6 +10,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
 use futures::FutureExt;
+use futures::StreamExt;
 use futures::channel::oneshot;
 use futures::future::BoxFuture;
 use tempfile::NamedTempFile;
@@ -19,6 +20,7 @@ use vortex_buffer::ByteBuffer;
 use vortex_buffer::ByteBufferMut;
 use vortex_error::VortexResult;
 
+use crate::ReadAtRequest;
 use crate::VortexReadAt;
 use crate::runtime::Task;
 use crate::runtime::single::block_on;
@@ -158,6 +160,52 @@ async fn test_file_read_with_real_file_tokio() {
         .await
         .unwrap();
     assert_eq!(full.to_host().await.as_slice(), TEST_DATA);
+}
+
+/// A batch mixing small reads, which share a blocking task, with large ones, each in its own task,
+/// returns every requested range, including reads that fail.
+#[tokio::test]
+async fn test_file_read_ranges_mixes_small_and_large_reads() -> VortexResult<()> {
+    use std::io::Write;
+
+    let data = (0..300_000u32).map(|i| i as u8).collect::<Vec<_>>();
+    let mut temp_file = NamedTempFile::new()?;
+    temp_file.write_all(&data)?;
+    temp_file.flush()?;
+    let file_read = FileReadAt::open(temp_file.path(), TokioRuntime::current())?;
+
+    let requests = [
+        (0, 10, 1),
+        (100_000, 100_000, 8),
+        (5, 4096, 64),
+        (250_000, 70_000, 1),
+        (299_990, 10, 2),
+        // Past the end of the file.
+        (299_995, 10, 1),
+    ]
+    .map(|(offset, length, alignment)| ReadAtRequest {
+        offset,
+        length,
+        alignment: Alignment::new(alignment),
+    });
+    let mut results = file_read
+        .read_ranges(requests.into())
+        .collect::<Vec<_>>()
+        .await;
+    results.sort_by_key(|(request, _)| request.offset);
+    assert_eq!(results.len(), requests.len());
+
+    for (request, result) in results {
+        let range = request.offset as usize..request.offset as usize + request.length;
+        if range.end > data.len() {
+            assert!(result.is_err());
+            continue;
+        }
+        let buffer = result?.to_host().await;
+        assert!(buffer.is_aligned(request.alignment));
+        assert_eq!(buffer.as_slice(), &data[range]);
+    }
+    Ok(())
 }
 
 // ============================================================================
