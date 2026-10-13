@@ -23,14 +23,17 @@ use vortex_error::VortexResult;
 use vortex_session::VortexSession;
 
 use crate::RunEnd;
+use crate::RunEndBool;
 use crate::array::RunEndArrayExt;
 use crate::array::RunEndArraySlotsExt;
 use crate::compute::take_from::RunEndTakeFrom;
+use crate::run_end_bool::RunEndBoolSliceKernel;
 
 pub(super) fn initialize(session: &VortexSession) {
     let kernels = session.kernels();
     kernels.register_execute_parent_kernel(Binary.id(), RunEnd, CompareExecuteAdaptor(RunEnd));
     kernels.register_execute_parent_kernel(Slice.id(), RunEnd, RunEndSliceKernel);
+    kernels.register_execute_parent_kernel(Slice.id(), RunEndBool, RunEndBoolSliceKernel);
     kernels.register_execute_parent_kernel(Filter.id(), RunEnd, FilterExecuteAdaptor(RunEnd));
     kernels.register_execute_parent_kernel(Dict.id(), RunEnd, TakeExecuteAdaptor(RunEnd));
     kernels.register_execute_parent_kernel(Dict.id(), RunEnd, RunEndTakeFrom);

@@ -12,7 +12,6 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::hash::Hash;
 use std::hash::Hasher;
-use std::ops::Range;
 
 use prost::Message as _;
 use vortex_array::Array;
@@ -31,16 +30,15 @@ use vortex_array::VortexSessionExecute;
 use vortex_array::array_slots;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::PrimitiveArray;
+use vortex_array::arrays::Slice;
 use vortex_array::arrays::bool::BoolArrayExt;
-use vortex_array::arrays::slice::SliceReduce;
-use vortex_array::arrays::slice::SliceReduceAdaptor;
 use vortex_array::buffer::BufferHandle;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
+use vortex_array::kernel::ExecuteParentKernel;
 use vortex_array::legacy_session;
 use vortex_array::match_each_unsigned_integer_ptype;
-use vortex_array::optimizer::rules::ParentRuleSet;
 use vortex_array::scalar::Scalar;
 use vortex_array::serde::ArrayChildren;
 use vortex_array::validity::Validity;
@@ -64,8 +62,10 @@ use crate::RunEndArrayExt;
 use crate::RunEndArraySlotsExt;
 use crate::RunEndData;
 use crate::compress::BoolRuns;
+use crate::decompress_bool::decode_alternating_bools;
 use crate::iter::trimmed_ends_iter;
 use crate::ops::find_physical_index;
+use crate::ops::find_slice_end_index;
 
 #[cfg(test)]
 mod tests;
@@ -197,8 +197,10 @@ impl RunEndBool {
         Array::try_from_parts(ArrayParts::new(RunEndBool, dtype, length, data, slots))
     }
 
-    /// Run-end encode a boolean array, or return `None` if a null run separates two runs of the
-    /// same value, as in `[true, null, true]`. Use [`RunEnd::encode`] for such arrays.
+    /// Run-end encode a boolean array, or return `None` if the runs do not alternate.
+    ///
+    /// Null runs take a position in the alternation, so `[true, null, true]` alternates but
+    /// `[true, null, false]` does not. Use [`RunEnd::encode`] for such arrays.
     pub fn encode(
         array: &ArrayRef,
         ctx: &mut ExecutionCtx,
@@ -209,8 +211,8 @@ impl RunEndBool {
     }
 
     /// Convert a boolean [`RunEndArray`] by merging adjacent runs with the same value, such as
-    /// the first two runs of `[false, false, true]`. Returns `None` if a null run separates two
-    /// runs of the same value.
+    /// the first two runs of `[false, false, true]`. Returns `None` if the merged runs do not
+    /// alternate, see [`RunEndBool::encode`].
     pub fn from_run_end(
         array: &RunEndArray,
         ctx: &mut ExecutionCtx,
@@ -265,9 +267,6 @@ fn alternating_values(start: bool, num_runs: usize, validity: Validity) -> Vorte
     let bits = BitBuffer::from_iter((0..num_runs).map(|run| start ^ (run % 2 == 1)));
     BoolArray::try_new(bits, validity)
 }
-
-const RULES: ParentRuleSet<RunEndBool> =
-    ParentRuleSet::new(&[ParentRuleSet::lift(&SliceReduceAdaptor(RunEndBool))]);
 
 impl VTable for RunEndBool {
     type TypedArrayData = RunEndBoolData;
@@ -382,17 +381,15 @@ impl VTable for RunEndBool {
         RunEndBoolSlots::NAMES[idx].to_string()
     }
 
-    fn reduce_parent(
-        array: ArrayView<'_, Self>,
-        parent: &ArrayRef,
-        child_idx: usize,
-    ) -> VortexResult<Option<ArrayRef>> {
-        RULES.evaluate(array, parent, child_idx)
-    }
-
-    /// Expand to a [`RunEnd`] array, so that its kernels and decoding apply.
-    fn execute(array: Array<Self>, _ctx: &mut ExecutionCtx) -> VortexResult<ExecutionResult> {
-        Ok(ExecutionResult::done(array.to_run_end()?))
+    fn execute(array: Array<Self>, ctx: &mut ExecutionCtx) -> VortexResult<ExecutionResult> {
+        let ends = array.ends().clone().execute::<PrimitiveArray>(ctx)?;
+        let (offset, len, start) = (array.offset(), array.len(), array.start());
+        let bits = match_each_unsigned_integer_ptype!(ends.ptype(), |E| {
+            let run_ends = trimmed_ends_iter(ends.as_slice::<E>(), offset, len);
+            decode_alternating_bools(run_ends, start, len)
+        });
+        let validity = array.as_view().validity()?;
+        Ok(ExecutionResult::done(BoolArray::try_new(bits, validity)?))
     }
 }
 
@@ -432,18 +429,36 @@ impl ValidityVTable<RunEndBool> for RunEndBool {
     }
 }
 
-impl SliceReduce for RunEndBool {
-    fn slice(array: ArrayView<'_, Self>, range: Range<usize>) -> VortexResult<Option<ArrayRef>> {
+/// Slice a [`RunEndBool`] by dropping the runs outside `range`, as [`RunEnd`] slicing does.
+#[derive(Debug)]
+pub(crate) struct RunEndBoolSliceKernel;
+
+impl ExecuteParentKernel<RunEndBool> for RunEndBoolSliceKernel {
+    type Parent = Slice;
+
+    fn execute_parent(
+        &self,
+        array: ArrayView<'_, RunEndBool>,
+        parent: ArrayView<'_, Slice>,
+        _child_idx: usize,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Option<ArrayRef>> {
+        let range = parent.slice_range().clone();
+        let begin = find_physical_index(array.ends(), range.start + array.offset(), ctx)?;
+        let end = find_slice_end_index(array.ends(), range.end + array.offset(), ctx)?;
         let slots = RunEndBoolSlots {
-            ends: array.ends().clone(),
-            run_validity: array.run_validity().cloned(),
+            ends: array.ends().slice(begin..end)?,
+            run_validity: array
+                .run_validity()
+                .map(|validity| validity.slice(begin..end))
+                .transpose()?,
         }
         .into_slots();
         let data = RunEndBoolData {
             offset: array.offset() + range.start,
-            start: array.start(),
+            start: array.run_value(begin),
         };
-        // SAFETY: a sub-range of a valid array stays covered by its ends.
+        // SAFETY: the kept runs cover the sliced range, as for `RunEnd` slicing.
         Ok(Some(
             unsafe {
                 Array::from_parts_unchecked(ArrayParts::new(
