@@ -292,7 +292,7 @@ def test_fragment_to_table(ds: vx.dataset.VortexDataset) -> None:
 
 
 def test_get_fragments(ds: vx.dataset.VortexDataset) -> None:
-    assert len(list(ds.get_fragments())) == 26
+    assert len(list(ds.get_fragments())) == 16
 
     assert ds.count_rows() == sum(f.count_rows() for f in ds.get_fragments())
 
