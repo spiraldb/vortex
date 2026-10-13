@@ -310,15 +310,18 @@ fn minmax_supported_dtype(input_dtype: &DType) -> bool {
 /// output dtype for aggregate expression lowering, but the accumulator does not yet compute them.
 /// Fixed-size lists are computed only over fixed-width scalar elements and only up to
 /// [`MAX_FIXED_SIZE_LIST_MIN_MAX_BYTES`] per value, so the extrema that statistics keep for every
-/// chunk stay small.
+/// chunk stay small. Extension types are computed on their storage, so only those whose storage
+/// order is their own order ([`ExtVTable::orders_by_storage`]) are computed.
+///
+/// [`ExtVTable::orders_by_storage`]: crate::dtype::extension::ExtVTable::orders_by_storage
 fn minmax_compute_supported_dtype(input_dtype: &DType) -> bool {
     match input_dtype {
         DType::Bool(_)
         | DType::Primitive(..)
         | DType::Decimal(..)
         | DType::Utf8(..)
-        | DType::Binary(..)
-        | DType::Extension(..) => true,
+        | DType::Binary(..) => true,
+        DType::Extension(ext_dtype) => ext_dtype.orders_by_storage(),
         DType::FixedSizeList(element_dtype, ..) => {
             matches!(
                 element_dtype.as_ref(),
@@ -458,9 +461,13 @@ impl AggregateFnVTable for MinMax {
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<()> {
-        // Fixed-size lists that `min_max` does not compute, such as those over the size cap, have
-        // no extrema in any encoding.
-        if batch.dtype().is_fixed_size_list() && !minmax_compute_supported_dtype(batch.dtype()) {
+        // Fixed-size lists and extension types that `min_max` does not compute, such as lists over
+        // the size cap or types whose storage order is not their own, have no extrema in any
+        // encoding.
+        let dtype = batch.dtype();
+        if (dtype.is_fixed_size_list() || dtype.is_extension())
+            && !minmax_compute_supported_dtype(dtype)
+        {
             return Ok(());
         }
 
@@ -557,6 +564,7 @@ mod tests {
     use crate::arrays::ChunkedArray;
     use crate::arrays::ConstantArray;
     use crate::arrays::DecimalArray;
+    use crate::arrays::ExtensionArray;
     use crate::arrays::FixedSizeListArray;
     use crate::arrays::ListArray;
     use crate::arrays::NullArray;
@@ -566,8 +574,12 @@ mod tests {
     use crate::dtype::DecimalDType;
     use crate::dtype::Nullability;
     use crate::dtype::PType;
+    use crate::dtype::extension::ExtId;
+    use crate::dtype::extension::ForeignExtDType;
     use crate::expr::stats::Precision;
     use crate::expr::stats::Stat;
+    use crate::extension::datetime::TimeUnit;
+    use crate::extension::datetime::Timestamp;
     use crate::scalar::DecimalValue;
     use crate::scalar::Scalar;
     use crate::scalar::ScalarValue;
@@ -1043,6 +1055,49 @@ mod tests {
             )?,
             None
         );
+        Ok(())
+    }
+
+    /// Extension extrema are computed on storage only for types whose storage order is their own.
+    /// Other types get none, from `min_max` or the aggregate, in any encoding.
+    #[test]
+    fn extension_extrema_require_storage_order() -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let storage = buffer![3i64, 1, 2].into_array();
+
+        let timestamp_dtype = Timestamp::new(TimeUnit::Seconds, Nullability::NonNullable).erased();
+        let timestamps = ExtensionArray::new(timestamp_dtype.clone(), storage.clone()).into_array();
+        assert_eq!(
+            min_max(&timestamps, &mut ctx, NumericalAggregateOpts::default())?,
+            Some(MinMaxResult {
+                min: Scalar::extension_ref(timestamp_dtype.clone(), Scalar::from(1i64)),
+                max: Scalar::extension_ref(timestamp_dtype, Scalar::from(3i64)),
+            })
+        );
+
+        #[expect(clippy::disallowed_methods, reason = "test-only id")]
+        let unordered_id = ExtId::new("test.unordered");
+        let unordered_dtype =
+            ForeignExtDType::from_parts(unordered_id, Vec::new(), storage.dtype().clone())?;
+        let unordered = ExtensionArray::new(unordered_dtype, storage).into_array();
+        let constant = ConstantArray::new(unordered.execute_scalar(0, &mut ctx)?, 3).into_array();
+        for array in [unordered, constant] {
+            assert_eq!(
+                min_max(&array, &mut ctx, NumericalAggregateOpts::default())?,
+                None
+            );
+            let mut acc = Accumulator::try_new(
+                MinMax,
+                NumericalAggregateOpts::default(),
+                array.dtype().clone(),
+            )?;
+            acc.accumulate(&array, &mut ctx)?;
+            assert!(
+                acc.finish()?.is_null(),
+                "extrema for {}",
+                array.encoding_id()
+            );
+        }
         Ok(())
     }
 
