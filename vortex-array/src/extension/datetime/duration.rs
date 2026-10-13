@@ -101,9 +101,7 @@ mod tests {
     use crate::dtype::PType;
     use crate::dtype::extension::ExtDType;
     use crate::dtype::extension::ExtVTable;
-    use crate::extension::datetime::AnyTemporal;
     use crate::extension::datetime::Duration;
-    use crate::extension::datetime::TemporalMetadata;
     use crate::extension::datetime::TimeUnit;
     use crate::scalar::PValue;
     use crate::scalar::Scalar;
@@ -124,15 +122,6 @@ mod tests {
         let scalar = Scalar::try_new(dtype, Some(ScalarValue::Primitive(PValue::I64(value))))?;
         assert_eq!(format!("{}", scalar.as_extension()), expected);
         Ok(())
-    }
-
-    #[test]
-    fn matches_any_temporal() {
-        let dtype = Duration::new(TimeUnit::Milliseconds, Nullable).erased();
-        let temporal = dtype.metadata::<AnyTemporal>();
-        assert_eq!(temporal, TemporalMetadata::Duration(&TimeUnit::Milliseconds));
-        assert_eq!(temporal.time_unit(), TimeUnit::Milliseconds);
-        assert!(temporal.to_jiff(0).is_err());
     }
 
     #[test]

@@ -24,6 +24,7 @@ use vortex::error::vortex_bail;
 use vortex::error::vortex_err;
 use vortex::error::vortex_panic;
 use vortex::extension::datetime::AnyTemporal;
+use vortex::extension::datetime::Duration;
 use vortex::extension::datetime::TemporalMetadata;
 use vortex::extension::datetime::TimeUnit;
 use vortex::scalar::DecimalValue;
@@ -138,6 +139,19 @@ impl TryToDataFusion<ScalarValue> for Scalar {
             DType::Extension(ext) => {
                 let storage_scalar = self.as_extension().to_storage_scalar();
 
+                if let Some(unit) = ext.metadata_opt::<Duration>() {
+                    let value = storage_scalar.as_primitive().as_::<i64>();
+                    return Ok(match unit {
+                        TimeUnit::Nanoseconds => ScalarValue::DurationNanosecond(value),
+                        TimeUnit::Microseconds => ScalarValue::DurationMicrosecond(value),
+                        TimeUnit::Milliseconds => ScalarValue::DurationMillisecond(value),
+                        TimeUnit::Seconds => ScalarValue::DurationSecond(value),
+                        TimeUnit::Days => {
+                            unreachable!("Unsupported TimeUnit {unit} for {}", ext.id())
+                        }
+                    });
+                }
+
                 let Some(temporal) = ext.metadata_opt::<AnyTemporal>() else {
                     // Unknown extension type: perform scalar conversion using the canonical
                     // scalar DType.
@@ -175,15 +189,6 @@ impl TryToDataFusion<ScalarValue> for Scalar {
                         TimeUnit::Microseconds => ScalarValue::Time64Microsecond(pv.as_::<i64>()),
                         TimeUnit::Milliseconds => ScalarValue::Time32Millisecond(pv.as_::<i32>()),
                         TimeUnit::Seconds => ScalarValue::Time32Second(pv.as_::<i32>()),
-                        TimeUnit::Days => {
-                            unreachable!("Unsupported TimeUnit {unit} for {}", ext.id())
-                        }
-                    },
-                    TemporalMetadata::Duration(unit) => match unit {
-                        TimeUnit::Nanoseconds => ScalarValue::DurationNanosecond(pv.as_::<i64>()),
-                        TimeUnit::Microseconds => ScalarValue::DurationMicrosecond(pv.as_::<i64>()),
-                        TimeUnit::Milliseconds => ScalarValue::DurationMillisecond(pv.as_::<i64>()),
-                        TimeUnit::Seconds => ScalarValue::DurationSecond(pv.as_::<i64>()),
                         TimeUnit::Days => {
                             unreachable!("Unsupported TimeUnit {unit} for {}", ext.id())
                         }

@@ -239,7 +239,6 @@ impl ToDuckDBScalar for ExtScalar<'_> {
                     vortex_bail!("cannot convert timeunit {unit} to a duckdb time")
                 }
             },
-            TemporalMetadata::Duration(_) => vortex_bail!("DuckDB has no duration type"),
         })
     }
 }
