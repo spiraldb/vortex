@@ -363,35 +363,40 @@ fn runend_decode_slice<T: Copy + Default>(
         }
         Mask::AllFalse(_) => (Buffer::<T>::zeroed(length), Validity::AllInvalid),
         Mask::Values(mask) => {
-            let mut decoded = BufferMut::with_capacity(length);
-            let mut decoded_validity = BitBufferMut::with_capacity(length);
-            for (end, value) in run_ends.zip_eq(
-                values
-                    .iter()
-                    .zip(mask.bit_buffer().iter())
-                    .map(|(&v, is_valid)| is_valid.then_some(v)),
-            ) {
+            // Nulls are usually rare and clustered, so start from all-valid and clear each
+            // maximal streak of null runs once, rather than appending validity per run.
+            let mut decoded: BufferMut<T> = BufferMut::with_capacity(length);
+            let mut decoded_validity = BitBufferMut::full(true, length);
+            let mut null_start = None;
+            for (end, (&value, is_valid)) in
+                run_ends.zip_eq(values.iter().zip(mask.bit_buffer().iter()))
+            {
+                let start = decoded.len();
                 assert!(
-                    end >= decoded.len(),
-                    "Runend ends must be monotonic, got {end} after {}",
-                    decoded.len()
+                    end >= start,
+                    "Runend ends must be monotonic, got {end} after {start}"
                 );
                 assert!(end <= length, "Runend end must be less than overall length");
-                match value {
-                    None => {
-                        decoded_validity.append_n(false, end - decoded.len());
-                        // SAFETY:
-                        // We preallocate enough capacity because we know the total length
-                        unsafe { decoded.push_n_unchecked(T::default(), end - decoded.len()) };
+                let value = if is_valid { value } else { T::default() };
+                // SAFETY:
+                // We preallocate enough capacity because we know the total length
+                unsafe { decoded.push_n_unchecked(value, end - start) };
+                match (is_valid, null_start) {
+                    (false, None) => null_start = Some(start),
+                    (true, Some(null_from)) => {
+                        // SAFETY: null_from <= start <= length == decoded_validity.len()
+                        unsafe { decoded_validity.fill_range_unchecked(null_from, start, false) };
+                        null_start = None;
                     }
-                    Some(value) => {
-                        decoded_validity.append_n(true, end - decoded.len());
-                        // SAFETY:
-                        // We preallocate enough capacity because we know the total length
-                        unsafe { decoded.push_n_unchecked(value, end - decoded.len()) };
-                    }
+                    _ => {}
                 }
             }
+            if let Some(null_from) = null_start {
+                let end = decoded.len();
+                // SAFETY: null_from <= end <= length == decoded_validity.len()
+                unsafe { decoded_validity.fill_range_unchecked(null_from, end, false) };
+            }
+            decoded_validity.truncate(decoded.len());
             (decoded.into(), Validity::from(decoded_validity.freeze()))
         }
     }
@@ -490,6 +495,7 @@ pub fn runend_decode_varbinview(
 mod tests {
     use std::sync::LazyLock;
 
+    use rstest::rstest;
     use vortex_array::VortexSessionExecute;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::assert_arrays_eq;
@@ -567,6 +573,33 @@ mod tests {
         let decoded = runend_decode_primitive(ends, values, 0, 10, &mut ctx)?;
 
         let expected = PrimitiveArray::from_iter(vec![1i32, 1, 2, 2, 2, 3, 3, 3, 3, 3]);
+        assert_arrays_eq!(decoded, expected, &mut ctx);
+        Ok(())
+    }
+
+    #[rstest]
+    #[case::middle_nulls(&[Some(1), None, None, Some(2)], 0, 10)]
+    #[case::leading_and_trailing_nulls(&[None, Some(1), Some(2), None], 0, 10)]
+    #[case::all_null(&[None, None, None, None], 0, 10)]
+    #[case::offset_and_trailing_null(&[None, Some(1), Some(2), None], 1, 8)]
+    fn decode_nullable(
+        #[case] values: &[Option<i32>],
+        #[case] offset: usize,
+        #[case] length: usize,
+    ) -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let ends = [2u32, 5, 7, 10];
+        let expected = PrimitiveArray::from_option_iter(
+            (offset..offset + length)
+                .map(|row| values[ends.iter().position(|&end| row < end as usize).unwrap_or(0)]),
+        );
+        let decoded = runend_decode_primitive(
+            PrimitiveArray::from_iter(ends),
+            PrimitiveArray::from_option_iter(values.iter().copied()),
+            offset,
+            length,
+            &mut ctx,
+        )?;
         assert_arrays_eq!(decoded, expected, &mut ctx);
         Ok(())
     }
