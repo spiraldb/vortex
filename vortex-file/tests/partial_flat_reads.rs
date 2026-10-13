@@ -300,3 +300,86 @@ async fn every_column_reads_part_of_its_segments() -> VortexResult<()> {
     }
     Ok(())
 }
+
+/// Columns that compress with patches: bit-packed integers with rare large outliers, and ALP floats
+/// with values that have no short decimal representation.
+fn patched_columns() -> Vec<(&'static str, ArrayRef)> {
+    vec![
+        (
+            "outliers",
+            PrimitiveArray::from_iter(
+                (0..N as u32).map(|i| if i % 997 == 0 { 1 << 30 | i } else { i % 100 }),
+            )
+            .into_array(),
+        ),
+        (
+            "irrational",
+            PrimitiveArray::from_iter((0..N).map(|i| {
+                if i % 50 == 0 {
+                    (i as f64).sqrt()
+                } else {
+                    (i % 10_000) as f64 * 0.25
+                }
+            }))
+            .into_array(),
+        ),
+    ]
+}
+
+/// Slicing patches searches all of their indices, then reads only the patch values in the range.
+#[tokio::test]
+async fn patched_columns_read_part_of_their_segments() -> VortexResult<()> {
+    let mut ctx = SESSION.create_execution_ctx();
+    let path = write(&table(patched_columns())?, true).await?;
+    let file = SESSION.open_options().open_path(&path).await?;
+    let segment_source = file.segment_source();
+
+    let mut patched = 0;
+    for layout in file.footer().layout().depth_first_traversal() {
+        let layout = layout?;
+        let Some(flat) = layout.as_opt::<Flat>() else {
+            continue;
+        };
+        let flat = flat.clone();
+        if !flat.dtype().is_primitive() {
+            continue;
+        }
+        let whole = flat
+            .new_reader(
+                "".into(),
+                Arc::clone(&segment_source),
+                &SESSION,
+                &Default::default(),
+            )?
+            .projection_evaluation(
+                &(0..flat.row_count()),
+                &vortex_array::expr::root().bind(flat.dtype())?,
+                vortex_array::MaskFuture::new_true(usize::try_from(flat.row_count())?),
+            )?
+            .await?;
+        let tree = whole.display_tree_encodings_only().to_string();
+        if !tree.contains("patch") {
+            continue;
+        }
+        patched += 1;
+
+        for rows in [0..1, 4321..4322, 10_000..10_064] {
+            let read = FlatRangeRead::try_new(&flat, vec![rows.clone()], &SESSION)?;
+            let segment_bytes = read.segment_data_nbytes();
+            let read = read
+                .read(Arc::clone(&segment_source))
+                .await?
+                .expect("partial read succeeds");
+            eprintln!(
+                "{} rows {rows:?}: {} of {segment_bytes} bytes in {} round trips\n{tree}",
+                flat.dtype(),
+                read.nbytes(),
+                read.round_trips,
+            );
+            assert!(read.nbytes() * 10 < segment_bytes);
+            assert_arrays_eq!(read.arrays[0], whole.slice(rows)?, &mut ctx);
+        }
+    }
+    assert!(patched > 0, "expected some layouts with patches");
+    Ok(())
+}
