@@ -592,7 +592,8 @@ impl Patches {
     ///
     /// `self` must be the patches held in the `slots` of that array. The patch children are
     /// read through `state`, so a [`RepeatedArrayProbe`](crate::RepeatedArrayProbe) keeps their
-    /// probes across reads instead of building a searcher per read.
+    /// probes across reads instead of building a searcher per read. A one-off read takes the
+    /// [`Self::get_patched`] path.
     pub fn probe_patched<V: VTable>(
         &self,
         state: &mut ProbeState<'_, V>,
@@ -600,6 +601,12 @@ impl Patches {
         index: usize,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<Option<Scalar>> {
+        // A one-off read keeps nothing between reads, so reading the children through `state`
+        // would build a probe per comparison. `get_patched` shares one probe across the search.
+        if state.retained().is_none() {
+            return self.get_patched(index, ctx);
+        }
+
         let range = if self.chunk_offsets.is_some() {
             let mut chunk_offsets = state
                 .slot(slots.chunk_offsets)?
@@ -619,7 +626,15 @@ impl Patches {
                 let Ok(needle) = T::try_from(needle) else {
                     return Ok(None);
                 };
-                primitive.as_slice::<T>()[range.clone()]
+                primitive
+                    .as_slice::<T>()
+                    .get(range.clone())
+                    .ok_or_else(|| {
+                        vortex_err!(
+                            "patch range {range:?} out of bounds for {} indices",
+                            primitive.len()
+                        )
+                    })?
                     .search_sorted(&needle, SearchSortedSide::Left)?
             })
         } else {
