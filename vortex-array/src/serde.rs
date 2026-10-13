@@ -5,6 +5,7 @@ use std::borrow::Cow;
 use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::iter;
+use std::ops::Range;
 use std::sync::Arc;
 
 use flatbuffers::FlatBufferBuilder;
@@ -656,55 +657,27 @@ impl SerializedArray {
         // for host-resident buffers. Device buffers are sliced directly.
         let segment = segment.ensure_aligned(Alignment::none())?;
 
-        // this can't return the validated array because there is no lifetime to give it, so we
-        // need to cast it below, which is safe.
         let (fb_buffer, flatbuffer_loc) = Self::validate_array_tree(array_tree)?;
-        // SAFETY: fb_buffer was already validated by validate_array_tree above.
-        let fb_array = unsafe { fba::root_as_array_unchecked(fb_buffer.as_ref()) };
-
-        let mut offset = 0usize;
-        let buffers = fb_array
-            .buffers()
-            .unwrap_or_default()
-            .iter()
+        let buffers = Self::segment_buffer_ranges_of(&fb_buffer)?
+            .into_iter()
             .enumerate()
-            .map(|(idx, fb_buf)| {
+            .map(|(idx, SegmentBufferRange { range, alignment })| {
                 let idx = u32::try_from(idx).vortex_expect("buffer count must fit in u32");
-
-                // The padding, length, and resulting offsets all come from the flatbuffer, which
-                // may be corrupt. Use checked arithmetic so malformed metadata returns a
-                // `VortexError` rather than panicking (see issue #8819).
-                let buffer_len = fb_buf.length() as usize;
-                let start = offset
-                    .checked_add(fb_buf.padding() as usize)
-                    .ok_or_else(|| {
-                        vortex_err!("Buffer {idx} offset overflows when adding its padding")
-                    })?;
-                let end = start.checked_add(buffer_len).ok_or_else(|| {
-                    vortex_err!("Buffer {idx} offset overflows when adding its length")
-                })?;
-
-                // The alignment exponent comes from the flatbuffer and may be corrupt, so validate
-                // it rather than panicking on a too-large shift (see issue #8819).
-                let alignment =
-                    Alignment::try_from_untrusted_exponent(fb_buf.alignment_exponent())?;
-                let handle = if let Some(host_data) = buffer_overrides.get(&idx) {
-                    BufferHandle::new_host(host_data.clone()).ensure_aligned(alignment)?
-                } else {
-                    // Bounds-check against the segment so an out-of-range buffer returns a
-                    // `VortexError` rather than panicking when slicing (see issue #8819).
-                    if end > segment.len() {
-                        vortex_bail!(
-                            "Buffer {idx} at offset {start} with length {buffer_len} is out of \
-                             bounds of the {}-byte segment",
-                            segment.len(),
-                        );
-                    }
-                    segment.slice(start..end).ensure_aligned(alignment)?
-                };
-
-                offset = end;
-                Ok(handle)
+                if let Some(host_data) = buffer_overrides.get(&idx) {
+                    return BufferHandle::new_host(host_data.clone()).ensure_aligned(alignment);
+                }
+                // Bounds-check against the segment so an out-of-range buffer returns a
+                // `VortexError` rather than panicking when slicing (see issue #8819).
+                if range.end > segment.len() {
+                    vortex_bail!(
+                        "Buffer {idx} at offset {} with length {} is out of bounds of the \
+                         {}-byte segment",
+                        range.start,
+                        range.len(),
+                        segment.len(),
+                    );
+                }
+                segment.slice(range).ensure_aligned(alignment)
             })
             .collect::<VortexResult<Arc<[_]>>>()?;
 
@@ -714,6 +687,67 @@ impl SerializedArray {
             buffers,
         })
     }
+
+    /// Returns where each buffer of an array tree lives within its segment.
+    ///
+    /// The ranges are in the order of the `Array.buffers` descriptor list, are relative to the start
+    /// of the segment holding the data buffers, and exclude the padding written before each buffer.
+    /// No buffer data is needed to compute them, so they can be used to plan reads of individual
+    /// buffers, or parts of them, before any of the segment has been fetched.
+    pub fn segment_buffer_ranges(
+        array_tree: impl Into<ByteBuffer>,
+    ) -> VortexResult<Vec<SegmentBufferRange>> {
+        let (fb_buffer, _) = Self::validate_array_tree(array_tree)?;
+        Self::segment_buffer_ranges_of(&fb_buffer)
+    }
+
+    fn segment_buffer_ranges_of(fb_buffer: &FlatBuffer) -> VortexResult<Vec<SegmentBufferRange>> {
+        // SAFETY: callers pass a flatbuffer already validated by `validate_array_tree`.
+        let fb_array = unsafe { fba::root_as_array_unchecked(fb_buffer.as_ref()) };
+
+        let mut offset = 0usize;
+        fb_array
+            .buffers()
+            .unwrap_or_default()
+            .iter()
+            .enumerate()
+            .map(|(idx, fb_buf)| {
+                // The padding, length, and resulting offsets all come from the flatbuffer, which
+                // may be corrupt. Use checked arithmetic so malformed metadata returns a
+                // `VortexError` rather than panicking (see issue #8819).
+                let start = offset
+                    .checked_add(fb_buf.padding() as usize)
+                    .ok_or_else(|| {
+                        vortex_err!("Buffer {idx} offset overflows when adding its padding")
+                    })?;
+                let end = start.checked_add(fb_buf.length() as usize).ok_or_else(|| {
+                    vortex_err!("Buffer {idx} offset overflows when adding its length")
+                })?;
+
+                // The alignment exponent comes from the flatbuffer and may be corrupt, so validate
+                // it rather than panicking on a too-large shift (see issue #8819).
+                let alignment =
+                    Alignment::try_from_untrusted_exponent(fb_buf.alignment_exponent())?;
+
+                offset = end;
+                Ok(SegmentBufferRange {
+                    range: start..end,
+                    alignment,
+                })
+            })
+            .collect()
+    }
+}
+
+/// The location of one serialized data buffer within its segment.
+///
+/// See [`SerializedArray::segment_buffer_ranges`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SegmentBufferRange {
+    /// The byte range of the buffer, relative to the start of the segment.
+    pub range: Range<usize>,
+    /// The alignment the buffer must have in memory.
+    pub alignment: Alignment,
 }
 
 struct SerializedArrayChildren<'a> {

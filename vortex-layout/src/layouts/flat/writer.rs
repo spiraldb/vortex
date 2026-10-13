@@ -38,6 +38,12 @@ pub struct FlatLayoutStrategy {
     pub include_padding: bool,
     /// Maximum length of variable length statistics
     pub max_variable_length_statistics_size: usize,
+    /// Whether to store the array tree in the layout metadata rather than the segment.
+    ///
+    /// An inline array tree lets readers decode the array's structure before reading its segment,
+    /// which enables reading only the parts of the segment that some rows need. Defaults to the
+    /// `FLAT_LAYOUT_INLINE_ARRAY_NODE` environment variable being `1`.
+    pub inline_array_tree: bool,
 }
 
 impl Default for FlatLayoutStrategy {
@@ -45,6 +51,7 @@ impl Default for FlatLayoutStrategy {
         Self {
             include_padding: true,
             max_variable_length_statistics_size: 64,
+            inline_array_tree: flat_layout_inline_array_node(),
         }
     }
 }
@@ -59,6 +66,12 @@ impl FlatLayoutStrategy {
     /// Set the maximum length of variable length statistics.
     pub fn with_max_variable_length_statistics_size(mut self, size: usize) -> Self {
         self.max_variable_length_statistics_size = size;
+        self
+    }
+
+    /// Set whether to store the array tree in the layout metadata rather than the segment.
+    pub fn with_inline_array_tree(mut self, inline_array_tree: bool) -> Self {
+        self.inline_array_tree = inline_array_tree;
         self
     }
 }
@@ -152,8 +165,9 @@ impl LayoutStrategy for FlatLayoutStrategy {
         )?;
         // there is at least the flatbuffer and the length
         assert!(buffers.len() >= 2);
-        let array_node =
-            flat_layout_inline_array_node().then(|| buffers[buffers.len() - 2].clone());
+        let array_node = self
+            .inline_array_tree
+            .then(|| buffers[buffers.len() - 2].clone());
         let segment_id = segment_sink.write(sequence_id, buffers).await?;
 
         let None = stream.next().await else {

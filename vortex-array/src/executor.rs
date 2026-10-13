@@ -702,6 +702,18 @@ fn try_execute_parent(
     Ok(None)
 }
 
+impl ArrayRef {
+    /// Apply the first of the session's `execute_parent` kernels that accepts this array as the
+    /// parent of one of its children, without executing anything else.
+    ///
+    /// Returns `None` if no kernel applies. This lets callers push operations such as slices into
+    /// encodings whose kernels need an [`ExecutionCtx`], without decoding the array.
+    pub fn execute_parent(&self, ctx: &mut ExecutionCtx) -> VortexResult<Option<ArrayRef>> {
+        let kernels = Arc::clone(&ctx.execute_parent_kernels);
+        try_execute_parent(self, &kernels, ctx)
+    }
+}
+
 /// A predicate that determines when an array has reached a desired form during execution.
 pub type DonePredicate = fn(&ArrayRef) -> bool;
 

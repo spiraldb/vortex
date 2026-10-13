@@ -346,8 +346,9 @@ impl RunEndData {
             return Ok(());
         }
 
+        // Run ends on a device cannot be read here.
         #[cfg(debug_assertions)]
-        {
+        if ends.is_host() {
             // Run ends must be strictly sorted for binary search to work correctly.
             let pre_validation = ends.statistics().to_owned();
 

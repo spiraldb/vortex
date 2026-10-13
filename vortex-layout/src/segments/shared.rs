@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::ops::Range;
 use std::sync::Arc;
 
 use futures::FutureExt;
@@ -8,6 +9,7 @@ use futures::TryFutureExt;
 use futures::future::BoxFuture;
 use futures::future::WeakShared;
 use vortex_array::buffer::BufferHandle;
+use vortex_buffer::Alignment;
 use vortex_error::SharedVortexResult;
 use vortex_error::VortexError;
 use vortex_error::VortexExpect;
@@ -17,13 +19,20 @@ use vortex_utils::aliases::dash_map::Entry;
 use crate::segments::SegmentFuture;
 use crate::segments::SegmentId;
 use crate::segments::SegmentSource;
+use crate::segments::source::slice_segment;
 
 /// A [`SegmentSource`] that allows multiple requesters to await the same underlying segment
 /// request.
+///
+/// Range requests are shared with identical in-flight range requests, and are served by slicing
+/// the whole segment when it is already in flight.
 pub struct SharedSegmentSource<S> {
     inner: S,
-    in_flight: DashMap<SegmentId, WeakShared<SharedSegmentFuture>>,
+    in_flight: DashMap<RequestKey, WeakShared<SharedSegmentFuture>>,
 }
+
+/// A whole segment (`None`) or an aligned byte range of it.
+type RequestKey = (SegmentId, Option<(Range<usize>, Alignment)>);
 
 type SharedSegmentFuture = BoxFuture<'static, SharedVortexResult<BufferHandle>>;
 
@@ -35,12 +44,15 @@ impl<S: SegmentSource> SharedSegmentSource<S> {
             in_flight: DashMap::default(),
         }
     }
-}
 
-impl<S: SegmentSource> SegmentSource for SharedSegmentSource<S> {
-    fn request(&self, id: SegmentId) -> SegmentFuture {
+    fn shared_request(
+        &self,
+        key: RequestKey,
+        request: impl FnOnce(&S) -> SegmentFuture,
+    ) -> SegmentFuture {
+        let mut request = Some(request);
         loop {
-            match self.in_flight.entry(id) {
+            match self.in_flight.entry(key.clone()) {
                 Entry::Occupied(e) => {
                     if let Some(shared_future) = e.get().upgrade() {
                         return shared_future.map_err(VortexError::from).boxed();
@@ -50,7 +62,10 @@ impl<S: SegmentSource> SegmentSource for SharedSegmentSource<S> {
                     }
                 }
                 Entry::Vacant(e) => {
-                    let future = self.inner.request(id).map_err(Arc::new).boxed().shared();
+                    let request = request
+                        .take()
+                        .vortex_expect("a vacant entry is only visited once");
+                    let future = request(&self.inner).map_err(Arc::new).boxed().shared();
                     e.insert(
                         future
                             .downgrade()
@@ -60,6 +75,32 @@ impl<S: SegmentSource> SegmentSource for SharedSegmentSource<S> {
                 }
             }
         }
+    }
+}
+
+impl<S: SegmentSource> SegmentSource for SharedSegmentSource<S> {
+    fn request(&self, id: SegmentId) -> SegmentFuture {
+        self.shared_request((id, None), |inner| inner.request(id))
+    }
+
+    fn request_range(
+        &self,
+        id: SegmentId,
+        range: Range<usize>,
+        alignment: Alignment,
+    ) -> SegmentFuture {
+        if let Some(whole) = self
+            .in_flight
+            .get(&(id, None))
+            .and_then(|entry| entry.upgrade())
+        {
+            return whole
+                .map(move |segment| slice_segment(segment?, id, range, alignment))
+                .boxed();
+        }
+        self.shared_request((id, Some((range.clone(), alignment))), |inner| {
+            inner.request_range(id, range, alignment)
+        })
     }
 }
 

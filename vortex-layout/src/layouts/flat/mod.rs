@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+mod partial;
 mod reader;
 pub mod writer;
 
@@ -27,6 +28,8 @@ use crate::LayoutReaderContext;
 use crate::LayoutReaderRef;
 use crate::VTable;
 use crate::children::OwnedLayoutChildren;
+pub use crate::layouts::flat::partial::FlatRangeRead;
+pub use crate::layouts::flat::partial::PartialRows;
 use crate::layouts::flat::reader::FlatReader;
 use crate::segments::SegmentId;
 use crate::segments::SegmentSource;

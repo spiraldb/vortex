@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::ops::Range;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -10,6 +11,7 @@ use moka::future::CacheBuilder;
 use moka::policy::EvictionPolicy;
 use rustc_hash::FxBuildHasher;
 use vortex_array::buffer::BufferHandle;
+use vortex_buffer::Alignment;
 use vortex_buffer::ByteBuffer;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
@@ -21,6 +23,7 @@ use vortex_metrics::MetricsRegistry;
 use crate::segments::SegmentFuture;
 use crate::segments::SegmentId;
 use crate::segments::SegmentSource;
+use crate::segments::source::slice_segment;
 
 /// Cache for individual segment byte buffers.
 ///
@@ -277,6 +280,27 @@ impl SegmentSource for SegmentCacheSourceAdapter {
                 tracing::warn!("Failed to store segment {} in cache: {}", id, e);
             }
             Ok(result)
+        }
+        .boxed()
+    }
+
+    /// Serves the range from a cached segment, or otherwise reads only the range from the
+    /// underlying source. Partial reads are not cached.
+    fn request_range(
+        &self,
+        id: SegmentId,
+        range: Range<usize>,
+        alignment: Alignment,
+    ) -> SegmentFuture {
+        let cache = Arc::clone(&self.cache);
+        let delegate = self.source.request_range(id, range.clone(), alignment);
+
+        async move {
+            if let Ok(Some(segment)) = cache.get(id).await {
+                tracing::debug!("Resolved range {:?} of segment {} from cache", range, id);
+                return slice_segment(BufferHandle::new_host(segment), id, range, alignment);
+            }
+            delegate.await
         }
         .boxed()
     }
