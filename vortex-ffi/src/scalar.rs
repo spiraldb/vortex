@@ -960,7 +960,14 @@ mod tests {
             assert_no_error(error);
             assert!(!vx_scalar_is_null(date));
             let roundtrip = vx_scalar_dtype(date);
-            assert_eq!(vx_dtype::as_ref(roundtrip), vx_dtype::as_ref(date_dtype));
+            // Compare the concrete type without initializing the ID interner, whose
+            // parking_lot dependency does not support Miri's strict provenance.
+            let extension = vx_dtype::as_ref(roundtrip).as_extension();
+            assert_eq!(extension.metadata_opt::<Date>(), Some(&TimeUnit::Days));
+            assert_eq!(
+                extension.storage_dtype(),
+                &DType::Primitive(PType::I32, Nullability::NonNullable)
+            );
             assert_eq!(
                 vx_scalar::as_ref(date).as_extension().to_storage_scalar(),
                 Scalar::primitive(20_000i32, Nullability::NonNullable)

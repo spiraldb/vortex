@@ -3,6 +3,7 @@
 
 import math
 import os
+import pickle
 
 import pyarrow as pa
 import pytest
@@ -114,28 +115,18 @@ def test_stream_pyarrow(tmpdir_factory) -> None:
     assert vx.open(str(data_dir / "names.vortex")).to_arrow(schema=table.schema).read_all().equals(table)
 
 
-def test_memory_map_matches_file_reads(vxf: VortexFile) -> None:
-    mapped = vx.open(vxf.path, memory_map=True)
-    indices = vx.array([0, 10, 500_000, 999_999])
-
-    expected = vxf.scan(indices=indices).read_all().to_arrow_table()
-    assert mapped.scan(indices=indices).read_all().to_arrow_table() == expected
-    assert len(mapped) == len(vxf)
-
-
-def test_memory_map_with_footer(vxf: VortexFile) -> None:
-    mapped = vx.open(vxf.path, memory_map=True, footer=vxf.footer)
-    assert (
-        mapped.scan(indices=vx.array([7])).read_all().to_arrow_table()
-        == vxf.scan(indices=vx.array([7])).read_all().to_arrow_table()
-    )
+@pytest.mark.parametrize("with_footer", [False, True])
+def test_memory_map_reads_values(vxf: VortexFile, with_footer: bool) -> None:
+    mapped = vx.open(vxf.path, memory_map=True, footer=vxf.footer if with_footer else None)
+    rows = [0, 7, 10, 500_000, 999_999]
+    assert mapped.scan(indices=vx.array(rows)).read_all().to_pylist() == [record(x) for x in rows]
+    assert len(mapped) == 1_000_000
 
 
-def test_memory_map_pickle_reopens_mapped(vxf: VortexFile) -> None:
-    import pickle
-
+def test_memory_map_pickle_roundtrip_reads_values(vxf: VortexFile) -> None:
     mapped = pickle.loads(pickle.dumps(vx.open(vxf.path, memory_map=True)))
-    assert len(mapped) == len(vxf)
+    assert len(mapped) == 1_000_000
+    assert mapped.scan(indices=vx.array([7, 999_999])).read_all().to_pylist() == [record(7), record(999_999)]
 
 
 def test_memory_map_rejects_segment_cache(vxf: VortexFile) -> None:

@@ -1202,15 +1202,15 @@ mod tests {
                 .projection_evaluation(&(0..3), &expr, MaskFuture::new_true(3))
                 .unwrap()
         })?;
-        assert_eq!(result.dtype(), reader.dtype());
-
-        let mut probe = result.probe();
-        let scalar = probe.execute_scalar(0, &mut ctx)?;
-        assert!(scalar.is_null());
-
-        let scalar = probe.execute_scalar(1, &mut ctx)?;
-        let field = scalar.as_struct().field_by_idx(0).unwrap();
-        assert_eq!(field, Scalar::primitive(2, false.into()));
+        let expected = StructArray::try_from_iter_with_validity(
+            [
+                ("a", buffer![7i32, 2, 3].into_array()),
+                ("b", buffer![4i32, 5, 6].into_array()),
+                ("c", buffer![4i32, 5, 6].into_array()),
+            ],
+            Validity::Array(BoolArray::from_iter([false, true, true]).into_array()),
+        )?;
+        assert_arrays_eq!(result, expected, &mut ctx);
         Ok(())
     }
 
@@ -1251,18 +1251,12 @@ mod tests {
         let result = block_on(move |_| future)?;
 
         let mut ctx = SESSION.create_execution_ctx();
-        if nullable {
-            assert_eq!(
-                result.dtype(),
-                &DType::Primitive(PType::I32, Nullability::Nullable)
-            );
-            assert!(result.execute_scalar(0, &mut ctx)?.is_null());
-            assert_nth_scalar!(result, 1, 20, &mut ctx);
-            assert_nth_scalar!(result, 2, 30, &mut ctx);
+        let expected = if nullable {
+            PrimitiveArray::from_option_iter([None, Some(20i32), Some(30)])
         } else {
-            let expected = PrimitiveArray::from_iter([10i32, 20, 30]);
-            assert_arrays_eq!(result, expected, &mut ctx);
-        }
+            PrimitiveArray::from_iter([10i32, 20, 30])
+        };
+        assert_arrays_eq!(result, expected, &mut ctx);
         Ok(())
     }
 
@@ -1597,9 +1591,9 @@ mod tests {
     }
 
     /// A field named [`RESERVED_VALIDITY_FIELD_NAME`] clashes with the validity partition of a
-    /// nullable struct. Such names are reserved and not supported.
+    /// nullable struct, resolving the integer field as a boolean validity mask.
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "The mask argument to 'mask' must be a non-nullable boolean array")]
     fn test_validity_partition_name_clash() {
         validity_partition_name_clash().unwrap();
     }

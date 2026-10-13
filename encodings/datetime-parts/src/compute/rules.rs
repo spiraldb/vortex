@@ -354,7 +354,11 @@ mod tests {
         assert_eq!(optimized.dtype(), comparison.dtype());
 
         let mut ctx = array_session().create_execution_ctx();
-        assert_eq!(true_count(&optimized, &mut ctx), 2);
+        assert_arrays_eq!(
+            optimized,
+            BoolArray::from_iter([Some(true), Some(true), Some(false)]),
+            &mut ctx
+        );
         Ok(())
     }
 

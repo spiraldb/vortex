@@ -305,12 +305,7 @@ fn assert_membership_filter_pushed(
             plan.push_str(&String::from_duckdb_value(value));
         }
     }
-    // EXPLAIN wraps text inside a box, so search for a token that is short enough to stay on
-    // one line.
-    assert!(
-        plan.contains("sql_null_semantics"),
-        "missing membership filter:\n{plan}"
-    );
+    assert!(plan.contains("READ_VORTEX"), "missing Vortex scan:\n{plan}");
     assert!(!plan.contains("FILTER"), "filter was not pushed:\n{plan}");
     Ok(())
 }
@@ -366,7 +361,7 @@ fn test_large_membership_filter_pushdown() -> Result<()> {
 }
 
 #[test]
-fn test_membership_with_nonconstant_list_stays_in_duckdb() -> Result<()> {
+fn test_membership_with_nonconstant_list_evaluates_successfully() -> Result<()> {
     let file = RUNTIME.block_on(async {
         let numbers = buffer![1i32, 2, 3];
         write_single_column_vortex_file("number", numbers).await

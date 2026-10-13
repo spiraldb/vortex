@@ -509,12 +509,12 @@ mod tests {
     use enum_iterator::all;
     use itertools::Itertools;
     use rstest::rstest;
+    use vortex_buffer::buffer;
     use vortex_error::VortexExpect;
     use vortex_error::VortexResult;
     use vortex_error::vortex_panic;
     use vortex_session::VortexSession;
 
-    use super::list_scalar_elements;
     use crate::ArrayRef;
     use crate::Canonical;
     use crate::IntoArray;
@@ -1132,7 +1132,7 @@ mod tests {
         );
     }
 
-    /// Every flat element dtype is written straight from its values, null elements included.
+    /// Canonicalizing a constant list preserves every flat element dtype and null element.
     #[rstest]
     #[case::bool(
         Scalar::list(
@@ -1168,13 +1168,19 @@ mod tests {
         NullArray::new(2).into_array()
     )]
     #[case::extension(date_list(), date_elements())]
-    fn test_list_scalar_elements_of_flat_dtypes(
+    fn test_canonicalize_list_flat_element_dtypes(
         #[case] list: Scalar,
         #[case] expected: ArrayRef,
     ) -> VortexResult<()> {
         let mut ctx = SESSION.create_execution_ctx();
-        let elements = list_scalar_elements(&list.as_list(), ctx.allocator());
-        assert_arrays_eq!(elements, expected, &mut ctx);
+        let size = expected.len() as u64;
+        let expected = ListViewArray::try_new(
+            expected,
+            buffer![0u64, 0].into_array(),
+            buffer![size, size].into_array(),
+            Validity::NonNullable,
+        )?;
+        assert_arrays_eq!(ConstantArray::new(list, 2), expected, &mut ctx);
         Ok(())
     }
 
