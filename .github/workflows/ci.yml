@@ -631,7 +631,6 @@ jobs:
         run: |
           cargo nextest run --cargo-profile ci --locked --no-capture \
             -p vortex-array-macros --test cpu_features
-      # The `ci` profile is a debug build.
       - name: Rust Tests
         run: |
           cargo nextest run --cargo-profile ci --locked --no-fail-fast \

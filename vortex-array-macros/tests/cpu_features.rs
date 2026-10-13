@@ -1,15 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Guard for the CPU feature test matrix in CI.
-//!
-//! Each matrix entry runs the test suite on an instance family chosen for its CPU features
-//! and sets `VORTEX_EXPECT_CPU_FEATURES` to a comma-separated list such as `avx2,bmi2`.
-//! The check is exact over [`known_features`]: every listed feature must be detected at
-//! runtime and every unlisted one must not be, so a runner that silently lands on a
-//! different CPU (with fewer *or* more features) fails the job instead of testing the wrong
-//! kernels. Without the variable this test does nothing.
-
 #![expect(clippy::tests_outside_test_module)]
 
 #[cfg(target_arch = "aarch64")]
