@@ -5,9 +5,9 @@ use rstest::rstest;
 use vortex_buffer::BitBuffer;
 use vortex_buffer::buffer;
 use vortex_error::VortexResult;
+use vortex_mask::Mask;
 
 use super::PreparedSet;
-use super::PreparedSetArray;
 use crate::ArrayRef;
 use crate::ExecutionCtx;
 use crate::IntoArray;
@@ -54,7 +54,7 @@ fn prepare(list: &Scalar) -> VortexResult<PreparedSetData> {
 
 /// Prepares the non-null list scalar `list` as a set repeated `len` times.
 fn prepare_array(list: &Scalar, len: usize) -> VortexResult<ArrayRef> {
-    Ok(PreparedSetArray::try_new(list.clone(), len)?.into_array())
+    PreparedSet::try_new_array(list.clone(), len)
 }
 
 /// A non-null list scalar of the rows of `elements`.
@@ -320,10 +320,20 @@ fn test_prepared_set_rows_are_the_constant_list() -> VortexResult<()> {
 
     assert_arrays_eq!(set, ConstantArray::new(set_with_null(), 4), &mut ctx);
 
-    // A slice keeps the probe instead of building it again.
-    let sliced = set.slice(1..3)?;
-    assert!(sliced.is::<PreparedSet>());
+    // A slice and a filter keep the probe instead of building it again.
+    let prepared = PreparedSet::set_of(&set).expect("prepared set");
+    let sliced = set.slice(1..3)?.optimize()?;
     assert_eq!(sliced.len(), 2);
+    assert!(
+        PreparedSet::set_of(&sliced).is_some_and(|sliced| sliced.shares_set_with(prepared))
+    );
+    let filtered = set
+        .filter(Mask::from_iter([true, false, true, true]))?
+        .optimize()?;
+    assert_eq!(filtered.len(), 3);
+    assert!(
+        PreparedSet::set_of(&filtered).is_some_and(|filtered| filtered.shares_set_with(prepared))
+    );
     Ok(())
 }
 
@@ -490,10 +500,8 @@ fn chunked_needles() -> VortexResult<ArrayRef> {
 
 /// The set that the list of a `list_contains` node holds.
 fn list_set(node: &ArrayRef) -> PreparedSetData {
-    node.as_::<ScalarFn>()
-        .get_child(0)
-        .as_::<PreparedSet>()
-        .data()
+    PreparedSet::set_of(node.as_::<ScalarFn>().get_child(0))
+        .expect("the list of the node is a prepared set")
         .clone()
 }
 

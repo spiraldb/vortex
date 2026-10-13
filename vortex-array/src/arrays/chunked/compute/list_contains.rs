@@ -26,7 +26,7 @@ impl ListContainsElementReduce for Chunked {
         needles: ArrayView<'_, Chunked>,
         options: &ListContainsOptions,
     ) -> VortexResult<Option<ArrayRef>> {
-        if !list.is::<PreparedSet>() {
+        if PreparedSet::set_of(list).is_none() {
             return Ok(None);
         }
 

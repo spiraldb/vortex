@@ -1,23 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Probing a constant set. [`PreparedSetArray`] holds a constant list together with the probe
-//! built from its elements, so that the kernels of a needle encoding can probe their own values.
+//! Probing a constant set. [`PreparedSet`] holds a constant list together with the probe built
+//! from its elements, so that the kernels of a needle encoding can probe their own values.
 
-mod array;
-mod literal;
+mod data;
+mod function;
 mod rules;
 
 use std::hash::BuildHasher;
 
-pub use array::PreparedSet;
-pub use array::PreparedSetArray;
-pub use array::PreparedSetData;
-pub use literal::PreparedSetLiteral;
+pub use data::PreparedSetData;
+pub use function::PreparedSet;
 use num_traits::ToPrimitive;
 use num_traits::WrappingSub;
 pub(crate) use rules::PrepareConstantListRule;
-pub(crate) use rules::PreparedSetLiteralRule;
 use vortex_buffer::BitBuffer;
 use vortex_buffer::BitBufferMut;
 use vortex_buffer::Buffer;

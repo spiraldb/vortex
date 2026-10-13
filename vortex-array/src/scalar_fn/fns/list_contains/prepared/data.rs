@@ -6,7 +6,6 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::hash::Hash;
 use std::hash::Hasher;
-use std::ops::Range;
 use std::sync::Arc;
 use std::sync::OnceLock;
 
@@ -16,76 +15,30 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure;
 use vortex_error::vortex_panic;
-use vortex_mask::Mask;
-use vortex_session::VortexSession;
-use vortex_session::registry::CachedId;
 
 use super::Probe;
 use super::new_probe;
-use crate::ArrayEq;
-use crate::ArrayHash;
-use crate::ArrayParts;
 use crate::ArrayRef;
-use crate::ArraySlots;
-use crate::EqMode;
 use crate::ExecutionCtx;
-use crate::ExecutionResult;
 use crate::IntoArray;
-use crate::array::Array;
-use crate::array::ArrayId;
-use crate::array::ArrayView;
-use crate::array::OperationsVTable;
-use crate::array::VTable;
-use crate::array::ValidityVTable;
-use crate::array::with_empty_buffers;
 use crate::arrays::BoolArray;
 use crate::arrays::ConstantArray;
 use crate::arrays::constant::list_scalar_elements;
-use crate::arrays::filter::FilterReduce;
-use crate::arrays::filter::FilterReduceAdaptor;
-use crate::arrays::slice::SliceReduce;
-use crate::arrays::slice::SliceReduceAdaptor;
-use crate::buffer::BufferHandle;
 use crate::dtype::DType;
-use crate::optimizer::rules::ParentRuleSet;
 use crate::scalar::Scalar;
 use crate::scalar_fn::ScalarFnRef;
 use crate::scalar_fn::ScalarFnVTableExt;
 use crate::scalar_fn::fns::list_contains::ListContainsOptions;
 use crate::scalar_fn::fns::literal::Literal;
-use crate::serde::ArrayChildren;
 use crate::validity::Validity;
 
-/// A [`PreparedSet`]-encoded array.
-pub type PreparedSetArray = Array<PreparedSet>;
-
-/// A constant, non-null list whose elements are prepared as a set for membership probes.
+/// The options of a [`PreparedSet`]: the list that every row holds, and its set.
 ///
-/// Every row holds the same list, as in a [`ConstantArray`]. A [`PreparedSetLiteral`] applied to
-/// an array, and the constant list of a [`ListContains`] node, become one when the array is
-/// optimized. A [`ListContainsElementReduce`] rule of the needle encoding then pushes the function
-/// into the needle's parts with slices of this array, so that the chunks of a chunked needle all
-/// probe one set, and a [`ListContainsElementKernel`] of the needle encoding gets the prepared set
-/// as its list.
+/// The set is shared by every clone, so every batch a [`PreparedSet`] is applied to, and every
+/// slice or filter of the array it gives, probe the one set. The probe needs an [`ExecutionCtx`]
+/// to materialize the elements, so it is built on the first probe.
 ///
-/// The set is shared, so a slice or a filter of this array does not build it again. This encoding
-/// exists only in memory, and it cannot be serialized.
-///
-/// [`PreparedSetLiteral`]: crate::scalar_fn::fns::list_contains::PreparedSetLiteral
-///
-/// [`ListContains`]: crate::scalar_fn::fns::list_contains::ListContains
-/// [`ListContainsElementKernel`]: crate::scalar_fn::fns::list_contains::ListContainsElementKernel
-/// [`ListContainsElementReduce`]: crate::scalar_fn::fns::list_contains::ListContainsElementReduce
-#[derive(Clone, Debug)]
-pub struct PreparedSet;
-
-/// The data of a [`PreparedSetArray`]: the list that every row holds, and its set.
-///
-/// The set is shared by every clone, so a slice or a filter of the array, and every batch a
-/// [`PreparedSetLiteral`] is applied to, probe the one set. The probe needs an [`ExecutionCtx`] to
-/// materialize the elements, so it is built on the first probe.
-///
-/// [`PreparedSetLiteral`]: crate::scalar_fn::fns::list_contains::PreparedSetLiteral
+/// [`PreparedSet`]: crate::scalar_fn::fns::list_contains::PreparedSet
 #[derive(Clone)]
 pub struct PreparedSetData(Arc<SharedSet>);
 
@@ -345,175 +298,5 @@ impl Eq for PreparedSetData {}
 impl Hash for PreparedSetData {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.list().hash(state);
-    }
-}
-
-impl ArrayHash for PreparedSetData {
-    fn array_hash<H: Hasher>(&self, state: &mut H, _accuracy: EqMode) {
-        self.hash(state);
-    }
-}
-
-impl ArrayEq for PreparedSetData {
-    fn array_eq(&self, other: &Self, _accuracy: EqMode) -> bool {
-        self == other
-    }
-}
-
-impl Array<PreparedSet> {
-    /// Prepares the non-null list scalar `list` as a set repeated `len` times.
-    ///
-    /// [`ListContains`] prepares a constant list itself. A kernel crate can use this to test its
-    /// [`ListContainsElementKernel`] against a prepared set.
-    ///
-    /// [`ListContains`]: crate::scalar_fn::fns::list_contains::ListContains
-    /// [`ListContainsElementKernel`]: crate::scalar_fn::fns::list_contains::ListContainsElementKernel
-    ///
-    /// # Errors
-    ///
-    /// Fails when `list` is not a list, or is null.
-    pub fn try_new(list: Scalar, len: usize) -> VortexResult<Self> {
-        Ok(Self::new(PreparedSetData::try_new(list)?, len))
-    }
-
-    /// An array of `len` rows that share the prepared set `set`.
-    pub fn new(set: PreparedSetData, len: usize) -> Self {
-        let dtype = set.list_dtype().clone();
-
-        // SAFETY: the dtype is the dtype of the list that every row holds.
-        unsafe {
-            Array::from_parts_unchecked(ArrayParts::new(
-                PreparedSet,
-                dtype,
-                len,
-                set,
-                ArraySlots::new(),
-            ))
-        }
-    }
-}
-
-const PARENT_RULES: ParentRuleSet<PreparedSet> = ParentRuleSet::new(&[
-    ParentRuleSet::lift(&FilterReduceAdaptor(PreparedSet)),
-    ParentRuleSet::lift(&SliceReduceAdaptor(PreparedSet)),
-]);
-
-impl VTable for PreparedSet {
-    type TypedArrayData = PreparedSetData;
-
-    type OperationsVTable = Self;
-    type ValidityVTable = Self;
-
-    fn id(&self) -> ArrayId {
-        static ID: CachedId = CachedId::new("vortex.list.prepared_set");
-        *ID
-    }
-
-    fn validate(
-        &self,
-        data: &PreparedSetData,
-        dtype: &DType,
-        _len: usize,
-        _slots: &[Option<ArrayRef>],
-    ) -> VortexResult<()> {
-        vortex_ensure!(
-            data.list_dtype() == dtype,
-            "PreparedSetArray list dtype does not match outer dtype"
-        );
-        Ok(())
-    }
-
-    fn nbuffers(_array: ArrayView<'_, Self>) -> usize {
-        0
-    }
-
-    fn buffer(_array: ArrayView<'_, Self>, idx: usize) -> BufferHandle {
-        vortex_panic!("PreparedSetArray buffer index {idx} out of bounds")
-    }
-
-    fn buffer_name(_array: ArrayView<'_, Self>, _idx: usize) -> Option<String> {
-        None
-    }
-
-    fn with_buffers(
-        &self,
-        array: ArrayView<'_, Self>,
-        buffers: &[BufferHandle],
-    ) -> VortexResult<ArrayParts<Self>> {
-        with_empty_buffers(self, array, buffers)
-    }
-
-    fn slot_name(_array: ArrayView<'_, Self>, idx: usize) -> String {
-        vortex_panic!("PreparedSetArray slot_name index {idx} out of bounds")
-    }
-
-    fn serialize(
-        _array: ArrayView<'_, Self>,
-        _session: &VortexSession,
-    ) -> VortexResult<Option<Vec<u8>>> {
-        vortex_bail!("PreparedSetArray is not serializable")
-    }
-
-    fn deserialize(
-        &self,
-        _dtype: &DType,
-        _len: usize,
-        _metadata: &[u8],
-        _buffers: &[BufferHandle],
-        _children: &dyn ArrayChildren,
-        _session: &VortexSession,
-    ) -> VortexResult<ArrayParts<Self>> {
-        vortex_bail!("PreparedSetArray is not serializable")
-    }
-
-    fn execute(array: Array<Self>, _ctx: &mut ExecutionCtx) -> VortexResult<ExecutionResult> {
-        // The rows hold the list only. The probe is of no use to the canonical form.
-        Ok(ExecutionResult::done(ConstantArray::new(
-            array.data().list().clone(),
-            array.len(),
-        )))
-    }
-
-    fn reduce_parent(
-        array: ArrayView<'_, Self>,
-        parent: &ArrayRef,
-        child_idx: usize,
-    ) -> VortexResult<Option<ArrayRef>> {
-        PARENT_RULES.evaluate(array, parent, child_idx)
-    }
-}
-
-impl OperationsVTable<PreparedSet> for PreparedSet {
-    type ProbeState = ();
-
-    fn scalar_at(
-        array: ArrayView<'_, PreparedSet>,
-        _index: usize,
-        _ctx: &mut ExecutionCtx,
-    ) -> VortexResult<Scalar> {
-        Ok(array.data().list().clone())
-    }
-}
-
-impl ValidityVTable<PreparedSet> for PreparedSet {
-    fn validity(_array: ArrayView<'_, PreparedSet>) -> VortexResult<Validity> {
-        // The list is never null.
-        Ok(Validity::AllValid)
-    }
-}
-
-impl SliceReduce for PreparedSet {
-    fn slice(array: ArrayView<'_, Self>, range: Range<usize>) -> VortexResult<Option<ArrayRef>> {
-        Ok(Some(
-            PreparedSetArray::new(array.data().clone(), range.len()).into_array(),
-        ))
-    }
-}
-
-impl FilterReduce for PreparedSet {
-    fn filter(array: ArrayView<'_, Self>, mask: &Mask) -> VortexResult<Option<ArrayRef>> {
-        Ok(Some(
-            PreparedSetArray::new(array.data().clone(), mask.true_count()).into_array(),
-        ))
     }
 }

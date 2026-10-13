@@ -38,12 +38,13 @@ pub trait ListContainsElementReduce: VTable {
 /// index 1. Unlike the reduce variant, implementations may read and execute on buffers via
 /// the provided [`ExecutionCtx`].
 ///
-/// The list of an optimized node is a [`PreparedSetArray`], so a kernel can get the prepared set
-/// with `list.as_opt::<PreparedSet>()` and probe its own values with
+/// The list of an optimized node is a [`PreparedSet`], so a kernel can get the prepared set with
+/// [`PreparedSet::set_of`] and probe its own values with
 /// [`PreparedSetData::contains`] or [`PreparedSetData::contains_scalar`], or make its result from
 /// matches it found another way with [`PreparedSetData::result_from_bits`].
 ///
-/// [`PreparedSetArray`]: crate::scalar_fn::fns::list_contains::PreparedSetArray
+/// [`PreparedSet`]: crate::scalar_fn::fns::list_contains::PreparedSet
+/// [`PreparedSet::set_of`]: crate::scalar_fn::fns::list_contains::PreparedSet::set_of
 /// [`PreparedSetData::contains`]: crate::scalar_fn::fns::list_contains::PreparedSetData::contains
 /// [`PreparedSetData::contains_scalar`]: crate::scalar_fn::fns::list_contains::PreparedSetData::contains_scalar
 /// [`PreparedSetData::result_from_bits`]: crate::scalar_fn::fns::list_contains::PreparedSetData::result_from_bits

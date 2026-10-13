@@ -4,10 +4,9 @@
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 
-use super::PreparedSetArray;
+use super::PreparedSet;
 use super::PreparedSetData;
 use crate::ArrayRef;
-use crate::IntoArray;
 use crate::array::ArrayView;
 use crate::arrays::Constant;
 use crate::arrays::ScalarFn;
@@ -16,11 +15,9 @@ use crate::arrays::scalar_fn::ScalarFnArrayExt;
 use crate::arrays::scalar_fn::ScalarFnArrayView;
 use crate::dtype::DType;
 use crate::optimizer::rules::ArrayParentReduceRule;
-use crate::optimizer::rules::ArrayReduceRule;
 use crate::scalar_fn::fns::list_contains::ListContains;
-use crate::scalar_fn::fns::list_contains::PreparedSetLiteral;
 
-/// Replaces the constant list of a [`ListContains`] with a [`PreparedSetArray`], so that push-down
+/// Replaces the constant list of a [`ListContains`] with a [`PreparedSet`], so that push-down
 /// rules share one set instead of preparing the constant again for each part of the needle.
 #[derive(Debug)]
 pub(crate) struct PrepareConstantListRule;
@@ -51,24 +48,8 @@ impl ArrayParentReduceRule<Constant> for PrepareConstantListRule {
             return Ok(None);
         }
 
-        let set = PreparedSetArray::new(PreparedSetData::try_new(scalar.clone())?, list.len());
+        let set = PreparedSet::new_array(PreparedSetData::try_new(scalar.clone())?, list.len());
         // SAFETY: every row of the prepared set holds the constant's list.
-        Ok(Some(unsafe {
-            (*parent).clone().with_slot(0, set.into_array())?
-        }))
-    }
-}
-
-/// Replaces a [`PreparedSetLiteral`] applied to an array with the [`PreparedSetArray`] its
-/// execution gives, so that push-down rules see the prepared set without executing anything.
-#[derive(Debug)]
-pub(crate) struct PreparedSetLiteralRule;
-
-impl ArrayReduceRule<ScalarFn> for PreparedSetLiteralRule {
-    fn reduce(&self, array: ArrayView<'_, ScalarFn>) -> VortexResult<Option<ArrayRef>> {
-        Ok(array
-            .scalar_fn()
-            .as_opt::<PreparedSetLiteral>()
-            .map(|set| PreparedSetArray::new(set.clone(), array.len()).into_array()))
+        Ok(Some(unsafe { (*parent).clone().with_slot(0, set)? }))
     }
 }

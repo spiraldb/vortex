@@ -15,10 +15,7 @@ pub use kernel::*;
 use num_traits::Zero;
 pub(crate) use prepared::PrepareConstantListRule;
 pub use prepared::PreparedSet;
-pub use prepared::PreparedSetArray;
 pub use prepared::PreparedSetData;
-pub use prepared::PreparedSetLiteral;
-pub(crate) use prepared::PreparedSetLiteralRule;
 use prost::Message;
 use vortex_buffer::BitBuffer;
 use vortex_buffer::Buffer;
@@ -39,7 +36,6 @@ use crate::arrays::Constant;
 use crate::arrays::ConstantArray;
 use crate::arrays::ListViewArray;
 use crate::arrays::PrimitiveArray;
-use crate::arrays::ScalarFn;
 use crate::arrays::ScalarFnArray;
 use crate::arrays::bool::BoolArrayExt;
 use crate::arrays::listview::ListViewArraySlotsExt;
@@ -224,7 +220,7 @@ impl ScalarFnVTable for ListContains {
     }
 
     /// A constant list and a constant needle fold to their constant answer, in expression and
-    /// array trees alike. Otherwise a literal list becomes a [`PreparedSetLiteral`], so that every
+    /// array trees alike. Otherwise a literal list becomes a [`PreparedSet`], so that every
     /// batch the expression is applied to probes one shared set rather than preparing the list
     /// again.
     fn reduce<T: ReduceNode>(&self, options: &Self::Options, node: &T) -> VortexResult<Option<T>> {
@@ -254,7 +250,7 @@ impl ScalarFnVTable for ListContains {
 
         // The set shares the literal, so the list is not cloned.
         let set = PreparedSetData::try_from_literal(literal.clone())?;
-        let set = node.new_node(PreparedSetLiteral.bind(set), &[])?;
+        let set = node.new_node(PreparedSet.bind(set), &[])?;
         Ok(Some(node.new_node(
             ListContains.bind(*options),
             &[set, node.child(1)],
@@ -372,11 +368,7 @@ fn compute_list_contains(
     }
 
     // The executor's reduce_parent step has already replaced a constant list with a prepared set.
-    // A literal list stays a `PreparedSetLiteral` when the applied expression was not optimized.
-    if let Some(set) = array.as_opt::<PreparedSet>() {
-        return set.contains(value, options, ctx);
-    }
-    if let Some(set) = prepared_literal(array) {
+    if let Some(set) = PreparedSet::set_of(array) {
         return set.contains(value, options, ctx);
     }
 
@@ -392,19 +384,7 @@ fn constant_list(array: &ArrayRef) -> Option<&Scalar> {
     if let Some(constant) = array.as_opt::<Constant>() {
         return Some(constant.data().scalar());
     }
-    if let Some(set) = array.as_opt::<PreparedSet>() {
-        return Some(set.data().list());
-    }
-    prepared_literal(array).map(PreparedSetData::list)
-}
-
-/// The set of a [`PreparedSetLiteral`] array.
-fn prepared_literal(array: &ArrayRef) -> Option<&PreparedSetData> {
-    array
-        .as_opt::<ScalarFn>()?
-        .data()
-        .scalar_fn()
-        .as_opt::<PreparedSetLiteral>()
+    PreparedSet::set_of(array).map(PreparedSetData::list)
 }
 
 /// The list a reduce node holds when it is a constant or a prepared set, in an expression or an
@@ -414,7 +394,7 @@ fn constant_list_node<T: ReduceNode>(node: &T) -> Option<Scalar> {
         return Some(list);
     }
     node.scalar_fn()?
-        .as_opt::<PreparedSetLiteral>()
+        .as_opt::<PreparedSet>()
         .map(|set| set.list().clone())
 }
 
@@ -869,8 +849,8 @@ mod tests {
     use crate::scalar::Scalar;
     use crate::scalar_fn::fns::list_contains::ListContains;
     use crate::scalar_fn::fns::list_contains::ListContainsOptions;
+    use crate::scalar_fn::fns::list_contains::PreparedSet;
     use crate::scalar_fn::fns::list_contains::PreparedSetData;
-    use crate::scalar_fn::fns::list_contains::PreparedSetLiteral;
     use crate::scalar_fn::fns::literal::Literal;
     use crate::stats::StatsSession;
     use crate::stats::stat as stat_expr;
@@ -2091,7 +2071,7 @@ mod tests {
         let expr = in_list(root(), lit(set.clone())).bind(&dtype)?.optimize()?;
         assert_eq!(
             expr.child(0)
-                .as_opt::<PreparedSetLiteral>()
+                .as_opt::<PreparedSet>()
                 .map(PreparedSetData::list),
             Some(&set)
         );
