@@ -31,6 +31,7 @@ REGULAR_IDS = (
     "fineweb-s3",
     "polarsignals",
     "appian-nvme",
+    "job-nvme",
     "vortex-queries",
 )
 COMPACT_IDS = tuple(
@@ -49,6 +50,7 @@ EXPECTED_IDS = {
             "statpopgen",
             "fineweb-s3",
             "appian-nvme",
+            "job-nvme",
             "vortex-queries",
         }
     ),
