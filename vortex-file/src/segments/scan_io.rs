@@ -705,15 +705,24 @@ mod tests {
 
     use futures::FutureExt;
     use futures::StreamExt;
+    use futures::TryStreamExt;
     use futures::channel::mpsc;
     use futures::channel::oneshot;
     use futures::future;
     use futures::future::BoxFuture;
     use rstest::rstest;
+    use vortex_array::ArrayRef;
     use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
     use vortex_array::arrays::ChunkedArray;
     use vortex_array::arrays::StructArray;
+    use vortex_array::assert_arrays_eq;
     use vortex_array::buffer::BufferHandle;
+    use vortex_array::expr::Expression;
+    use vortex_array::expr::get_item;
+    use vortex_array::expr::gt;
+    use vortex_array::expr::lit;
+    use vortex_array::expr::root;
     use vortex_buffer::Alignment;
     use vortex_buffer::Buffer;
     use vortex_buffer::ByteBuffer;
@@ -730,6 +739,7 @@ mod tests {
     use vortex_io::request::IoTarget;
     use vortex_io::session::RuntimeSession;
     use vortex_io::session::RuntimeSessionExt;
+    use vortex_layout::scan::v2;
     use vortex_layout::session::LayoutSession;
     use vortex_metrics::DefaultMetricsRegistry;
     use vortex_session::VortexSession;
@@ -744,6 +754,7 @@ mod tests {
     use super::SharedRead;
     use crate::OpenOptionsSessionExt;
     use crate::WriteOptionsSessionExt;
+    use crate::planning::scan_file;
     use crate::read::IoRequestStream;
     use crate::segments::RequestMetrics;
 
@@ -1146,6 +1157,70 @@ mod tests {
         assert_eq!(bytes.to_host().await.as_slice(), b"data");
         assert_eq!(source.state.lock().stats.forgotten, 1);
         assert_eq!(source.state.lock().stats.forgotten_bytes, 4);
+        Ok(())
+    }
+
+    /// A scan's splits keep the file's read driver running after the file and its reader are
+    /// dropped, as DataFusion drops them once a partition's scan is prepared.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn splits_outlive_the_file() -> VortexResult<()> {
+        let session = session();
+        let bytes = write(&session).await?;
+        let file = session.open_options().open_read(bytes.clone()).await?;
+        let dtype = file.dtype().clone();
+        let expected: Vec<ArrayRef> = file.scan()?.into_stream()?.try_collect().await?;
+        let tasks = v2::prepare(file.scan()?, scan_file(&file))?.execute(None)?;
+        drop(file);
+        // Preparing another scan forgets the state shared with the dropped file's reader.
+        let other = session.open_options().open_read(bytes).await?;
+        drop(v2::prepare(other.scan()?, scan_file(&other))?);
+
+        let mut actual = Vec::new();
+        for task in tasks {
+            actual.extend(task.await?);
+        }
+        assert_arrays_eq!(
+            ChunkedArray::try_new(actual, dtype.clone())?,
+            ChunkedArray::try_new(expected, dtype)?,
+            &mut session.create_execution_ctx()
+        );
+        Ok(())
+    }
+
+    /// A file opened over a reader serves V2's splits through its read driver, announcing,
+    /// prefetching and fetching by protocol request, and returns what the default scan returns.
+    #[rstest]
+    #[case::no_filter(None)]
+    #[case::filter(Some(gt(get_item("a", root()), lit(120_000_i32))))]
+    #[case::filter_matching_nothing(Some(gt(get_item("a", root()), lit(1_000_000_i32))))]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn splits_read_through_the_file_driver(
+        #[case] filter: Option<Expression>,
+    ) -> VortexResult<()> {
+        let session = session();
+        let file = session
+            .open_options()
+            .open_read(write(&session).await?)
+            .await?;
+        assert!(file.scan_io().is_some());
+
+        let builder = || -> VortexResult<_> {
+            let builder = file.scan()?;
+            Ok(match &filter {
+                Some(filter) => builder.with_filter(filter.bind(file.dtype())?),
+                None => builder,
+            })
+        };
+        let dtype = builder()?.dtype()?;
+        let expected: Vec<ArrayRef> = builder()?.into_stream()?.try_collect().await?;
+        let actual: Vec<ArrayRef> = v2::into_stream(builder()?, scan_file(&file))?
+            .try_collect()
+            .await?;
+        assert_arrays_eq!(
+            ChunkedArray::try_new(actual, dtype.clone())?,
+            ChunkedArray::try_new(expected, dtype)?,
+            &mut session.create_execution_ctx()
+        );
         Ok(())
     }
 }

@@ -541,9 +541,14 @@ mod tests {
     use allocator_api2::alloc::AllocError;
     use allocator_api2::alloc::Allocator;
     use allocator_api2::alloc::Global;
+    use futures::TryStreamExt;
     use futures::future::BoxFuture;
     use parking_lot::Mutex;
+    use vortex_array::ArrayRef;
     use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
+    use vortex_array::arrays::ChunkedArray;
+    use vortex_array::assert_arrays_eq;
     use vortex_array::buffer::BufferHandle;
     use vortex_array::memory::BufferAllocatorRef;
     use vortex_array::memory::MemorySessionExt;
@@ -553,6 +558,9 @@ mod tests {
     use vortex_buffer::ByteBufferMut;
     use vortex_error::vortex_bail;
     use vortex_io::session::RuntimeSession;
+    use vortex_layout::scan::v2;
+    use vortex_layout::segments::MokaSegmentCache;
+    use vortex_layout::segments::SegmentEviction;
     use vortex_layout::session::LayoutSession;
     use vortex_session::registry::Id;
     use vortex_session::registry::ReadContext;
@@ -560,6 +568,61 @@ mod tests {
     use super::*;
     use crate::WriteOptionsSessionExt;
     use crate::footer::SegmentSpec;
+    use crate::planning::scan_file;
+
+    #[tokio::test]
+    async fn v2_reuses_configured_segment_cache_across_opens() -> VortexResult<()> {
+        let session = test_session().with_tokio();
+        let expected = Buffer::from_iter(0..65_536_i32).into_array();
+        let mut bytes = ByteBufferMut::empty();
+        session
+            .write_options()
+            .write(&mut bytes, expected.clone().to_array_stream())
+            .await?;
+        let bytes = ByteBuffer::from(bytes);
+        let footer = session
+            .open_options()
+            .open_buffer(bytes.clone())?
+            .footer()
+            .clone();
+        let total_read = Arc::new(AtomicUsize::new(0));
+        let reader = CountingRead {
+            inner: bytes.clone(),
+            total_read: Arc::clone(&total_read),
+            first_read_len: Arc::default(),
+            reads: Arc::default(),
+        };
+        let cache: Arc<dyn SegmentCache> = Arc::new(
+            MokaSegmentCache::new(bytes.len() as u64, SegmentEviction::TinyLfu)
+                .for_file("test-file"),
+        );
+        let mut after_warmup = 0;
+        for iteration in 0..2 {
+            let file = session
+                .open_options()
+                .with_footer(footer.clone())
+                .with_segment_cache(Arc::clone(&cache))
+                .open_read(reader.clone())
+                .await?;
+            assert!(file.scan_io().is_none());
+            let chunks: Vec<ArrayRef> = v2::into_stream(file.scan()?, scan_file(&file))?
+                .try_collect()
+                .await?;
+            assert_arrays_eq!(
+                ChunkedArray::try_new(chunks, expected.dtype().clone())?,
+                expected,
+                &mut session.create_execution_ctx()
+            );
+            let read = total_read.load(Ordering::Relaxed);
+            if iteration == 0 {
+                assert!(read > 0);
+                after_warmup = read;
+            } else {
+                assert_eq!(read, after_warmup, "warm scan must not read segment bytes");
+            }
+        }
+        Ok(())
+    }
 
     fn test_session() -> VortexSession {
         let session = vortex_array::array_session()
