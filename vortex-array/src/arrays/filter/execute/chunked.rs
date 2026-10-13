@@ -175,11 +175,12 @@ impl<'a, T: NativePType, D: ChunkDecoder<T>> ChunkedFilter<'a, T, D> {
 
             load_chunk_words(bits_bytes, bits.offset() + start, chunk_len, &mut words);
             let words = &words[..chunk_len.div_ceil(64)];
-            let selected = words.iter().map(|w| w.count_ones() as usize).sum::<usize>();
 
-            if selected == 0 {
+            if words.iter().all(|&w| w == 0) {
                 continue;
             }
+
+            let selected = words.iter().map(|w| w.count_ones() as usize).sum::<usize>();
 
             if selected == FILTER_CHUNK_LEN {
                 self.push_full_chunk(chunk_idx);
