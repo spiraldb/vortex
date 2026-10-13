@@ -24,6 +24,7 @@ use vortex::error::vortex_bail;
 use vortex::error::vortex_err;
 use vortex::error::vortex_panic;
 use vortex::extension::datetime::AnyTemporal;
+use vortex::extension::datetime::Duration;
 use vortex::extension::datetime::TemporalMetadata;
 use vortex::extension::datetime::TimeUnit;
 use vortex::scalar::DecimalValue;
@@ -137,6 +138,19 @@ impl TryToDataFusion<ScalarValue> for Scalar {
             DType::Variant(_) => vortex_bail!("Variant scalars aren't supported with DF"),
             DType::Extension(ext) => {
                 let storage_scalar = self.as_extension().to_storage_scalar();
+
+                if let Some(unit) = ext.metadata_opt::<Duration>() {
+                    let value = storage_scalar.as_primitive().as_::<i64>();
+                    return Ok(match unit {
+                        TimeUnit::Nanoseconds => ScalarValue::DurationNanosecond(value),
+                        TimeUnit::Microseconds => ScalarValue::DurationMicrosecond(value),
+                        TimeUnit::Milliseconds => ScalarValue::DurationMillisecond(value),
+                        TimeUnit::Seconds => ScalarValue::DurationSecond(value),
+                        TimeUnit::Days => {
+                            unreachable!("Unsupported TimeUnit {unit} for {}", ext.id())
+                        }
+                    });
+                }
 
                 let Some(temporal) = ext.metadata_opt::<AnyTemporal>() else {
                     // Unknown extension type: perform scalar conversion using the canonical
@@ -253,7 +267,11 @@ pub fn scalar_from_df(value: &ScalarValue, session: &VortexSession) -> VortexRes
         | ScalarValue::TimestampSecond(v, _)
         | ScalarValue::TimestampMillisecond(v, _)
         | ScalarValue::TimestampMicrosecond(v, _)
-        | ScalarValue::TimestampNanosecond(v, _) => {
+        | ScalarValue::TimestampNanosecond(v, _)
+        | ScalarValue::DurationSecond(v)
+        | ScalarValue::DurationMillisecond(v)
+        | ScalarValue::DurationMicrosecond(v)
+        | ScalarValue::DurationNanosecond(v) => {
             let dtype = arrow
                 .from_arrow_datatype(&value.data_type(), Nullability::Nullable)
                 .vortex_expect("arrow data type to dtype");
@@ -409,6 +427,7 @@ mod tests {
     use vortex::dtype::UnionVariants;
     use vortex::dtype::i256;
     use vortex::extension::datetime::Date;
+    use vortex::extension::datetime::Duration;
     use vortex::extension::datetime::Time;
     use vortex::extension::datetime::Timestamp;
     use vortex::scalar::DecimalValue;
@@ -735,6 +754,11 @@ mod tests {
         Nullability::NonNullable
     ))]
     #[case::binary(Scalar::binary(ByteBuffer::from(vec![1u8, 2, 3, 4, 5]), Nullability::NonNullable))]
+    #[case::duration(Scalar::extension::<Duration>(TimeUnit::Microseconds, Scalar::from(-42i64)))]
+    #[case::duration_null(Scalar::extension::<Duration>(
+        TimeUnit::Seconds,
+        Scalar::null(DType::Primitive(PType::I64, Nullability::Nullable))
+    ))]
     fn test_round_trip_conversions(#[case] original: Scalar) {
         let df_scalar = original.try_to_df().unwrap();
         let round_trip = from_df(&df_scalar);

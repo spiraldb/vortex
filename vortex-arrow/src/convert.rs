@@ -41,6 +41,10 @@ use arrow_array::types::Decimal32Type;
 use arrow_array::types::Decimal64Type;
 use arrow_array::types::Decimal128Type;
 use arrow_array::types::Decimal256Type;
+use arrow_array::types::DurationMicrosecondType;
+use arrow_array::types::DurationMillisecondType;
+use arrow_array::types::DurationNanosecondType;
+use arrow_array::types::DurationSecondType;
 use arrow_array::types::Float16Type;
 use arrow_array::types::Float32Type;
 use arrow_array::types::Float64Type;
@@ -73,6 +77,7 @@ use vortex_array::IntoArray;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::DecimalArray;
 use vortex_array::arrays::DictArray;
+use vortex_array::arrays::ExtensionArray;
 use vortex_array::arrays::FixedSizeListArray;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::ListViewArray;
@@ -94,6 +99,7 @@ use vortex_array::dtype::NativePType;
 use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
 use vortex_array::dtype::i256;
+use vortex_array::extension::datetime::Duration;
 use vortex_array::extension::datetime::TimeUnit;
 use vortex_array::validity::Validity;
 use vortex_buffer::Alignment;
@@ -314,7 +320,13 @@ impl_from_arrow_temporal!(Time64NanosecondType);
 impl_from_arrow_temporal!(Date32Type);
 impl_from_arrow_temporal!(Date64Type);
 
-/// Conversion of an Arrow temporal array (timestamp/date/time) into a Vortex temporal
+// duration
+impl_from_arrow_temporal!(DurationSecondType);
+impl_from_arrow_temporal!(DurationMillisecondType);
+impl_from_arrow_temporal!(DurationMicrosecondType);
+impl_from_arrow_temporal!(DurationNanosecondType);
+
+/// Conversion of an Arrow temporal array (timestamp/date/time/duration) into a Vortex temporal
 /// extension array.
 pub fn from_arrow_temporal<T: ArrowPrimitiveType>(
     value: &ArrowPrimitiveArray<T>,
@@ -341,7 +353,11 @@ where
         }
         DataType::Date32 => TemporalArray::new_date(arr, TimeUnit::Days).into(),
         DataType::Date64 => TemporalArray::new_date(arr, TimeUnit::Milliseconds).into(),
-        DataType::Duration(_) | DataType::Interval(_) => {
+        DataType::Duration(time_unit) => {
+            let dtype = Duration::new(from_arrow_time_unit(*time_unit), arr.dtype().nullability());
+            ExtensionArray::new(dtype.erased(), arr).into_array()
+        }
+        DataType::Interval(_) => {
             vortex_bail!("Arrow {} arrays are not supported", value.data_type())
         }
         _ => vortex_panic!("Invalid temporal type: {}", value.data_type()),
@@ -824,6 +840,20 @@ pub fn from_arrow_dyn(array: &dyn ArrowArray, nullable: bool) -> VortexResult<Ar
                 from_arrow_temporal(array.as_primitive::<Time64NanosecondType>(), nullable)
             }
             ArrowTimeUnit::Second | ArrowTimeUnit::Millisecond => unreachable!(),
+        },
+        DataType::Duration(u) => match u {
+            ArrowTimeUnit::Second => {
+                from_arrow_temporal(array.as_primitive::<DurationSecondType>(), nullable)
+            }
+            ArrowTimeUnit::Millisecond => {
+                from_arrow_temporal(array.as_primitive::<DurationMillisecondType>(), nullable)
+            }
+            ArrowTimeUnit::Microsecond => {
+                from_arrow_temporal(array.as_primitive::<DurationMicrosecondType>(), nullable)
+            }
+            ArrowTimeUnit::Nanosecond => {
+                from_arrow_temporal(array.as_primitive::<DurationNanosecondType>(), nullable)
+            }
         },
         DataType::Decimal32(..) => {
             from_arrow_decimal32(array.as_primitive::<Decimal32Type>(), nullable)

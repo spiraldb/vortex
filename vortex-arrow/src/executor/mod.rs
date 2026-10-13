@@ -58,6 +58,7 @@ use crate::executor::primitive::to_arrow_primitive;
 use crate::executor::run_end::to_arrow_run_end;
 use crate::executor::struct_::to_arrow_struct;
 use crate::executor::temporal::to_arrow_date;
+use crate::executor::temporal::to_arrow_duration;
 use crate::executor::temporal::to_arrow_time;
 use crate::executor::temporal::to_arrow_timestamp;
 use crate::session::ArrowSessionExt;
@@ -200,11 +201,11 @@ pub(crate) fn execute_arrow_naive(
         dt @ (DataType::Date32 | DataType::Date64) => to_arrow_date(array, dt, ctx),
         dt @ (DataType::Time32(_) | DataType::Time64(_)) => to_arrow_time(array, dt, ctx),
         dt @ DataType::Timestamp(..) => to_arrow_timestamp(array, dt, ctx),
+        dt @ DataType::Duration(_) => to_arrow_duration(array, dt, ctx),
         DataType::Map(entries_field, keys_sorted) => {
             to_arrow_map(array, entries_field, *keys_sorted, exporter, ctx)
         }
         DataType::FixedSizeBinary(_)
-        | DataType::Duration(_)
         | DataType::Interval(_)
         | DataType::Union(..) => {
             vortex_bail!("Conversion to Arrow type {resolved_type} is not supported");
@@ -302,8 +303,13 @@ mod tests {
     use vortex_array::VortexSessionExecute;
     use vortex_array::array_session;
     use vortex_array::arrays::BoolArray;
+    use vortex_array::arrays::ExtensionArray;
     use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::arrays::TemporalArray;
     use vortex_array::arrays::VarBinViewArray;
+    use vortex_array::dtype::Nullability;
+    use vortex_array::extension::datetime::Duration;
+    use vortex_array::extension::datetime::TimeUnit as VortexTimeUnit;
 
     use crate::ArrowSessionExt;
 
@@ -317,6 +323,22 @@ mod tests {
 
     fn boolean() -> ArrayRef {
         BoolArray::from_iter([true, false]).into_array()
+    }
+
+    fn duration_seconds() -> ArrayRef {
+        ExtensionArray::new(
+            Duration::new(VortexTimeUnit::Seconds, Nullability::NonNullable).erased(),
+            PrimitiveArray::from_iter([1i64, 2]).into_array(),
+        )
+        .into_array()
+    }
+
+    fn date_days() -> ArrayRef {
+        TemporalArray::new_date(
+            PrimitiveArray::from_iter([1i32, 2]).into_array(),
+            VortexTimeUnit::Days,
+        )
+        .into()
     }
 
     fn list_target() -> DataType {
@@ -343,6 +365,8 @@ mod tests {
     )]
     #[case::byte_from_primitive(primitive(), DataType::Utf8)]
     #[case::byte_from_bool(boolean(), DataType::Binary)]
+    #[case::duration_unit_mismatch(duration_seconds(), DataType::Duration(TimeUnit::Millisecond))]
+    #[case::duration_from_date(date_days(), DataType::Duration(TimeUnit::Second))]
     fn incompatible_target_returns_error(#[case] array: ArrayRef, #[case] target: DataType) {
         let session = array_session();
         let mut ctx = session.create_execution_ctx();
@@ -363,6 +387,7 @@ mod tests {
     #[case::primitive_to_int64(primitive(), DataType::Int64)]
     #[case::primitive_to_date32(primitive(), DataType::Date32)]
     #[case::primitive_to_timestamp(primitive(), DataType::Timestamp(TimeUnit::Microsecond, None))]
+    #[case::primitive_to_duration(primitive(), DataType::Duration(TimeUnit::Second))]
     #[case::utf8_to_binary(utf8(), DataType::Binary)]
     #[case::utf8_to_large_utf8(utf8(), DataType::LargeUtf8)]
     fn supported_cross_class_target_still_works(#[case] array: ArrayRef, #[case] target: DataType) {
