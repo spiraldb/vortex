@@ -4,6 +4,18 @@
 //! Execution for primitive [`Interleave`] values.
 
 use num_traits::AsPrimitive;
+use vortex_array::AnyColumnar;
+use vortex_array::Array;
+use vortex_array::ExecutionCtx;
+use vortex_array::ExecutionResult;
+use vortex_array::arrays::Constant;
+use vortex_array::arrays::Primitive;
+use vortex_array::arrays::PrimitiveArray;
+use vortex_array::arrays::primitive::PrimitiveArrayExt;
+use vortex_array::dtype::NativePType;
+use vortex_array::match_each_native_ptype;
+use vortex_array::match_each_unsigned_integer_ptype;
+use vortex_array::require_child;
 use vortex_buffer::Buffer;
 use vortex_buffer::BufferAllocatorRef;
 use vortex_buffer::BufferMut;
@@ -14,18 +26,6 @@ use vortex_error::vortex_ensure_eq;
 
 use super::super::Interleave;
 use super::super::InterleaveArrayExt;
-use crate::AnyColumnar;
-use crate::array::Array;
-use crate::arrays::Constant;
-use crate::arrays::Primitive;
-use crate::arrays::PrimitiveArray;
-use crate::arrays::primitive::PrimitiveArrayExt;
-use crate::dtype::NativePType;
-use crate::executor::ExecutionCtx;
-use crate::executor::ExecutionResult;
-use crate::match_each_native_ptype;
-use crate::match_each_unsigned_integer_ptype;
-use crate::require_child;
 
 pub(super) fn execute(
     mut array: Array<Interleave>,
@@ -131,8 +131,9 @@ where
 
 #[cfg(test)]
 mod tests {
+    use vortex_array::memory::BufferAllocatorRef;
+
     use super::*;
-    use crate::memory::BufferAllocatorRef;
 
     #[test]
     fn rejects_out_of_bounds_selectors() {

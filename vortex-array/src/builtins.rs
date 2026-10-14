@@ -14,7 +14,6 @@ use vortex_error::VortexResult;
 use crate::ArrayRef;
 use crate::IntoArray;
 use crate::arrays::ConstantArray;
-use crate::arrays::InterleaveArray;
 use crate::dtype::DType;
 use crate::dtype::FieldName;
 use crate::expr::Expression;
@@ -67,8 +66,6 @@ pub trait ExprBuiltins: Sized {
 
     /// Conditional selection: `result[i] = if mask[i] then if_true[i] else if_false[i]`.
     fn zip(&self, if_true: Expression, if_false: Expression) -> VortexResult<Expression>;
-
-    // TODO(joe): add an `interleave` expression builtin mirroring `ArrayBuiltins::interleave`.
 
     /// Apply a binary operator to this expression and another.
     fn binary(&self, rhs: Expression, op: Operator) -> VortexResult<Expression>;
@@ -143,16 +140,6 @@ pub trait ArrayBuiltins: Sized {
     /// Conditional selection: `result[i] = if mask[i] then if_true[i] else if_false[i]`.
     fn zip(&self, if_true: ArrayRef, if_false: ArrayRef) -> VortexResult<ArrayRef>;
 
-    /// Random-access gather by `(array_index, row_index)`: output row `i` is taken from
-    /// `values[array_indices[i]][row_indices[i]]`, where `self` is the (non-nullable)
-    /// `array_indices` selector and `row_indices` names the position within the selected value.
-    /// See [`InterleaveArray`].
-    fn interleave(
-        &self,
-        values: impl IntoIterator<Item = ArrayRef>,
-        row_indices: ArrayRef,
-    ) -> VortexResult<ArrayRef>;
-
     /// Check if a list contains a value.
     fn list_contains(&self, value: ArrayRef) -> VortexResult<ArrayRef>;
 
@@ -213,17 +200,6 @@ impl ArrayBuiltins for ArrayRef {
 
     fn zip(&self, if_true: ArrayRef, if_false: ArrayRef) -> VortexResult<ArrayRef> {
         Ok(Zip::try_new(if_true, if_false, self.clone())?.into_array())
-    }
-
-    fn interleave(
-        &self,
-        values: impl IntoIterator<Item = ArrayRef>,
-        row_indices: ArrayRef,
-    ) -> VortexResult<ArrayRef> {
-        Ok(
-            InterleaveArray::try_new(values.into_iter().collect(), self.clone(), row_indices)?
-                .into_array(),
-        )
     }
 
     fn list_contains(&self, value: ArrayRef) -> VortexResult<ArrayRef> {

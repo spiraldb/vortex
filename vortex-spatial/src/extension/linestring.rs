@@ -24,7 +24,6 @@ use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::ExtensionArray;
-use vortex_array::arrays::InterleaveArray;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
@@ -52,6 +51,7 @@ use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure;
 use vortex_error::vortex_ensure_eq;
 use vortex_error::vortex_err;
+use vortex_scalar_fns::interleave::Interleave;
 use vortex_session::registry::CachedId;
 use vortex_session::registry::Id;
 
@@ -156,7 +156,7 @@ pub(crate) fn linestring_array_from_point_pairs(
         .field_names()
         .iter()
         .map(|name| {
-            Ok(InterleaveArray::try_new(
+            Ok(Interleave::try_new(
                 vec![
                     point_ordinate(starts, start_dimension, name)?,
                     point_ordinate(ends, end_dimension, name)?,

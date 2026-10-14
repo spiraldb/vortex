@@ -12,13 +12,13 @@
 mod bool;
 mod primitive;
 
+use vortex_array::Array;
+use vortex_array::ExecutionCtx;
+use vortex_array::ExecutionResult;
 use vortex_error::VortexResult;
 use vortex_error::vortex_panic;
 
 use super::Interleave;
-use crate::array::Array;
-use crate::executor::ExecutionCtx;
-use crate::executor::ExecutionResult;
 
 /// Executes an [`InterleaveArray`](super::InterleaveArray) by dispatching on the value type.
 pub(super) fn execute(

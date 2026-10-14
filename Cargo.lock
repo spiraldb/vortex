@@ -11323,6 +11323,7 @@ dependencies = [
  "vortex-parquet-variant",
  "vortex-pco",
  "vortex-runend",
+ "vortex-scalar-fns",
  "vortex-scan",
  "vortex-sequence",
  "vortex-session",
@@ -12353,6 +12354,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "vortex-scalar-fns"
+version = "0.1.0"
+dependencies = [
+ "codspeed-divan-compat",
+ "mimalloc",
+ "num-traits",
+ "rand 0.10.3",
+ "vortex-array",
+ "vortex-buffer",
+ "vortex-error",
+ "vortex-session",
+]
+
+[[package]]
 name = "vortex-scan"
 version = "0.1.0"
 dependencies = [
@@ -12434,6 +12449,7 @@ dependencies = [
  "vortex-error",
  "vortex-layout",
  "vortex-mask",
+ "vortex-scalar-fns",
  "vortex-session",
  "vortex-spatial",
  "wkb",

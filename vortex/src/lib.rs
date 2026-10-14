@@ -225,6 +225,11 @@ pub mod scalar {
     pub use vortex_array::scalar::*;
 }
 
+/// Array functions beyond those the core array crate relies on.
+pub mod scalar_fns {
+    pub use vortex_scalar_fns::*;
+}
+
 /// Data-source abstractions for scan integrations.
 pub mod scan {
     pub use vortex_scan::*;

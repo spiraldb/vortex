@@ -45,6 +45,30 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::hash::Hasher;
 
+use vortex_array::Array;
+use vortex_array::ArrayEq;
+use vortex_array::ArrayHash;
+use vortex_array::ArrayId;
+use vortex_array::ArrayParts;
+use vortex_array::ArrayRef;
+use vortex_array::ArraySlots;
+use vortex_array::ArrayView;
+use vortex_array::EqMode;
+use vortex_array::ExecutionCtx;
+use vortex_array::ExecutionResult;
+use vortex_array::IntoArray;
+use vortex_array::OperationsVTable;
+use vortex_array::TypedArrayRef;
+use vortex_array::VTable;
+use vortex_array::ValidityVTable;
+use vortex_array::arrays::ConstantArray;
+use vortex_array::buffer::BufferHandle;
+use vortex_array::dtype::DType;
+use vortex_array::dtype::Nullability;
+use vortex_array::scalar::Scalar;
+use vortex_array::serde::ArrayChildren;
+use vortex_array::validity::Validity;
+use vortex_array::with_empty_buffers;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
@@ -53,31 +77,6 @@ use vortex_error::vortex_ensure_eq;
 use vortex_error::vortex_panic;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
-
-use crate::ArrayEq;
-use crate::ArrayHash;
-use crate::ArrayRef;
-use crate::EqMode;
-use crate::ExecutionCtx;
-use crate::IntoArray;
-use crate::array::Array;
-use crate::array::ArrayId;
-use crate::array::ArrayParts;
-use crate::array::ArraySlots;
-use crate::array::ArrayView;
-use crate::array::OperationsVTable;
-use crate::array::TypedArrayRef;
-use crate::array::VTable;
-use crate::array::ValidityVTable;
-use crate::array::with_empty_buffers;
-use crate::arrays::ConstantArray;
-use crate::buffer::BufferHandle;
-use crate::dtype::DType;
-use crate::dtype::Nullability;
-use crate::executor::ExecutionResult;
-use crate::scalar::Scalar;
-use crate::serde::ArrayChildren;
-use crate::validity::Validity;
 
 /// An [`Interleave`]-encoded Vortex array. See the [module docs](self) for the specification.
 pub type InterleaveArray = Array<Interleave>;
@@ -202,7 +201,7 @@ impl Interleave {
     }
 }
 
-impl Array<Interleave> {
+impl Interleave {
     /// Constructs a new [`InterleaveArray`] from `values` and the `array_indices` / `row_indices`
     /// selectors.
     ///
@@ -214,7 +213,7 @@ impl Array<Interleave> {
         values: Vec<ArrayRef>,
         array_indices: ArrayRef,
         row_indices: ArrayRef,
-    ) -> VortexResult<Self> {
+    ) -> VortexResult<InterleaveArray> {
         let dtype = Interleave::check(&values, &array_indices, &row_indices)?;
         // SAFETY: `check` just validated every invariant and computed the matching `dtype`.
         Ok(unsafe { Self::new_unchecked(values, array_indices, row_indices, dtype) })
@@ -239,7 +238,7 @@ impl Array<Interleave> {
         array_indices: ArrayRef,
         row_indices: ArrayRef,
         dtype: DType,
-    ) -> Self {
+    ) -> InterleaveArray {
         let mut slots: ArraySlots = ArraySlots::with_capacity(values.len() + 2);
         slots.push(Some(array_indices));
         slots.push(Some(row_indices));
@@ -265,7 +264,7 @@ impl Array<Interleave> {
     /// the value arrays. Every slot must be `Some`, there must be at least two values
     /// (`slots.len() >= 4`), and `dtype` must equal the value returned by `Interleave::check` for
     /// these arguments.
-    pub unsafe fn new_unchecked_slots(slots: ArraySlots, dtype: DType) -> Self {
+    pub unsafe fn new_unchecked_slots(slots: ArraySlots, dtype: DType) -> InterleaveArray {
         let num_values = slots.len() - 2;
         let len = slots[0]
             .as_ref()
@@ -436,7 +435,7 @@ impl ValidityVTable<Interleave> for Interleave {
         // SAFETY: `value_validity_array` yields a non-nullable boolean array per value,
         // the selectors already validated.
         let interleaved = unsafe {
-            InterleaveArray::new_unchecked_slots(slots, DType::Bool(Nullability::NonNullable))
+            Interleave::new_unchecked_slots(slots, DType::Bool(Nullability::NonNullable))
         };
         Ok(Validity::Array(interleaved.into_array()))
     }
@@ -456,16 +455,16 @@ fn value_validity_array(value: &ArrayRef) -> VortexResult<ArrayRef> {
 
 #[cfg(test)]
 mod tests {
+    use vortex_array::Canonical;
+    use vortex_array::VortexSessionExecute;
+    use vortex_array::array_session;
+    use vortex_array::arrays::BoolArray;
+    use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::assert_arrays_eq;
+    use vortex_array::dtype::PType;
     use vortex_error::VortexResult;
 
     use super::*;
-    use crate::Canonical;
-    use crate::VortexSessionExecute;
-    use crate::array_session;
-    use crate::arrays::BoolArray;
-    use crate::arrays::PrimitiveArray;
-    use crate::assert_arrays_eq;
-    use crate::dtype::PType;
 
     /// Reference (oracle) implementation of the interleave spec, used only to validate the optimized
     /// [execute](super::execute) path. It is intentionally simple and slow: it pulls each output
@@ -550,7 +549,7 @@ mod tests {
         let (values, array_indices, row_indices) = build(branches, indices);
 
         let interleaved =
-            InterleaveArray::try_new(values.clone(), array_indices.clone(), row_indices.clone())?
+            Interleave::try_new(values.clone(), array_indices.clone(), row_indices.clone())?
                 .into_array();
 
         let mut ctx = array_session().create_execution_ctx();
@@ -643,7 +642,7 @@ mod tests {
         let value = BoolArray::from_iter([true, false]).into_array();
         let array_indices = BoolArray::from_iter([true, false]).into_array();
         let row_indices = PrimitiveArray::from_iter([0u32, 1]).into_array();
-        let err = InterleaveArray::try_new(vec![value.clone(), value], array_indices, row_indices)
+        let err = Interleave::try_new(vec![value.clone(), value], array_indices, row_indices)
             .err()
             .vortex_expect("expected interleave to reject a boolean array_indices");
         assert!(err.to_string().contains("unsigned integer"), "{err}");
@@ -654,7 +653,7 @@ mod tests {
         let value = BoolArray::from_iter([true]).into_array();
         let array_indices = PrimitiveArray::from_iter([0i32, 1]).into_array();
         let row_indices = PrimitiveArray::from_iter([0u32, 0]).into_array();
-        let err = InterleaveArray::try_new(vec![value.clone(), value], array_indices, row_indices)
+        let err = Interleave::try_new(vec![value.clone(), value], array_indices, row_indices)
             .err()
             .vortex_expect("expected interleave to reject a signed integer array_indices");
         assert!(err.to_string().contains("unsigned integer"), "{err}");
@@ -665,7 +664,7 @@ mod tests {
         let value = BoolArray::from_iter([true, false]).into_array();
         let array_indices = PrimitiveArray::from_iter([0u32, 1]).into_array();
         let row_indices = PrimitiveArray::from_option_iter([Some(0u32), Some(1)]).into_array();
-        let err = InterleaveArray::try_new(vec![value.clone(), value], array_indices, row_indices)
+        let err = Interleave::try_new(vec![value.clone(), value], array_indices, row_indices)
             .err()
             .vortex_expect("expected interleave to reject nullable row_indices");
         assert!(err.to_string().contains("non-nullable"), "{err}");
@@ -676,7 +675,7 @@ mod tests {
         let value = BoolArray::from_iter([true, false]).into_array();
         let array_indices = PrimitiveArray::from_iter([0u32, 1]).into_array();
         let row_indices = PrimitiveArray::from_iter([0u32]).into_array();
-        let err = InterleaveArray::try_new(vec![value.clone(), value], array_indices, row_indices)
+        let err = Interleave::try_new(vec![value.clone(), value], array_indices, row_indices)
             .err()
             .vortex_expect("expected interleave to reject mismatched selector lengths");
         assert!(err.to_string().contains("equal length"), "{err}");
@@ -688,7 +687,7 @@ mod tests {
         let array_indices = PrimitiveArray::from_iter([2u32]).into_array();
         let row_indices = PrimitiveArray::from_iter([0u32]).into_array();
         let interleaved =
-            InterleaveArray::try_new(vec![value.clone(), value], array_indices, row_indices)?
+            Interleave::try_new(vec![value.clone(), value], array_indices, row_indices)?
                 .into_array();
 
         let mut ctx = array_session().create_execution_ctx();
@@ -709,7 +708,7 @@ mod tests {
         let array_indices = PrimitiveArray::from_iter([0u32]).into_array();
         let row_indices = PrimitiveArray::from_iter([1u32]).into_array();
         let interleaved =
-            InterleaveArray::try_new(vec![value.clone(), value], array_indices, row_indices)?
+            Interleave::try_new(vec![value.clone(), value], array_indices, row_indices)?
                 .into_array();
 
         let mut ctx = array_session().create_execution_ctx();
@@ -728,7 +727,7 @@ mod tests {
         let array_indices = PrimitiveArray::from_iter([0u8, 1, 0, 1]).into_array();
         let row_indices = PrimitiveArray::from_iter([0u32, 0, 1, 1]).into_array();
         let interleaved =
-            InterleaveArray::try_new(vec![v0, v1], array_indices, row_indices)?.into_array();
+            Interleave::try_new(vec![v0, v1], array_indices, row_indices)?.into_array();
         let expected =
             PrimitiveArray::from_option_iter([Some(1.0f64), Some(10.0), Some(2.0), None])
                 .into_array();
@@ -744,8 +743,7 @@ mod tests {
         let array_indices = PrimitiveArray::from_iter([0u8, 1, 0, 1]).into_array();
         let row_indices = PrimitiveArray::from_iter([0u32, 0, 1, 1]).into_array();
         let interleaved =
-            InterleaveArray::try_new(vec![constant, column], array_indices, row_indices)?
-                .into_array();
+            Interleave::try_new(vec![constant, column], array_indices, row_indices)?.into_array();
         let expected = PrimitiveArray::from_iter([1.0f64, 10.0, 1.0, 20.0]).into_array();
         let mut ctx = array_session().create_execution_ctx();
 
@@ -764,8 +762,7 @@ mod tests {
         let array_indices = PrimitiveArray::from_iter([0u8, 1, 0, 1]).into_array();
         let row_indices = PrimitiveArray::from_iter([0u32, 0, 1, 1]).into_array();
         let interleaved =
-            InterleaveArray::try_new(vec![constant, column], array_indices, row_indices)?
-                .into_array();
+            Interleave::try_new(vec![constant, column], array_indices, row_indices)?.into_array();
         let expected =
             PrimitiveArray::from_option_iter([None, Some(10.0f64), None, Some(20.0)]).into_array();
         let mut ctx = array_session().create_execution_ctx();
