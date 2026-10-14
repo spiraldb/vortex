@@ -26,7 +26,6 @@ workspace = true
 arbitrary = { workspace = true, optional = true }
 arcref = { workspace = true }
 arrow-buffer = { workspace = true }
-async-lock = { workspace = true }
 bytes = { workspace = true }
 cfg-if = { workspace = true }
 cudarc = { workspace = true, optional = true }
