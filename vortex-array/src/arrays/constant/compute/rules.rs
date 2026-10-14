@@ -17,7 +17,6 @@ use crate::optimizer::rules::ParentRuleSet;
 use crate::scalar_fn::fns::between::BetweenReduceAdaptor;
 use crate::scalar_fn::fns::cast::CastReduceAdaptor;
 use crate::scalar_fn::fns::fill_null::FillNullReduceAdaptor;
-use crate::scalar_fn::fns::list_contains::PrepareConstantListRule;
 use crate::scalar_fn::fns::not::NotReduceAdaptor;
 
 pub(crate) const PARENT_RULES: ParentRuleSet<Constant> = ParentRuleSet::new(&[
@@ -27,7 +26,6 @@ pub(crate) const PARENT_RULES: ParentRuleSet<Constant> = ParentRuleSet::new(&[
     ParentRuleSet::lift(&FillNullReduceAdaptor(Constant)),
     ParentRuleSet::lift(&FilterReduceAdaptor(Constant)),
     ParentRuleSet::lift(&NotReduceAdaptor(Constant)),
-    ParentRuleSet::lift(&PrepareConstantListRule),
     ParentRuleSet::lift(&SliceReduceAdaptor(Constant)),
     ParentRuleSet::lift(&TakeReduceAdaptor(Constant)),
 ]);

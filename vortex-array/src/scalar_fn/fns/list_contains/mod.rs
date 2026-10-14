@@ -13,7 +13,6 @@ use std::ops::BitOr;
 use arrow_buffer::bit_iterator::BitIndexIterator;
 pub use kernel::*;
 use num_traits::Zero;
-pub(crate) use prepared::PrepareConstantListRule;
 pub use prepared::PreparedSet;
 pub use prepared::PreparedSetData;
 use prost::Message;
@@ -220,41 +219,29 @@ impl ScalarFnVTable for ListContains {
     }
 
     /// A constant list and a constant needle fold to their constant answer, in expression and
-    /// array trees alike. Otherwise a literal list becomes a [`PreparedSet`], so that every
-    /// batch the expression is applied to probes one shared set rather than preparing the list
-    /// again.
+    /// array trees alike. Otherwise a constant list becomes a [`PreparedSet`], so that every
+    /// batch, and every part of the needle that the set is pushed into, probes one shared set
+    /// rather than preparing the list again.
     fn reduce<T: ReduceNode>(&self, options: &Self::Options, node: &T) -> VortexResult<Option<T>> {
         let list = node.child(0);
+        let needle = node.child(1);
 
         // The needle first: it is rarely constant, and a list is costly to clone.
-        if let Some(needle) = node.child(1).as_constant()
+        if let Some(needle) = needle.as_constant()
             && let Some(list) = constant_list_node(&list)
         {
             let result = compute_contains_scalar(&list, &needle, options)?;
             return Ok(Some(node.new_constant(result)));
         }
 
-        // Only an expression tree holds a literal as a scalar function: applied to an array, a
-        // literal is a constant array. So this prepares the list once per expression, and never
-        // once per batch.
-        let Some(literal) = list.scalar_fn() else {
+        let Some(set) = prepare_constant_list(&list, &needle)? else {
             return Ok(None);
         };
-        // A null list has no set, and answers null for every needle at execution.
-        if !literal
-            .as_opt::<Literal>()
-            .is_some_and(|list| !list.is_null())
-        {
-            return Ok(None);
-        }
 
-        // The set shares the literal, so the list is not cloned.
-        let set = PreparedSetData::try_from_literal(literal.clone())?;
         let set = node.new_node(PreparedSet.bind(set), &[])?;
-        Ok(Some(node.new_node(
-            ListContains.bind(*options),
-            &[set, node.child(1)],
-        )?))
+        Ok(Some(
+            node.new_node(ListContains.bind(*options), &[set, needle])?,
+        ))
     }
 
     /// The validity of `needle IN list` for a literal list, decided without a probe.
@@ -367,7 +354,7 @@ fn compute_list_contains(
         .into_array());
     }
 
-    // The executor's reduce_parent step has already replaced a constant list with a prepared set.
+    // The reduce step has already replaced a constant list with a prepared set.
     if let Some(set) = PreparedSet::set_of(array) {
         return set.contains(value, options, ctx);
     }
@@ -385,6 +372,38 @@ fn constant_list(array: &ArrayRef) -> Option<&Scalar> {
         return Some(constant.data().scalar());
     }
     PreparedSet::set_of(array).map(PreparedSetData::list)
+}
+
+/// The set of `list` when it is a non-null constant list, a literal in an expression tree or a
+/// constant array in an array tree, whose elements have the dtype of `needle`.
+///
+/// A null list has no set, and a needle of another dtype is an error for execution to report.
+fn prepare_constant_list<T: ReduceNode>(
+    list: &T,
+    needle: &T,
+) -> VortexResult<Option<PreparedSetData>> {
+    let DType::List(element_dtype, _) = list.node_dtype()? else {
+        return Ok(None);
+    };
+    if !element_dtype.eq_ignore_nullability(&needle.node_dtype()?) {
+        return Ok(None);
+    }
+
+    // A literal shares its list with the set, so the list is not cloned. Any other scalar
+    // function, a prepared set included, is not a constant list.
+    if let Some(scalar_fn) = list.scalar_fn() {
+        return match scalar_fn.as_opt::<Literal>() {
+            Some(literal) if !literal.is_null() => {
+                PreparedSetData::try_from_literal(scalar_fn.clone()).map(Some)
+            }
+            _ => Ok(None),
+        };
+    }
+
+    match list.as_constant() {
+        Some(list) if !list.is_null() => PreparedSetData::try_new(list).map(Some),
+        _ => Ok(None),
+    }
 }
 
 /// The list a reduce node holds when it is a constant or a prepared set, in an expression or an

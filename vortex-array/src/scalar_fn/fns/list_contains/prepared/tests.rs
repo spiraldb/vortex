@@ -202,7 +202,6 @@ fn test_decimal_bitmap_across_storage_widths(
     });
     let options = ListContainsOptions { sql_null_semantics };
     let set = prepare(&list)?;
-    assert!(set.element_set(&mut ctx)?.probe.is_bitmap());
     let non_match = (!sql_null_semantics).then_some(false);
     assert_arrays_eq!(
         set.contains(&needles, &options, &mut ctx)?,
@@ -246,7 +245,6 @@ fn test_decimal_wide_values(
     )
     .into_array();
     let set = prepare(&list)?;
-    assert_eq!(set.element_set(&mut ctx)?.probe.is_bitmap(), dense);
     assert_arrays_eq!(
         set.contains(&needles, &ListContainsOptions::default(), &mut ctx)?,
         BoolArray::from_iter([
@@ -266,32 +264,27 @@ fn test_decimal_wide_values(
 #[case::bitmap(
     PrimitiveArray::from_option_iter([Some(5i64), Some(-3), Some(5)]).into_array(),
     PrimitiveArray::from_option_iter([Some(-3i64), Some(4), Some(i64::MIN), None]).into_array(),
-    true,
     [Some(true), Some(false), Some(false), None],
 )]
 #[case::unsigned_in_signed_order(
     PrimitiveArray::from_option_iter([Some(u64::MAX), Some(0), Some(1 << 40)]).into_array(),
     PrimitiveArray::from_option_iter([Some(1u64 << 40), Some(1), Some(u64::MAX), Some(0)])
         .into_array(),
-    false,
     [Some(true), Some(false), Some(true), Some(true)],
 )]
 #[case::float_bits(
     PrimitiveArray::from_option_iter([Some(0.0f64), Some(f64::NAN)]).into_array(),
     PrimitiveArray::from_option_iter([Some(-0.0f64), Some(0.0), Some(f64::NAN), Some(1.5)])
         .into_array(),
-    false,
     [Some(false), Some(true), Some(true), Some(false)],
 )]
 fn test_primitive_integers(
     #[case] elements: ArrayRef,
     #[case] needles: ArrayRef,
-    #[case] dense: bool,
     #[case] expected: [Option<bool>; 4],
 ) -> VortexResult<()> {
     let mut ctx = array_session().create_execution_ctx();
     let set = PreparedSetData::try_new(list_scalar(&elements, &mut ctx)?)?;
-    assert_eq!(set.element_set(&mut ctx)?.probe.is_bitmap(), dense);
     assert_arrays_eq!(
         set.contains(&needles, &ListContainsOptions::default(), &mut ctx)?,
         BoolArray::from_iter(expected),

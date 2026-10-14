@@ -6,7 +6,6 @@
 
 mod data;
 mod function;
-mod rules;
 
 use std::hash::BuildHasher;
 
@@ -14,12 +13,12 @@ pub use data::PreparedSetData;
 pub use function::PreparedSet;
 use num_traits::ToPrimitive;
 use num_traits::WrappingSub;
-pub(crate) use rules::PrepareConstantListRule;
 use vortex_buffer::BitBuffer;
 use vortex_buffer::BitBufferMut;
 use vortex_buffer::Buffer;
 use vortex_buffer::BufferAllocatorRef;
 use vortex_buffer::BufferMut;
+use vortex_compute::lane_kernels::collect_bits;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_mask::Mask;
@@ -46,7 +45,6 @@ use crate::dtype::i256;
 use crate::match_each_decimal_value_type;
 use crate::match_each_integer_ptype;
 use crate::scalar_fn::fns::binary::build_row_comparator;
-use crate::scalar_fn::fns::binary::collect_bits;
 use crate::validity::Validity;
 
 /// A set whose span of values needs at most this many bits per element is probed through a bitmap
@@ -69,12 +67,6 @@ trait Probe: Send + Sync {
         needles: &ArrayRef,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<(BitBuffer, Validity)>;
-
-    /// Whether the probe holds its values in a bitmap.
-    #[cfg(test)]
-    fn is_bitmap(&self) -> bool {
-        false
-    }
 }
 
 /// Builds the probe of the non-null `elements`.
@@ -169,11 +161,6 @@ impl<T: NativePType + SetInteger> Probe for PrimitiveSet<T> {
         let bits = self.0.contains(needles.as_slice::<T>(), ctx.allocator());
         Ok((bits, needles.validity()?))
     }
-
-    #[cfg(test)]
-    fn is_bitmap(&self) -> bool {
-        matches!(self.0, IntegerSet::Bitmap { .. })
-    }
 }
 
 /// The unscaled values of decimals, as the narrowest type that holds every value of their
@@ -194,11 +181,6 @@ impl<T: NativeDecimalType + SetInteger> Probe for DecimalSet<T> {
         let valid = validity.execute_mask(needles.len(), ctx)?;
         let values = converted_buffer::<T>(&needles, &valid)?;
         Ok((self.0.contains(&values, ctx.allocator()), validity))
-    }
-
-    #[cfg(test)]
-    fn is_bitmap(&self) -> bool {
-        matches!(self.0, IntegerSet::Bitmap { .. })
     }
 }
 

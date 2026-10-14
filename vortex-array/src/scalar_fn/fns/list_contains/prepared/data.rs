@@ -23,7 +23,8 @@ use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::arrays::BoolArray;
 use crate::arrays::ConstantArray;
-use crate::arrays::constant::list_scalar_elements;
+use crate::arrays::ListViewArray;
+use crate::arrays::listview::ListViewArraySlotsExt;
 use crate::dtype::DType;
 use crate::scalar::Scalar;
 use crate::scalar_fn::ScalarFnRef;
@@ -58,12 +59,17 @@ struct SharedSet {
 pub(super) struct ElementSet {
     /// All elements of the list, null elements included, with the element dtype of the list.
     elements: ArrayRef,
-    pub(super) probe: Box<dyn Probe>,
+    probe: Box<dyn Probe>,
 }
 
 impl ElementSet {
     fn try_new(list: &Scalar, ctx: &mut ExecutionCtx) -> VortexResult<Self> {
-        let elements = list_scalar_elements(&list.as_list(), ctx.allocator());
+        // The canonical form of a constant list holds its elements once, whatever its length.
+        let elements = ConstantArray::new(list.clone(), 1)
+            .into_array()
+            .execute::<ListViewArray>(ctx)?
+            .elements()
+            .clone();
 
         // A null element never equals a needle, so the probe is better off without it.
         let valid = elements.validity()?.execute_mask(elements.len(), ctx)?;
@@ -144,10 +150,7 @@ impl PreparedSetData {
     }
 
     /// The elements and their probe, built on the first call and shared after it.
-    pub(super) fn element_set<'a>(
-        &'a self,
-        ctx: &mut ExecutionCtx,
-    ) -> VortexResult<&'a ElementSet> {
+    fn element_set<'a>(&'a self, ctx: &mut ExecutionCtx) -> VortexResult<&'a ElementSet> {
         self.0
             .set
             .get_or_init(|| ElementSet::try_new(self.list(), ctx).map_err(Arc::new))
