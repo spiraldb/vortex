@@ -23,6 +23,7 @@ use vortex_array::IntoArray;
 use vortex_array::TypedArrayRef;
 use vortex_array::VortexSessionExecute;
 use vortex_array::array_slots;
+use vortex_array::arrays::Bool;
 use vortex_array::arrays::DecimalArray;
 use vortex_array::arrays::ListViewArray;
 use vortex_array::arrays::Primitive;
@@ -52,6 +53,7 @@ use crate::compress::runend_decode_decimal;
 use crate::compress::runend_decode_primitive;
 use crate::compress::runend_decode_varbinview;
 use crate::compress::runend_encode;
+use crate::compress::runend_encode_bool;
 use crate::decompress_bool::runend_decode_bools;
 use crate::ops::find_physical_index;
 use crate::ops::find_slice_end_index;
@@ -294,23 +296,33 @@ impl RunEnd {
     }
 
     /// Run the array through run-end encoding.
+    ///
+    /// Boolean arrays keep an explicit value per run. Use [`RunEndBool::encode`] to omit them.
+    ///
+    /// [`RunEndBool::encode`]: crate::RunEndBool::encode
     pub fn encode(array: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<RunEndArray> {
-        if let Some(parray) = array.as_opt::<Primitive>() {
-            let (ends, values) = runend_encode(parray, ctx);
-            let ends = ends.into_array();
-            let len = array.len();
-            let dtype = values.dtype().clone();
-            let slots = RunEndSlots { ends, values }.into_slots();
-            let data = unsafe { RunEndData::new_unchecked(0) };
-            Array::try_from_parts(ArrayParts::new(RunEnd, dtype, len, data, slots))
+        let len = array.len();
+        let (ends, values) = if let Some(parray) = array.as_opt::<Primitive>() {
+            runend_encode(parray, ctx)
+        } else if let Some(barray) = array.as_opt::<Bool>() {
+            let (ends, values) = runend_encode_bool(barray, ctx)?;
+            (ends, values.into_array())
         } else {
-            vortex_bail!("REE can only encode primitive arrays")
-        }
+            vortex_bail!("REE can only encode primitive and boolean arrays")
+        };
+        let ends = ends.into_array();
+        let dtype = values.dtype().clone();
+        let slots = RunEndSlots { ends, values }.into_slots();
+        let data = unsafe { RunEndData::new_unchecked(0) };
+        Array::try_from_parts(ArrayParts::new(RunEnd, dtype, len, data, slots))
     }
 }
 
 impl RunEndData {
-    fn logical_len_from_ends(ends: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<usize> {
+    pub(crate) fn logical_len_from_ends(
+        ends: &ArrayRef,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<usize> {
         if ends.is_empty() {
             Ok(0)
         } else {
@@ -327,13 +339,23 @@ impl RunEndData {
         length: usize,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<()> {
+        vortex_ensure_eq!(ends.len(), values.len());
+        Self::validate_ends(ends, offset, length, ctx)
+    }
+
+    /// Validate that `ends` are run ends covering `offset..offset + length`.
+    pub(crate) fn validate_ends(
+        ends: &ArrayRef,
+        offset: usize,
+        length: usize,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<()> {
         // DType validation
         vortex_ensure!(
             ends.dtype().is_unsigned_int(),
             "run ends must be unsigned integers, was {}",
             ends.dtype(),
         );
-        vortex_ensure_eq!(ends.len(), values.len());
 
         // Handle empty run-ends
         if ends.is_empty() {

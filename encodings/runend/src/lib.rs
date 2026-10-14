@@ -7,6 +7,7 @@ mod arbitrary;
 pub use arbitrary::ArbitraryRunEndArray;
 pub use array::*;
 pub use iter::trimmed_ends_iter;
+pub use run_end_bool::*;
 
 mod array;
 pub mod compress;
@@ -17,6 +18,7 @@ mod kernel;
 pub mod ops;
 mod probe;
 mod rules;
+mod run_end_bool;
 #[cfg(test)]
 #[cfg(not(codspeed))]
 mod trace_tests;
@@ -43,6 +45,7 @@ use vortex_session::VortexSession;
 /// Initialize run-end encoding in the given session.
 pub fn initialize(session: &VortexSession) {
     session.arrays().register(RunEnd);
+    session.arrays().register(RunEndBool);
     kernel::initialize(session);
 
     // Register the RunEnd-specific aggregate kernels.
