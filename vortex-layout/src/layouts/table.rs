@@ -321,6 +321,7 @@ mod tests {
     use vortex_array::ArrayContext;
     use vortex_array::ArrayRef;
     use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
     use vortex_array::arrays::BoolArray;
     use vortex_array::arrays::ChunkedArray;
     use vortex_array::arrays::ListArray;
@@ -409,12 +410,14 @@ mod tests {
             buffer![1i32, 2, 3, 4, 5, 6].into_array(),
             buffer![0u32, 2, 5, 5, 6].into_array(),
             Validity::NonNullable,
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )?
         .into_array();
         let outer = ListArray::try_new(
             inner,
             buffer![0u32, 2, 4].into_array(),
             Validity::NonNullable,
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )?
         .into_array();
 
@@ -445,6 +448,7 @@ mod tests {
             inner_struct,
             buffer![0u32, 2, 5, 5].into_array(),
             Validity::Array(BoolArray::from_iter([true, false, true]).into_array()),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )?
         .into_array();
         let st = StructArray::from_fields([("items", items)].as_slice())?.into_array();
@@ -471,12 +475,14 @@ mod tests {
             buffer![1i32, 2, 3].into_array(),
             buffer![0u32, 2, 3].into_array(),
             Validity::NonNullable,
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )?
         .into_array();
         let chunk1 = ListArray::try_new(
             buffer![4i32, 5, 6, 7].into_array(),
             buffer![0u32, 1, 4].into_array(),
             Validity::NonNullable,
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )?
         .into_array();
         let dtype = chunk0.dtype().clone();
@@ -508,6 +514,7 @@ mod tests {
             PrimitiveArray::from_iter(0..9_i32).into_array(),
             PrimitiveArray::from_iter(0..=9_u32).into_array(),
             Validity::NonNullable,
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )?
         .into_array();
 

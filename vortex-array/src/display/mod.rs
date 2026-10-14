@@ -21,7 +21,7 @@ pub use tree_display::TreeDisplay;
 
 use crate::ArrayRef;
 use crate::VortexSessionExecute;
-use crate::legacy_session;
+use crate::internal_session;
 
 /// Describe how to convert an array to a string.
 ///
@@ -538,7 +538,7 @@ impl ArrayRef {
                 let is_truncated = self.len() > limit;
 
                 let fmt_scalar = |i| {
-                    self.execute_scalar(i, &mut legacy_session().create_execution_ctx())
+                    self.execute_scalar(i, &mut internal_session().create_execution_ctx())
                         .map_or_else(|e| format!("<error: {e}>"), |s| s.to_string())
                 };
                 write!(
@@ -586,7 +586,7 @@ impl ArrayRef {
 
                 let mut builder = tabled::builder::Builder::default();
                 // Reuse a single execution context across all per-row accesses below.
-                let mut ctx = legacy_session().create_execution_ctx();
+                let mut ctx = internal_session().create_execution_ctx();
 
                 // Special logic for struct arrays.
                 let DType::Struct(sf, _) = self.dtype() else {
@@ -662,12 +662,14 @@ mod test {
     use vortex_buffer::buffer;
 
     use crate::IntoArray as _;
+    use crate::VortexSessionExecute;
     use crate::arrays::BoolArray;
     use crate::arrays::ListArray;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::StructArray;
     use crate::display::DISPLAY_LIMIT;
     use crate::dtype::FieldNames;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[test]
@@ -722,6 +724,7 @@ mod test {
             buffer![1, 2, 3, 4].into_array(),
             buffer![0, 0, 1, 1, 2, 4].into_array(),
             Validity::Array(BoolArray::from_iter([true, true, false, true, true]).into_array()),
+            &mut test_session().create_execution_ctx(),
         )
         .unwrap()
         .into_array();

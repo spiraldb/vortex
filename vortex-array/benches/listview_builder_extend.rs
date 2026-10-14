@@ -58,7 +58,13 @@ fn make_listview(
         Validity::NonNullable
     };
 
-    ListViewArray::new(elements, offsets.into_array(), sizes.into_array(), validity)
+    ListViewArray::new(
+        elements,
+        offsets.into_array(),
+        sizes.into_array(),
+        validity,
+        &mut test_session().create_execution_ctx(),
+    )
 }
 
 #[divan::bench(args = ZCTL_ARGS)]

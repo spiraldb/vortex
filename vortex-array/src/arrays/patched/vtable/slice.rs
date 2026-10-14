@@ -78,7 +78,14 @@ mod tests {
         let values = buffer![0u16; 512].into_array();
         let patch_indices = buffer![1u32, 8, 30].into_array();
         let patch_values = buffer![u16::MAX; 3].into_array();
-        let patches = Patches::new(512, 0, patch_indices, patch_values, None)?;
+        let patches = Patches::new(
+            512,
+            0,
+            patch_indices,
+            patch_values,
+            None,
+            &mut crate::test_harness::test_session().create_execution_ctx(),
+        )?;
 
         let mut ctx = crate::test_harness::test_session().create_execution_ctx();
 
@@ -123,6 +130,7 @@ mod tests {
             patch_indices.into_array(),
             patch_values.into_array(),
             None,
+            &mut crate::test_harness::test_session().create_execution_ctx(),
         )
         .unwrap();
 
@@ -157,7 +165,15 @@ mod tests {
         let patched_indices = buffer![1u32, 2, 1024, 2048, 3072, 3088].into_array();
         let patched_values = buffer![0u64, 1, 2, 3, 4, 5].into_array();
 
-        let patches = Patches::new(10_000, 0, patched_indices, patched_values, None).unwrap();
+        let patches = Patches::new(
+            10_000,
+            0,
+            patched_indices,
+            patched_values,
+            None,
+            &mut crate::test_harness::test_session().create_execution_ctx(),
+        )
+        .unwrap();
         let mut ctx = crate::test_harness::test_session().create_execution_ctx();
 
         let patched_array = Patched::from_array_and_patches(values, &patches, &mut ctx)

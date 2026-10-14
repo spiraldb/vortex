@@ -34,12 +34,14 @@ use vortex_buffer::Alignment;
 use vortex_buffer::ByteBuffer;
 use vortex_buffer::ByteBufferMut;
 use vortex_error::VortexResult;
+use vortex_error::vortex_ensure;
 use vortex_error::vortex_ensure_eq;
 use vortex_error::vortex_err;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
 
 use crate::ZstdBuffersMetadata;
+use crate::ZstdBuffersValidity;
 use crate::decompressor::with_decompressor;
 use crate::validate_frame_content_size;
 
@@ -51,7 +53,8 @@ pub type ZstdBuffersArray = Array<ZstdBuffers>;
 pub struct ZstdBuffers;
 
 impl ZstdBuffers {
-    /// Construct a [`ZstdBuffersArray`] from compressed buffer data.
+    /// Construct a [`ZstdBuffersArray`] from compressed buffer data whose inner array has no
+    /// children and whose validity is not stored as a child.
     pub fn try_new(
         dtype: DType,
         len: usize,
@@ -83,6 +86,12 @@ impl ZstdBuffers {
         let mut uncompressed_sizes = Vec::with_capacity(serialization.buffers.len());
         let mut buffer_alignments = Vec::with_capacity(serialization.buffers.len());
 
+        let (validity, validity_child) = match array.validity()? {
+            Validity::NonNullable | Validity::AllValid => (ZstdBuffersValidity::AllValid, None),
+            Validity::AllInvalid => (ZstdBuffersValidity::AllInvalid, None),
+            Validity::Array(validity) => (ZstdBuffersValidity::Child, Some(validity)),
+        };
+
         let mut compressor = zstd::bulk::Compressor::new(level)?;
         for buffer in &serialization.buffers {
             buffer_alignments.push(u32::from(buffer.alignment()));
@@ -98,8 +107,14 @@ impl ZstdBuffers {
             compressed_buffers,
             uncompressed_sizes,
             buffer_alignments,
+            validity,
         };
-        let slots: ArraySlots = serialization.children.into_iter().map(Some).collect();
+        let slots: ArraySlots = serialization
+            .children
+            .into_iter()
+            .chain(validity_child)
+            .map(Some)
+            .collect();
         let compressed = Array::try_from_parts(ArrayParts::new(
             ZstdBuffers,
             array.dtype().clone(),
@@ -125,7 +140,13 @@ impl ZstdBuffers {
                 vortex_err!("Unknown inner encoding: {}", array.data().inner_encoding_id)
             })?;
 
-        let children: Vec<ArrayRef> = array.slots().iter().flatten().cloned().collect();
+        let children: Vec<ArrayRef> = array
+            .slots()
+            .iter()
+            .take(array.data().inner_child_count(array.slots().len()))
+            .flatten()
+            .cloned()
+            .collect();
         inner_vtable.deserialize(
             ArrayDeserialization::new(
                 array.data().inner_encoding_id,
@@ -160,6 +181,7 @@ pub struct ZstdBuffersData {
     compressed_buffers: Vec<BufferHandle>,
     uncompressed_sizes: Vec<u64>,
     buffer_alignments: Vec<u32>,
+    validity: ZstdBuffersValidity,
 }
 
 impl Display for ZstdBuffersData {
@@ -236,6 +258,14 @@ impl ZstdBuffersDecodePlan {
 }
 
 impl ZstdBuffersData {
+    /// Number of leading slots that belong to the inner array, out of `n_slots`.
+    fn inner_child_count(&self, n_slots: usize) -> usize {
+        match self.validity {
+            ZstdBuffersValidity::Child => n_slots.saturating_sub(1),
+            ZstdBuffersValidity::AllValid | ZstdBuffersValidity::AllInvalid => n_slots,
+        }
+    }
+
     fn validate(&self) -> VortexResult<()> {
         vortex_ensure_eq!(
             self.compressed_buffers.len(),
@@ -386,6 +416,7 @@ impl ArrayHash for ZstdBuffersData {
         }
         self.uncompressed_sizes.hash(state);
         self.buffer_alignments.hash(state);
+        self.validity.hash(state);
     }
 }
 
@@ -401,6 +432,7 @@ impl ArrayEq for ZstdBuffersData {
                 .all(|(a, b)| a.array_eq(b, accuracy))
             && self.uncompressed_sizes == other.uncompressed_sizes
             && self.buffer_alignments == other.buffer_alignments
+            && self.validity == other.validity
     }
 }
 
@@ -417,11 +449,24 @@ impl VTable for ZstdBuffers {
     fn validate(
         &self,
         data: &Self::TypedArrayData,
-        _dtype: &DType,
-        _len: usize,
-        _slots: &[Option<ArrayRef>],
+        dtype: &DType,
+        len: usize,
+        slots: &[Option<ArrayRef>],
     ) -> VortexResult<()> {
-        data.validate()
+        data.validate()?;
+        if data.validity == ZstdBuffersValidity::Child {
+            vortex_ensure!(
+                dtype.is_nullable(),
+                "non-nullable ZstdBuffers has a validity child"
+            );
+            let validity = slots
+                .last()
+                .and_then(Option::as_ref)
+                .ok_or_else(|| vortex_err!("ZstdBuffers validity child is missing"))?;
+            vortex_ensure_eq!(validity.dtype(), &Validity::DTYPE);
+            vortex_ensure_eq!(validity.len(), len);
+        }
+        Ok(())
     }
 
     fn nbuffers(array: ArrayView<'_, Self>) -> usize {
@@ -452,15 +497,24 @@ impl VTable for ZstdBuffers {
         ))
     }
 
-    fn slot_name(_array: ArrayView<'_, Self>, idx: usize) -> String {
-        format!("child_{idx}")
+    fn slot_name(array: ArrayView<'_, Self>, idx: usize) -> String {
+        if idx >= array.data().inner_child_count(array.slots().len()) {
+            "validity".to_string()
+        } else {
+            format!("child_{idx}")
+        }
     }
 
     fn serialize(
         array: ArrayView<'_, Self>,
         _session: &VortexSession,
     ) -> VortexResult<Option<Vec<u8>>> {
-        let children: Vec<&ArrayRef> = array.slots().iter().flatten().collect();
+        let children: Vec<&ArrayRef> = array
+            .slots()
+            .iter()
+            .take(array.data().inner_child_count(array.slots().len()))
+            .flatten()
+            .collect();
         let child_dtypes = children
             .iter()
             .map(|child| child.dtype().try_into())
@@ -475,6 +529,7 @@ impl VTable for ZstdBuffers {
                 buffer_alignments: array.buffer_alignments.clone(),
                 child_dtypes,
                 child_lens,
+                validity: Some(array.validity as i32),
             }
             .encode_to_vec(),
         ))
@@ -492,13 +547,24 @@ impl VTable for ZstdBuffers {
         let metadata = ZstdBuffersMetadata::decode(metadata)?;
         let compressed_buffers: Vec<BufferHandle> = buffers.to_vec();
 
+        let stored_validity = metadata
+            .validity
+            .map(ZstdBuffersValidity::try_from)
+            .transpose()
+            .map_err(|_| vortex_err!("unknown ZstdBuffers validity {:?}", metadata.validity))?;
+        let n_inner_children = metadata.child_dtypes.len();
+        let has_validity_child = stored_validity == Some(ZstdBuffersValidity::Child);
+
         // Children belong to inner encodings, and serialization doesn't
         // preserve their dtypes and values. Check dtypes are recovered from
         // metadata.
-        vortex_ensure_eq!(metadata.child_dtypes.len(), children.len());
-        vortex_ensure_eq!(metadata.child_lens.len(), children.len());
+        vortex_ensure_eq!(
+            n_inner_children + usize::from(has_validity_child),
+            children.len()
+        );
+        vortex_ensure_eq!(metadata.child_lens.len(), n_inner_children);
 
-        let slots: ArraySlots = (0..children.len())
+        let mut slots: ArraySlots = (0..n_inner_children)
             .map(|i| {
                 let child_dtype = DType::from_proto(&metadata.child_dtypes[i], session)?;
                 let child_len = usize::try_from(metadata.child_lens[i])?;
@@ -506,16 +572,49 @@ impl VTable for ZstdBuffers {
             })
             .collect::<VortexResult<Vec<_>>>()?
             .into();
+        if has_validity_child {
+            slots.push(Some(children.get(
+                n_inner_children,
+                &Validity::DTYPE,
+                len,
+            )?));
+        }
 
-        let data = ZstdBuffersData {
+        let mut data = ZstdBuffersData {
             inner_encoding_id: array_id_from_string(&metadata.inner_encoding_id),
             inner_metadata: metadata.inner_metadata.clone(),
             compressed_buffers,
             uncompressed_sizes: metadata.uncompressed_sizes.clone(),
             buffer_alignments: metadata.buffer_alignments.clone(),
+            validity: stored_validity.unwrap_or(ZstdBuffersValidity::AllValid),
         };
-
         data.validate()?;
+
+        // Arrays written before validity was stored: read it from the inner array once, here,
+        // where a session is available to rebuild it.
+        if stored_validity.is_none() && dtype.is_nullable() {
+            let parts = ArrayParts::new(self.clone(), dtype.clone(), len, data.clone(), slots);
+            let array = Array::try_from_parts(parts)?;
+            let inner_validity =
+                ZstdBuffers::decompress_and_build_inner(&array, session)?.validity()?;
+            let mut slots: ArraySlots = array.slots().iter().cloned().collect();
+            data.validity = match inner_validity {
+                Validity::NonNullable | Validity::AllValid => ZstdBuffersValidity::AllValid,
+                Validity::AllInvalid => ZstdBuffersValidity::AllInvalid,
+                Validity::Array(validity) => {
+                    slots.push(Some(validity));
+                    ZstdBuffersValidity::Child
+                }
+            };
+            return Ok(ArrayParts::new(
+                self.clone(),
+                dtype.clone(),
+                len,
+                data,
+                slots,
+            ));
+        }
+
         Ok(ArrayParts::new(
             self.clone(),
             dtype.clone(),
@@ -554,17 +653,18 @@ impl OperationsVTable<ZstdBuffers> for ZstdBuffers {
 }
 
 impl ValidityVTable<ZstdBuffers> for ZstdBuffers {
-    #[allow(clippy::disallowed_methods)]
     fn validity(array: ArrayView<'_, ZstdBuffers>) -> VortexResult<Validity> {
-        if !array.dtype().is_nullable() {
-            return Ok(Validity::NonNullable);
-        }
-
-        let inner_array = ZstdBuffers::decompress_and_build_inner(
-            &array.into_owned(),
-            vortex_array::legacy_session(),
-        )?;
-        inner_array.validity()
+        Ok(match array.data().validity {
+            ZstdBuffersValidity::AllValid => Validity::AllValid,
+            ZstdBuffersValidity::AllInvalid => Validity::AllInvalid,
+            ZstdBuffersValidity::Child => Validity::Array(
+                array
+                    .slots()
+                    .last()
+                    .and_then(Option::clone)
+                    .ok_or_else(|| vortex_err!("ZstdBuffers validity child is missing"))?,
+            ),
+        })
     }
 }
 
@@ -585,6 +685,7 @@ mod tests {
     use vortex_array::serde::SerializedArray;
     use vortex_array::session::ArraySessionExt;
     use vortex_buffer::ByteBufferMut;
+    use vortex_error::VortexExpect;
     use vortex_error::VortexResult;
     use vortex_session::registry::ReadContext;
 
@@ -724,6 +825,47 @@ mod tests {
             );
         }
 
+        Ok(())
+    }
+
+    /// Arrays written before validity was stored have no validity in their metadata and no
+    /// validity child, so deserialization reads it from the inner array.
+    #[test]
+    fn test_deserialize_without_stored_validity() -> VortexResult<()> {
+        let session = vortex_aggregates::session();
+        let input = make_nullable_primitive_array();
+        let compressed = ZstdBuffers::compress(&input, 3, &session)?;
+        assert_eq!(compressed.data().validity, ZstdBuffersValidity::Child);
+
+        let metadata = <ZstdBuffers as VTable>::serialize(compressed.as_view(), &session)?
+            .vortex_expect("ZstdBuffers always serializes");
+        let mut metadata = ZstdBuffersMetadata::decode(metadata.as_slice())?;
+        metadata.validity = None;
+        let n_inner = compressed
+            .data()
+            .inner_child_count(compressed.slots().len());
+        let inner_children: Vec<ArrayRef> = compressed.slots()[..n_inner]
+            .iter()
+            .flatten()
+            .cloned()
+            .collect();
+
+        let parts = ZstdBuffers.deserialize(
+            compressed.dtype(),
+            compressed.len(),
+            &metadata.encode_to_vec(),
+            &compressed.data().compressed_buffers,
+            &inner_children.as_slice(),
+            &session,
+        )?;
+        let legacy = Array::try_from_parts(parts)?;
+        assert_eq!(legacy.data().validity, ZstdBuffersValidity::Child);
+
+        let legacy = legacy.into_array();
+        let mut ctx = session.create_execution_ctx();
+        for i in 0..input.len() {
+            assert_eq!(legacy.is_valid(i, &mut ctx)?, input.is_valid(i, &mut ctx)?);
+        }
         Ok(())
     }
 }

@@ -158,17 +158,23 @@ pub(crate) fn build_polygon_storage(
         ),
     ])?
     .into_array();
-    let rings = ListArray::try_new(
-        coordinates,
-        PrimitiveArray::new(ring_offsets.freeze(), Validity::NonNullable).into_array(),
-        Validity::NonNullable,
-    )?
+    // SAFETY: both offset buffers start at zero and are pushed in increasing order, ending at
+    // the number of coordinates and rings respectively.
+    let rings = unsafe {
+        ListArray::new_unchecked(
+            coordinates,
+            PrimitiveArray::new(ring_offsets.freeze(), Validity::NonNullable).into_array(),
+            Validity::NonNullable,
+        )
+    }
     .into_array();
-    let storage = ListArray::try_new(
-        rings,
-        PrimitiveArray::new(polygon_offsets.freeze(), Validity::NonNullable).into_array(),
-        Validity::NonNullable,
-    )?
+    let storage = unsafe {
+        ListArray::new_unchecked(
+            rings,
+            PrimitiveArray::new(polygon_offsets.freeze(), Validity::NonNullable).into_array(),
+            Validity::NonNullable,
+        )
+    }
     .into_array();
     Ok(storage)
 }

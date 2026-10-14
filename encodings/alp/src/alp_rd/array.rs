@@ -22,6 +22,7 @@ use vortex_array::ExecutionCtx;
 use vortex_array::ExecutionResult;
 use vortex_array::IntoArray;
 use vortex_array::TypedArrayRef;
+use vortex_array::VortexSessionExecute;
 use vortex_array::array_slots;
 use vortex_array::arrays::Primitive;
 use vortex_array::arrays::PrimitiveArray;
@@ -169,7 +170,7 @@ impl VTable for ALPRD {
         metadata: &[u8],
         _buffers: &[BufferHandle],
         children: &dyn ArrayChildren,
-        _session: &VortexSession,
+        session: &VortexSession,
     ) -> VortexResult<ArrayParts<Self>> {
         let metadata = ALPRDMetadata::decode(metadata)?;
         if children.len() < 2 {
@@ -214,6 +215,7 @@ impl VTable for ALPRD {
                     values,
                     // TODO(0ax1): handle chunk offsets
                     None,
+                    &mut session.create_execution_ctx(),
                 )
             })
             .transpose()?;

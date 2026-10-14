@@ -51,9 +51,14 @@ fn geometry_lists(elements: ArrayRef, elements_per_row: usize) -> ArrayRef {
         (0..=ROWS).map(|row| u64::try_from(row * elements_per_row).unwrap()),
     )
     .into_array();
-    ListArray::try_new(elements, offsets, Validity::NonNullable)
-        .unwrap()
-        .into_array()
+    ListArray::try_new(
+        elements,
+        offsets,
+        Validity::NonNullable,
+        &mut SESSION.create_execution_ctx(),
+    )
+    .unwrap()
+    .into_array()
 }
 
 fn point_lists(nullable: bool) -> ArrayRef {

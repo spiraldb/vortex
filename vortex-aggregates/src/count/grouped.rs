@@ -149,6 +149,7 @@ mod tests {
             offsets.into_array(),
             sizes.into_array(),
             Validity::NonNullable,
+            &mut crate::session().create_execution_ctx(),
         )?
         .into_array())
     }

@@ -432,6 +432,7 @@ mod tests {
             bytes.clone(),
             DType::Utf8(Nullability::NonNullable),
             Validity::NonNullable,
+            &mut VortexSession::empty().create_execution_ctx(),
         )?;
         let mut ctx = VortexSession::empty().create_execution_ctx();
         let column = Utf8Column::decode(array.into_array(), &mut ctx)?;
@@ -482,6 +483,7 @@ mod tests {
             ByteBuffer::from(vec![b'a', 0xff]),
             DType::Utf8(Nullability::Nullable),
             Validity::from_iter([true, false]),
+            &mut VortexSession::empty().create_execution_ctx(),
         )?;
         let mut ctx = VortexSession::empty().create_execution_ctx();
         let column = Utf8Column::decode(array.into_array(), &mut ctx)?;

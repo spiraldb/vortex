@@ -243,7 +243,12 @@ mod tests {
     fn null_input_row() -> VortexResult<()> {
         // 2 rows of dim-2 vectors. Row 1 is masked as null.
         let arr = tensor_array(&[2], &[3.0, 4.0, 0.0, 0.0])?;
-        let arr = MaskedArray::try_new(arr, Validity::from_iter([true, false]))?.into_array();
+        let arr = MaskedArray::try_new(
+            arr,
+            Validity::from_iter([true, false]),
+            &mut SESSION.create_execution_ctx(),
+        )?
+        .into_array();
 
         let result = L2Norm::try_new(arr)?;
         let mut ctx = SESSION.create_execution_ctx();

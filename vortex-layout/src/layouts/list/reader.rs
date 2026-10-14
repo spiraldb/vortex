@@ -883,6 +883,7 @@ mod tests {
             buffer![1i32, 2, 3, 4, 5].into_array(),
             buffer![0u32, 2, 4, 5].into_array(),
             validity,
+            &mut SESSION.create_execution_ctx(),
         )
         .expect("array is valid")
         .into_array()
@@ -897,6 +898,7 @@ mod tests {
             buffer![1i32, 2, 3, 4, 5, 6].into_array(),
             buffer![0u32, 1, 2, 3, 4, 5, 6].into_array(),
             validity,
+            &mut SESSION.create_execution_ctx(),
         )
         .expect("array is valid")
         .into_array()
@@ -981,6 +983,7 @@ mod tests {
             buffer![10i32, 11, 20, 21, 22, 30, 31, 32, 40, 41].into_array(),
             buffer![0u32, 2, 5, 5, 8, 10].into_array(),
             validity,
+            &mut SESSION.create_execution_ctx(),
         )
         .expect("array is valid")
         .into_array()
@@ -1065,12 +1068,14 @@ mod tests {
             PrimitiveArray::from_iter(0..128_i32).into_array(),
             PrimitiveArray::from_iter((0..=8_u32).map(|idx| idx * 16)).into_array(),
             Validity::NonNullable,
+            &mut SESSION.create_execution_ctx(),
         )?
         .into_array();
         let outer = ListArray::try_new(
             inner,
             buffer![0u32, 2, 4, 6, 8].into_array(),
             Validity::NonNullable,
+            &mut SESSION.create_execution_ctx(),
         )?
         .into_array();
 

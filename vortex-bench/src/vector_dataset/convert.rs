@@ -114,7 +114,8 @@ pub fn list_to_vector_ext(input: ArrayRef) -> VortexResult<ArrayRef> {
 
     // Extract the flat elements buffer up front: the nullable-handling branch below
     // needs to inspect runtime validity before we can decide whether to rewrap it.
-    let raw_elements = list.sliced_elements()?;
+    let mut ctx = SESSION.create_execution_ctx();
+    let raw_elements = list.sliced_elements(&mut ctx)?;
 
     let num_rows = input.len();
     if num_rows == 0 {
@@ -127,8 +128,8 @@ pub fn list_to_vector_ext(input: ArrayRef) -> VortexResult<ArrayRef> {
     // `Primitive` array (direct slice index). That's the common case after
     // `parquet_to_vortex_chunks`, so for a 100K-row column we do ~100K primitive
     // slice indexes rather than 200K. The loop body is O(1) either way.
-    let mut prev_end = list.offset_at(0)?;
-    let first_end = list.offset_at(1)?;
+    let mut prev_end = list.offset_at(0, &mut ctx)?;
+    let first_end = list.offset_at(1, &mut ctx)?;
 
     let dim = first_end.checked_sub(prev_end).ok_or_else(|| {
         vortex_err!("list_to_vector_ext: offsets are not monotonically increasing")
@@ -140,7 +141,7 @@ pub fn list_to_vector_ext(input: ArrayRef) -> VortexResult<ArrayRef> {
     prev_end = first_end;
 
     for i in 1..num_rows {
-        let end = list.offset_at(i + 1)?;
+        let end = list.offset_at(i + 1, &mut ctx)?;
 
         let row_len = end
             .checked_sub(prev_end)
@@ -277,7 +278,13 @@ mod tests {
         }
         let offsets =
             PrimitiveArray::new::<i32>(offsets_buf.freeze(), Validity::NonNullable).into_array();
-        Array::<List>::new(elements, offsets, Validity::NonNullable).into_array()
+        Array::<List>::new(
+            elements,
+            offsets,
+            Validity::NonNullable,
+            &mut SESSION.create_execution_ctx(),
+        )
+        .into_array()
     }
 
     fn list_f32(rows: &[&[f32]]) -> ArrayRef {
@@ -295,7 +302,13 @@ mod tests {
             PrimitiveArray::new::<f32>(elements.freeze(), Validity::NonNullable).into_array();
         let offsets_array =
             PrimitiveArray::new::<i32>(offsets.freeze(), Validity::NonNullable).into_array();
-        Array::<List>::new(elements_array, offsets_array, Validity::NonNullable).into_array()
+        Array::<List>::new(
+            elements_array,
+            offsets_array,
+            Validity::NonNullable,
+            &mut SESSION.create_execution_ctx(),
+        )
+        .into_array()
     }
 
     #[test]
@@ -376,9 +389,15 @@ mod tests {
         let sizes =
             PrimitiveArray::new::<i32>(sizes_buf.freeze(), Validity::NonNullable).into_array();
 
-        ListViewArray::try_new(elements, offsets, sizes, Validity::NonNullable)
-            .unwrap()
-            .into_array()
+        ListViewArray::try_new(
+            elements,
+            offsets,
+            sizes,
+            Validity::NonNullable,
+            &mut SESSION.create_execution_ctx(),
+        )
+        .unwrap()
+        .into_array()
     }
 
     #[test]
@@ -411,7 +430,13 @@ mod tests {
             Validity::NonNullable,
         )
         .into_array();
-        let list = Array::<List>::new(elements, offsets, Validity::AllInvalid).into_array();
+        let list = Array::<List>::new(
+            elements,
+            offsets,
+            Validity::AllInvalid,
+            &mut SESSION.create_execution_ctx(),
+        )
+        .into_array();
 
         let err = list_to_vector_ext(list).unwrap_err().to_string();
         assert!(
@@ -433,7 +458,13 @@ mod tests {
             Validity::NonNullable,
         )
         .into_array();
-        let list = Array::<List>::new(elements, offsets, Validity::NonNullable).into_array();
+        let list = Array::<List>::new(
+            elements,
+            offsets,
+            Validity::NonNullable,
+            &mut SESSION.create_execution_ctx(),
+        )
+        .into_array();
 
         let err = list_to_vector_ext(list).unwrap_err().to_string();
         assert!(

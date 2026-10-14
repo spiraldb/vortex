@@ -677,7 +677,12 @@ impl ArrowSession {
                     elem_field.as_ref(),
                 )?;
                 let validity = nulls(list.nulls(), field.is_nullable())?;
-                Ok(ListArray::try_new(elements, offsets.into_array(), validity)?.into_array())
+                // SAFETY: Arrow list offsets are non-negative, sorted and bounded by the values, and
+                // `trim_offsets` rebases them onto the referenced slice of the values.
+                Ok(
+                    unsafe { ListArray::new_unchecked(elements, offsets.into_array(), validity) }
+                        .into_array(),
+                )
             }
             DataType::LargeList(elem_field) => {
                 let list = array.as_list::<i64>();
@@ -687,7 +692,12 @@ impl ArrowSession {
                     elem_field.as_ref(),
                 )?;
                 let validity = nulls(list.nulls(), field.is_nullable())?;
-                Ok(ListArray::try_new(elements, offsets.into_array(), validity)?.into_array())
+                // SAFETY: Arrow list offsets are non-negative, sorted and bounded by the values, and
+                // `trim_offsets` rebases them onto the referenced slice of the values.
+                Ok(
+                    unsafe { ListArray::new_unchecked(elements, offsets.into_array(), validity) }
+                        .into_array(),
+                )
             }
             DataType::FixedSizeList(elem_field, list_size) => {
                 let fsl = array.as_fixed_size_list();
@@ -708,7 +718,11 @@ impl ArrowSession {
                 let offsets = list.offsets().clone().into_array();
                 let sizes = list.sizes().clone().into_array();
                 let validity = nulls(list.nulls(), field.is_nullable())?;
-                Ok(ListViewArray::try_new(elements, offsets, sizes, validity)?.into_array())
+                // SAFETY: Arrow list views keep every `offset + size` within the values.
+                Ok(
+                    unsafe { ListViewArray::new_unchecked(elements, offsets, sizes, validity) }
+                        .into_array(),
+                )
             }
             DataType::LargeListView(elem_field) => {
                 let list = array.as_list_view::<i64>();
@@ -717,7 +731,11 @@ impl ArrowSession {
                 let offsets = list.offsets().clone().into_array();
                 let sizes = list.sizes().clone().into_array();
                 let validity = nulls(list.nulls(), field.is_nullable())?;
-                Ok(ListViewArray::try_new(elements, offsets, sizes, validity)?.into_array())
+                // SAFETY: Arrow list views keep every `offset + size` within the values.
+                Ok(
+                    unsafe { ListViewArray::new_unchecked(elements, offsets, sizes, validity) }
+                        .into_array(),
+                )
             }
             DataType::Map(entries_field, keys_sorted) => {
                 let map = array.as_map();

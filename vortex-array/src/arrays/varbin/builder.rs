@@ -42,7 +42,7 @@ use crate::dtype::OffsetBuilderPType;
 use crate::expr::stats::Precision;
 use crate::expr::stats::Stat;
 #[cfg(debug_assertions)]
-use crate::legacy_session;
+use crate::internal_session;
 use crate::match_each_integer_ptype;
 use crate::scalar::Scalar;
 use crate::validity::Validity;
@@ -354,7 +354,7 @@ impl<O: OffsetBuilderPType> VarBinBuilder<O> {
         usize: AsPrimitive<O>,
     {
         let offsets = array.offsets().clone().execute::<PrimitiveArray>(ctx)?;
-        let bytes: ByteBuffer = array.sliced_bytes();
+        let bytes: ByteBuffer = array.sliced_bytes(ctx);
         let validity = array
             .varbin_validity()
             .execute_mask(array.as_ref().len(), ctx)?;
@@ -430,7 +430,7 @@ impl<O: OffsetBuilderPType> VarBinBuilder<O> {
         {
             let offsets_are_sorted = integer_bounds(
                 offsets.as_ref(),
-                &mut legacy_session().create_execution_ctx(),
+                &mut internal_session().create_execution_ctx(),
             )
             .ok()
             .flatten()

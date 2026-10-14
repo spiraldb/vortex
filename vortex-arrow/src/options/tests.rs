@@ -134,6 +134,7 @@ fn external_options_reach_nested_exporters() -> VortexResult<()> {
         buffer![1i32, 2, 3].into_array(),
         buffer![0i32, 3].into_array(),
         Validity::NonNullable,
+        &mut ctx,
     )?
     .into_array();
     let called = Arc::new(AtomicU32::new(0));
@@ -196,8 +197,13 @@ impl Shape {
         Ok(match self {
             Shape::Flat => (leaf, leaf_type),
             Shape::List => (
-                ListArray::try_new(leaf, buffer![0i32, 3].into_array(), Validity::NonNullable)?
-                    .into_array(),
+                ListArray::try_new(
+                    leaf,
+                    buffer![0i32, 3].into_array(),
+                    Validity::NonNullable,
+                    ctx,
+                )?
+                .into_array(),
                 DataType::List(field),
             ),
             Shape::ListView => (
@@ -206,6 +212,7 @@ impl Shape {
                     buffer![0i32].into_array(),
                     buffer![3i32].into_array(),
                     Validity::NonNullable,
+                    ctx,
                 )?
                 .into_array(),
                 DataType::ListView(field),

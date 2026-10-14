@@ -95,6 +95,7 @@ fn nullable_eight_points(bencher: Bencher) {
     let input = MaskedArray::try_new(
         multipoints(ROWS, 8),
         Validity::from_iter((0..ROWS).map(|row| !row.is_multiple_of(8))),
+        &mut SESSION.create_execution_ctx(),
     )
     .unwrap()
     .into_array();

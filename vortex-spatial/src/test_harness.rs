@@ -5,6 +5,7 @@
 
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
+use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::ExtensionArray;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::PrimitiveArray;
@@ -79,6 +80,7 @@ fn nest<T>(rows: &[Vec<T>], elements: ArrayRef) -> VortexResult<ArrayRef> {
         elements,
         PrimitiveArray::from_iter(offsets).into_array(),
         Validity::NonNullable,
+        &mut spatial_session().create_execution_ctx(),
     )?
     .into_array())
 }
@@ -197,6 +199,7 @@ pub fn nullable_multipolygon_column(
         vertex_list_lists(&polygons)?,
         PrimitiveArray::from_iter(offsets).into_array(),
         Validity::from_iter(multipolygons.iter().map(Option::is_some)),
+        &mut spatial_session().create_execution_ctx(),
     )?
     .into_array();
     spatial_column::<MultiPolygon>(

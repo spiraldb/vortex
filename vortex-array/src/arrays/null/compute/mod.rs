@@ -8,6 +8,8 @@ pub(crate) mod rules;
 mod slice;
 mod take;
 
+pub(crate) use take::initialize;
+
 #[cfg(test)]
 mod test {
     use rstest::rstest;

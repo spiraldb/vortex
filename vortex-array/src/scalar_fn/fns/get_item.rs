@@ -477,6 +477,7 @@ mod tests {
             buffer![0f32, 1., 2., 3., 4., 5., 6., 7., 8., 9., 10., 11.].into_array(),
             buffer![2u64, 4, 6, 8, 10, 12].into_array(),
             Validity::Array(BoolArray::from_iter([true, true, false, true, true]).into_array()),
+            &mut crate::test_harness::test_session().create_execution_ctx(),
         )
         .unwrap();
 

@@ -125,9 +125,20 @@ fn constructs_map_with_listview_entries() -> VortexResult<()> {
         &DType::Map(map_dtype.clone(), Nullability::Nullable)
     );
     assert!(array.keys_sorted());
-    assert_eq!(array.entry_count_at(0), 3);
-    assert_eq!(array.entry_count_at(1), 0);
-    assert_eq!(array.entries_at(0)?.dtype(), &map_dtype.entries_dtype());
+    assert_eq!(
+        array.entry_count_at(0, &mut test_session().create_execution_ctx()),
+        3
+    );
+    assert_eq!(
+        array.entry_count_at(1, &mut test_session().create_execution_ctx()),
+        0
+    );
+    assert_eq!(
+        array
+            .entries_at(0, &mut test_session().create_execution_ctx())?
+            .dtype(),
+        &map_dtype.entries_dtype()
+    );
 
     let mut ctx = test_session().create_execution_ctx();
     assert_eq!(
@@ -164,6 +175,7 @@ fn rejects_malformed_entry_storage() -> VortexResult<()> {
         offsets,
         sizes,
         Validity::NonNullable,
+        &mut test_session().create_execution_ctx(),
     )?;
     assert!(MapArray::try_new(map_dtype.clone(), non_struct_entries).is_err());
 
@@ -174,6 +186,7 @@ fn rejects_malformed_entry_storage() -> VortexResult<()> {
         PrimitiveArray::from_iter([0u64]).into_array(),
         PrimitiveArray::from_iter([1u64]).into_array(),
         Validity::NonNullable,
+        &mut test_session().create_execution_ctx(),
     )?;
     assert!(MapArray::try_new(map_dtype.clone(), null_entries).is_err());
 
@@ -278,10 +291,10 @@ fn scalar_access_preserves_variable_entry_counts_and_utf8_pairs() -> VortexResul
     let array = builder.finish_into_map();
     let mut ctx = test_session().create_execution_ctx();
 
-    assert_eq!(array.entry_count_at(0), 2);
-    assert_eq!(array.entry_count_at(1), 1);
-    assert_eq!(array.entry_count_at(2), 0);
-    assert_eq!(array.entry_count_at(3), 3);
+    assert_eq!(array.entry_count_at(0, &mut ctx), 2);
+    assert_eq!(array.entry_count_at(1, &mut ctx), 1);
+    assert_eq!(array.entry_count_at(2, &mut ctx), 0);
+    assert_eq!(array.entry_count_at(3, &mut ctx), 3);
     for (index, expected) in expected.into_iter().enumerate() {
         assert_eq!(array.execute_scalar(index, &mut ctx)?, expected);
     }

@@ -440,8 +440,13 @@ mod tests {
         let data = buffer![1i32, 2, 3, 4, 5, 6].into_array();
         let offsets = buffer![0i64, 2, 2, 5, 6].into_array();
 
-        let array =
-            ListArray::try_new(data, offsets, crate::validity::Validity::NonNullable).unwrap();
+        let array = ListArray::try_new(
+            data,
+            offsets,
+            crate::validity::Validity::NonNullable,
+            &mut SESSION.create_execution_ctx(),
+        )
+        .unwrap();
         test_cast_conformance(&array.into_array(), &mut SESSION.create_execution_ctx());
     }
 }

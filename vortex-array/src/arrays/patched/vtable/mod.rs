@@ -387,6 +387,7 @@ mod tests {
             buffer![1u32, 2, 3].into_array(),
             buffer![1u16; 3].into_array(),
             None,
+            &mut test_session().create_execution_ctx(),
         )
         .unwrap();
 
@@ -420,6 +421,7 @@ mod tests {
             buffer![1u32, 2, 3].into_array(),
             buffer![1u16; 3].into_array(),
             None,
+            &mut test_session().create_execution_ctx(),
         )
         .unwrap();
 
@@ -453,6 +455,7 @@ mod tests {
             buffer![1u32, 2, 3].into_array(),
             buffer![10u16, 20, 30].into_array(),
             None,
+            &mut test_session().create_execution_ctx(),
         )
         .unwrap();
 
@@ -490,6 +493,7 @@ mod tests {
             buffer![1u32, 2, 3].into_array(),
             buffer![10u16, 20, 30].into_array(),
             None,
+            &mut test_session().create_execution_ctx(),
         )
         .unwrap();
 
@@ -531,6 +535,7 @@ mod tests {
             buffer![1u32, 2, 3].into_array(),
             buffer![10u16, 20, 30].into_array(),
             None,
+            &mut test_session().create_execution_ctx(),
         )
         .unwrap();
 
@@ -580,7 +585,14 @@ mod tests {
         let indices = PrimitiveArray::from_iter(patch_indices.iter().copied()).into_array();
         let patch_vals = PrimitiveArray::from_iter(patch_values.iter().copied()).into_array();
 
-        let patches = Patches::new(len, 0, indices, patch_vals, None)?;
+        let patches = Patches::new(
+            len,
+            0,
+            indices,
+            patch_vals,
+            None,
+            &mut test_session().create_execution_ctx(),
+        )?;
 
         let session = test_session();
         let mut ctx = session.create_execution_ctx();

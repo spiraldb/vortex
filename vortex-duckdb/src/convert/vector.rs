@@ -3,6 +3,7 @@
 
 use num_traits::AsPrimitive;
 use vortex::array::ArrayRef;
+use vortex::array::ExecutionCtx;
 use vortex::array::IntoArray;
 use vortex::array::arrays::BoolArray;
 use vortex::array::arrays::DecimalArray;
@@ -221,7 +222,11 @@ fn process_duckdb_lists(
 }
 
 /// Converts flat vector to a vortex array
-pub fn flat_vector_to_vortex(vector: &VectorRef, len: usize) -> VortexResult<ArrayRef> {
+pub fn flat_vector_to_vortex(
+    vector: &VectorRef,
+    len: usize,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<ArrayRef> {
     let logical_type = vector.logical_type();
     match logical_type.as_type_id() {
         DUCKDB_TYPE::DUCKDB_TYPE_TIMESTAMP => {
@@ -363,6 +368,7 @@ pub fn flat_vector_to_vortex(vector: &VectorRef, len: usize) -> VortexResult<Arr
             let child_data = flat_vector_to_vortex(
                 vector.array_vector_get_child(),
                 len * array_elem_size as usize,
+                ctx,
             )?;
 
             FixedSizeListArray::try_new(
@@ -379,20 +385,21 @@ pub fn flat_vector_to_vortex(vector: &VectorRef, len: usize) -> VortexResult<Arr
 
             let (offsets, sizes, child_min_length) = process_duckdb_lists(entries, &validity)?;
             let child_data =
-                flat_vector_to_vortex(vector.list_vector_get_child(), child_min_length)?;
+                flat_vector_to_vortex(vector.list_vector_get_child(), child_min_length, ctx)?;
 
             ListViewArray::try_new(
                 child_data,
                 offsets.into_array(),
                 sizes.into_array(),
                 Validity::from_mask(validity, Nullability::Nullable),
+                ctx,
             )
             .map(|a| a.into_array())
         }
         DUCKDB_TYPE::DUCKDB_TYPE_STRUCT => {
             let logical_type = vector.logical_type();
             let children = (0..logical_type.struct_type_child_count())
-                .map(|idx| flat_vector_to_vortex(vector.struct_vector_get_child(idx), len))
+                .map(|idx| flat_vector_to_vortex(vector.struct_vector_get_child(idx), len, ctx))
                 .collect::<Result<Vec<_>, _>>()?;
             let names = (0..logical_type.struct_type_child_count())
                 .map(|idx| logical_type.struct_child_name(idx))
@@ -408,6 +415,7 @@ pub fn flat_vector_to_vortex(vector: &VectorRef, len: usize) -> VortexResult<Arr
 pub fn data_chunk_to_vortex(
     field_names: &FieldNames,
     chunk: &DataChunkRef,
+    ctx: &mut ExecutionCtx,
 ) -> VortexResult<ArrayRef> {
     let len = chunk.len();
 
@@ -415,7 +423,7 @@ pub fn data_chunk_to_vortex(
         .map(|i| {
             let vector = chunk.get_vector(i);
             vector.flatten(len);
-            flat_vector_to_vortex(vector, len.as_())
+            flat_vector_to_vortex(vector, len.as_(), ctx)
         })
         .collect::<VortexResult<Vec<_>>>()?;
     StructArray::try_new(
@@ -469,7 +477,7 @@ mod tests {
         }
 
         // Test conversion
-        let result = flat_vector_to_vortex(&vector, len).unwrap();
+        let result = flat_vector_to_vortex(&vector, len, &mut ctx).unwrap();
         let expected =
             PrimitiveArray::from_option_iter([Some(1i32), Some(2), Some(3), Some(4), Some(5)]);
         assert_arrays_eq!(result, expected, &mut ctx);
@@ -491,7 +499,7 @@ mod tests {
         }
 
         // Test conversion
-        let result = flat_vector_to_vortex(&vector, len).unwrap();
+        let result = flat_vector_to_vortex(&vector, len, &mut ctx).unwrap();
         let vortex_array = TemporalArray::try_from(result).unwrap();
         let vortex_values = vortex_array
             .temporal_values()
@@ -519,7 +527,7 @@ mod tests {
         }
 
         // Test conversion
-        let result = flat_vector_to_vortex(&vector, len).unwrap();
+        let result = flat_vector_to_vortex(&vector, len, &mut ctx).unwrap();
         let vortex_array = TemporalArray::try_from(result).unwrap();
         let vortex_values = vortex_array
             .temporal_values()
@@ -547,7 +555,7 @@ mod tests {
         }
 
         // Test conversion
-        let result = flat_vector_to_vortex(&vector, len).unwrap();
+        let result = flat_vector_to_vortex(&vector, len, &mut ctx).unwrap();
         let vortex_array = TemporalArray::try_from(result).unwrap();
         let vortex_values = vortex_array
             .temporal_values()
@@ -580,7 +588,7 @@ mod tests {
         validity_slice.set(1, false);
 
         // Test conversion
-        let result = flat_vector_to_vortex(&vector, len).unwrap();
+        let result = flat_vector_to_vortex(&vector, len, &mut ctx).unwrap();
         let vortex_array = TemporalArray::try_from(result).unwrap();
         let vortex_values = vortex_array
             .temporal_values()
@@ -623,7 +631,12 @@ mod tests {
         }
 
         // Test conversion
-        let result = flat_vector_to_vortex(&vector, len).unwrap();
+        let result = flat_vector_to_vortex(
+            &vector,
+            len,
+            &mut vortex::aggregates::session().create_execution_ctx(),
+        )
+        .unwrap();
         let vortex_array = TemporalArray::try_from(result).unwrap();
         let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let vortex_values = vortex_array
@@ -652,7 +665,7 @@ mod tests {
         }
 
         // Test conversion
-        let result = flat_vector_to_vortex(&vector, len).unwrap();
+        let result = flat_vector_to_vortex(&vector, len, &mut ctx).unwrap();
         let vortex_array = TemporalArray::try_from(result).unwrap();
         let vortex_values = vortex_array
             .temporal_values()
@@ -680,7 +693,7 @@ mod tests {
         }
 
         // Test conversion
-        let result = flat_vector_to_vortex(&vector, len).unwrap();
+        let result = flat_vector_to_vortex(&vector, len, &mut ctx).unwrap();
         let vortex_array = result.execute::<BoolArray>(&mut ctx).unwrap();
         let expected = BoolArray::new(BitBuffer::from(values), Validity::AllValid);
         assert_arrays_eq!(vortex_array, expected, &mut ctx);
@@ -707,7 +720,7 @@ mod tests {
         validity_slice.set(1, false);
 
         // Test conversion
-        let result = flat_vector_to_vortex(&vector, len).unwrap();
+        let result = flat_vector_to_vortex(&vector, len, &mut ctx).unwrap();
         let vortex_array = result.execute::<PrimitiveArray>(&mut ctx).unwrap();
         let vortex_slice = vortex_array.as_slice::<i32>();
 
@@ -746,13 +759,18 @@ mod tests {
         }
 
         // Test conversion
-        let result = flat_vector_to_vortex(&vector, len).unwrap();
+        let result = flat_vector_to_vortex(
+            &vector,
+            len,
+            &mut vortex::aggregates::session().create_execution_ctx(),
+        )
+        .unwrap();
         let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let vortex_array = result.execute::<ListViewArray>(&mut ctx).unwrap();
 
         assert_eq!(vortex_array.len(), len);
         assert_arrays_eq!(
-            vortex_array.list_elements_at(0).unwrap(),
+            vortex_array.list_elements_at(0, &mut ctx).unwrap(),
             PrimitiveArray::from_option_iter([Some(1i32), Some(2), Some(3), Some(4)]),
             &mut ctx
         );
@@ -777,7 +795,7 @@ mod tests {
         }
 
         // Test conversion
-        let result = flat_vector_to_vortex(&vector, len).unwrap();
+        let result = flat_vector_to_vortex(&vector, len, &mut ctx).unwrap();
         let vortex_array = result.execute::<FixedSizeListArray>(&mut ctx).unwrap();
 
         assert_eq!(vortex_array.len(), len);
@@ -797,7 +815,7 @@ mod tests {
         let vector = Vector::with_capacity(&logical_type, len);
 
         // Test conversion
-        let result = flat_vector_to_vortex(&vector, len).unwrap();
+        let result = flat_vector_to_vortex(&vector, len, &mut ctx).unwrap();
         let vortex_array = result.execute::<StructArray>(&mut ctx).unwrap();
 
         assert_eq!(vortex_array.len(), len);
@@ -833,7 +851,7 @@ mod tests {
         }
 
         // Test conversion
-        let result = flat_vector_to_vortex(&vector, len).unwrap();
+        let result = flat_vector_to_vortex(&vector, len, &mut ctx).unwrap();
         let vortex_array = result.execute::<StructArray>(&mut ctx).unwrap();
 
         assert_eq!(vortex_array.len(), len);
@@ -885,12 +903,12 @@ mod tests {
 
         // Test conversion - the old bug would compute child length as 0+0=0 instead of
         // max(4,0)=4.
-        let result = flat_vector_to_vortex(&vector, len).unwrap();
+        let result = flat_vector_to_vortex(&vector, len, &mut ctx).unwrap();
         let vortex_array = result.execute::<ListViewArray>(&mut ctx).unwrap();
 
         assert_eq!(vortex_array.len(), len);
         assert_arrays_eq!(
-            vortex_array.list_elements_at(0).unwrap(),
+            vortex_array.list_elements_at(0, &mut ctx).unwrap(),
             PrimitiveArray::from_option_iter([Some(1i32), Some(2), Some(3), Some(4)]),
             &mut ctx
         );
@@ -937,17 +955,17 @@ mod tests {
 
         // Test conversion - the old bug would compute child length as 0+2=2 instead of
         // max(4,2)=4.
-        let result = flat_vector_to_vortex(&vector, len).unwrap();
+        let result = flat_vector_to_vortex(&vector, len, &mut ctx).unwrap();
         let vortex_array = result.execute::<ListViewArray>(&mut ctx).unwrap();
 
         assert_eq!(vortex_array.len(), len);
         assert_arrays_eq!(
-            vortex_array.list_elements_at(0).unwrap(),
+            vortex_array.list_elements_at(0, &mut ctx).unwrap(),
             PrimitiveArray::from_option_iter([Some(3i32), Some(4)]),
             &mut ctx
         );
         assert_arrays_eq!(
-            vortex_array.list_elements_at(1).unwrap(),
+            vortex_array.list_elements_at(1, &mut ctx).unwrap(),
             PrimitiveArray::from_option_iter([Some(1i32), Some(2)]),
             &mut ctx
         );
@@ -995,19 +1013,19 @@ mod tests {
 
         // Test conversion. The old code would compute child_min_length as 9999+9999=19998, which
         // would panic when trying to read that much data from the child vector.
-        let result = flat_vector_to_vortex(&vector, len).unwrap();
+        let result = flat_vector_to_vortex(&vector, len, &mut ctx).unwrap();
         let vortex_array = result.execute::<ListViewArray>(&mut ctx).unwrap();
 
         assert_eq!(vortex_array.len(), len);
 
         // Valid entries should work correctly.
         assert_arrays_eq!(
-            vortex_array.list_elements_at(0).unwrap(),
+            vortex_array.list_elements_at(0, &mut ctx).unwrap(),
             PrimitiveArray::from_option_iter([Some(1i32), Some(2)]),
             &mut ctx
         );
         assert_arrays_eq!(
-            vortex_array.list_elements_at(2).unwrap(),
+            vortex_array.list_elements_at(2, &mut ctx).unwrap(),
             PrimitiveArray::from_option_iter([Some(3i32), Some(4)]),
             &mut ctx
         );
@@ -1080,7 +1098,7 @@ mod tests {
         let validity_slice = unsafe { vector.ensure_validity_bitslice(len) };
         validity_slice.set(1, false);
 
-        let result = flat_vector_to_vortex(&vector, len)?;
+        let result = flat_vector_to_vortex(&vector, len, &mut ctx)?;
         let extension = result
             .as_opt::<Extension>()
             .vortex_expect("expected ExtensionArray")

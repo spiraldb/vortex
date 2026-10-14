@@ -485,7 +485,7 @@ mod tests {
             .clone()
             .execute_cuda(&mut cuda_ctx)
             .await?
-            .into_host()
+            .into_host(cuda_ctx.session())
             .await?
             .into_array();
 

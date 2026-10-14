@@ -185,6 +185,7 @@ mod tests {
             buffer![509u16, 510, 511].into_array(),
             buffer![u32::MAX; 3].into_array(),
             None,
+            &mut crate::test_harness::test_session().create_execution_ctx(),
         )
         .unwrap();
 
@@ -218,6 +219,7 @@ mod tests {
             buffer![5u16, 510, 511].into_array(),
             buffer![u32::MAX; 3].into_array(),
             None,
+            &mut crate::test_harness::test_session().create_execution_ctx(),
         )
         .unwrap();
 
@@ -256,6 +258,7 @@ mod tests {
             buffer![509u16, 510, 511].into_array(),
             buffer![f32::NAN, subnormal, f32::NEG_INFINITY].into_array(),
             None,
+            &mut crate::test_harness::test_session().create_execution_ctx(),
         )?;
 
         let mut ctx = crate::test_harness::test_session().create_execution_ctx();
@@ -290,6 +293,7 @@ mod tests {
             buffer![5u16, 6, 7, 8, 9].into_array(),
             buffer![f32::NAN, f32::NEG_INFINITY, 0f32, -0.0f32, f32::INFINITY].into_array(),
             None,
+            &mut crate::test_harness::test_session().create_execution_ctx(),
         )?;
 
         let mut ctx = crate::test_harness::test_session().create_execution_ctx();

@@ -87,6 +87,7 @@ mod benchmarks {
             offsets.freeze().into_array(),
             sizes.freeze().into_array(),
             Validity::NonNullable,
+            &mut SESSION.create_execution_ctx(),
         );
         if zctl {
             lv = unsafe { lv.with_zero_copy_to_list(true) };

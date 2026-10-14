@@ -75,6 +75,7 @@ fn contiguous_list_view(elements: ArrayRef, group_sizes: &[usize]) -> ArrayRef {
         offsets.into_array(),
         sizes.into_array(),
         Validity::NonNullable,
+        &mut SESSION.create_execution_ctx(),
     )
     .unwrap()
     .into_array()

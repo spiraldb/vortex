@@ -234,7 +234,14 @@ mod tests {
         } else {
             Validity::from_iter(group_valid.iter().copied())
         };
-        Ok(ListViewArray::try_new(elements, offsets, sizes, validity)?.into_array())
+        Ok(ListViewArray::try_new(
+            elements,
+            offsets,
+            sizes,
+            validity,
+            &mut crate::session().create_execution_ctx(),
+        )?
+        .into_array())
     }
 
     #[test]

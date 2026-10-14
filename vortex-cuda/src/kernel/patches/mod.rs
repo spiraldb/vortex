@@ -245,8 +245,15 @@ mod tests {
         let patch_val = force_cast::<Values>(patch_val, &mut ctx);
 
         // Copy all to GPU
-        let patches =
-            Patches::new(128, 0, patch_idx.into_array(), patch_val.into_array(), None).unwrap();
+        let patches = Patches::new(
+            128,
+            0,
+            patch_idx.into_array(),
+            patch_val.into_array(),
+            None,
+            &mut ctx,
+        )
+        .unwrap();
 
         let cpu_result = values.clone().patch(&patches, &mut ctx).unwrap();
 
@@ -280,7 +287,7 @@ mod tests {
         .into_array()
         .execute::<vortex::array::Canonical>(&mut ctx)
         .unwrap()
-        .into_host()
+        .into_host(cuda_ctx.session())
         .await
         .unwrap()
         .into_primitive();

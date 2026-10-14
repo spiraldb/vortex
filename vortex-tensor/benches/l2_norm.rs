@@ -75,8 +75,12 @@ fn non_nullable(bencher: Bencher, width: usize) {
 #[divan::bench(args = WIDTHS)]
 fn nullable(bencher: Bencher, width: usize) {
     let validity = Validity::from_iter((0..ELEMENTS / width).map(|i| i % 8 != 0));
-    let input = MaskedArray::try_new(vectors(width), validity)
-        .unwrap()
-        .into_array();
+    let input = MaskedArray::try_new(
+        vectors(width),
+        validity,
+        &mut vortex_aggregates::session().create_execution_ctx(),
+    )
+    .unwrap()
+    .into_array();
     bench_l2_norm(bencher, input);
 }

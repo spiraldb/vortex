@@ -2035,12 +2035,14 @@ async fn nested_list_of_list_roundtrip() -> VortexResult<()> {
         buffer![1i32, 2, 3, 4, 5, 6].into_array(),
         buffer![0u32, 2, 5, 5, 6].into_array(),
         Validity::NonNullable,
+        &mut SESSION.create_execution_ctx(),
     )?
     .into_array();
     let outer = ListArray::try_new(
         inner,
         buffer![0u32, 2, 4].into_array(),
         Validity::NonNullable,
+        &mut SESSION.create_execution_ctx(),
     )?
     .into_array();
     let st = StructArray::from_fields(&[("nested", outer)])?.into_array();
@@ -2132,6 +2134,7 @@ async fn nested_struct_list_struct_roundtrip() -> VortexResult<()> {
         inner_struct,
         buffer![0u32, 2, 5, 5].into_array(),
         Validity::Array(BoolArray::from_iter([true, false, true]).into_array()),
+        &mut SESSION.create_execution_ctx(),
     )?
     .into_array();
     let st = StructArray::from_fields(&[("items", items)])?.into_array();

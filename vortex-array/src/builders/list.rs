@@ -16,6 +16,8 @@ use crate::ArrayRef;
 use crate::Canonical;
 use crate::ExecutionCtx;
 use crate::IntoArray;
+#[cfg(debug_assertions)]
+use crate::VortexSessionExecute;
 use crate::array::ArrayView;
 use crate::arrays::List;
 use crate::arrays::ListArray;
@@ -23,6 +25,8 @@ use crate::arrays::ListView;
 use crate::arrays::ListViewArray;
 use crate::arrays::PrimitiveArray;
 use crate::arrays::list::ListArraySlotsExt;
+#[cfg(debug_assertions)]
+use crate::arrays::list::ListData;
 use crate::arrays::listview::ListViewArraySlotsExt;
 use crate::arrays::listview::ListViewRebuildMode;
 use crate::builders::ArrayBuilder;
@@ -35,6 +39,8 @@ use crate::dtype::IntegerPType;
 use crate::dtype::Nullability;
 use crate::dtype::Nullability::NonNullable;
 use crate::dtype::OffsetBuilderPType;
+#[cfg(debug_assertions)]
+use crate::internal_session;
 use crate::match_each_integer_ptype;
 use crate::scalar::ListScalar;
 use crate::scalar::Scalar;
@@ -184,12 +190,23 @@ impl<O: OffsetBuilderPType> ListBuilder<O> {
             "offsets length must be one more than nulls length."
         );
 
-        ListArray::try_new(
-            self.elements_builder.finish(),
-            self.offsets_builder.finish(),
-            self.nulls.finish_with_nullability(self.dtype.nullability()),
+        let elements = self.elements_builder.finish();
+        let offsets = self.offsets_builder.finish();
+        let validity = self.nulls.finish_with_nullability(self.dtype.nullability());
+
+        #[cfg(debug_assertions)]
+        #[expect(clippy::disallowed_methods)]
+        ListData::validate(
+            &elements,
+            &offsets,
+            &validity,
+            &mut internal_session().create_execution_ctx(),
         )
-        .vortex_expect("Buffer, offsets, and validity must have same length.")
+        .vortex_expect("Buffer, offsets, and validity must have same length.");
+
+        // SAFETY: offsets start at zero and are appended in increasing order, each bounded by the
+        // elements appended so far, and there is one validity entry per list.
+        unsafe { ListArray::new_unchecked(elements, offsets, validity) }
     }
 
     /// The [`DType`] of the inner elements. Note that this is **not** the same as the [`DType`] of
@@ -501,8 +518,8 @@ mod tests {
         let mut ctx = test_session().create_execution_ctx();
         let list_array = list.execute::<ListViewArray>(&mut ctx).unwrap();
 
-        assert_eq!(list_array.list_elements_at(0).unwrap().len(), 3);
-        assert_eq!(list_array.list_elements_at(1).unwrap().len(), 3);
+        assert_eq!(list_array.list_elements_at(0, &mut ctx).unwrap().len(), 3);
+        assert_eq!(list_array.list_elements_at(1, &mut ctx).unwrap().len(), 3);
     }
 
     #[test]
@@ -566,9 +583,9 @@ mod tests {
         let mut ctx = test_session().create_execution_ctx();
         let list_array = list.execute::<ListViewArray>(&mut ctx).unwrap();
 
-        assert_eq!(list_array.list_elements_at(0).unwrap().len(), 3);
-        assert_eq!(list_array.list_elements_at(1).unwrap().len(), 0);
-        assert_eq!(list_array.list_elements_at(2).unwrap().len(), 3);
+        assert_eq!(list_array.list_elements_at(0, &mut ctx).unwrap().len(), 3);
+        assert_eq!(list_array.list_elements_at(1, &mut ctx).unwrap().len(), 0);
+        assert_eq!(list_array.list_elements_at(2, &mut ctx).unwrap().len(), 3);
     }
 
     fn test_extend_builder_gen<O: OffsetBuilderPType>() {
@@ -841,6 +858,7 @@ mod tests {
             buffer![1, 2, 3, 4].into_array(),
             buffer![0, 3].into_array(),
             Validity::NonNullable,
+            &mut test_session().create_execution_ctx(),
         )
         .unwrap();
 
@@ -848,6 +866,7 @@ mod tests {
             buffer![5, 6].into_array(),
             buffer![0, 2].into_array(),
             Validity::NonNullable,
+            &mut test_session().create_execution_ctx(),
         )
         .unwrap();
 

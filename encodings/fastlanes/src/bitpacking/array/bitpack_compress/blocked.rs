@@ -110,6 +110,7 @@ pub fn bitpack_encode_blocked(
             bit_widths,
             num_exceptions.unwrap_or(0),
             &validity_mask,
+            ctx,
         )?
     };
 
@@ -202,6 +203,7 @@ fn gather_blocked_patches(
     bit_widths: &[u8],
     num_exceptions_hint: usize,
     validity_mask: &Mask,
+    ctx: &mut ExecutionCtx,
 ) -> VortexResult<Option<Patches>> {
     let patch_validity = match array.validity()? {
         Validity::NonNullable => Validity::NonNullable,
@@ -216,6 +218,7 @@ fn gather_blocked_patches(
                 num_exceptions_hint,
                 patch_validity,
                 validity_mask,
+                ctx,
             )
         })
     })
@@ -227,6 +230,7 @@ fn gather_blocked_patches_typed<T, I>(
     num_exceptions_hint: usize,
     patch_validity: Validity,
     validity_mask: &Mask,
+    ctx: &mut ExecutionCtx,
 ) -> VortexResult<Option<Patches>>
 where
     T: NativePType + PrimInt,
@@ -260,6 +264,7 @@ where
         indices.into_array(),
         PrimitiveArray::new(patch_values, patch_validity).into_array(),
         Some(chunk_offsets.into_array()),
+        ctx,
     )?))
 }
 

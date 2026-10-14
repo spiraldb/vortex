@@ -82,13 +82,13 @@ mod tests {
         let validity = Validity::Array(
             BoolArray::from_iter([true, false, true, true].into_iter()).into_array(),
         );
-        let masked = MaskedArray::try_new(child, validity)?;
+        let masked = MaskedArray::try_new(child, validity, &mut ctx)?;
 
         let gpu_result = MaskedExecutor
             .execute(masked.clone().into_array(), &mut cuda_ctx)
             .await
             .vortex_expect("GPU decompression failed")
-            .into_host()
+            .into_host(cuda_ctx.session())
             .await?
             .into_array();
 

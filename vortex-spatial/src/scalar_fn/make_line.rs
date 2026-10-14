@@ -131,6 +131,7 @@ fn build_make_lines(
         &starts,
         &ends,
         Validity::from_mask(valid, output_dtype.storage_dtype().nullability()),
+        ctx,
     )
 }
 

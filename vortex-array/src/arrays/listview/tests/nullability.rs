@@ -92,7 +92,9 @@ fn test_nullable_listview_comprehensive() {
     );
 
     // list_elements_at still returns data even for null lists.
-    let null_list_data = listview.list_elements_at(1).unwrap();
+    let null_list_data = listview
+        .list_elements_at(1, &mut test_session().create_execution_ctx())
+        .unwrap();
     assert_eq!(null_list_data.len(), 2);
     assert_eq!(
         null_list_data
@@ -147,7 +149,9 @@ fn test_nullable_elements() {
     };
 
     // First list: [Some(1), None].
-    let first_list = listview.list_elements_at(0).unwrap();
+    let first_list = listview
+        .list_elements_at(0, &mut test_session().create_execution_ctx())
+        .unwrap();
     assert_eq!(first_list.len(), 2);
     assert!(
         !first_list
@@ -169,7 +173,9 @@ fn test_nullable_elements() {
     );
 
     // Second list: [Some(3), None].
-    let second_list = listview.list_elements_at(1).unwrap();
+    let second_list = listview
+        .list_elements_at(1, &mut test_session().create_execution_ctx())
+        .unwrap();
     assert!(
         !second_list
             .execute_scalar(0, &mut test_session().create_execution_ctx())
@@ -190,7 +196,9 @@ fn test_nullable_elements() {
     );
 
     // Third list: [Some(5), Some(6)].
-    let third_list = listview.list_elements_at(2).unwrap();
+    let third_list = listview
+        .list_elements_at(2, &mut test_session().create_execution_ctx())
+        .unwrap();
     assert!(
         !third_list
             .execute_scalar(0, &mut test_session().create_execution_ctx())
@@ -232,7 +240,13 @@ fn test_validity_length_mismatch() {
     // Wrong length validity.
     let validity = Validity::Array(BoolArray::from_iter(vec![true, false, true]).into_array());
 
-    let result = ListViewArray::try_new(elements, offsets, sizes, validity);
+    let result = ListViewArray::try_new(
+        elements,
+        offsets,
+        sizes,
+        validity,
+        &mut test_session().create_execution_ctx(),
+    );
 
     assert!(result.is_err());
     let err = result.unwrap_err();

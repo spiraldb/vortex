@@ -69,6 +69,7 @@ mod tests {
             PrimitiveArray::new(buffer![33_i32, 44, 55], Validity::AllValid).into_array(),
             20,
             Scalar::null_native::<i32>(),
+            &mut SESSION.create_execution_ctx(),
         )
         .unwrap()
         .into_array()
@@ -89,6 +90,7 @@ mod tests {
             PrimitiveArray::new(buffer![33_i32], Validity::AllValid).into_array(),
             1,
             Scalar::null_native::<i32>(),
+            &mut SESSION.create_execution_ctx(),
         )
         .unwrap();
 
@@ -107,6 +109,7 @@ mod tests {
             PrimitiveArray::new(buffer![33_i32, 44, 55], Validity::AllValid).into_array(),
             7,
             Scalar::null_native::<i32>(),
+            &mut SESSION.create_execution_ctx(),
         )
         .unwrap()
         .into_array();
@@ -122,6 +125,7 @@ mod tests {
             PrimitiveArray::new(buffer![44_i32, 55], Validity::AllValid).into_array(),
             4,
             Scalar::null_native::<i32>(),
+            &mut SESSION.create_execution_ctx(),
         )
         .unwrap();
 
@@ -144,6 +148,7 @@ mod tests {
                     .unwrap(),
                 5,
                 null_fill_value,
+                &mut SESSION.create_execution_ctx(),
             )
             .unwrap()
             .into_array(),
@@ -157,6 +162,7 @@ mod tests {
                 buffer![100i32, 200, 300].into_array(),
                 5,
                 ten_fill_value,
+                &mut SESSION.create_execution_ctx(),
             )
             .unwrap()
             .into_array(),

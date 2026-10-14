@@ -396,7 +396,12 @@ mod tests {
         // 2 rows of dim-2 vectors. Row 1 of rhs is masked as null.
         let lhs = tensor_array(&[2], &[3.0, 4.0, 1.0, 0.0])?;
         let rhs = tensor_array(&[2], &[3.0, 4.0, 0.0, 1.0])?;
-        let rhs = MaskedArray::try_new(rhs, Validity::from_iter([true, false]))?.into_array();
+        let rhs = MaskedArray::try_new(
+            rhs,
+            Validity::from_iter([true, false]),
+            &mut SESSION.create_execution_ctx(),
+        )?
+        .into_array();
 
         let result = CosineSimilarity::try_new(lhs, rhs)?;
         let mut ctx = SESSION.create_execution_ctx();

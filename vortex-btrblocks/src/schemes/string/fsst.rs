@@ -110,6 +110,7 @@ impl Scheme for FSSTScheme {
             fsst.codes().bytes().clone(),
             fsst.codes().dtype().clone(),
             fsst.codes().validity()?,
+            exec_ctx,
         )?;
 
         // Reuse the padded symbol table as-is; only the codes and lengths change here.
@@ -122,7 +123,6 @@ impl Scheme for FSSTScheme {
             )?),
             compressed_codes,
             compressed_original_lengths,
-            exec_ctx,
         )?;
 
         Ok(fsst.into_array())

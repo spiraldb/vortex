@@ -2,32 +2,23 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use vortex_error::VortexResult;
-use vortex_mask::AllOr;
 
 use crate::ArrayRef;
 use crate::IntoArray;
-use crate::VortexSessionExecute;
 use crate::array::ArrayView;
 use crate::arrays::Constant;
 use crate::arrays::ConstantArray;
 use crate::arrays::MaskedArray;
 use crate::arrays::dict::TakeReduce;
 use crate::arrays::dict::TakeReduceAdaptor;
-use crate::legacy_session;
 use crate::optimizer::rules::ParentRuleSet;
 use crate::scalar::Scalar;
 use crate::validity::Validity;
 
 impl TakeReduce for Constant {
-    #[allow(clippy::disallowed_methods)]
     fn take(array: ArrayView<'_, Constant>, indices: &ArrayRef) -> VortexResult<Option<ArrayRef>> {
-        let mut ctx = legacy_session().create_execution_ctx();
-        let result = match indices
-            .validity()?
-            .execute_mask(indices.len(), &mut ctx)?
-            .bit_buffer()
-        {
-            AllOr::All => {
+        let result = match indices.validity()? {
+            Validity::NonNullable | Validity::AllValid => {
                 let scalar = Scalar::try_new(
                     array
                         .scalar()
@@ -37,7 +28,7 @@ impl TakeReduce for Constant {
                 )?;
                 ConstantArray::new(scalar, indices.len()).into_array()
             }
-            AllOr::None => ConstantArray::new(
+            Validity::AllInvalid => ConstantArray::new(
                 Scalar::null(
                     array
                         .dtype()
@@ -46,14 +37,15 @@ impl TakeReduce for Constant {
                 indices.len(),
             )
             .into_array(),
-            AllOr::Some(v) => {
+            validity @ Validity::Array(_) => {
                 let arr = ConstantArray::new(array.scalar().clone(), indices.len()).into_array();
 
                 if array.scalar().is_null() {
                     return Ok(Some(arr));
                 }
 
-                MaskedArray::try_new(arr, Validity::from(v.clone()))?.into_array()
+                // A non-null constant has no nulls, so the child needs no execution to check.
+                MaskedArray::try_new_with_valid_child(arr, validity)?.into_array()
             }
         };
         Ok(Some(result))

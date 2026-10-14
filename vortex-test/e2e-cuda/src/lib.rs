@@ -145,6 +145,7 @@ fn list_array() -> VortexArrayRef {
         PrimitiveArray::from_iter([10i32, 11, 12, 13, 14]).into_array(),
         PrimitiveArray::from_iter([0i32, 2, 2, 5, 5, 5]).into_array(),
         Validity::from_iter([true, false, true, true, false]),
+        &mut SESSION.create_execution_ctx(),
     )
     .expect("list array")
     .into_array()
@@ -165,6 +166,7 @@ fn fixed_size_list_as_list_array() -> VortexArrayRef {
         PrimitiveArray::from_iter(20i32..30).into_array(),
         PrimitiveArray::from_iter([0i32, 2, 4, 6, 8, 10]).into_array(),
         Validity::from_iter([true, false, true, true, false]),
+        &mut SESSION.create_execution_ctx(),
     )
     .expect("fixed-size-list as list array")
     .into_array()

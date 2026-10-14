@@ -182,6 +182,7 @@ mod tests {
                 vec![(2.0, 2.0)],
             ])?,
             Validity::from_iter([true, false]),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )?
         .into_array();
         let expected = MaskedArray::try_new(
@@ -190,6 +191,7 @@ mod tests {
                 vec![vec![(2.0, 2.0), (2.0, 2.0)]],
             ])?,
             Validity::from_iter([true, false]),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )?
         .into_array();
         let result = SpatialConvexHull::try_new(input)?.into_array();
@@ -229,6 +231,7 @@ mod tests {
             points,
             PrimitiveArray::from_iter([0_u32, 5, 8]).into_array(),
             Validity::NonNullable,
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )?
         .into_array();
 

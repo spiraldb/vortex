@@ -310,6 +310,7 @@ fn grouped_primitive_tracks_empty_overflow_and_null_groups() -> VortexResult<()>
         buffer![0i32, 0, 1, 2, 0].into_array(),
         buffer![1i32, 0, 1, 2, 1].into_array(),
         Validity::from_iter([true, true, true, true, false]),
+        &mut crate::session().create_execution_ctx(),
     )?
     .into_array();
     let mut accumulator = GroupedAccumulator::try_new(
@@ -335,6 +336,7 @@ fn grouped_bool_fallback_tracks_empty_groups() -> VortexResult<()> {
         buffer![0i32, 2, 2].into_array(),
         buffer![2i32, 0, 2].into_array(),
         Validity::NonNullable,
+        &mut crate::session().create_execution_ctx(),
     )?
     .into_array();
     let mut accumulator = GroupedAccumulator::try_new(

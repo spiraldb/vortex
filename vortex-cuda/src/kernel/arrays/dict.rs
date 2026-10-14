@@ -457,7 +457,7 @@ mod tests {
         unsafe { release(&raw mut exported.array) };
         assert_eq!(exported_bits_ptr, bits_ptr);
 
-        let actual = actual.into_host().await?.into_array();
+        let actual = actual.into_host(cuda_ctx.session()).await?.into_array();
         assert_arrays_eq!(actual, expected, &mut ctx);
         Ok(())
     }
@@ -924,7 +924,7 @@ mod tests {
     /// Helper to copy a CUDA VarBinViewArray result to host memory.
     async fn cuda_varbinview_to_host(vbv: VarBinViewArray) -> VortexResult<VarBinViewArray> {
         Ok(Canonical::VarBinView(vbv)
-            .into_host()
+            .into_host(&vortex::aggregates::session())
             .await?
             .into_varbinview())
     }

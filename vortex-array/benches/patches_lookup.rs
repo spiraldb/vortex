@@ -56,6 +56,7 @@ fn patches_from_indices(index_iter: impl Iterator<Item = u64>, chunked: bool) ->
         Buffer::from(indices).into_array(),
         values.into_array(),
         chunk_offsets,
+        &mut SESSION.create_execution_ctx(),
     )
     .unwrap();
     if chunked {

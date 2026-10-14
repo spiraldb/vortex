@@ -42,16 +42,39 @@ fn test_slice_comprehensive() {
     let offsets = buffer![0i32, 3, 5, 7].into_array();
     let sizes = buffer![3i32, 2, 3, 2].into_array();
 
-    let listview = ListViewArray::new(elements, offsets, sizes, Validity::NonNullable).into_array();
+    let listview = ListViewArray::new(
+        elements,
+        offsets,
+        sizes,
+        Validity::NonNullable,
+        &mut test_session().create_execution_ctx(),
+    )
+    .into_array();
 
     // Test basic slice [1..3] - middle portion.
     let sliced = listview.slice(1..3).unwrap();
     let sliced_list = sliced.as_::<ListView>();
     assert_eq!(sliced_list.len(), 2, "Wrong slice length");
-    assert_eq!(sliced_list.offset_at(0), 3, "Wrong offset for list[1]");
-    assert_eq!(sliced_list.size_at(0), 2, "Wrong size for list[1]");
-    assert_eq!(sliced_list.offset_at(1), 5, "Wrong offset for list[2]");
-    assert_eq!(sliced_list.size_at(1), 3, "Wrong size for list[2]");
+    assert_eq!(
+        sliced_list.offset_at(0, &mut test_session().create_execution_ctx()),
+        3,
+        "Wrong offset for list[1]"
+    );
+    assert_eq!(
+        sliced_list.size_at(0, &mut test_session().create_execution_ctx()),
+        2,
+        "Wrong size for list[1]"
+    );
+    assert_eq!(
+        sliced_list.offset_at(1, &mut test_session().create_execution_ctx()),
+        5,
+        "Wrong offset for list[2]"
+    );
+    assert_eq!(
+        sliced_list.size_at(1, &mut test_session().create_execution_ctx()),
+        3,
+        "Wrong size for list[2]"
+    );
 
     // Test full array slice [0..4].
     let full = listview.slice(0..4).unwrap();
@@ -76,8 +99,16 @@ fn test_slice_comprehensive() {
     let single = listview.slice(2..3).unwrap();
     let single_list = single.as_::<ListView>();
     assert_eq!(single_list.len(), 1, "Single element slice failed");
-    assert_eq!(single_list.offset_at(0), 5, "Wrong offset for single slice");
-    assert_eq!(single_list.size_at(0), 3, "Wrong size for single slice");
+    assert_eq!(
+        single_list.offset_at(0, &mut test_session().create_execution_ctx()),
+        5,
+        "Wrong offset for single slice"
+    );
+    assert_eq!(
+        single_list.size_at(0, &mut test_session().create_execution_ctx()),
+        3,
+        "Wrong size for single slice"
+    );
 }
 
 #[test]
@@ -89,7 +120,8 @@ fn test_slice_out_of_order() {
     let offsets = buffer![6i32, 0, 3, 8, 2].into_array(); // Out of order.
     let sizes = buffer![2i32, 3, 3, 1, 1].into_array();
 
-    let listview = ListViewArray::new(elements, offsets, sizes, Validity::NonNullable).into_array();
+    let listview =
+        ListViewArray::new(elements, offsets, sizes, Validity::NonNullable, &mut ctx).into_array();
 
     // Slice [1..4] should maintain the out-of-order offsets.
     let sliced = listview.slice(1..4).unwrap();
@@ -101,37 +133,49 @@ fn test_slice_out_of_order() {
         "Slice [1..4] of out-of-order ListView should produce 3 lists"
     );
     assert_eq!(
-        sliced_list.offset_at(0),
+        sliced_list.offset_at(0, &mut ctx),
         0,
         "First list should have offset 0 (from original index 1)"
     );
-    assert_eq!(sliced_list.size_at(0), 3, "First list should have size 3");
     assert_eq!(
-        sliced_list.offset_at(1),
+        sliced_list.size_at(0, &mut ctx),
+        3,
+        "First list should have size 3"
+    );
+    assert_eq!(
+        sliced_list.offset_at(1, &mut ctx),
         3,
         "Second list should have offset 3 (from original index 2)"
     );
-    assert_eq!(sliced_list.size_at(1), 3, "Second list should have size 3");
     assert_eq!(
-        sliced_list.offset_at(2),
+        sliced_list.size_at(1, &mut ctx),
+        3,
+        "Second list should have size 3"
+    );
+    assert_eq!(
+        sliced_list.offset_at(2, &mut ctx),
         8,
         "Third list should have offset 8 (from original index 3)"
     );
-    assert_eq!(sliced_list.size_at(2), 1, "Third list should have size 1");
+    assert_eq!(
+        sliced_list.size_at(2, &mut ctx),
+        1,
+        "Third list should have size 1"
+    );
 
     // Verify the actual list contents are correct.
     assert_arrays_eq!(
-        sliced_list.list_elements_at(0).unwrap(),
+        sliced_list.list_elements_at(0, &mut ctx).unwrap(),
         PrimitiveArray::from_iter([10i32, 20, 30]),
         &mut ctx
     );
     assert_arrays_eq!(
-        sliced_list.list_elements_at(1).unwrap(),
+        sliced_list.list_elements_at(1, &mut ctx).unwrap(),
         PrimitiveArray::from_iter([40i32, 50, 60]),
         &mut ctx
     );
     assert_arrays_eq!(
-        sliced_list.list_elements_at(2).unwrap(),
+        sliced_list.list_elements_at(2, &mut ctx).unwrap(),
         PrimitiveArray::from_iter([90i32]),
         &mut ctx
     );
@@ -172,10 +216,22 @@ fn test_slice_with_nulls() {
     ); // Original index 2 was valid.
 
     // Verify offsets and sizes are preserved.
-    assert_eq!(sliced_list.offset_at(0), 2);
-    assert_eq!(sliced_list.size_at(0), 2);
-    assert_eq!(sliced_list.offset_at(1), 4);
-    assert_eq!(sliced_list.size_at(1), 2);
+    assert_eq!(
+        sliced_list.offset_at(0, &mut test_session().create_execution_ctx()),
+        2
+    );
+    assert_eq!(
+        sliced_list.size_at(0, &mut test_session().create_execution_ctx()),
+        2
+    );
+    assert_eq!(
+        sliced_list.offset_at(1, &mut test_session().create_execution_ctx()),
+        4
+    );
+    assert_eq!(
+        sliced_list.size_at(1, &mut test_session().create_execution_ctx()),
+        2
+    );
 }
 
 // Parameterized edge case tests.
@@ -331,7 +387,14 @@ fn test_cast_special_patterns(#[case] expected_sizes: Vec<usize>, #[case] list_c
         )
     };
 
-    let listview = ListViewArray::new(elements, offsets, sizes, Validity::NonNullable).into_array();
+    let listview = ListViewArray::new(
+        elements,
+        offsets,
+        sizes,
+        Validity::NonNullable,
+        &mut test_session().create_execution_ctx(),
+    )
+    .into_array();
 
     let target_dtype = if is_empty_case {
         DType::List(
@@ -353,7 +416,10 @@ fn test_cast_special_patterns(#[case] expected_sizes: Vec<usize>, #[case] list_c
     assert_eq!(result_list.len(), list_count);
 
     for (i, expected_size) in expected_sizes.iter().enumerate() {
-        assert_eq!(result_list.size_at(i), *expected_size);
+        assert_eq!(
+            result_list.size_at(i, &mut test_session().create_execution_ctx()),
+            *expected_size
+        );
     }
 }
 
@@ -386,7 +452,10 @@ fn test_cast_large_dataset() {
 
     assert_eq!(result_list.len(), 20);
     for i in 0..20 {
-        assert_eq!(result_list.size_at(i), 4);
+        assert_eq!(
+            result_list.size_at(i, &mut test_session().create_execution_ctx()),
+            4
+        );
     }
 }
 
@@ -403,6 +472,7 @@ fn test_zip_widens_false_element_nullability() -> VortexResult<()> {
         buffer![0u32, 2, 3].into_array(),
         buffer![2u32, 1, 1].into_array(),
         Validity::NonNullable,
+        &mut ctx,
     )
     .into_array();
     // [[10, null], [30], [40]]
@@ -411,6 +481,7 @@ fn test_zip_widens_false_element_nullability() -> VortexResult<()> {
         buffer![0u32, 2, 3].into_array(),
         buffer![2u32, 1, 1].into_array(),
         Validity::NonNullable,
+        &mut ctx,
     )
     .into_array();
     let mask = Mask::from_iter([false, true, false]);
@@ -434,6 +505,7 @@ fn test_zip_widens_false_element_nullability() -> VortexResult<()> {
         buffer![0u32, 2, 3].into_array(),
         buffer![2u32, 1, 1].into_array(),
         Validity::NonNullable,
+        &mut ctx,
     )
     .into_array();
     assert_arrays_eq!(result, expected, &mut ctx);
@@ -449,6 +521,7 @@ fn test_zip_widens_true_element_nullability() -> VortexResult<()> {
         buffer![0u32, 2, 3].into_array(),
         buffer![2u32, 1, 1].into_array(),
         Validity::NonNullable,
+        &mut ctx,
     )
     .into_array();
     // [[10], [20], [30]]
@@ -457,6 +530,7 @@ fn test_zip_widens_true_element_nullability() -> VortexResult<()> {
         buffer![0u32, 1, 2].into_array(),
         buffer![1u32, 1, 1].into_array(),
         Validity::NonNullable,
+        &mut ctx,
     )
     .into_array();
     let mask = Mask::from_iter([true, false, true]);
@@ -480,6 +554,7 @@ fn test_zip_widens_true_element_nullability() -> VortexResult<()> {
         buffer![0u32, 2, 3].into_array(),
         buffer![2u32, 1, 1].into_array(),
         Validity::NonNullable,
+        &mut ctx,
     )
     .into_array();
     assert_arrays_eq!(result, expected, &mut ctx);
@@ -548,14 +623,38 @@ fn test_mask_preserves_structure() {
     ); // Masked.
 
     // Offsets and sizes are preserved.
-    assert_eq!(result_list.offset_at(0), 0);
-    assert_eq!(result_list.size_at(0), 2);
-    assert_eq!(result_list.offset_at(1), 2);
-    assert_eq!(result_list.size_at(1), 2);
-    assert_eq!(result_list.offset_at(2), 4);
-    assert_eq!(result_list.size_at(2), 2);
-    assert_eq!(result_list.offset_at(3), 6);
-    assert_eq!(result_list.size_at(3), 2);
+    assert_eq!(
+        result_list.offset_at(0, &mut test_session().create_execution_ctx()),
+        0
+    );
+    assert_eq!(
+        result_list.size_at(0, &mut test_session().create_execution_ctx()),
+        2
+    );
+    assert_eq!(
+        result_list.offset_at(1, &mut test_session().create_execution_ctx()),
+        2
+    );
+    assert_eq!(
+        result_list.size_at(1, &mut test_session().create_execution_ctx()),
+        2
+    );
+    assert_eq!(
+        result_list.offset_at(2, &mut test_session().create_execution_ctx()),
+        4
+    );
+    assert_eq!(
+        result_list.size_at(2, &mut test_session().create_execution_ctx()),
+        2
+    );
+    assert_eq!(
+        result_list.offset_at(3, &mut test_session().create_execution_ctx()),
+        6
+    );
+    assert_eq!(
+        result_list.size_at(3, &mut test_session().create_execution_ctx()),
+        2
+    );
 }
 
 #[test]
@@ -606,7 +705,14 @@ fn test_mask_with_gaps() {
     let offsets = buffer![0u32, 4, 8].into_array();
     let sizes = buffer![2u32, 2, 2].into_array();
 
-    let listview = ListViewArray::new(elements, offsets, sizes, Validity::NonNullable).into_array();
+    let listview = ListViewArray::new(
+        elements,
+        offsets,
+        sizes,
+        Validity::NonNullable,
+        &mut test_session().create_execution_ctx(),
+    )
+    .into_array();
 
     let selection = Mask::from_iter([true, false, false]);
     let result = listview.mask((!&selection).into_array()).unwrap();
@@ -632,8 +738,14 @@ fn test_mask_with_gaps() {
     ); // Not masked
 
     // Offsets and sizes still preserved
-    assert_eq!(result_list.offset_at(1), 4);
-    assert_eq!(result_list.size_at(1), 2);
+    assert_eq!(
+        result_list.offset_at(1, &mut test_session().create_execution_ctx()),
+        4
+    );
+    assert_eq!(
+        result_list.size_at(1, &mut test_session().create_execution_ctx()),
+        2
+    );
 }
 
 #[test]
@@ -651,6 +763,7 @@ fn test_mask_constant_arrays() {
         constant_offsets,
         constant_sizes,
         Validity::NonNullable,
+        &mut test_session().create_execution_ctx(),
     )
     .into_array();
 
@@ -678,10 +791,28 @@ fn test_mask_constant_arrays() {
     );
 
     // All offsets and sizes remain constant
-    assert_eq!(result_list.offset_at(0), 1);
-    assert_eq!(result_list.offset_at(1), 1);
-    assert_eq!(result_list.offset_at(2), 1);
-    assert_eq!(result_list.size_at(0), 2);
-    assert_eq!(result_list.size_at(1), 2);
-    assert_eq!(result_list.size_at(2), 2);
+    assert_eq!(
+        result_list.offset_at(0, &mut test_session().create_execution_ctx()),
+        1
+    );
+    assert_eq!(
+        result_list.offset_at(1, &mut test_session().create_execution_ctx()),
+        1
+    );
+    assert_eq!(
+        result_list.offset_at(2, &mut test_session().create_execution_ctx()),
+        1
+    );
+    assert_eq!(
+        result_list.size_at(0, &mut test_session().create_execution_ctx()),
+        2
+    );
+    assert_eq!(
+        result_list.size_at(1, &mut test_session().create_execution_ctx()),
+        2
+    );
+    assert_eq!(
+        result_list.size_at(2, &mut test_session().create_execution_ctx()),
+        2
+    );
 }

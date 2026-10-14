@@ -250,11 +250,24 @@ mod tests {
             indices.into_array(),
             values.into_array(),
             Some(chunk_offsets.into_array()),
+            &mut vortex::aggregates::session().create_execution_ctx(),
         )?;
         assert!(patches.chunk_offsets().is_some());
-        assert_eq!(patches.chunk_offset_at(0)?, 0);
-        assert_eq!(patches.chunk_offset_at(1)?, 2);
-        assert_eq!(patches.chunk_offset_at(2)?, 3);
+        assert_eq!(
+            patches
+                .chunk_offset_at(0, &mut vortex::aggregates::session().create_execution_ctx())?,
+            0
+        );
+        assert_eq!(
+            patches
+                .chunk_offset_at(1, &mut vortex::aggregates::session().create_execution_ctx())?,
+            2
+        );
+        assert_eq!(
+            patches
+                .chunk_offset_at(2, &mut vortex::aggregates::session().create_execution_ctx())?,
+            3
+        );
 
         Ok(())
     }
@@ -284,6 +297,7 @@ mod tests {
             indices.into_array(),
             values.into_array(),
             Some(chunk_offsets.into_array()),
+            cuda_ctx.execution_ctx(),
         )?;
 
         let mut device_patches = load_device_patches(&patches, &mut cuda_ctx).await?;
@@ -328,6 +342,7 @@ mod tests {
             indices.into_array(),
             values.into_array(),
             Some(chunk_offsets),
+            &mut ctx,
         )?;
 
         let mut device_patches = load_device_patches(&patches, &mut cuda_ctx).await?;

@@ -23,12 +23,16 @@ fn build_with_codes_validity(
     new_codes_validity: Validity,
 ) -> VortexResult<ArrayRef> {
     let codes = array.codes();
-    let new_codes = VarBinArray::try_new(
-        codes.offsets().clone(),
-        codes.bytes().clone(),
-        codes.dtype().with_nullability(dtype.nullability()),
-        new_codes_validity,
-    )?;
+    // SAFETY: the offsets and bytes come from valid codes and are unchanged. Only the
+    // nullability differs, and `new_codes_validity` was cast to match it.
+    let new_codes = unsafe {
+        VarBinArray::new_unchecked(
+            codes.offsets().clone(),
+            codes.bytes().clone(),
+            codes.dtype().with_nullability(dtype.nullability()),
+            new_codes_validity,
+        )
+    };
 
     Ok(unsafe {
         FSST::new_unchecked_with_symbol_table(

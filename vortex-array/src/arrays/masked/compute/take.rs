@@ -29,12 +29,13 @@ impl TakeReduce for Masked {
             array.child().take(indices.clone())?
         };
 
+        // Null indices were filled before taking, so the taken child still has no nulls.
         // Compute the new validity by taking from array's validity and merging with indices validity
         let taken_validity = array.validity()?.take(indices)?;
 
         // Construct new MaskedArray
         Ok(Some(
-            MaskedArray::try_new(taken_child, taken_validity)?.into_array(),
+            MaskedArray::try_new_with_valid_child(taken_child, taken_validity)?.into_array(),
         ))
     }
 }
@@ -55,19 +56,22 @@ mod tests {
     #[case(
         MaskedArray::try_new(
             PrimitiveArray::from_iter([1i32, 2, 3, 4, 5]).into_array(),
-            Validity::from_iter([true, true, false, true, false])
+            Validity::from_iter([true, true, false, true, false]),
+            &mut test_session().create_execution_ctx(),
         ).unwrap()
     )]
     #[case(
         MaskedArray::try_new(
             PrimitiveArray::from_iter([10i32, 20, 30]).into_array(),
-            Validity::AllValid
+            Validity::AllValid,
+            &mut test_session().create_execution_ctx(),
         ).unwrap()
     )]
     #[case(
         MaskedArray::try_new(
             PrimitiveArray::from_iter(0..100).into_array(),
-            Validity::from_iter((0..100).map(|i| i % 3 != 0))
+            Validity::from_iter((0..100).map(|i| i % 3 != 0)),
+            &mut test_session().create_execution_ctx(),
         ).unwrap()
     )]
     fn test_take_masked_conformance(#[case] array: MaskedArray) {

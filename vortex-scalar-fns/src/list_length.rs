@@ -225,7 +225,13 @@ mod tests {
     #[case(buffer![0u64, 2, 5, 5, 7].into_array())]
     fn test_list_length(#[case] offsets: ArrayRef) -> VortexResult<()> {
         let elements = create_list_elements();
-        let list = ListArray::try_new(elements, offsets, Validity::NonNullable)?.into_array();
+        let list = ListArray::try_new(
+            elements,
+            offsets,
+            Validity::NonNullable,
+            &mut vortex_aggregates::session().create_execution_ctx(),
+        )?
+        .into_array();
         let result = list.apply(&list_length(root()))?;
         let mut ctx = vortex_aggregates::session().create_execution_ctx();
         assert_arrays_eq!(result, PrimitiveArray::from_iter([2u64, 3, 0, 2]), &mut ctx);
@@ -241,6 +247,7 @@ mod tests {
             elements,
             offsets,
             Validity::Array(BoolArray::from_iter([true, false, true, false]).into_array()),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )?
         .into_array();
         let result = list.apply(&list_length(root()))?;
@@ -278,6 +285,7 @@ mod tests {
             buffer![5u32, 0, 4, 1].into_array(),
             buffer![2u32, 3, 0, 2].into_array(),
             Validity::NonNullable,
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )
         .into_array();
         let result = lv.apply(&list_length(root()))?;
@@ -294,6 +302,7 @@ mod tests {
             buffer![5u32, 0, 4, 1].into_array(),
             buffer![2u32, 3, 0, 2].into_array(),
             Validity::Array(BoolArray::from_iter([true, false, true, false]).into_array()),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )
         .into_array();
         let result = lv.apply(&list_length(root()))?;
@@ -313,6 +322,7 @@ mod tests {
             elements,
             buffer![0u32, 2, 5, 5, 7].into_array(),
             Validity::NonNullable,
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )?
         .into_array();
         let taken = list.take(buffer![3u64, 0, 2].into_array())?;

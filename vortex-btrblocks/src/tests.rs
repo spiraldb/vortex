@@ -96,6 +96,7 @@ fn test_default_compressor_roundtrip() -> VortexResult<()> {
         elements.into_array(),
         offsets.into_array(),
         Validity::NonNullable,
+        &mut SESSION.create_execution_ctx(),
     )?
     .into_array();
 

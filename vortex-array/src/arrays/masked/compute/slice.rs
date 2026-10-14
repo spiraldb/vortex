@@ -18,6 +18,8 @@ impl SliceReduce for Masked {
         let child = array.child().slice(range.clone())?;
         let validity = array.validity()?.slice(range)?;
 
-        Ok(Some(MaskedArray::try_new(child, validity)?.into_array()))
+        Ok(Some(
+            MaskedArray::try_new_with_valid_child(child, validity)?.into_array(),
+        ))
     }
 }

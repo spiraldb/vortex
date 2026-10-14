@@ -37,7 +37,7 @@ use crate::dtype::IntegerPType;
 use crate::dtype::PType;
 use crate::expr::stats::Stat;
 use crate::expr::stats::StatsProviderExt;
-use crate::legacy_session;
+use crate::internal_session;
 use crate::match_each_integer_ptype;
 use crate::match_each_unsigned_integer_ptype;
 use crate::scalar_fn::fns::operators::Operator;
@@ -96,8 +96,11 @@ pub struct ListViewSlots {
 /// # use vortex_array::arrays::listview::ListViewArrayExt;
 /// # use vortex_array::validity::Validity;
 /// # use vortex_array::IntoArray;
+/// # use vortex_array::VortexSessionExecute;
+/// # use vortex_array::test_harness::test_session;
 /// # use vortex_buffer::buffer;
 /// # use std::sync::Arc;
+/// # let mut ctx = test_session().create_execution_ctx();
 /// #
 /// // Create a list view array representing [[3, 4], [1], [2, 3]].
 /// // Note: Unlike `ListArray`, offsets don't need to be monotonic.
@@ -111,17 +114,18 @@ pub struct ListViewSlots {
 ///     offsets.into_array(),
 ///     sizes.into_array(),
 ///     Validity::NonNullable,
+///     &mut ctx,
 /// );
 ///
 /// assert_eq!(list_view.len(), 3);
 ///
 /// // Access individual lists
-/// let first_list = list_view.list_elements_at(0)?;
+/// let first_list = list_view.list_elements_at(0, &mut ctx)?;
 /// assert_eq!(first_list.len(), 2);
 /// // First list contains elements[2..4] = [3, 4]
 ///
-/// let first_offset = list_view.offset_at(0);
-/// let first_size = list_view.size_at(0);
+/// let first_offset = list_view.offset_at(0, &mut ctx);
+/// let first_size = list_view.size_at(0, &mut ctx);
 /// assert_eq!(first_offset, 2);
 /// assert_eq!(first_size, 2);
 /// # Ok(())
@@ -232,6 +236,7 @@ impl ListViewData {
         offsets: &ArrayRef,
         sizes: &ArrayRef,
         validity: &Validity,
+        ctx: &mut ExecutionCtx,
     ) -> VortexResult<()> {
         // Check that offsets and sizes are integer arrays and non-nullable.
         vortex_ensure!(
@@ -263,10 +268,8 @@ impl ListViewData {
 
         // Skip host-only validation when offsets/sizes are not host-resident.
         if offsets.is_host() && sizes.is_host() {
-            #[allow(clippy::disallowed_methods)]
-            let mut ctx = legacy_session().create_execution_ctx();
-            let offsets_primitive = offsets.clone().execute::<PrimitiveArray>(&mut ctx)?;
-            let sizes_primitive = sizes.clone().execute::<PrimitiveArray>(&mut ctx)?;
+            let offsets_primitive = offsets.clone().execute::<PrimitiveArray>(ctx)?;
+            let sizes_primitive = sizes.clone().execute::<PrimitiveArray>(ctx)?;
             // Offsets and sizes are non-negative; reinterpret to unsigned to dispatch over 4 widths
             // each (4x4 instead of 8x8). This is a read-only validation, so result types are moot.
             let offsets_primitive =
@@ -368,8 +371,7 @@ pub trait ListViewArrayExt: ListViewArraySlotsExt {
         )
     }
 
-    #[allow(clippy::disallowed_methods)]
-    fn offset_at(&self, index: usize) -> usize {
+    fn offset_at(&self, index: usize, ctx: &mut ExecutionCtx) -> usize {
         assert!(
             index < self.len(),
             "Index {index} out of bounds 0..{}",
@@ -380,7 +382,7 @@ pub trait ListViewArrayExt: ListViewArraySlotsExt {
             .map(|p| match_each_integer_ptype!(p.ptype(), |P| { p.as_slice::<P>()[index].as_() }))
             .unwrap_or_else(|| {
                 self.offsets()
-                    .execute_scalar(index, &mut legacy_session().create_execution_ctx())
+                    .execute_scalar(index, ctx)
                     .vortex_expect("offsets must support execute_scalar")
                     .as_primitive()
                     .as_::<usize>()
@@ -388,8 +390,7 @@ pub trait ListViewArrayExt: ListViewArraySlotsExt {
             })
     }
 
-    #[allow(clippy::disallowed_methods)]
-    fn size_at(&self, index: usize) -> usize {
+    fn size_at(&self, index: usize, ctx: &mut ExecutionCtx) -> usize {
         assert!(
             index < self.len(),
             "Index {} out of bounds 0..{}",
@@ -401,7 +402,7 @@ pub trait ListViewArrayExt: ListViewArraySlotsExt {
             .map(|p| match_each_integer_ptype!(p.ptype(), |P| { p.as_slice::<P>()[index].as_() }))
             .unwrap_or_else(|| {
                 self.sizes()
-                    .execute_scalar(index, &mut legacy_session().create_execution_ctx())
+                    .execute_scalar(index, ctx)
                     .vortex_expect("sizes must support execute_scalar")
                     .as_primitive()
                     .as_::<usize>()
@@ -409,9 +410,9 @@ pub trait ListViewArrayExt: ListViewArraySlotsExt {
             })
     }
 
-    fn list_elements_at(&self, index: usize) -> VortexResult<ArrayRef> {
-        let offset = self.offset_at(index);
-        let size = self.size_at(index);
+    fn list_elements_at(&self, index: usize, ctx: &mut ExecutionCtx) -> VortexResult<ArrayRef> {
+        let offset = self.offset_at(index, ctx);
+        let size = self.size_at(index, ctx);
         self.elements().slice(offset..offset + size)
     }
 
@@ -533,8 +534,8 @@ pub trait ListViewArrayExt: ListViewArraySlotsExt {
         );
 
         if self.is_zero_copy_to_list() {
-            let start = self.offset_at(0);
-            let end = self.offset_at(n_lists - 1) + self.size_at(n_lists - 1);
+            let start = self.offset_at(0, ctx);
+            let end = self.offset_at(n_lists - 1, ctx) + self.size_at(n_lists - 1, ctx);
             return Ok((start, end));
         }
 
@@ -568,11 +569,17 @@ impl<T: TypedArrayRef<ListView>> ListViewArrayExt for T {}
 
 impl Array<ListView> {
     /// Creates a new `ListViewArray`.
-    pub fn new(elements: ArrayRef, offsets: ArrayRef, sizes: ArrayRef, validity: Validity) -> Self {
+    pub fn new(
+        elements: ArrayRef,
+        offsets: ArrayRef,
+        sizes: ArrayRef,
+        validity: Validity,
+        ctx: &mut ExecutionCtx,
+    ) -> Self {
         let dtype = DType::List(Arc::new(elements.dtype().clone()), validity.nullability());
         let len = offsets.len();
         let slots = ListViewData::make_slots(&elements, &offsets, &sizes, &validity, len);
-        ListViewData::validate(&elements, &offsets, &sizes, &validity)
+        ListViewData::validate(&elements, &offsets, &sizes, &validity, ctx)
             .vortex_expect("`ListViewArray` construction failed");
         let data = ListViewData::new();
         unsafe { Array::from_parts_unchecked(ArrayParts::new(ListView, dtype, len, data, slots)) }
@@ -584,11 +591,12 @@ impl Array<ListView> {
         offsets: ArrayRef,
         sizes: ArrayRef,
         validity: Validity,
+        ctx: &mut ExecutionCtx,
     ) -> VortexResult<Self> {
         let dtype = DType::List(Arc::new(elements.dtype().clone()), validity.nullability());
         let len = offsets.len();
         let slots = ListViewData::make_slots(&elements, &offsets, &sizes, &validity, len);
-        ListViewData::validate(&elements, &offsets, &sizes, &validity)?;
+        ListViewData::validate(&elements, &offsets, &sizes, &validity, ctx)?;
         let data = ListViewData::try_new()?;
         Ok(unsafe {
             Array::from_parts_unchecked(ArrayParts::new(ListView, dtype, len, data, slots))
@@ -621,7 +629,7 @@ impl Array<ListView> {
     pub unsafe fn with_zero_copy_to_list(self, is_zctl: bool) -> Self {
         if cfg!(debug_assertions) && is_zctl {
             #[allow(clippy::disallowed_methods)]
-            let mut ctx = legacy_session().create_execution_ctx();
+            let mut ctx = internal_session().create_execution_ctx();
             let offsets_primitive = self
                 .offsets()
                 .clone()
@@ -632,8 +640,13 @@ impl Array<ListView> {
                 .clone()
                 .execute::<PrimitiveArray>(&mut ctx)
                 .vortex_expect("sizes must canonicalize to primitive");
-            validate_zctl(self.elements(), offsets_primitive, sizes_primitive)
-                .vortex_expect("Failed to validate zero-copy to list flag");
+            validate_zctl(
+                self.elements(),
+                offsets_primitive,
+                sizes_primitive,
+                &mut ctx,
+            )
+            .vortex_expect("Failed to validate zero-copy to list flag");
         }
         let dtype = self.dtype().clone();
         let len = self.len();
@@ -716,17 +729,16 @@ where
 
 /// Helper function to validate if the `ListViewArray` components are actually zero-copyable to
 /// [`ListArray`](crate::arrays::ListArray).
-#[allow(clippy::disallowed_methods)]
 fn validate_zctl(
     elements: &ArrayRef,
     offsets_primitive: PrimitiveArray,
     sizes_primitive: PrimitiveArray,
+    ctx: &mut ExecutionCtx,
 ) -> VortexResult<()> {
     // Offsets must be sorted (but not strictly sorted, zero-length lists are allowed), even
     // if there are null views.
-    let mut ctx = legacy_session().create_execution_ctx();
     let is_sorted =
-        integer_bounds(offsets_primitive.as_ref(), &mut ctx)?.is_none_or(|bounds| bounds.is_sorted);
+        integer_bounds(offsets_primitive.as_ref(), ctx)?.is_none_or(|bounds| bounds.is_sorted);
     vortex_ensure!(is_sorted, "offsets must be sorted");
 
     // Validate that offset[i] + size[i] <= offset[i+1] for all items

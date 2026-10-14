@@ -133,7 +133,14 @@ async fn test_dict_listview_validity_roundtrip() {
     let offsets = PrimitiveArray::from_iter(vec![0u32, 2, 4]).into_array();
     let sizes = PrimitiveArray::from_iter(vec![2u32, 2, 1]).into_array();
     let list_validity = Validity::Array(BoolArray::from_iter([true, false, true]).into_array());
-    let listview = ListViewArray::new(elements, offsets, sizes, list_validity).into_array();
+    let listview = ListViewArray::new(
+        elements,
+        offsets,
+        sizes,
+        list_validity,
+        &mut SESSION.create_execution_ctx(),
+    )
+    .into_array();
 
     let codes = PrimitiveArray::new(
         vortex_buffer::buffer![0u32, 0, 1, 0, 2],

@@ -13,6 +13,7 @@ use object_store::registry::ObjectStoreRegistry;
 use parking_lot::Mutex;
 use static_assertions::assert_impl_all;
 use vortex::array::ArrayRef;
+use vortex::array::VortexSessionExecute;
 use vortex::array::stream::ArrayStreamAdapter;
 use vortex::dtype::DType;
 use vortex::dtype::FieldName;
@@ -121,7 +122,11 @@ pub fn copy_to_sink(
 ) -> VortexResult<()> {
     push_to_writer(
         init_global,
-        data_chunk_to_vortex(bind_data.fields.names(), chunk)?,
+        data_chunk_to_vortex(
+            bind_data.fields.names(),
+            chunk,
+            &mut SESSION.create_execution_ctx(),
+        )?,
     )
 }
 
@@ -135,9 +140,11 @@ pub fn prepare_batch_push(
     batch: &mut CopyPreparedBatch,
     chunk: &DataChunkRef,
 ) -> VortexResult<()> {
-    batch
-        .arrays
-        .push(data_chunk_to_vortex(bind.fields.names(), chunk)?);
+    batch.arrays.push(data_chunk_to_vortex(
+        bind.fields.names(),
+        chunk,
+        &mut SESSION.create_execution_ctx(),
+    )?);
     Ok(())
 }
 

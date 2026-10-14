@@ -654,6 +654,7 @@ mod tests {
             buffer![0i32, 1, 0, 1].into_array(),
             buffer![0u32, 2, 4].into_array(),
             Validity::NonNullable,
+            &mut ctx,
         )?;
 
         let struct_of_lists = StructArray::try_new(
@@ -704,6 +705,7 @@ mod tests {
             PrimitiveArray::from_iter(elements).into_array(),
             PrimitiveArray::from_iter(offsets).into_array(),
             Validity::NonNullable,
+            &mut crate::session().create_execution_ctx(),
         )?;
 
         let mut ctx = crate::session().create_execution_ctx();
@@ -715,13 +717,19 @@ mod tests {
     fn test_list_is_constant_nested_lists() -> VortexResult<()> {
         let inner_elements = buffer![1i32, 2, 1, 2].into_array();
         let inner_offsets = buffer![0u32, 1, 2, 3, 4].into_array();
-        let inner_lists = ListArray::try_new(inner_elements, inner_offsets, Validity::NonNullable)?;
+        let inner_lists = ListArray::try_new(
+            inner_elements,
+            inner_offsets,
+            Validity::NonNullable,
+            &mut crate::session().create_execution_ctx(),
+        )?;
 
         let outer_offsets = buffer![0u32, 2, 4].into_array();
         let outer_list = ListArray::try_new(
             inner_lists.into_array(),
             outer_offsets,
             Validity::NonNullable,
+            &mut crate::session().create_execution_ctx(),
         )?;
 
         let mut ctx = crate::session().create_execution_ctx();
@@ -767,6 +775,7 @@ mod tests {
             PrimitiveArray::from_iter(elements).into_array(),
             PrimitiveArray::from_iter(offsets).into_array(),
             Validity::NonNullable,
+            &mut crate::session().create_execution_ctx(),
         )?;
 
         let mut ctx = crate::session().create_execution_ctx();

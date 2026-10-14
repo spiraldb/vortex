@@ -277,7 +277,12 @@ mod tests {
         // 3 rows of dim-2 vectors. Row 1 of lhs is masked as null.
         let lhs = tensor_array(&[2], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0])?;
         let rhs = tensor_array(&[2], &[7.0, 8.0, 9.0, 10.0, 11.0, 12.0])?;
-        let lhs = MaskedArray::try_new(lhs, Validity::from_iter([true, false, true]))?.into_array();
+        let lhs = MaskedArray::try_new(
+            lhs,
+            Validity::from_iter([true, false, true]),
+            &mut SESSION.create_execution_ctx(),
+        )?
+        .into_array();
 
         let result = InnerProduct::try_new(lhs, rhs)?;
         let mut ctx = SESSION.create_execution_ctx();

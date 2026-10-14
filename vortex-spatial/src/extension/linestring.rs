@@ -131,6 +131,7 @@ pub(crate) fn linestring_array_from_point_pairs(
     starts: &StructArray,
     ends: &StructArray,
     validity: Validity,
+    ctx: &mut ExecutionCtx,
 ) -> VortexResult<ArrayRef> {
     let len = starts.len();
     vortex_ensure_eq!(
@@ -177,7 +178,7 @@ pub(crate) fn linestring_array_from_point_pairs(
     .into_array();
 
     let offsets = Buffer::from_iter((0..=last_offset).step_by(2)).into_array();
-    let storage = ListArray::try_new(vertices, offsets, validity)?.into_array();
+    let storage = ListArray::try_new(vertices, offsets, validity, ctx)?.into_array();
 
     Ok(ExtensionArray::try_new(ext_dtype.clone().erased(), storage)?.into_array())
 }

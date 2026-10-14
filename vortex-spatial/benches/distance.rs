@@ -132,9 +132,13 @@ fn polygon_column_x_constant_polygon(bencher: Bencher) {
 #[divan::bench]
 fn nullable_point_column_x_constant_point(bencher: Bencher) {
     let validity = Validity::from_iter((0..POINT_ROWS).map(|i| !i.is_multiple_of(8)));
-    let points = MaskedArray::try_new(points(POINT_ROWS, 0), validity)
-        .unwrap()
-        .into_array();
+    let points = MaskedArray::try_new(
+        points(POINT_ROWS, 0),
+        validity,
+        &mut SESSION.create_execution_ctx(),
+    )
+    .unwrap()
+    .into_array();
     let mut ctx = SESSION.create_execution_ctx();
     let point = point_constant(0.0, 0.0, POINT_ROWS, &mut ctx);
     bench_distance(bencher, points, point);

@@ -185,6 +185,7 @@ mod tests {
             PrimitiveArray::new(buffer![0u32, 4u32], Validity::NonNullable).into_array(),
             PrimitiveArray::new(buffer![0.0f32, 999f32], Validity::NonNullable).into_array(),
             Some(PrimitiveArray::new(buffer![0u32], Validity::NonNullable).into_array()),
+            &mut ctx,
         )?;
 
         let alp_array = ALP::try_new(
@@ -198,7 +199,7 @@ mod tests {
             .execute(alp_array.clone().into_array(), &mut cuda_ctx)
             .await
             .vortex_expect("GPU decompression failed")
-            .into_host()
+            .into_host(cuda_ctx.session())
             .await?
             .into_array();
 
@@ -242,7 +243,7 @@ mod tests {
             .into_array()
             .execute_cuda(&mut cuda_ctx)
             .await?
-            .into_host()
+            .into_host(cuda_ctx.session())
             .await?
             .into_array();
 
@@ -273,7 +274,7 @@ mod tests {
             .into_array()
             .execute_cuda(&mut cuda_ctx)
             .await?
-            .into_host()
+            .into_host(cuda_ctx.session())
             .await?
             .into_array();
 
@@ -319,7 +320,7 @@ mod tests {
             .into_array()
             .execute_cuda(&mut cuda_ctx)
             .await?
-            .into_host()
+            .into_host(cuda_ctx.session())
             .await?
             .into_array();
 
@@ -362,7 +363,7 @@ mod tests {
             .into_array()
             .execute_cuda(&mut cuda_ctx)
             .await?
-            .into_host()
+            .into_host(cuda_ctx.session())
             .await?
             .into_array();
 
@@ -398,6 +399,7 @@ mod tests {
             PrimitiveArray::new(patch_indices, Validity::NonNullable).into_array(),
             PrimitiveArray::new(patch_values, Validity::NonNullable).into_array(),
             Some(PrimitiveArray::new(buffer![0u32], Validity::NonNullable).into_array()),
+            &mut ctx,
         )?;
 
         let alp_array = ALP::try_new(
@@ -410,7 +412,7 @@ mod tests {
             .execute(alp_array.clone().into_array(), &mut cuda_ctx)
             .await
             .vortex_expect("GPU decompression failed")
-            .into_host()
+            .into_host(cuda_ctx.session())
             .await?
             .into_array();
 
@@ -446,7 +448,7 @@ mod tests {
             .into_array()
             .execute_cuda(&mut cuda_ctx)
             .await?
-            .into_host()
+            .into_host(cuda_ctx.session())
             .await?
             .into_array();
 

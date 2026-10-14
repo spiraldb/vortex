@@ -68,6 +68,7 @@ impl CudaExecute for ListExecutor {
                 empty.clone().into_array(),
                 empty.into_array(),
                 validity,
+                ctx.execution_ctx(),
             )?));
         }
 
@@ -134,6 +135,7 @@ async fn list_views_typed<O: DeviceRepr + NativePType>(
         view_offsets.into_array(),
         view_sizes.into_array(),
         validity,
+        ctx.execution_ctx(),
     )?))
 }
 
@@ -169,13 +171,13 @@ mod tests {
         .into_array();
         let offsets_array =
             PrimitiveArray::new(Buffer::from(offsets), Validity::NonNullable).into_array();
-        let list = ListArray::try_new(elements, offsets_array, Validity::NonNullable)?;
+        let list = ListArray::try_new(elements, offsets_array, Validity::NonNullable, &mut ctx)?;
 
         let gpu_result = ListExecutor
             .execute(list.clone().into_array(), &mut cuda_ctx)
             .await
             .vortex_expect("GPU decompression failed")
-            .into_host()
+            .into_host(cuda_ctx.session())
             .await?
             .into_array();
 
@@ -196,13 +198,13 @@ mod tests {
             PrimitiveArray::new(buffer![0i32, 2, 2, 4], Validity::NonNullable).into_array();
         let validity =
             Validity::Array(BoolArray::from_iter([true, false, true].into_iter()).into_array());
-        let list = ListArray::try_new(elements, offsets, validity)?;
+        let list = ListArray::try_new(elements, offsets, validity, &mut ctx)?;
 
         let gpu_result = ListExecutor
             .execute(list.clone().into_array(), &mut cuda_ctx)
             .await
             .vortex_expect("GPU decompression failed")
-            .into_host()
+            .into_host(cuda_ctx.session())
             .await?
             .into_array();
 

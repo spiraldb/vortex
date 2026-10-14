@@ -199,6 +199,7 @@ fn collect_list_rows(
         offsets,
         sizes,
         validity,
+        ctx,
     )?;
     // SAFETY: the views were either forwarded unchanged or rebuilt as a gapless, non-overlapping
     // running sum over the same elements, so the flag still holds. Forwarding it matters:
@@ -355,6 +356,7 @@ mod tests {
             elements,
             PrimitiveArray::from_iter(offsets.iter().copied()).into_array(),
             validity,
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )?
         .into_array())
     }
@@ -396,6 +398,7 @@ mod tests {
             PrimitiveArray::from_iter([2u32, 0]).into_array(),
             PrimitiveArray::from_iter([2u32, 2]).into_array(),
             Validity::NonNullable,
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )?;
         assert!(
             !views.is_zero_copy_to_list(),
@@ -546,6 +549,7 @@ mod tests {
         let expected = MaskedArray::try_new(
             multipoint_column(vec![vec![(0.0, 2.0)], vec![(1.0, 3.0)]])?,
             Validity::from_iter([true, false]),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )?
         .into_array();
 

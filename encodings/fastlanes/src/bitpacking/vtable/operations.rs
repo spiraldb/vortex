@@ -258,6 +258,7 @@ mod test {
                     buffer![1u32].into_array(),
                     PrimitiveArray::new(buffer![999u32], Validity::AllValid).into_array(),
                     None,
+                    &mut SESSION.create_execution_ctx(),
                 )
                 .unwrap(),
             ),

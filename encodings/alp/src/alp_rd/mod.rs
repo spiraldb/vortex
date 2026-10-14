@@ -104,15 +104,19 @@ where
                 .into_array()
         };
 
-        Patches::new(
-            len,
-            0,
-            packed_pos,
-            Buffer::from(exceptions).into_array(),
-            // TODO(0ax1): handle chunk offsets
-            None,
-        )
-        .vortex_expect("Patches construction in encode")
+        // SAFETY: exception positions are pushed in increasing order while scanning the input,
+        // so they are sorted, unique and below `len`, with one exception value each.
+        unsafe {
+            Patches::new_unchecked(
+                len,
+                0,
+                packed_pos,
+                Buffer::from(exceptions).into_array(),
+                // TODO(0ax1): handle chunk offsets
+                None,
+                None,
+            )
+        }
     });
 
     ALPRD::try_new(

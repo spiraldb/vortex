@@ -60,9 +60,14 @@ fn primitive_list(width: usize) -> ArrayRef {
     let elements = PrimitiveArray::from_iter(0..element_count as u32).into_array();
     let offsets =
         Buffer::from_iter((0..=LIST_LENGTH).map(|index| (index * width) as u32)).into_array();
-    ListArray::try_new(elements, offsets, Validity::NonNullable)
-        .unwrap()
-        .into_array()
+    ListArray::try_new(
+        elements,
+        offsets,
+        Validity::NonNullable,
+        &mut SESSION.create_execution_ctx(),
+    )
+    .unwrap()
+    .into_array()
 }
 
 fn selection_mask(setup: MaskSetup) -> Mask {

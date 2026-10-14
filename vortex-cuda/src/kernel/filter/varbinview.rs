@@ -79,7 +79,7 @@ mod tests {
             .execute(filter_array.clone().into_array(), &mut cuda_ctx)
             .await
             .vortex_expect("GPU filter failed")
-            .into_host()
+            .into_host(cuda_ctx.session())
             .await?
             .into_array();
 

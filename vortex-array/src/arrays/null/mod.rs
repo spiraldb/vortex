@@ -33,6 +33,10 @@ use crate::validity::Validity;
 
 pub(crate) mod compute;
 
+pub(crate) fn initialize(session: &VortexSession) {
+    compute::initialize(session);
+}
+
 /// A [`Null`]-encoded Vortex array.
 pub type NullArray = Array<Null>;
 

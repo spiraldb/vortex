@@ -171,6 +171,7 @@ fn test_take_execute_kernel_rejects_non_contiguous_sequential_rank_past_filter_l
             buffer![10u32, 11, 20, 30, 31, 32, 40, 50, 51].into_array(),
             buffer![0u32, 2, 3, 6, 7, 9].into_array(),
             Validity::NonNullable,
+            &mut crate::test_harness::test_session().create_execution_ctx(),
         )?
         .into_array(),
         Mask::from_indices(5, vec![0, 2, 4]),
@@ -185,6 +186,7 @@ fn test_take_execute_kernel_rejects_translated_rank_past_filter_len() -> VortexR
             buffer![10u32, 11, 20, 30, 31, 32, 40, 50, 51].into_array(),
             buffer![0u32, 2, 3, 6, 7, 9].into_array(),
             Validity::NonNullable,
+            &mut crate::test_harness::test_session().create_execution_ctx(),
         )?
         .into_array(),
         Mask::from_indices(5, vec![0, 2, 4]),
@@ -199,6 +201,7 @@ fn test_take_execute_kernel_handles_empty_sequential_take() -> VortexResult<()> 
             buffer![10u32, 11, 20, 30, 31, 32, 40, 50, 51].into_array(),
             buffer![0u32, 2, 3, 6, 7, 9].into_array(),
             Validity::NonNullable,
+            &mut crate::test_harness::test_session().create_execution_ctx(),
         )?
         .into_array(),
         Mask::from_indices(5, vec![0, 2, 4]),
@@ -220,6 +223,7 @@ fn test_take_execute_kernel_handles_empty_sequential_take() -> VortexResult<()> 
             PrimitiveArray::from_iter(std::iter::empty::<u32>()).into_array(),
             buffer![0u32].into_array(),
             Validity::NonNullable,
+            &mut ctx,
         )?
         .into_array(),
         &mut ctx
@@ -457,12 +461,14 @@ fn test_take_execute_kernel_handles_list_filter_child() -> VortexResult<()> {
             buffer![10u32, 11, 20, 30, 31, 32, 40, 50, 51].into_array(),
             buffer![0u32, 2, 3, 6, 7, 9].into_array(),
             Validity::NonNullable,
+            &mut crate::test_harness::test_session().create_execution_ctx(),
         )?
         .into_array(),
         ListArray::try_new(
             buffer![40u32, 10, 11, 30, 31, 32].into_array(),
             buffer![0u32, 1, 3, 6].into_array(),
             Validity::NonNullable,
+            &mut crate::test_harness::test_session().create_execution_ctx(),
         )?
         .into_array(),
     )

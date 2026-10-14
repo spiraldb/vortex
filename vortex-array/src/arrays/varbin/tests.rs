@@ -29,6 +29,7 @@ fn binary_array() -> ArrayRef {
         values,
         DType::Utf8(Nullability::NonNullable),
         Validity::NonNullable,
+        &mut test_session().create_execution_ctx(),
     )
     .unwrap()
     .into_array()
@@ -84,6 +85,7 @@ fn try_new_rejects_invalid_offsets(#[case] offsets: ArrayRef) {
         values,
         DType::Binary(Nullability::NonNullable),
         Validity::NonNullable,
+        &mut test_session().create_execution_ctx(),
     );
 
     assert!(result.is_err());
@@ -99,6 +101,7 @@ fn try_new_allows_nonzero_first_offset() -> VortexResult<()> {
         values,
         DType::Binary(Nullability::NonNullable),
         Validity::NonNullable,
+        &mut test_session().create_execution_ctx(),
     )?;
 
     assert_eq!(array.len(), 2);
@@ -116,6 +119,7 @@ fn try_new_rejects_unsorted_utf8_offsets_at_null_row() {
         values,
         DType::Utf8(Nullability::Nullable),
         Validity::from_iter([true, false, true]),
+        &mut test_session().create_execution_ctx(),
     );
 
     assert!(result.is_err());

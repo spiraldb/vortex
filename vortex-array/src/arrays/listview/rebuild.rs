@@ -477,7 +477,13 @@ mod tests {
         let offsets = PrimitiveArray::from_iter(vec![0u32, 1]).into_array();
         let sizes = PrimitiveArray::from_iter(vec![3u32, 2]).into_array();
 
-        let listview = ListViewArray::new(elements, offsets, sizes, Validity::NonNullable);
+        let listview = ListViewArray::new(
+            elements,
+            offsets,
+            sizes,
+            Validity::NonNullable,
+            &mut SESSION.create_execution_ctx(),
+        );
 
         let mut ctx = SESSION.create_execution_ctx();
         let flattened = listview.rebuild(ListViewRebuildMode::MakeZeroCopyToList, &mut ctx)?;
@@ -487,20 +493,20 @@ mod tests {
         assert_eq!(flattened.elements().len(), 5);
 
         // Offsets should be sequential
-        assert_eq!(flattened.offset_at(0), 0);
-        assert_eq!(flattened.size_at(0), 3);
-        assert_eq!(flattened.offset_at(1), 3);
-        assert_eq!(flattened.size_at(1), 2);
+        assert_eq!(flattened.offset_at(0, &mut ctx), 0);
+        assert_eq!(flattened.size_at(0, &mut ctx), 3);
+        assert_eq!(flattened.offset_at(1, &mut ctx), 3);
+        assert_eq!(flattened.size_at(1, &mut ctx), 2);
 
         // Verify the data is correct
         assert_arrays_eq!(
-            flattened.list_elements_at(0)?,
+            flattened.list_elements_at(0, &mut ctx)?,
             PrimitiveArray::from_iter([1i32, 2, 3]),
             &mut ctx
         );
 
         assert_arrays_eq!(
-            flattened.list_elements_at(1)?,
+            flattened.list_elements_at(1, &mut ctx)?,
             PrimitiveArray::from_iter([2i32, 3]),
             &mut ctx
         );
@@ -523,7 +529,13 @@ mod tests {
             .into_array(),
         );
 
-        let listview = ListViewArray::new(elements, offsets, sizes, validity);
+        let listview = ListViewArray::new(
+            elements,
+            offsets,
+            sizes,
+            validity,
+            &mut SESSION.create_execution_ctx(),
+        );
 
         let mut ctx = SESSION.create_execution_ctx();
         let flattened = listview.rebuild(ListViewRebuildMode::MakeZeroCopyToList, &mut ctx)?;
@@ -536,13 +548,13 @@ mod tests {
 
         // Verify valid lists contain correct data
         assert_arrays_eq!(
-            flattened.list_elements_at(0)?,
+            flattened.list_elements_at(0, &mut ctx)?,
             PrimitiveArray::from_iter([1i32, 2]),
             &mut ctx
         );
 
         assert_arrays_eq!(
-            flattened.list_elements_at(2)?,
+            flattened.list_elements_at(2, &mut ctx)?,
             PrimitiveArray::from_iter([3i32]),
             &mut ctx
         );
@@ -562,23 +574,23 @@ mod tests {
         let mut ctx = SESSION.create_execution_ctx();
         let flattened = listview.rebuild(ListViewRebuildMode::MakeZeroCopyToList, &mut ctx)?;
 
-        assert_eq!(flattened.offset_at(0), 0);
-        assert_eq!(flattened.size_at(0), 1);
-        assert_eq!(flattened.offset_at(1), 1);
-        assert_eq!(flattened.size_at(1), 0);
-        assert_eq!(flattened.offset_at(2), 1);
-        assert_eq!(flattened.size_at(2), 2);
+        assert_eq!(flattened.offset_at(0, &mut ctx), 0);
+        assert_eq!(flattened.size_at(0, &mut ctx), 1);
+        assert_eq!(flattened.offset_at(1, &mut ctx), 1);
+        assert_eq!(flattened.size_at(1, &mut ctx), 0);
+        assert_eq!(flattened.offset_at(2, &mut ctx), 1);
+        assert_eq!(flattened.size_at(2, &mut ctx), 2);
         assert!(flattened.validity()?.execute_is_valid(0, &mut ctx)?);
         assert!(!flattened.validity()?.execute_is_valid(1, &mut ctx)?);
         assert!(flattened.validity()?.execute_is_valid(2, &mut ctx)?);
 
         assert_arrays_eq!(
-            flattened.list_elements_at(0)?,
+            flattened.list_elements_at(0, &mut ctx)?,
             PrimitiveArray::from_iter([1i32]),
             &mut ctx
         );
         assert_arrays_eq!(
-            flattened.list_elements_at(2)?,
+            flattened.list_elements_at(2, &mut ctx)?,
             PrimitiveArray::from_iter([3i32, 4]),
             &mut ctx
         );
@@ -599,7 +611,13 @@ mod tests {
         let offsets = PrimitiveArray::from_iter(vec![2u32, 5]).into_array();
         let sizes = PrimitiveArray::from_iter(vec![2u32, 2]).into_array();
 
-        let listview = ListViewArray::new(elements, offsets, sizes, Validity::NonNullable);
+        let listview = ListViewArray::new(
+            elements,
+            offsets,
+            sizes,
+            Validity::NonNullable,
+            &mut SESSION.create_execution_ctx(),
+        );
 
         let mut ctx = SESSION.create_execution_ctx();
         let trimmed = listview.rebuild(ListViewRebuildMode::TrimElements, &mut ctx)?;
@@ -608,20 +626,20 @@ mod tests {
         assert_eq!(trimmed.elements().len(), 5);
 
         // Offsets should be adjusted: old offset 2 -> new offset 0, old offset 5 -> new offset 3.
-        assert_eq!(trimmed.offset_at(0), 0);
-        assert_eq!(trimmed.size_at(0), 2);
-        assert_eq!(trimmed.offset_at(1), 3);
-        assert_eq!(trimmed.size_at(1), 2);
+        assert_eq!(trimmed.offset_at(0, &mut ctx), 0);
+        assert_eq!(trimmed.size_at(0, &mut ctx), 2);
+        assert_eq!(trimmed.offset_at(1, &mut ctx), 3);
+        assert_eq!(trimmed.size_at(1, &mut ctx), 2);
 
         // Verify the data is correct.
         assert_arrays_eq!(
-            trimmed.list_elements_at(0)?,
+            trimmed.list_elements_at(0, &mut ctx)?,
             PrimitiveArray::from_iter([1i32, 2]),
             &mut ctx
         );
 
         assert_arrays_eq!(
-            trimmed.list_elements_at(1)?,
+            trimmed.list_elements_at(1, &mut ctx)?,
             PrimitiveArray::from_iter([3i32, 4]),
             &mut ctx
         );
@@ -640,24 +658,30 @@ mod tests {
         let elements = PrimitiveArray::from_iter(0i32..300).into_array();
         let offsets = PrimitiveArray::from_iter(vec![10u32, 0]).into_array();
         let sizes = PrimitiveArray::from_iter(vec![150u32, 130]).into_array();
-        let listview = ListViewArray::new(elements, offsets, sizes, Validity::NonNullable);
+        let listview = ListViewArray::new(
+            elements,
+            offsets,
+            sizes,
+            Validity::NonNullable,
+            &mut SESSION.create_execution_ctx(),
+        );
 
         let mut ctx = SESSION.create_execution_ctx();
         let flattened = listview.rebuild(ListViewRebuildMode::MakeZeroCopyToList, &mut ctx)?;
 
         assert_eq!(flattened.elements().len(), 280);
-        assert_eq!(flattened.offset_at(0), 0);
-        assert_eq!(flattened.size_at(0), 150);
-        assert_eq!(flattened.offset_at(1), 150);
-        assert_eq!(flattened.size_at(1), 130);
+        assert_eq!(flattened.offset_at(0, &mut ctx), 0);
+        assert_eq!(flattened.size_at(0, &mut ctx), 150);
+        assert_eq!(flattened.offset_at(1, &mut ctx), 150);
+        assert_eq!(flattened.size_at(1, &mut ctx), 130);
 
         assert_arrays_eq!(
-            flattened.list_elements_at(0)?,
+            flattened.list_elements_at(0, &mut ctx)?,
             PrimitiveArray::from_iter(10i32..160),
             &mut ctx
         );
         assert_arrays_eq!(
-            flattened.list_elements_at(1)?,
+            flattened.list_elements_at(1, &mut ctx)?,
             PrimitiveArray::from_iter(0i32..130),
             &mut ctx
         );
@@ -676,7 +700,13 @@ mod tests {
         let sizes = PrimitiveArray::from_iter(vec![2u32, 2, 0, 0]).into_array();
         let validity = Validity::from_iter(vec![true, true, false, false]);
 
-        let listview = ListViewArray::new(elements, offsets, sizes, validity);
+        let listview = ListViewArray::new(
+            elements,
+            offsets,
+            sizes,
+            validity,
+            &mut SESSION.create_execution_ctx(),
+        );
 
         // First rebuild to make it zero-copy-to-list
         let mut ctx = SESSION.create_execution_ctx();
@@ -685,16 +715,16 @@ mod tests {
 
         // Verify NULL items have correct offsets (should not reuse previous offsets)
         // After rebuild: offsets should be [0, 2, 4, 4] for zero-copy-to-list
-        assert_eq!(rebuilt.offset_at(0), 0);
-        assert_eq!(rebuilt.offset_at(1), 2);
-        assert_eq!(rebuilt.offset_at(2), 4); // NULL should be at position 4
-        assert_eq!(rebuilt.offset_at(3), 4); // Second NULL also at position 4
+        assert_eq!(rebuilt.offset_at(0, &mut ctx), 0);
+        assert_eq!(rebuilt.offset_at(1, &mut ctx), 2);
+        assert_eq!(rebuilt.offset_at(2, &mut ctx), 4); // NULL should be at position 4
+        assert_eq!(rebuilt.offset_at(3, &mut ctx), 4); // Second NULL also at position 4
 
         // All sizes should be correct
-        assert_eq!(rebuilt.size_at(0), 2);
-        assert_eq!(rebuilt.size_at(1), 2);
-        assert_eq!(rebuilt.size_at(2), 0); // NULL has size 0
-        assert_eq!(rebuilt.size_at(3), 0); // NULL has size 0
+        assert_eq!(rebuilt.size_at(0, &mut ctx), 2);
+        assert_eq!(rebuilt.size_at(1, &mut ctx), 2);
+        assert_eq!(rebuilt.size_at(2, &mut ctx), 0); // NULL has size 0
+        assert_eq!(rebuilt.size_at(3, &mut ctx), 0); // NULL has size 0
 
         // Now rebuild with MakeExact (which calls naive_rebuild then trim_elements)
         // This should not panic (issue #5412)
@@ -708,13 +738,13 @@ mod tests {
 
         // Verify data is preserved
         assert_arrays_eq!(
-            exact.list_elements_at(0)?,
+            exact.list_elements_at(0, &mut ctx)?,
             PrimitiveArray::from_iter([1i32, 2]),
             &mut ctx
         );
 
         assert_arrays_eq!(
-            exact.list_elements_at(1)?,
+            exact.list_elements_at(1, &mut ctx)?,
             PrimitiveArray::from_iter([3i32, 4]),
             &mut ctx
         );
@@ -734,11 +764,17 @@ mod tests {
         let offsets = PrimitiveArray::from_iter(vec![70_000u32, 70_002]).into_array();
         let sizes = PrimitiveArray::from_iter(vec![2u16, 2]).into_array();
 
-        let listview = ListViewArray::new(elements, offsets, sizes, Validity::NonNullable);
+        let listview = ListViewArray::new(
+            elements,
+            offsets,
+            sizes,
+            Validity::NonNullable,
+            &mut SESSION.create_execution_ctx(),
+        );
         let mut ctx = SESSION.create_execution_ctx();
         let trimmed = listview.rebuild(ListViewRebuildMode::TrimElements, &mut ctx)?;
         assert_arrays_eq!(
-            trimmed.list_elements_at(1)?,
+            trimmed.list_elements_at(1, &mut ctx)?,
             PrimitiveArray::from_iter([30i32, 40]),
             &mut ctx
         );
@@ -756,11 +792,17 @@ mod tests {
         let offsets = PrimitiveArray::from_iter(vec![1u16, 3]).into_array();
         let sizes = PrimitiveArray::from_iter(vec![70_000u32, 2]).into_array();
 
-        let listview = ListViewArray::new(elements, offsets, sizes, Validity::NonNullable);
+        let listview = ListViewArray::new(
+            elements,
+            offsets,
+            sizes,
+            Validity::NonNullable,
+            &mut SESSION.create_execution_ctx(),
+        );
         let mut ctx = SESSION.create_execution_ctx();
         let trimmed = listview.rebuild(ListViewRebuildMode::TrimElements, &mut ctx)?;
         assert_arrays_eq!(
-            trimmed.list_elements_at(1)?,
+            trimmed.list_elements_at(1, &mut ctx)?,
             PrimitiveArray::from_iter([30i32, 40]),
             &mut ctx
         );
@@ -779,18 +821,24 @@ mod tests {
         let offsets = PrimitiveArray::from_iter(vec![0i32, 1]).into_array();
         let sizes = PrimitiveArray::from_iter(vec![3i16, 2]).into_array();
 
-        let listview = ListViewArray::new(elements, offsets, sizes, Validity::NonNullable);
+        let listview = ListViewArray::new(
+            elements,
+            offsets,
+            sizes,
+            Validity::NonNullable,
+            &mut SESSION.create_execution_ctx(),
+        );
         let mut ctx = SESSION.create_execution_ctx();
         let rebuilt = listview.rebuild(ListViewRebuildMode::MakeZeroCopyToList, &mut ctx)?;
 
         // Values: [1,2,3] and [2,3].
         assert_arrays_eq!(
-            rebuilt.list_elements_at(0)?,
+            rebuilt.list_elements_at(0, &mut ctx)?,
             PrimitiveArray::from_iter([1i32, 2, 3]),
             &mut ctx
         );
         assert_arrays_eq!(
-            rebuilt.list_elements_at(1)?,
+            rebuilt.list_elements_at(1, &mut ctx)?,
             PrimitiveArray::from_iter([2i32, 3]),
             &mut ctx
         );
@@ -824,7 +872,13 @@ mod tests {
         let offsets = PrimitiveArray::from_iter(vec![215u8, 0]).into_array();
         let sizes = PrimitiveArray::from_iter(vec![46u8, 10]).into_array();
 
-        let listview = ListViewArray::new(elements, offsets, sizes, Validity::NonNullable);
+        let listview = ListViewArray::new(
+            elements,
+            offsets,
+            sizes,
+            Validity::NonNullable,
+            &mut SESSION.create_execution_ctx(),
+        );
         let mut ctx = SESSION.create_execution_ctx();
         let trimmed = listview.rebuild(ListViewRebuildMode::TrimElements, &mut ctx)?;
 

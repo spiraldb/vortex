@@ -90,7 +90,14 @@ fn make_vortex_list(elements: vortex_array::ArrayRef) -> vortex_array::ArrayRef 
     .into_array();
     let list_len = u32::try_from(LIST_LEN).expect("benchmark list length must fit u32");
     let sizes = PrimitiveArray::from_iter(std::iter::repeat_n(list_len, N)).into_array();
-    ListViewArray::new(elements, offsets, sizes, Validity::NonNullable).into_array()
+    ListViewArray::new(
+        elements,
+        offsets,
+        sizes,
+        Validity::NonNullable,
+        &mut SESSION.create_execution_ctx(),
+    )
+    .into_array()
 }
 
 fn arrow_output_bytes(rows: &arrow_row::Rows) -> u64 {

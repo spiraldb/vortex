@@ -73,9 +73,14 @@ fn list_array(len: usize) -> ArrayRef {
     let elements = PrimitiveArray::from_iter(0..(len * LIST_SIZE) as u32).into_array();
     let offsets = Buffer::from_iter((0..=len).map(|idx| (idx * LIST_SIZE) as u32)).into_array();
 
-    ListArray::try_new(elements, offsets, Validity::NonNullable)
-        .unwrap()
-        .into_array()
+    ListArray::try_new(
+        elements,
+        offsets,
+        Validity::NonNullable,
+        &mut SESSION.create_execution_ctx(),
+    )
+    .unwrap()
+    .into_array()
 }
 
 fn slice_mask(array_len: usize, filtered_len: usize) -> Mask {

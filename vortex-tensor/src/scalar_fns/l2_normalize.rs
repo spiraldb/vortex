@@ -371,7 +371,12 @@ mod tests {
                 1.0, 0.0, // The null row's placeholder values.
             ],
         )?;
-        let input = MaskedArray::try_new(input, Validity::from_iter([true, false]))?.into_array();
+        let input = MaskedArray::try_new(
+            input,
+            Validity::from_iter([true, false]),
+            &mut SESSION.create_execution_ctx(),
+        )?
+        .into_array();
         let output = evaluate(input)?;
         let mut ctx = SESSION.create_execution_ctx();
 
@@ -461,7 +466,12 @@ mod tests {
     #[test]
     fn test_return_dtype_has_nonnullable_fields() -> VortexResult<()> {
         let input = vector_array(2, &[3.0f64, 4.0])?;
-        let input = MaskedArray::try_new(input, Validity::AllValid)?.into_array();
+        let input = MaskedArray::try_new(
+            input,
+            Validity::AllValid,
+            &mut SESSION.create_execution_ctx(),
+        )?
+        .into_array();
         let output = L2Normalize::try_new(input)?.into_array();
 
         let DType::Struct(fields, Nullability::Nullable) = output.dtype() else {

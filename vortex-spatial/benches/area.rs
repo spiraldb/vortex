@@ -131,6 +131,7 @@ fn nullable_polygon(bencher: Bencher) {
     let geometry = MaskedArray::try_new(
         simple_polygons(),
         Validity::from_iter((0..ROWS).map(|row| !row.is_multiple_of(8))),
+        &mut SESSION.create_execution_ctx(),
     )
     .unwrap()
     .into_array();

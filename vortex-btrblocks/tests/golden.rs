@@ -413,7 +413,13 @@ fn list_of_int_runs() -> VortexResult<ArrayRef> {
         offsets.push(offset);
     }
     let offsets = PrimitiveArray::new(Buffer::copy_from(&offsets), Validity::NonNullable);
-    Ok(ListArray::try_new(elements, offsets.into_array(), Validity::NonNullable)?.into_array())
+    Ok(ListArray::try_new(
+        elements,
+        offsets.into_array(),
+        Validity::NonNullable,
+        &mut SESSION.create_execution_ctx(),
+    )?
+    .into_array())
 }
 
 /// Excludes OnPair from the `regular` and `compact` variants: it beats FSST on

@@ -120,6 +120,7 @@ fn list_child(len: usize, rng: &mut StdRng) -> ArrayRef {
         offsets.into_array(),
         sizes.into_array(),
         Validity::NonNullable,
+        &mut SESSION.create_execution_ctx(),
     )
     .into_array()
 }
@@ -178,9 +179,15 @@ fn compressed_children_union(rng: &mut StdRng) -> ArrayRef {
                 let values = variant_child(variant, indices.len(), rng);
                 let fill = Scalar::default_value(values.dtype());
 
-                Sparse::try_new(indices.into_array(), values, ARRAY_SIZE, fill)
-                    .unwrap()
-                    .into_array()
+                Sparse::try_new(
+                    indices.into_array(),
+                    values,
+                    ARRAY_SIZE,
+                    fill,
+                    &mut SESSION.create_execution_ctx(),
+                )
+                .unwrap()
+                .into_array()
             })
             .collect(),
     )

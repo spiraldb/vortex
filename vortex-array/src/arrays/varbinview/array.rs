@@ -41,7 +41,7 @@ use crate::builders::VarBinViewBuilder;
 use crate::dtype::DType;
 use crate::dtype::Nullability;
 #[cfg(debug_assertions)]
-use crate::legacy_session;
+use crate::internal_session;
 use crate::validity::Validity;
 
 #[array_slots(VarBinView)]
@@ -319,7 +319,7 @@ impl VarBinViewData {
             &buffers,
             &dtype,
             &validity,
-            &mut legacy_session().create_execution_ctx(),
+            &mut internal_session().create_execution_ctx(),
         )
         .vortex_expect("[Debug Assertion]: Invalid `VarBinViewArray` parameters");
 

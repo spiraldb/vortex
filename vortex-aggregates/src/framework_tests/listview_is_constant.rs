@@ -63,6 +63,7 @@ fn test_is_constant_basic(
         offsets.into_array(),
         sizes.into_array(),
         validity,
+        &mut crate::session().create_execution_ctx(),
     )
     .into_array();
 
@@ -131,9 +132,10 @@ fn test_constant_repeated_same_lists() {
     let offsets = buffer![0i32, 0, 0, 0].into_array(); // All point to same start.
     let sizes = buffer![3i32, 3, 3, 3].into_array(); // All same size.
 
-    let listview = ListViewArray::new(elements, offsets, sizes, Validity::NonNullable).into_array();
+    let mut ctx = crate::session().create_execution_ctx();
+    let listview =
+        ListViewArray::new(elements, offsets, sizes, Validity::NonNullable, &mut ctx).into_array();
 
     // All lists are [10, 20, 30] so should be constant.
-    let mut ctx = crate::session().create_execution_ctx();
     assert!(is_constant(&listview, &mut ctx).unwrap());
 }

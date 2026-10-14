@@ -404,6 +404,7 @@ fn list_identical() -> VortexResult<()> {
         buffer![0u32, 2].into_array(),
         buffer![2u32, 2].into_array(),
         Validity::NonNullable,
+        &mut crate::session().create_execution_ctx(),
     )?
     .into_array();
     let b = ListViewArray::try_new(
@@ -411,6 +412,7 @@ fn list_identical() -> VortexResult<()> {
         buffer![0u32, 2].into_array(),
         buffer![2u32, 2].into_array(),
         Validity::NonNullable,
+        &mut crate::session().create_execution_ctx(),
     )?
     .into_array();
     assert_matches_baseline(&a, &b)
@@ -423,6 +425,7 @@ fn list_different_elements() -> VortexResult<()> {
         buffer![0u32, 2].into_array(),
         buffer![2u32, 2].into_array(),
         Validity::NonNullable,
+        &mut crate::session().create_execution_ctx(),
     )?
     .into_array();
     let b = ListViewArray::try_new(
@@ -430,6 +433,7 @@ fn list_different_elements() -> VortexResult<()> {
         buffer![0u32, 2].into_array(),
         buffer![2u32, 2].into_array(),
         Validity::NonNullable,
+        &mut crate::session().create_execution_ctx(),
     )?
     .into_array();
     assert_matches_baseline(&a, &b)
@@ -442,6 +446,7 @@ fn list_different_lengths() -> VortexResult<()> {
         buffer![0u32, 2].into_array(),
         buffer![2u32, 1].into_array(),
         Validity::NonNullable,
+        &mut crate::session().create_execution_ctx(),
     )?
     .into_array();
     let b = ListViewArray::try_new(
@@ -449,6 +454,7 @@ fn list_different_lengths() -> VortexResult<()> {
         buffer![0u32, 2].into_array(),
         buffer![2u32, 1].into_array(),
         Validity::NonNullable,
+        &mut crate::session().create_execution_ctx(),
     )?
     .into_array();
     assert_matches_baseline(&a, &b)
@@ -462,6 +468,7 @@ fn list_nullable_ignores_garbage() -> VortexResult<()> {
         buffer![0u8, 2].into_array(),
         buffer![2u8, 2].into_array(),
         validity.clone(),
+        &mut crate::session().create_execution_ctx(),
     )?
     .into_array();
     let b = ListViewArray::try_new(
@@ -469,6 +476,7 @@ fn list_nullable_ignores_garbage() -> VortexResult<()> {
         buffer![0u8, 2].into_array(),
         buffer![2u8, 2].into_array(),
         validity,
+        &mut crate::session().create_execution_ctx(),
     )?
     .into_array();
     assert_matches_baseline(&a, &b)
@@ -482,6 +490,7 @@ fn list_different_offset_dtypes() -> VortexResult<()> {
         buffer![0u8, 2].into_array(),
         buffer![2u8, 2].into_array(),
         Validity::NonNullable,
+        &mut crate::session().create_execution_ctx(),
     )?
     .into_array();
     let b = ListViewArray::try_new(
@@ -489,6 +498,7 @@ fn list_different_offset_dtypes() -> VortexResult<()> {
         buffer![0i16, 2].into_array(),
         buffer![2i16, 2].into_array(),
         Validity::NonNullable,
+        &mut crate::session().create_execution_ctx(),
     )?
     .into_array();
     assert_matches_baseline(&a, &b)

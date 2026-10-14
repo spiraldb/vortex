@@ -8,6 +8,7 @@ use std::task::Poll;
 use futures::stream;
 use rstest::rstest;
 use vortex::array::IntoArray;
+use vortex::array::VortexSessionExecute;
 use vortex::array::arrays::Constant;
 use vortex::array::arrays::DictArray;
 use vortex::array::arrays::ListViewArray;
@@ -78,6 +79,7 @@ fn read_plain(array: &ArrowArray, dtype: &DType) -> VortexResult<ArrayRef> {
                 buffer(array, 2)?.slice_unaligned(..),
                 dtype.clone(),
                 validity,
+                &mut vortex::aggregates::session().create_execution_ctx(),
             )?
             .into_array())
         }
@@ -329,6 +331,7 @@ async fn test_decode_non_contiguous_dictionary_list_view() -> VortexResult<()> {
         PrimitiveArray::from_iter([2i32, 0]).into_array(),
         PrimitiveArray::from_iter([2i32, 2]).into_array(),
         Validity::NonNullable,
+        ctx.execution_ctx(),
     )
     .into_array();
     let expected = expected.take(PrimitiveArray::from_iter([2u32, 3, 0, 1]).into_array())?;

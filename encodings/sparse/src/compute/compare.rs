@@ -90,6 +90,7 @@ mod tests {
             buffer![10i32, 20, 30].into_array(),
             8,
             Scalar::from(1i32),
+            &mut SESSION.create_execution_ctx(),
         )
         .unwrap();
         let arr = array.into_array();

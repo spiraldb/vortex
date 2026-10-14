@@ -48,6 +48,7 @@ fn make_primitive_lv(num_lists: usize, list_size: usize, step: usize) -> ListVie
         offsets.into_array(),
         sizes.into_array(),
         Validity::NonNullable,
+        &mut SESSION.create_execution_ctx(),
     )
 }
 
@@ -70,6 +71,7 @@ fn make_varbinview_lv(num_lists: usize, list_size: usize, step: usize) -> ListVi
         offsets.into_array(),
         sizes.into_array(),
         Validity::NonNullable,
+        &mut SESSION.create_execution_ctx(),
     )
 }
 
@@ -93,6 +95,7 @@ fn make_struct_lv(num_lists: usize, list_size: usize, step: usize) -> ListViewAr
         offsets.into_array(),
         sizes.into_array(),
         Validity::NonNullable,
+        &mut SESSION.create_execution_ctx(),
     )
 }
 
@@ -106,8 +109,13 @@ fn make_nested_list_lv(
     let inner_offsets: Buffer<u32> = (0..=elem_count)
         .map(|i| (i * inner_list_size) as u32)
         .collect();
-    let elements =
-        ListArray::new(values, inner_offsets.into_array(), Validity::NonNullable).into_array();
+    let elements = ListArray::new(
+        values,
+        inner_offsets.into_array(),
+        Validity::NonNullable,
+        &mut SESSION.create_execution_ctx(),
+    )
+    .into_array();
     let offsets: Buffer<u32> = (0..num_lists).map(|i| (i * list_size) as u32).collect();
     let sizes: Buffer<u32> = std::iter::repeat_n(list_size as u32, num_lists).collect();
     ListViewArray::new(
@@ -115,6 +123,7 @@ fn make_nested_list_lv(
         offsets.into_array(),
         sizes.into_array(),
         Validity::NonNullable,
+        &mut SESSION.create_execution_ctx(),
     )
 }
 
@@ -252,6 +261,7 @@ fn fsl_large(bencher: Bencher) {
         offsets.into_array(),
         sizes.into_array(),
         Validity::NonNullable,
+        &mut SESSION.create_execution_ctx(),
     );
     bencher
         .with_inputs(|| (&lv, SESSION.create_execution_ctx()))

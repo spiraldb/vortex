@@ -31,7 +31,9 @@ use crate::array::ArrayView;
 use crate::array::VTable;
 use crate::array::validity_to_child;
 use crate::array::with_empty_buffers;
+use crate::arrays::Bool;
 use crate::arrays::ConstantArray;
+use crate::arrays::bool::BoolArrayExt;
 use crate::arrays::masked::MaskedArrayExt;
 use crate::arrays::masked::MaskedArraySlotsExt;
 use crate::arrays::masked::MaskedData;
@@ -42,7 +44,6 @@ use crate::buffer::BufferHandle;
 use crate::dtype::DType;
 use crate::executor::ExecutionCtx;
 use crate::executor::ExecutionResult;
-use crate::legacy_session;
 use crate::require_child;
 use crate::scalar::Scalar;
 use crate::serde::ArrayChildren;
@@ -74,7 +75,6 @@ impl VTable for Masked {
         *ID
     }
 
-    #[expect(clippy::disallowed_methods)]
     fn validate(
         &self,
         _data: &MaskedData,
@@ -95,10 +95,16 @@ impl VTable for Masked {
             *dtype,
             "MaskedArray dtype does not match child and validity",
         );
-        vortex_ensure!(
-            child.all_valid(&mut legacy_session().create_execution_ctx())?,
-            "MaskedArray children must not have nulls",
-        );
+        // `VTable::validate` has no ctx, so it only checks for child nulls it can read without
+        // executing. Constructors and deserialization check any child.
+        let child_has_nulls = match child.validity()? {
+            Validity::NonNullable | Validity::AllValid => false,
+            Validity::AllInvalid => len > 0,
+            Validity::Array(validity) => validity.as_opt::<Bool>().is_some_and(|bools| {
+                validity.is_host() && bools.to_bit_buffer().true_count() != len
+            }),
+        };
+        vortex_ensure!(!child_has_nulls, "MaskedArray children must not have nulls");
         Ok(())
     }
 
@@ -129,7 +135,6 @@ impl VTable for Masked {
         Ok(Some(vec![]))
     }
 
-    #[allow(clippy::disallowed_methods)]
     fn deserialize(
         &self,
         dtype: &DType,
@@ -138,7 +143,7 @@ impl VTable for Masked {
 
         buffers: &[BufferHandle],
         children: &dyn ArrayChildren,
-        _session: &VortexSession,
+        session: &VortexSession,
     ) -> VortexResult<ArrayParts<Self>> {
         if !metadata.is_empty() {
             vortex_bail!(
@@ -168,7 +173,7 @@ impl VTable for Masked {
         let validity_slot = validity_to_child(&validity, len);
         let data = MaskedData::try_new(
             len,
-            child.all_valid(&mut legacy_session().create_execution_ctx())?,
+            child.all_valid(&mut session.create_execution_ctx())?,
             validity,
         )?;
         Ok(ArrayParts::new(
@@ -241,19 +246,22 @@ mod tests {
     #[case(
         MaskedArray::try_new(
             PrimitiveArray::from_iter([1i32, 2, 3]).into_array(),
-            Validity::AllValid
+            Validity::AllValid,
+            &mut test_session().create_execution_ctx(),
         ).unwrap()
     )]
     #[case(
         MaskedArray::try_new(
             PrimitiveArray::from_iter([1i32, 2, 3, 4, 5]).into_array(),
-            Validity::from_iter([true, true, false, true, false])
+            Validity::from_iter([true, true, false, true, false]),
+            &mut test_session().create_execution_ctx(),
         ).unwrap()
     )]
     #[case(
         MaskedArray::try_new(
             PrimitiveArray::from_iter(0..100).into_array(),
-            Validity::from_iter((0..100).map(|i| i % 3 != 0))
+            Validity::from_iter((0..100).map(|i| i % 3 != 0)),
+            &mut test_session().create_execution_ctx(),
         ).unwrap()
     )]
     fn test_serde_roundtrip(#[case] array: MaskedArray) {
@@ -304,7 +312,11 @@ mod tests {
         let child = PrimitiveArray::from_iter([1i32, 2, 3]).into_array();
         assert_eq!(child.dtype().nullability(), Nullability::NonNullable);
 
-        let array = MaskedArray::try_new(child, Validity::AllValid)?;
+        let array = MaskedArray::try_new(
+            child,
+            Validity::AllValid,
+            &mut test_session().create_execution_ctx(),
+        )?;
         assert_eq!(array.dtype().nullability(), Nullability::Nullable);
 
         // Execute the array. This should produce a Canonical with Nullable dtype.

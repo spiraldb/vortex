@@ -112,6 +112,7 @@ fn test_dict_list_dict_display() {
         Validity::Array(
             BoolArray::from_iter([true, true, false, true, false, true, true]).into_array(),
         ),
+        &mut test_session().create_execution_ctx(),
     )
     .unwrap()
     .into_array();

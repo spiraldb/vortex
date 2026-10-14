@@ -123,4 +123,21 @@ pub struct ZstdBuffersMetadata {
     /// Length of each child array, ordered as "child_dtypes"
     #[prost(uint64, repeated, tag = "6")]
     pub child_lens: Vec<u64>,
+    /// Validity of the array, stored so it can be read without decompressing. With
+    /// [`ZstdBuffersValidity::Child`], the validity is one more child after the inner children.
+    /// Absent in arrays written before validity was stored.
+    #[prost(enumeration = "ZstdBuffersValidity", optional, tag = "7")]
+    pub validity: Option<i32>,
+}
+
+/// How a [`ZstdBuffers`] array stores its validity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, prost::Enumeration)]
+#[repr(i32)]
+pub enum ZstdBuffersValidity {
+    /// Every row is valid. Also used for non-nullable arrays.
+    AllValid = 0,
+    /// Every row is null.
+    AllInvalid = 1,
+    /// The validity is a boolean child following the inner children.
+    Child = 2,
 }

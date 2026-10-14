@@ -9,7 +9,7 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 
 use crate::ArrayRef;
-use crate::VortexSessionExecute;
+use crate::ExecutionCtx;
 use crate::array::Array;
 use crate::array::ArrayParts;
 use crate::array::TypedArrayRef;
@@ -17,7 +17,7 @@ use crate::array::child_to_validity;
 use crate::array::validity_to_child;
 use crate::array_slots;
 use crate::arrays::Masked;
-use crate::legacy_session;
+use crate::dtype::DType;
 use crate::validity::Validity;
 
 #[array_slots(Masked)]
@@ -77,17 +77,38 @@ impl MaskedData {
 
 impl Array<Masked> {
     /// Constructs a new `MaskedArray`.
-    #[allow(clippy::disallowed_methods)]
-    pub fn try_new(child: ArrayRef, validity: Validity) -> VortexResult<Self> {
+    pub fn try_new(
+        child: ArrayRef,
+        validity: Validity,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Self> {
         let dtype = child.dtype().as_nullable();
         let len = child.len();
         let validity_slot = validity_to_child(&validity, len);
-        let data = MaskedData::try_new(
-            len,
-            child.all_valid(&mut legacy_session().create_execution_ctx())?,
-            validity,
-        )?;
-        Ok(unsafe {
+        let data = MaskedData::try_new(len, child.all_valid(ctx)?, validity)?;
+        Ok(Self::from_data(child, validity_slot, dtype, len, data))
+    }
+
+    /// Constructs a `MaskedArray` from a child that the caller knows has no nulls.
+    pub(crate) fn try_new_with_valid_child(
+        child: ArrayRef,
+        validity: Validity,
+    ) -> VortexResult<Self> {
+        let dtype = child.dtype().as_nullable();
+        let len = child.len();
+        let validity_slot = validity_to_child(&validity, len);
+        let data = MaskedData::try_new(len, true, validity)?;
+        Ok(Self::from_data(child, validity_slot, dtype, len, data))
+    }
+
+    fn from_data(
+        child: ArrayRef,
+        validity_slot: Option<ArrayRef>,
+        dtype: DType,
+        len: usize,
+        data: MaskedData,
+    ) -> Self {
+        unsafe {
             Array::from_parts_unchecked(ArrayParts::new(
                 Masked,
                 dtype,
@@ -95,6 +116,6 @@ impl Array<Masked> {
                 data,
                 smallvec![Some(child), validity_slot],
             ))
-        })
+        }
     }
 }

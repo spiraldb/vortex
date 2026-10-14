@@ -92,6 +92,7 @@ fn nullable_two_vertex_lines(bencher: Bencher) {
     let lines = MaskedArray::try_new(
         linestrings(2),
         Validity::from_iter((0..ROWS).map(|i| !i.is_multiple_of(8))),
+        &mut SESSION.create_execution_ctx(),
     )
     .unwrap()
     .into_array();

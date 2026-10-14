@@ -19,6 +19,7 @@ mod tests {
         MaskedArray::try_new(
             PrimitiveArray::from_iter([1i32, 2, 3]).into_array(),
             Validity::AllValid,
+            &mut test_session().create_execution_ctx(),
         )
         .expect("valid masked array")
     }
@@ -27,6 +28,7 @@ mod tests {
         MaskedArray::try_new(
             PrimitiveArray::from_iter([1i32, 2, 3]).into_array(),
             Validity::from_iter([true, false, true]),
+            &mut test_session().create_execution_ctx(),
         )
         .expect("valid masked array")
     }
@@ -52,6 +54,7 @@ mod tests {
         let array = MaskedArray::try_new(
             PrimitiveArray::from_iter([1i32, 2, 3, 4, 5]).into_array(),
             Validity::from_iter([true, false, true, false, true]),
+            &mut test_session().create_execution_ctx(),
         )?;
 
         let canonical = array
@@ -75,6 +78,7 @@ mod tests {
         let array = MaskedArray::try_new(
             PrimitiveArray::from_iter([10i32, 20, 30]).into_array(),
             Validity::AllValid,
+            &mut test_session().create_execution_ctx(),
         )?;
 
         let canonical = array

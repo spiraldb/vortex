@@ -149,20 +149,26 @@ fn execute(array: VortexResult<impl IntoArray>, ctx: &mut ExecutionCtx) -> Array
 /// Marks one row in `null_every` null without changing the geometry storage.
 fn nullable_every(array: ArrayRef, null_every: usize) -> ArrayRef {
     let validity = Validity::from_iter((0..array.len()).map(|i| !i.is_multiple_of(null_every)));
-    MaskedArray::try_new(array, validity).unwrap().into_array()
+    MaskedArray::try_new(array, validity, &mut SESSION.create_execution_ctx())
+        .unwrap()
+        .into_array()
 }
 
 /// A deterministic 90%-null validity pattern.
 fn ninety_percent_null(array: ArrayRef) -> ArrayRef {
     let validity = Validity::from_iter((0..array.len()).map(|i| i.is_multiple_of(10)));
-    MaskedArray::try_new(array, validity).unwrap().into_array()
+    MaskedArray::try_new(array, validity, &mut SESSION.create_execution_ctx())
+        .unwrap()
+        .into_array()
 }
 
 /// A deterministic 50% validity pattern with a distinct phase per operand. Adjacent phases make
 /// the two columns jointly cover every valid/null combination once per four rows.
 fn half_valid(array: ArrayRef, phase: usize) -> ArrayRef {
     let validity = Validity::from_iter((0..array.len()).map(|i| (i + phase) % 4 < 2));
-    MaskedArray::try_new(array, validity).unwrap().into_array()
+    MaskedArray::try_new(array, validity, &mut SESSION.create_execution_ctx())
+        .unwrap()
+        .into_array()
 }
 
 mod contains {

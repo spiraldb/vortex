@@ -91,6 +91,7 @@ mod test {
             PrimitiveArray::new(buffer![1.23f64, 0.47, 9.99, 3.5], Validity::AllValid).into_array(),
             100,
             test_array_fill_value(),
+            &mut SESSION.create_execution_ctx(),
         )
         .unwrap()
         .into_array()
@@ -156,6 +157,7 @@ mod test {
             buffer![10].into_array(),
             10,
             Scalar::primitive(1, Nullability::NonNullable),
+            &mut SESSION.create_execution_ctx(),
         )
         .unwrap();
 
@@ -181,6 +183,7 @@ mod test {
             buffer![10, 8, 3, 2, 1].into_array(),
             10,
             Scalar::primitive(1, Nullability::NonNullable),
+            &mut SESSION.create_execution_ctx(),
         )
         .unwrap();
 
@@ -205,12 +208,14 @@ mod test {
         PrimitiveArray::new(buffer![1.23f64, 0.47, 9.99, 3.5], Validity::AllValid).into_array(),
         100,
         Scalar::null_native::<f64>(),
+        &mut SESSION.create_execution_ctx(),
     ).unwrap())]
     #[case(Sparse::try_new(
         buffer![1u32, 3, 7, 8, 9].into_array(),
         buffer![10, 8, 3, 2, 1].into_array(),
         10,
         Scalar::from(0i32),
+        &mut SESSION.create_execution_ctx(),
     ).unwrap())]
     #[case({
         let nullable_values = PrimitiveArray::from_option_iter([Some(100i64), None, Some(300)]);
@@ -219,6 +224,7 @@ mod test {
             nullable_values.into_array(),
             10,
             Scalar::null_native::<i64>(),
+            &mut SESSION.create_execution_ctx(),
         ).unwrap()
     })]
     #[case(Sparse::try_new(
@@ -226,6 +232,7 @@ mod test {
         buffer![999i32].into_array(),
         20,
         Scalar::from(-1i32),
+        &mut SESSION.create_execution_ctx(),
     ).unwrap())]
     fn test_take_sparse_conformance(#[case] sparse: SparseArray) {
         test_take_conformance(&sparse.into_array(), &mut SESSION.create_execution_ctx());

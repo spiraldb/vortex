@@ -172,15 +172,14 @@ pub(crate) fn core_session() -> VortexSession {
         .with::<MemorySession>()
 }
 
-// TODO(ngates): canonicalize doesn't currently take a session, therefore we cannot invoke execute
-//  from the new array encodings to support back-compat for legacy encodings. So we hold a session
-//  here...
-/// Returns the hidden global [`VortexSession`] used as a back-compat shim for code paths that
-/// cannot yet thread an explicit session through.
+/// Returns a crate-private core-only session for the few code paths that cannot receive an
+/// [`ExecutionCtx`]: [`Display`](std::fmt::Display) formatting and debug-only invariant checks.
+///
+/// Everything else must thread the caller's [`ExecutionCtx`].
 #[inline]
-pub fn legacy_session() -> &'static VortexSession {
-    static LEGACY_SESSION: LazyLock<VortexSession> = LazyLock::new(core_session);
-    &LEGACY_SESSION
+pub(crate) fn internal_session() -> &'static VortexSession {
+    static INTERNAL_SESSION: LazyLock<VortexSession> = LazyLock::new(core_session);
+    &INTERNAL_SESSION
 }
 
 pub type ArrayContext = Interner;

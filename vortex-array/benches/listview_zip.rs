@@ -89,6 +89,7 @@ fn list_view(base: i64, nullable: bool) -> ArrayRef {
         offsets.freeze().into_array(),
         sizes.freeze().into_array(),
         validity,
+        &mut SESSION.create_execution_ctx(),
     )
     .unwrap()
     .into_array()

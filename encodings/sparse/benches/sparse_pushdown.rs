@@ -68,6 +68,7 @@ fn make_sparse(num_patches: usize, constant: bool) -> ArrayRef {
         values.into_array(),
         LEN,
         Scalar::from(1i32),
+        &mut SESSION.create_execution_ctx(),
     )
     .vortex_expect("valid sparse")
     .into_array()
@@ -83,9 +84,15 @@ fn make_sparse_nullable(num_patches: usize) -> ArrayRef {
     )
     .into_array();
     let nullable = DType::Primitive(PType::I32, Nullability::Nullable);
-    Sparse::try_new(indices.into_array(), values, LEN, Scalar::null(nullable))
-        .vortex_expect("valid sparse")
-        .into_array()
+    Sparse::try_new(
+        indices.into_array(),
+        values,
+        LEN,
+        Scalar::null(nullable),
+        &mut SESSION.create_execution_ctx(),
+    )
+    .vortex_expect("valid sparse")
+    .into_array()
 }
 
 #[divan::bench]

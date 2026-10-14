@@ -546,12 +546,15 @@ async fn writer_restricts_layouts_to_the_enabled_editions() -> VortexResult<()> 
 /// The writer emits the list layout exactly when the enabled editions include it.
 #[tokio::test]
 async fn list_layout_follows_enabled_editions() -> VortexResult<()> {
+    use vortex_array::VortexSessionExecute;
+
     use crate::VortexSessionDefault;
 
     let list = ListArray::try_new(
         buffer![1i32, 2, 3, 4, 5].into_array(),
         buffer![0u32, 2, 5].into_array(),
         Validity::NonNullable,
+        &mut vortex_aggregates::session().create_execution_ctx(),
     )?;
     let array = StructArray::from_fields(&[("l", list.into_array())])?.into_array();
     let list_layout = Id::from("vortex.list");
