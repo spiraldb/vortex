@@ -102,10 +102,6 @@ pub mod scalar_fn;
 pub use scalar_fn::ScalarFn;
 pub use scalar_fn::ScalarFnArray;
 
-pub mod shared;
-pub use shared::Shared;
-pub use shared::SharedArray;
-
 pub mod slice;
 pub use slice::Slice;
 pub use slice::SliceArray;

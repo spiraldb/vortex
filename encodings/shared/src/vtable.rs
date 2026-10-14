@@ -3,36 +3,36 @@
 
 use std::hash::Hasher;
 
+use vortex_array::Array;
+use vortex_array::ArrayEq;
+use vortex_array::ArrayHash;
+use vortex_array::ArrayId;
+use vortex_array::ArrayParts;
+use vortex_array::ArrayRef;
+use vortex_array::ArrayView;
+use vortex_array::Canonical;
+use vortex_array::EqMode;
+use vortex_array::ExecutionCtx;
+use vortex_array::ExecutionResult;
+use vortex_array::OperationsVTable;
+use vortex_array::ProbeState;
+use vortex_array::RepeatedArrayProbe;
+use vortex_array::VTable;
+use vortex_array::ValidityVTable;
+use vortex_array::buffer::BufferHandle;
+use vortex_array::dtype::DType;
+use vortex_array::scalar::Scalar;
+use vortex_array::validity::Validity;
+use vortex_array::with_empty_buffers;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_panic;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
 
-use crate::ArrayEq;
-use crate::ArrayHash;
-use crate::ArrayParts;
-use crate::ArrayRef;
-use crate::Canonical;
-use crate::EqMode;
-use crate::ExecutionCtx;
-use crate::ExecutionResult;
-use crate::array::Array;
-use crate::array::ArrayId;
-use crate::array::ArrayView;
-use crate::array::OperationsVTable;
-use crate::array::ProbeState;
-use crate::array::RepeatedArrayProbe;
-use crate::array::VTable;
-use crate::array::ValidityVTable;
-use crate::array::with_empty_buffers;
-use crate::arrays::shared::SharedArrayExt;
-use crate::arrays::shared::SharedData;
-use crate::arrays::shared::SharedSlots;
-use crate::buffer::BufferHandle;
-use crate::dtype::DType;
-use crate::scalar::Scalar;
-use crate::validity::Validity;
+use crate::SharedArrayExt;
+use crate::SharedData;
+use crate::SharedSlots;
 
 /// A [`Shared`]-encoded Vortex array.
 pub type SharedArray = Array<Shared>;
@@ -114,7 +114,7 @@ impl VTable for Shared {
         _metadata: &[u8],
 
         _buffers: &[BufferHandle],
-        _children: &dyn crate::serde::ArrayChildren,
+        _children: &dyn vortex_array::serde::ArrayChildren,
         _session: &VortexSession,
     ) -> VortexResult<ArrayParts<Self>> {
         vortex_error::vortex_bail!("Shared array is not serializable")

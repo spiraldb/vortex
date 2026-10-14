@@ -1,25 +1,25 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use vortex_array::ArrayEq;
+use vortex_array::Canonical;
+use vortex_array::EqMode;
+use vortex_array::IntoArray;
+use vortex_array::VortexSessionExecute;
+use vortex_array::arrays::PrimitiveArray;
+use vortex_array::validity::Validity;
 use vortex_buffer::buffer;
 use vortex_error::VortexResult;
 
-use crate::Canonical;
-use crate::IntoArray;
-use crate::VortexSessionExecute;
-use crate::arrays::PrimitiveArray;
-use crate::arrays::SharedArray;
-use crate::arrays::shared::SharedArrayExt;
-use crate::hash::ArrayEq;
-use crate::hash::EqMode;
-use crate::validity::Validity;
+use crate::Shared;
+use crate::SharedArrayExt;
 
 #[test]
 fn shared_array_caches_on_canonicalize() -> VortexResult<()> {
     let array = PrimitiveArray::new(buffer![1i32, 2, 3], Validity::NonNullable).into_array();
-    let shared = SharedArray::new(array);
+    let shared = Shared::new(array);
 
-    let session = crate::array_session();
+    let session = vortex_array::array_session();
     let mut ctx = session.create_execution_ctx();
 
     let first = shared.get_or_compute(|source| source.clone().execute::<Canonical>(&mut ctx))?;

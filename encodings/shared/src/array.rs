@@ -8,17 +8,18 @@ use std::sync::Arc;
 use std::sync::OnceLock;
 
 use async_lock::Mutex as AsyncMutex;
+use vortex_array::Array;
+use vortex_array::ArrayParts;
+use vortex_array::ArrayRef;
+use vortex_array::Canonical;
+use vortex_array::IntoArray;
+use vortex_array::TypedArrayRef;
+use vortex_array::array_slots;
 use vortex_error::SharedVortexResult;
 use vortex_error::VortexResult;
 
-use crate::ArrayRef;
-use crate::Canonical;
-use crate::IntoArray;
-use crate::array::Array;
-use crate::array::ArrayParts;
-use crate::array::TypedArrayRef;
-use crate::array_slots;
-use crate::arrays::Shared;
+use crate::Shared;
+use crate::SharedArray;
 
 #[array_slots(Shared)]
 pub struct SharedSlots {
@@ -103,9 +104,9 @@ impl Default for SharedData {
     }
 }
 
-impl Array<Shared> {
-    /// Creates a new `SharedArray`.
-    pub fn new(source: ArrayRef) -> Self {
+impl Shared {
+    /// Creates a new [`SharedArray`] wrapping `source`.
+    pub fn new(source: ArrayRef) -> SharedArray {
         let dtype = source.dtype().clone();
         let len = source.len();
         unsafe {

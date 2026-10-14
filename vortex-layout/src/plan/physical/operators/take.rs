@@ -6,9 +6,8 @@
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::arrays::DictArray;
-use vortex_array::arrays::Shared;
-use vortex_array::arrays::SharedArray;
 use vortex_error::VortexResult;
+use vortex_shared::Shared;
 
 use super::UNBOUNDED;
 use super::join_inlet;
@@ -79,11 +78,11 @@ impl Operator for TakeSource {
     }
 }
 
-/// `array` as a [`SharedArray`], so however many dictionaries use it, it is canonicalized once.
+/// `array` as a [`SharedArray`](vortex_shared::SharedArray), so however many dictionaries use it, it is canonicalized once.
 fn shared(array: ArrayRef) -> ArrayRef {
     if array.is::<Shared>() {
         array
     } else {
-        SharedArray::new(array).into_array()
+        Shared::new(array).into_array()
     }
 }

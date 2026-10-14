@@ -11327,6 +11327,7 @@ dependencies = [
  "vortex-scan",
  "vortex-sequence",
  "vortex-session",
+ "vortex-shared",
  "vortex-sparse",
  "vortex-utils",
  "vortex-uuid",
@@ -11363,7 +11364,6 @@ dependencies = [
  "arbitrary",
  "arcref",
  "arrow-buffer 59.3.0",
- "async-lock",
  "bytes",
  "cfg-if",
  "codspeed-divan-compat",
@@ -12170,6 +12170,7 @@ dependencies = [
  "vortex-scan",
  "vortex-sequence",
  "vortex-session",
+ "vortex-shared",
  "vortex-utils",
 ]
 
@@ -12411,6 +12412,17 @@ dependencies = [
  "parking_lot",
  "vortex-error",
  "vortex-utils",
+]
+
+[[package]]
+name = "vortex-shared"
+version = "0.1.0"
+dependencies = [
+ "async-lock",
+ "vortex-array",
+ "vortex-buffer",
+ "vortex-error",
+ "vortex-session",
 ]
 
 [[package]]

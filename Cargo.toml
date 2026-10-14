@@ -13,6 +13,7 @@ members = [
     "vortex-io",
     "vortex-cloud",
     "vortex-array",
+    "encodings/shared",
     "vortex-arrow",
     "vortex-row",
     "vortex-tensor",
@@ -330,6 +331,7 @@ vortex-runend = { version = "0.1.0", path = "./encodings/runend", default-featur
 vortex-scan = { version = "0.1.0", path = "./vortex-scan", default-features = false }
 vortex-sequence = { version = "0.1.0", path = "encodings/sequence", default-features = false }
 vortex-session = { version = "0.1.0", path = "./vortex-session", default-features = false }
+vortex-shared = { version = "0.1.0", path = "./encodings/shared", default-features = false }
 vortex-sparse = { version = "0.1.0", path = "./encodings/sparse", default-features = false }
 vortex-spatial = { version = "0.1.0", path = "./vortex-spatial", default-features = false }
 vortex-tensor = { version = "0.1.0", path = "./vortex-tensor", default-features = false }

@@ -15,7 +15,6 @@ use vortex_array::IntoArray;
 use vortex_array::MaskFuture;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::DictArray;
-use vortex_array::arrays::SharedArray;
 use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldMask;
@@ -34,6 +33,7 @@ use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
+use vortex_shared::Shared;
 use vortex_utils::aliases::dash_map::DashMap;
 
 use super::DictLayout;
@@ -117,7 +117,7 @@ impl DictReader {
                     )
                     .vortex_expect("must construct dict values array evaluation")
                     .map_err(Arc::new)
-                    .map(move |array| Ok(SharedArray::new(array?).into_array()))
+                    .map(move |array| Ok(Shared::new(array?).into_array()))
                     .boxed()
                     .shared()
             })
@@ -165,7 +165,7 @@ impl DictReader {
                 self.values_array_uncanonical()
                     .map(move |array| {
                         let array = array?.apply_bound(&expr)?;
-                        Ok(SharedArray::new(array).into_array())
+                        Ok(Shared::new(array).into_array())
                     })
                     .boxed()
                     .shared()
@@ -321,7 +321,7 @@ impl LayoutReader for DictReader {
                 )
                 .vortex_expect("must construct dict values array evaluation")
                 .map_err(Arc::new)
-                .map(move |array| Ok(SharedArray::new(array?.apply_bound(&inner)?).into_array()))
+                .map(move |array| Ok(Shared::new(array?.apply_bound(&inner)?).into_array()))
                 .boxed()
                 .shared()
         } else {

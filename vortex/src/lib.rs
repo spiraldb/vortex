@@ -298,6 +298,11 @@ pub mod encodings {
         pub use vortex_sequence::*;
     }
 
+    /// Memoizing wrapper that canonicalizes its child once across consumers.
+    pub mod shared {
+        pub use vortex_shared::*;
+    }
+
     /// Sparse fill-value-plus-patches encoding.
     pub mod sparse {
         pub use vortex_sparse::*;
