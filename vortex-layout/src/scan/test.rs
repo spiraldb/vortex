@@ -63,6 +63,7 @@ pub struct TestLayoutReader {
     fail_first_filter: bool,
     fail_first_projection: bool,
     fail_projection: bool,
+    pruning_rejection: Option<(bool, bool)>,
     projection_masks: Option<Arc<Mutex<Vec<usize>>>>,
 }
 
@@ -78,6 +79,7 @@ impl TestLayoutReader {
             fail_first_filter: false,
             fail_first_projection: false,
             fail_projection: false,
+            pruning_rejection: None,
             projection_masks: None,
         }
     }
@@ -110,6 +112,11 @@ impl TestLayoutReader {
 
     pub fn with_fail_first_projection(mut self) -> Self {
         self.fail_first_projection = true;
+        self
+    }
+
+    pub fn with_pruning_rejection(mut self, whole_file: bool, statistics: bool) -> Self {
+        self.pruning_rejection = Some((whole_file, statistics));
         self
     }
 
@@ -156,7 +163,19 @@ impl LayoutReader for TestLayoutReader {
         _expr: &BoundExpression,
         mask: Mask,
     ) -> VortexResult<MaskFuture> {
-        Ok(MaskFuture::ready(mask))
+        Ok(MaskFuture::ready(if self.pruning_rejection.is_some() {
+            Mask::new_false(mask.len())
+        } else {
+            mask
+        }))
+    }
+
+    fn can_prune_file(&self, _expr: &BoundExpression) -> VortexResult<bool> {
+        Ok(self.pruning_rejection.is_some_and(|(whole_file, _)| whole_file))
+    }
+
+    fn split_pruning_is_statistics(&self, _expr: &BoundExpression) -> VortexResult<bool> {
+        Ok(self.pruning_rejection.is_none_or(|(_, statistics)| statistics))
     }
 
     fn filter_evaluation(

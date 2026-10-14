@@ -37,6 +37,7 @@ use crate::layouts::row_idx::RowIdxLayoutReader;
 use crate::scan::limit::RowLimit;
 use crate::scan::limit::ScanLimit;
 use crate::scan::metrics::ScanCounters;
+use crate::scan::metrics::ScanMetrics;
 use crate::scan::repeated_scan::RepeatedScan;
 use crate::scan::repeated_scan::ScanTasks;
 use crate::scan::split_by::SplitBy;
@@ -75,6 +76,7 @@ pub struct ScanBuilder<A> {
     /// Function to apply to each [`ArrayRef`] within the spawned split tasks.
     map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
     metrics_registry: Option<Arc<dyn MetricsRegistry>>,
+    metrics: Option<ScanMetrics>,
     /// Maximal number of rows to read after filtering.
     limit: Option<ScanLimit>,
     /// The row-offset assigned to the first row of the file. Used by the `row_idx` expression,
@@ -101,6 +103,7 @@ impl ScanBuilder<ArrayRef> {
             concurrency: 4,
             map_fn: Arc::new(Ok),
             metrics_registry: None,
+            metrics: None,
             limit: None,
             row_offset: 0,
         }
@@ -236,23 +239,28 @@ impl<A: 'static + Send> ScanBuilder<A> {
     /// Add or clear the metrics registry used by scan execution.
     pub fn with_some_metrics_registry(mut self, metrics: Option<Arc<dyn MetricsRegistry>>) -> Self {
         self.metrics_registry = metrics;
+        self.metrics = None;
         self
     }
 
-    /// The metrics registry stores totals for this prepared scan.
+    /// Registers aggregate counters for this prepared scan in `metrics`.
     ///
-    /// Each prepared scan registers four counters with these names:
-    ///
-    /// - `scan.splits.considered`: selected split tasks that start execution.
-    /// - `scan.splits.pruned`: splits that split statistics fully reject.
-    /// - `scan.splits.filtered`: splits that predicate evaluation fully rejects.
-    /// - `scan.files.pruned`: whole-file statistics rejections.
-    ///
-    /// Each execution uses fresh local counters and adds its counts to these totals after its tasks stop.
-    /// [`build_with_counters`](Self::build_with_counters) and [`into_stream_with_counters`](Self::into_stream_with_counters) return live counters for one execution.
+    /// Each execution uses fresh counters and adds its counts after all of its tasks stop.
     /// [`ScanCounters`] defines cancellation behavior.
-    pub fn with_metrics_registry(mut self, metrics: Arc<dyn MetricsRegistry>) -> Self {
-        self.metrics_registry = Some(metrics);
+    /// For multiple prepared scans, reuse [`ScanMetrics`] through [`Self::with_scan_metrics`].
+    pub fn with_metrics_registry(self, metrics: Arc<dyn MetricsRegistry>) -> Self {
+        self.with_some_metrics_registry(Some(metrics))
+    }
+
+    /// Uses shared aggregate counters without new registry entries.
+    pub fn with_scan_metrics(self, metrics: ScanMetrics) -> Self {
+        self.with_some_scan_metrics(Some(metrics))
+    }
+
+    /// Sets or clears shared aggregate counters.
+    pub fn with_some_scan_metrics(mut self, metrics: Option<ScanMetrics>) -> Self {
+        self.metrics = metrics;
+        self.metrics_registry = None;
         self
     }
 
@@ -305,6 +313,7 @@ impl<A: 'static + Send> ScanBuilder<A> {
             natural_splits: self.natural_splits,
             concurrency: self.concurrency,
             metrics_registry: self.metrics_registry,
+            metrics: self.metrics,
             limit: self.limit,
             row_offset: self.row_offset,
             map_fn: Arc::new(move |a| old_map_fn(a).and_then(&map_fn)),
@@ -368,7 +377,8 @@ impl<A: 'static + Send> ScanBuilder<A> {
             splits,
             self.concurrency,
             self.map_fn,
-            self.metrics_registry,
+            self.metrics
+                .or_else(|| self.metrics_registry.as_deref().map(ScanMetrics::new)),
             self.limit,
             dtype,
         ))

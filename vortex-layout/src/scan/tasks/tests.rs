@@ -165,15 +165,15 @@ fn scan_counters_after_deferred_pruning(
         metrics: None,
     });
     let task = split_exec(&ctx, RowMask::new(0, Mask::new_true(1)))?;
-    assert_eq!(counters.snapshot().splits_considered, 0);
+    assert_eq!(counters.snapshot().splits_attempted, 0);
     if pending {
         assert!(task.now_or_never().is_none());
     } else {
         assert!(block_on(task)?.is_none());
     }
-    assert_eq!(counters.snapshot().splits_considered, 1);
+    assert_eq!(counters.snapshot().splits_attempted, 1);
     assert_eq!(counters.snapshot().splits_pruned, pruned);
-    assert_eq!(counters.snapshot().splits_filtered, 0);
+    assert_eq!(counters.snapshot().splits_empty_after_predicate, 0);
     assert_eq!(reader.pruning_calls.load(Ordering::Relaxed), pruning_calls);
     assert_eq!(
         reader.file_pruning_calls.load(Ordering::Relaxed),

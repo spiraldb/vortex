@@ -31,10 +31,13 @@ use vortex_layout::layouts::table::TableStrategy;
 use vortex_layout::layouts::zoned::writer::ZonedLayoutOptions;
 use vortex_layout::layouts::zoned::writer::ZonedStrategy;
 use vortex_layout::scan::metrics::ScanCounters;
+use vortex_layout::scan::metrics::ScanMetrics;
 use vortex_layout::scan::split_by::SplitBy;
 use vortex_metrics::DefaultMetricsRegistry;
 use vortex_metrics::MetricValue;
 use vortex_metrics::MetricsRegistry;
+use vortex_scan::selection::Selection;
+use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 
 use super::SESSION;
 use crate::OpenOptionsSessionExt;
@@ -70,12 +73,13 @@ async fn scan_file(values: [[i32; 2]; 4]) -> VortexResult<VortexFile> {
     SESSION.open_options().open_buffer(buffer)
 }
 
-fn assert_registry(registry: &DefaultMetricsRegistry, expected: [u64; 4]) {
+fn assert_registry(registry: &DefaultMetricsRegistry, expected: [u64; 5]) {
     for (idx, name) in [
-        "scan.splits.considered",
+        "scan.splits.attempted",
         "scan.splits.pruned",
-        "scan.splits.filtered",
-        "scan.files.pruned",
+        "scan.splits.empty_after_predicate",
+        "scan.file_scans.pruned",
+        "scan.file_scans.attempted",
     ]
     .into_iter()
     .enumerate()
@@ -93,28 +97,29 @@ fn assert_registry(registry: &DefaultMetricsRegistry, expected: [u64; 4]) {
     }
 }
 
-fn assert_execution(counters: &ScanCounters, expected: [u64; 4]) {
+fn assert_execution(counters: &ScanCounters, expected: [u64; 5]) {
     let counts = counters.snapshot();
     assert_eq!(
         [
-            counts.splits_considered,
+            counts.splits_attempted,
             counts.splits_pruned,
-            counts.splits_filtered,
-            counts.files_pruned,
+            counts.splits_empty_after_predicate,
+            counts.file_scans_pruned,
+            counts.file_scans_attempted,
         ],
         expected,
     );
 }
 
 #[rstest]
-#[case::statistics([[0, 1], [10, 11], [90, 91], [100, 101]], [4, 4, 0, 0], None)]
-#[case::predicate([[0, 100], [10, 90], [20, 80], [30, 70]], [4, 0, 4, 0], None)]
-#[case::statistics_with_limit([[0, 1], [10, 11], [90, 91], [100, 101]], [4, 4, 0, 0], Some(3))]
-#[case::predicate_with_limit([[0, 100], [10, 90], [20, 80], [30, 70]], [4, 0, 4, 0], Some(3))]
+#[case::statistics([[0, 1], [10, 11], [90, 91], [100, 101]], [4, 4, 0, 0, 1], None)]
+#[case::predicate([[0, 100], [10, 90], [20, 80], [30, 70]], [4, 0, 4, 0, 1], None)]
+#[case::statistics_with_limit([[0, 1], [10, 11], [90, 91], [100, 101]], [4, 4, 0, 0, 1], Some(3))]
+#[case::predicate_with_limit([[0, 100], [10, 90], [20, 80], [30, 70]], [4, 0, 4, 0, 1], Some(3))]
 #[tokio::test]
 async fn test_scan_rejection_counters(
     #[case] values: [[i32; 2]; 4],
-    #[case] expected: [u64; 4],
+    #[case] expected: [u64; 5],
     #[case] limit: Option<u64>,
 ) -> VortexResult<()> {
     let file = scan_file(values).await?;
@@ -153,22 +158,22 @@ async fn test_scan_rejection_counters(
 }
 
 #[rstest]
-#[case::row_index(eq(row_idx(), lit(20u64)), [4, 0, 4, 0], 0)]
-#[case::partial(eq(row_idx(), lit(3u64)), [4, 0, 3, 0], 1)]
+#[case::row_index(eq(row_idx(), lit(20u64)), [4, 0, 4, 0, 1], 0)]
+#[case::partial(eq(row_idx(), lit(3u64)), [4, 0, 3, 0, 1], 1)]
 #[case::row_index_first(
     and(eq(row_idx(), lit(20u64)), eq(col("value"), lit(50i32))),
-    [4, 0, 4, 0],
+    [4, 0, 4, 0, 1],
     0,
 )]
 #[case::statistics_first(
     and(eq(col("value"), lit(50i32)), eq(row_idx(), lit(20u64))),
-    [4, 4, 0, 0],
+    [4, 4, 0, 0, 1],
     0,
 )]
 #[tokio::test]
 async fn test_scan_row_index_rejection_counters(
     #[case] predicate: Expression,
-    #[case] expected: [u64; 4],
+    #[case] expected: [u64; 5],
     #[case] expected_rows: usize,
 ) -> VortexResult<()> {
     let file = scan_file([[0, 1], [10, 11], [90, 91], [100, 101]]).await?;
@@ -206,9 +211,9 @@ async fn test_scan_whole_file_rejection() -> VortexResult<()> {
     assert!(tasks.is_empty());
     let (tasks, second) = scan.execute_with_counters(None)?;
     assert!(tasks.is_empty());
-    assert_execution(&first, [0, 0, 0, 1]);
-    assert_execution(&second, [0, 0, 0, 1]);
-    assert_registry(&registry, [0, 0, 0, 2]);
+    assert_execution(&first, [0, 0, 0, 1, 1]);
+    assert_execution(&second, [0, 0, 0, 1, 1]);
+    assert_registry(&registry, [0, 0, 0, 2, 2]);
     Ok(())
 }
 
@@ -222,11 +227,11 @@ async fn test_scan_lazy_whole_file_rejection() -> VortexResult<()> {
         .with_metrics_registry(Arc::<DefaultMetricsRegistry>::clone(&registry))
         .into_stream_with_counters()?;
     assert!(registry.snapshot().is_empty());
-    assert_execution(&counters, [0, 0, 0, 0]);
+    assert_execution(&counters, [0, 0, 0, 0, 0]);
     futures::pin_mut!(stream);
     assert!(stream.next().await.is_none());
-    assert_registry(&registry, [0, 0, 0, 1]);
-    assert_execution(&counters, [0, 0, 0, 1]);
+    assert_registry(&registry, [0, 0, 0, 1, 1]);
+    assert_execution(&counters, [0, 0, 0, 1, 1]);
     Ok(())
 }
 
@@ -238,7 +243,7 @@ async fn test_scan_lazy_whole_file_rejection() -> VortexResult<()> {
 async fn test_scan_limit_counters(
     #[case] limit: u64,
     #[case] rows: usize,
-    #[case] considered: u64,
+    #[case] attempted: u64,
 ) -> VortexResult<()> {
     let file = scan_file([[0, 1], [10, 11], [90, 91], [100, 101]]).await?;
     let registry = Arc::new(DefaultMetricsRegistry::default());
@@ -254,8 +259,8 @@ async fn test_scan_limit_counters(
         actual_rows += array?.len();
     }
     assert_eq!(actual_rows, rows);
-    assert_registry(&registry, [considered, 0, 0, 0]);
-    assert_execution(&counters, [considered, 0, 0, 0]);
+    assert_registry(&registry, [attempted, 0, 0, 0, u64::from(attempted != 0)]);
+    assert_execution(&counters, [attempted, 0, 0, 0, u64::from(attempted != 0)]);
     Ok(())
 }
 
@@ -266,7 +271,7 @@ async fn test_scan_limit_counters(
 #[tokio::test]
 async fn test_scan_filtered_limit_counters(
     #[case] limit: u64,
-    #[case] considered: u64,
+    #[case] attempted: u64,
 ) -> VortexResult<()> {
     let file = scan_file([[0, 1], [10, 11], [90, 91], [100, 101]]).await?;
     let registry = Arc::new(DefaultMetricsRegistry::default());
@@ -285,9 +290,36 @@ async fn test_scan_filtered_limit_counters(
             rows += count?;
         }
         assert_eq!(rows as u64, limit);
-        assert_execution(&counters, [considered, 0, 0, 0]);
-        assert_registry(&registry, [considered * execution, 0, 0, 0]);
+        assert_execution(&counters, [attempted, 0, 0, 0, u64::from(attempted != 0)]);
+        assert_registry(
+            &registry,
+            [
+                attempted * execution,
+                0,
+                0,
+                0,
+                u64::from(attempted != 0) * execution,
+            ],
+        );
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_scan_empty_selection_counters() -> VortexResult<()> {
+    let file = scan_file([[0, 1], [10, 11], [90, 91], [100, 101]]).await?;
+    let registry = Arc::new(DefaultMetricsRegistry::default());
+    let (tasks, counters) = file
+        .scan()?
+        .with_selection(Selection::IncludeByIndex(StrictSortedBuffer::try_new(
+            buffer![],
+        )?))
+        .with_filter(eq(col("value"), lit(200i32)).bind(file.dtype())?)
+        .with_metrics_registry(registry.clone())
+        .build_with_counters()?;
+    assert!(tasks.is_empty());
+    assert_execution(&counters, [0, 0, 0, 0, 0]);
+    assert_registry(&registry, [0, 0, 0, 0, 0]);
     Ok(())
 }
 
@@ -302,12 +334,13 @@ async fn test_scan_unpolled_tasks() -> VortexResult<()> {
         .with_metrics_registry(Arc::<DefaultMetricsRegistry>::clone(&registry))
         .build_with_counters()?;
     assert_eq!(tasks.len(), 4);
-    assert_registry(&registry, [0, 0, 0, 0]);
+    assert_execution(&counters, [0, 0, 0, 0, 1]);
+    assert_registry(&registry, [0, 0, 0, 0, 0]);
     assert!(tasks.remove(0).await?.is_none());
-    assert_execution(&counters, [1, 1, 0, 0]);
-    assert_registry(&registry, [0, 0, 0, 0]);
+    assert_execution(&counters, [1, 1, 0, 0, 1]);
+    assert_registry(&registry, [0, 0, 0, 0, 0]);
     drop(tasks);
-    assert_registry(&registry, [1, 1, 0, 0]);
+    assert_registry(&registry, [1, 1, 0, 0, 1]);
     Ok(())
 }
 
@@ -336,13 +369,13 @@ async fn test_scan_dynamic_file_rejection() -> VortexResult<()> {
     for task in tasks {
         assert!(task.await?.is_none());
     }
-    assert_registry(&registry, [4, 0, 0, 1]);
-    assert_execution(&first, [4, 0, 0, 1]);
+    assert_registry(&registry, [4, 0, 0, 1, 1]);
+    assert_execution(&first, [4, 0, 0, 1, 1]);
 
     let (tasks, second) = scan.execute_with_counters(None)?;
     assert!(tasks.is_empty());
-    assert_registry(&registry, [4, 0, 0, 2]);
-    assert_execution(&second, [0, 0, 0, 1]);
+    assert_registry(&registry, [4, 0, 0, 2, 2]);
+    assert_execution(&second, [0, 0, 0, 1, 1]);
     bound.store(50, Ordering::Relaxed);
     let mut rows = 0;
     let (tasks, third) = scan.execute_with_counters(None)?;
@@ -352,10 +385,10 @@ async fn test_scan_dynamic_file_rejection() -> VortexResult<()> {
         }
     }
     assert_eq!(rows, 4);
-    assert_registry(&registry, [8, 2, 0, 2]);
-    assert_execution(&first, [4, 0, 0, 1]);
-    assert_execution(&second, [0, 0, 0, 1]);
-    assert_execution(&third, [4, 2, 0, 0]);
+    assert_registry(&registry, [8, 2, 0, 2, 3]);
+    assert_execution(&first, [4, 0, 0, 1, 1]);
+    assert_execution(&second, [0, 0, 0, 1, 1]);
+    assert_execution(&third, [4, 2, 0, 0, 1]);
     Ok(())
 }
 
@@ -363,19 +396,20 @@ async fn test_scan_dynamic_file_rejection() -> VortexResult<()> {
 async fn test_scan_registry_size_is_constant() -> VortexResult<()> {
     let file = scan_file([[0, 1], [10, 11], [90, 91], [100, 101]]).await?;
     let registry = Arc::new(DefaultMetricsRegistry::default());
-    let scan = file
-        .scan()?
-        .with_split_by(SplitBy::RowCount(2))
-        .with_filter(eq(col("value"), lit(50i32)).bind(file.dtype())?)
-        .with_metrics_registry(Arc::<DefaultMetricsRegistry>::clone(&registry))
-        .prepare()?;
+    let metrics = ScanMetrics::new(registry.as_ref());
     for _ in 0..100 {
+        let scan = file
+            .scan()?
+            .with_split_by(SplitBy::RowCount(2))
+            .with_filter(eq(col("value"), lit(50i32)).bind(file.dtype())?)
+            .with_scan_metrics(metrics.clone())
+            .prepare()?;
         for task in scan.execute(None)? {
             assert!(task.await?.is_none());
         }
-        assert_eq!(registry.snapshot().len(), 4);
+        assert_eq!(registry.snapshot().len(), 5);
     }
-    assert_registry(&registry, [400, 400, 0, 0]);
+    assert_registry(&registry, [400, 400, 0, 0, 100]);
     Ok(())
 }
 
@@ -395,12 +429,12 @@ async fn test_scan_execution_counters_are_independent() -> VortexResult<()> {
     for task in second_tasks {
         assert!(task.await?.is_none());
     }
-    assert_execution(&first, [1, 1, 0, 0]);
-    assert_execution(&second, [4, 4, 0, 0]);
-    assert_registry(&registry, [4, 4, 0, 0]);
+    assert_execution(&first, [1, 1, 0, 0, 1]);
+    assert_execution(&second, [4, 4, 0, 0, 1]);
+    assert_registry(&registry, [4, 4, 0, 0, 1]);
     drop(tasks);
-    assert_registry(&registry, [5, 5, 0, 0]);
-    assert_execution(&first, [1, 1, 0, 0]);
-    assert_execution(&second, [4, 4, 0, 0]);
+    assert_registry(&registry, [5, 5, 0, 0, 2]);
+    assert_execution(&first, [1, 1, 0, 0, 1]);
+    assert_execution(&second, [4, 4, 0, 0, 1]);
     Ok(())
 }

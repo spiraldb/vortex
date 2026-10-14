@@ -30,7 +30,6 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_io::runtime::BlockingRuntime;
 use vortex_io::session::RuntimeSessionExt;
-use vortex_metrics::MetricsRegistry;
 use vortex_scan::row_mask::RowMask;
 use vortex_scan::selection::Selection;
 use vortex_session::VortexSession;
@@ -162,7 +161,7 @@ impl<A: 'static + Send> RepeatedScan<A> {
         splits: Splits,
         concurrency: usize,
         map_fn: MapFn<A>,
-        metrics_registry: Option<Arc<dyn MetricsRegistry>>,
+        metrics: Option<ScanMetrics>,
         limit: Option<ScanLimit>,
         dtype: DType,
     ) -> Self {
@@ -177,7 +176,7 @@ impl<A: 'static + Send> RepeatedScan<A> {
             splits,
             concurrency,
             map_fn,
-            metrics: metrics_registry.as_deref().map(ScanMetrics::new),
+            metrics,
             limit,
             dtype,
         }
@@ -388,6 +387,7 @@ fn selected_mask(selection: &Selection, range: &Range<u64>) -> Option<RowMask> {
 }
 
 fn can_prune_file(ctx: &TaskContext) -> VortexResult<bool> {
+    ctx.count::<true>(ScanCounters::attempt_file_scan);
     if let Some(filter) = &ctx.filter
         && filter.can_prune_file_any(ctx.reader.as_ref())?
     {

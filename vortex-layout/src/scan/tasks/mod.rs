@@ -50,7 +50,7 @@ fn split_exec_inner<const TRACK_COUNTERS: bool>(
     let projection =
         ctx.reader
             .projection_evaluation(&row_range, &ctx.projection, filter_mask.clone())?;
-    Ok(considered::<TRACK_COUNTERS>(ctx, async move {
+    Ok(attempted::<TRACK_COUNTERS>(ctx, async move {
         if filter_mask.await?.all_false() {
             return Ok(None);
         }
@@ -70,7 +70,7 @@ fn split_projection<const TRACK_COUNTERS: bool>(
     let projection =
         ctx.reader
             .projection_evaluation(row_range, &ctx.projection, MaskFuture::ready(mask))?;
-    Ok(considered::<TRACK_COUNTERS>(
+    Ok(attempted::<TRACK_COUNTERS>(
         ctx,
         projection.map(|array| array.map(Some)),
     ))
@@ -78,7 +78,7 @@ fn split_projection<const TRACK_COUNTERS: bool>(
 
 /// With counters enabled, this future counts the split when its task first runs.
 /// It holds the context until it stops, so registry totals include its counts.
-fn considered<const TRACK_COUNTERS: bool>(
+fn attempted<const TRACK_COUNTERS: bool>(
     ctx: &Arc<TaskContext>,
     split: impl Future<Output = VortexResult<Option<ArrayRef>>> + Send + 'static,
 ) -> SplitFuture {
@@ -87,7 +87,7 @@ fn considered<const TRACK_COUNTERS: bool>(
     }
     let ctx = Arc::clone(ctx);
     async move {
-        ctx.count::<TRACK_COUNTERS>(ScanCounters::consider_split);
+        ctx.count::<TRACK_COUNTERS>(ScanCounters::attempt_split);
         split.await
     }
     .boxed()
@@ -153,7 +153,7 @@ fn build_filter_mask<const TRACK_COUNTERS: bool>(
             // Filter evaluations return a mask already intersected with the input mask.
             mask = conjunct_mask;
             if mask.all_false() {
-                ctx.count::<TRACK_COUNTERS>(ScanCounters::filter_split);
+                ctx.count::<TRACK_COUNTERS>(ScanCounters::empty_split_after_predicate);
                 return Ok(mask);
             }
         }
@@ -189,7 +189,7 @@ async fn prune_conjunct<const TRACK_COUNTERS: bool>(
         if ctx.reader.split_pruning_is_statistics(conjunct)? {
             ctx.count::<TRACK_COUNTERS>(ScanCounters::prune_split);
         } else {
-            ctx.count::<TRACK_COUNTERS>(ScanCounters::filter_split);
+            ctx.count::<TRACK_COUNTERS>(ScanCounters::empty_split_after_predicate);
         }
     }
     Ok(mask)
