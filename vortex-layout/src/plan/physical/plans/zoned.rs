@@ -121,12 +121,18 @@ impl PrunedZones {
         expression: &BoundExpression,
         session: &VortexSession,
     ) -> VortexResult<Mask> {
+        if let Some(pruned) = self.get(expression, session)? {
+            return Ok(pruned);
+        }
+        let mut state = self.state.write();
+        if let Some((_, _, pruned)) = state.as_ref() {
+            return Ok(pruned.clone());
+        }
+        // Several splits can load the zones before the first proof finishes. Evaluate once
+        // under the lock so those already-compiled sources reuse the same proof.
         let version = self.version();
         let pruned = zones.prune(expression, session)?;
-        let mut state = self.state.write();
-        if state.is_none() {
-            *state = Some((zones, version, pruned.clone()));
-        }
+        *state = Some((zones, version, pruned.clone()));
         Ok(pruned)
     }
 }
@@ -508,5 +514,85 @@ impl PlanParentReduceRule<Zoned> for ExpressionZonedRule {
         Ok(child
             .with_pruning(parent.expression().clone())?
             .map(Plan::into_plan))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::sync::Barrier;
+    use std::thread;
+
+    use rstest::rstest;
+    use vortex_array::IntoArray;
+    use vortex_array::aggregate_fn::AggregateFnVTableExt;
+    use vortex_array::aggregate_fn::NumericalAggregateOpts;
+    use vortex_array::aggregate_fn::fns::max::Max;
+    use vortex_array::array_session;
+    use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::arrays::StructArray;
+    use vortex_array::dtype::PType;
+    use vortex_array::expr::gt;
+    use vortex_array::expr::lit;
+    use vortex_array::expr::root;
+    use vortex_array::validity::Validity;
+    use vortex_buffer::bitbuffer;
+    use vortex_buffer::buffer;
+    use vortex_error::VortexResult;
+    use vortex_error::vortex_err;
+
+    use super::PrunedZones;
+    use crate::layouts::zoned::zone_map::ZoneMap;
+
+    #[rstest]
+    #[case(1)]
+    #[case(8)]
+    fn initialization_reuses_pruning_bitmap(#[case] threads: usize) -> VortexResult<()> {
+        let session = array_session();
+        let dtype = PType::I32.into();
+        let max = Max.bind(NumericalAggregateOpts::default());
+        let zones = ZoneMap::try_new(
+            dtype,
+            StructArray::from_fields(&[(
+                max.to_string(),
+                PrimitiveArray::new(buffer![0i32, 2, 4, 6], Validity::AllValid).into_array(),
+            )])?,
+            Arc::new([max]),
+            4,
+            16,
+        )?;
+        let expression = gt(root(), lit(3i32))
+            .bind(&PType::I32.into())?
+            .falsify(&session)?
+            .ok_or_else(|| vortex_err!("missing pruning expression"))?;
+        let cache = PrunedZones::new(&expression);
+        let barrier = Barrier::new(threads);
+        let masks = thread::scope(|scope| {
+            let tasks = (0..threads)
+                .map(|_| {
+                    scope.spawn(|| {
+                        barrier.wait();
+                        cache.init(zones.clone(), &expression, &session)
+                    })
+                })
+                .collect::<Vec<_>>();
+            tasks
+                .into_iter()
+                .map(|task| {
+                    task.join()
+                        .map_err(|_| vortex_err!("zone initialization panicked"))?
+                })
+                .collect::<VortexResult<Vec<_>>>()
+        })?;
+        let cached = cache.init(zones, &expression, &session)?.to_bit_buffer();
+        assert_eq!(cached, bitbuffer![true, true, false, false]);
+        for mask in masks {
+            assert_eq!(
+                mask.to_bit_buffer().inner().as_ptr(),
+                cached.inner().as_ptr(),
+                "initializers must reuse the cached pruning bitmap"
+            );
+        }
+        Ok(())
     }
 }
