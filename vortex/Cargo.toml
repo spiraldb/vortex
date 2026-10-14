@@ -30,6 +30,7 @@ vortex-datetime-parts = { workspace = true }
 vortex-decimal-byte-parts = { workspace = true }
 vortex-edition = { workspace = true }
 vortex-error = { workspace = true }
+vortex-expr = { workspace = true }
 vortex-fastlanes = { workspace = true }
 vortex-file = { workspace = true, optional = true }
 vortex-fsst = { workspace = true }
