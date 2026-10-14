@@ -6,6 +6,7 @@ use vortex_array::ArrayRef;
 use vortex_array::ArrayView;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
+use vortex_array::arrays::Bool;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::DecimalArray;
@@ -32,6 +33,7 @@ use vortex_buffer::BufferMut;
 use vortex_buffer::buffer;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
+use vortex_mask::AllOr;
 use vortex_mask::Mask;
 
 use crate::iter::trimmed_ends_iter;
@@ -182,6 +184,125 @@ fn runend_encode_nullable_primitive<T: NativePType>(
         ends.freeze(),
         PrimitiveArray::new(values, Validity::from(validity.freeze())),
     )
+}
+
+/// Run-end encode a `BoolArray`, returning a tuple of `(ends, values)`.
+///
+/// Adjacent equal values, and adjacent nulls, form a single run.
+pub fn runend_encode_bool(
+    array: ArrayView<'_, Bool>,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<(PrimitiveArray, BoolArray)> {
+    BoolRuns::from_bools(array, ctx)?.into_explicit(array.dtype().nullability(), ctx)
+}
+
+/// Boolean runs in which adjacent runs always differ.
+#[derive(Default)]
+pub(crate) struct BoolRuns {
+    ends: BufferMut<u64>,
+    values: Vec<Option<bool>>,
+}
+
+impl BoolRuns {
+    /// The runs of a `BoolArray`.
+    pub(crate) fn from_bools(
+        array: ArrayView<'_, Bool>,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Self> {
+        let validity = array.validity()?.execute_mask(array.len(), ctx)?;
+        let bits = array.to_bit_buffer();
+        let mut runs = Self::default();
+        match validity.bit_buffer() {
+            AllOr::All => {
+                for (idx, value) in bits.iter().enumerate() {
+                    runs.push(idx as u64 + 1, Some(value));
+                }
+            }
+            AllOr::None => runs.push(array.len() as u64, None),
+            AllOr::Some(valid) => {
+                for (idx, (value, is_valid)) in bits.iter().zip(valid.iter()).enumerate() {
+                    runs.push(idx as u64 + 1, is_valid.then_some(value));
+                }
+            }
+        }
+        Ok(runs)
+    }
+
+    /// Extend the runs up to the exclusive logical `end` with `value`, merging it into the last
+    /// run if that run has the same value. Empty runs are dropped.
+    pub(crate) fn push(&mut self, end: u64, value: Option<bool>) {
+        if self.ends.last().is_some_and(|&last| end <= last) || end == 0 {
+            return;
+        }
+        if let Some(last) = self.ends.last_mut()
+            && self.values.last() == Some(&value)
+        {
+            *last = end;
+        } else {
+            self.ends.push(end);
+            self.values.push(value);
+        }
+    }
+
+    /// The value of the first run if the valid runs alternate, treating null runs as wildcards
+    /// that still take a position in the alternation.
+    fn alternating_start(&self) -> Option<bool> {
+        let Some(start) = self
+            .values
+            .iter()
+            .enumerate()
+            .find_map(|(run, value)| value.map(|value| value ^ (run % 2 == 1)))
+        else {
+            return Some(false);
+        };
+        self.values
+            .iter()
+            .enumerate()
+            .all(|(run, value)| value.is_none_or(|value| value == start ^ (run % 2 == 1)))
+            .then_some(start)
+    }
+
+    fn validity(&self, nullability: Nullability) -> Validity {
+        match nullability {
+            Nullability::NonNullable => Validity::NonNullable,
+            Nullability::Nullable if self.values.iter().all(Option::is_some) => Validity::AllValid,
+            Nullability::Nullable => Validity::from(BitBuffer::from_iter(
+                self.values.iter().map(Option::is_some),
+            )),
+        }
+    }
+
+    fn into_ends(self, ctx: &mut ExecutionCtx) -> VortexResult<PrimitiveArray> {
+        let ends = PrimitiveArray::new(self.ends.freeze(), Validity::NonNullable).narrow(ctx)?;
+        ends.statistics()
+            .set(Stat::IsStrictSorted, Precision::Exact(true.into()));
+        Ok(ends)
+    }
+
+    /// Build the `(ends, values)` of a run-end array with one explicit value per run.
+    pub(crate) fn into_explicit(
+        self,
+        nullability: Nullability,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<(PrimitiveArray, BoolArray)> {
+        let bits = BitBuffer::from_iter(self.values.iter().map(|value| value.unwrap_or(false)));
+        let validity = self.validity(nullability);
+        Ok((self.into_ends(ctx)?, BoolArray::try_new(bits, validity)?))
+    }
+
+    /// Build the `(ends, start, validity)` of runs whose values alternate, or `None` if a null
+    /// run separates two runs of the same value.
+    pub(crate) fn into_alternating(
+        self,
+        nullability: Nullability,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Option<(PrimitiveArray, bool, Validity)>> {
+        let Some(start) = self.alternating_start() else {
+            return Ok(None);
+        };
+        let validity = self.validity(nullability);
+        Ok(Some((self.into_ends(ctx)?, start, validity)))
+    }
 }
 
 pub fn runend_decode_primitive(

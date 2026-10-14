@@ -65,3 +65,7 @@ harness = false
 [[bench]]
 name = "run_end_decode_primitive"
 harness = false
+
+[[bench]]
+name = "run_end_bool_decode"
+harness = false
