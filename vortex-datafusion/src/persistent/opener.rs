@@ -901,7 +901,7 @@ mod tests {
             expr_adapter_factory: Arc::new(DefaultPhysicalExprAdapterFactory),
             table_schema,
             limit: None,
-            metrics_registry: metrics_registry.clone(),
+            metrics_registry: Arc::<DefaultMetricsRegistry>::clone(&metrics_registry),
             scan_metrics: ScanMetrics::new(metrics_registry.as_ref()),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
@@ -928,7 +928,8 @@ mod tests {
             .into_iter()
             .enumerate()
         {
-            let size = write_arrow_to_vortex(Arc::clone(&object_store), path, batch.clone()).await?;
+            let size =
+                write_arrow_to_vortex(Arc::clone(&object_store), path, batch.clone()).await?;
             let batches = opener
                 .open(PartitionedFile::new(path, size))?
                 .await?
@@ -1322,7 +1323,7 @@ mod tests {
             expr_adapter_factory: Arc::new(DefaultPhysicalExprAdapterFactory),
             table_schema: table_schema.clone(),
             limit: None,
-            metrics_registry: metrics_registry.clone(),
+            metrics_registry: Arc::<DefaultMetricsRegistry>::clone(&metrics_registry),
             scan_metrics: ScanMetrics::new(metrics_registry.as_ref()),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
@@ -1412,7 +1413,7 @@ mod tests {
             expr_adapter_factory: Arc::new(DefaultPhysicalExprAdapterFactory),
             table_schema: TableSchema::from(Arc::clone(&table_schema)),
             limit: None,
-            metrics_registry: metrics_registry.clone(),
+            metrics_registry: Arc::<DefaultMetricsRegistry>::clone(&metrics_registry),
             scan_metrics: ScanMetrics::new(metrics_registry.as_ref()),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
@@ -1569,7 +1570,7 @@ mod tests {
             expr_adapter_factory: Arc::new(DefaultPhysicalExprAdapterFactory),
             table_schema: table_schema.clone(),
             limit: None,
-            metrics_registry: metrics_registry.clone(),
+            metrics_registry: Arc::<DefaultMetricsRegistry>::clone(&metrics_registry),
             scan_metrics: ScanMetrics::new(metrics_registry.as_ref()),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
@@ -1632,7 +1633,7 @@ mod tests {
             expr_adapter_factory: Arc::new(DefaultPhysicalExprAdapterFactory),
             table_schema: TableSchema::from(schema),
             limit: None,
-            metrics_registry: metrics_registry.clone(),
+            metrics_registry: Arc::<DefaultMetricsRegistry>::clone(&metrics_registry),
             scan_metrics: ScanMetrics::new(metrics_registry.as_ref()),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
@@ -1842,7 +1843,7 @@ mod tests {
             expr_adapter_factory: Arc::new(DefaultPhysicalExprAdapterFactory),
             table_schema,
             limit: None,
-            metrics_registry: metrics_registry.clone(),
+            metrics_registry: Arc::<DefaultMetricsRegistry>::clone(&metrics_registry),
             scan_metrics: ScanMetrics::new(metrics_registry.as_ref()),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),

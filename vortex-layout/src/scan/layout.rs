@@ -504,7 +504,7 @@ mod tests {
         let registry = Arc::new(DefaultMetricsRegistry::default());
         let reader = TestLayoutReader::new(8).with_pruning_rejection(whole_file, statistics);
         let source = LayoutReaderDataSource::new(Arc::new(reader), session)
-            .with_metrics_registry(registry.clone());
+            .with_metrics_registry(Arc::<DefaultMetricsRegistry>::clone(&registry));
         for execution in 1..=2 {
             let scan = runtime.block_on(source.scan(ScanRequest {
                 filter: Some(root()),
@@ -536,7 +536,7 @@ mod tests {
         let registry = Arc::new(DefaultMetricsRegistry::default());
         let source = LayoutReaderDataSource::new(Arc::new(TestLayoutReader::new(8)), session)
             .with_split_max_row_count(2)
-            .with_metrics_registry(registry.clone());
+            .with_metrics_registry(Arc::<DefaultMetricsRegistry>::clone(&registry));
         for execution in 1..=2 {
             let scan = runtime.block_on(source.scan(ScanRequest::default()))?;
             let partitions = runtime.block_on(scan.partitions().try_collect::<Vec<_>>())?;

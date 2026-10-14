@@ -171,11 +171,15 @@ impl LayoutReader for TestLayoutReader {
     }
 
     fn can_prune_file(&self, _expr: &BoundExpression) -> VortexResult<bool> {
-        Ok(self.pruning_rejection.is_some_and(|(whole_file, _)| whole_file))
+        Ok(self
+            .pruning_rejection
+            .is_some_and(|(whole_file, _)| whole_file))
     }
 
     fn split_pruning_is_statistics(&self, _expr: &BoundExpression) -> VortexResult<bool> {
-        Ok(self.pruning_rejection.is_none_or(|(_, statistics)| statistics))
+        Ok(self
+            .pruning_rejection
+            .is_none_or(|(_, statistics)| statistics))
     }
 
     fn filter_evaluation(

@@ -315,7 +315,7 @@ async fn test_scan_empty_selection_counters() -> VortexResult<()> {
             buffer![],
         )?))
         .with_filter(eq(col("value"), lit(200i32)).bind(file.dtype())?)
-        .with_metrics_registry(registry.clone())
+        .with_metrics_registry(Arc::<DefaultMetricsRegistry>::clone(&registry))
         .build_with_counters()?;
     assert!(tasks.is_empty());
     assert_execution(&counters, [0, 0, 0, 0, 0]);

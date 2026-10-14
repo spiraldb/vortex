@@ -65,7 +65,8 @@ impl ScanCounters {
     }
 
     pub(super) fn empty_split_after_predicate(&self) {
-        self.splits_empty_after_predicate.fetch_add(1, Ordering::Relaxed);
+        self.splits_empty_after_predicate
+            .fetch_add(1, Ordering::Relaxed);
     }
 
     pub(super) fn attempt_file_scan(&self) {
