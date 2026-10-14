@@ -82,7 +82,9 @@ def test_arrow_indices_use_scan_validation(indexed_file, indices):
 @pytest.mark.parametrize("indices", [None, [], [1], [0, 2, 5, 8]])
 @pytest.mark.parametrize("batch_size", [None, 1, 3])
 @pytest.mark.parametrize("combine_chunks", [False, True])
-def test_iterator_to_arrow_array_matches_read_all(indexed_file, indices, batch_size, combine_chunks):
+def test_iterator_to_arrow_array_matches_read_all(
+    indexed_file: tuple[vx.VortexFile, pa.Table], indices, batch_size, combine_chunks
+):
     file, _ = indexed_file
     selection = None if indices is None else vx.array(pa.array(indices, type=pa.uint64()))
     arrow_type = pa.struct([("id", pa.int64()), ("payload", pa.string_view())])
@@ -93,10 +95,10 @@ def test_iterator_to_arrow_array_matches_read_all(indexed_file, indices, batch_s
     expected = scan().read_all().to_arrow_array(arrow_type=arrow_type, combine_chunks=combine_chunks)
     result = scan().to_arrow_array(arrow_type=arrow_type, combine_chunks=combine_chunks)
     assert type(result) is type(expected)
-    assert result.equals(expected)
+    assert result == expected
 
     inferred = scan().read_all().to_arrow_array(combine_chunks=combine_chunks)
-    assert scan().to_arrow_array(combine_chunks=combine_chunks).equals(inferred)
+    assert scan().to_arrow_array(combine_chunks=combine_chunks) == inferred
 
 
 def test_iterator_to_arrow_array_after_read_is_empty(indexed_file):
@@ -113,4 +115,5 @@ def test_long_row_indices(tmp_path: Path):
     vx.io.write(vx.array(pa.table({"x": list(range(rows))})), str(path))
     indices = list(range(rows))
     result = vx.open(str(path)).scan(indices=vx.array(indices)).to_arrow_array(combine_chunks=True)
+    assert isinstance(result, pa.StructArray)
     assert result.field("x").to_pylist() == indices
