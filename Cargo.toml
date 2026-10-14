@@ -13,6 +13,7 @@ members = [
     "vortex-io",
     "vortex-cloud",
     "vortex-array",
+    "vortex-aggregates",
     "encodings/interleave",
     "encodings/shared",
     "vortex-arrow",
@@ -299,6 +300,7 @@ zstd = { version = "0.13.3", default-features = false, features = [
 
 # BEGIN crates published by this project
 vortex = { version = "0.1.0", path = "./vortex" }
+vortex-aggregates = { version = "0.1.0", path = "./vortex-aggregates", default-features = false }
 vortex-alp = { version = "0.1.0", path = "./encodings/alp", default-features = false }
 vortex-array = { version = "0.1.0", path = "./vortex-array", default-features = false }
 vortex-array-macros = { version = "0.1.0", path = "./vortex-array-macros" }
