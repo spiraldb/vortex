@@ -107,12 +107,15 @@ fn assert_execution(counters: &ScanCounters, expected: [u64; 4]) {
 }
 
 #[rstest]
-#[case::statistics([[0, 1], [10, 11], [90, 91], [100, 101]], [4, 4, 0, 0])]
-#[case::predicate([[0, 100], [10, 90], [20, 80], [30, 70]], [4, 0, 4, 0])]
+#[case::statistics([[0, 1], [10, 11], [90, 91], [100, 101]], [4, 4, 0, 0], None)]
+#[case::predicate([[0, 100], [10, 90], [20, 80], [30, 70]], [4, 0, 4, 0], None)]
+#[case::statistics_with_limit([[0, 1], [10, 11], [90, 91], [100, 101]], [4, 4, 0, 0], Some(3))]
+#[case::predicate_with_limit([[0, 100], [10, 90], [20, 80], [30, 70]], [4, 0, 4, 0], Some(3))]
 #[tokio::test]
 async fn test_scan_rejection_counters(
     #[case] values: [[i32; 2]; 4],
     #[case] expected: [u64; 4],
+    #[case] limit: Option<u64>,
 ) -> VortexResult<()> {
     let file = scan_file(values).await?;
     let predicate = and(
@@ -128,6 +131,7 @@ async fn test_scan_rejection_counters(
         .scan()?
         .with_split_by(SplitBy::RowCount(2))
         .with_filter(predicate.bind(file.dtype())?)
+        .with_some_limit(limit)
         .with_metrics_registry(Arc::<DefaultMetricsRegistry>::clone(&registry))
         .map(|_| -> VortexResult<()> { panic!("rejected splits must not reach the mapper") })
         .prepare()?;
@@ -245,13 +249,45 @@ async fn test_scan_limit_counters(
         .with_metrics_registry(Arc::<DefaultMetricsRegistry>::clone(&registry))
         .prepare()?;
     let mut actual_rows = 0;
-    let (tasks, counters) = scan.execute_with_counters(None)?;
-    for task in tasks {
-        actual_rows += task.await?.unwrap().len();
+    let (mut stream, counters) = scan.execute_stream_with_counters(None)?;
+    while let Some(array) = stream.next().await {
+        actual_rows += array?.len();
     }
     assert_eq!(actual_rows, rows);
     assert_registry(&registry, [considered, 0, 0, 0]);
     assert_execution(&counters, [considered, 0, 0, 0]);
+    Ok(())
+}
+
+#[rstest]
+#[case::zero(0, 0)]
+#[case::partial(3, 1)]
+#[case::all(8, 1)]
+#[tokio::test]
+async fn test_scan_filtered_limit_counters(
+    #[case] limit: u64,
+    #[case] considered: u64,
+) -> VortexResult<()> {
+    let file = scan_file([[0, 1], [10, 11], [90, 91], [100, 101]]).await?;
+    let registry = Arc::new(DefaultMetricsRegistry::default());
+    let scan = file
+        .scan()?
+        .with_split_by(SplitBy::RowCount(8))
+        .with_filter(gt_eq(col("value"), lit(0i32)).bind(file.dtype())?)
+        .with_limit(limit)
+        .with_metrics_registry(Arc::<DefaultMetricsRegistry>::clone(&registry))
+        .map(|array| Ok(array.len()))
+        .prepare()?;
+    for execution in 1..=2 {
+        let (mut stream, counters) = scan.execute_stream_with_counters(None)?;
+        let mut rows = 0;
+        while let Some(count) = stream.next().await {
+            rows += count?;
+        }
+        assert_eq!(rows as u64, limit);
+        assert_execution(&counters, [considered, 0, 0, 0]);
+        assert_registry(&registry, [considered * execution, 0, 0, 0]);
+    }
     Ok(())
 }
 

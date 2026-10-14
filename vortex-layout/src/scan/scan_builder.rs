@@ -400,9 +400,15 @@ impl<A: 'static + Send> ScanBuilder<A> {
     /// Returns a lazy stream and fresh counters for one execution.
     pub fn into_stream_with_counters(
         self,
-    ) -> VortexResult<(impl Stream<Item = VortexResult<A>> + Send + 'static + use<A>, Arc<ScanCounters>)> {
+    ) -> VortexResult<(
+        impl Stream<Item = VortexResult<A>> + Send + 'static + use<A>,
+        Arc<ScanCounters>,
+    )> {
         let counters = Arc::new(ScanCounters::default());
-        Ok((LazyScanStream::new(self, Some(Arc::clone(&counters))), counters))
+        Ok((
+            LazyScanStream::new(self, Some(Arc::clone(&counters))),
+            counters,
+        ))
     }
 
     /// Returns an [`Iterator`] using the session's runtime.
@@ -453,7 +459,8 @@ impl<A: 'static + Send> Stream for LazyScanStream<A> {
                     // This also keeps construction errors on the Preparing -> Error path rather
                     // than running construction on the caller's executor.
                     let counters = self.counters.take();
-                    let task = handle.spawn_cpu(move || builder.prepare()?.execute_stream_inner(None, counters));
+                    let task = handle
+                        .spawn_cpu(move || builder.prepare()?.execute_stream_inner(None, counters));
                     self.state = LazyScanState::Preparing(task);
                 }
                 LazyScanState::Preparing(task) => match ready!(Pin::new(task).poll(cx)) {

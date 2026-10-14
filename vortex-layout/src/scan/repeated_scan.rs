@@ -138,7 +138,9 @@ impl<A: 'static + Send> RepeatedScan<A> {
         if masks.peek().is_some() && can_prune_file(&ctx)? {
             return Ok(Vec::new());
         }
-        masks.map(|mask| Ok(map_split(split_exec(&ctx, mask)?, &self.map_fn))).collect()
+        masks
+            .map(|mask| Ok(map_split(split_exec(&ctx, mask)?, &self.map_fn)))
+            .collect()
     }
 
     pub fn dtype(&self) -> &DType {
@@ -318,30 +320,32 @@ impl<A: 'static + Send> RepeatedScan<A> {
                 let gate = limit.clone();
                 let selection = self.selection.clone();
                 let split_handle = handle.clone();
-                let tasks = stream::iter(iter::once(Either::Left(first_mask)).chain(ranges.map(Either::Right)))
-                    .take_while(move |_| future::ready(!gate.is_exhausted()))
-                    .map(move |split| {
-                        let ctx = Arc::clone(&ctx);
-                        let selection = selection.clone();
-                        split_handle.spawn_nested(move |handle| async move {
-                            let task = handle
-                                .spawn_cpu(move || {
-                                    let row_mask = match split {
-                                        Either::Left(mask) => mask,
-                                        Either::Right(range) => selection.row_mask(&range),
-                                    };
-                                    if row_mask.mask().all_false() {
-                                        return Ok(None);
-                                    }
-                                    split_exec(&ctx, row_mask).map(Some)
-                                })
-                                .await?;
-                            match task {
-                                Some(task) => task.await,
-                                None => Ok(None),
-                            }
-                        })
-                    });
+                let tasks = stream::iter(
+                    iter::once(Either::Left(first_mask)).chain(ranges.map(Either::Right)),
+                )
+                .take_while(move |_| future::ready(!gate.is_exhausted()))
+                .map(move |split| {
+                    let ctx = Arc::clone(&ctx);
+                    let selection = selection.clone();
+                    split_handle.spawn_nested(move |handle| async move {
+                        let task = handle
+                            .spawn_cpu(move || {
+                                let row_mask = match split {
+                                    Either::Left(mask) => mask,
+                                    Either::Right(range) => selection.row_mask(&range),
+                                };
+                                if row_mask.mask().all_false() {
+                                    return Ok(None);
+                                }
+                                split_exec(&ctx, row_mask).map(Some)
+                            })
+                            .await?;
+                        match task {
+                            Some(task) => task.await,
+                            None => Ok(None),
+                        }
+                    })
+                });
                 let map_fn = Arc::clone(map_fn);
                 let arrays = buffer(tasks, ordered, concurrency)
                     .filter_map(|array| future::ready(array.transpose()))
@@ -357,7 +361,9 @@ impl<A: 'static + Send> RepeatedScan<A> {
                 // are exact, so a limit can also be reserved here in split order.
                 let mut tasks = Vec::new();
                 for row_mask in iter::once(first_mask).chain(
-                    ranges.map(|range| self.selection.row_mask(&range)).filter(|mask| !mask.mask().all_false())
+                    ranges
+                        .map(|range| self.selection.row_mask(&range))
+                        .filter(|mask| !mask.mask().all_false()),
                 ) {
                     let task = if let Some(limit) = &limit {
                         if limit.is_exhausted() {

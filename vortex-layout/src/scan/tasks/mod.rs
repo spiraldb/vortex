@@ -59,7 +59,12 @@ fn split_exec_inner<const TRACK_COUNTERS: bool>(
             *version = filter.dynamic_updates(idx).map(|du| du.version());
 
             mask = prune_conjunct::<TRACK_COUNTERS>(
-                &ctx, filter, idx, *version, &row_range, mask,
+                &ctx,
+                filter,
+                idx,
+                *version,
+                &filter_row_range,
+                mask,
             )
             .await?;
             if mask.all_false() {
@@ -86,7 +91,7 @@ fn split_exec_inner<const TRACK_COUNTERS: bool>(
                     filter,
                     idx,
                     Some(dv),
-                    &row_range,
+                    &filter_row_range,
                     mask,
                 )
                 .await?;
@@ -97,7 +102,7 @@ fn split_exec_inner<const TRACK_COUNTERS: bool>(
 
             let input_true_count = mask.true_count();
             let conjunct_mask = reader
-                .filter_evaluation(&row_range, conjunct, MaskFuture::ready(mask))?
+                .filter_evaluation(&filter_row_range, conjunct, MaskFuture::ready(mask))?
                 .await?;
             filter.report_selectivity(
                 idx,
@@ -114,7 +119,9 @@ fn split_exec_inner<const TRACK_COUNTERS: bool>(
 
         Ok(mask)
     });
-    let projection = ctx.reader.projection_evaluation(&row_range, &ctx.projection, filter_mask.clone())?;
+    let projection =
+        ctx.reader
+            .projection_evaluation(&row_range, &ctx.projection, filter_mask.clone())?;
     let count_ctx = TRACK_COUNTERS.then(|| Arc::clone(ctx));
     Ok(async move {
         if let Some(ctx) = &count_ctx {
@@ -124,7 +131,8 @@ fn split_exec_inner<const TRACK_COUNTERS: bool>(
             return Ok(None);
         }
         projection.await.map(Some)
-    }.boxed())
+    }
+    .boxed())
 }
 
 pub(crate) fn split_projection(
@@ -147,14 +155,17 @@ fn split_projection_inner<const TRACK_COUNTERS: bool>(
     if mask.all_false() {
         return Ok(futures::future::ready(Ok(None)).boxed());
     }
-    let projection = ctx.reader.projection_evaluation(row_range, &ctx.projection, MaskFuture::ready(mask))?;
+    let projection =
+        ctx.reader
+            .projection_evaluation(row_range, &ctx.projection, MaskFuture::ready(mask))?;
     let count_ctx = TRACK_COUNTERS.then(|| Arc::clone(ctx));
     Ok(async move {
         if let Some(ctx) = &count_ctx {
             ctx.count::<TRACK_COUNTERS>(ScanCounters::consider_split);
         }
         projection.await.map(Some)
-    }.boxed())
+    }
+    .boxed())
 }
 
 /// Applies whole-file statistics for a dynamic conjunct, then split statistics.
