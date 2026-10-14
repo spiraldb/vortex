@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+from pathlib import Path
+
 from bench_orchestrator.config import (
+    ENGINE_SKIPPED_QUERIES,
     Benchmark,
     BenchmarkTarget,
     Engine,
@@ -128,3 +131,11 @@ def test_group_targets_by_backend_routes_lance_to_lance_binary() -> None:
 def test_datafusion_package_and_binary_names_match() -> None:
     assert Engine.DATAFUSION.package_name == "datafusion-bench"
     assert Engine.DATAFUSION.binary_name == "datafusion-bench"
+
+
+def test_job_datafusion_skips_match_16_and_17_query_files() -> None:
+    job_sql = Path(__file__).resolve().parents[2] / "vortex-bench" / "sql" / "job"
+    names = sorted(path.stem for path in job_sql.glob("*.sql"))
+    skipped, _reason = ENGINE_SKIPPED_QUERIES[(Benchmark.JOB, Engine.DATAFUSION)]
+
+    assert [names[idx - 1] for idx in skipped] == [name for name in names if name.startswith(("16", "17"))]

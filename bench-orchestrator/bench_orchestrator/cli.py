@@ -22,6 +22,7 @@ from .ci_matrix import MATRIX_PRESETS, resolve_matrix
 from .comparison import analyzer
 from .comparison.reporter import pivot_comparison_table
 from .config import (
+    ENGINE_SKIPPED_QUERIES,
     Benchmark,
     BenchmarkTarget,
     BuildConfig,
@@ -389,8 +390,14 @@ def run(
                     def stream(line: str) -> None:
                         write_result_line(line, ctx.write_raw_json, compatibility_file)
 
+                    target_excludes = exclude_list
+                    if skipped := ENGINE_SKIPPED_QUERIES.get((benchmark, target.engine)):
+                        skipped_ids, reason = skipped
+                        console.print(f"[yellow]{target}: skipping {len(skipped_ids)} queries: {reason}[/yellow]")
+                        target_excludes = [*(exclude_list or []), *skipped_ids]
+
                     try:
-                        query_ids = executor.list_queries(benchmark, query_list, exclude_list)
+                        query_ids = executor.list_queries(benchmark, query_list, target_excludes)
                         for query_id in query_ids:
                             part_ingest_output = None
                             if ingest_temp_dir is not None:
