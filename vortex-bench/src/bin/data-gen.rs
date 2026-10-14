@@ -11,6 +11,7 @@ use std::process::Command;
 
 use clap::Parser;
 use clap::value_parser;
+use mimalloc::MiMalloc;
 use tracing::info;
 use vortex::error::VortexExpect;
 use vortex_bench::Benchmark;
@@ -49,6 +50,9 @@ struct Args {
     #[arg(long = "opt", value_delimiter = ',', value_parser = value_parser!(Opt))]
     options: Vec<Opt>,
 }
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use clap::value_parser;
 use duckdb_bench::DuckClient;
+use mimalloc::MiMalloc;
 use tokio::runtime::Runtime;
 use vortex::metrics::tracing::set_global_labels;
 use vortex_bench::BenchmarkArg;
@@ -102,6 +103,9 @@ struct Args {
     )]
     reuse: bool,
 }
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();

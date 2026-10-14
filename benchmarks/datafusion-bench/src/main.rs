@@ -24,6 +24,7 @@ use datafusion_bench::tracer::set_labels;
 use datafusion_common::TableReference;
 use datafusion_physical_plan::ExecutionPlan;
 use datafusion_physical_plan::collect;
+use mimalloc::MiMalloc;
 use parking_lot::Mutex;
 use vortex::file::multi::MultiFileDataSource;
 use vortex::io::filesystem::FileSystemRef;
@@ -122,6 +123,9 @@ struct Args {
     #[arg(long = "opt", value_delimiter = ',', value_parser = value_parser!(Opt))]
     options: Vec<Opt>,
 }
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

@@ -10,6 +10,7 @@ use anyhow::bail;
 use clap::Parser;
 use clap::ValueEnum;
 use indicatif::ProgressBar;
+use mimalloc::MiMalloc;
 use regex::Regex;
 use string_bench::ColumnResult;
 use string_bench::DirectCandidate;
@@ -136,6 +137,9 @@ fn contains_duplicates<T: PartialEq>(values: &[T]) -> bool {
         .enumerate()
         .any(|(index, value)| values[..index].contains(value))
 }
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() -> Result<()> {
     let args = Args::parse();
