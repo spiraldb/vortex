@@ -27,10 +27,13 @@ use vortex_array::arrays::PrimitiveArray;
 use vortex_array::dtype::NativePType;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
+use vortex_error::vortex_panic;
 use vortex_fastlanes::BitPacked;
 use vortex_fastlanes::BitPackedData;
 use vortex_fastlanes::FoR;
+use vortex_fastlanes::FoRArrayExt;
 use vortex_fastlanes::FoRArraySlotsExt;
+use vortex_fastlanes::FoRReferences;
 use vortex_session::VortexSession;
 
 #[global_allocator]
@@ -54,7 +57,12 @@ const BIT_WIDTH: u8 = 7;
 
 fn values<T: NativePType + TryFrom<usize>>(len: usize) -> Buffer<T> {
     (0..len)
-        .map(|i| T::try_from(1000 + (i * 7919) % 100).ok().unwrap())
+        // Each chunk's values climb by 1000, so every chunk has its own reference.
+        .map(|i| {
+            T::try_from(1000 * (1 + i / 1024) + (i * 7919) % 100)
+                .ok()
+                .unwrap()
+        })
         .collect()
 }
 
@@ -77,7 +85,10 @@ fn for_array<T: NativePType + TryFrom<usize>>(len: usize, child: Child) -> Array
             BitPackedData::encode_blocked(for_array.encoded(), &bit_widths, &mut ctx).unwrap()
         }
     };
-    FoR::try_new_chunked(packed.into_array(), for_array.references().clone(), 0)
+    let FoRReferences::Blocked(references) = for_array.references() else {
+        vortex_panic!("every chunk has its own reference");
+    };
+    FoR::try_new_chunked(packed.into_array(), references.clone(), 0)
         .unwrap()
         .into_array()
 }
