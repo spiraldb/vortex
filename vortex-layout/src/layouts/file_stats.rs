@@ -11,6 +11,11 @@ use parking_lot::Mutex;
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::VortexSessionExecute;
+use vortex_array::aggregate_fn::Accumulator;
+use vortex_array::aggregate_fn::AggregateFnVTable;
+use vortex_array::aggregate_fn::DynAccumulator;
+use vortex_array::aggregate_fn::fns::is_sorted::IsSorted;
+use vortex_array::aggregate_fn::fns::is_sorted::IsSortedOptions;
 use vortex_array::aggregate_fn::fns::sum::sum;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::struct_::StructArrayExt;
@@ -83,14 +88,21 @@ impl StatsAccumulator {
         let builders = stats
             .iter()
             .filter_map(|&stat| {
-                stat.dtype(dtype).map(|stat_dtype| {
-                    stats_builder_with_capacity(
-                        stat,
-                        &stat_dtype.as_nullable(),
-                        1024,
-                        max_variable_length_statistics_size,
-                    )
-                })
+                let stat_dtype = match stat {
+                    // Sortedness returns partials after computing the stat
+                    // at [`StatsAccumulator::push_chunk`]
+                    Stat::IsSorted | Stat::IsStrictSorted => {
+                        IsSorted.partial_dtype(&sortedness_stat_into_options(stat), dtype)
+                    }
+                    _ => stat.dtype(dtype),
+                }?;
+
+                Some(stats_builder_with_capacity(
+                    stat,
+                    &stat_dtype.as_nullable(),
+                    1024,
+                    max_variable_length_statistics_size,
+                ))
             })
             .collect::<Vec<_>>();
 
@@ -102,7 +114,28 @@ impl StatsAccumulator {
 
     fn push_chunk(&mut self, array: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<()> {
         for builder in &mut self.builders {
-            if let Some(value) = array.statistics().compute_stat(builder.stat(), ctx)? {
+            let stat = builder.stat();
+            let value = array.statistics().compute_stat(stat, ctx)?;
+            let value = match stat {
+                // Two sorted chunks can be out of order when joined.
+                // E.g. [[1, 2], [1, 4]] goes from 2 back to 1.
+                //
+                // So, we need to keep each chunk's first and last values so [`StatsAccumulator::as_stats_set`]
+                // can check where the chunks meet. Others stats only need each chunk's result.
+                Stat::IsSorted | Stat::IsStrictSorted => {
+                    let are_values_sorted =
+                        value.is_some_and(|value| value.as_bool().value() == Some(true));
+                    Some(IsSorted::make_partial(
+                        array,
+                        are_values_sorted,
+                        sortedness_stat_into_options(stat).strict,
+                        ctx,
+                    )?)
+                }
+                _ => value,
+            };
+
+            if let Some(value) = value {
                 builder.append_scalar(value.cast(&value.dtype().as_nullable())?)?;
             } else {
                 builder.append_null();
@@ -185,7 +218,14 @@ impl StatsAccumulator {
                         stats_set.set(stat, Precision::exact(sum_value));
                     }
                 }
-                Stat::IsConstant | Stat::IsSorted | Stat::IsStrictSorted => {}
+                Stat::IsSorted | Stat::IsStrictSorted => {
+                    let merged = merge_sortedness_partials(values, stat, ctx)?;
+
+                    if merged.get(stat) == Precision::exact(true) {
+                        stats_set.set(stat, Precision::exact(true));
+                    }
+                }
+                Stat::IsConstant => {}
             }
         }
         Ok(stats_set)
@@ -276,6 +316,49 @@ fn stats_builder_with_capacity(
         },
         _ => Box::new(StatNameArrayBuilder::new(stat, values_builder)),
     }
+}
+
+fn sortedness_stat_into_options(stat: Stat) -> IsSortedOptions {
+    IsSortedOptions {
+        strict: stat == Stat::IsStrictSorted,
+    }
+}
+
+/// Merge sortedness partials build during [`StatsAccumulator::push_chunk`]
+/// in file order, checking where consecutive chunks meet.
+///
+/// Returns `true` only when the merged are sorted. Otherwise, leaves
+/// the statistic absent.
+fn merge_sortedness_partials(
+    partials: &ArrayRef,
+    sortedness_stat: Stat,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<StatsSet> {
+    let dtype = partials
+        .dtype()
+        .as_struct_fields()
+        .field("first_value")
+        .vortex_expect("sortedness partials contain first_value");
+
+    let mut accumulator = Accumulator::try_new(
+        IsSorted,
+        sortedness_stat_into_options(sortedness_stat),
+        dtype,
+    )?;
+
+    let mut reader = partials.repeated_probe();
+
+    for chunk_index in 0..partials.len() {
+        let partial = reader.execute_scalar(chunk_index, ctx)?;
+        accumulator.combine_partials(&partial)?;
+    }
+
+    let result = accumulator.finish()?;
+
+    Ok(match result.as_bool().value() {
+        Some(true) => StatsSet::of(sortedness_stat, Precision::exact(true)),
+        _ => StatsSet::default(),
+    })
 }
 
 /// Arrays with their associated names, reduced version of a `StructArray`.
@@ -672,5 +755,115 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[rstest]
+    #[case::sorted(buffer![1u32, 2, 3].into_array(), true)]
+    #[case::unsorted(buffer![1u32, 3, 2].into_array(), false)]
+    fn accumulates_sortedness(
+        #[case] values: ArrayRef,
+        #[case] expected: bool,
+    ) -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let mut acc = StatsAccumulator::new(values.dtype(), &[Stat::IsSorted], 8);
+        acc.push_chunk(&values, &mut ctx)?;
+
+        let stats = acc.as_stats_set(&[Stat::IsSorted], &mut ctx)?;
+        let expected = if expected {
+            Precision::exact(true)
+        } else {
+            Precision::Absent
+        };
+        assert_eq!(stats.get(Stat::IsSorted), expected);
+
+        Ok(())
+    }
+
+    #[rstest]
+    #[case::ordered(
+        vec![vec![Some(1.0), Some(2.0)], vec![Some(3.0), Some(4.0)]],
+        true
+    )]
+    #[case::overlapping(
+        vec![vec![Some(1.0), Some(3.0)], vec![Some(2.0), Some(4.0)]],
+        false
+    )]
+    #[case::unsorted_chunk(
+        vec![vec![Some(2.0), Some(1.0)], vec![Some(3.0), Some(4.0)]],
+        false
+    )]
+    #[case::leading_null_across_chunks(
+        vec![vec![None, Some(1.0), Some(2.0)], vec![Some(3.0), Some(4.0)]],
+        true
+    )]
+    #[case::singleton_null_across_chunks(
+        vec![vec![None], vec![Some(1.0), Some(2.0)]],
+        true
+    )]
+    #[case::null_after_values(
+        vec![vec![Some(1.0)], vec![None, Some(2.0)]],
+        false
+    )]
+    #[case::nan_at_end(
+        vec![vec![Some(1.0), Some(2.0)], vec![Some(3.0), Some(f64::NAN)]],
+        true
+    )]
+    #[case::nan_before_finite_values(
+        vec![vec![Some(1.0), Some(f64::NAN)], vec![Some(2.0), Some(3.0)]],
+        false
+    )]
+    #[case::empty_chunk(
+        vec![vec![], vec![None, Some(1.0), Some(2.0)]],
+        true
+    )]
+    #[case::empty_between_chunks(vec![vec![Some(2.0)], vec![], vec![Some(1.0)]], false)]
+    fn combines_chunk_sortedness(
+        #[case] chunks: Vec<Vec<Option<f64>>>,
+        #[case] expected: bool,
+        #[values(Stat::IsSorted, Stat::IsStrictSorted)] stat: Stat,
+    ) -> VortexResult<()> {
+        let stats = chunk_sortedness_stats(chunks, &[stat])?;
+        let expected = if expected {
+            Precision::exact(true)
+        } else {
+            Precision::Absent
+        };
+        assert_eq!(stats.get(stat), expected);
+
+        Ok(())
+    }
+
+    #[rstest]
+    #[case::equal_numeric_boundary(
+        vec![vec![Some(1.0), Some(2.0)], vec![Some(2.0), Some(3.0)]]
+    )]
+    #[case::duplicate_nulls_across_chunks(vec![vec![None], vec![None, Some(1.0)]])]
+    #[case::equal_nan_boundary(
+        vec![vec![Some(1.0), Some(f64::NAN)], vec![Some(f64::NAN)]]
+    )]
+    fn strict_chunk_sortedness(#[case] chunks: Vec<Vec<Option<f64>>>) -> VortexResult<()> {
+        let requested = [Stat::IsSorted, Stat::IsStrictSorted];
+        let stats = chunk_sortedness_stats(chunks, &requested)?;
+        assert_eq!(stats.get(Stat::IsSorted), Precision::exact(true));
+        assert_eq!(stats.get(Stat::IsStrictSorted), Precision::Absent);
+
+        Ok(())
+    }
+
+    fn chunk_sortedness_stats(
+        chunks: Vec<Vec<Option<f64>>>,
+        requested: &[Stat],
+    ) -> VortexResult<StatsSet> {
+        let mut ctx = array_session().create_execution_ctx();
+        let dtype = DType::Primitive(PType::F64, Nullability::Nullable);
+        let mut acc = StatsAccumulator::new(&dtype, requested, 8);
+        for chunk in chunks {
+            acc.push_chunk(
+                &PrimitiveArray::from_option_iter(chunk).into_array(),
+                &mut ctx,
+            )?;
+        }
+
+        acc.as_stats_set(requested, &mut ctx)
     }
 }
