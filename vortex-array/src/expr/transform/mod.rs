@@ -3,7 +3,6 @@
 
 //! Transformations for [`crate::expr::Expression`] and [`crate::expr::BoundExpression`] trees.
 mod bound_partition;
-pub(crate) mod match_between;
 mod replace;
 
 pub use bound_partition::*;

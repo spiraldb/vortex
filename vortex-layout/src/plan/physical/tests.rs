@@ -539,11 +539,11 @@ fn expression_partitions_across_row_idx_and_struct() -> VortexResult<()> {
 
     let optimized = optimize(plan)?;
     insta::assert_snapshot!(optimized.display_tree(), @"
-    root: vortex.plan.eval(bool, rows=3) expr=(($.row_idx and $.child.child_0) and $.child.child_1)
-      child: vortex.plan.pack({row_idx=bool, child={child_0=bool, child_1=bool}}, rows=3)
+    root: vortex.plan.eval(bool, rows=3) expr=($.row_idx and $.child)
+      child: vortex.plan.pack({row_idx=bool, child=bool}, rows=3)
         row_idx: vortex.plan.eval(bool, rows=3) expr=($ > 11u64)
           child: vortex.plan.row_idx(u64, rows=3)
-        child: vortex.plan.eval({child_0=bool, child_1=bool}, rows=3) expr=pack(child_0: $.a, child_1: $.b)
+        child: vortex.plan.eval(bool, rows=3) expr=($.a and $.b)
           child: vortex.plan.pack({a=bool, b=bool}, rows=3)
             a: vortex.plan.take(bool, rows=3)
               codes: vortex.plan.segment_scan(u8, rows=3)

@@ -34,6 +34,8 @@ use crate::scalar_fn::fns::literal::Literal;
 use crate::scalar_fn::fns::operators::CompareOperator;
 use crate::scalar_fn::fns::operators::Operator;
 
+mod between;
+use between::simplify_between;
 pub mod boolean;
 pub use boolean::BooleanExecuteAdaptor;
 pub use boolean::BooleanKernel;
@@ -260,7 +262,7 @@ impl ScalarFnVTable for Binary {
                 (Some(Some(true)), _) => Some(widen(rhs)),
                 (_, Some(Some(true))) => Some(widen(lhs)),
                 (Some(None), Some(None)) => Some(widen(lhs)),
-                _ => None,
+                _ => return simplify_between(expr),
             },
             Operator::Or => match (bool_literal(lhs), bool_literal(rhs)) {
                 (Some(Some(true)), _) | (_, Some(Some(true))) => Some(bool_lit(true)),
