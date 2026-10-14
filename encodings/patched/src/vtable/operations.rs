@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use vortex_array::ArrayView;
+use vortex_array::ExecutionCtx;
+use vortex_array::OperationsVTable;
+use vortex_array::arrays::PrimitiveArray;
+use vortex_array::optimizer::ArrayOptimizer;
+use vortex_array::scalar::Scalar;
 use vortex_error::VortexResult;
 
-use crate::ExecutionCtx;
-use crate::array::ArrayView;
-use crate::array::OperationsVTable;
-use crate::arrays::PrimitiveArray;
-use crate::arrays::patched::Patched;
-use crate::arrays::patched::PatchedArrayExt;
-use crate::arrays::patched::PatchedArraySlotsExt;
-use crate::optimizer::ArrayOptimizer;
-use crate::scalar::Scalar;
+use crate::Patched;
+use crate::PatchedArrayExt;
+use crate::PatchedArraySlotsExt;
 
 impl OperationsVTable<Patched> for Patched {
     type ProbeState = ();
@@ -59,17 +59,16 @@ impl OperationsVTable<Patched> for Patched {
 
 #[cfg(test)]
 mod tests {
+    use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
+    use vortex_array::dtype::Nullability;
+    use vortex_array::optimizer::ArrayOptimizer;
+    use vortex_array::patches::Patches;
+    use vortex_array::scalar::Scalar;
     use vortex_buffer::buffer;
     use vortex_session::VortexSession;
 
-    use crate::IntoArray;
-    use crate::VortexSessionExecute;
-    use crate::array_session;
-    use crate::arrays::Patched;
-    use crate::dtype::Nullability;
-    use crate::optimizer::ArrayOptimizer;
-    use crate::patches::Patches;
-    use crate::scalar::Scalar;
+    use crate::Patched;
 
     #[test]
     fn test_simple() {
@@ -92,25 +91,25 @@ mod tests {
 
         assert_eq!(
             array
-                .execute_scalar(0, &mut array_session().create_execution_ctx())
+                .execute_scalar(0, &mut crate::test_session().create_execution_ctx())
                 .unwrap(),
             Scalar::primitive(0u16, Nullability::NonNullable)
         );
         assert_eq!(
             array
-                .execute_scalar(1, &mut array_session().create_execution_ctx())
+                .execute_scalar(1, &mut crate::test_session().create_execution_ctx())
                 .unwrap(),
             Scalar::primitive(1u16, Nullability::NonNullable)
         );
         assert_eq!(
             array
-                .execute_scalar(2, &mut array_session().create_execution_ctx())
+                .execute_scalar(2, &mut crate::test_session().create_execution_ctx())
                 .unwrap(),
             Scalar::primitive(1u16, Nullability::NonNullable)
         );
         assert_eq!(
             array
-                .execute_scalar(3, &mut array_session().create_execution_ctx())
+                .execute_scalar(3, &mut crate::test_session().create_execution_ctx())
                 .unwrap(),
             Scalar::primitive(1u16, Nullability::NonNullable)
         );
@@ -137,7 +136,7 @@ mod tests {
 
         for index in 0..array.len() {
             let value = array
-                .execute_scalar(index, &mut array_session().create_execution_ctx())
+                .execute_scalar(index, &mut crate::test_session().create_execution_ctx())
                 .unwrap();
 
             if [1, 2, 3].contains(&index) {
@@ -175,14 +174,14 @@ mod tests {
 
         assert_eq!(
             array
-                .execute_scalar(0, &mut array_session().create_execution_ctx())
+                .execute_scalar(0, &mut crate::test_session().create_execution_ctx())
                 .unwrap(),
             1u16.into()
         );
         for index in 1..array.len() {
             assert_eq!(
                 array
-                    .execute_scalar(index, &mut array_session().create_execution_ctx())
+                    .execute_scalar(index, &mut crate::test_session().create_execution_ctx())
                     .unwrap(),
                 0u16.into()
             );

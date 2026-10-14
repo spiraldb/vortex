@@ -11321,6 +11321,7 @@ dependencies = [
  "vortex-mask",
  "vortex-metrics",
  "vortex-parquet-variant",
+ "vortex-patched",
  "vortex-pco",
  "vortex-runend",
  "vortex-scan",
@@ -11350,6 +11351,7 @@ dependencies = [
  "vortex-error",
  "vortex-fastlanes",
  "vortex-mask",
+ "vortex-patched",
  "vortex-session",
 ]
 
@@ -11544,6 +11546,7 @@ dependencies = [
  "vortex-fastlanes",
  "vortex-fsst",
  "vortex-onpair",
+ "vortex-patched",
  "vortex-pco",
  "vortex-runend",
  "vortex-sequence",
@@ -11637,6 +11640,7 @@ dependencies = [
  "vortex-arrow",
  "vortex-buffer",
  "vortex-error",
+ "vortex-patched",
  "vortex-session",
 ]
 
@@ -11904,6 +11908,7 @@ dependencies = [
  "vortex-error",
  "vortex-fastlanes",
  "vortex-mask",
+ "vortex-patched",
  "vortex-session",
 ]
 
@@ -11969,6 +11974,7 @@ dependencies = [
  "vortex-mask",
  "vortex-metrics",
  "vortex-onpair",
+ "vortex-patched",
  "vortex-pco",
  "vortex-runend",
  "vortex-scan",
@@ -12246,6 +12252,21 @@ dependencies = [
  "vortex-mask",
  "vortex-session",
  "vortex-uuid",
+]
+
+[[package]]
+name = "vortex-patched"
+version = "0.1.0"
+dependencies = [
+ "insta",
+ "prost 0.14.4",
+ "rstest",
+ "rustc-hash",
+ "vortex-array",
+ "vortex-buffer",
+ "vortex-error",
+ "vortex-mask",
+ "vortex-session",
 ]
 
 [[package]]

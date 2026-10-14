@@ -13,7 +13,6 @@ use vortex_array::ArrayId;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::arrays::Patched;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::assert_arrays_eq;
 use vortex_array::serde::SerializeOptions;
@@ -30,6 +29,7 @@ use vortex_edition::declarations::core::CORE_2026_08_3;
 use vortex_error::VortexResult;
 use vortex_fastlanes::bitpacked_v1_id;
 use vortex_fastlanes::bitpacked_v2_id;
+use vortex_patched::Patched;
 use vortex_session::VortexSession;
 use vortex_session::registry::ReadContext;
 

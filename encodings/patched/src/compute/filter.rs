@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use vortex_array::ArrayRef;
+use vortex_array::ArrayView;
+use vortex_array::IntoArray;
+use vortex_array::arrays::FilterArray;
+use vortex_array::arrays::filter::FilterReduce;
 use vortex_error::VortexResult;
 use vortex_mask::AllOr;
 use vortex_mask::Mask;
 
-use crate::ArrayRef;
-use crate::IntoArray;
-use crate::array::ArrayView;
-use crate::arrays::FilterArray;
-use crate::arrays::Patched;
-use crate::arrays::filter::FilterReduce;
-use crate::arrays::patched::PatchedArrayExt;
+use crate::Patched;
+use crate::PatchedArrayExt;
 
 impl FilterReduce for Patched {
     fn filter(array: ArrayView<'_, Self>, mask: &Mask) -> VortexResult<Option<ArrayRef>> {
@@ -63,22 +63,22 @@ impl FilterReduce for Patched {
 
 #[cfg(test)]
 mod tests {
+    use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
+    use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::assert_arrays_eq;
+    use vortex_array::optimizer::ArrayOptimizer;
+    use vortex_array::patches::Patches;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
     use vortex_mask::Mask;
 
-    use crate::IntoArray;
-    use crate::VortexSessionExecute;
-    use crate::arrays::Patched;
-    use crate::arrays::PrimitiveArray;
-    use crate::assert_arrays_eq;
-    use crate::optimizer::ArrayOptimizer;
-    use crate::patches::Patches;
+    use crate::Patched;
 
     #[test]
     fn test_filter_noop() -> VortexResult<()> {
         // Filter that doesn't prune any chunks (all data fits in one chunk).
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_session().create_execution_ctx();
 
         let array = buffer![u16::MIN; 5].into_array();
         let patched_indices = buffer![3u8, 4].into_array();
@@ -105,7 +105,7 @@ mod tests {
     #[test]
     fn test_filter_with_offset() -> VortexResult<()> {
         // Test filtering where offset > 0.
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_session().create_execution_ctx();
 
         let array = buffer![u16::MIN; 4096].into_array();
         let patched_indices = buffer![5u16, 1030].into_array();
@@ -133,7 +133,7 @@ mod tests {
     #[test]
     fn test_filter_basic() -> VortexResult<()> {
         // Basic test: filter with mask that crosses boundaries.
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_session().create_execution_ctx();
 
         let array = buffer![u16::MIN; 4096].into_array();
         let patched_indices = buffer![1024u16, 1025].into_array();
@@ -160,7 +160,7 @@ mod tests {
     #[test]
     fn test_filter_complex() -> VortexResult<()> {
         // Filter with mask that crosses boundaries, with patches offset.
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_session().create_execution_ctx();
 
         let array = buffer![u16::MIN; 4096].into_array();
         let patched_indices = buffer![1024u16, 1025].into_array();
@@ -187,7 +187,7 @@ mod tests {
     #[test]
     fn test_filter_sliced() -> VortexResult<()> {
         // Test filter on a sliced PatchedArray to exercise codepath where offset > 0.
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_session().create_execution_ctx();
 
         // Create a larger array (6 chunks) so we can slice and still have room
         // for the filter to prune chunks.
@@ -225,7 +225,7 @@ mod tests {
     fn test_filter_with_offset_nonuniform() -> VortexResult<()> {
         // Test filtering with offset > 0 using non-uniform base values.
         // This catches slice_chunks bugs where inner coordinates are miscalculated.
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_session().create_execution_ctx();
 
         // Use non-uniform values so that incorrect slicing is detectable.
         let base_values: Vec<u16> = (0u16..4096).collect();
@@ -262,7 +262,7 @@ mod tests {
     fn test_filter_with_offset_last_chunk() -> VortexResult<()> {
         // Test filtering with offset > 0 where the mask touches the last chunk.
         // This ensures we don't accidentally slice past the end of the array or mask.
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_session().create_execution_ctx();
 
         // Create a 6-chunk array (6144 elements).
         let array = buffer![u16::MIN; 6144].into_array();

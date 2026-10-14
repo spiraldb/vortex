@@ -2,9 +2,8 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use prost::Message;
-
-use crate::ArrayEq;
-use crate::ArrayHash;
+use vortex_array::ArrayEq;
+use vortex_array::ArrayHash;
 mod kernels;
 mod operations;
 mod slice;
@@ -12,6 +11,32 @@ mod slice;
 use std::hash::Hash;
 use std::hash::Hasher;
 
+use vortex_array::Array;
+use vortex_array::ArrayId;
+use vortex_array::ArrayParts;
+use vortex_array::ArrayRef;
+use vortex_array::ArrayView;
+use vortex_array::Canonical;
+use vortex_array::EqMode;
+use vortex_array::ExecutionCtx;
+use vortex_array::ExecutionResult;
+use vortex_array::IntoArray;
+use vortex_array::VTable;
+use vortex_array::ValidityChild;
+use vortex_array::ValidityVTableFromChild;
+use vortex_array::arrays::Primitive;
+use vortex_array::arrays::PrimitiveArray;
+use vortex_array::arrays::primitive::PrimitiveDataParts;
+use vortex_array::buffer::BufferHandle;
+use vortex_array::builders::ArrayBuilder;
+use vortex_array::builders::PrimitiveBuilder;
+use vortex_array::dtype::DType;
+use vortex_array::dtype::NativePType;
+use vortex_array::dtype::PType;
+use vortex_array::match_each_native_ptype;
+use vortex_array::require_child;
+use vortex_array::serde::ArrayChildren;
+use vortex_array::with_empty_buffers;
 use vortex_buffer::Buffer;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
@@ -19,38 +44,12 @@ use vortex_error::vortex_panic;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
 
-use crate::ArrayRef;
-use crate::Canonical;
-use crate::EqMode;
-use crate::ExecutionCtx;
-use crate::ExecutionResult;
-use crate::IntoArray;
-use crate::array::Array;
-use crate::array::ArrayId;
-use crate::array::ArrayParts;
-use crate::array::ArrayView;
-use crate::array::VTable;
-use crate::array::ValidityChild;
-use crate::array::ValidityVTableFromChild;
-use crate::array::with_empty_buffers;
-use crate::arrays::Primitive;
-use crate::arrays::PrimitiveArray;
-use crate::arrays::patched::PatchedArrayExt;
-use crate::arrays::patched::PatchedArraySlotsExt;
-use crate::arrays::patched::PatchedData;
-use crate::arrays::patched::PatchedSlots;
-use crate::arrays::patched::PatchedSlotsView;
-use crate::arrays::patched::compute::rules::PARENT_RULES;
-use crate::arrays::primitive::PrimitiveDataParts;
-use crate::buffer::BufferHandle;
-use crate::builders::ArrayBuilder;
-use crate::builders::PrimitiveBuilder;
-use crate::dtype::DType;
-use crate::dtype::NativePType;
-use crate::dtype::PType;
-use crate::match_each_native_ptype;
-use crate::require_child;
-use crate::serde::ArrayChildren;
+use crate::PatchedArrayExt;
+use crate::PatchedArraySlotsExt;
+use crate::PatchedData;
+use crate::PatchedSlots;
+use crate::PatchedSlotsView;
+use crate::compute::rules::PARENT_RULES;
 
 /// A [`Patched`]-encoded Vortex array.
 pub type PatchedArray = Array<Patched>;
@@ -348,35 +347,34 @@ fn apply_patches_primitive<V: NativePType>(
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
+    use vortex_array::Array;
+    use vortex_array::ArrayContext;
+    use vortex_array::ArrayParts;
+    use vortex_array::ArraySlots;
+    use vortex_array::Canonical;
+    use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
+    use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::assert_arrays_eq;
+    use vortex_array::builders::builder_with_capacity_in;
+    use vortex_array::patches::Patches;
+    use vortex_array::serde::SerializeOptions;
+    use vortex_array::serde::SerializedArray;
+    use vortex_array::session::ArraySessionExt;
+    use vortex_array::validity::Validity;
     use vortex_buffer::ByteBufferMut;
     use vortex_buffer::buffer;
     use vortex_buffer::buffer_mut;
     use vortex_error::VortexResult;
     use vortex_session::registry::ReadContext;
 
-    use crate::Array;
-    use crate::ArrayContext;
-    use crate::ArrayParts;
-    use crate::ArraySlots;
-    use crate::Canonical;
-    use crate::IntoArray;
-    use crate::VortexSessionExecute;
-    use crate::array_session;
-    use crate::arrays::Patched;
-    use crate::arrays::PatchedArray;
-    use crate::arrays::PrimitiveArray;
-    use crate::arrays::patched::PatchedArrayExt;
-    use crate::arrays::patched::PatchedArraySlotsExt;
-    use crate::arrays::patched::PatchedData;
-    use crate::arrays::patched::PatchedSlots;
-    use crate::arrays::patched::PatchedSlotsView;
-    use crate::assert_arrays_eq;
-    use crate::builders::builder_with_capacity_in;
-    use crate::patches::Patches;
-    use crate::serde::SerializeOptions;
-    use crate::serde::SerializedArray;
-    use crate::session::ArraySessionExt;
-    use crate::validity::Validity;
+    use crate::Patched;
+    use crate::PatchedArray;
+    use crate::PatchedArrayExt;
+    use crate::PatchedArraySlotsExt;
+    use crate::PatchedData;
+    use crate::PatchedSlots;
+    use crate::PatchedSlotsView;
 
     #[test]
     fn test_execute() {
@@ -390,7 +388,7 @@ mod tests {
         )
         .unwrap();
 
-        let session = array_session();
+        let session = crate::test_session();
         let mut ctx = session.create_execution_ctx();
 
         let array = Patched::from_array_and_patches(values, &patches, &mut ctx)
@@ -423,7 +421,7 @@ mod tests {
         )
         .unwrap();
 
-        let session = array_session();
+        let session = crate::test_session();
         let mut ctx = session.create_execution_ctx();
 
         let array = Patched::from_array_and_patches(values, &patches, &mut ctx)
@@ -456,7 +454,7 @@ mod tests {
         )
         .unwrap();
 
-        let session = array_session();
+        let session = crate::test_session();
         let mut ctx = session.create_execution_ctx();
 
         let array = Patched::from_array_and_patches(values, &patches, &mut ctx)
@@ -493,7 +491,7 @@ mod tests {
         )
         .unwrap();
 
-        let session = array_session();
+        let session = crate::test_session();
         let mut ctx = session.create_execution_ctx();
 
         let array = Patched::from_array_and_patches(values, &patches, &mut ctx)
@@ -534,7 +532,7 @@ mod tests {
         )
         .unwrap();
 
-        let session = array_session();
+        let session = crate::test_session();
         let mut ctx = session.create_execution_ctx();
 
         let array = Patched::from_array_and_patches(values, &patches, &mut ctx)
@@ -582,7 +580,7 @@ mod tests {
 
         let patches = Patches::new(len, 0, indices, patch_vals, None)?;
 
-        let session = array_session();
+        let session = crate::test_session();
         let mut ctx = session.create_execution_ctx();
 
         Patched::from_array_and_patches(array, &patches, &mut ctx)
@@ -599,11 +597,11 @@ mod tests {
         let arr = make_patched_array(vec![0u16; 1024], &[1, 2, 3], &[10, 20, 30]).unwrap();
         arr.into_array().slice(2..1024).unwrap()
     })]
-    fn test_serde_roundtrip(#[case] array: crate::ArrayRef) {
+    fn test_serde_roundtrip(#[case] array: vortex_array::ArrayRef) {
         let dtype = array.dtype().clone();
         let len = array.len();
 
-        let session = array_session();
+        let session = crate::test_session();
         session.arrays().register(Patched);
 
         let ctx = ArrayContext::empty().with_allowed_ids(
@@ -662,7 +660,7 @@ mod tests {
         assert_eq!(array_ref.dtype(), new_array.dtype());
 
         // Execute both and compare results
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = crate::test_session().create_execution_ctx();
         let original_executed = array_ref.execute::<Canonical>(&mut ctx)?.into_primitive();
         let new_executed = new_array.execute::<Canonical>(&mut ctx)?.into_primitive();
 
@@ -698,7 +696,7 @@ mod tests {
         .into_array();
 
         // Execute and verify the inner values changed (except at patch positions)
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = crate::test_session().create_execution_ctx();
         let executed = new_array.execute::<Canonical>(&mut ctx)?.into_primitive();
 
         // Expected: all 5s except indices 1, 2, 3 which are patched to 10, 20, 30

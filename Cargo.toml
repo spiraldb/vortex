@@ -60,6 +60,7 @@ members = [
     "encodings/bytebool",
     "encodings/parquet-variant",
     "encodings/onpair",
+    "encodings/patched",
     "encodings/uuid",
     # Benchmarks
     "benchmarks/bench-support",
@@ -322,6 +323,7 @@ vortex-mask = { version = "0.1.0", path = "./vortex-mask", default-features = fa
 vortex-metrics = { version = "0.1.0", path = "./vortex-metrics", default-features = false }
 vortex-onpair = { version = "0.1.0", path = "./encodings/onpair", default-features = false }
 vortex-parquet-variant = { version = "0.1.0", path = "./encodings/parquet-variant" }
+vortex-patched = { version = "0.1.0", path = "./encodings/patched", default-features = false }
 vortex-pco = { version = "0.1.0", path = "./encodings/pco", default-features = false }
 vortex-row = { version = "0.1.0", path = "./vortex-row", default-features = false }
 vortex-runend = { version = "0.1.0", path = "./encodings/runend", default-features = false }

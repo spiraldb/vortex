@@ -1,29 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use vortex_array::ArrayRef;
+use vortex_array::ArrayView;
+use vortex_array::Canonical;
+use vortex_array::ExecutionCtx;
+use vortex_array::IntoArray;
+use vortex_array::arrays::BoolArray;
+use vortex_array::arrays::ConstantArray;
+use vortex_array::arrays::PrimitiveArray;
+use vortex_array::arrays::bool::BoolDataParts;
+use vortex_array::arrays::primitive::NativeValue;
+use vortex_array::builtins::ArrayBuiltins;
+use vortex_array::child_to_validity;
+use vortex_array::dtype::NativePType;
+use vortex_array::match_each_native_ptype;
+use vortex_array::scalar_fn::fns::binary::CompareKernel;
+use vortex_array::scalar_fn::fns::operators::CompareOperator;
 use vortex_buffer::BitBufferMut;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 
-use crate::ArrayRef;
-use crate::Canonical;
-use crate::ExecutionCtx;
-use crate::IntoArray;
-use crate::array::ArrayView;
-use crate::array::child_to_validity;
-use crate::arrays::BoolArray;
-use crate::arrays::ConstantArray;
-use crate::arrays::Patched;
-use crate::arrays::PrimitiveArray;
-use crate::arrays::bool::BoolDataParts;
-use crate::arrays::patched::PatchedArrayExt;
-use crate::arrays::patched::PatchedArraySlotsExt;
-use crate::arrays::primitive::NativeValue;
-use crate::builtins::ArrayBuiltins;
-use crate::dtype::NativePType;
-use crate::match_each_native_ptype;
-use crate::scalar_fn::fns::binary::CompareKernel;
-use crate::scalar_fn::fns::operators::CompareOperator;
+use crate::Patched;
+use crate::PatchedArrayExt;
+use crate::PatchedArraySlotsExt;
 
 impl CompareKernel for Patched {
     fn compare(
@@ -159,22 +159,22 @@ impl<V: NativePType> ApplyPatches<'_, V> {
 
 #[cfg(test)]
 mod tests {
+    use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
+    use vortex_array::arrays::BoolArray;
+    use vortex_array::arrays::ConstantArray;
+    use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::assert_arrays_eq;
+    use vortex_array::optimizer::ArrayOptimizer;
+    use vortex_array::patches::Patches;
+    use vortex_array::scalar_fn::fns::binary::CompareKernel;
+    use vortex_array::scalar_fn::fns::operators::CompareOperator;
+    use vortex_array::validity::Validity;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
     use vortex_error::vortex_err;
 
-    use crate::IntoArray;
-    use crate::VortexSessionExecute;
-    use crate::arrays::BoolArray;
-    use crate::arrays::ConstantArray;
-    use crate::arrays::Patched;
-    use crate::arrays::PrimitiveArray;
-    use crate::assert_arrays_eq;
-    use crate::optimizer::ArrayOptimizer;
-    use crate::patches::Patches;
-    use crate::scalar_fn::fns::binary::CompareKernel;
-    use crate::scalar_fn::fns::operators::CompareOperator;
-    use crate::validity::Validity;
+    use crate::Patched;
 
     #[test]
     fn test_basic() {
@@ -188,7 +188,7 @@ mod tests {
         )
         .unwrap();
 
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_session().create_execution_ctx();
 
         let lhs = Patched::from_array_and_patches(lhs, &patches, &mut ctx)
             .unwrap()
@@ -221,7 +221,7 @@ mod tests {
         )
         .unwrap();
 
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_session().create_execution_ctx();
 
         let lhs = Patched::from_array_and_patches(lhs, &patches, &mut ctx).unwrap();
         // Slice the array so that the first patch should be skipped.
@@ -258,7 +258,7 @@ mod tests {
             None,
         )?;
 
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_session().create_execution_ctx();
         let lhs = Patched::from_array_and_patches(lhs, &patches, &mut ctx)?
             .into_array()
             .try_downcast::<Patched>()
@@ -292,7 +292,7 @@ mod tests {
             None,
         )?;
 
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_session().create_execution_ctx();
         let lhs = Patched::from_array_and_patches(lhs, &patches, &mut ctx)?
             .into_array()
             .try_downcast::<Patched>()

@@ -2,23 +2,23 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use rustc_hash::FxHashMap;
+use vortex_array::ArrayRef;
+use vortex_array::ArrayView;
+use vortex_array::ExecutionCtx;
+use vortex_array::IntoArray;
+use vortex_array::arrays::PrimitiveArray;
+use vortex_array::arrays::dict::TakeExecute;
+use vortex_array::arrays::primitive::PrimitiveDataParts;
+use vortex_array::dtype::IntegerPType;
+use vortex_array::dtype::NativePType;
+use vortex_array::match_each_native_ptype;
+use vortex_array::match_each_unsigned_integer_ptype;
 use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
 
-use crate::ArrayRef;
-use crate::ExecutionCtx;
-use crate::IntoArray;
-use crate::array::ArrayView;
-use crate::arrays::Patched;
-use crate::arrays::PrimitiveArray;
-use crate::arrays::dict::TakeExecute;
-use crate::arrays::patched::PatchedArrayExt;
-use crate::arrays::patched::PatchedArraySlotsExt;
-use crate::arrays::primitive::PrimitiveDataParts;
-use crate::dtype::IntegerPType;
-use crate::dtype::NativePType;
-use crate::match_each_native_ptype;
-use crate::match_each_unsigned_integer_ptype;
+use crate::Patched;
+use crate::PatchedArrayExt;
+use crate::PatchedArraySlotsExt;
 
 impl TakeExecute for Patched {
     fn take(
@@ -131,18 +131,17 @@ fn take_map<I: IntegerPType, V: NativePType>(
 mod tests {
     use std::ops::Range;
 
+    use vortex_array::ArrayRef;
+    use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
+    use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::assert_arrays_eq;
+    use vortex_array::patches::Patches;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
     use vortex_session::VortexSession;
 
-    use crate::ArrayRef;
-    use crate::IntoArray;
-    use crate::VortexSessionExecute;
-    use crate::array_session;
-    use crate::arrays::Patched;
-    use crate::arrays::PrimitiveArray;
-    use crate::assert_arrays_eq;
-    use crate::patches::Patches;
+    use crate::Patched;
 
     fn make_patched_array(
         base: &[u16],
@@ -169,7 +168,7 @@ mod tests {
 
     #[test]
     fn test_take_basic() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = crate::test_session().create_execution_ctx();
         // Array with base values [0, 0, 0, 0, 0] patched at indices [1, 3] with values [10, 30]
         let array = make_patched_array(&[0; 5], &[1, 3], &[10, 30], 0..5)?;
 
@@ -186,7 +185,7 @@ mod tests {
 
     #[test]
     fn test_take_sliced() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = crate::test_session().create_execution_ctx();
         let array = make_patched_array(&[0; 10], &[1, 3], &[100, 200], 2..10)?;
 
         let indices = buffer![0u32, 1, 2, 3, 7].into_array();
@@ -201,7 +200,7 @@ mod tests {
 
     #[test]
     fn test_take_out_of_order() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = crate::test_session().create_execution_ctx();
         // Array with base values [0, 0, 0, 0, 0] patched at indices [1, 3] with values [10, 30]
         let array = make_patched_array(&[0; 5], &[1, 3], &[10, 30], 0..5)?;
 
@@ -218,7 +217,7 @@ mod tests {
 
     #[test]
     fn test_take_duplicates() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = crate::test_session().create_execution_ctx();
         // Array with base values [0, 0, 0, 0, 0] patched at index [2] with value [99]
         let array = make_patched_array(&[0; 5], &[2], &[99], 0..5)?;
 
@@ -239,9 +238,9 @@ mod tests {
 
     #[test]
     fn test_take_with_null_indices() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
-        use crate::arrays::BoolArray;
-        use crate::validity::Validity;
+        let mut ctx = crate::test_session().create_execution_ctx();
+        use vortex_array::arrays::BoolArray;
+        use vortex_array::validity::Validity;
 
         // Array: 10 elements, base value 0, patches at indices 2, 5, 8 with values 20, 50, 80
         let array = make_patched_array(&[0; 10], &[2, 5, 8], &[20, 50, 80], 0..10)?;

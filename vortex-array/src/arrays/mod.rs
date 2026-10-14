@@ -90,10 +90,6 @@ pub mod null;
 pub use null::Null;
 pub use null::NullArray;
 
-pub mod patched;
-pub use patched::Patched;
-pub use patched::PatchedArray;
-
 pub mod piecewise_sequence;
 pub use piecewise_sequence::PiecewiseSequence;
 pub use piecewise_sequence::PiecewiseSequenceArray;
@@ -146,7 +142,6 @@ pub(crate) fn initialize(session: &VortexSession) {
     list::initialize(session);
     listview::initialize(session);
     map::initialize(session);
-    patched::initialize(session);
     primitive::initialize(session);
     struct_::initialize(session);
     varbin::initialize(session);
