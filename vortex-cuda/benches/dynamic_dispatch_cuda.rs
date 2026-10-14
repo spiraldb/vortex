@@ -25,6 +25,7 @@ use cudarc::driver::LaunchConfig;
 use cudarc::driver::PushKernelArg;
 use cudarc::driver::sys::CUevent_flags;
 use futures::executor::block_on;
+use mimalloc::MiMalloc;
 use vortex::array::ArrayRef;
 use vortex::array::IntoArray;
 use vortex::array::VortexSessionExecute;
@@ -69,6 +70,9 @@ use vortex_cuda_macros::cuda_available;
 use vortex_cuda_macros::cuda_not_available;
 
 use crate::bench_config::BENCH_SIZES;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 /// Launch the dynamic_dispatch kernel and return GPU-timed duration.
 ///

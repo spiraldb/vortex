@@ -60,7 +60,7 @@ impl RowIdxLayoutReader {
             name: Arc::clone(child.name()),
             row_offset,
             child,
-            partition_cache: DashMap::with_hasher(Default::default()),
+            partition_cache: DashMap::with_hasher_and_shard_amount(Default::default(), 8),
             session,
         }
     }

@@ -65,7 +65,7 @@ impl FileStatsLayoutReader {
             file_stats,
             struct_fields,
             session,
-            prune_cache: Default::default(),
+            prune_cache: DashMap::with_hasher_and_shard_amount(Default::default(), 8),
         }
     }
 
