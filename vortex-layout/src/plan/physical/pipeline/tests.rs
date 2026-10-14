@@ -69,6 +69,7 @@ const ROWS: u64 = 20;
 #[derive(Default)]
 struct Store {
     segments: Vec<BufferHandle>,
+    segment_offset: u32,
 }
 
 impl Store {
@@ -86,7 +87,7 @@ impl Store {
         for buffer in buffers {
             bytes.extend_from_slice(buffer.as_ref());
         }
-        let segment_id = SegmentId::from(u32::try_from(self.segments.len())?);
+        let segment_id = SegmentId::from(self.segment_offset + u32::try_from(self.segments.len())?);
         self.segments.push(BufferHandle::new_host(bytes.freeze()));
         Ok(FlatLayout::new(
             array.len() as u64,
@@ -114,7 +115,7 @@ impl Store {
     }
 
     fn read(&self, segment_id: SegmentId) -> BufferHandle {
-        self.segments[*segment_id as usize].clone()
+        self.segments[(*segment_id - self.segment_offset) as usize].clone()
     }
 }
 
@@ -404,8 +405,12 @@ fn splits_of_one_scan_read_each_segment_once(
     #[values([0, 4, 11, 20], [0, 9, 13, 20], [0, 1, 2, 20])] cuts: [u64; 4],
     #[values(1, 3)] active: usize,
     #[values(Delivery::Fifo, Delivery::Lifo)] order: Delivery,
+    #[values(0, u32::MAX - 16)] segment_offset: u32,
 ) -> VortexResult<()> {
-    let mut store = Store::default();
+    let mut store = Store {
+        segment_offset,
+        ..Store::default()
+    };
     let (plan, expected) = fixture(&mut store)?;
     let splits: Vec<Split> = cuts
         .windows(2)
@@ -419,7 +424,9 @@ fn splits_of_one_scan_read_each_segment_once(
     assert_eq!(run.leftover, (0, 0), "every shared segment was dropped");
     assert_eq!(
         segments_read(&run.events),
-        (0..store.segments.len() as u32).collect::<Vec<_>>()
+        (0..store.segments.len() as u32)
+            .map(|index| segment_offset + index)
+            .collect::<Vec<_>>()
     );
     for (index, split) in splits.iter().enumerate() {
         assert_view(
@@ -701,9 +708,14 @@ fn eval_applies_expression_to_selected_rows() -> VortexResult<()> {
 }
 
 /// A column read by two fields of one struct is read and decoded once, and both fields get it.
-#[test]
-fn a_segment_two_readers_need_is_read_once() -> VortexResult<()> {
-    let mut store = Store::default();
+#[rstest]
+fn a_segment_two_readers_need_is_read_once(
+    #[values(0, u32::MAX - 1)] segment_offset: u32,
+) -> VortexResult<()> {
+    let mut store = Store {
+        segment_offset,
+        ..Store::default()
+    };
     let a = PrimitiveArray::from_iter(0..ROWS as i32).into_array();
     let column = lower(&store.chunked(&a, &[7, 13])?)?;
     let expected = StructArray::from_fields(&[("x", a.clone()), ("y", a)])?.into_array();
@@ -730,7 +742,10 @@ fn a_segment_two_readers_need_is_read_once() -> VortexResult<()> {
         mask.clone(),
         delivery(Delivery::Lifo),
     )?;
-    assert_eq!(segments_read(&run.events), [0, 1]);
+    assert_eq!(
+        segments_read(&run.events),
+        [segment_offset, segment_offset + 1]
+    );
     assert_view(&expected, &rows, &mask, run.arrays)
 }
 
