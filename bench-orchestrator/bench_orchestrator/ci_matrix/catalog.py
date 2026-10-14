@@ -74,7 +74,7 @@ DEFAULT_WITH_DUCKDB_PR_FULL = Coverage(
 STANDARD_WITH_DUCKDB = Coverage(STANDARD_WITH_DUCKDB_TARGETS)
 DATAFUSION_VORTEX = Coverage(DATAFUSION_VORTEX_TARGETS)
 COMPACT = Coverage(COMPACT_TARGETS)
-JOB_DUCKDB = Coverage(duck(Format.PARQUET, Format.VORTEX, Format.DUCKDB))
+JOB = Coverage(df(Format.PARQUET, Format.VORTEX) | duck(Format.PARQUET, Format.VORTEX, Format.DUCKDB))
 
 # Concrete benchmark cases
 
@@ -250,8 +250,8 @@ BENCHMARKS = (
         id="job-nvme",
         benchmark=Benchmark.JOB,
         name="JOB on NVME",
-        # DuckDB only: DataFusion spends minutes per pass on the 17x queries' join orders.
-        runs={"pr-full": JOB_DUCKDB},
+        # DataFusion skips queries 16a-17f; see `ENGINE_SKIPPED_QUERIES`.
+        runs={"pr-full": JOB},
     ),
     BenchmarkCase(
         id="vortex-queries",

@@ -97,6 +97,16 @@ def engines_for_benchmark(benchmark: Benchmark) -> frozenset[Engine]:
     return BENCHMARK_ENGINES.get(benchmark, frozenset(Engine))
 
 
+# Queries an engine skips for a benchmark, with the reason. `vx-bench run` excludes them and prints
+# the reason for each run.
+ENGINE_SKIPPED_QUERIES: dict[tuple[Benchmark, Engine], tuple[tuple[int, ...], str]] = {
+    (Benchmark.JOB, Engine.DATAFUSION): (
+        tuple(range(56, 66)),
+        "JOB 16a-17f (q56-q65): DataFusion's join orders take 8-43 s per query, DuckDB under 1 s",
+    ),
+}
+
+
 T = TypeVar("T")
 
 

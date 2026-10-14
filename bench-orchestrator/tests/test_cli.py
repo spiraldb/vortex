@@ -153,3 +153,34 @@ def test_run_combines_ingest_output_per_backend(tmp_path, monkeypatch) -> None:
     assert output_path.read_text(encoding="utf-8") == "datafusion-ingest\nduckdb-ingest\n"
     assert len(seen_backend_paths) == 2
     assert seen_backend_paths[0] != seen_backend_paths[1]
+
+
+def test_run_applies_engine_skipped_queries_per_target(tmp_path, monkeypatch) -> None:
+    binary_path = tmp_path / "bench"
+    binary_path.write_text("", encoding="utf-8")
+    excludes: dict[str, list[int] | None] = {}
+
+    def fake_list_queries(self, benchmark, queries=None, exclude_queries=None) -> list[int]:
+        excludes[self.backend.value] = exclude_queries
+        return []
+
+    monkeypatch.setattr(cli_module, "ResultStore", lambda: ResultStore(base_dir=tmp_path / "runs"))
+    monkeypatch.setattr(cli_module.BenchmarkBuilder, "get_binary_path", lambda self, backend: binary_path)
+    monkeypatch.setattr(BenchmarkExecutor, "list_queries", fake_list_queries)
+
+    result = runner.invoke(
+        cli_module.app,
+        [
+            "run",
+            "job",
+            "--targets-json",
+            '[{"engine":"datafusion","format":"parquet"},{"engine":"duckdb","format":"parquet"}]',
+            "--exclude-queries",
+            "1",
+            "--no-build",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert excludes == {"datafusion": [1, *range(56, 66)], "duckdb": [1]}
+    assert "skipping 10 queries" in result.output
