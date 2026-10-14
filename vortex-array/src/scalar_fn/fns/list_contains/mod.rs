@@ -220,8 +220,8 @@ impl ScalarFnVTable for ListContains {
 
     /// A constant list and a constant needle fold to their constant answer, in expression and
     /// array trees alike. Otherwise a constant list becomes a [`PreparedSet`], so that every
-    /// batch, and every part of the needle that the set is pushed into, probes one shared set
-    /// rather than preparing the list again.
+    /// batch, and every part of the needle that the set is pushed into, looks up its needles in
+    /// one shared set rather than preparing the list again.
     fn reduce<T: ReduceNode>(&self, options: &Self::Options, node: &T) -> VortexResult<Option<T>> {
         let list = node.child(0);
         let needle = node.child(1);
@@ -244,7 +244,7 @@ impl ScalarFnVTable for ListContains {
         ))
     }
 
-    /// The validity of `needle IN list` for a literal list, decided without a probe.
+    /// The validity of `needle IN list` for a literal list, decided without a lookup.
     ///
     /// Off SQL null semantics only a null needle gives null, unless the list is empty, which
     /// answers `false` for every needle. Under them a null element can give null too, by leaving
@@ -1720,7 +1720,7 @@ mod tests {
         assert_rows_agree(result, BoolArray::from_iter([true, false]))
     }
 
-    /// Probes `set` with each element, its neighbours and the type's extremes, against a naive
+    /// Looks up each element of `set`, its neighbours and the type's extremes, against a naive
     /// oracle.
     fn assert_integer_membership<T>(set: Vec<T>) -> VortexResult<()>
     where
@@ -1749,13 +1749,13 @@ mod tests {
     }
 
     #[test]
-    fn integer_sets_through_every_probe() -> VortexResult<()> {
-        // Dense spans probe a bitmap, including spans straddling zero and whole types.
+    fn integer_sets_through_every_haystack() -> VortexResult<()> {
+        // Dense spans look up in a bitmap, including spans straddling zero and whole types.
         assert_integer_membership(vec![-3i32, -1, 0, 2])?;
         assert_integer_membership(vec![i8::MIN, 0, i8::MAX])?;
         assert_integer_membership(vec![u64::MAX, u64::MAX - 2])?;
         assert_integer_membership(vec![i64::MIN, i64::MIN + 5])?;
-        // A sparse set probes a binary search when small and a hash set when large.
+        // A sparse set looks up through a binary search when small and a hash set when large.
         assert_integer_membership(vec![-(1i64 << 40), 1, 1 << 40])?;
         assert_integer_membership((0..100u64).map(|v| v << 30).collect())?;
         assert_integer_membership(vec![i64::MIN, i64::MAX])
@@ -1837,7 +1837,7 @@ mod tests {
     }
 
     #[test]
-    fn constant_set_row_probe_keeps_the_declared_nullability() -> VortexResult<()> {
+    fn constant_set_row_haystack_keeps_the_declared_nullability() -> VortexResult<()> {
         // A nullable element dtype decides nothing off SQL null semantics, so non-null needles give
         // a non-nullable result, though each comparison is against a nullable element.
         let needles = BoolArray::from_iter([true, false]).into_array();
@@ -1856,8 +1856,9 @@ mod tests {
     }
 
     #[test]
-    fn constant_set_row_probe_of_only_nulls() -> VortexResult<()> {
-        // The row probe must also preserve the distinction between an empty set and null elements.
+    fn constant_set_row_haystack_of_only_nulls() -> VortexResult<()> {
+        // The row haystack must also preserve the distinction between an empty set and null
+        // elements.
         let needles = BoolArray::from_iter([Some(true), None]).into_array();
         let element = DType::Bool(Nullability::Nullable);
         let set = Scalar::list(
@@ -1899,7 +1900,7 @@ mod tests {
     }
 
     #[test]
-    fn constant_set_of_strings_probes_an_encoded_needle() -> VortexResult<()> {
+    fn constant_set_of_strings_looks_up_an_encoded_needle() -> VortexResult<()> {
         let needles = VarBinArray::from_iter(
             [Some("a"), Some("b"), None],
             DType::Utf8(Nullability::Nullable),
@@ -1913,8 +1914,8 @@ mod tests {
     }
 
     #[test]
-    fn constant_set_row_probe_honours_both_semantics() -> VortexResult<()> {
-        // Boolean sets use the general sorted row probe.
+    fn constant_set_row_haystack_honours_both_semantics() -> VortexResult<()> {
+        // Boolean sets use the general sorted row haystack.
         let needles = BoolArray::from_iter([Some(true), Some(false), None]).into_array();
         let element = DType::Bool(Nullability::Nullable);
         let set = Scalar::list(
@@ -2051,9 +2052,9 @@ mod tests {
     }
 
     #[test]
-    fn validity_of_a_constant_set_needs_no_probe() -> VortexResult<()> {
+    fn validity_of_a_constant_set_needs_no_lookup() -> VortexResult<()> {
         // Off SQL null semantics the needle alone decides validity. Under them a null element
-        // makes validity depend on the probe, which only the fallback computes.
+        // makes validity depend on the lookup, which only the fallback computes.
         let dtype = DType::Primitive(I32, Nullability::Nullable);
         let bound = |expr: Expression| expr.bind(&dtype);
         let needle = bound(root())?;
@@ -2081,7 +2082,7 @@ mod tests {
     #[test]
     fn optimize_prepares_a_literal_list_once() -> VortexResult<()> {
         // The literal becomes a prepared set that every batch the expression is applied to
-        // probes, and a prepared set is left alone, so optimization reaches a fixed point.
+        // looks up in, and a prepared set is left alone, so optimization reaches a fixed point.
         let dtype = DType::Primitive(I32, Nullability::Nullable);
         let set = i32_set(vec![Some(2), None]);
         let expr = in_list(root(), lit(set.clone())).bind(&dtype)?.optimize()?;

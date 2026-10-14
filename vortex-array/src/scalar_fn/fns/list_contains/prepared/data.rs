@@ -16,8 +16,7 @@ use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure;
 use vortex_error::vortex_panic;
 
-use super::Probe;
-use super::new_probe;
+use crate::ArrayHaystack;
 use crate::ArrayRef;
 use crate::ExecutionCtx;
 use crate::IntoArray;
@@ -36,8 +35,8 @@ use crate::validity::Validity;
 /// The options of a [`PreparedSet`]: the list that every row holds, and its set.
 ///
 /// The set is shared by every clone, so every batch a [`PreparedSet`] is applied to, and every
-/// slice or filter of the array it gives, probe the one set. The probe needs an [`ExecutionCtx`]
-/// to materialize the elements, so it is built on the first probe.
+/// slice or filter of the array it gives, looks up needles in the one set. The haystack needs
+/// an [`ExecutionCtx`] to materialize the elements, so it is built on the first lookup.
 ///
 /// [`PreparedSet`]: crate::scalar_fn::fns::list_contains::PreparedSet
 #[derive(Clone)]
@@ -47,19 +46,19 @@ struct SharedSet {
     /// The [`Literal`] of the non-null list that every row holds, shared with the expression it
     /// came from rather than cloned out of it.
     literal: ScalarFnRef,
-    /// Whether the list holds a null element, which a probe does not hold.
+    /// Whether the list holds a null element, which the haystack does not hold.
     has_null_element: bool,
     /// Whether the list holds no element at all, counting null elements.
     is_empty: bool,
-    /// The elements, and the probe over the non-null ones, built on the first probe.
+    /// The elements, and the haystack of the non-null ones, built on the first lookup.
     set: OnceLock<SharedVortexResult<ElementSet>>,
 }
 
-/// The elements of the list, and the non-null ones in a probe structure.
-pub(super) struct ElementSet {
+/// The elements of the list, and their haystack.
+struct ElementSet {
     /// All elements of the list, null elements included, with the element dtype of the list.
     elements: ArrayRef,
-    probe: Box<dyn Probe>,
+    haystack: ArrayHaystack,
 }
 
 impl ElementSet {
@@ -70,17 +69,9 @@ impl ElementSet {
             .execute::<ListViewArray>(ctx)?
             .elements()
             .clone();
+        let haystack = ArrayHaystack::try_new(&elements, ctx)?;
 
-        // A null element never equals a needle, so the probe is better off without it.
-        let valid = elements.validity()?.execute_mask(elements.len(), ctx)?;
-        let probe_elements = if valid.all_true() {
-            elements.clone()
-        } else {
-            elements.filter(valid)?
-        };
-        let probe = new_probe(probe_elements, ctx)?;
-
-        Ok(Self { elements, probe })
+        Ok(Self { elements, haystack })
     }
 }
 
@@ -144,12 +135,12 @@ impl PreparedSetData {
     ///
     /// # Errors
     ///
-    /// Fails when the elements cannot be executed into the probe.
+    /// Fails when the elements cannot be executed into the haystack.
     pub fn elements(&self, ctx: &mut ExecutionCtx) -> VortexResult<&ArrayRef> {
         Ok(&self.element_set(ctx)?.elements)
     }
 
-    /// The elements and their probe, built on the first call and shared after it.
+    /// The elements and their haystack, built on the first call and shared after it.
     fn element_set<'a>(&'a self, ctx: &mut ExecutionCtx) -> VortexResult<&'a ElementSet> {
         self.0
             .set
@@ -179,7 +170,7 @@ impl PreparedSetData {
     /// semantics, which gives `false` for every needle. Under SQL null semantics, a list that holds
     /// a null element gives `null` for a needle that matches no element.
     ///
-    /// A constant needle is probed once, and gives a constant result.
+    /// A constant needle is looked up once, and gives a constant result.
     ///
     /// # Errors
     ///
@@ -196,14 +187,14 @@ impl PreparedSetData {
         }
 
         self.check_needle_dtype(needles.dtype())?;
-        let (bits, needle_validity) = self.element_set(ctx)?.probe.contains(needles, ctx)?;
+        let (bits, needle_validity) = self.element_set(ctx)?.haystack.contains(needles, ctx)?;
         self.result_from_bits(bits, needle_validity, needles.dtype(), options)
     }
 
     /// Whether the constant `needle` is an element of the list, under `options`.
     ///
     /// The answer is the one [`Self::contains`] gives for each row of a needle with this value, for
-    /// example for the fill value of a sparse needle. The probe gets one row.
+    /// example for the fill value of a sparse needle. The haystack looks up one row.
     ///
     /// # Errors
     ///
@@ -216,17 +207,17 @@ impl PreparedSetData {
     ) -> VortexResult<Scalar> {
         self.check_needle_dtype(needle.dtype())?;
         let needles = ConstantArray::new(needle.clone(), 1).into_array();
-        let (bits, needle_validity) = self.element_set(ctx)?.probe.contains(&needles, ctx)?;
+        let (bits, needle_validity) = self.element_set(ctx)?.haystack.contains(&needles, ctx)?;
         self.result_from_bits(bits, needle_validity, needle.dtype(), options)?
             .execute_scalar(0, ctx)
     }
 
     /// Makes the result of [`Self::contains`] from one membership bit per needle.
     ///
-    /// A kernel that finds the matches of its needles without this probe, for example from bounds
-    /// of its own, uses this to apply the null semantics of [`Self::contains`]. A set bit in `bits`
-    /// tells that the needle equals an element. `needle_validity` is the validity of the needles,
-    /// and `needle_dtype` is their dtype. The bit of a null needle has no effect.
+    /// A kernel that finds the matches of its needles without this haystack, for example from
+    /// bounds of its own, uses this to apply the null semantics of [`Self::contains`]. A set bit
+    /// in `bits` tells that the needle equals an element. `needle_validity` is the validity of the
+    /// needles, and `needle_dtype` is their dtype. The bit of a null needle has no effect.
     ///
     /// # Errors
     ///

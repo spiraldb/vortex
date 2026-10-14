@@ -313,7 +313,7 @@ fn test_prepared_set_rows_are_the_constant_list() -> VortexResult<()> {
 
     assert_arrays_eq!(set, ConstantArray::new(set_with_null(), 4), &mut ctx);
 
-    // A slice and a filter keep the probe instead of building it again.
+    // A slice and a filter keep the haystack instead of building it again.
     let prepared = PreparedSet::set_of(&set).expect("prepared set");
     let sliced = set.slice(1..3)?.optimize()?;
     assert_eq!(sliced.len(), 2);
@@ -334,7 +334,7 @@ fn test_prepared_set_rows_are_the_constant_list() -> VortexResult<()> {
     ListContainsOptions { sql_null_semantics: true },
     [None, Some(true), None, None]
 )]
-fn test_list_contains_probes_a_prepared_set_list(
+fn test_list_contains_looks_up_in_a_prepared_set_list(
     #[case] options: ListContainsOptions,
     #[case] expected: [Option<bool>; 4],
 ) -> VortexResult<()> {
@@ -372,8 +372,8 @@ fn test_constant_needle_gives_a_constant(
 }
 
 #[test]
-fn test_constant_row_needle_probes_one_row() -> VortexResult<()> {
-    // A probe of rows cannot look a scalar needle up, so execution probes one row.
+fn test_constant_row_needle_looks_up_one_row() -> VortexResult<()> {
+    // A row haystack cannot look a scalar needle up, so execution looks up one row.
     let mut ctx = array_session().create_execution_ctx();
     let needles = nested_needles();
     let dtype = needles.dtype().as_nullable();
@@ -496,7 +496,8 @@ fn list_set(node: &ArrayRef) -> PreparedSetData {
         .clone()
 }
 
-/// Asserts that `array` was pushed into its chunks, and that every non-empty chunk probes one set.
+/// Asserts that `array` was pushed into its chunks, and that every non-empty chunk looks up in
+/// one set.
 fn assert_chunks_share_one_set(array: &ArrayRef) {
     let chunked = array.as_::<Chunked>();
     let sets: Vec<_> = chunked

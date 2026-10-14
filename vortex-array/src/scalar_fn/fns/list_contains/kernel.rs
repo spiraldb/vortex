@@ -39,7 +39,7 @@ pub trait ListContainsElementReduce: VTable {
 /// the provided [`ExecutionCtx`].
 ///
 /// The list of an optimized node is a [`PreparedSet`], so a kernel can get the prepared set with
-/// [`PreparedSet::set_of`] and probe its own values with
+/// [`PreparedSet::set_of`] and look up its own values with
 /// [`PreparedSetData::contains`] or [`PreparedSetData::contains_scalar`], or make its result from
 /// matches it found another way with [`PreparedSetData::result_from_bits`].
 ///

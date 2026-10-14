@@ -29,18 +29,19 @@ use crate::scalar_fn::ScalarFnId;
 use crate::scalar_fn::ScalarFnVTable;
 use crate::scalar_fn::ScalarFnVTableExt;
 
-/// A constant, non-null list whose elements are prepared as a set for membership probes.
+/// A constant, non-null list whose elements are prepared as a set for membership lookups.
 ///
 /// [`ListContains`] puts this in place of a literal list when an expression is optimized, so that
-/// every batch the expression is applied to probes one shared [`PreparedSetData`]: the list is
-/// materialized, sorted and hashed once per expression rather than once per batch. In an array
-/// tree, the constant list of a [`ListContains`] node becomes this function with no children.
+/// every batch the expression is applied to looks up its needles in one shared
+/// [`PreparedSetData`]: the list is materialized, sorted and hashed once per expression rather
+/// than once per batch. In an array tree, the constant list of a [`ListContains`] node becomes
+/// this function with no children.
 ///
 /// Every row of such an array holds the list. A slice or a filter of it keeps the options, so it
-/// probes the same set. A [`ListContainsElementReduce`] rule of the needle encoding can push the
-/// function into the needle's parts with slices of the array, so that the chunks of a chunked
-/// needle all probe one set, and a [`ListContainsElementKernel`] of the needle encoding gets the
-/// set through [`PreparedSet::set_of`].
+/// looks up in the same set. A [`ListContainsElementReduce`] rule of the needle encoding can push
+/// the function into the needle's parts with slices of the array, so that the chunks of a chunked
+/// needle all look up in one set, and a [`ListContainsElementKernel`] of the needle encoding gets
+/// the set through [`PreparedSet::set_of`].
 ///
 /// It serializes as the list, and deserializes into a set prepared again.
 ///
@@ -127,7 +128,7 @@ impl ScalarFnVTable for PreparedSet {
         args: &dyn ExecutionArgs,
         _ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrayRef> {
-        // The rows hold the list only. The probe is of no use to the canonical form.
+        // The rows hold the list only. The haystack is of no use to the canonical form.
         Ok(ConstantArray::new(set.list().clone(), args.row_count()).into_array())
     }
 

@@ -166,7 +166,7 @@ mod tests {
     #[case::optimized(true)]
     fn test_list_contains_reduces_a_prepared_set(#[case] optimize: bool) -> VortexResult<()> {
         // The constant list becomes a prepared set before the sequence sees it. The sequence
-        // still answers from its bounds rather than leaving the probe to execution.
+        // still answers from its bounds rather than leaving the lookup to execution.
         let list_scalar = Scalar::list(
             Arc::new(I32.into()),
             vec![1.into(), 3.into()],
