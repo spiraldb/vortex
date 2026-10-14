@@ -8,6 +8,7 @@ use std::sync::Weak;
 
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
+use vortex_array::expr::BoundExpression;
 use vortex_error::VortexResult;
 
 use crate::LayoutReader;
@@ -17,6 +18,7 @@ use crate::scan::v2::io::SegmentRanges;
 use crate::scan::v2::io::segment_ranges;
 use crate::scan::v2::lower::lower;
 use crate::scan::v2::lower::lower_with_zones;
+use crate::scan::v2::repeated_scan::PreparedPlans;
 
 /// Layout-derived state with the same lifetime as an explicitly cached layout reader.
 ///
@@ -40,10 +42,40 @@ pub(super) struct SharedFile {
     pub(super) root: PlanRef,
     /// Layout-derived state shared by active scans or retained by an explicitly cached reader.
     plans: Arc<FilePlans>,
+    /// The most recently prepared expressions, retained only while this file has active scans.
+    prepared: Mutex<Option<PreparedExpressions>>,
     _reader: Arc<dyn LayoutReader>,
 }
 
+struct PreparedExpressions {
+    projection: BoundExpression,
+    filter: Option<BoundExpression>,
+    plans: PreparedPlans,
+}
+
 impl SharedFile {
+    pub(super) fn prepare_plans(
+        &self,
+        projection: &BoundExpression,
+        filter: Option<&BoundExpression>,
+        prepare: impl FnOnce() -> VortexResult<PreparedPlans>,
+    ) -> VortexResult<PreparedPlans> {
+        let mut prepared = self.prepared.lock();
+        if let Some(cached) = prepared.as_ref()
+            && cached.projection == *projection
+            && cached.filter.as_ref() == filter
+        {
+            return Ok(cached.plans.clone());
+        }
+        let plans = prepare()?;
+        *prepared = Some(PreparedExpressions {
+            projection: projection.clone(),
+            filter: filter.cloned(),
+            plans: plans.clone(),
+        });
+        Ok(plans)
+    }
+
     pub(super) fn zones(&self) -> VortexResult<PlanRef> {
         self.plans
             .zones
@@ -94,6 +126,7 @@ pub(super) fn shared_file(
     let shared = Arc::new(SharedFile {
         root,
         plans,
+        prepared: Mutex::default(),
         _reader: Arc::clone(reader),
         file,
     });

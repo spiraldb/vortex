@@ -97,8 +97,13 @@ pub(super) fn prepare_scan<A: 'static + Send>(
         &builder.projection,
         builder.filter.as_ref(),
         &builder.selection,
-        &builder.session,
     )?;
+    let pruning = builder
+        .filter
+        .as_ref()
+        .map(|filter| pruning_plan(filter, &shared.zones()?, &builder.session))
+        .transpose()?
+        .flatten();
     let plans = ScanPlans {
         session: builder.session,
         locations: Arc::clone(&shared.file.locations),
@@ -148,7 +153,7 @@ pub(super) fn prepare_scan<A: 'static + Send>(
     };
 
     Ok(RepeatedScanV2 {
-        pruning: prepared.pruning.clone(),
+        pruning,
         plans,
         filter: prepared.filter,
         io: shared.file.io.clone().unwrap_or_else(|| {
@@ -168,11 +173,12 @@ pub(super) fn prepare_scan<A: 'static + Send>(
     })
 }
 
-/// Expression plans and chunk boundaries for a scan.
-struct PreparedPlans {
+/// Data expression plans and chunk boundaries. Non-identity scans share these independently of
+/// their row selection and session; sparse identity scans derive boundaries from their selection.
+#[derive(Clone)]
+pub(super) struct PreparedPlans {
     projection: PlanRef,
     filter: Option<FilterPlans>,
-    pruning: Option<PlanRef>,
     projection_starts: Arc<[u64]>,
     filter_starts: Arc<[u64]>,
     all_starts: Arc<[u64]>,
@@ -184,7 +190,6 @@ impl PreparedPlans {
         projection: &BoundExpression,
         filter: Option<&BoundExpression>,
         selection: &Selection,
-        session: &VortexSession,
     ) -> VortexResult<Self> {
         if projection.is_root() && filter.is_none() {
             // Identity scans need no expression rewrites or changes to dictionary value forms.
@@ -201,15 +206,23 @@ impl PreparedPlans {
             return Ok(Self {
                 projection: shared.root.clone(),
                 filter: None,
-                pruning: None,
                 projection_starts: Arc::clone(&starts),
                 filter_starts: Arc::clone(&starts),
                 all_starts: starts,
             });
         }
+        shared.prepare_plans(projection, filter, || {
+            Self::plan(shared, projection, filter)
+        })
+    }
+
+    fn plan(
+        shared: &SharedFile,
+        projection: &BoundExpression,
+        filter: Option<&BoundExpression>,
+    ) -> VortexResult<Self> {
         let root = shared.root.clone();
         let plan = |expression| optimize(plan_row_idx_expression(expression, root.clone())?);
-        let filter_expression = filter;
         let filter = filter
             .cloned()
             .map(|filter| {
@@ -240,14 +253,9 @@ impl PreparedPlans {
         let filter = filter
             .map(|filter| FilterPlans::conjuncts(filter, conjunct_plans))
             .transpose()?;
-        let pruning = filter_expression
-            .map(|filter| pruning_plan(filter, &shared.zones()?, session))
-            .transpose()?
-            .flatten();
         Ok(Self {
             projection,
             filter,
-            pruning,
             projection_starts,
             filter_starts: filter_starts.into(),
             all_starts: all_starts.into(),
@@ -602,5 +610,91 @@ fn intersect_ranges(left: Option<&Range<u64>>, right: Option<Range<u64>>) -> Opt
         (None, Some(r)) => Some(r),
         (Some(l), None) => Some(l.clone()),
         (Some(l), Some(r)) => Some(cmp::max(l.start, r.start)..cmp::min(l.end, r.end)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::sync::Barrier;
+    use std::thread;
+
+    use vortex_array::dtype::DType;
+    use vortex_array::dtype::Nullability::NonNullable;
+    use vortex_array::dtype::PType;
+    use vortex_array::expr::gt;
+    use vortex_array::expr::lit;
+    use vortex_array::expr::root;
+    use vortex_error::VortexResult;
+    use vortex_error::vortex_err;
+    use vortex_scan::selection::Selection;
+    use vortex_session::registry::ReadContext;
+
+    use super::PreparedPlans;
+    use crate::layouts::flat::FlatLayout;
+    use crate::plan::physical::PlanRef;
+    use crate::scan::v2::ScanFile;
+    use crate::scan::v2::file::shared_file;
+    use crate::segments::SegmentSource;
+    use crate::segments::TestSegments;
+    use crate::test::new_session;
+
+    #[test]
+    fn concurrent_preparation_reuses_expression_plans() -> VortexResult<()> {
+        let session = new_session();
+        let dtype = DType::Primitive(PType::I32, NonNullable);
+        let layout =
+            FlatLayout::new(10, dtype.clone(), 0.into(), ReadContext::new([])).into_layout();
+        let segments: Arc<dyn SegmentSource> = Arc::new(TestSegments::default());
+        let reader = layout.new_reader(
+            "".into(),
+            Arc::clone(&segments),
+            &session,
+            &Default::default(),
+        )?;
+        let shared = shared_file(
+            &reader,
+            ScanFile {
+                layout,
+                segments,
+                locations: Arc::default(),
+                io: None,
+                plans: None,
+            },
+        )?;
+        let projection = root().bind(&dtype)?;
+        let filter = gt(root(), lit(5_i32)).bind(&dtype)?;
+        let barrier = Barrier::new(8);
+        let prepared = thread::scope(|scope| {
+            let threads = (0..8)
+                .map(|_| {
+                    scope.spawn(|| {
+                        barrier.wait();
+                        PreparedPlans::new(&shared, &projection, Some(&filter), &Selection::All)
+                    })
+                })
+                .collect::<Vec<_>>();
+            threads
+                .into_iter()
+                .map(|thread| {
+                    thread
+                        .join()
+                        .map_err(|_| vortex_err!("preparation panicked"))?
+                })
+                .collect::<VortexResult<Vec<_>>>()
+        })?;
+        let first = prepared[0]
+            .filter
+            .as_ref()
+            .ok_or_else(|| vortex_err!("missing filter"))?;
+        for plans in &prepared[1..] {
+            let filter = plans
+                .filter
+                .as_ref()
+                .ok_or_else(|| vortex_err!("missing filter"))?;
+            assert!(PlanRef::ptr_eq(&first.plans()[0], &filter.plans()[0]));
+            assert!(Arc::ptr_eq(&prepared[0].all_starts, &plans.all_starts));
+        }
+        Ok(())
     }
 }

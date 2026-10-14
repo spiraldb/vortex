@@ -26,17 +26,22 @@ fn reduce(plan: &PlanRef) -> VortexResult<Option<PlanRef>> {
 
 /// Optimizes `plan`, preserving its dtype and row domain.
 pub fn optimize(plan: PlanRef) -> VortexResult<PlanRef> {
-    if let Some(rewritten) = reduce(&plan)? {
-        return optimize(rewritten);
+    Ok(optimize_ref(&plan)?.unwrap_or(plan))
+}
+
+/// Borrows unchanged subtrees so traversal does not clone and drop every shared child.
+fn optimize_ref(plan: &PlanRef) -> VortexResult<Option<PlanRef>> {
+    if let Some(rewritten) = reduce(plan)? {
+        return optimize(rewritten).map(Some);
     }
 
     let mut children: Option<Vec<PlanRef>> = None;
     for (index, child) in plan.children().iter_refs().enumerate() {
         let child = child?;
-        let optimized = optimize(child.clone())?;
+        let optimized = optimize_ref(child)?;
         if let Some(children) = &mut children {
-            children.push(optimized);
-        } else if !PlanRef::ptr_eq(child, &optimized) {
+            children.push(optimized.unwrap_or_else(|| child.clone()));
+        } else if let Some(optimized) = optimized {
             let mut optimized_children = Vec::with_capacity(plan.child_count());
             for previous in plan.children().iter_refs().take(index) {
                 optimized_children.push(previous?.clone());
@@ -47,12 +52,12 @@ pub fn optimize(plan: PlanRef) -> VortexResult<PlanRef> {
     }
 
     let Some(children) = children else {
-        return Ok(plan);
+        return Ok(None);
     };
 
     let plan = plan.with_children(children)?;
     if let Some(rewritten) = reduce(&plan)? {
-        return optimize(rewritten);
+        return optimize(rewritten).map(Some);
     }
-    Ok(plan)
+    Ok(Some(plan))
 }

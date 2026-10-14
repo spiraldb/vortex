@@ -985,9 +985,12 @@ async fn cached_dictionary_accepts_different_queries() -> VortexResult<()> {
     )?;
     let mut file = scan_file(&segments, &layout)?;
     file.plans = Some(Arc::default());
+    let _active = shared_file(&reader, file.clone())?;
     let dtype = DType::Utf8(NonNullable);
     for (projection, filter) in [
         (root(), eq(root(), lit("apple"))),
+        (root(), eq(root(), lit("banana"))),
+        (byte_length(root()), eq(root(), lit("banana"))),
         (byte_length(root()), gt(byte_length(root()), lit(3u64))),
         (root(), eq(root(), lit("banana"))),
     ] {
@@ -1007,6 +1010,59 @@ async fn cached_dictionary_accepts_different_queries() -> VortexResult<()> {
             &mut session.create_execution_ctx()
         );
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn shared_expression_plans_respect_rows_and_dynamic_bounds() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write_layout(&session).await?;
+    let reader = layout.new_reader(
+        "".into(),
+        Arc::clone(&segments),
+        &session,
+        &Default::default(),
+    )?;
+    let file = scan_file(&segments, &layout)?;
+    let active = shared_file(&reader, file.clone())?;
+    let weak = Arc::downgrade(&active);
+    let bound = Arc::new(Mutex::new(Some(500_i32)));
+    let filter = {
+        let bound = Arc::clone(&bound);
+        dynamic(
+            CompareOperator::Gt,
+            move || bound.lock().map(Into::into),
+            DTYPE,
+            true,
+            root(),
+        )
+        .bind(&DTYPE)?
+    };
+    for (lower, range) in [(500, 0..2000), (1500, 1000..3000), (2500, 2000..4000)] {
+        *bound.lock() = Some(lower);
+        let scan = v2::prepare(
+            ScanBuilder::new(session.clone(), Arc::clone(&reader))
+                .with_filter(filter.clone())
+                .with_row_range(range.clone())
+                .with_row_indices(StrictSortedBuffer::try_new(Buffer::from_iter(
+                    (0..4000u64).step_by(2),
+                ))?),
+            file.clone(),
+        )?;
+        let actual = await_tasks(DTYPE, scan.execute(None)?).await?;
+        let lower = u64::try_from(lower)?;
+        let expected = range
+            .filter(|row| *row > lower && row % 2 == 0)
+            .map(i32::try_from)
+            .collect::<Result<Buffer<_>, _>>()?;
+        assert_arrays_eq!(
+            actual,
+            expected.into_array(),
+            &mut session.create_execution_ctx()
+        );
+    }
+    drop(active);
+    assert!(weak.upgrade().is_none());
     Ok(())
 }
 
