@@ -394,10 +394,7 @@ impl LayoutReader for ChunkedReader {
 
             // A chunk known to have no selected rows is not read, decoded or filtered, and adds
             // no empty chunk to the result. Random row reads select few rows from many chunks.
-            if chunk_mask.is_ready()
-                && let Some(Ok(mask)) = chunk_mask.clone().now_or_never()
-                && mask.all_false()
-            {
+            if chunk_mask.peek().is_some_and(Mask::all_false) {
                 continue;
             }
 
@@ -637,7 +634,7 @@ mod test {
         let mut ctx = SESSION.create_execution_ctx();
         let mask = Mask::from_indices(9, vec![0, 7]);
         let pending = MaskFuture::new(9, async move { Ok(mask) });
-        assert!(!pending.is_ready());
+        assert!(pending.peek().is_none());
 
         let result = evaluate(layout, pending);
         assert_arrays_eq!(result, buffer![1i32, 8].into_array(), &mut ctx);
