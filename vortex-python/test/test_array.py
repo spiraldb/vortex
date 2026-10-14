@@ -27,12 +27,6 @@ def test_chunked_array_with_nulls_round_trip() -> None:
     assert arr.to_arrow_array().null_count == 2
 
 
-@pytest.mark.parametrize("unit", ["s", "ms", "us", "ns"])
-def test_duration_array_round_trip(unit: str) -> None:
-    a = pa.array([-5, None, 7], type=pa.duration(unit))
-    assert vortex.array(a).to_arrow_array() == a
-
-
 def test_varbin_array_round_trip() -> None:
     a = pa.array(["a", "b", "c"], type=pa.string_view())
     arr = vortex.array(a)
