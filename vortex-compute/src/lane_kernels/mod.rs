@@ -17,11 +17,12 @@
 //!   caller-provided `&mut [MaybeUninit<R>]`).
 //! - [`map_in_place`] — in-place kernels via [`IndexedSinkExt`] (writes back through
 //!   the sink itself).
-//! - [`collect_bits`] — allocating wrappers that bit-pack a predicate into a `BitBuffer`.
+//! - [`collect_bits`](mod@collect_bits) — allocating wrappers that bit-pack a predicate into a
+//!   `BitBuffer`.
 //!
-//! The kernels outside [`collect_bits`] never allocate. Both kernel families handle a mask with a non-byte-aligned
-//! offset and with a logical `len` shorter than the underlying byte buffer, via
-//! `BitBuffer::chunks`.
+//! The kernels outside [`collect_bits`](mod@collect_bits) never allocate. Both kernel families
+//! handle a mask with a non-byte-aligned offset and with a logical `len` shorter than the
+//! underlying byte buffer, via `BitBuffer::chunks`.
 
 pub mod collect_bits;
 pub mod map_in_place;
