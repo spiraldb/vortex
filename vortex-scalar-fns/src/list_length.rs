@@ -2,37 +2,36 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use num_traits::AsPrimitive;
+use vortex_array::ArrayRef;
+use vortex_array::ArrayView;
+use vortex_array::ExecutionCtx;
+use vortex_array::IntoArray;
+use vortex_array::arrays::ConstantArray;
+use vortex_array::arrays::FixedSizeList;
+use vortex_array::arrays::List;
+use vortex_array::arrays::ListView;
+use vortex_array::arrays::fixed_size_list::FixedSizeListArrayExt;
+use vortex_array::arrays::list::ListArrayExt;
+use vortex_array::arrays::list::ListArraySlotsExt;
+use vortex_array::arrays::listview::ListViewArrayExt;
+use vortex_array::arrays::listview::ListViewArraySlotsExt;
+use vortex_array::builtins::ArrayBuiltins;
+use vortex_array::dtype::DType;
+use vortex_array::dtype::Nullability;
+use vortex_array::dtype::PType;
+use vortex_array::matcher::Matcher;
+use vortex_array::scalar::Scalar;
+use vortex_array::scalar_fn::Arity;
+use vortex_array::scalar_fn::ChildName;
+use vortex_array::scalar_fn::EmptyOptions;
+use vortex_array::scalar_fn::ExecutionArgs;
+use vortex_array::scalar_fn::ScalarFnId;
+use vortex_array::scalar_fn::ScalarFnVTable;
+use vortex_array::scalar_fn::fns::operators::Operator;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
-
-use crate::ArrayRef;
-use crate::ExecutionCtx;
-use crate::IntoArray;
-use crate::array::ArrayView;
-use crate::arrays::ConstantArray;
-use crate::arrays::FixedSizeList;
-use crate::arrays::List;
-use crate::arrays::ListView;
-use crate::arrays::fixed_size_list::FixedSizeListArrayExt;
-use crate::arrays::list::ListArrayExt;
-use crate::arrays::list::ListArraySlotsExt;
-use crate::arrays::listview::ListViewArrayExt;
-use crate::arrays::listview::ListViewArraySlotsExt;
-use crate::builtins::ArrayBuiltins;
-use crate::dtype::DType;
-use crate::dtype::Nullability;
-use crate::dtype::PType;
-use crate::matcher::Matcher;
-use crate::scalar::Scalar;
-use crate::scalar_fn::Arity;
-use crate::scalar_fn::ChildName;
-use crate::scalar_fn::EmptyOptions;
-use crate::scalar_fn::ExecutionArgs;
-use crate::scalar_fn::ScalarFnId;
-use crate::scalar_fn::ScalarFnVTable;
-use crate::scalar_fn::fns::operators::Operator;
 
 /// Number of elements in each list of a `List` or `FixedSizeList` typed array.
 ///
@@ -186,28 +185,28 @@ mod tests {
     use std::sync::Arc;
 
     use rstest::rstest;
+    use vortex_array::ArrayRef;
+    use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
+    use vortex_array::array_session;
+    use vortex_array::arrays::BoolArray;
+    use vortex_array::arrays::ConstantArray;
+    use vortex_array::arrays::FixedSizeListArray;
+    use vortex_array::arrays::ListArray;
+    use vortex_array::arrays::ListViewArray;
+    use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::assert_arrays_eq;
+    use vortex_array::dtype::DType;
+    use vortex_array::dtype::Nullability;
+    use vortex_array::dtype::PType;
+    use vortex_array::expr::cast;
+    use vortex_array::expr::root;
+    use vortex_array::scalar::Scalar;
+    use vortex_array::validity::Validity;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
 
-    use crate::ArrayRef;
-    use crate::IntoArray;
-    use crate::VortexSessionExecute;
-    use crate::array_session;
-    use crate::arrays::BoolArray;
-    use crate::arrays::ConstantArray;
-    use crate::arrays::FixedSizeListArray;
-    use crate::arrays::ListArray;
-    use crate::arrays::ListViewArray;
-    use crate::arrays::PrimitiveArray;
-    use crate::assert_arrays_eq;
-    use crate::dtype::DType;
-    use crate::dtype::Nullability;
-    use crate::dtype::PType;
-    use crate::expr::cast;
     use crate::expr::list_length;
-    use crate::expr::root;
-    use crate::scalar::Scalar;
-    use crate::validity::Validity;
 
     fn create_list_elements() -> ArrayRef {
         PrimitiveArray::from_option_iter::<i32, _>([

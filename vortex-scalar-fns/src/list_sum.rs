@@ -1,29 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use vortex_array::ArrayRef;
+use vortex_array::Canonical;
+use vortex_array::Columnar;
+use vortex_array::ExecutionCtx;
+use vortex_array::IntoArray;
+use vortex_array::aggregate_fn::AggregateFnVTable;
+use vortex_array::aggregate_fn::DynGroupedAccumulator;
+use vortex_array::aggregate_fn::GroupedAccumulator;
+use vortex_array::aggregate_fn::NumericalAggregateOpts;
+use vortex_array::aggregate_fn::fns::sum_v2::SumV2;
+use vortex_array::arrays::ConstantArray;
+use vortex_array::dtype::DType;
+use vortex_array::scalar_fn::Arity;
+use vortex_array::scalar_fn::ChildName;
+use vortex_array::scalar_fn::ExecutionArgs;
+use vortex_array::scalar_fn::ScalarFnId;
+use vortex_array::scalar_fn::ScalarFnVTable;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
-
-use crate::ArrayRef;
-use crate::Canonical;
-use crate::Columnar;
-use crate::ExecutionCtx;
-use crate::IntoArray;
-use crate::aggregate_fn::AggregateFnVTable;
-use crate::aggregate_fn::DynGroupedAccumulator;
-use crate::aggregate_fn::GroupedAccumulator;
-use crate::aggregate_fn::NumericalAggregateOpts;
-use crate::aggregate_fn::fns::sum_v2::SumV2;
-use crate::arrays::ConstantArray;
-use crate::dtype::DType;
-use crate::scalar_fn::Arity;
-use crate::scalar_fn::ChildName;
-use crate::scalar_fn::ExecutionArgs;
-use crate::scalar_fn::ScalarFnId;
-use crate::scalar_fn::ScalarFnVTable;
 
 /// Sum of the elements in each list of a `List` or `FixedSizeList` typed array.
 ///
@@ -141,34 +140,34 @@ mod tests {
 
     use prost::Message;
     use rstest::rstest;
+    use vortex_array::ArrayRef;
+    use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
+    use vortex_array::aggregate_fn::NumericalAggregateOpts;
+    use vortex_array::array_session;
+    use vortex_array::arrays::BoolArray;
+    use vortex_array::arrays::ConstantArray;
+    use vortex_array::arrays::FixedSizeListArray;
+    use vortex_array::arrays::ListArray;
+    use vortex_array::arrays::ListViewArray;
+    use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::assert_arrays_eq;
+    use vortex_array::dtype::DType;
+    use vortex_array::dtype::Nullability;
+    use vortex_array::dtype::PType;
+    use vortex_array::expr::Expression;
+    use vortex_array::expr::proto::ExprSerializeProtoExt;
+    use vortex_array::expr::root;
+    use vortex_array::proto::expr as pb;
+    use vortex_array::scalar::Scalar;
+    use vortex_array::scalar_fn::ScalarFnVTable;
+    use vortex_array::validity::Validity;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
 
-    use crate::ArrayRef;
-    use crate::IntoArray;
-    use crate::VortexSessionExecute;
-    use crate::aggregate_fn::NumericalAggregateOpts;
-    use crate::array_session;
-    use crate::arrays::BoolArray;
-    use crate::arrays::ConstantArray;
-    use crate::arrays::FixedSizeListArray;
-    use crate::arrays::ListArray;
-    use crate::arrays::ListViewArray;
-    use crate::arrays::PrimitiveArray;
-    use crate::assert_arrays_eq;
-    use crate::dtype::DType;
-    use crate::dtype::Nullability;
-    use crate::dtype::PType;
-    use crate::expr::Expression;
     use crate::expr::list_sum;
     use crate::expr::list_sum_opts;
-    use crate::expr::proto::ExprSerializeProtoExt;
-    use crate::expr::root;
-    use crate::proto::expr as pb;
-    use crate::scalar::Scalar;
-    use crate::scalar_fn::ScalarFnVTable;
-    use crate::scalar_fn::fns::list_sum::ListSum;
-    use crate::validity::Validity;
+    use crate::list_sum::ListSum;
 
     fn create_list_elements() -> ArrayRef {
         PrimitiveArray::from_option_iter::<i32, _>([
@@ -525,7 +524,9 @@ mod tests {
             let proto = expr.serialize_proto()?;
             let buf = proto.encode_to_vec();
             let decoded = pb::Expr::decode(buf.as_slice())?;
-            let deser = Expression::from_proto(&decoded, &array_session())?;
+            let session = array_session();
+            crate::initialize(&session);
+            let deser = Expression::from_proto(&decoded, &session)?;
             assert_eq!(expr, deser);
         }
         Ok(())

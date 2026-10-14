@@ -112,6 +112,13 @@ pub mod expr {
     //! Expression trees, their optimizer, and the analyses and rewrites built on them.
     pub use vortex_array::expr::*;
     pub use vortex_expr::*;
+    pub use vortex_scalar_fns::expr::*;
+
+    /// Constructors for expressions whose children have already been bound and type-checked.
+    pub mod bound {
+        pub use vortex_array::expr::bound::*;
+        pub use vortex_scalar_fns::expr::bound::*;
+    }
 }
 use vortex_array::memory::MemorySession;
 use vortex_array::optimizer::kernels::KernelSession;
@@ -122,6 +129,7 @@ use vortex_array::stats::session::StatsSession;
 use vortex_btrblocks::CompressionSession;
 use vortex_io::session::RuntimeSession;
 use vortex_layout::session::LayoutSession;
+pub use vortex_scalar_fns as scalar_fns;
 use vortex_session::VortexSession;
 
 // We re-export like so in order to allow users to search inside subcrates when using the Rust docs.
@@ -357,6 +365,7 @@ impl VortexSessionDefault for VortexSession {
             .with::<CompressionSession>()
             .with::<RuntimeSession>();
         vortex_aggregates::initialize(&session);
+        vortex_scalar_fns::initialize(&session);
         vortex_arrow::initialize(&session);
         #[cfg(feature = "parquet-variant")]
         vortex_parquet_variant::initialize(&session);
@@ -397,7 +406,6 @@ mod test {
     use vortex_array::expr::gt;
     use vortex_array::expr::lit;
     use vortex_array::expr::root;
-    use vortex_array::expr::select;
     use vortex_array::stream::ArrayStreamExt;
     use vortex_array::validity::Validity;
     use vortex_btrblocks::BtrBlocksCompressorBuilder;
@@ -406,6 +414,7 @@ mod test {
     use vortex_file::OpenOptionsSessionExt;
     use vortex_file::WriteOptionsSessionExt;
     use vortex_file::WriteStrategyBuilder;
+    use vortex_scalar_fns::expr::select;
     use vortex_session::VortexSession;
 
     use crate as vortex;

@@ -16,6 +16,7 @@ version = { workspace = true }
 itertools = { workspace = true }
 vortex-array = { workspace = true }
 vortex-error = { workspace = true }
+vortex-scalar-fns = { workspace = true }
 vortex-utils = { workspace = true }
 
 [lints]

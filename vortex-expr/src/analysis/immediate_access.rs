@@ -5,8 +5,8 @@ use vortex_array::dtype::FieldName;
 use vortex_array::dtype::StructFields;
 use vortex_array::expr::BoundExpression;
 use vortex_array::scalar_fn::fns::get_item::GetItem;
-use vortex_array::scalar_fn::fns::select::Select;
 use vortex_error::VortexExpect;
+use vortex_scalar_fns::select::Select;
 
 use crate::analysis::AnnotationFn;
 

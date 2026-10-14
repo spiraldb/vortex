@@ -23,11 +23,11 @@ use vortex::scalar_fn::ScalarFnVTableExt;
 use vortex::scalar_fn::fns::between::BetweenOptions;
 use vortex::scalar_fn::fns::between::StrictComparison;
 use vortex::scalar_fn::fns::binary::Binary;
-use vortex::scalar_fn::fns::merge::DuplicateHandling;
 use vortex::scalar_fn::fns::operators::Operator;
-use vortex::scalar_fn::fns::replace_time_zone::ReplaceTimeZoneOptions;
 use vortex::scalar_fn::fns::variant_get::VariantPath;
 use vortex::scalar_fn::fns::variant_get::VariantPathElement;
+use vortex::scalar_fns::merge::DuplicateHandling;
+use vortex::scalar_fns::replace_time_zone::ReplaceTimeZoneOptions;
 
 use crate::dtype::PyDType;
 use crate::error::PyVortexResult;

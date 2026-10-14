@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Benchmarks for the `list_length` scalar function over `List` and `ListView` inputs.
-//!
-//! `list_length` reads only the offsets/sizes (never the elements), so its cost scales with the
-//! number of lists.
+//! Benchmarks for the `list_sum` scalar function over `List`, `ListView`, and
+//! `FixedSizeList` inputs.
 
 #![expect(clippy::unwrap_used)]
 #![expect(clippy::cast_possible_truncation)]
@@ -22,13 +20,14 @@ use vortex_array::Canonical;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::BoolArray;
+use vortex_array::arrays::FixedSizeListArray;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::ListViewArray;
 use vortex_array::arrays::PrimitiveArray;
-use vortex_array::expr::list_length;
 use vortex_array::expr::root;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
+use vortex_scalar_fns::expr::list_sum;
 use vortex_session::VortexSession;
 
 #[global_allocator]
@@ -42,13 +41,13 @@ static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::array_sess
 
 const BASE_LIST_SIZE: usize = 8;
 
-const SMALL: usize = 100;
-const MEDIUM: usize = 10_000;
 // Sized to keep the CodSpeed simulation under 1ms per benchmark.
-const LARGE: usize = 20_000;
+const SMALL: usize = 100;
+const MEDIUM: usize = 250;
+const LARGE: usize = 500;
 
-/// A uniformly-random partition of `num_lists * LIST_SIZE` elements into `num_lists` lists,
-/// plus a validity mask with ~1/8 of lists null at random positions.
+/// A uniformly-random partition of `num_lists * BASE_LIST_SIZE` elements into `num_lists`
+/// lists, plus a validity mask with ~1/8 of lists null at random positions.
 fn random_lists(num_lists: usize) -> (Vec<i32>, Validity) {
     let mut rng = StdRng::seed_from_u64(num_lists as u64);
     let total = (num_lists * BASE_LIST_SIZE) as i32;
@@ -72,11 +71,22 @@ fn random_lists(num_lists: usize) -> (Vec<i32>, Validity) {
     )
 }
 
+/// `0..total` as `i32` elements, with ~1/8 nulled at random positions when `nullable`.
+fn make_elements(total: i32, nullable: bool) -> ArrayRef {
+    if !nullable {
+        return PrimitiveArray::from_iter(0..total).into_array();
+    }
+    let mut rng = StdRng::seed_from_u64(total as u64);
+    let null_dist = Uniform::new(0u32, 8).unwrap();
+    PrimitiveArray::from_option_iter((0..total).map(|v| (rng.sample(null_dist) != 0).then_some(v)))
+        .into_array()
+}
+
 /// A canonical `List<i32>` of `num_lists` variable-length lists, ~1/8 of them null.
-fn make_list(num_lists: usize) -> ArrayRef {
+fn make_list(num_lists: usize, nullable_elements: bool) -> ArrayRef {
     let (sizes, validity) = random_lists(num_lists);
     let total: i32 = sizes.iter().sum();
-    let elements = PrimitiveArray::from_iter(0..total).into_array();
+    let elements = make_elements(total, nullable_elements);
     let offsets: Buffer<i32> = std::iter::once(0)
         .chain(sizes.iter().scan(0i32, |acc, &s| {
             *acc += s;
@@ -92,7 +102,7 @@ fn make_list(num_lists: usize) -> ArrayRef {
 fn make_listview(num_lists: usize) -> ArrayRef {
     let (sizes, validity) = random_lists(num_lists);
     let total: i32 = sizes.iter().sum();
-    let elements = PrimitiveArray::from_iter(0..total).into_array();
+    let elements = make_elements(total, false);
     let offsets: Buffer<i32> = sizes
         .iter()
         .scan(0i32, |acc, &s| {
@@ -105,9 +115,20 @@ fn make_listview(num_lists: usize) -> ArrayRef {
     ListViewArray::new(elements, offsets.into_array(), sizes.into_array(), validity).into_array()
 }
 
-/// Apply `list_length(root())` and materialize the result.
+/// A `FixedSizeList<i32, 8>` of `num_lists` lists, ~1/8 of them null.
+fn make_fsl(num_lists: usize) -> ArrayRef {
+    let mut rng = StdRng::seed_from_u64(num_lists as u64);
+    let total = (num_lists * BASE_LIST_SIZE) as i32;
+    let elements = make_elements(total, false);
+    let null_dist = Uniform::new(0u32, 8).unwrap();
+    let valid = (0..num_lists).map(|_| rng.sample(null_dist) != 0);
+    let validity = Validity::Array(BoolArray::from_iter(valid).into_array());
+    FixedSizeListArray::new(elements, BASE_LIST_SIZE as u32, validity, num_lists).into_array()
+}
+
+/// Apply `list_sum(root())` and materialize the result.
 fn run(bencher: Bencher, array: ArrayRef) {
-    let expr = list_length(root());
+    let expr = list_sum(root());
     bencher
         .with_inputs(|| (&array, SESSION.create_execution_ctx()))
         .bench_refs(|(array, ctx)| {
@@ -121,31 +142,56 @@ fn run(bencher: Bencher, array: ArrayRef) {
 }
 
 #[divan::bench]
-fn list_length_small(bencher: Bencher) {
-    run(bencher, make_list(SMALL));
+fn list_sum_small(bencher: Bencher) {
+    run(bencher, make_list(SMALL, false));
 }
 
 #[divan::bench]
-fn list_length_medium(bencher: Bencher) {
-    run(bencher, make_list(MEDIUM));
+fn list_sum_medium(bencher: Bencher) {
+    run(bencher, make_list(MEDIUM, false));
 }
 
 #[divan::bench]
-fn list_length_large(bencher: Bencher) {
-    run(bencher, make_list(LARGE));
+fn list_sum_large(bencher: Bencher) {
+    run(bencher, make_list(LARGE, false));
 }
 
 #[divan::bench]
-fn listview_length_small(bencher: Bencher) {
+fn list_sum_nullable_elements_medium(bencher: Bencher) {
+    run(bencher, make_list(MEDIUM, true));
+}
+
+#[divan::bench]
+fn list_sum_nullable_elements_large(bencher: Bencher) {
+    run(bencher, make_list(LARGE, true));
+}
+
+#[divan::bench]
+fn listview_sum_small(bencher: Bencher) {
     run(bencher, make_listview(SMALL));
 }
 
 #[divan::bench]
-fn listview_length_medium(bencher: Bencher) {
+fn listview_sum_medium(bencher: Bencher) {
     run(bencher, make_listview(MEDIUM));
 }
 
 #[divan::bench]
-fn listview_length_large(bencher: Bencher) {
+fn listview_sum_large(bencher: Bencher) {
     run(bencher, make_listview(LARGE));
+}
+
+#[divan::bench]
+fn fsl_sum_small(bencher: Bencher) {
+    run(bencher, make_fsl(SMALL));
+}
+
+#[divan::bench]
+fn fsl_sum_medium(bencher: Bencher) {
+    run(bencher, make_fsl(MEDIUM));
+}
+
+#[divan::bench]
+fn fsl_sum_large(bencher: Bencher) {
+    run(bencher, make_fsl(LARGE));
 }

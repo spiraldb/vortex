@@ -180,11 +180,10 @@ impl Expression {
     /// # use vortex_array::dtype::{DType, Nullability, PType};
     /// # use vortex_array::scalar_fn::fns::like::{Like, LikeOptions};
     /// # use vortex_array::scalar_fn::ScalarFnVTableExt;
-    /// # use vortex_array::expr::{and, cast, eq, get_item, gt, lit, not, root, select};
+    /// # use vortex_array::expr::{and, cast, eq, get_item, gt, lit, not, pack, root};
     /// // Build a complex nested expression
-    /// let complex_expr = select(
-    ///     ["result"],
-    ///     and(
+    /// let complex_expr = pack(
+    ///     [("result", and(
     ///         not(eq(get_item("status", root()), lit("inactive"))),
     ///         and(
     ///             Like.new_expr(LikeOptions::default(), [get_item("name", root()), lit("%admin%")]),
@@ -193,7 +192,8 @@ impl Expression {
     ///                 lit(75.0)
     ///             )
     ///         )
-    ///     )
+    ///     ))],
+    ///     Nullability::NonNullable,
     /// );
     ///
     /// println!("{}", complex_expr.display_tree());
