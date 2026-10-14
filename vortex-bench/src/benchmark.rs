@@ -35,27 +35,6 @@ pub trait Benchmark: Send + Sync {
     /// Get all available queries for this benchmark
     fn queries(&self) -> anyhow::Result<Vec<(usize, String)>>;
 
-    /// Queries `engine` skips, each with the reason it is skipped. Default: none.
-    fn skipped_queries(&self, _engine: Engine) -> Vec<(usize, &'static str)> {
-        Vec::new()
-    }
-
-    /// [`Benchmark::queries`] without the [`Benchmark::skipped_queries`] for `engine`.
-    fn engine_queries(&self, engine: Engine) -> anyhow::Result<Vec<(usize, String)>> {
-        let skipped = self.skipped_queries(engine);
-        Ok(self
-            .queries()?
-            .into_iter()
-            .filter(|(idx, _)| match skipped.iter().find(|(s, _)| s == idx) {
-                Some((_, reason)) => {
-                    tracing::info!(query = idx, %engine, reason, "skipping query");
-                    false
-                }
-                None => true,
-            })
-            .collect())
-    }
-
     /// SQL an `engine` must run before this benchmark's queries (e.g. loading engine
     /// extensions). Runners replay these after every (re)open. Default: none.
     fn engine_init_sql(&self, _engine: Engine) -> Vec<String> {

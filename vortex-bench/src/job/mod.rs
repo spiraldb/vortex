@@ -26,7 +26,6 @@ use vortex::error::VortexExpect;
 
 use crate::Benchmark;
 use crate::BenchmarkDataset;
-use crate::Engine;
 use crate::Format;
 use crate::TableSpec;
 use crate::datasets::data_downloads::download_many;
@@ -62,15 +61,8 @@ pub(crate) const TABLES: &[&str] = &[
     "title",
 ];
 
-/// Query families DataFusion skips. Its join orders for these chain `cast_info`, `name` and
-/// `movie_keyword` through large intermediates, taking 8-43s per query versus under 1s on DuckDB,
-/// which would make DataFusion the bulk of the suite's CI time.
-const DATAFUSION_SKIPPED_FAMILIES: &[&str] = &["16", "17"];
-const DATAFUSION_SKIP_REASON: &str =
-    "JOB 16*/17*: DataFusion join orders take 8-43s per query (DuckDB <1s)";
-
-/// JOB query files, sorted by name. Query index `i` (1-based) is `job_query_paths()[i - 1]`.
-fn job_query_paths() -> Vec<PathBuf> {
+/// All JOB queries as `(index, sql)` pairs, numbered in file-name order.
+pub fn job_queries() -> impl Iterator<Item = (usize, String)> {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("sql")
         .join("job");
@@ -80,12 +72,7 @@ fn job_query_paths() -> Vec<PathBuf> {
         .filter(|p| p.extension().is_some_and(|e| e == "sql"))
         .collect();
     paths.sort();
-    paths
-}
-
-/// All JOB queries as `(index, sql)` pairs, numbered in file-name order.
-pub fn job_queries() -> impl Iterator<Item = (usize, String)> {
-    job_query_paths().into_iter().enumerate().map(|(i, p)| {
+    paths.into_iter().enumerate().map(|(i, p)| {
         let sql = fs::read_to_string(p).vortex_expect("cannot load JOB query from file");
         (i + 1, sql)
     })
@@ -120,22 +107,6 @@ impl Benchmark for JobBenchmark {
 
     fn queries(&self) -> anyhow::Result<Vec<(usize, String)>> {
         Ok(job_queries().collect())
-    }
-
-    fn skipped_queries(&self, engine: Engine) -> Vec<(usize, &'static str)> {
-        if engine != Engine::DataFusion {
-            return Vec::new();
-        }
-        job_query_paths()
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| {
-                p.file_stem()
-                    .and_then(|s| s.to_str())
-                    .is_some_and(|s| DATAFUSION_SKIPPED_FAMILIES.iter().any(|f| s.starts_with(f)))
-            })
-            .map(|(i, _)| (i + 1, DATAFUSION_SKIP_REASON))
-            .collect()
     }
 
     async fn generate_base_data(&self) -> anyhow::Result<()> {
@@ -248,20 +219,5 @@ mod tests {
         assert_eq!(queries.first().map(|(i, _)| *i), Some(1));
         assert_eq!(queries.last().map(|(i, _)| *i), Some(113));
         assert!(queries.iter().all(|(_, sql)| sql.contains("SELECT")));
-    }
-
-    #[test]
-    fn datafusion_skips_16_and_17() -> anyhow::Result<()> {
-        let bench = JobBenchmark::with_remote_data_dir(None)?;
-        let skipped: Vec<_> = bench
-            .skipped_queries(Engine::DataFusion)
-            .into_iter()
-            .map(|(i, _)| i)
-            .collect();
-        // 16a-16d and 17a-17f follow the 55 queries 1a..15d.
-        assert_eq!(skipped, (56..=65).collect::<Vec<_>>());
-        assert!(bench.skipped_queries(Engine::DuckDB).is_empty());
-        assert_eq!(bench.engine_queries(Engine::DataFusion)?.len(), 103);
-        Ok(())
     }
 }
