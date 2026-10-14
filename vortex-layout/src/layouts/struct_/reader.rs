@@ -1326,7 +1326,11 @@ mod tests {
             PrimitiveArray::from_iter([0i32, 1, 2, 3, 4, 5])
         };
         let expected = StructArray::try_from_iter_with_validity(
-            [("c", c.into_array()), ("e", e.into_array()), ("x", x.into_array())],
+            [
+                ("c", c.into_array()),
+                ("e", e.into_array()),
+                ("x", x.into_array()),
+            ],
             Validity::NonNullable,
         )?;
         assert_arrays_eq!(result, expected, &mut SESSION.create_execution_ctx());
