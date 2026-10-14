@@ -4,6 +4,15 @@
 //! Optimized [`Interleave`] implementation for boolean values.
 
 use num_traits::AsPrimitive;
+use vortex_array::Array;
+use vortex_array::ExecutionCtx;
+use vortex_array::ExecutionResult;
+use vortex_array::arrays::Bool;
+use vortex_array::arrays::BoolArray;
+use vortex_array::arrays::Primitive;
+use vortex_array::arrays::bool::BoolArrayExt;
+use vortex_array::match_each_unsigned_integer_ptype;
+use vortex_array::require_child;
 use vortex_buffer::BitBuffer;
 use vortex_buffer::BitBufferMut;
 use vortex_buffer::BufferAllocatorRef;
@@ -13,15 +22,6 @@ use vortex_error::vortex_ensure_eq;
 
 use super::super::Interleave;
 use super::super::InterleaveArrayExt;
-use crate::array::Array;
-use crate::arrays::Bool;
-use crate::arrays::BoolArray;
-use crate::arrays::Primitive;
-use crate::arrays::bool::BoolArrayExt;
-use crate::executor::ExecutionCtx;
-use crate::executor::ExecutionResult;
-use crate::match_each_unsigned_integer_ptype;
-use crate::require_child;
 
 /// Gathers `N` boolean values under unsigned `array_indices` / `row_indices` selectors, scattering
 /// each selected bit into the output position it routes to.

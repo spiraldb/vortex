@@ -11315,6 +11315,7 @@ dependencies = [
  "vortex-fastlanes",
  "vortex-file",
  "vortex-fsst",
+ "vortex-interleave",
  "vortex-io",
  "vortex-ipc",
  "vortex-layout",
@@ -12034,6 +12035,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "vortex-interleave"
+version = "0.1.0"
+dependencies = [
+ "codspeed-divan-compat",
+ "mimalloc",
+ "num-traits",
+ "rand 0.10.3",
+ "vortex-array",
+ "vortex-buffer",
+ "vortex-error",
+ "vortex-session",
+]
+
+[[package]]
 name = "vortex-io"
 version = "0.1.0"
 dependencies = [
@@ -12463,6 +12478,7 @@ dependencies = [
  "vortex-buffer",
  "vortex-edition",
  "vortex-error",
+ "vortex-interleave",
  "vortex-layout",
  "vortex-mask",
  "vortex-session",

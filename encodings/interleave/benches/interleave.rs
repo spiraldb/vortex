@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Benchmarks the Vortex [`Interleave`](vortex_array::arrays::Interleave) Boolean and primitive
+//! Benchmarks the Vortex [`Interleave`](vortex_interleave::Interleave) Boolean and primitive
 //! execute paths on a focused set of configurations:
 //!
 //! - `round_robin`, 2 children: a merge — `array_index = i % N`, `row_index = i / N`.
@@ -28,9 +28,9 @@ use vortex_array::VortexSessionExecute;
 use vortex_array::array_session;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ConstantArray;
-use vortex_array::arrays::InterleaveArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_buffer::Buffer;
+use vortex_interleave::Interleave;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -182,7 +182,7 @@ fn vortex(bencher: Bencher, combo: Combo) {
     bencher
         .with_inputs(|| {
             (
-                InterleaveArray::try_new(
+                Interleave::try_new(
                     values.clone(),
                     array_indices.clone().into_array(),
                     row_indices.clone().into_array(),
@@ -201,7 +201,7 @@ fn bench_primitive(bencher: Bencher, combo: Combo, mixed_constants: bool) {
     bencher
         .with_inputs(|| {
             (
-                InterleaveArray::try_new(
+                Interleave::try_new(
                     values.clone(),
                     array_indices.clone().into_array(),
                     row_indices.clone().into_array(),

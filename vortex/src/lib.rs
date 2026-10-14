@@ -272,6 +272,11 @@ pub mod encodings {
         pub use vortex_fsst::*;
     }
 
+    /// Lazy random-access gather across several value arrays.
+    pub mod interleave {
+        pub use vortex_interleave::*;
+    }
+
     #[cfg(feature = "parquet-variant")]
     /// Parquet Variant array encoding.
     pub mod parquet_variant {

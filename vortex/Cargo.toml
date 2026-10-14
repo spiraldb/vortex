@@ -33,6 +33,7 @@ vortex-error = { workspace = true }
 vortex-fastlanes = { workspace = true }
 vortex-file = { workspace = true, optional = true }
 vortex-fsst = { workspace = true }
+vortex-interleave = { workspace = true }
 vortex-io = { workspace = true }
 vortex-ipc = { workspace = true }
 vortex-layout = { workspace = true }
