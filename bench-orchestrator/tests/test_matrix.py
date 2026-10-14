@@ -31,13 +31,13 @@ REGULAR_IDS = (
     "fineweb-s3",
     "polarsignals",
     "appian-nvme",
-    "job-nvme",
     "vortex-queries",
 )
 COMPACT_IDS = tuple(
     benchmark_id for benchmark_id in REGULAR_IDS if benchmark_id not in {"polarsignals", "vortex-queries"}
 )
 PR_ALL_IDS = tuple(benchmark_id for benchmark_id in REGULAR_IDS if benchmark_id != "vortex-queries")
+PR_FULL_IDS = (*REGULAR_IDS[:-1], "job-nvme", "vortex-queries")
 EXPECTED_IDS = {
     "develop": REGULAR_IDS,
     "pr": tuple(
@@ -50,13 +50,12 @@ EXPECTED_IDS = {
             "statpopgen",
             "fineweb-s3",
             "appian-nvme",
-            "job-nvme",
             "vortex-queries",
         }
     ),
     "pr-compact": COMPACT_IDS,
     "pr-all": PR_ALL_IDS,
-    "pr-full": REGULAR_IDS,
+    "pr-full": PR_FULL_IDS,
     "nightly": ("tpch-nvme", "tpch-s3"),
 }
 

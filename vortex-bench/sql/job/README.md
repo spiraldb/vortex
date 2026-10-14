@@ -36,11 +36,13 @@ Benchmark query indices are integers, so the upstream query names are numbered i
 
 ## CI variant
 
-CI runs this suite from local NVMe as the `JOB on NVME` PR comment, comparing DataFusion and
-DuckDB over Parquet and Vortex files (plus a native DuckDB baseline).
+CI runs this suite from local NVMe as the `JOB on NVME` PR comment in the `pr-full` preset
+(`action/bench-sql-extended`), comparing DuckDB over Parquet and Vortex files against a native
+DuckDB baseline. DataFusion is left out because its join orders make a few queries (`17b`-`17f`)
+take tens of seconds each.
 
 ## Running locally
 
 ```bash
-vx-bench run job --engine datafusion,duckdb --format parquet,vortex
+vx-bench run job --engine duckdb --format parquet,vortex,duckdb
 ```

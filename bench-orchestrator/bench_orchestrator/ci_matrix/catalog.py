@@ -258,12 +258,8 @@ BENCHMARKS = (
         id="job-nvme",
         benchmark=Benchmark.JOB,
         name="JOB on NVME",
-        runs={
-            "pr-compact": COMPACT,
-            "pr-all": COMPACT,
-            "pr-full": DEFAULT_WITH_DUCKDB_PR_FULL,
-            "develop": STANDARD_WITH_DUCKDB,
-        },
+        # DuckDB only: DataFusion spends minutes per pass on the 17x queries' join orders.
+        runs={"pr-full": Coverage(duck(Format.PARQUET, Format.VORTEX, Format.DUCKDB))},
     ),
     BenchmarkCase(
         id="vortex-queries",
