@@ -16,6 +16,7 @@ use criterion::BenchmarkId;
 use criterion::Criterion;
 use criterion::Throughput;
 use futures::executor::block_on;
+use mimalloc::MiMalloc;
 use vortex::array::ArrayRef;
 use vortex::array::IntoArray;
 use vortex::array::arrays::PrimitiveArray;
@@ -38,6 +39,9 @@ use vortex_fsst::FSSTSymbolTable;
 use vortex_fsst::test_utils::make_fsst_clickbench_urls;
 
 use crate::timed_launch_strategy::TimedLaunchStrategy;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 // Bench-local size instead of the workspace 100M default: each input is a
 // clickbench URL, much heavier per-element than the fixed-width primitives

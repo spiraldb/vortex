@@ -12,6 +12,7 @@
 use std::sync::Arc;
 
 use divan::Bencher;
+use mimalloc::MiMalloc;
 use rand::RngExt;
 use rand::SeedableRng;
 use rand::prelude::StdRng;
@@ -30,6 +31,9 @@ use vortex_array::expr::list_contains;
 use vortex_array::expr::lit;
 use vortex_array::expr::root;
 use vortex_array::scalar::Scalar;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
     divan::main();
