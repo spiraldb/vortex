@@ -1424,6 +1424,43 @@ mod tests {
         Ok(())
     }
 
+    /// A field named like the internal struct validity partition must not clash with it.
+    #[test]
+    fn test_validity_partition_name_clash() -> VortexResult<()> {
+        let validity = Validity::Array(BoolArray::from_iter([false, true]).into_array());
+        let array =
+            StructArray::try_from_iter_with_validity([("$validity", buffer![1i32, 2])], validity)?;
+
+        let segments = Arc::new(TestSegments::default());
+        let (ptr, eof) = SequenceId::root().split();
+        let segments2 = Arc::<TestSegments>::clone(&segments);
+        let layout = block_on(|handle| {
+            let session = new_session().with_handle(handle);
+            async move {
+                let stream = array.into_array().to_array_stream().sequenced(ptr);
+                let flat = Arc::new(FlatLayoutStrategy::default());
+                TableStrategy::new(Arc::clone(&flat) as _, flat)
+                    .write_stream(
+                        ArrayContext::empty().into(),
+                        segments2,
+                        stream,
+                        eof,
+                        &session,
+                    )
+                    .await
+            }
+        })?;
+        let reader = layout.new_reader("".into(), segments, &SESSION, &Default::default())?;
+
+        let expr = col("$validity").bind(reader.dtype())?;
+        let future = reader.projection_evaluation(&(0..2), &expr, MaskFuture::new_true(2))?;
+        let result = block_on(move |_| future)?;
+
+        let expected = PrimitiveArray::from_option_iter([None, Some(2i32)]);
+        assert_arrays_eq!(result, expected, &mut SESSION.create_execution_ctx());
+        Ok(())
+    }
+
     #[rstest]
     fn test_struct_layout_nested(
         #[from(nested_struct_layout)] (segments, layout): (Arc<dyn SegmentSource>, LayoutRef),
