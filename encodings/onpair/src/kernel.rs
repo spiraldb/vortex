@@ -10,10 +10,10 @@ use vortex_array::optimizer::kernels::ArrayKernelsExt;
 use vortex_array::scalar_fn::ScalarFnVTable;
 use vortex_array::scalar_fn::fns::binary::Binary;
 use vortex_array::scalar_fn::fns::binary::CompareExecuteAdaptor;
-use vortex_array::scalar_fn::fns::byte_length::ByteLength;
-use vortex_array::scalar_fn::fns::byte_length::ByteLengthExecuteAdaptor;
 use vortex_array::scalar_fn::fns::cast::Cast;
 use vortex_array::scalar_fn::fns::cast::CastExecuteAdaptor;
+use vortex_scalar_fns::byte_length::ByteLength;
+use vortex_scalar_fns::byte_length::ByteLengthExecuteAdaptor;
 use vortex_session::VortexSession;
 
 use crate::OnPair;

@@ -55,7 +55,7 @@ impl FillNull {
     /// These are the dtypes whose canonical arrays have a [`FillNullKernel`], so update this list
     /// whenever `fill_null_canonical` gains or loses one. Rewrites into fill_null, such as the
     /// CASE WHEN simplification, check it first because other dtypes fail at execution time.
-    pub(crate) fn supports_dtype(dtype: &DType) -> bool {
+    pub fn supports_dtype(dtype: &DType) -> bool {
         matches!(
             dtype,
             DType::Bool(_)

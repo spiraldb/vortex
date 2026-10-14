@@ -2,6 +2,28 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use num_traits::AsPrimitive;
+use vortex_array::ArrayRef;
+use vortex_array::ArrayView;
+use vortex_array::ExecutionCtx;
+use vortex_array::IntoArray;
+use vortex_array::VTable;
+use vortex_array::arrays::ConstantArray;
+use vortex_array::arrays::PrimitiveArray;
+use vortex_array::arrays::VarBinViewArray;
+use vortex_array::arrays::scalar_fn::ExactScalarFn;
+use vortex_array::arrays::scalar_fn::ScalarFnArrayView;
+use vortex_array::arrays::varbinview::VarBinViewArrayExt;
+use vortex_array::dtype::DType;
+use vortex_array::dtype::Nullability;
+use vortex_array::dtype::PType;
+use vortex_array::kernel::ExecuteParentKernel;
+use vortex_array::scalar::Scalar;
+use vortex_array::scalar_fn::Arity;
+use vortex_array::scalar_fn::ChildName;
+use vortex_array::scalar_fn::EmptyOptions;
+use vortex_array::scalar_fn::ExecutionArgs;
+use vortex_array::scalar_fn::ScalarFnId;
+use vortex_array::scalar_fn::ScalarFnVTable;
 use vortex_buffer::Buffer;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
@@ -9,29 +31,6 @@ use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure_eq;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
-
-use crate::ArrayRef;
-use crate::ExecutionCtx;
-use crate::IntoArray;
-use crate::array::ArrayView;
-use crate::array::VTable;
-use crate::arrays::ConstantArray;
-use crate::arrays::PrimitiveArray;
-use crate::arrays::VarBinViewArray;
-use crate::arrays::scalar_fn::ExactScalarFn;
-use crate::arrays::scalar_fn::ScalarFnArrayView;
-use crate::arrays::varbinview::VarBinViewArrayExt;
-use crate::dtype::DType;
-use crate::dtype::Nullability;
-use crate::dtype::PType;
-use crate::kernel::ExecuteParentKernel;
-use crate::scalar::Scalar;
-use crate::scalar_fn::Arity;
-use crate::scalar_fn::ChildName;
-use crate::scalar_fn::EmptyOptions;
-use crate::scalar_fn::ExecutionArgs;
-use crate::scalar_fn::ScalarFnId;
-use crate::scalar_fn::ScalarFnVTable;
 
 pub trait ByteLengthKernel: VTable {
     fn byte_length(
@@ -167,22 +166,22 @@ pub(crate) fn byte_length(
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
+    use vortex_array::ArrayRef;
+    use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
+    use vortex_array::array_session;
+    use vortex_array::arrays::ConstantArray;
+    use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::arrays::VarBinArray;
+    use vortex_array::arrays::VarBinViewArray;
+    use vortex_array::assert_arrays_eq;
+    use vortex_array::dtype::DType;
+    use vortex_array::dtype::Nullability;
+    use vortex_array::expr::root;
+    use vortex_array::scalar::Scalar;
     use vortex_error::VortexResult;
 
-    use crate::ArrayRef;
-    use crate::IntoArray;
-    use crate::VortexSessionExecute;
-    use crate::array_session;
-    use crate::arrays::ConstantArray;
-    use crate::arrays::PrimitiveArray;
-    use crate::arrays::VarBinArray;
-    use crate::arrays::VarBinViewArray;
-    use crate::assert_arrays_eq;
-    use crate::dtype::DType;
-    use crate::dtype::Nullability;
     use crate::expr::byte_length;
-    use crate::expr::root;
-    use crate::scalar::Scalar;
 
     #[rstest]
     #[case(VarBinArray::from_strs(vec!["hello", "world", ""]).into_array(), vec![5u64, 5, 0])]
