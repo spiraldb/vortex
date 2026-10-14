@@ -77,3 +77,40 @@ def test_arrow_indices_use_scan_validation(indexed_file, indices):
     indices = vx.array(pa.array(indices, type=pa.uint64()))
     with pytest.raises(RuntimeError):
         file.to_arrow(indices=indices)
+
+
+@pytest.mark.parametrize("indices", [None, [], [1], [0, 2, 5, 8]])
+@pytest.mark.parametrize("batch_size", [None, 1, 3])
+@pytest.mark.parametrize("combine_chunks", [False, True])
+def test_iterator_to_arrow_array_matches_read_all(indexed_file, indices, batch_size, combine_chunks):
+    file, _ = indexed_file
+    selection = None if indices is None else vx.array(pa.array(indices, type=pa.uint64()))
+    arrow_type = pa.struct([("id", pa.int64()), ("payload", pa.string_view())])
+
+    def scan() -> vx.ArrayIterator:
+        return file.scan(indices=selection, batch_size=batch_size)
+
+    expected = scan().read_all().to_arrow_array(arrow_type=arrow_type, combine_chunks=combine_chunks)
+    result = scan().to_arrow_array(arrow_type=arrow_type, combine_chunks=combine_chunks)
+    assert type(result) is type(expected)
+    assert result.equals(expected)
+
+    inferred = scan().read_all().to_arrow_array(combine_chunks=combine_chunks)
+    assert scan().to_arrow_array(combine_chunks=combine_chunks).equals(inferred)
+
+
+def test_iterator_to_arrow_array_after_read_is_empty(indexed_file):
+    file, _ = indexed_file
+    iterator = file.scan()
+    assert len(iterator.to_arrow_array()) == 9
+    assert len(iterator.to_arrow_array()) == 0
+
+
+def test_long_row_indices(tmp_path: Path):
+    # Long index lists take the path that releases the GIL while they are decoded.
+    rows = (1 << 16) + 5
+    path = tmp_path / "long.vortex"
+    vx.io.write(vx.array(pa.table({"x": list(range(rows))})), str(path))
+    indices = list(range(rows))
+    result = vx.open(str(path)).scan(indices=vx.array(indices)).to_arrow_array(combine_chunks=True)
+    assert result.field("x").to_pylist() == indices
