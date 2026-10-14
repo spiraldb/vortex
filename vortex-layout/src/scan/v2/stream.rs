@@ -87,7 +87,7 @@ impl<A: 'static + Send> Stream for LazyScanStream<A> {
                         handle.spawn_cpu(move || {
                             builder
                                 .prepare()
-                                .and_then(|scan| scan.execute_batches(None))
+                                .and_then(|scan| scan.execute_batches_scheduled(None))
                         })
                     };
                     self.state = State::Preparing {

@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use futures::FutureExt;
 use futures::future::BoxFuture;
+use futures::future::try_join_all;
 use itertools::Either;
 use itertools::Itertools;
 use vortex_array::ArrayRef;
@@ -24,6 +25,8 @@ use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_io::request::IoService;
+use vortex_io::runtime::Handle;
+use vortex_io::session::RuntimeSessionExt;
 use vortex_mask::Mask;
 use vortex_scan::planning::planner::WorkScope;
 use vortex_scan::selection::Selection;
@@ -388,19 +391,33 @@ impl<A: 'static + Send> RepeatedScanV2<A> {
         &self,
         row_range: Option<Range<u64>>,
     ) -> VortexResult<Vec<BoxFuture<'static, VortexResult<Vec<A>>>>> {
-        self.execute_batch_splits(self.split_plans(row_range)?)
+        self.execute_batch_splits(self.split_plans(row_range)?, None)
+    }
+
+    pub(super) fn execute_batches_scheduled(
+        &self,
+        row_range: Option<Range<u64>>,
+    ) -> VortexResult<Vec<BoxFuture<'static, VortexResult<Vec<A>>>>> {
+        self.execute_batch_splits(
+            self.split_plans(row_range)?,
+            Some(self.plans.session.handle()),
+        )
     }
 
     pub(super) async fn execute_batches_pruned(
         &self,
         row_range: Option<Range<u64>>,
     ) -> VortexResult<Vec<BoxFuture<'static, VortexResult<Vec<A>>>>> {
-        self.execute_batch_splits(self.execution_splits(row_range).await?)
+        self.execute_batch_splits(
+            self.execution_splits(row_range).await?,
+            Some(self.plans.session.handle()),
+        )
     }
 
     fn execute_batch_splits(
         &self,
         splits: Vec<SplitPlan>,
+        map_handle: Option<Handle>,
     ) -> VortexResult<Vec<BoxFuture<'static, VortexResult<Vec<A>>>>> {
         Ok(splits
             .into_iter()
@@ -409,9 +426,23 @@ impl<A: 'static + Send> RepeatedScanV2<A> {
                 let map_fn = Arc::clone(&self.map_fn);
                 let run = split.run(io);
                 let shared = Arc::clone(&self.shared);
+                let map_handle = map_handle.clone();
                 async move {
                     let _shared = shared;
-                    run.await?.into_iter().map(|array| map_fn(array)).collect()
+                    let arrays = run.await?;
+                    if arrays.len() > 1
+                        && let Some(handle) = map_handle
+                    {
+                        // Conversion can decode large compressed batches. Let workers steal
+                        // individual batches rather than binding a whole filter split to one.
+                        let tasks = arrays.into_iter().map(|array| {
+                            let map_fn = Arc::clone(&map_fn);
+                            handle.spawn_cpu(move || map_fn(array))
+                        });
+                        try_join_all(tasks).await
+                    } else {
+                        arrays.into_iter().map(|array| map_fn(array)).collect()
+                    }
                 }
                 .boxed()
             })
