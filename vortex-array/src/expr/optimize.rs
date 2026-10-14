@@ -153,7 +153,6 @@ mod tests {
     use crate::expr::pack;
     use crate::expr::root;
     use crate::expr::select;
-    use crate::expr::transform::replace;
     use crate::expr::zip_expr;
     use crate::scalar::Scalar;
     use crate::scalar_fn::fns::literal::Literal;
@@ -252,6 +251,13 @@ mod tests {
         );
         let scope = DType::Struct(fields, Nullability::NonNullable);
 
+        let root_pack = pack(
+            field_names
+                .iter()
+                .map(|name| (name.clone(), get_item(name.clone(), root())))
+                .collect::<Vec<_>>(),
+            Nullability::NonNullable,
+        );
         let expr = select(
             field_names
                 .iter()
@@ -259,7 +265,7 @@ mod tests {
                 .chain(["input_row_idx".into(), "input_file_idx".into()])
                 .collect::<Vec<_>>(),
             merge([
-                root(),
+                root_pack,
                 pack(
                     [
                         ("input_row_idx", lit(0_u64)),
@@ -269,14 +275,6 @@ mod tests {
                 ),
             ]),
         );
-        let root_pack = pack(
-            field_names
-                .iter()
-                .map(|name| (name.clone(), get_item(name.clone(), root())))
-                .collect::<Vec<_>>(),
-            Nullability::NonNullable,
-        );
-        let expr = replace(expr, &root(), root_pack);
 
         let expected = pack(
             field_names

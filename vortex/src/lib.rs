@@ -108,7 +108,11 @@ pub use vortex_array::compute;
 use vortex_array::dtype::session::DTypeSession;
 // vortex::expr is in the process of having its dependencies inverted, and will eventually be
 // pulled back out into a vortex_expr crate.
-pub use vortex_array::expr;
+pub mod expr {
+    //! Expression trees, their optimizer, and the analyses and rewrites built on them.
+    pub use vortex_array::expr::*;
+    pub use vortex_expr::*;
+}
 use vortex_array::memory::MemorySession;
 use vortex_array::optimizer::kernels::KernelSession;
 pub use vortex_array::scalar_fn;
