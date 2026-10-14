@@ -17,11 +17,11 @@ use vortex_array::ArraySerialization;
 use vortex_array::ArrayVTable;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::arrays::Patched;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure;
 use vortex_error::vortex_err;
+use vortex_patched::Patched;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
 

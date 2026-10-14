@@ -11,9 +11,7 @@ use vortex_array::ArrayPlugin;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::arrays::PatchedArray;
 use vortex_array::arrays::PrimitiveArray;
-use vortex_array::arrays::patched::PatchedArraySlotsExt;
 use vortex_array::assert_arrays_eq;
 use vortex_array::buffer::BufferHandle;
 use vortex_array::builtins::ArrayBuiltins;
@@ -29,6 +27,8 @@ use vortex_buffer::ByteBufferMut;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
+use vortex_patched::PatchedArray;
+use vortex_patched::PatchedArraySlotsExt;
 use vortex_session::VortexSession;
 use vortex_session::registry::ReadContext;
 

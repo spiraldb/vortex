@@ -75,10 +75,16 @@ use std::env;
 use std::sync::LazyLock;
 
 pub use array::*;
+#[cfg(test)]
+use vortex_array::session::ArraySessionExt;
 use vortex_buffer::ByteBuffer;
 pub use vtable::*;
 
-pub(crate) fn initialize(session: &vortex_session::VortexSession) {
+/// Register the [`Patched`] array's execution kernels in the given session.
+///
+/// The array plugin itself is registered separately by callers that opt into experimental
+/// patches (see [`use_experimental_patches`]).
+pub fn initialize(session: &vortex_session::VortexSession) {
     vtable::initialize(session);
 }
 
@@ -116,4 +122,12 @@ pub fn use_experimental_patches() -> bool {
     static USE_EXPERIMENTAL_PATCHES: LazyLock<bool> =
         LazyLock::new(|| env::var("VORTEX_EXPERIMENTAL_PATCHED_ARRAY").is_ok_and(|v| v == "1"));
     *USE_EXPERIMENTAL_PATCHES
+}
+
+#[cfg(test)]
+fn test_session() -> vortex_session::VortexSession {
+    let session = vortex_array::array_session();
+    session.arrays().register(Patched);
+    initialize(&session);
+    session
 }

@@ -13,14 +13,14 @@ use vortex_array::Canonical;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::VTable;
-use vortex_array::arrays::Patched;
-use vortex_array::arrays::patched::use_experimental_patches;
 use vortex_array::arrays::primitive::PrimitiveArrayExt;
 use vortex_array::dtype::PType;
 use vortex_compressor::scheme::CompressionEstimate;
 use vortex_compressor::scheme::DeferredEstimate;
 use vortex_compressor::scheme::EstimateVerdict;
 use vortex_error::VortexResult;
+use vortex_patched::Patched;
+use vortex_patched::use_experimental_patches;
 
 use crate::ArrayAndStats;
 use crate::CascadingCompressor;

@@ -15,10 +15,10 @@ use vortex_array::ArraySerialization;
 use vortex_array::ArrayVTable;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::arrays::Patched;
 use vortex_error::VortexResult;
 use vortex_error::vortex_ensure_eq;
 use vortex_error::vortex_err;
+use vortex_patched::Patched;
 use vortex_session::VortexSession;
 
 use crate::ALP;
@@ -102,13 +102,13 @@ mod tests {
     use vortex_array::ArrayPlugin;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::arrays::PatchedArray;
     use vortex_array::arrays::PrimitiveArray;
-    use vortex_array::arrays::patched::PatchedArraySlotsExt;
     use vortex_array::buffer::BufferHandle;
     use vortex_array::session::ArraySessionExt;
     use vortex_error::VortexResult;
     use vortex_error::vortex_err;
+    use vortex_patched::PatchedArray;
+    use vortex_patched::PatchedArraySlotsExt;
     use vortex_session::VortexSession;
 
     use super::ALPPatchedPlugin;

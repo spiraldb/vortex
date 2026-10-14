@@ -278,6 +278,11 @@ pub mod encodings {
         pub use vortex_parquet_variant::*;
     }
 
+    /// Lane-transposed patches over an inner array (experimental).
+    pub mod patched {
+        pub use vortex_patched::*;
+    }
+
     /// Pco numeric compression encoding.
     pub mod pco {
         pub use vortex_pco::*;

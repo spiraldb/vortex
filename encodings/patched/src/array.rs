@@ -5,6 +5,27 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::ops::Range;
 
+use vortex_array::Array;
+use vortex_array::ArrayParts;
+use vortex_array::ArrayRef;
+use vortex_array::ArraySlots;
+use vortex_array::Canonical;
+use vortex_array::ExecutionCtx;
+use vortex_array::IntoArray;
+use vortex_array::TypedArrayRef;
+use vortex_array::VortexSessionExecute;
+use vortex_array::array_slots;
+use vortex_array::arrays::PrimitiveArray;
+use vortex_array::buffer::BufferHandle;
+use vortex_array::dtype::DType;
+use vortex_array::dtype::IntegerPType;
+use vortex_array::dtype::NativePType;
+use vortex_array::dtype::PType;
+use vortex_array::legacy_session;
+use vortex_array::match_each_native_ptype;
+use vortex_array::match_each_unsigned_integer_ptype;
+use vortex_array::patches::Patches;
+use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
 use vortex_buffer::BufferMut;
 use vortex_error::VortexResult;
@@ -12,30 +33,9 @@ use vortex_error::vortex_ensure;
 use vortex_error::vortex_ensure_eq;
 use vortex_error::vortex_err;
 
-use crate::ArrayRef;
-use crate::ArraySlots;
-use crate::Canonical;
-use crate::ExecutionCtx;
-use crate::IntoArray;
-use crate::VortexSessionExecute;
-use crate::array::Array;
-use crate::array::ArrayParts;
-use crate::array::TypedArrayRef;
-use crate::array_slots;
-use crate::arrays::Patched;
-use crate::arrays::PrimitiveArray;
-use crate::arrays::patched::TransposedPatches;
-use crate::arrays::patched::patch_lanes;
-use crate::buffer::BufferHandle;
-use crate::dtype::DType;
-use crate::dtype::IntegerPType;
-use crate::dtype::NativePType;
-use crate::dtype::PType;
-use crate::legacy_session;
-use crate::match_each_native_ptype;
-use crate::match_each_unsigned_integer_ptype;
-use crate::patches::Patches;
-use crate::validity::Validity;
+use crate::Patched;
+use crate::TransposedPatches;
+use crate::patch_lanes;
 
 #[derive(Debug, Clone)]
 pub struct PatchedData {
@@ -368,18 +368,18 @@ fn transpose<I: IntegerPType, V: NativePType>(
 
 #[cfg(test)]
 mod tests {
+    use vortex_array::ArrayRef;
+    use vortex_array::IntoArray;
+    use vortex_array::array_slots;
+    use vortex_array::arrays::Chunked;
+    use vortex_array::arrays::Null;
+    use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::arrays::Union;
+    use vortex_array::validity::Validity;
     use vortex_buffer::Buffer;
     use vortex_buffer::buffer;
 
     use super::PatchedSlots;
-    use crate::ArrayRef;
-    use crate::IntoArray;
-    use crate::array_slots;
-    use crate::arrays::Chunked;
-    use crate::arrays::Null;
-    use crate::arrays::PrimitiveArray;
-    use crate::arrays::Union;
-    use crate::validity::Validity;
 
     #[array_slots(Null)]
     struct OptionalPatchedSlots {

@@ -3,16 +3,16 @@
 
 use std::ops::Range;
 
+use vortex_array::ArrayRef;
+use vortex_array::ArrayView;
+use vortex_array::IntoArray;
+use vortex_array::arrays::slice::SliceReduce;
 use vortex_error::VortexResult;
 
-use crate::ArrayRef;
-use crate::IntoArray;
-use crate::array::ArrayView;
-use crate::arrays::Patched;
-use crate::arrays::patched::PatchedArrayExt;
-use crate::arrays::patched::PatchedArraySlotsExt;
-use crate::arrays::patched::PatchedSlots;
-use crate::arrays::slice::SliceReduce;
+use crate::Patched;
+use crate::PatchedArrayExt;
+use crate::PatchedArraySlotsExt;
+use crate::PatchedSlots;
 
 impl SliceReduce for Patched {
     fn slice(array: ArrayView<'_, Self>, range: Range<usize>) -> VortexResult<Option<ArrayRef>> {
@@ -59,19 +59,19 @@ mod tests {
     use std::ops::Range;
 
     use rstest::rstest;
+    use vortex_array::Canonical;
+    use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
+    use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::assert_arrays_eq;
+    use vortex_array::dtype::NativePType;
+    use vortex_array::patches::Patches;
     use vortex_buffer::Buffer;
     use vortex_buffer::BufferMut;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
 
-    use crate::Canonical;
-    use crate::IntoArray;
-    use crate::VortexSessionExecute;
-    use crate::arrays::Patched;
-    use crate::arrays::PrimitiveArray;
-    use crate::assert_arrays_eq;
-    use crate::dtype::NativePType;
-    use crate::patches::Patches;
+    use crate::Patched;
 
     #[test]
     fn test_reduce() -> VortexResult<()> {
@@ -80,7 +80,7 @@ mod tests {
         let patch_values = buffer![u16::MAX; 3].into_array();
         let patches = Patches::new(512, 0, patch_indices, patch_values, None)?;
 
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_session().create_execution_ctx();
 
         let patched_array = Patched::from_array_and_patches(values, &patches, &mut ctx)?;
 
@@ -126,7 +126,7 @@ mod tests {
         )
         .unwrap();
 
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_session().create_execution_ctx();
 
         let patched_array = Patched::from_array_and_patches(inner.into_array(), &patches, &mut ctx)
             .unwrap()
@@ -158,7 +158,7 @@ mod tests {
         let patched_values = buffer![0u64, 1, 2, 3, 4, 5].into_array();
 
         let patches = Patches::new(10_000, 0, patched_indices, patched_values, None).unwrap();
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_session().create_execution_ctx();
 
         let patched_array = Patched::from_array_and_patches(values, &patches, &mut ctx)
             .unwrap()
