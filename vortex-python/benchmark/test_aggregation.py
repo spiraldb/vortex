@@ -16,7 +16,7 @@ def _has_mean(t: pa.DataType) -> bool:
     return is_integer(t) or is_floating(t)
 
 
-@pytest.mark.benchmark(group="aggregation", disable_gc=True)
+@pytest.mark.benchmark(group="aggregation")
 def test_arrow_table_aggregation(benchmark: BenchmarkFixture, vxf: vx.VortexFile) -> None:
     aggregations: list[tuple[str, Literal["mean"]]] = [
         (field.name, "mean") for field in vxf.dtype.to_arrow_schema() if _has_mean(field.type)
@@ -24,19 +24,19 @@ def test_arrow_table_aggregation(benchmark: BenchmarkFixture, vxf: vx.VortexFile
     benchmark(lambda: pa.concat_tables(x.to_arrow_table() for x in vxf.scan()).group_by([]).aggregate(aggregations))
 
 
-@pytest.mark.benchmark(group="aggregation", disable_gc=True)
+@pytest.mark.benchmark(group="aggregation")
 def test_polars_aggregation(benchmark: BenchmarkFixture, vxf: vx.VortexFile) -> None:
     lf = vxf.to_polars()
     benchmark(lambda: lf.mean().collect().to_arrow())
 
 
-@pytest.mark.benchmark(group="aggregation", disable_gc=True)
+@pytest.mark.benchmark(group="aggregation")
 def test_polars_streaming_aggregation(benchmark: BenchmarkFixture, vxf: vx.VortexFile) -> None:
     lf = vxf.to_polars()
     benchmark(lambda: lf.mean().collect(engine="streaming").to_arrow())
 
 
-@pytest.mark.benchmark(group="aggregation", disable_gc=True)
+@pytest.mark.benchmark(group="aggregation")
 def test_duckdb_aggregation(benchmark: BenchmarkFixture, vxf: vx.VortexFile) -> None:
     conn = duckdb.connect(database=":memory:")
     ds = vxf.to_dataset()

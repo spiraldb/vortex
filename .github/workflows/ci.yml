@@ -149,7 +149,7 @@ jobs:
 
       - name: Pytest Benchmarks - Vortex
         run: |
-          bash ../scripts/bench-taskset.sh uv run --all-packages pytest --benchmark-only benchmark/
+          bash ../scripts/bench-taskset.sh uv run --all-packages pytest --benchmark-only --benchmark-disable-gc benchmark/
         working-directory: vortex-python/
 
   python-windows:

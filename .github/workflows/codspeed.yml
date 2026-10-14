@@ -126,6 +126,39 @@ jobs:
           # Cached package restoration fails on dangling libc6-dbg documentation symlinks.
           cache-instruments: "false"
 
+  bench-codspeed-python:
+    name: "Benchmark with Codspeed (Python)"
+    timeout-minutes: 45
+    runs-on: >-
+      ${{ github.repository == 'vortex-data/vortex'
+          && format('runs-on={0}/runner=amd64-medium/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=bench-codspeed-python', github.run_id)
+          || 'ubuntu-latest' }}
+    env:
+      # Same settings as the bench profile, which keeps the debug info that CodSpeed uses to
+      # attribute native frames. See `profile.bench_python` in Cargo.toml.
+      MATURIN_PEP517_ARGS: "--profile bench_python"
+    steps:
+      - uses: runs-on/action@v2
+        if: github.repository == 'vortex-data/vortex'
+        with:
+          sccache: s3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: ./.github/actions/setup-prebuild
+        with:
+          enable-sccache: ${{ github.repository == 'vortex-data/vortex' && 'true' || 'false' }}
+      - uses: ./.github/actions/system-info
+      # Build the extension before measurement, so the benchmark step does not compile it.
+      - name: Build Python extension
+        run: uv sync --all-packages
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@f842b9a3ffe213dbb81768fd7f7eeb4dfcf1c369  # v5
+        with:
+          run: cd vortex-python && uv run --all-packages --no-sync pytest benchmark/ --codspeed
+          token: ${{ secrets.CODSPEED_TOKEN }}
+          mode: "simulation"
+          # Cached package restoration fails on dangling libc6-dbg documentation symlinks.
+          cache-instruments: "false"
+
   # Compile on smaller VMs from the same CPU family as the measurement hosts. Globally
   # enabled features also affect build scripts, so the build host must support them.
   bench-codspeed-cpu-features-build:

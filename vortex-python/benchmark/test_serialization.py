@@ -12,7 +12,6 @@ import vortex as vx
 
 @pytest.mark.parametrize("protocol", [4, 5], ids=lambda p: f"p{p}")
 @pytest.mark.parametrize("operation", ["dumps", "loads", "roundtrip"])
-@pytest.mark.benchmark(disable_gc=True)
 def test_pickle(
     benchmark: BenchmarkFixture,
     array_fixture: vx.Array,
