@@ -166,12 +166,12 @@ fn collect_starts(plan: &PlanRef, offset: u64, starts: &mut Vec<u64>) -> VortexR
 
 /// The filter splits of `rows`, as every cut including `rows.start` and `rows.end`.
 ///
-/// Rows are cut at `filter_starts`, the chunk starts of the columns the filter reads. A split
-/// longer than `max_rows` is cut further at `finer_starts`, the chunk starts of every column the
-/// scan reads, so a scan with coarse filter chunks still gives every thread several splits. No
-/// split is cut inside a chunk, which every split reading it would decode again. A cut closer than
-/// a quarter of `max_rows` to its neighbour is dropped, so misaligned chunks of different columns
-/// do not leave slivers.
+/// Rows are cut at `filter_starts`, the sorted chunk starts of the columns the filter reads. A
+/// split longer than `max_rows` is cut further at `finer_starts`, the sorted chunk starts of every
+/// column the scan reads, so a scan with coarse filter chunks still gives every thread several
+/// splits. No split is cut inside a chunk, which every split reading it would decode again. A cut
+/// closer than a quarter of `max_rows` to its neighbour is dropped, so misaligned chunks of
+/// different columns do not leave slivers.
 pub(super) fn filter_split_boundaries(
     filter_starts: &[u64],
     finer_starts: &[u64],
@@ -230,13 +230,16 @@ pub(super) fn sparse_filter_split_boundaries(
     )
 }
 
-/// `rows` cut at every one of `starts` inside it that is at least `min_rows` from the cut before
-/// and from `rows.end`, as every cut including `rows.start` and `rows.end`.
+/// `rows` cut at every one of the sorted `starts` inside it that is at least `min_rows` from the
+/// cut before and from `rows.end`, as every cut including `rows.start` and `rows.end`.
 fn cut_at(starts: &[u64], rows: Range<u64>, min_rows: u64) -> Vec<u64> {
+    // Refining each coarse split must only visit its own boundaries, not rescan the whole file.
+    let first = starts.partition_point(|&start| start <= rows.start);
+    let last = starts.partition_point(|&start| start < rows.end);
     let mut cuts = vec![rows.start];
-    for &start in starts {
+    for &start in &starts[first..last] {
         let previous = cuts[cuts.len() - 1];
-        if rows.start < start && start < rows.end && start - previous >= min_rows {
+        if start - previous >= min_rows {
             cuts.push(start);
         }
     }
@@ -306,6 +309,8 @@ mod tests {
     #[case::short_split_ignores_finer_starts(&[60_000], &[30_000, 60_000, 90_000], 0..120_000, 65_536, vec![0, 60_000, 120_000])]
     #[case::never_inside_a_chunk(&[], &[], 0..1_000_000, 65_536, vec![0, 1_000_000])]
     #[case::only_inside_rows(&[10_000, 50_000, 200_000], &[], 20_000..100_000, 65_536, vec![20_000, 50_000, 100_000])]
+    #[case::excludes_range_edges(&[0, 10_000, 50_000, 100_000, 200_000], &[], 10_000..100_000, 65_536, vec![10_000, 50_000, 100_000])]
+    #[case::refines_only_inside_each_split(&[0, 100_000, 200_000, 300_000], &[0, 50_000, 100_000, 150_000, 200_000, 250_000, 300_000], 50_000..250_000, 65_536, vec![50_000, 100_000, 150_000, 200_000, 250_000])]
     #[case::empty(&[10], &[], 5..5, 65_536, vec![])]
     fn filter_splits(
         #[case] filter_starts: &[u64],
