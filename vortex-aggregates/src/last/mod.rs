@@ -1,21 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use vortex_array::ArrayRef;
+use vortex_array::Columnar;
+use vortex_array::ExecutionCtx;
+use vortex_array::aggregate_fn::Accumulator;
+use vortex_array::aggregate_fn::AggregateArgs;
+use vortex_array::aggregate_fn::AggregateFnId;
+use vortex_array::aggregate_fn::AggregateFnVTable;
+use vortex_array::aggregate_fn::DynAccumulator;
+use vortex_array::aggregate_fn::EmptyOptions;
+use vortex_array::dtype::DType;
+use vortex_array::scalar::Scalar;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_session::registry::CachedId;
-
-use crate::ArrayRef;
-use crate::Columnar;
-use crate::ExecutionCtx;
-use crate::aggregate_fn::Accumulator;
-use crate::aggregate_fn::AggregateArgs;
-use crate::aggregate_fn::AggregateFnId;
-use crate::aggregate_fn::AggregateFnVTable;
-use crate::aggregate_fn::DynAccumulator;
-use crate::aggregate_fn::EmptyOptions;
-use crate::dtype::DType;
-use crate::scalar::Scalar;
 
 /// Return the last non-null value of an array.
 ///
@@ -151,29 +150,29 @@ impl AggregateFnVTable for Last {
 
 #[cfg(test)]
 mod tests {
+    use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
+    use vortex_array::aggregate_fn::Accumulator;
+    use vortex_array::aggregate_fn::AggregateDTypes;
+    use vortex_array::aggregate_fn::AggregateFnVTable;
+    use vortex_array::aggregate_fn::DynAccumulator;
+    use vortex_array::aggregate_fn::EmptyOptions;
+    use vortex_array::array_session;
+    use vortex_array::arrays::ChunkedArray;
+    use vortex_array::arrays::ConstantArray;
+    use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::arrays::VarBinArray;
+    use vortex_array::dtype::DType;
+    use vortex_array::dtype::Nullability;
+    use vortex_array::dtype::Nullability::Nullable;
+    use vortex_array::dtype::PType;
+    use vortex_array::scalar::Scalar;
+    use vortex_array::validity::Validity;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
 
-    use crate::IntoArray;
-    use crate::VortexSessionExecute;
-    use crate::aggregate_fn::Accumulator;
-    use crate::aggregate_fn::AggregateDTypes;
-    use crate::aggregate_fn::AggregateFnVTable;
-    use crate::aggregate_fn::DynAccumulator;
-    use crate::aggregate_fn::EmptyOptions;
-    use crate::aggregate_fn::fns::last::Last;
-    use crate::aggregate_fn::fns::last::last;
-    use crate::array_session;
-    use crate::arrays::ChunkedArray;
-    use crate::arrays::ConstantArray;
-    use crate::arrays::PrimitiveArray;
-    use crate::arrays::VarBinArray;
-    use crate::dtype::DType;
-    use crate::dtype::Nullability;
-    use crate::dtype::Nullability::Nullable;
-    use crate::dtype::PType;
-    use crate::scalar::Scalar;
-    use crate::validity::Validity;
+    use crate::last::Last;
+    use crate::last::last;
 
     #[test]
     fn last_non_null() -> VortexResult<()> {
