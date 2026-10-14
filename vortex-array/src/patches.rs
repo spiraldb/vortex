@@ -29,6 +29,8 @@ use crate::IntoArray;
 use crate::arrays::Primitive;
 use crate::arrays::PrimitiveArray;
 use crate::arrays::primitive::PrimitiveArrayExt;
+#[cfg(debug_assertions)]
+use crate::arrays::primitive::integer_bounds;
 use crate::builtins::ArrayBuiltins;
 use crate::dtype::DType;
 use crate::dtype::IntegerPType;
@@ -271,9 +273,11 @@ impl Patches {
 
             #[cfg(debug_assertions)]
             {
-                use crate::aggregate_fn::fns::is_sorted::is_sorted;
                 assert!(
-                    is_sorted(&indices, ctx).unwrap_or(false),
+                    integer_bounds(&indices, ctx)
+                        .ok()
+                        .flatten()
+                        .is_none_or(|bounds| bounds.is_sorted),
                     "Patch indices must be sorted"
                 );
             }
