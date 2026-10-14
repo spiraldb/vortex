@@ -11,6 +11,7 @@ use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldMask;
 use vortex_array::dtype::FieldName;
 use vortex_array::dtype::Nullability;
+use vortex_array::dtype::RESERVED_VALIDITY_FIELD_NAME;
 use vortex_array::dtype::StructFields;
 use vortex_array::expr::BoundExpression;
 use vortex_array::expr::ExactBoundExpr;
@@ -59,7 +60,7 @@ impl std::fmt::Display for Item {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Item::Field(field_name) => write!(f, "{field_name}"),
-            Item::Validity => f.write_str("$__vortex_validity"),
+            Item::Validity => f.write_str(RESERVED_VALIDITY_FIELD_NAME),
         }
     }
 }
@@ -68,7 +69,7 @@ impl From<Item> for FieldName {
     fn from(item: Item) -> Self {
         match item {
             Item::Field(field_name) => field_name,
-            Item::Validity => FieldName::from("$validity"),
+            Item::Validity => FieldName::from(RESERVED_VALIDITY_FIELD_NAME),
         }
     }
 }
@@ -591,6 +592,7 @@ mod tests {
     use vortex_array::dtype::FieldName;
     use vortex_array::dtype::Nullability;
     use vortex_array::dtype::PType;
+    use vortex_array::dtype::RESERVED_VALIDITY_FIELD_NAME;
     use vortex_array::dtype::StructFields;
     use vortex_array::expr::Expression;
     use vortex_array::expr::and;
@@ -1424,12 +1426,20 @@ mod tests {
         Ok(())
     }
 
-    /// A field named like the internal struct validity partition must not clash with it.
+    /// A field named [`RESERVED_VALIDITY_FIELD_NAME`] clashes with the validity partition of a
+    /// nullable struct. Such names are reserved and not supported.
     #[test]
-    fn test_validity_partition_name_clash() -> VortexResult<()> {
+    #[should_panic]
+    fn test_validity_partition_name_clash() {
+        validity_partition_name_clash().unwrap();
+    }
+
+    fn validity_partition_name_clash() -> VortexResult<()> {
         let validity = Validity::Array(BoolArray::from_iter([false, true]).into_array());
-        let array =
-            StructArray::try_from_iter_with_validity([("$validity", buffer![1i32, 2])], validity)?;
+        let array = StructArray::try_from_iter_with_validity(
+            [(RESERVED_VALIDITY_FIELD_NAME, buffer![1i32, 2])],
+            validity,
+        )?;
 
         let segments = Arc::new(TestSegments::default());
         let (ptr, eof) = SequenceId::root().split();
@@ -1452,7 +1462,7 @@ mod tests {
         })?;
         let reader = layout.new_reader("".into(), segments, &SESSION, &Default::default())?;
 
-        let expr = col("$validity").bind(reader.dtype())?;
+        let expr = col(RESERVED_VALIDITY_FIELD_NAME).bind(reader.dtype())?;
         let future = reader.projection_evaluation(&(0..2), &expr, MaskFuture::new_true(2))?;
         let result = block_on(move |_| future)?;
 
