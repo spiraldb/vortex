@@ -271,9 +271,8 @@ Benchmarks run automatically on all commits to `develop` and can be run on-deman
 - **SQL Compact** -- `action/bench-sql-compact` runs the `pr-compact` preset, which benchmarks
   `vortex-compact` plus Parquet control rows used to distinguish code changes from runner drift.
 - **All CPU benchmarks** -- `action/bench-all` runs random access, compression, string encoding,
-  and the `pr-all` SQL preset, which combines the `pr` and `pr-compact` coverage, plus the
-  default targets of Clickbench Sorted, statpopgen, and FineWeb on S3, without repeating shared
-  jobs. Do not combine it with other benchmark labels;
+  and the `pr-all` SQL preset, the union of the `pr`, `pr-compact`, and `pr-full` coverage, without
+  repeating shared jobs. Do not combine it with other benchmark labels;
   GPU compression is the only exception.
 
 All CI benchmarks run on dedicated instances with the `release_debug` profile and
