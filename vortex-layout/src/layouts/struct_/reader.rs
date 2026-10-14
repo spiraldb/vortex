@@ -576,6 +576,7 @@ mod tests {
     use rstest::fixture;
     use rstest::rstest;
     use vortex_array::ArrayContext;
+    use vortex_array::ArrayRef;
     use vortex_array::IntoArray;
     use vortex_array::MaskFuture;
     use vortex_array::VortexSessionExecute;
@@ -592,6 +593,7 @@ mod tests {
     use vortex_array::dtype::PType;
     use vortex_array::dtype::StructFields;
     use vortex_array::expr::Expression;
+    use vortex_array::expr::and;
     use vortex_array::expr::col;
     use vortex_array::expr::eq;
     use vortex_array::expr::get_item;
@@ -611,6 +613,7 @@ mod tests {
     use vortex_io::session::RuntimeSessionExt;
     use vortex_mask::Mask;
 
+    use crate::LayoutReaderRef;
     use crate::LayoutRef;
     use crate::LayoutStrategy;
     use crate::layouts::flat::writer::FlatLayoutStrategy;
@@ -1088,6 +1091,332 @@ mod tests {
             let expected = PrimitiveArray::from_iter([10i32, 20, 30]);
             assert_arrays_eq!(result, expected, &mut ctx);
         }
+        Ok(())
+    }
+
+    /// Builds `$.a` of [`nested_validity_array`] with the given validity.
+    ///
+    /// `$.a.b` is null at row 2 and `$.a.b.c` is null at row 3.
+    fn nested_validity_a(validity: [bool; 6]) -> VortexResult<StructArray> {
+        let b = StructArray::try_from_iter_with_validity(
+            [
+                (
+                    "c",
+                    PrimitiveArray::from_option_iter([
+                        Some(1i32),
+                        Some(2),
+                        Some(3),
+                        None,
+                        Some(5),
+                        Some(6),
+                    ])
+                    .into_array(),
+                ),
+                ("d", buffer![10i32, 20, 30, 40, 50, 60].into_array()),
+            ],
+            Validity::Array(
+                BoolArray::from_iter([true, true, false, true, true, true]).into_array(),
+            ),
+        )?;
+        StructArray::try_from_iter_with_validity(
+            [
+                ("e", buffer![100i32, 101, 102, 103, 104, 105].into_array()),
+                ("b", b.into_array()),
+            ],
+            Validity::Array(BoolArray::from_iter(validity).into_array()),
+        )
+    }
+
+    /// A struct where each row is null at a different level of nesting:
+    ///
+    /// | row | `$`               | `$.a` | `$.a.b` | `$.a.b.c` | `$.a.b.d` | `$.a.e` | `$.x` |
+    /// |-----|-------------------|-------|---------|-----------|-----------|---------|-------|
+    /// | 0   | null if nullable  |       |         | 1         | 10        | 100     | 0     |
+    /// | 1   |                   | null  |         | 2         | 20        | 101     | 1     |
+    /// | 2   |                   |       | null    | 3         | 30        | 102     | 2     |
+    /// | 3   |                   |       |         | null      | 40        | 103     | 3     |
+    /// | 4   |                   |       |         | 5         | 50        | 104     | 4     |
+    /// | 5   |                   |       |         | 6         | 60        | 105     | 5     |
+    fn nested_validity_array(root_nullable: bool) -> VortexResult<ArrayRef> {
+        let a = nested_validity_a([true, false, true, true, true, true])?;
+        let validity = if root_nullable {
+            Validity::Array(
+                BoolArray::from_iter([false, true, true, true, true, true]).into_array(),
+            )
+        } else {
+            Validity::NonNullable
+        };
+        Ok(StructArray::try_from_iter_with_validity(
+            [
+                ("x", buffer![0i32, 1, 2, 3, 4, 5].into_array()),
+                ("a", a.into_array()),
+            ],
+            validity,
+        )?
+        .into_array())
+    }
+
+    fn nested_validity_reader(root_nullable: bool) -> VortexResult<LayoutReaderRef> {
+        let array = nested_validity_array(root_nullable)?;
+        let ctx = ArrayContext::empty();
+        let segments = Arc::new(TestSegments::default());
+        let (ptr, eof) = SequenceId::root().split();
+        let strategy = TableStrategy::new(
+            Arc::new(FlatLayoutStrategy::default()),
+            Arc::new(FlatLayoutStrategy::default()),
+        );
+        let segments2 = Arc::<TestSegments>::clone(&segments);
+        let layout = block_on(|handle| {
+            let session = new_session().with_handle(handle);
+            async move {
+                let stream = array.to_array_stream().sequenced(ptr);
+                strategy
+                    .write_stream(ctx.into(), segments2, stream, eof, &session)
+                    .await
+            }
+        })?;
+        layout.new_reader("".into(), segments, &SESSION, &Default::default())
+    }
+
+    fn nested_validity_project(
+        root_nullable: bool,
+        expr: Expression,
+        mask: Mask,
+    ) -> VortexResult<ArrayRef> {
+        let reader = nested_validity_reader(root_nullable)?;
+        let expr = expr.bind(reader.dtype())?;
+        let future = reader.projection_evaluation(&(0..6), &expr, MaskFuture::ready(mask))?;
+        block_on(move |_| future)
+    }
+
+    fn nested_validity_filter(root_nullable: bool, expr: Expression) -> VortexResult<Mask> {
+        let reader = nested_validity_reader(root_nullable)?;
+        let expr = expr.bind(reader.dtype())?;
+        let future = reader.filter_evaluation(&(0..6), &expr, MaskFuture::new_true(6))?;
+        block_on(move |_| future)
+    }
+
+    fn a_b() -> Expression {
+        get_item("b", col("a"))
+    }
+
+    #[rstest]
+    #[case::leaf_nullable(
+        get_item("c", a_b()),
+        [Some(1), None, None, None, Some(5), Some(6)]
+    )]
+    #[case::leaf_non_nullable(
+        get_item("d", a_b()),
+        [Some(10), None, None, Some(40), Some(50), Some(60)]
+    )]
+    #[case::middle(
+        get_item("e", col("a")),
+        [Some(100), None, Some(102), Some(103), Some(104), Some(105)]
+    )]
+    fn test_nested_validity_projection(
+        #[values(false, true)] root_nullable: bool,
+        #[case] expr: Expression,
+        #[case] mut expected: [Option<i32>; 6],
+    ) -> VortexResult<()> {
+        if root_nullable {
+            expected[0] = None;
+        }
+        let result = nested_validity_project(root_nullable, expr, Mask::new_true(6))?;
+        let expected = PrimitiveArray::from_option_iter(expected);
+        assert_arrays_eq!(result, expected, &mut SESSION.create_execution_ctx());
+        Ok(())
+    }
+
+    #[rstest]
+    fn test_nested_validity_projection_row_mask(
+        #[values(false, true)] root_nullable: bool,
+    ) -> VortexResult<()> {
+        let mask = Mask::from_iter([true, false, true, false, true, true]);
+        let result = nested_validity_project(root_nullable, get_item("c", a_b()), mask)?;
+        let first = (!root_nullable).then_some(1i32);
+        let expected = PrimitiveArray::from_option_iter([first, None, Some(5), Some(6)]);
+        assert_arrays_eq!(result, expected, &mut SESSION.create_execution_ctx());
+        Ok(())
+    }
+
+    #[rstest]
+    fn test_nested_validity_projection_top_level_field(
+        #[values(false, true)] root_nullable: bool,
+    ) -> VortexResult<()> {
+        let result = nested_validity_project(root_nullable, col("x"), Mask::new_true(6))?;
+        let expected = if root_nullable {
+            PrimitiveArray::from_option_iter([None, Some(1i32), Some(2), Some(3), Some(4), Some(5)])
+        } else {
+            PrimitiveArray::from_iter([0i32, 1, 2, 3, 4, 5])
+        };
+        assert_arrays_eq!(result, expected, &mut SESSION.create_execution_ctx());
+        Ok(())
+    }
+
+    #[rstest]
+    fn test_nested_validity_projection_root(
+        #[values(false, true)] root_nullable: bool,
+    ) -> VortexResult<()> {
+        let result = nested_validity_project(root_nullable, root(), Mask::new_true(6))?;
+        let expected = nested_validity_array(root_nullable)?;
+        assert_arrays_eq!(result, expected, &mut SESSION.create_execution_ctx());
+        Ok(())
+    }
+
+    #[rstest]
+    fn test_nested_validity_projection_nested_struct(
+        #[values(false, true)] root_nullable: bool,
+    ) -> VortexResult<()> {
+        let result = nested_validity_project(root_nullable, col("a"), Mask::new_true(6))?;
+        let expected = nested_validity_a([!root_nullable, false, true, true, true, true])?;
+        assert_arrays_eq!(result, expected, &mut SESSION.create_execution_ctx());
+        Ok(())
+    }
+
+    #[rstest]
+    fn test_nested_validity_projection_select(
+        #[values(false, true)] root_nullable: bool,
+    ) -> VortexResult<()> {
+        let expr = select(["c"], a_b());
+        let result = nested_validity_project(root_nullable, expr, Mask::new_true(6))?;
+        let c = PrimitiveArray::from_option_iter([
+            Some(1i32),
+            Some(2),
+            Some(3),
+            None,
+            Some(5),
+            Some(6),
+        ]);
+        let validity = BoolArray::from_iter([!root_nullable, false, false, true, true, true]);
+        let expected = StructArray::try_from_iter_with_validity(
+            [("c", c.into_array())],
+            Validity::Array(validity.into_array()),
+        )?;
+        assert_arrays_eq!(result, expected, &mut SESSION.create_execution_ctx());
+        Ok(())
+    }
+
+    #[rstest]
+    fn test_nested_validity_projection_pack_across_levels(
+        #[values(false, true)] root_nullable: bool,
+    ) -> VortexResult<()> {
+        let expr = pack(
+            [
+                ("c", get_item("c", a_b())),
+                ("e", get_item("e", col("a"))),
+                ("x", col("x")),
+            ],
+            Nullability::NonNullable,
+        );
+        let result = nested_validity_project(root_nullable, expr, Mask::new_true(6))?;
+
+        let first = |value: i32| (!root_nullable).then_some(value);
+        let c = PrimitiveArray::from_option_iter([first(1), None, None, None, Some(5), Some(6)]);
+        let e = PrimitiveArray::from_option_iter([
+            first(100),
+            None,
+            Some(102),
+            Some(103),
+            Some(104),
+            Some(105),
+        ]);
+        let x = if root_nullable {
+            PrimitiveArray::from_option_iter([None, Some(1i32), Some(2), Some(3), Some(4), Some(5)])
+        } else {
+            PrimitiveArray::from_iter([0i32, 1, 2, 3, 4, 5])
+        };
+        let expected = StructArray::try_from_iter_with_validity(
+            [("c", c.into_array()), ("e", e.into_array()), ("x", x.into_array())],
+            Validity::NonNullable,
+        )?;
+        assert_arrays_eq!(result, expected, &mut SESSION.create_execution_ctx());
+        Ok(())
+    }
+
+    #[rstest]
+    fn test_nested_validity_projection_is_null(
+        #[values(false, true)] root_nullable: bool,
+    ) -> VortexResult<()> {
+        let result = nested_validity_project(root_nullable, is_null(a_b()), Mask::new_true(6))?;
+        let expected = BoolArray::from_iter([root_nullable, true, true, false, false, false]);
+        assert_arrays_eq!(result, expected, &mut SESSION.create_execution_ctx());
+        Ok(())
+    }
+
+    #[rstest]
+    #[case::leaf_predicate(
+        gt(get_item("c", a_b()), lit(0)),
+        [true, false, false, false, true, true],
+        [false, false, false, false, true, true]
+    )]
+    #[case::leaf_is_not_null(
+        is_not_null(get_item("c", a_b())),
+        [true, false, false, false, true, true],
+        [false, false, false, false, true, true]
+    )]
+    #[case::leaf_is_null(
+        is_null(get_item("c", a_b())),
+        [false, true, true, true, false, false],
+        [true, true, true, true, false, false]
+    )]
+    #[case::inner_is_null(
+        is_null(a_b()),
+        [false, true, true, false, false, false],
+        [true, true, true, false, false, false]
+    )]
+    #[case::inner_is_not_null(
+        is_not_null(a_b()),
+        [true, false, false, true, true, true],
+        [false, false, false, true, true, true]
+    )]
+    #[case::outer_is_null(
+        is_null(col("a")),
+        [false, true, false, false, false, false],
+        [true, true, false, false, false, false]
+    )]
+    #[case::root_is_null(
+        is_null(root()),
+        [false, false, false, false, false, false],
+        [true, false, false, false, false, false]
+    )]
+    #[case::root_is_not_null(
+        is_not_null(root()),
+        [true, true, true, true, true, true],
+        [false, true, true, true, true, true]
+    )]
+    #[case::top_level_or_leaf(
+        or(eq(col("x"), lit(0)), gt(get_item("c", a_b()), lit(5))),
+        [true, false, false, false, false, true],
+        [false, false, false, false, false, true]
+    )]
+    #[case::middle_or_leaf(
+        or(gt(get_item("e", col("a")), lit(99)), gt(get_item("d", a_b()), lit(25))),
+        [true, false, true, true, true, true],
+        [false, false, true, true, true, true]
+    )]
+    #[case::middle_and_inner_is_null(
+        and(gt(get_item("e", col("a")), lit(99)), is_null(a_b())),
+        [false, false, true, false, false, false],
+        [false, false, true, false, false, false]
+    )]
+    #[case::leaf_compared_to_top_level(
+        gt(get_item("d", a_b()), col("x")),
+        [true, false, false, true, true, true],
+        [false, false, false, true, true, true]
+    )]
+    fn test_nested_validity_filter(
+        #[values(false, true)] root_nullable: bool,
+        #[case] expr: Expression,
+        #[case] non_nullable_root: [bool; 6],
+        #[case] nullable_root: [bool; 6],
+    ) -> VortexResult<()> {
+        let expected = if root_nullable {
+            nullable_root
+        } else {
+            non_nullable_root
+        };
+        let result = nested_validity_filter(root_nullable, expr)?;
+        assert_eq!(result, Mask::from_iter(expected));
         Ok(())
     }
 
