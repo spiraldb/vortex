@@ -6,16 +6,16 @@
 use std::sync::Arc;
 
 use itertools::Itertools;
+use vortex_array::ArrayRef;
+use vortex_array::IntoArray;
+use vortex_array::arrays::Chunked;
+use vortex_array::arrays::ChunkedArray;
+use vortex_array::arrays::chunked::ChunkedArrayExt;
+use vortex_array::dtype::DType;
 use vortex_error::VortexResult;
 
-use crate::ArrayRef;
-use crate::IntoArray;
-use crate::arrays::Chunked;
-use crate::arrays::ChunkedArray;
-use crate::arrays::chunked::ChunkedArrayExt;
-use crate::dtype::DType;
-use crate::stream::ArrayStream;
-use crate::stream::ArrayStreamAdapter;
+use crate::ArrayStream;
+use crate::ArrayStreamAdapter;
 
 /// Iterator of array with a known [`DType`].
 ///
@@ -92,9 +92,14 @@ pub trait ArrayIteratorExt: ArrayIterator {
 
 impl<I: ArrayIterator> ArrayIteratorExt for I {}
 
-impl ArrayRef {
+/// Extension methods to iterate over an [`ArrayRef`] chunk by chunk.
+pub trait ArrayRefIterExt {
     /// Create an [`ArrayIterator`] over the array.
-    pub fn to_array_iterator(&self) -> impl ArrayIterator + 'static {
+    fn to_array_iterator(&self) -> impl ArrayIterator + 'static;
+}
+
+impl ArrayRefIterExt for ArrayRef {
+    fn to_array_iterator(&self) -> impl ArrayIterator + 'static {
         let dtype = self.dtype().clone();
         let iter = if let Some(chunked) = self.as_opt::<Chunked>() {
             ArrayChunkIterator::Chunked(Arc::new(chunked.into_owned()), 0)

@@ -242,6 +242,7 @@ mod test {
     use vortex_array::expr::lit;
     use vortex_array::expr::root;
     use vortex_array::validity::Validity;
+    use vortex_array_stream::ArrayRefStreamExt;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
     use vortex_io::runtime::single::block_on;

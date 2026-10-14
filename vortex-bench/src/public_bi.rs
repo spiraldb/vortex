@@ -28,6 +28,7 @@ use url::Url;
 use vortex::array::ArrayRef;
 use vortex::array::ExecutionCtx;
 use vortex::array::IntoArray;
+use vortex::array::stream::ArrayRefStreamExt;
 use vortex::array::stream::ArrayStreamExt;
 use vortex::error::VortexResult;
 use vortex::error::vortex_err;

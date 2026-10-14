@@ -185,6 +185,7 @@ mod tests {
     use vortex_array::extension::datetime::TimeUnit;
     use vortex_array::scalar::ScalarValue;
     use vortex_array::stats::StatsSet;
+    use vortex_array_stream::ArrayRefStreamExt;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
     use vortex_io::runtime::single::block_on;

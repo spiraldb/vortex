@@ -9,7 +9,6 @@ use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
 
-use futures::stream;
 use vortex_buffer::BufferMut;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
@@ -27,12 +26,8 @@ use crate::array_slots;
 use crate::arrays::Chunked;
 use crate::arrays::PrimitiveArray;
 use crate::dtype::DType;
-use crate::iter::ArrayIterator;
-use crate::iter::ArrayIteratorAdapter;
 use crate::search_sorted::SearchSorted;
 use crate::search_sorted::SearchSortedSide;
-use crate::stream::ArrayStream;
-use crate::stream::ArrayStreamAdapter;
 use crate::validity::Validity;
 
 /// Slot layout of a [`Chunked`] array: `[chunk_offsets, chunks...]`.
@@ -107,20 +102,6 @@ pub trait ChunkedArrayExt: TypedArrayRef<Chunked> {
         let chunk_start = chunk_offset_values[index_chunk];
         let index_in_chunk = index - chunk_start;
         Ok((index_chunk, index_in_chunk))
-    }
-
-    fn array_iterator(&self) -> impl ArrayIterator + '_ {
-        ArrayIteratorAdapter::new(
-            self.dtype().clone(),
-            self.iter_chunks().map(|chunk| Ok(chunk.clone())),
-        )
-    }
-
-    fn array_stream(&self) -> impl ArrayStream + '_ {
-        ArrayStreamAdapter::new(
-            self.dtype().clone(),
-            stream::iter(self.iter_chunks().map(|chunk| Ok(chunk.clone()))),
-        )
     }
 }
 impl<T: TypedArrayRef<Chunked>> ChunkedArrayExt for T {}

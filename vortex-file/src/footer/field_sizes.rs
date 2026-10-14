@@ -126,6 +126,7 @@ mod tests {
     use vortex_array::arrays::StructArray;
     use vortex_array::dtype::FieldPath;
     use vortex_array::field_path;
+    use vortex_array_stream::ArrayRefStreamExt;
     use vortex_buffer::ByteBufferMut;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;

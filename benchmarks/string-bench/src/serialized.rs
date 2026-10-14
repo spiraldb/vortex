@@ -31,6 +31,7 @@ use vortex::array::IntoArray;
 use vortex::array::VortexSessionExecute;
 use vortex::array::arrays::ChunkedArray;
 use vortex::array::arrays::VarBinViewArray;
+use vortex::array::stream::ArrayRefStreamExt;
 use vortex::compressor::BtrBlocksCompressorBuilder;
 use vortex::file::OpenOptionsSessionExt;
 use vortex::file::WriteOptionsSessionExt;

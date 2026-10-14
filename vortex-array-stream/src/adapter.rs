@@ -6,11 +6,11 @@ use std::task::Poll;
 
 use futures::Stream;
 use pin_project_lite::pin_project;
+use vortex_array::ArrayRef;
+use vortex_array::dtype::DType;
 use vortex_error::VortexResult;
 
-use crate::ArrayRef;
-use crate::dtype::DType;
-use crate::stream::ArrayStream;
+use crate::ArrayStream;
 
 pin_project! {
     /// An adapter for a stream of array chunks to implement an ArrayReader.

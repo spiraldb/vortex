@@ -570,6 +570,7 @@ mod tests {
     use vortex_array::expr::root;
     use vortex_array::scalar::Scalar;
     use vortex_array::validity::Validity;
+    use vortex_array_stream::ArrayRefStreamExt;
     use vortex_buffer::buffer;
     use vortex_io::runtime::single::block_on;
     use vortex_io::session::RuntimeSessionExt;

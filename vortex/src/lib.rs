@@ -64,7 +64,7 @@
 //!
 //! ```rust,no_run
 //! use vortex::VortexSessionDefault;
-//! use vortex::array::{IntoArray, stream::ArrayStreamExt};
+//! use vortex::array::{IntoArray, stream::{ArrayRefStreamExt, ArrayStreamExt}};
 //! use vortex::array::arrays::PrimitiveArray;
 //! use vortex::array::expr::{gt, lit, root};
 //! use vortex::array::validity::Validity;
@@ -138,6 +138,8 @@ use vortex_session::VortexSession;
 /// conversion.
 pub mod array {
     pub use vortex_array::*;
+    pub use vortex_array_stream as stream;
+    pub use vortex_array_stream::iter;
 
     // TODO(connor): We should probably manually pull up everything we need besides these 3 modules.
     // Note that there `vortex::dtype`, `vortex::extension`, and `vortex::scalar` are all exported
@@ -406,8 +408,9 @@ mod test {
     use vortex_array::expr::gt;
     use vortex_array::expr::lit;
     use vortex_array::expr::root;
-    use vortex_array::stream::ArrayStreamExt;
     use vortex_array::validity::Validity;
+    use vortex_array_stream::ArrayRefStreamExt;
+    use vortex_array_stream::ArrayStreamExt;
     use vortex_btrblocks::BtrBlocksCompressorBuilder;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;

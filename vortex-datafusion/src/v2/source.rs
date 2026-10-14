@@ -713,6 +713,7 @@ mod tests {
     use vortex::VortexSessionDefault;
     use vortex::array::IntoArray;
     use vortex::array::arrays::StructArray;
+    use vortex::array::stream::ArrayRefStreamExt;
     use vortex::buffer::ByteBufferMut;
     use vortex::buffer::buffer;
     use vortex::file::OpenOptionsSessionExt;

@@ -22,6 +22,7 @@ use vortex::array::IntoArray;
 use vortex::array::VortexSessionExecute;
 use vortex::array::arrays::StructArray;
 use vortex::array::arrays::struct_::StructArrayExt;
+use vortex::array::stream::ArrayRefStreamExt;
 use vortex::compressor::BtrBlocksCompressorBuilder;
 use vortex::error::VortexResult;
 use vortex::file::OpenOptionsSessionExt;

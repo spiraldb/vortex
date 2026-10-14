@@ -39,6 +39,7 @@ use vortex_array::arrays::list::ListArraySlotsExt;
 use vortex_array::arrays::varbin::VarBinArraySlotsExt;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::PType;
+use vortex_array_stream::iter::ArrayRefIterExt;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure_eq;

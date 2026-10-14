@@ -25,6 +25,7 @@ use vortex_array::aggregate_fn::fns::nan_count::NanCount;
 use vortex_array::aggregate_fn::fns::null_count::NullCount;
 use vortex_array::aggregate_fn::session::AggregateFnSessionExt;
 use vortex_array::dtype::DType;
+use vortex_array_stream::ArrayRefStreamExt;
 use vortex_error::VortexError;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
@@ -263,6 +264,7 @@ mod tests {
     use vortex_array::dtype::PType;
     use vortex_array::extension::datetime::TimeUnit;
     use vortex_array::extension::datetime::Timestamp;
+    use vortex_array_stream::ArrayRefStreamExt;
     use vortex_buffer::buffer;
     use vortex_error::VortexExpect;
     use vortex_io::runtime::Handle;

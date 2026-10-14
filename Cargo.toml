@@ -13,6 +13,7 @@ members = [
     "vortex-io",
     "vortex-cloud",
     "vortex-array",
+    "vortex-array-stream",
     "vortex-scalar-fns",
     "vortex-expr",
     "vortex-aggregates",
@@ -306,6 +307,7 @@ vortex-aggregates = { version = "0.1.0", path = "./vortex-aggregates", default-f
 vortex-alp = { version = "0.1.0", path = "./encodings/alp", default-features = false }
 vortex-array = { version = "0.1.0", path = "./vortex-array", default-features = false }
 vortex-array-macros = { version = "0.1.0", path = "./vortex-array-macros" }
+vortex-array-stream = { version = "0.1.0", path = "./vortex-array-stream", default-features = false }
 vortex-arrow = { version = "0.1.0", path = "./vortex-arrow", default-features = false }
 vortex-btrblocks = { version = "0.1.0", path = "./vortex-btrblocks", default-features = false }
 vortex-buffer = { version = "0.1.0", path = "./vortex-buffer", default-features = false }

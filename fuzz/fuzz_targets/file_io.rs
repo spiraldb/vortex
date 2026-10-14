@@ -18,6 +18,7 @@ use vortex_array::dtype::StructFields;
 use vortex_array::expr::lit;
 use vortex_array::expr::root;
 use vortex_array::scalar_fn::fns::operators::Operator;
+use vortex_array_stream::iter::ArrayRefIterExt;
 use vortex_btrblocks::BtrBlocksCompressorBuilder;
 use vortex_error::VortexExpect;
 use vortex_error::vortex_panic;

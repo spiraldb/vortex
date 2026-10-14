@@ -46,6 +46,7 @@ use vortex::array::arrays::StructArray;
 use vortex::array::arrays::TemporalArray;
 use vortex::array::arrays::VarBinViewArray;
 use vortex::array::arrays::varbinview::BinaryView;
+use vortex::array::stream::ArrayRefStreamExt;
 use vortex::array::stream::ArrayStreamExt;
 use vortex::array::validity::Validity;
 use vortex::arrow::ArrowSessionExt;

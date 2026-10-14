@@ -651,6 +651,7 @@ mod tests {
     use vortex::array::arrays::StructArray;
     use vortex::array::arrays::struct_::StructArrayExt;
     use vortex::array::assert_arrays_eq;
+    use vortex::array::stream::ArrayRefStreamExt;
     use vortex::buffer::ByteBufferMut;
     use vortex::editions::CORE_2025_05_0;
     use vortex::editions::ComponentKind;

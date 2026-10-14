@@ -524,6 +524,7 @@ mod tests {
     use vortex_array::buffer::BufferHandle;
     use vortex_array::memory::BufferAllocatorRef;
     use vortex_array::memory::MemorySessionExt;
+    use vortex_array_stream::ArrayRefStreamExt;
     use vortex_buffer::Alignment;
     use vortex_buffer::Buffer;
     use vortex_buffer::ByteBuffer;

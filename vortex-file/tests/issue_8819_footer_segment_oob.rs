@@ -14,6 +14,7 @@ use std::mem::size_of;
 use std::sync::LazyLock;
 
 use vortex_array::IntoArray;
+use vortex_array_stream::ArrayRefStreamExt;
 use vortex_buffer::Buffer;
 use vortex_buffer::ByteBuffer;
 use vortex_buffer::ByteBufferMut;

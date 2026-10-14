@@ -235,7 +235,7 @@ mod tests {
     use vortex_array::dtype::FieldName;
     use vortex_array::dtype::FieldNames;
     use vortex_array::dtype::StructFields;
-    use vortex_array::iter::ArrayIterator;
+    use vortex_array_stream::iter::ArrayIterator;
     use vortex_arrow::ArrowArrayStreamAdapter;
     use vortex_error::vortex_err;
     use vortex_session::VortexSession;

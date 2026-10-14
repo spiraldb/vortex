@@ -21,6 +21,7 @@ use datafusion_physical_plan::expressions as df_expr;
 use datafusion_physical_plan::filter_pushdown::PushedDown;
 use rstest::rstest;
 use vortex::VortexSessionDefault;
+use vortex::array::stream::ArrayRefStreamExt;
 use vortex::buffer::ByteBufferMut;
 use vortex::file::OpenOptionsSessionExt;
 use vortex::file::WriteOptionsSessionExt;

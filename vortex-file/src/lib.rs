@@ -46,7 +46,7 @@
 //! # Writing
 //!
 //! Use [`WriteOptionsSessionExt::write_options`] or [`VortexWriteOptions::new`] to write an
-//! [`ArrayStream`](vortex_array::stream::ArrayStream). The default [`WriteStrategyBuilder`]
+//! [`ArrayStream`](vortex_array_stream::ArrayStream). The default [`WriteStrategyBuilder`]
 //! repartitions rows, builds statistics layouts, dictionary-encodes suitable columns, compresses
 //! chunks with the BtrBlocks-style compressor, and writes flat leaf layouts. Advanced users can
 //! replace the whole strategy or override individual fields.

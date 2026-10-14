@@ -10,6 +10,7 @@ use tempfile::NamedTempFile;
 use vortex::array::IntoArray;
 use vortex::array::arrays::PrimitiveArray;
 use vortex::array::arrays::StructArray;
+use vortex::array::stream::ArrayRefStreamExt;
 use vortex::file::WriteOptionsSessionExt;
 use vortex::io::runtime::BlockingRuntime;
 use vortex_array::arrays::ExtensionArray;

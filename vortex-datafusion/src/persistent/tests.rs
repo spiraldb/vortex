@@ -24,6 +24,7 @@ use vortex::array::IntoArray;
 use vortex::array::arrays::ChunkedArray;
 use vortex::array::arrays::StructArray;
 use vortex::array::arrays::VarBinArray;
+use vortex::array::stream::ArrayRefStreamExt;
 use vortex::array::validity::Validity;
 use vortex::buffer::Buffer;
 use vortex::buffer::buffer;

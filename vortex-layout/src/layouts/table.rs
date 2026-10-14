@@ -346,6 +346,7 @@ mod tests {
     use vortex_array::dtype::StructFields;
     use vortex_array::field_path;
     use vortex_array::validity::Validity;
+    use vortex_array_stream::ArrayRefStreamExt;
     use vortex_buffer::buffer;
     use vortex_error::VortexExpect;
     use vortex_error::VortexResult;

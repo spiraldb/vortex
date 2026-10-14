@@ -6,7 +6,7 @@ use arrow_array::ffi_stream;
 use arrow_schema::SchemaRef;
 use vortex_array::ArrayRef;
 use vortex_array::dtype::DType;
-use vortex_array::iter::ArrayIterator;
+use vortex_array_stream::iter::ArrayIterator;
 use vortex_error::VortexError;
 use vortex_error::VortexResult;
 

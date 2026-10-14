@@ -40,7 +40,7 @@ use vortex_array::expr::Expression;
 use vortex_array::expr::root;
 use vortex_array::expr::stats::Precision;
 use vortex_array::stats::StatsSet;
-use vortex_array::stream::SendableArrayStream;
+use vortex_array_stream::SendableArrayStream;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_session::VortexSession;

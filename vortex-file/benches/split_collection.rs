@@ -22,6 +22,7 @@ use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::dtype::Field;
 use vortex_array::dtype::FieldMask;
+use vortex_array_stream::ArrayRefStreamExt;
 use vortex_btrblocks::BtrBlocksCompressorBuilder;
 use vortex_buffer::Buffer;
 use vortex_buffer::ByteBufferMut;

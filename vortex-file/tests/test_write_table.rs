@@ -19,6 +19,7 @@ use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::dtype::FieldNames;
 use vortex_array::field_path;
 use vortex_array::validity::Validity;
+use vortex_array_stream::ArrayRefStreamExt;
 use vortex_btrblocks::BtrBlocksCompressor;
 use vortex_buffer::ByteBuffer;
 use vortex_file::OpenOptionsSessionExt;

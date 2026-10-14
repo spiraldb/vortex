@@ -911,6 +911,7 @@ mod tests {
     use vortex::array::ArrayRef;
     use vortex::array::IntoArray;
     use vortex::array::arrays::PrimitiveArray;
+    use vortex::array::stream::ArrayRefStreamExt;
     use vortex::array::stream::ArrayStreamAdapter;
     use vortex::array::stream::ArrayStreamExt;
     use vortex::buffer::ByteBuffer;

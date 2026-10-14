@@ -303,6 +303,7 @@ mod tests {
 
     use vortex_array::IntoArray;
     use vortex_array::array_session;
+    use vortex_array_stream::ArrayRefStreamExt;
     use vortex_buffer::ByteBuffer;
     use vortex_buffer::ByteBufferMut;
     use vortex_buffer::buffer;

@@ -11304,6 +11304,7 @@ dependencies = [
  "vortex-aggregates",
  "vortex-alp",
  "vortex-array",
+ "vortex-array-stream",
  "vortex-arrow",
  "vortex-btrblocks",
  "vortex-buffer",
@@ -11404,7 +11405,6 @@ dependencies = [
  "num_enum",
  "parking_lot",
  "paste",
- "pin-project-lite",
  "primitive-types",
  "prost 0.14.4",
  "prost-types",
@@ -11445,6 +11445,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "vortex-array-stream"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "itertools 0.14.0",
+ "pin-project-lite",
+ "vortex-array",
+ "vortex-error",
+]
+
+[[package]]
 name = "vortex-arrow"
 version = "0.1.0"
 dependencies = [
@@ -11462,6 +11473,7 @@ dependencies = [
  "simdutf8",
  "tracing",
  "vortex-array",
+ "vortex-array-stream",
  "vortex-buffer",
  "vortex-error",
  "vortex-fsst",
@@ -11655,6 +11667,7 @@ dependencies = [
  "tpchgen-arrow",
  "vortex",
  "vortex-array",
+ "vortex-array-stream",
  "vortex-arrow",
  "vortex-buffer",
  "vortex-error",
@@ -11989,6 +12002,7 @@ dependencies = [
  "vortex-aggregates",
  "vortex-alp",
  "vortex-array",
+ "vortex-array-stream",
  "vortex-btrblocks",
  "vortex-buffer",
  "vortex-bytebool",
@@ -12052,6 +12066,7 @@ dependencies = [
  "tracing-subscriber",
  "vortex",
  "vortex-array",
+ "vortex-array-stream",
  "vortex-btrblocks",
  "vortex-buffer",
  "vortex-cuda",
@@ -12124,6 +12139,7 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "vortex-array",
+ "vortex-array-stream",
  "vortex-buffer",
  "vortex-error",
  "vortex-session",
@@ -12207,6 +12223,7 @@ dependencies = [
  "uuid",
  "vortex-aggregates",
  "vortex-array",
+ "vortex-array-stream",
  "vortex-arrow",
  "vortex-btrblocks",
  "vortex-buffer",
@@ -12291,6 +12308,7 @@ dependencies = [
  "rstest",
  "tokio",
  "vortex-array",
+ "vortex-array-stream",
  "vortex-arrow",
  "vortex-buffer",
  "vortex-edition",
@@ -12453,6 +12471,7 @@ dependencies = [
  "roaring",
  "tracing",
  "vortex-array",
+ "vortex-array-stream",
  "vortex-buffer",
  "vortex-error",
  "vortex-io",
@@ -12653,6 +12672,7 @@ dependencies = [
  "rstest",
  "uuid",
  "vortex-array",
+ "vortex-array-stream",
  "vortex-arrow",
  "vortex-buffer",
  "vortex-error",

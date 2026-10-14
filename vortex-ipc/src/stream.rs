@@ -17,7 +17,7 @@ use futures::TryStreamExt;
 use pin_project_lite::pin_project;
 use vortex_array::ArrayRef;
 use vortex_array::dtype::DType;
-use vortex_array::stream::ArrayStream;
+use vortex_array_stream::ArrayStream;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
@@ -227,8 +227,9 @@ mod test {
     use vortex_array::IntoArray as _;
     use vortex_array::VortexSessionExecute;
     use vortex_array::assert_arrays_eq;
-    use vortex_array::stream::ArrayStream;
-    use vortex_array::stream::ArrayStreamExt;
+    use vortex_array_stream::ArrayRefStreamExt;
+    use vortex_array_stream::ArrayStream;
+    use vortex_array_stream::ArrayStreamExt;
     use vortex_buffer::buffer;
 
     use super::*;

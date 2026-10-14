@@ -45,7 +45,6 @@ num-traits = { workspace = true }
 num_enum = { workspace = true }
 parking_lot = { workspace = true }
 paste = { workspace = true }
-pin-project-lite = { workspace = true }
 primitive-types = { workspace = true, optional = true, features = [
     "arbitrary",
 ] }

@@ -24,6 +24,7 @@ parquet-variant = { workspace = true }
 parquet-variant-compute = { workspace = true }
 prost = { workspace = true }
 vortex-array = { workspace = true }
+vortex-array-stream = { workspace = true }
 vortex-arrow = { workspace = true }
 vortex-buffer = { workspace = true }
 vortex-error = { workspace = true }

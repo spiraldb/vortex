@@ -9,7 +9,7 @@ use bytes::BytesMut;
 use itertools::Itertools;
 use vortex_array::ArrayRef;
 use vortex_array::dtype::DType;
-use vortex_array::iter::ArrayIterator;
+use vortex_array_stream::iter::ArrayIterator;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
@@ -174,8 +174,9 @@ mod test {
     use vortex_array::IntoArray as _;
     use vortex_array::VortexSessionExecute;
     use vortex_array::assert_arrays_eq;
-    use vortex_array::iter::ArrayIterator;
-    use vortex_array::iter::ArrayIteratorExt;
+    use vortex_array_stream::iter::ArrayIterator;
+    use vortex_array_stream::iter::ArrayIteratorExt;
+    use vortex_array_stream::iter::ArrayRefIterExt;
     use vortex_buffer::buffer;
 
     use super::*;

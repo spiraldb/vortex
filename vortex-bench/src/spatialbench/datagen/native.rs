@@ -32,6 +32,7 @@ use tokio::fs::File as TokioFile;
 use vortex::array::ArrayRef;
 use vortex::array::IntoArray;
 use vortex::array::arrays::ChunkedArray;
+use vortex::array::stream::ArrayRefStreamExt;
 use vortex::file::WriteOptionsSessionExt;
 use vortex_arrow::ArrowSessionExt;
 

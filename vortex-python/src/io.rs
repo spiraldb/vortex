@@ -16,6 +16,7 @@ use vortex::array::IntoArray;
 use vortex::array::iter::ArrayIterator;
 use vortex::array::iter::ArrayIteratorAdapter;
 use vortex::array::iter::ArrayIteratorExt;
+use vortex::array::stream::iter::ArrayRefIterExt;
 use vortex::compressor::BtrBlocksCompressorBuilder;
 use vortex::error::VortexError;
 use vortex::error::VortexResult;

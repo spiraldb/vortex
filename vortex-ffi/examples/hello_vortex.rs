@@ -22,6 +22,7 @@ use vortex::array::ArrayRef;
 use vortex::array::IntoArray;
 use vortex::array::arrays::ChunkedArray;
 use vortex::array::arrays::StructArray;
+use vortex::array::stream::ArrayRefStreamExt;
 use vortex::buffer::Buffer;
 use vortex::error::VortexResult;
 use vortex::error::vortex_err;

@@ -16,6 +16,7 @@ use vortex::array::arrays::StructArray;
 use vortex::array::arrays::VarBinArray;
 use vortex::array::arrays::VarBinViewArray;
 use vortex::array::assert_arrays_eq;
+use vortex::array::stream::ArrayRefStreamExt;
 use vortex::array::stream::ArrayStreamAdapter;
 use vortex::array::stream::ArrayStreamExt;
 use vortex::array::validity::Validity;

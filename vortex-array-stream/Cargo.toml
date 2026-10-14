@@ -1,0 +1,23 @@
+[package]
+name = "vortex-array-stream"
+authors = { workspace = true }
+categories = { workspace = true }
+description = "Iterator and async stream adapters over Vortex arrays"
+edition = { workspace = true }
+include = { workspace = true }
+keywords = { workspace = true }
+license = { workspace = true }
+readme = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+
+[dependencies]
+futures = { workspace = true, features = ["alloc", "async-await", "std"] }
+itertools = { workspace = true }
+pin-project-lite = { workspace = true }
+vortex-array = { workspace = true }
+vortex-error = { workspace = true }
+
+[lints]
+workspace = true

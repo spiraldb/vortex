@@ -301,6 +301,7 @@ mod tests {
     use vortex_array::dtype::Nullability::NonNullable;
     use vortex_array::dtype::PType;
     use vortex_array::validity::Validity;
+    use vortex_array_stream::ArrayRefStreamExt;
     use vortex_buffer::Buffer;
     use vortex_buffer::ByteBuffer;
     use vortex_error::VortexResult;

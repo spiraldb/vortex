@@ -511,6 +511,7 @@ mod tests {
     use vortex::array::memory::BufferAllocatorRef;
     use vortex::array::memory::MemorySessionExt;
     use vortex::array::memory::StaticBufferAllocator;
+    use vortex::array::stream::ArrayRefStreamExt;
     use vortex::array::validity::Validity;
     use vortex::buffer::BitBuffer;
     use vortex::buffer::Buffer;

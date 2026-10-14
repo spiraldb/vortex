@@ -109,10 +109,10 @@ The crate has three layers. Most callers only need the array-stream layer.
 | Messages      | `messages::AsyncMessageWriter`, `messages::SyncMessageWriter`  | `messages::AsyncMessageReader`, `messages::SyncMessageReader`, `messages::BufMessageReader` |
 | Framing       | `messages::MessageEncoder`                                     | `messages::MessageDecoder`                                                                  |
 
-`ArrayStreamIPC` and `ArrayIteratorIPC` are implemented for every `ArrayStream` and
-`ArrayIterator`. They write the `DTypeMessage`, then one `ArrayMessage` per item. The iterator and
-stream from `ArrayRef::to_array_iterator` and `ArrayRef::to_array_stream` yield one item per chunk
-of a chunked array.
+`ArrayStreamIPC` and `ArrayIteratorIPC` are implemented for every `ArrayStream` and `ArrayIterator`.
+They write the `DTypeMessage`, then one `ArrayMessage` per item. The iterator and stream from
+`ArrayRefIterExt::to_array_iterator` and `ArrayRefStreamExt::to_array_stream` yield one item per
+chunk of a chunked array.
 
 `AsyncIPCReader` and `SyncIPCReader` read such a stream back as an `ArrayStream` or `ArrayIterator`.
 They fail if the first message is not a `DTypeMessage`, if a later message is not an
@@ -127,6 +127,7 @@ use std::io::Cursor;
 use vortex::VortexSessionDefault;
 use vortex::array::IntoArray;
 use vortex::array::iter::ArrayIteratorExt;
+use vortex::array::iter::ArrayRefIterExt;
 use vortex::buffer::buffer;
 use vortex::error::VortexResult;
 use vortex::ipc::iterator::ArrayIteratorIPC;

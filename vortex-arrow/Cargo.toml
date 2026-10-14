@@ -30,6 +30,7 @@ num-traits = { workspace = true }
 simdutf8 = { workspace = true }
 tracing = { workspace = true }
 vortex-array = { workspace = true }
+vortex-array-stream = { workspace = true }
 vortex-buffer = { workspace = true, features = ["arrow"] }
 vortex-error = { workspace = true }
 vortex-mask = { workspace = true }

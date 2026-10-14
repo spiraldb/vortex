@@ -322,8 +322,9 @@ mod tests {
     use vortex_array::serde::SerializeOptions;
     use vortex_array::serde::SerializedArray;
     use vortex_array::session::ArraySessionExt;
-    use vortex_array::stream::ArrayStreamExt;
     use vortex_array::validity::Validity;
+    use vortex_array_stream::ArrayRefStreamExt;
+    use vortex_array_stream::ArrayStreamExt;
     use vortex_arrow::ArrowSessionExt;
     use vortex_buffer::BitBuffer;
     use vortex_buffer::ByteBufferMut;

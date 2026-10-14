@@ -16,6 +16,7 @@ all-features = true
 
 [dependencies]
 vortex-array = { workspace = true }
+vortex-array-stream = { workspace = true }
 vortex-buffer = { workspace = true }
 vortex-error = { workspace = true }
 vortex-io = { workspace = true }

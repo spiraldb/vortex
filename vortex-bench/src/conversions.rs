@@ -35,6 +35,7 @@ use vortex::array::arrays::StructArray;
 use vortex::array::arrays::VarBinViewArray;
 use vortex::array::arrays::struct_::StructArrayExt;
 use vortex::array::builders::builder_with_capacity_in;
+use vortex::array::stream::ArrayRefStreamExt;
 use vortex::array::stream::ArrayStreamAdapter;
 use vortex::array::stream::ArrayStreamExt;
 use vortex::compressor::BtrBlocksCompressorBuilder;

@@ -123,7 +123,6 @@ mod expression;
 pub mod extension;
 pub mod flatbuffers;
 mod hash;
-pub mod iter;
 pub mod kernel;
 pub mod mask;
 mod mask_future;
@@ -142,7 +141,6 @@ pub mod search_sorted;
 pub mod serde;
 pub mod session;
 pub mod stats;
-pub mod stream;
 #[cfg(any(test, feature = "_test-harness"))]
 pub mod test_harness;
 pub mod validity;

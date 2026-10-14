@@ -31,6 +31,7 @@ url = { workspace = true }
 vortex-aggregates = { workspace = true }
 vortex-alp = { workspace = true }
 vortex-array = { workspace = true }
+vortex-array-stream = { workspace = true }
 vortex-btrblocks = { workspace = true }
 vortex-buffer = { workspace = true }
 vortex-bytebool = { workspace = true }

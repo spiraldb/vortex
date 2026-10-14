@@ -16,6 +16,7 @@ use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::dtype::FieldNames;
 use vortex_array::validity::Validity;
+use vortex_array_stream::ArrayRefStreamExt;
 use vortex_buffer::ByteBufferMut;
 use vortex_error::VortexError;
 use vortex_error::VortexResult;
