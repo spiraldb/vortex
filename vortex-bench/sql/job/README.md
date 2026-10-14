@@ -37,12 +37,16 @@ Benchmark query indices are integers, so the upstream query names are numbered i
 ## CI variant
 
 CI runs this suite from local NVMe as the `JOB on NVME` PR comment in the `pr-full` and `pr-all`
-presets (`action/bench-sql-extended` and `action/bench-all`), comparing DuckDB over Parquet and Vortex files against a native
-DuckDB baseline. DataFusion is left out because its join orders make a few queries (`17b`-`17f`)
-take tens of seconds each.
+presets (`action/bench-sql-extended` and `action/bench-all`), comparing DataFusion and DuckDB over
+Parquet and Vortex files against a native DuckDB baseline.
+
+DataFusion skips the ten `16*` and `17*` queries (q56-q65). Its join orders for them chain
+`cast_info`, `name` and `movie_keyword` through large intermediates, taking 8-43 s per query
+against under 1 s on DuckDB, which would make DataFusion most of the suite's CI time. The skip
+and its reason live in `JobBenchmark::skipped_queries`, and the harness logs each skipped query.
 
 ## Running locally
 
 ```bash
-vx-bench run job --engine duckdb --format parquet,vortex,duckdb
+vx-bench run job --engine datafusion,duckdb --format parquet,vortex
 ```

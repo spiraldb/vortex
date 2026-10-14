@@ -134,7 +134,7 @@ async fn main() -> anyhow::Result<()> {
     let benchmark = create_benchmark(args.benchmark, &opts)?;
 
     let filtered_queries = filter_queries(
-        benchmark.queries()?,
+        benchmark.engine_queries(Engine::DataFusion)?,
         args.queries.as_ref(),
         args.exclude_queries.as_ref(),
     );
