@@ -324,8 +324,8 @@ fn sortedness_stat_into_options(stat: Stat) -> IsSortedOptions {
     }
 }
 
-/// Merge sortedness partials build during [`StatsAccumulator::push_chunk`]
-/// in file order, checking where consecutive chunks meet.
+/// Merge sortedness partials built, while checking where consecutive
+/// chunks meet.
 ///
 /// Returns `true` only when the merged are sorted. Otherwise, leaves
 /// the statistic absent.
