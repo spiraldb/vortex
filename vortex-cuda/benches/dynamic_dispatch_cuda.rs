@@ -377,7 +377,7 @@ fn bench_dict_bp_codes_alp_for_bp_values_dynanmic_dispatch(c: &mut Criterion) {
             .vortex_expect("bitpack values");
         let values_tree = ALP::new(
             FoR::try_new(bp.into_array(), global_reference(&for_arr))
-                .vortex_expect("for_new")
+                .vortex_expect("FoR over bit-packed values")
                 .into_array(),
             exponents,
             None,
@@ -683,7 +683,7 @@ fn bench_dict_bp_codes_alp_for_bp_values_composed_standalone(c: &mut Criterion) 
             .try_into()
             .vortex_expect("values reference");
         let values_for = FoR::try_new(values_bp.clone().into_array(), global_reference(&for_arr))
-            .vortex_expect("for_new")
+            .vortex_expect("FoR over bit-packed values")
             .into_array();
         let _values_alp = ALP::new(values_for, exponents, None).into_array();
 
@@ -778,7 +778,7 @@ fn bench_alp_for_bitpacked_f64(c: &mut Criterion) {
 
             let tree = ALP::new(
                 FoR::try_new(bp.into_array(), global_reference(&for_arr))
-                    .vortex_expect("for_new")
+                    .vortex_expect("FoR over bit-packed values")
                     .into_array(),
                 alp_exponents,
                 patches,
@@ -898,7 +898,7 @@ fn bench_alp_for_bitpacked(c: &mut Criterion) {
 
         let tree = ALP::new(
             FoR::try_new(bp.into_array(), global_reference(&for_arr))
-                .vortex_expect("for_new")
+                .vortex_expect("FoR over bit-packed values")
                 .into_array(),
             exponents,
             None,

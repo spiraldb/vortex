@@ -37,6 +37,7 @@ use vortex_session::VortexSession;
 use crate::BitPacked;
 use crate::BitPackedArrayExt;
 use crate::FoRData;
+use crate::FoRReferences;
 use crate::for_::array::FoRArrayExt;
 use crate::for_::array::FoRArraySlotsExt;
 use crate::for_::array::FoRSlots;
@@ -90,14 +91,17 @@ impl VTable for FoR {
         slots: &[Option<ArrayRef>],
     ) -> VortexResult<()> {
         let slots = FoRSlotsView::from_slots(slots);
-        validate_parts(
-            slots.encoded,
-            data.global_reference.as_ref(),
-            slots.blocked_references,
-            data.offset,
-            dtype,
-            len,
-        )
+        let references = match (data.global_reference.as_ref(), slots.blocked_references) {
+            (Some(reference), None) => FoRReferences::Global(reference),
+            (None, Some(references)) => FoRReferences::Blocked(references),
+            (Some(_), Some(_)) => {
+                vortex_bail!("FoR cannot have both a global reference and blocked references")
+            }
+            (None, None) => {
+                vortex_bail!("FoR needs either a global reference or blocked references")
+            }
+        };
+        validate_parts(slots.encoded, references, data.offset, dtype, len)
     }
 
     fn nbuffers(_array: ArrayView<'_, Self>) -> usize {
@@ -232,8 +236,7 @@ impl FoR {
 
 fn validate_parts(
     encoded: &ArrayRef,
-    global_reference: Option<&Scalar>,
-    blocked_references: Option<&ArrayRef>,
+    references: FoRReferences<'_>,
     offset: u16,
     dtype: &DType,
     len: usize,
@@ -242,8 +245,8 @@ fn validate_parts(
     vortex_ensure_eq!(encoded.dtype(), dtype, "FoR encoded dtype mismatch");
     vortex_ensure_eq!(encoded.len(), len, "FoR encoded length mismatch");
     let references_dtype = dtype.as_nonnullable();
-    match (global_reference, blocked_references) {
-        (Some(reference), None) => {
+    match references {
+        FoRReferences::Global(reference) => {
             vortex_ensure!(!reference.is_null(), "FoR global reference cannot be null");
             vortex_ensure_eq!(
                 reference.dtype(),
@@ -251,7 +254,7 @@ fn validate_parts(
                 "FoR global reference dtype mismatch"
             );
         }
-        (None, Some(references)) => {
+        FoRReferences::Blocked(references) => {
             vortex_ensure_eq!(
                 references.dtype(),
                 &references_dtype,
@@ -263,10 +266,6 @@ fn validate_parts(
                 "FoR expects one reference per chunk"
             );
         }
-        (Some(_), Some(_)) => {
-            vortex_bail!("FoR cannot have both a global reference and blocked references")
-        }
-        (None, None) => vortex_bail!("FoR needs either a global reference or blocked references"),
     }
     Ok(())
 }
