@@ -18,15 +18,8 @@ use vortex_mask::Mask;
 /// A future that resolves to a mask.
 #[derive(Clone)]
 pub struct MaskFuture {
-    inner: Inner,
+    inner: Shared<BoxFuture<'static, SharedVortexResult<Mask>>>,
     len: usize,
-}
-
-#[derive(Clone)]
-enum Inner {
-    /// A mask that was known when the future was made.
-    Ready(Mask),
-    Pending(Shared<BoxFuture<'static, SharedVortexResult<Mask>>>),
 }
 
 impl MaskFuture {
@@ -36,8 +29,8 @@ impl MaskFuture {
         F: Future<Output = VortexResult<Mask>> + Send + 'static,
     {
         Self {
-            inner: Inner::Pending(
-                fut.inspect(move |r| {
+            inner: fut
+                .inspect(move |r| {
                     if let Ok(mask) = r
                         && mask.len() != len {
                             vortex_panic!("MaskFuture created with future that returned mask of incorrect length (expected {}, got {})", len, mask.len());
@@ -46,7 +39,6 @@ impl MaskFuture {
                 .map_err(Arc::new)
                 .boxed()
                 .shared(),
-            ),
             len,
         }
     }
@@ -63,19 +55,20 @@ impl MaskFuture {
 
     /// Create a MaskFuture from a ready mask.
     pub fn ready(mask: Mask) -> Self {
-        Self {
-            len: mask.len(),
-            inner: Inner::Ready(mask),
-        }
+        let fut = Self::new(mask.len(), async move { Ok(mask) });
+        // Complete the shared future now: it is ready on its first poll, and once complete,
+        // `is_ready` sees it.
+        let _ready = fut.inner.clone().now_or_never();
+        fut
     }
 
     /// Returns true if the mask is available without waiting.
     ///
-    /// This is the case for [`MaskFuture::ready`] and its slices, whose mask was known when they
-    /// were made. Polling such a future returns the mask at once, so a reader can check it
-    /// before it requests any data, for example to skip rows that are not selected.
+    /// This is the case once the future has completed, which [`MaskFuture::ready`] and slices of
+    /// a completed mask have from the start. Polling such a future returns the mask at once, so a
+    /// reader can check it before it requests any data, for example to skip unselected rows.
     pub fn is_ready(&self) -> bool {
-        matches!(self.inner, Inner::Ready(_))
+        self.inner.peek().is_some()
     }
 
     /// Create a MaskFuture that resolves to a mask with all values set to true.
@@ -91,12 +84,24 @@ impl MaskFuture {
             return self.clone();
         }
 
-        match &self.inner {
-            Inner::Ready(mask) => Self::ready(mask.slice(range)),
-            Inner::Pending(inner) => {
-                let inner = inner.clone();
-                Self::new(range.len(), async move { Ok(inner.await?.slice(range)) })
-            }
+        // A slice of a completed mask is complete too.
+        if let Some(Ok(mask)) = self.inner.peek() {
+            return Self::ready(mask.slice(range));
+        }
+
+        let inner = self.inner.clone();
+        Self::new(range.len(), async move { Ok(inner.await?.slice(range)) })
+    }
+
+    pub fn inspect(
+        self,
+        f: impl FnOnce(&SharedVortexResult<Mask>) + 'static + Send + Sync,
+    ) -> Self {
+        let len = self.len;
+
+        Self {
+            inner: self.inner.inspect(f).boxed().shared(),
+            len,
         }
     }
 }
@@ -108,16 +113,12 @@ impl Future for MaskFuture {
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Self::Output> {
-        match &mut self.inner {
-            Inner::Ready(mask) => std::task::Poll::Ready(Ok(mask.clone())),
-            Inner::Pending(inner) => inner.poll_unpin(cx).map_err(VortexError::from),
-        }
+        self.inner.poll_unpin(cx).map_err(VortexError::from)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use futures::future;
     use vortex_buffer::BitBuffer;
 
     use super::*;
@@ -156,14 +157,16 @@ mod tests {
     }
 
     #[test]
-    fn pending_masks_and_their_slices_are_not_ready() -> VortexResult<()> {
+    fn pending_masks_are_ready_once_complete() -> VortexResult<()> {
         let mask = Mask::from_buffer(BitBuffer::from_iter([true, false, true]));
-        let pending = MaskFuture::new(3, future::ready(Ok(mask.clone())));
+        let pending = MaskFuture::new(3, async move { Ok(mask) });
         assert!(!pending.is_ready());
+        assert!(!pending.slice(0..2).is_ready());
 
-        let slice = pending.slice(0..2);
-        assert!(!slice.is_ready());
-        assert_eq!(futures::executor::block_on(slice)?, mask.slice(0..2));
+        let mask = futures::executor::block_on(pending.clone())?;
+        assert!(pending.is_ready());
+        assert!(pending.slice(0..2).is_ready());
+        assert_eq!(mask.len(), 3);
         Ok(())
     }
 }
