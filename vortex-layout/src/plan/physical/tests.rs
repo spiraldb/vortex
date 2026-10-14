@@ -36,6 +36,7 @@ use vortex_array::scalar_fn::fns::operators::CompareOperator;
 use vortex_array::stats::as_stat_bitset_bytes;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
+use vortex_expr::stats::rewrite::BoundExpressionPruneExt;
 use vortex_mask::Mask;
 use vortex_scalar_fns::expr::byte_length;
 use vortex_session::registry::CachedId;

@@ -7,12 +7,12 @@ use std::any::Any;
 use std::sync::Arc;
 
 use parking_lot::RwLock;
+use vortex_array::scalar_fn::ScalarFnId;
 use vortex_session::SessionExt;
 use vortex_session::SessionGuard;
 use vortex_session::SessionVar;
 use vortex_utils::aliases::hash_map::HashMap;
 
-use crate::scalar_fn::ScalarFnId;
 use crate::stats::rewrite::StatsRewriteRule;
 use crate::stats::rewrite::StatsRewriteRuleRef;
 use crate::stats::rewrite::register_builtins;

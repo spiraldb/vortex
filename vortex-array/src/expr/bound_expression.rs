@@ -12,7 +12,6 @@ use itertools::Itertools;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_ensure;
-use vortex_session::VortexSession;
 
 use crate::dtype::DType;
 use crate::expr::Expression;
@@ -28,8 +27,6 @@ use crate::scalar_fn::ScalarFnRef;
 use crate::scalar_fn::ScalarFnVTable;
 use crate::scalar_fn::ScalarFnVTableExt;
 use crate::scalar_fn::fns::is_not_null::IsNotNull;
-use crate::stats::rewrite::falsify;
-use crate::stats::rewrite::satisfy;
 
 /// An [`Expression`] that has been type-checked against a [`Scope`].
 ///
@@ -268,16 +265,6 @@ impl BoundExpression {
                 })
             }
         }
-    }
-
-    /// Return an expression that proves this predicate is definitely false from statistics.
-    pub fn falsify(&self, session: &VortexSession) -> VortexResult<Option<BoundExpression>> {
-        falsify(self, session)
-    }
-
-    /// Return an expression that proves this predicate is definitely true from statistics.
-    pub fn satisfy(&self, session: &VortexSession) -> VortexResult<Option<BoundExpression>> {
-        satisfy(self, session)
     }
 
     /// Display the bound expression as a formatted tree structure.

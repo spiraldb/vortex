@@ -35,8 +35,6 @@ use vortex_array::scalar_fn::ScalarFnVTableExt;
 use vortex_array::scalar_fn::fns::binary::Binary;
 use vortex_array::scalar_fn::fns::literal::Literal;
 use vortex_array::scalar_fn::fns::operators::Operator;
-use vortex_array::stats::expr::bound::stat as bound_stat;
-use vortex_array::stats::rewrite::StatsRewriteRule;
 use vortex_buffer::BitBufferMut;
 use vortex_buffer::Buffer;
 use vortex_error::VortexExpect;
@@ -44,6 +42,8 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_ensure;
 use vortex_error::vortex_ensure_eq;
 use vortex_error::vortex_err;
+use vortex_expr::stats::expr::bound::stat as bound_stat;
+use vortex_expr::stats::rewrite::StatsRewriteRule;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
 
@@ -305,10 +305,11 @@ mod tests {
     use vortex_array::scalar_fn::ScalarFnVTableExt;
     use vortex_array::scalar_fn::VecExecutionArgs;
     use vortex_array::scalar_fn::session::ScalarFnSessionExt;
-    use vortex_array::stats::StatsSessionExt;
-    use vortex_array::stats::rewrite::StatsRewriteRule;
     use vortex_array::validity::Validity;
     use vortex_error::VortexResult;
+    use vortex_expr::stats::StatsSessionExt;
+    use vortex_expr::stats::rewrite::BoundExpressionPruneExt;
+    use vortex_expr::stats::rewrite::StatsRewriteRule;
     use vortex_session::VortexSession;
 
     use super::BloomContains;
