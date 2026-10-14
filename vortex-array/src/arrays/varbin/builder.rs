@@ -31,6 +31,8 @@ use crate::arrays::PrimitiveArray;
 use crate::arrays::VarBin;
 use crate::arrays::VarBinArray;
 use crate::arrays::VarBinView;
+#[cfg(debug_assertions)]
+use crate::arrays::primitive::integer_bounds;
 use crate::arrays::varbin::VarBinArrayExt;
 use crate::arrays::varbin::VarBinArraySlotsExt;
 use crate::arrays::varbinview::VarBinViewArrayExt;
@@ -426,10 +428,13 @@ impl<O: OffsetBuilderPType> VarBinBuilder<O> {
         // prevent VarBinArray::validate from recomputing it after deserialization.
         #[cfg(debug_assertions)]
         {
-            let offsets_are_sorted = offsets
-                .statistics()
-                .compute_is_sorted(&mut legacy_session().create_execution_ctx())
-                .unwrap_or(false);
+            let offsets_are_sorted = integer_bounds(
+                offsets.as_ref(),
+                &mut legacy_session().create_execution_ctx(),
+            )
+            .ok()
+            .flatten()
+            .is_some_and(|bounds| bounds.is_sorted);
             debug_assert!(offsets_are_sorted, "VarBinBuilder offsets must be sorted");
         }
         offsets
