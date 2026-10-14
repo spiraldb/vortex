@@ -163,9 +163,10 @@ impl VTable for FoR {
         );
         // The fused unpack reads a bit-packed child's buffers directly. Its chunks line up with
         // the FoR chunks when the reference is global or the offsets match.
-        let fused = array.encoded().as_opt::<BitPacked>().is_some_and(|bp| {
-            array.references().is_global() || bp.offset() == array.offset()
-        });
+        let fused = array
+            .encoded()
+            .as_opt::<BitPacked>()
+            .is_some_and(|bp| array.references().is_global() || bp.offset() == array.offset());
         let array = if fused {
             array
         } else {
