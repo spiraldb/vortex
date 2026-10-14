@@ -134,7 +134,7 @@ fn scalar_functions_run_on_rect() -> VortexResult<()> {
     let distance = distance.execute::<Canonical>(&mut ctx)?.into_primitive();
     let distances = distance.as_slice::<f64>();
     assert_eq!(distances[0], 0.0);
-    assert!(distances[1] > 0.0);
+    assert!((distances[1] - 200.0f64.sqrt()).abs() < 1e-12);
 
     // Intersects / Contains: true for the interior point, false for the exterior one.
     let intersects = SpatialIntersects::try_new(bbox.clone(), points.clone())?.into_array();

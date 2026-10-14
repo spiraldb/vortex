@@ -20,6 +20,7 @@ use criterion::Criterion;
 use criterion::Throughput;
 use cudarc::driver::DeviceRepr;
 use futures::executor::block_on;
+use mimalloc::MiMalloc;
 use vortex::array::IntoArray;
 use vortex::array::VortexSessionExecute;
 use vortex::array::array_session;
@@ -40,6 +41,9 @@ use vortex_cuda_macros::cuda_not_available;
 
 use crate::bench_config::BENCH_SIZES;
 use crate::timed_launch_strategy::TimedLaunchStrategy;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 /// Patch frequencies to benchmark (as fractions).
 const PATCH_FREQUENCIES: &[(f64, &str)] = &[(0.0, "0%"), (0.01, "1%"), (0.10, "10%")];

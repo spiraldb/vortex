@@ -363,11 +363,12 @@ pub unsafe extern "C-unwind" fn duckdb_reader_scan(
     chunk: cpp::duckdb_data_chunk,
     error: *mut cpp::duckdb_vx_error,
 ) -> bool {
-    let file = unsafe { file.cast::<OpenFileReader>().as_ref() }.vortex_expect("null pointer");
+    // The local state holds the scan state of its current file, so the file is not needed.
+    let _ = file;
     let global = unsafe { global.cast::<GlobalState>().as_ref() }.vortex_expect("null pointer");
     let local = unsafe { local.cast::<LocalState>().as_mut() }.vortex_expect("null pointer");
     let chunk = unsafe { DataChunk::borrow_mut(chunk) };
-    try_or(error, || reader_scan(file, global, local, chunk))
+    try_or(error, || reader_scan(global, local, chunk))
 }
 
 #[unsafe(no_mangle)]
