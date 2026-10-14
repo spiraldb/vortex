@@ -104,6 +104,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    vortex_bench::configure_allocator();
     let args = Args::parse();
     setup_logging_and_tracing(args.verbose, args.tracing)?;
 

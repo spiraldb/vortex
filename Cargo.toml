@@ -190,6 +190,7 @@ lasso = { version = "0.7", features = ["multi-threaded", "inline-more"] }
 lending-iterator = "0.1.7"
 libfuzzer-sys = "0.4"
 libloading = "0.8"
+libmimalloc-sys = { version = "0.1.49", features = ["extended"] }
 liblzma = "0.4"
 log = { version = "0.4.21" }
 memchr = "2.8.1"

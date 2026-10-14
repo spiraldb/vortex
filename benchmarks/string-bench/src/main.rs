@@ -142,6 +142,7 @@ fn contains_duplicates<T: PartialEq>(values: &[T]) -> bool {
 static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() -> Result<()> {
+    vortex_bench::configure_allocator();
     let args = Args::parse();
     setup_logging_and_tracing_with_format(args.verbose, args.tracing, args.log_format)?;
     let runtime = tokio::runtime::Builder::new_current_thread()
