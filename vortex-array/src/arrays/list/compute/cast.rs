@@ -84,7 +84,7 @@ mod tests {
     use crate::dtype::PType;
     use crate::validity::Validity;
 
-    static SESSION: LazyLock<VortexSession> = LazyLock::new(crate::array_session);
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(crate::test_harness::test_session);
 
     #[test]
     fn test_cast_list_success() {

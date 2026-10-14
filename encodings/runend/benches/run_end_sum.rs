@@ -19,7 +19,7 @@ const LEN: usize = 2_048;
 const RUN_LENGTH: usize = 64;
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-    let session = vortex_array::array_session();
+    let session = vortex_aggregates::session();
     vortex_runend::initialize(&session);
     session
 });

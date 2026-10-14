@@ -53,7 +53,6 @@ mod test {
     use vortex_array::ArrayRef;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::compute::conformance::filter::test_filter_conformance;
     use vortex_array::compute::conformance::take::test_take_conformance;
@@ -76,7 +75,7 @@ mod test {
         );
         test_filter_conformance(
             &for_array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         );
 
         let for_array = fa(
@@ -85,7 +84,7 @@ mod test {
         );
         test_filter_conformance(
             &for_array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         );
 
         let values =
@@ -93,7 +92,7 @@ mod test {
         let for_array = fa(values.into_array(), Scalar::from(50i16));
         test_filter_conformance(
             &for_array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         );
     }
 
@@ -109,7 +108,7 @@ mod test {
     fn test_take_for_conformance(#[case] for_array: FoRArray) {
         test_take_conformance(
             &for_array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         );
     }
 }
@@ -120,7 +119,6 @@ mod tests {
     use vortex_array::ArrayRef;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::compute::conformance::binary_numeric::test_binary_numeric_array;
     use vortex_array::compute::conformance::consistency::test_array_consistency;
@@ -166,7 +164,7 @@ mod tests {
     fn test_for_consistency(#[case] array: FoRArray) {
         test_array_consistency(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         );
     }
 
@@ -182,7 +180,7 @@ mod tests {
     fn test_for_binary_numeric(#[case] array: FoRArray) {
         test_binary_numeric_array(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         );
     }
 }

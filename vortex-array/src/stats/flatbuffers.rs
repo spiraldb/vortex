@@ -238,7 +238,6 @@ mod tests {
     use vortex_error::VortexResult;
     use vortex_error::vortex_err;
 
-    use crate::array_session;
     use crate::dtype::DType;
     use crate::dtype::Nullability;
     use crate::dtype::PType;
@@ -249,6 +248,7 @@ mod tests {
     use crate::scalar::PValue;
     use crate::scalar::ScalarValue;
     use crate::stats::StatsSet;
+    use crate::test_harness::test_session;
 
     fn roundtrip_sum(sum: f64) -> VortexResult<u64> {
         let stats = StatsSet::of(
@@ -262,7 +262,7 @@ mod tests {
         let fb = root::<fba::ArrayStats>(fbb.finished_data())?;
 
         let dtype = DType::Primitive(PType::F64, Nullability::NonNullable);
-        let read = StatsSet::from_flatbuffer(&fb, &dtype, &array_session())?;
+        let read = StatsSet::from_flatbuffer(&fb, &dtype, &test_session())?;
         Ok(read
             .get_as::<f64>(
                 Stat::Sum,

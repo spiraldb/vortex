@@ -157,7 +157,7 @@ mod tests {
     #[case::empty_lists(vec![0i32, 0, 3, 3])]
     #[crate::test]
     async fn test_cuda_list_decompression(#[case] offsets: Vec<i32>) -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -186,7 +186,7 @@ mod tests {
 
     #[crate::test]
     async fn test_cuda_list_with_nulls() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 

@@ -14,9 +14,9 @@ use rand::rngs::StdRng;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::patches::Patches;
+use vortex_array::test_harness::test_session;
 use vortex_buffer::Buffer;
 use vortex_error::VortexExpect;
 use vortex_session::VortexSession;
@@ -29,7 +29,7 @@ fn main() {
     divan::main();
 }
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(test_session);
 
 /// Sized to keep CodSpeed simulation under 1ms per benchmark.
 const ARRAY_LEN: usize = 4096;

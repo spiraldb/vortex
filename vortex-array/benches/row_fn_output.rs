@@ -15,7 +15,6 @@ use mimalloc::MiMalloc;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::dtype::DType;
@@ -26,6 +25,7 @@ use vortex_array::scalar_fn::VecExecutionArgs;
 use vortex_array::scalar_fn::unstable::row::RowFn;
 use vortex_array::scalar_fn::unstable::row::RowVisitor;
 use vortex_array::scalar_fn::unstable::row::execute_rows;
+use vortex_array::test_harness::test_session;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_ensure;
@@ -40,7 +40,7 @@ fn main() {
     divan::main();
 }
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(test_session);
 
 const ROWS: usize = 1 << 14;
 

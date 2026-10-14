@@ -23,7 +23,6 @@ impl FillNullReduce for Constant {
 mod test {
     use crate::IntoArray as _;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::ConstantArray;
     use crate::assert_arrays_eq;
     use crate::builtins::ArrayBuiltins;
@@ -31,10 +30,11 @@ mod test {
     use crate::dtype::Nullability;
     use crate::dtype::PType;
     use crate::scalar::Scalar;
+    use crate::test_harness::test_session;
 
     #[test]
     fn test_null() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let actual = ConstantArray::new(Scalar::null_native::<i32>(), 3)
             .into_array()
             .fill_null(Scalar::from(1))
@@ -48,7 +48,7 @@ mod test {
 
     #[test]
     fn test_non_null() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let actual = ConstantArray::new(Scalar::from(Some(1)), 3)
             .into_array()
             .fill_null(Scalar::from(1))
@@ -62,7 +62,7 @@ mod test {
 
     #[test]
     fn test_non_nullable_with_nullable() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let actual = ConstantArray::new(Scalar::from(1), 3)
             .into_array()
             .fill_null(Scalar::new(

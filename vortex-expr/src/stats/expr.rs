@@ -172,7 +172,6 @@ mod tests {
     use vortex_array::Canonical;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::Chunked;
     use vortex_array::arrays::ChunkedArray;
     use vortex_array::arrays::ConstantArray;
@@ -203,7 +202,7 @@ mod tests {
     use super::stat;
     use super::sum;
 
-    static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_aggregates::session);
 
     #[test]
     fn bound_stats_constructor_preserves_child_and_dtype() -> VortexResult<()> {

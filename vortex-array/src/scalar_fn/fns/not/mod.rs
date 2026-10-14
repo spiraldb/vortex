@@ -126,7 +126,6 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::bool::BoolArrayExt;
     use crate::assert_arrays_eq;
     use crate::dtype::DType;
@@ -137,6 +136,7 @@ mod tests {
     use crate::expr::root;
     use crate::expr::test_harness;
     use crate::scalar_fn::fns::not::BoolArray;
+    use crate::test_harness::test_session;
 
     #[test]
     fn is_strict() {
@@ -149,7 +149,7 @@ mod tests {
 
     #[test]
     fn preserves_nulls() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let input = BoolArray::from_iter([Some(false), None, Some(true)]).into_array();
 
         let result = input.apply(&not(root()))?;
@@ -164,7 +164,7 @@ mod tests {
 
     #[test]
     fn invert_booleans() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let not_expr = not(root());
         let bools = BoolArray::from_iter([false, true, false, false, true, true]);
         let result = bools

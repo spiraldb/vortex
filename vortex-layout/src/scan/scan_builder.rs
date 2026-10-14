@@ -483,7 +483,6 @@ mod test {
     use vortex_array::IntoArray;
     use vortex_array::MaskFuture;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::dtype::DType;
     use vortex_array::dtype::FieldMask;
@@ -816,7 +815,7 @@ mod test {
 
     #[test]
     fn into_stream_executes_after_prepare() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let calls = Arc::new(AtomicUsize::new(0));
         let reader = Arc::new(SplittingLayoutReader::new(Arc::clone(&calls)));
 
@@ -840,7 +839,7 @@ mod test {
 
     #[test]
     fn supplied_natural_splits_skip_layout_walk() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let calls = Arc::new(AtomicUsize::new(0));
         let reader = Arc::new(SplittingLayoutReader::new(Arc::clone(&calls)));
 
@@ -1308,7 +1307,7 @@ mod test {
 
     #[test]
     fn into_stream_with_row_range() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let calls = Arc::new(AtomicUsize::new(0));
         let reader = Arc::new(SplittingLayoutReader::new(Arc::clone(&calls)));
 

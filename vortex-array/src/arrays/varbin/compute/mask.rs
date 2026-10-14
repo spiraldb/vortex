@@ -33,11 +33,11 @@ impl MaskReduce for VarBin {
 mod test {
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::VarBinArray;
     use crate::compute::conformance::mask::test_mask_conformance;
     use crate::dtype::DType;
     use crate::dtype::Nullability;
+    use crate::test_harness::test_session;
 
     #[test]
     fn test_mask_var_bin_array() {
@@ -47,7 +47,7 @@ mod test {
         );
         test_mask_conformance(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
 
         let array = VarBinArray::from_iter(
@@ -56,7 +56,7 @@ mod test {
         );
         test_mask_conformance(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 }

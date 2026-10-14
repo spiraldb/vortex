@@ -32,10 +32,9 @@ use crate::combined::Combined;
 use crate::combined::PairOptions;
 use crate::mean::Mean;
 use crate::sum::Sum;
-use crate::test_session;
 
 fn fresh_session() -> VortexSession {
-    test_session()
+    crate::session()
 }
 
 fn dict_of_seven() -> ArrayRef {

@@ -146,18 +146,18 @@ mod tests {
 
     use super::Reader;
     use crate::IntoArray;
-    use crate::array_session;
     use crate::arrays::PrimitiveArray;
     use crate::executor::VortexSessionExecute;
     use crate::search_sorted::SearchResult;
     use crate::search_sorted::SearchSorted;
     use crate::search_sorted::SearchSortedPrimitiveArray;
     use crate::search_sorted::SearchSortedSide;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[test]
     fn search_sorted_reads_canonical_values_directly() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let array = PrimitiveArray::new(buffer![1i32, 2, 3, 4], Validity::NonNullable).into_array();
         let searcher = SearchSortedPrimitiveArray::<i32>::new(&array, &mut ctx);
         assert!(matches!(searcher.reader, Reader::Values(_)));
@@ -170,7 +170,7 @@ mod tests {
 
     #[test]
     fn search_sorted_probes_when_values_are_not_addressable() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         // Nullable: the buffer holds an arbitrary value wherever an element is null, so the
         // search has to consult validity through the probe.
         let array = PrimitiveArray::new(buffer![1i32, 2, 3, 4], Validity::AllValid).into_array();
@@ -186,7 +186,7 @@ mod tests {
     #[test]
     fn search_sorted_optional_value() -> VortexResult<()> {
         let array = PrimitiveArray::new(buffer![1i32, 2, 3, 4], Validity::AllValid).into_array();
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let res = SearchSortedPrimitiveArray::<i32>::new(&array, &mut ctx)
             .search_sorted(&Some(3i32), SearchSortedSide::Left)?;
         assert_eq!(res, SearchResult::Found(2));
@@ -197,7 +197,7 @@ mod tests {
     fn search_sorted_optional_value_with_nulls() -> VortexResult<()> {
         let array =
             PrimitiveArray::from_option_iter([None, None, Some(2i32), Some(3)]).into_array();
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let searcher = SearchSortedPrimitiveArray::<i32>::new(&array, &mut ctx);
         assert_eq!(
             searcher.search_sorted(&Some(2i32), SearchSortedSide::Left)?,

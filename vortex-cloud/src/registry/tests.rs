@@ -267,7 +267,7 @@ async fn test_resolved_key_reaches_the_object(
     use vortex_error::VortexError;
     use vortex_file::OpenOptionsSessionExt;
 
-    let session = vortex_array::array_session()
+    let session = vortex_aggregates::session()
         .with::<vortex_layout::session::LayoutSession>()
         .with::<vortex_io::session::RuntimeSession>();
 

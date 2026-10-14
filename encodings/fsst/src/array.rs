@@ -1061,7 +1061,6 @@ mod test {
     use vortex_array::ArrayPlugin;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::VarBinViewArray;
     use vortex_array::buffer::BufferHandle;
     use vortex_array::dtype::DType;
@@ -1093,7 +1092,7 @@ mod test {
         let symbol_lengths = Buffer::<u8>::copy_from([3, 8]);
 
         let compressor = Compressor::rebuild_from(symbols.as_slice(), symbol_lengths.as_slice());
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let strings = VarBinViewArray::from_iter_str(["abcabcab", "defghijk", "abcxyz"]);
         let fsst_array = fsst_compress(&strings.into_array(), &compressor, &mut ctx)?;
 
@@ -1113,7 +1112,7 @@ mod test {
     /// expose the populated prefix.
     #[test]
     fn symbol_table_padded_on_creation() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let strings = VarBinViewArray::from_iter_str(["abcabcab", "defghijk", "abcxyz"]);
         let compressor = Compressor::rebuild_from(
             [
@@ -1154,7 +1153,7 @@ mod test {
     /// them before a `Decompressor` can borrow them.
     #[test]
     fn symbol_table_padded_on_deserialize() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let input = VarBinViewArray::from_iter_str(["abcabcab", "defghijk"]).into_array();
         let compressor = fsst_train_compressor(&input, &mut ctx)?;
         let fsst_array = fsst_compress(&input, &compressor, &mut ctx)?;
@@ -1199,7 +1198,7 @@ mod test {
                 &buffers,
                 &children.as_slice(),
             ),
-            &array_session(),
+            &vortex_aggregates::session(),
         )?;
 
         let padded = deserialized
@@ -1308,7 +1307,7 @@ mod test {
         let symbol_lengths = Buffer::<u8>::copy_from([3, 8]);
 
         let compressor = Compressor::rebuild_from(symbols.as_slice(), symbol_lengths.as_slice());
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let input = VarBinViewArray::from_iter_str(["abcabcab", "defghijk"]);
         let fsst_array = fsst_compress(&input.into_array(), &compressor, &mut ctx)?;
 
@@ -1349,11 +1348,11 @@ mod test {
                 &buffers,
                 &children.as_slice(),
             ),
-            &array_session(),
+            &vortex_aggregates::session(),
         )?;
 
-        let decompressed =
-            fsst.execute::<VarBinViewArray>(&mut array_session().create_execution_ctx())?;
+        let decompressed = fsst
+            .execute::<VarBinViewArray>(&mut vortex_aggregates::session().create_execution_ctx())?;
         let mask = decompressed
             .validity()?
             .execute_mask(decompressed.len(), &mut ctx)?;

@@ -14,7 +14,6 @@ use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::aggregate_fn::AggregateFnVTableExt;
 use vortex_array::aggregate_fn::NumericalAggregateOpts;
-use vortex_array::array_session;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability;
@@ -34,7 +33,7 @@ fn main() {
 // Sized to keep the CodSpeed simulation under 1ms per benchmark.
 const N: usize = 15_000;
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_aggregates::session);
 
 #[divan::bench]
 fn sum_i32(bencher: Bencher) {

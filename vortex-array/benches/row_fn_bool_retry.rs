@@ -14,7 +14,6 @@ use divan::counter::ItemsCount;
 use mimalloc::MiMalloc;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::PrimitiveArray;
@@ -25,6 +24,7 @@ use vortex_array::scalar_fn::VecExecutionArgs;
 use vortex_array::scalar_fn::unstable::row::RowFn;
 use vortex_array::scalar_fn::unstable::row::RowVisitor;
 use vortex_array::scalar_fn::unstable::row::execute_rows;
+use vortex_array::test_harness::test_session;
 use vortex_array::validity::Validity;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
@@ -35,7 +35,7 @@ use vortex_session::registry::CachedId;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(test_session);
 
 const SIZES: &[usize] = &[16_384];
 const BATCHES_PER_ITER: usize = 8;

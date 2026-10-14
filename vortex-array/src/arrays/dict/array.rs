@@ -371,7 +371,6 @@ mod test {
     use crate::ArrayRef;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::ChunkedArray;
     use crate::arrays::DictArray;
     use crate::arrays::PrimitiveArray;
@@ -385,6 +384,7 @@ mod test {
     use crate::dtype::Nullability::NonNullable;
     use crate::dtype::PType;
     use crate::dtype::UnsignedPType;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[test]
@@ -404,7 +404,7 @@ mod test {
             .unwrap()
             .execute_mask(
                 dict.as_ref().len(),
-                &mut array_session().create_execution_ctx(),
+                &mut test_session().create_execution_ctx(),
             )
             .unwrap();
         let AllOr::Some(indices) = mask.indices() else {
@@ -430,7 +430,7 @@ mod test {
             .unwrap()
             .execute_mask(
                 dict.as_ref().len(),
-                &mut array_session().create_execution_ctx(),
+                &mut test_session().create_execution_ctx(),
             )
             .unwrap();
         let AllOr::Some(indices) = mask.indices() else {
@@ -460,7 +460,7 @@ mod test {
             .unwrap()
             .execute_mask(
                 dict.as_ref().len(),
-                &mut array_session().create_execution_ctx(),
+                &mut test_session().create_execution_ctx(),
             )
             .unwrap();
         let AllOr::Some(indices) = mask.indices() else {
@@ -486,7 +486,7 @@ mod test {
             .unwrap()
             .execute_mask(
                 dict.as_ref().len(),
-                &mut array_session().create_execution_ctx(),
+                &mut test_session().create_execution_ctx(),
             )
             .unwrap();
         let AllOr::Some(indices) = mask.indices() else {
@@ -529,7 +529,7 @@ mod test {
         let values = VarBinViewArray::from_iter_str(["zero", "one", "two"]);
         let dict = DictArray::try_new(buffer![2u8, 0, 2, 1].into_array(), values.into_array())?;
         let expected = VarBinViewArray::from_iter_str(["two", "zero", "two", "one"]);
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mut builder = VarBinBuilder::<i32>::with_capacity_in(
             dict.dtype().clone(),
             dict.len(),
@@ -545,7 +545,7 @@ mod test {
 
     #[test]
     fn test_dict_array_from_primitive_chunks() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let len = 2;
         let chunk_count = 2;
         let array = make_dict_primitive_chunks::<u64, u64>(len, 2, chunk_count);
@@ -555,10 +555,7 @@ mod test {
             len * chunk_count,
             ctx.allocator(),
         );
-        array.append_to_builder(
-            builder.as_mut(),
-            &mut array_session().create_execution_ctx(),
-        )?;
+        array.append_to_builder(builder.as_mut(), &mut test_session().create_execution_ctx())?;
 
         let into_prim = array.execute::<PrimitiveArray>(&mut ctx)?;
         let prim_into = builder.finish_into_canonical(&mut ctx).into_primitive();
@@ -625,7 +622,7 @@ mod test {
         };
         let dict =
             DictArray::try_new(codes, PrimitiveArray::from_iter(0..num_values).into_array())?;
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mask = dict.compute_referenced_values_mask(referenced, &mut ctx)?;
 
         assert_eq!(mask, BitBuffer::from(expected));

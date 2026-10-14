@@ -188,7 +188,6 @@ mod tests {
     use vortex_array::ArrayRef;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::BoolArray;
     use vortex_array::arrays::ConstantArray;
     use vortex_array::arrays::FixedSizeListArray;
@@ -228,7 +227,7 @@ mod tests {
         let elements = create_list_elements();
         let list = ListArray::try_new(elements, offsets, Validity::NonNullable)?.into_array();
         let result = list.apply(&list_length(root()))?;
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         assert_arrays_eq!(result, PrimitiveArray::from_iter([2u64, 3, 0, 2]), &mut ctx);
         Ok(())
     }
@@ -246,7 +245,7 @@ mod tests {
         .into_array();
         let result = list.apply(&list_length(root()))?;
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let result = result.execute::<PrimitiveArray>(&mut ctx)?;
 
         let expected = PrimitiveArray::from_option_iter::<u64, _>([Some(2), None, Some(0), None]);
@@ -265,7 +264,7 @@ mod tests {
         let array = ConstantArray::new(null_scalar, 2).into_array();
         let result = array.apply(&list_length(root()))?;
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         assert!(!result.is_valid(0, &mut ctx)?);
         assert!(!result.is_valid(1, &mut ctx)?);
         Ok(())
@@ -282,7 +281,7 @@ mod tests {
         )
         .into_array();
         let result = lv.apply(&list_length(root()))?;
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         assert_arrays_eq!(result, PrimitiveArray::from_iter([2u64, 3, 0, 2]), &mut ctx);
         Ok(())
     }
@@ -299,7 +298,7 @@ mod tests {
         .into_array();
         let result = lv.apply(&list_length(root()))?;
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let result = result.execute::<PrimitiveArray>(&mut ctx)?;
 
         let expected = PrimitiveArray::from_option_iter::<u64, _>([Some(2), None, Some(0), None]);
@@ -319,7 +318,7 @@ mod tests {
         let taken = list.take(buffer![3u64, 0, 2].into_array())?;
 
         let result = taken.apply(&list_length(root()))?;
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         assert_arrays_eq!(result, PrimitiveArray::from_iter([2u64, 2, 0]), &mut ctx);
         Ok(())
     }
@@ -335,7 +334,7 @@ mod tests {
         let fsl = create_fixed_size_list(Validity::NonNullable);
         let result = fsl.apply(&list_length(root()))?;
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         assert_arrays_eq!(result, PrimitiveArray::from_iter([2u64, 2, 2, 2]), &mut ctx);
         Ok(())
     }
@@ -347,7 +346,7 @@ mod tests {
         ));
         let result = fsl.apply(&list_length(root()))?;
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let result = result.execute::<PrimitiveArray>(&mut ctx)?;
 
         let expected = PrimitiveArray::from_option_iter::<u64, _>([Some(2), None, Some(2), None]);
@@ -368,7 +367,7 @@ mod tests {
 
         let lengths = fsl.apply(&list_length(cast(root(), failing_cast_dtype)))?;
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let result = lengths.execute::<ArrayRef>(&mut ctx);
 
         assert!(result.is_err());

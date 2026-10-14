@@ -290,7 +290,6 @@ mod test {
 
     use itertools::Itertools;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::primitive::PrimitiveArrayExt;
     use vortex_array::assert_arrays_eq;
     use vortex_array::dtype::PType;
@@ -307,7 +306,7 @@ mod test {
     use crate::for_::tests::global;
 
     static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-        let session = array_session();
+        let session = vortex_aggregates::session();
         crate::initialize(&session);
         session
     });

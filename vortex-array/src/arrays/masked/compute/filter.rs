@@ -34,10 +34,10 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::MaskedArray;
     use crate::arrays::PrimitiveArray;
     use crate::compute::conformance::filter::test_filter_conformance;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[rstest]
@@ -62,7 +62,7 @@ mod tests {
     fn test_filter_masked_conformance(#[case] array: MaskedArray) {
         test_filter_conformance(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 }

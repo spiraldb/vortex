@@ -35,7 +35,7 @@ mod common;
 use common::enable_all_registered_array_encodings;
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-    let session = vortex_array::array_session()
+    let session = vortex_aggregates::session()
         .with::<LayoutSession>()
         .with::<RuntimeSession>();
 

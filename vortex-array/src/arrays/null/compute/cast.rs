@@ -33,13 +33,13 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::NullArray;
     use crate::builtins::ArrayBuiltins;
     use crate::compute::conformance::cast::test_cast_conformance;
     use crate::dtype::DType;
     use crate::dtype::Nullability;
     use crate::dtype::PType;
+    use crate::test_harness::test_session;
 
     #[test]
     fn test_cast_null_to_null() {
@@ -68,7 +68,7 @@ mod tests {
         for i in 0..5 {
             assert!(
                 result
-                    .execute_scalar(i, &mut array_session().create_execution_ctx())
+                    .execute_scalar(i, &mut test_session().create_execution_ctx())
                     .unwrap()
                     .is_null()
             );
@@ -92,7 +92,7 @@ mod tests {
     fn test_cast_null_conformance(#[case] array: NullArray) {
         test_cast_conformance(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 }

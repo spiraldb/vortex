@@ -19,7 +19,6 @@ mod tests {
     use crate::Canonical;
     use crate::IntoArray as _;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::StructArray;
@@ -34,11 +33,12 @@ mod tests {
     use crate::dtype::Nullability;
     use crate::dtype::PType;
     use crate::dtype::StructFields;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[test]
     fn take_empty_struct() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let struct_arr =
             StructArray::try_new(FieldNames::empty(), vec![], 10, Validity::NonNullable).unwrap();
         let indices = PrimitiveArray::from_option_iter([Some(1), None]);
@@ -67,13 +67,13 @@ mod tests {
         let taken = struct_arr
             .take(indices.into_array())
             .unwrap()
-            .execute::<Canonical>(&mut array_session().create_execution_ctx())
+            .execute::<Canonical>(&mut test_session().create_execution_ctx())
             .unwrap();
         assert_eq!(taken.len(), 1);
         assert!(
             taken
                 .into_array()
-                .all_invalid(&mut array_session().create_execution_ctx())
+                .all_invalid(&mut test_session().create_execution_ctx())
                 .unwrap()
         );
     }
@@ -85,14 +85,14 @@ mod tests {
         let taken = arr
             .take(indices.into_array())
             .unwrap()
-            .execute::<Canonical>(&mut array_session().create_execution_ctx())
+            .execute::<Canonical>(&mut test_session().create_execution_ctx())
             .unwrap();
         assert_eq!(taken.len(), 1);
     }
 
     #[test]
     fn take_field_struct() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let struct_arr =
             StructArray::from_fields(&[("a", PrimitiveArray::from_iter(0..10).into_array())])
                 .unwrap();
@@ -115,7 +115,7 @@ mod tests {
             &StructArray::try_new(FieldNames::empty(), vec![], 5, Validity::NonNullable)
                 .unwrap()
                 .into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 
@@ -150,7 +150,7 @@ mod tests {
             )
             .unwrap()
             .into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 
@@ -261,7 +261,7 @@ mod tests {
             &StructArray::try_new(FieldNames::empty(), vec![], 5, Validity::NonNullable)
                 .unwrap()
                 .into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 
@@ -278,7 +278,7 @@ mod tests {
             &StructArray::try_new(["xs", "ys"].into(), vec![xs, ys], 5, Validity::NonNullable)
                 .unwrap()
                 .into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 
@@ -300,7 +300,7 @@ mod tests {
             )
             .unwrap()
             .into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 
@@ -329,7 +329,7 @@ mod tests {
             )
             .unwrap()
             .into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 
@@ -342,7 +342,7 @@ mod tests {
             &StructArray::try_new(["xs", "ys"].into(), vec![xs, ys], 1, Validity::NonNullable)
                 .unwrap()
                 .into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 
@@ -366,7 +366,7 @@ mod tests {
             )
             .unwrap()
             .into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 
@@ -418,7 +418,7 @@ mod tests {
     fn test_struct_consistency(#[case] array: StructArray) {
         test_array_consistency(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 }

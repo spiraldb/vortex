@@ -225,18 +225,18 @@ mod tests {
     use crate::ArrayContext;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::Decimal;
     use crate::arrays::DecimalArray;
     use crate::assert_arrays_eq;
     use crate::dtype::DecimalDType;
     use crate::serde::SerializeOptions;
     use crate::serde::SerializedArray;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[test]
     fn test_array_serde() {
-        let session = array_session();
+        let session = test_session();
         let array = DecimalArray::new(
             buffer![100i128, 200i128, 300i128, 400i128, 500i128],
             DecimalDType::new(10, 2),
@@ -266,7 +266,7 @@ mod tests {
 
     #[test]
     fn test_nullable_decimal_serde_roundtrip() {
-        let session = array_session();
+        let session = test_session();
         let mut ctx = session.create_execution_ctx();
         let array = DecimalArray::new(
             buffer![1234567i32, 0i32, -9999999i32],

@@ -164,7 +164,6 @@ mod tests {
     use crate::ArrayRef;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::ChunkedArray;
     use crate::arrays::bool::BoolArrayExt;
     use crate::assert_arrays_eq;
@@ -175,6 +174,7 @@ mod tests {
     use crate::dtype::DType;
     use crate::dtype::Nullability;
     use crate::scalar::Scalar;
+    use crate::test_harness::test_session;
 
     fn make_opt_bool_chunks(len: usize, chunk_count: usize) -> ArrayRef {
         let mut rng = StdRng::seed_from_u64(0);
@@ -199,7 +199,7 @@ mod tests {
         let chunk_count = 10;
         let chunk = make_opt_bool_chunks(len, chunk_count);
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mut builder = builder_with_capacity_in(
             chunk.dtype(),
             len * chunk_count,
@@ -223,7 +223,7 @@ mod tests {
 
     #[test]
     fn test_append_scalar() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mut builder = BoolBuilder::with_capacity_in(
             Nullability::Nullable,
             10,

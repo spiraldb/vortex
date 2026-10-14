@@ -231,7 +231,7 @@ mod tests {
             optimized.encoding_id()
         );
 
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_harness::test_session().create_execution_ctx();
         let expected = if mask_value {
             PrimitiveArray::from_option_iter([Some(1i32), Some(2), Some(3), Some(4), Some(5)])
         } else {

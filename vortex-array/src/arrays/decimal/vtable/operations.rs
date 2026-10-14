@@ -35,13 +35,13 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::Decimal;
     use crate::arrays::DecimalArray;
     use crate::dtype::DecimalDType;
     use crate::dtype::Nullability;
     use crate::scalar::DecimalValue;
     use crate::scalar::Scalar;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[test]
@@ -83,7 +83,7 @@ mod tests {
 
         assert_eq!(
             array
-                .execute_scalar(0, &mut array_session().create_execution_ctx())
+                .execute_scalar(0, &mut test_session().create_execution_ctx())
                 .unwrap(),
             Scalar::decimal(
                 DecimalValue::I128(100),

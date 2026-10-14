@@ -17,7 +17,7 @@
 //! session before deserializing or executing arrays that may contain these encodings.
 //!
 //! ```rust
-//! let session = vortex_array::array_session();
+//! let session = vortex_aggregates::session();
 //! vortex_fastlanes::initialize(&session);
 //! ```
 //!
@@ -179,7 +179,7 @@ mod test {
     use super::*;
 
     pub static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         initialize(&session);
         session
     });

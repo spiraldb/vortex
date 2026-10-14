@@ -13,7 +13,6 @@ use super::filter_records;
 use crate::ArrayRef;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
-use crate::array_session;
 use crate::arrays::DecimalArray;
 use crate::arrays::PrimitiveArray;
 use crate::compute::conformance::filter::LARGE_SIZE;
@@ -22,6 +21,7 @@ use crate::compute::conformance::filter::test_filter_conformance;
 use crate::dtype::DecimalDType;
 use crate::dtype::i256;
 use crate::memory::test_allocator::counting_allocator;
+use crate::test_harness::test_session;
 use crate::validity::Validity;
 
 #[test]
@@ -99,5 +99,5 @@ fn filter_records_use_execution_allocator() {
     Validity::NonNullable,
 ).into_array())]
 fn fixed_width_filter_conformance(#[case] array: ArrayRef) {
-    test_filter_conformance(&array, &mut array_session().create_execution_ctx());
+    test_filter_conformance(&array, &mut test_session().create_execution_ctx());
 }

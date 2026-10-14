@@ -49,20 +49,20 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::arrays::bool::BoolArrayExt;
     use crate::builtins::ArrayBuiltins;
     use crate::dtype::DType;
     use crate::dtype::Nullability;
     use crate::scalar::Scalar;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[rstest]
     #[case(true, bitbuffer![true, true, false, true])]
     #[case(false, bitbuffer![true, false, false, false])]
     fn bool_fill_null(#[case] fill_value: bool, #[case] expected: BitBuffer) {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let bool_array = BoolArray::new(
             BitBuffer::from_iter([true, true, false, false]),
             Validity::from_iter([true, false, true, false]),

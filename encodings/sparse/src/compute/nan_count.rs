@@ -86,13 +86,13 @@ mod tests {
     use crate::initialize;
 
     static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         initialize(&session);
         session
     });
 
     static CANONICAL_SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         session.arrays().register(Sparse);
         session
     });

@@ -101,7 +101,6 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::Decimal;
     use crate::arrays::DecimalArray;
     use crate::assert_arrays_eq;
@@ -110,6 +109,7 @@ mod tests {
     use crate::dtype::DecimalDType;
     use crate::dtype::DecimalType;
     use crate::match_each_decimal_value_type;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     // Host-backed storage exposes device slicing without allowing implicit host copies.
@@ -163,7 +163,7 @@ mod tests {
         )]
         values_type: DecimalType,
     ) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let bytes = match_each_decimal_value_type!(values_type, |D| {
             Buffer::<D>::from_iter([-12i8, 34, -56, 78, 90, 12].map(|value| value.as_()))
                 .into_byte_buffer()

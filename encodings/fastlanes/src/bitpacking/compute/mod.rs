@@ -82,7 +82,6 @@ mod tests {
     use rstest::rstest;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::compute::conformance::binary_numeric::test_binary_numeric_array;
     use vortex_array::compute::conformance::consistency::test_array_consistency;
@@ -96,7 +95,7 @@ mod tests {
             array,
             bit_width,
             None,
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )
         .unwrap()
     }
@@ -133,7 +132,7 @@ mod tests {
     #[case::alternating_bits(bp(&PrimitiveArray::from_iter([0u16, 255, 0, 255, 0, 255]), 8))]
 
     fn test_bitpacked_consistency(#[case] array: BitPackedArray) {
-        let ctx = &mut array_session().create_execution_ctx();
+        let ctx = &mut vortex_aggregates::session().create_execution_ctx();
         test_array_consistency(&array.into_array(), ctx);
     }
 
@@ -147,7 +146,7 @@ mod tests {
     fn test_bitpacked_binary_numeric(#[case] array: BitPackedArray) {
         test_binary_numeric_array(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         );
     }
 }

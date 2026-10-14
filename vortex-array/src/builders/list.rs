@@ -427,7 +427,6 @@ mod tests {
     use vortex_error::VortexResult;
 
     use crate::IntoArray;
-    use crate::array_session;
     use crate::arrays::ChunkedArray;
     use crate::arrays::ListViewArray;
     use crate::arrays::PrimitiveArray;
@@ -446,6 +445,7 @@ mod tests {
     use crate::dtype::PType::I32;
     use crate::executor::VortexSessionExecute;
     use crate::scalar::Scalar;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[test]
@@ -498,7 +498,7 @@ mod tests {
         let list = builder.finish();
         assert_eq!(list.len(), 2);
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let list_array = list.execute::<ListViewArray>(&mut ctx).unwrap();
 
         assert_eq!(list_array.list_elements_at(0).unwrap().len(), 3);
@@ -563,7 +563,7 @@ mod tests {
         let list = builder.finish();
         assert_eq!(list.len(), 3);
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let list_array = list.execute::<ListViewArray>(&mut ctx).unwrap();
 
         assert_eq!(list_array.list_elements_at(0).unwrap().len(), 3);
@@ -580,7 +580,7 @@ mod tests {
         .into_array();
         assert_eq!(list.len(), 3);
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
 
         let mut builder = ListBuilder::<O>::with_capacity_in(
             Arc::new(I32.into()),
@@ -645,7 +645,7 @@ mod tests {
     /// non-`u64`) offset/size types.
     #[test]
     fn test_append_to_builder_any_list_builder() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
 
         let list = ListArray::from_iter_opt_slow::<u64, _, _>(
             [Some(vec![0, 1, 2]), None, Some(vec![4, 5])],
@@ -724,7 +724,7 @@ mod tests {
 
     #[test]
     fn test_append_list_arrays_grow_builder() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let dtype: Arc<DType> = Arc::new(I32.into());
 
         // Enough lists to exceed the offsets capacity of a zero-capacity builder, so appending
@@ -770,7 +770,7 @@ mod tests {
     #[test]
     fn test_append_listview_array_flattens_overlaps_and_skips_leading_elements() -> VortexResult<()>
     {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let dtype: Arc<DType> = Arc::new(I32.into());
 
         // Overlapping source, so not zero-copyable to a list:
@@ -859,7 +859,7 @@ mod tests {
             DType::List(Arc::new(DType::Primitive(I32, NonNullable)), NonNullable),
         );
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let canon_values = chunked_list
             .unwrap()
             .as_array()
@@ -869,18 +869,18 @@ mod tests {
 
         assert_eq!(
             one_trailing_unused_element
-                .execute_scalar(0, &mut array_session().create_execution_ctx())
+                .execute_scalar(0, &mut test_session().create_execution_ctx())
                 .unwrap(),
             canon_values
-                .execute_scalar(0, &mut array_session().create_execution_ctx())
+                .execute_scalar(0, &mut test_session().create_execution_ctx())
                 .unwrap()
         );
         assert_eq!(
             second_array
-                .execute_scalar(0, &mut array_session().create_execution_ctx())
+                .execute_scalar(0, &mut test_session().create_execution_ctx())
                 .unwrap(),
             canon_values
-                .execute_scalar(1, &mut array_session().create_execution_ctx())
+                .execute_scalar(1, &mut test_session().create_execution_ctx())
                 .unwrap()
         );
     }
@@ -916,7 +916,7 @@ mod tests {
         let array = builder.finish_into_list();
         assert_eq!(array.len(), 3);
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
 
         // Check actual values using scalar_at.
 
@@ -979,7 +979,7 @@ mod tests {
     #[test]
     fn test_append_array_as_list() {
         let dtype: Arc<DType> = Arc::new(I32.into());
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mut builder = ListBuilder::<u32>::with_capacity_in(
             Arc::clone(&dtype),
             NonNullable,

@@ -166,7 +166,6 @@ mod tests {
     use rstest::rstest;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::BoolArray;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::arrays::VarBinViewArray;
@@ -189,7 +188,10 @@ mod tests {
         array: vortex_array::ArrayRef,
         dt: &DataType,
     ) -> VortexResult<arrow_array::ArrayRef> {
-        array.execute_arrow(Some(dt), &mut array_session().create_execution_ctx())
+        array.execute_arrow(
+            Some(dt),
+            &mut vortex_aggregates::session().create_execution_ctx(),
+        )
     }
 
     fn dict_basic_input() -> vortex_array::ArrayRef {

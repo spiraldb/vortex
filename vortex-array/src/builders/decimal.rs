@@ -329,12 +329,12 @@ mod tests {
     use vortex_buffer::BufferAllocatorRef;
 
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::assert_arrays_eq;
     use crate::builders::ArrayBuilder;
     use crate::builders::DecimalBuilder;
     use crate::builders::decimal::DecimalArray;
     use crate::dtype::DecimalDType;
+    use crate::test_harness::test_session;
 
     #[test]
     fn test_mixed_extend() {
@@ -355,16 +355,16 @@ mod tests {
             false.into(),
             BufferAllocatorRef::static_ref(),
         );
-        i8s.append_to_builder(&mut i128s, &mut array_session().create_execution_ctx())
+        i8s.append_to_builder(&mut i128s, &mut test_session().create_execution_ctx())
             .unwrap();
         let i128s = i128s.finish();
 
         for i in 0..i8s.len() {
             assert_eq!(
-                i8s.execute_scalar(i, &mut array_session().create_execution_ctx())
+                i8s.execute_scalar(i, &mut test_session().create_execution_ctx())
                     .unwrap(),
                 i128s
-                    .execute_scalar(i, &mut array_session().create_execution_ctx())
+                    .execute_scalar(i, &mut test_session().create_execution_ctx())
                     .unwrap()
             );
         }
@@ -372,7 +372,7 @@ mod tests {
 
     #[test]
     fn test_append_scalar() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         use crate::scalar::Scalar;
 
         // Simply test that the builder accepts its own finish output via scalar.
@@ -400,7 +400,7 @@ mod tests {
         );
         for i in 0..array.len() {
             let scalar = array
-                .execute_scalar(i, &mut array_session().create_execution_ctx())
+                .execute_scalar(i, &mut test_session().create_execution_ctx())
                 .unwrap();
             builder2.append_scalar(&scalar).unwrap();
         }

@@ -14,7 +14,6 @@ use super::take_values;
 use crate::ArrayRef;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
-use crate::array_session;
 use crate::arrays::BoolArray;
 use crate::arrays::ConstantArray;
 use crate::arrays::DecimalArray;
@@ -24,6 +23,7 @@ use crate::assert_arrays_eq;
 use crate::compute::conformance::take::test_take_conformance;
 use crate::dtype::DecimalDType;
 use crate::dtype::i256;
+use crate::test_harness::test_session;
 use crate::validity::Validity;
 
 fn allocator() -> BufferAllocatorRef {
@@ -129,7 +129,7 @@ fn take_constant_length_slices() -> VortexResult<()> {
 
 #[test]
 fn null_index_skips_out_of_bounds_primitive_value() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let values = PrimitiveArray::from_iter([10i32, 20, 30]);
     let indices = PrimitiveArray::new(
         buffer![1u64, 3],
@@ -148,7 +148,7 @@ fn null_index_skips_out_of_bounds_primitive_value() -> VortexResult<()> {
 
 #[test]
 fn null_index_skips_out_of_bounds_decimal_value() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let decimal_dtype = DecimalDType::new(19, 1);
     let values = DecimalArray::new(
         buffer![10i128, 20, 30],
@@ -172,7 +172,7 @@ fn null_index_skips_out_of_bounds_decimal_value() -> VortexResult<()> {
 
 #[test]
 fn decimal_i256_take_consumes_piecewise_indices() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let decimal_dtype = DecimalDType::new(76, 2);
     let values = DecimalArray::new(
         buffer![
@@ -240,5 +240,5 @@ fn decimal_i256_take_consumes_piecewise_indices() -> VortexResult<()> {
     Validity::NonNullable,
 ).into_array())]
 fn fixed_width_take_conformance(#[case] array: ArrayRef) {
-    test_take_conformance(&array, &mut array_session().create_execution_ctx());
+    test_take_conformance(&array, &mut test_session().create_execution_ctx());
 }

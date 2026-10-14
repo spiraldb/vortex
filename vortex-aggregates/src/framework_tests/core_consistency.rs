@@ -17,8 +17,6 @@ use vortex_array::arrays::PrimitiveArray;
 use vortex_array::compute::conformance::consistency::test_slice_aggregate_consistency;
 use vortex_buffer::buffer;
 
-use crate::test_session;
-
 #[rstest]
 #[case::primitive(buffer![5i32, 1, 9, 3, 7, 2, 8].into_array())]
 #[case::nullable(
@@ -42,5 +40,5 @@ use crate::test_session;
     .into_array()
 )]
 fn core_encodings_aggregate_consistency(#[case] array: ArrayRef) {
-    test_slice_aggregate_consistency(&array, &mut test_session().create_execution_ctx());
+    test_slice_aggregate_consistency(&array, &mut crate::session().create_execution_ctx());
 }

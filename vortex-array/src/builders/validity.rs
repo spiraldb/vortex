@@ -139,10 +139,10 @@ mod tests {
 
     use super::ValidityBuilder;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::Chunked;
     use crate::dtype::Nullability::NonNullable;
     use crate::dtype::Nullability::Nullable;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     /// An arbitrary run length. `ValidityBuilder` treats no length specially, so the tests only
@@ -205,7 +205,7 @@ mod tests {
     /// Bits and runs interleave, and have to come back out in the order they went in.
     #[test]
     fn test_bits_and_runs_keep_their_order() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mut builder = ValidityBuilder::new(0, BufferAllocatorRef::static_ref());
 
         builder.append_n_nulls(1);

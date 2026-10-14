@@ -132,7 +132,7 @@ mod tests {
         assert_arrays_eq!(
             result,
             storage,
-            &mut vortex_array::array_session().create_execution_ctx()
+            &mut vortex_aggregates::session().create_execution_ctx()
         );
         Ok(())
     }
@@ -152,7 +152,7 @@ mod tests {
         assert_arrays_eq!(
             result,
             storage,
-            &mut vortex_array::array_session().create_execution_ctx()
+            &mut vortex_aggregates::session().create_execution_ctx()
         );
         Ok(())
     }
@@ -173,7 +173,7 @@ mod tests {
         assert_arrays_eq!(
             result,
             ConstantArray::new(storage_scalar, 3),
-            &mut vortex_array::array_session().create_execution_ctx()
+            &mut vortex_aggregates::session().create_execution_ctx()
         );
         Ok(())
     }

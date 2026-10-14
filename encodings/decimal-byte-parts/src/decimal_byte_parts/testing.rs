@@ -4,7 +4,6 @@
 //! Shared fixtures for decimal byte-parts tests.
 
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::DecimalArray;
 use vortex_array::dtype::DecimalDType;
 use vortex_array::dtype::i256;
@@ -19,7 +18,7 @@ use super::DecimalBytePartsArray;
 pub(crate) fn i128_parts(values: Vec<i128>, validity: Validity) -> DecimalBytePartsArray {
     DecimalByteParts::encode(
         &DecimalArray::new(Buffer::from(values), DecimalDType::new(38, 2), validity),
-        &mut array_session().create_execution_ctx(),
+        &mut vortex_aggregates::session().create_execution_ctx(),
     )
     .vortex_expect("valid decimal byte parts")
 }
@@ -28,7 +27,7 @@ pub(crate) fn i128_parts(values: Vec<i128>, validity: Validity) -> DecimalBytePa
 pub(crate) fn i256_parts(values: Vec<i256>, validity: Validity) -> DecimalBytePartsArray {
     DecimalByteParts::encode(
         &DecimalArray::new(Buffer::from(values), DecimalDType::new(76, 2), validity),
-        &mut array_session().create_execution_ctx(),
+        &mut vortex_aggregates::session().create_execution_ctx(),
     )
     .vortex_expect("valid decimal byte parts")
 }

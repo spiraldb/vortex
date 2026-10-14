@@ -153,16 +153,16 @@ mod tests {
     use super::integer_bounds;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::PrimitiveArray;
     use crate::expr::stats::Precision;
     use crate::expr::stats::Stat;
     use crate::expr::stats::StatsProviderExt;
+    use crate::test_harness::test_session;
 
     #[test]
     fn bounds_of_sorted_values() -> VortexResult<()> {
         let array = PrimitiveArray::from_iter([0u32, 2, 2, 7]).into_array();
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         assert_eq!(
             integer_bounds(&array, &mut ctx)?,
             Some(IntegerBounds {
@@ -183,7 +183,7 @@ mod tests {
     fn bounds_skip_nulls() -> VortexResult<()> {
         let array =
             PrimitiveArray::from_option_iter([Some(5i64), None, Some(-3), None]).into_array();
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         assert_eq!(
             integer_bounds(&array, &mut ctx)?,
             Some(IntegerBounds {
@@ -203,7 +203,7 @@ mod tests {
     #[test]
     fn bounds_of_all_null_array() -> VortexResult<()> {
         let array = PrimitiveArray::from_option_iter([None::<u8>, None]).into_array();
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         assert_eq!(integer_bounds(&array, &mut ctx)?, None);
         Ok(())
     }

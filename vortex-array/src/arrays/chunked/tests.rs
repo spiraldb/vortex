@@ -12,7 +12,6 @@ use vortex_session::VortexSession;
 use crate::Canonical;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
-use crate::array_session;
 use crate::arrays::Chunked;
 use crate::arrays::ChunkedArray;
 use crate::arrays::ListArray;
@@ -30,9 +29,10 @@ use crate::dtype::Nullability;
 use crate::dtype::PType;
 use crate::dtype::PType::I32;
 use crate::executor::execute_into_builder;
+use crate::test_harness::test_session;
 use crate::validity::Validity;
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(test_session);
 
 fn chunked_array() -> ChunkedArray {
     ChunkedArray::try_new(

@@ -256,7 +256,6 @@ mod tests {
     use vortex_array::ArrayRef;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::arrays::struct_::StructArrayExt;
     use vortex_array::assert_arrays_eq;
@@ -280,7 +279,7 @@ mod tests {
     use crate::merge::StructArray;
 
     fn primitive_field(array: &ArrayRef, field_path: &[&str]) -> VortexResult<PrimitiveArray> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let mut field_path = field_path.iter();
 
         let Some(field) = field_path.next() else {
@@ -306,7 +305,7 @@ mod tests {
 
     #[test]
     pub fn test_merge_right_most() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let expr = merge_opts(
             vec![
                 get_item("0", root()),
@@ -477,7 +476,7 @@ mod tests {
         ])
         .unwrap()
         .into_array();
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let actual_array = test_array
             .apply(&expr)
             .unwrap()
@@ -502,7 +501,7 @@ mod tests {
 
     #[test]
     pub fn test_merge_order() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let expr = merge(vec![get_item("0", root()), get_item("1", root())]);
 
         let test_array = StructArray::from_fields(&[

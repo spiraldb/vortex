@@ -16,7 +16,6 @@ mod test {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::ExtensionArray;
     use crate::arrays::PrimitiveArray;
     use crate::compute::conformance::filter::test_filter_conformance;
@@ -25,6 +24,7 @@ mod test {
     use crate::extension::datetime::Date;
     use crate::extension::datetime::TimeUnit;
     use crate::extension::datetime::Timestamp;
+    use crate::test_harness::test_session;
 
     #[test]
     fn test_filter_extension_array() {
@@ -35,7 +35,7 @@ mod test {
         let array = ExtensionArray::new(ext_dtype.clone(), storage);
         test_filter_conformance(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
 
         // Test with nullable extension type
@@ -45,7 +45,7 @@ mod test {
         let array = ExtensionArray::new(ext_dtype_nullable, storage);
         test_filter_conformance(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 
@@ -87,7 +87,7 @@ mod test {
     fn test_take_extension_array_conformance(#[case] array: ExtensionArray) {
         test_take_conformance(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 }
@@ -99,13 +99,13 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::ExtensionArray;
     use crate::arrays::PrimitiveArray;
     use crate::compute::conformance::consistency::test_array_consistency;
     use crate::dtype::Nullability;
     use crate::extension::datetime::TimeUnit;
     use crate::extension::datetime::Timestamp;
+    use crate::test_harness::test_session;
 
     #[rstest]
     // Note: The original test_all_consistency cases for extension arrays caused errors
@@ -129,7 +129,7 @@ mod tests {
     fn test_extension_consistency(#[case] array: ExtensionArray) {
         test_array_consistency(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 }

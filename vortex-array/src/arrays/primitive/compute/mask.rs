@@ -33,9 +33,9 @@ mod test {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::PrimitiveArray;
     use crate::compute::conformance::mask::test_mask_conformance;
+    use crate::test_harness::test_session;
 
     #[rstest]
     #[case(PrimitiveArray::from_iter([1i32, 2, 3, 4, 5]))]
@@ -48,7 +48,7 @@ mod test {
     fn test_mask_primitive_conformance(#[case] array: PrimitiveArray) {
         test_mask_conformance(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 }

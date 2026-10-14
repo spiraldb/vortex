@@ -204,7 +204,6 @@ mod test {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::ChunkedArray;
     use crate::arrays::PrimitiveArray;
     use crate::compute::conformance::filter::test_filter_conformance;
@@ -212,6 +211,7 @@ mod test {
     use crate::dtype::Nullability;
     use crate::dtype::PType;
     use crate::dtype::half::f16;
+    use crate::test_harness::test_session;
 
     #[test]
     fn filter_chunked_floats() {
@@ -279,7 +279,7 @@ mod test {
     fn test_filter_chunked_conformance(#[case] chunked: ChunkedArray) {
         test_filter_conformance(
             &chunked.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 }

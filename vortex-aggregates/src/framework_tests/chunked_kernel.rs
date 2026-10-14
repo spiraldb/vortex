@@ -18,10 +18,9 @@ use vortex_buffer::buffer;
 use vortex_error::VortexResult;
 
 use crate::sum::Sum;
-use crate::test_session;
 
 fn run_sum(batch: &vortex_array::ArrayRef) -> VortexResult<Scalar> {
-    let mut ctx = test_session().create_execution_ctx();
+    let mut ctx = crate::session().create_execution_ctx();
     let mut acc = Accumulator::try_new(
         Sum,
         NumericalAggregateOpts::default(),

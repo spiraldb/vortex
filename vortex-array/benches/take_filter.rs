@@ -29,9 +29,9 @@ use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::RecursiveCanonical;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::PrimitiveArray;
+use vortex_array::test_harness::test_session;
 use vortex_array::validity::Validity;
 use vortex_buffer::BitBuffer;
 use vortex_buffer::BitBufferMut;
@@ -63,7 +63,7 @@ const INDEX_SEED: u64 = 43;
 const LIST_SIZE: usize = 4;
 const NULL_INDEX_INTERVAL: usize = 8;
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(test_session);
 
 fn primitive_array() -> ArrayRef {
     PrimitiveArray::from_iter(0..ARRAY_LEN as u32).into_array()

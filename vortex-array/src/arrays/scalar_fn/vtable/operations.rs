@@ -77,7 +77,6 @@ mod tests {
     use crate::VortexSessionExecute;
     use crate::array::Array;
     use crate::array::ArrayParts;
-    use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::ScalarFnArray;
@@ -90,11 +89,12 @@ mod tests {
     use crate::scalar_fn::fns::binary::Binary;
     use crate::scalar_fn::fns::literal::Literal;
     use crate::scalar_fn::fns::operators::Operator;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[test]
     fn test_scalar_fn_add() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let lhs = buffer![1i32, 2, 3].into_array();
         let rhs = buffer![10i32, 20, 30].into_array();
 
@@ -105,7 +105,7 @@ mod tests {
 
         let result = scalar_fn_array
             .into_array()
-            .execute::<Canonical>(&mut array_session().create_execution_ctx())?
+            .execute::<Canonical>(&mut test_session().create_execution_ctx())?
             .into_array();
         let expected = buffer![11i32, 22, 33].into_array();
         assert_arrays_eq!(result, expected, &mut ctx);
@@ -193,7 +193,7 @@ mod tests {
 
     #[test]
     fn test_scalar_fn_mul() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let lhs = buffer![2i32, 3, 4].into_array();
         let rhs = buffer![5i32, 6, 7].into_array();
 
@@ -202,7 +202,7 @@ mod tests {
 
         let result = scalar_fn_array
             .into_array()
-            .execute::<Canonical>(&mut array_session().create_execution_ctx())?
+            .execute::<Canonical>(&mut test_session().create_execution_ctx())?
             .into_array();
         let expected = buffer![10i32, 18, 28].into_array();
         assert_arrays_eq!(result, expected, &mut ctx);
@@ -212,7 +212,7 @@ mod tests {
 
     #[test]
     fn test_scalar_fn_with_nullable() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let lhs = PrimitiveArray::new(buffer![1i32, 2, 3], Validity::AllValid).into_array();
         let rhs = PrimitiveArray::new(
             buffer![10i32, 20, 30],
@@ -225,7 +225,7 @@ mod tests {
 
         let result = scalar_fn_array
             .into_array()
-            .execute::<Canonical>(&mut array_session().create_execution_ctx())?
+            .execute::<Canonical>(&mut test_session().create_execution_ctx())?
             .into_array();
         let expected = PrimitiveArray::new(
             buffer![11i32, 0, 33],
@@ -239,7 +239,7 @@ mod tests {
 
     #[test]
     fn test_scalar_fn_comparison() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let lhs = buffer![1i32, 5, 3].into_array();
         let rhs = buffer![2i32, 5, 1].into_array();
 
@@ -248,7 +248,7 @@ mod tests {
 
         let result = scalar_fn_array
             .into_array()
-            .execute::<Canonical>(&mut array_session().create_execution_ctx())?
+            .execute::<Canonical>(&mut test_session().create_execution_ctx())?
             .into_array();
         let expected = BoolArray::from_iter([false, true, false]).into_array();
         assert_arrays_eq!(result, expected, &mut ctx);
@@ -275,7 +275,7 @@ mod tests {
 
     #[test]
     fn scalar_fn_probe() -> VortexResult<()> {
-        let ctx = &mut array_session().create_execution_ctx();
+        let ctx = &mut test_session().create_execution_ctx();
         let array = scalar_nested_add()?;
         let mut probe = array.probe();
 
@@ -289,7 +289,7 @@ mod tests {
 
     #[test]
     fn scalar_fn_repeated_probe() -> VortexResult<()> {
-        let ctx = &mut array_session().create_execution_ctx();
+        let ctx = &mut test_session().create_execution_ctx();
         let array = scalar_nested_add()?;
         let mut probe = array.repeated_probe();
 
@@ -303,7 +303,7 @@ mod tests {
 
     #[test]
     fn scalar_fn_all_valid() -> VortexResult<()> {
-        let ctx = &mut array_session().create_execution_ctx();
+        let ctx = &mut test_session().create_execution_ctx();
         let array = scalar_nested_add()?;
         assert!(!array.all_valid(ctx)?);
         assert!(!array.all_invalid(ctx)?);

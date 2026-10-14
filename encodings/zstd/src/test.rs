@@ -6,7 +6,6 @@ use rstest::rstest;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::VarBinViewArray;
@@ -34,7 +33,7 @@ use crate::ZstdMetadata;
 
 #[test]
 fn test_zstd_compress_decompress() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = vortex_aggregates::session().create_execution_ctx();
     let data: Vec<i32> = (0..200).collect();
     let array = PrimitiveArray::from_iter(data.clone());
 
@@ -68,7 +67,7 @@ fn test_zstd_compress_decompress() {
 
 #[test]
 fn test_zstd_empty() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = vortex_aggregates::session().create_execution_ctx();
     let data: Vec<i32> = vec![];
     let array = PrimitiveArray::new(
         data.iter().cloned().collect::<Buffer<_>>(),
@@ -82,7 +81,7 @@ fn test_zstd_empty() {
 
 #[test]
 fn test_zstd_with_validity_and_multi_frame() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = vortex_aggregates::session().create_execution_ctx();
     let data: Vec<i32> = (0..200).collect();
     let mut validity: Vec<bool> = vec![false; 200];
     validity[3] = true;
@@ -136,7 +135,7 @@ fn test_zstd_with_validity_and_multi_frame() {
 
 #[test]
 fn test_zstd_with_dict() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = vortex_aggregates::session().create_execution_ctx();
     let data: Vec<i32> = (0..200).collect();
     let array = PrimitiveArray::new(
         data.iter().cloned().collect::<Buffer<_>>(),
@@ -166,7 +165,7 @@ fn test_zstd_with_dict() {
 
 #[test]
 fn test_validity_vtable() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = vortex_aggregates::session().create_execution_ctx();
     let mask_bools = vec![false, true, true, false, true];
     let array = PrimitiveArray::new(
         (0..5).collect::<Buffer<_>>(),
@@ -177,7 +176,10 @@ fn test_validity_vtable() {
     assert_eq!(
         arr.validity()
             .unwrap()
-            .execute_mask(arr.len(), &mut array_session().create_execution_ctx())
+            .execute_mask(
+                arr.len(),
+                &mut vortex_aggregates::session().create_execution_ctx()
+            )
             .unwrap(),
         Mask::from_iter(mask_bools)
     );
@@ -186,7 +188,10 @@ fn test_validity_vtable() {
         sliced
             .validity()
             .unwrap()
-            .execute_mask(sliced.len(), &mut array_session().create_execution_ctx())
+            .execute_mask(
+                sliced.len(),
+                &mut vortex_aggregates::session().create_execution_ctx()
+            )
             .unwrap(),
         Mask::from_iter(vec![true, true, false])
     );
@@ -194,7 +199,7 @@ fn test_validity_vtable() {
 
 #[test]
 fn test_zstd_var_bin_view() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = vortex_aggregates::session().create_execution_ctx();
     let data: [Option<&'static [u8]>; 5] = [
         Some(b"foo"),
         Some(b"bar"),
@@ -220,7 +225,7 @@ fn test_zstd_var_bin_view() {
 
 #[test]
 fn test_zstd_append_to_primitive_builder() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = vortex_aggregates::session().create_execution_ctx();
     let array = PrimitiveArray::from_option_iter([Some(1_i32), None, Some(3), Some(4), Some(5)]);
     let compressed = Zstd::from_primitive(&array, 0, 3, &mut ctx)?.slice(1..4)?;
     let mut builder = builder_with_capacity_in(
@@ -241,7 +246,7 @@ fn test_zstd_append_to_offset_builder(
     )]
     dtype: DType,
 ) {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = vortex_aggregates::session().create_execution_ctx();
     let array = VarBinViewArray::from_iter(
         [
             Some(b"foo".as_slice()),
@@ -276,7 +281,7 @@ fn test_zstd_append_to_offset_builder(
 /// requested region may reach it — otherwise the finished array retains the whole frames.
 #[test]
 fn test_zstd_append_to_view_builder_keeps_only_the_sliced_bytes() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = vortex_aggregates::session().create_execution_ctx();
     // Long enough that the values live in the data buffers rather than inline in the views.
     let values = (0..12)
         .map(|i| format!("value number {i} padded well past the inline limit"))
@@ -320,7 +325,7 @@ fn test_zstd_append_to_view_builder_keeps_only_the_sliced_bytes() -> VortexResul
 
 #[test]
 fn test_zstd_decompress_var_bin_view() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = vortex_aggregates::session().create_execution_ctx();
     let data: [Option<&'static [u8]>; 5] = [
         Some(b"foo"),
         Some(b"bar"),
@@ -351,7 +356,7 @@ fn test_zstd_decompress_var_bin_view() {
 
 #[test]
 fn test_sliced_array_children() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = vortex_aggregates::session().create_execution_ctx();
     let data: Vec<Option<i32>> = (0..10).map(|v| (v != 5).then_some(v)).collect();
     let compressed =
         Zstd::from_primitive(&PrimitiveArray::from_option_iter(data), 0, 100, &mut ctx).unwrap();
@@ -398,7 +403,7 @@ fn corrupt_var_bin_view_metadata(
 fn test_zstd_rejects_corrupt_frame_metadata(
     #[case] corrupt: fn(&mut ZstdMetadata),
 ) -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = vortex_aggregates::session().create_execution_ctx();
     let (_, compressed) = corrupt_var_bin_view_metadata(3, corrupt, &mut ctx)?;
 
     assert!(Zstd::decompress(&compressed, &mut ctx).is_err());
@@ -420,7 +425,7 @@ fn test_zstd_rejects_corrupt_frame_metadata(
 /// nothing but a length prefix has to error from every read path, not read back as an empty value.
 #[test]
 fn test_zstd_rejects_a_frame_ending_in_a_dangling_length_prefix() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = vortex_aggregates::session().create_execution_ctx();
     let mut values = Vec::new();
     values.extend_from_slice(&3u32.to_le_bytes());
     values.extend_from_slice(b"cat");
@@ -460,7 +465,7 @@ fn test_zstd_rejects_a_frame_ending_in_a_dangling_length_prefix() -> VortexResul
 /// holds every stored value, so those arrays still read back.
 #[test]
 fn test_zstd_reads_legacy_single_frame_var_bin_metadata() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = vortex_aggregates::session().create_execution_ctx();
     let (array, compressed) =
         corrupt_var_bin_view_metadata(0, |metadata| metadata.frames[0].n_values = 0, &mut ctx)?;
 
@@ -477,7 +482,7 @@ fn test_zstd_reads_legacy_single_frame_var_bin_metadata() -> VortexResult<()> {
 /// stays exact across frames.
 #[test]
 fn test_zstd_reads_legacy_primitive_frame_metadata() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = vortex_aggregates::session().create_execution_ctx();
     let array = PrimitiveArray::from_iter(0..200_i32);
     let mut data = ZstdData::from_primitive(&array, 3, 30, &mut ctx)?;
     for frame in &mut data.metadata.frames {
@@ -498,7 +503,7 @@ fn test_zstd_reads_legacy_primitive_frame_metadata() -> VortexResult<()> {
 /// the buffer alignment when compressing primitive arrays.
 #[test]
 fn test_zstd_frame_start_buffer_alignment() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = vortex_aggregates::session().create_execution_ctx();
     let data = vec![0u8; 2];
     let aligned_buffer = Buffer::copy_from_aligned(&data, Alignment::new(8));
     // u8 array now has a 8-byte alignment.
@@ -510,7 +515,7 @@ fn test_zstd_frame_start_buffer_alignment() {
 
 #[test]
 fn test_zstd_rejects_mismatched_frame_content_size() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = vortex_aggregates::session().create_execution_ctx();
     let compressed =
         Zstd::from_primitive(&PrimitiveArray::from_iter([1_i32, 2, 3]), 0, 0, &mut ctx).unwrap();
     let mut data = compressed.data().clone();

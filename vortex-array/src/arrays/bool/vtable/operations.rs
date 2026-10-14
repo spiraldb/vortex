@@ -31,14 +31,14 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::arrays::bool::BoolArrayExt;
     use crate::assert_arrays_eq;
+    use crate::test_harness::test_session;
 
     #[test]
     fn test_slice_hundred_elements() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr = BoolArray::from_iter(iter::repeat_n(Some(true), 100));
         let sliced_arr = arr
             .into_array()
@@ -53,7 +53,7 @@ mod tests {
 
     #[test]
     fn test_slice() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr = BoolArray::from_iter([Some(true), Some(true), None, Some(false), None]);
         let sliced_arr = arr
             .into_array()

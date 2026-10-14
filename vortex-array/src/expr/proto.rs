@@ -101,7 +101,6 @@ mod tests {
     use vortex_session::VortexSession;
 
     use super::ExprSerializeProtoExt;
-    use crate::array_session;
     use crate::expr::Expression;
     use crate::expr::and;
     use crate::expr::between;
@@ -114,6 +113,7 @@ mod tests {
     use crate::scalar_fn::fns::between::BetweenOptions;
     use crate::scalar_fn::fns::between::StrictComparison;
     use crate::scalar_fn::session::ScalarFnSession;
+    use crate::test_harness::test_session;
 
     #[test]
     fn expression_serde() {
@@ -136,7 +136,7 @@ mod tests {
         let s_expr = expr.serialize_proto().unwrap();
         let buf = s_expr.encode_to_vec();
         let s_expr = pb::Expr::decode(buf.as_slice()).unwrap();
-        let deser_expr = Expression::from_proto(&s_expr, &array_session()).unwrap();
+        let deser_expr = Expression::from_proto(&s_expr, &test_session()).unwrap();
 
         assert_eq!(&deser_expr, &expr);
     }

@@ -218,7 +218,6 @@ mod tests {
     use crate::Canonical;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::StructArray;
     use crate::assert_arrays_eq;
@@ -237,6 +236,7 @@ mod tests {
     use crate::extension::datetime::Date;
     use crate::extension::datetime::TimeUnit;
     use crate::scalar::Scalar;
+    use crate::test_harness::test_session;
 
     #[test]
     fn dtype() {
@@ -256,7 +256,7 @@ mod tests {
 
     #[test]
     fn evaluate() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let test_array =
             PrimitiveArray::from_option_iter([Some(1i32), None, Some(3), None, Some(5)])
                 .into_array();
@@ -277,7 +277,7 @@ mod tests {
 
     #[test]
     fn evaluate_struct_field() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let test_array = StructArray::from_fields(&[(
             "a",
             PrimitiveArray::from_option_iter([Some(1i32), None, Some(3)]).into_array(),
@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn evaluate_non_nullable_input() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let test_array = buffer![1i32, 2, 3].into_array();
         let expr = fill_null(root(), lit(0i32));
         let result = test_array.apply(&expr).unwrap();
@@ -308,7 +308,7 @@ mod tests {
     /// accepts, so adding a kernel without updating `supports_dtype` fails here.
     #[test]
     fn supports_dtype_matches_kernels() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let i32_dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
         let dtypes = [
             DType::Bool(Nullability::Nullable),

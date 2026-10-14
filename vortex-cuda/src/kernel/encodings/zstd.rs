@@ -365,7 +365,7 @@ mod tests {
 
     #[crate::test]
     async fn test_cuda_zstd_decompression_utf8() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -392,7 +392,7 @@ mod tests {
 
     #[crate::test]
     async fn test_cuda_zstd_decompression_multiple_frames() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -429,7 +429,7 @@ mod tests {
 
     #[crate::test]
     async fn test_cuda_zstd_decompression_sliced() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -464,7 +464,7 @@ mod tests {
     /// correct results instead of panicking.
     #[crate::test]
     async fn test_cuda_zstd_nullable_falls_back_to_cpu() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 

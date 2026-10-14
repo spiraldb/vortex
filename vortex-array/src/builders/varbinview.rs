@@ -1407,13 +1407,13 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::assert_arrays_eq;
     use crate::builders::ArrayBuilder;
     use crate::builders::VarBinViewBuilder;
     use crate::builders::varbinview::VarBinViewArray;
     use crate::dtype::DType;
     use crate::dtype::Nullability;
+    use crate::test_harness::test_session;
 
     /// A long-enough value that a view over it must reference a data buffer.
     const LONG: &str = "a value that is far too long to inline";
@@ -1422,7 +1422,7 @@ mod tests {
     /// and the append composes with staged in-progress bytes on either side.
     #[test]
     fn test_append_buffer_with_lengths() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mut builder = VarBinViewBuilder::with_capacity_in(
             DType::Utf8(Nullability::Nullable),
             8,
@@ -1456,7 +1456,7 @@ mod tests {
     /// Offsets need not start at zero: only the referenced range of the heap is adopted.
     #[test]
     fn test_append_buffer_with_offsets() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mut builder = VarBinViewBuilder::with_capacity_in(
             DType::Utf8(Nullability::Nullable),
             8,
@@ -1493,7 +1493,7 @@ mod tests {
     /// never reference it, so an under-utilized heap is rewritten to just the referencing values.
     #[test]
     fn test_append_buffer_with_lengths_compacts_underutilized_heap() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mut builder = VarBinViewBuilder::with_compaction_in(
             DType::Utf8(Nullability::Nullable),
             4,
@@ -1525,7 +1525,7 @@ mod tests {
     /// bytes or producing views that reference them.
     #[test]
     fn test_append_buffer_with_lengths_compaction_skips_null_bytes() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mut builder = VarBinViewBuilder::with_compaction_in(
             DType::Utf8(Nullability::Nullable),
             2,
@@ -1574,7 +1574,7 @@ mod tests {
     /// resolve their index.
     #[test]
     fn test_append_views_gathered() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let dictionary = <VarBinViewArray as FromIterator<_>>::from_iter([
             Some("tiny"),
             Some(LONG),
@@ -1620,7 +1620,7 @@ mod tests {
     fn test_append_views_scattered() {
         use crate::arrays::varbinview::build_views::BinaryView;
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let patch_values =
             <VarBinViewArray as FromIterator<_>>::from_iter([Some(LONG), Some("tiny")]);
         let mut buffers = patch_values
@@ -1669,7 +1669,7 @@ mod tests {
         const DEAD: &str = "a dead value nobody gathers, far too long to inline";
         const OTHER: &str = "another value far too long to inline";
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let dictionary =
             <VarBinViewArray as FromIterator<_>>::from_iter([Some(LONG), Some(DEAD), Some(OTHER)]);
         assert_eq!(dictionary.data_buffers().len(), 1);
@@ -1717,7 +1717,7 @@ mod tests {
     fn test_append_views_gathered_slices_contiguous_range() {
         const TAIL: &str = "the referenced tail value, too long to inline";
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let dictionary = <VarBinViewArray as FromIterator<_>>::from_iter([Some(LONG), Some(TAIL)]);
         let heap = dictionary.data_buffers()[0].as_host().clone();
 
@@ -1751,7 +1751,7 @@ mod tests {
     fn test_append_views_gathered_keeps_utilized_buffer() {
         const SHORTER: &str = "a shorter long value";
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let dictionary =
             <VarBinViewArray as FromIterator<_>>::from_iter([Some(LONG), Some(SHORTER)]);
         let heap = dictionary.data_buffers()[0].as_host().clone();
@@ -1782,7 +1782,7 @@ mod tests {
     /// buffers — and must never resolve a code.
     #[test]
     fn test_append_views_gathered_all_null_drops_buffers() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let dictionary = <VarBinViewArray as FromIterator<_>>::from_iter([Some(LONG)]);
         let buffers = dictionary
             .data_buffers()
@@ -1813,7 +1813,7 @@ mod tests {
     /// A fully-inlined heap has zero utilization; a compacting builder must not retain it at all.
     #[test]
     fn test_append_buffer_with_lengths_drops_fully_inlined_heap() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mut builder = VarBinViewBuilder::with_compaction_in(
             DType::Utf8(Nullability::Nullable),
             4,
@@ -1840,7 +1840,7 @@ mod tests {
 
     #[test]
     fn test_utf8_builder() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mut builder = VarBinViewBuilder::with_capacity_in(
             DType::Utf8(Nullability::Nullable),
             10,
@@ -1872,7 +1872,7 @@ mod tests {
 
     #[test]
     fn test_utf8_builder_with_extend() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let array = {
             let mut builder = VarBinViewBuilder::with_capacity_in(
                 DType::Utf8(Nullability::Nullable),
@@ -1926,7 +1926,7 @@ mod tests {
             BufferAllocatorRef::statically_allocated(),
         );
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
 
         array.append_to_builder(&mut builder, &mut ctx)?;
         assert_eq!(builder.completed_block_count(), 1);
@@ -1964,7 +1964,7 @@ mod tests {
 
     #[test]
     fn test_append_scalar() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         use crate::scalar::Scalar;
 
         // Test with Utf8 builder.
@@ -2067,7 +2067,7 @@ mod tests {
 
         // Verify the value was stored correctly
         let retrieved = array
-            .execute_scalar(0, &mut array_session().create_execution_ctx())
+            .execute_scalar(0, &mut test_session().create_execution_ctx())
             .unwrap()
             .as_binary()
             .value()

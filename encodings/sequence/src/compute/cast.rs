@@ -63,7 +63,7 @@ mod tests {
     use crate::SequenceArray;
 
     static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         crate::initialize(&session);
         session
     });

@@ -270,7 +270,7 @@ mod tests {
 
     #[test]
     fn test_float_dict_encode() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let values = buffer![1f32, 2f32, 2f32, 0f32, 1f32];
         let validity =
             Validity::Array(BoolArray::from_iter([true, true, true, false, true]).into_array());

@@ -854,7 +854,6 @@ mod test {
 
     use crate::IntoArray as _;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::arrays::ConstantArray;
     use crate::arrays::ListArray;
@@ -868,11 +867,12 @@ mod test {
     use crate::dtype::Nullability;
     use crate::dtype::PType::I32;
     use crate::scalar::Scalar;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[test]
     fn nullable_take() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let list = ListArray::try_new(
             buffer![0i32, 5, 3, 4].into_array(),
             buffer![0, 2, 3, 4, 4].into_array(),
@@ -902,12 +902,12 @@ mod test {
 
         assert!(
             result
-                .is_valid(0, &mut array_session().create_execution_ctx())
+                .is_valid(0, &mut test_session().create_execution_ctx())
                 .unwrap()
         );
         assert_eq!(
             result
-                .execute_scalar(0, &mut array_session().create_execution_ctx())
+                .execute_scalar(0, &mut test_session().create_execution_ctx())
                 .unwrap(),
             Scalar::list(
                 Arc::clone(&element_dtype),
@@ -918,18 +918,18 @@ mod test {
 
         assert!(
             result
-                .is_invalid(1, &mut array_session().create_execution_ctx())
+                .is_invalid(1, &mut test_session().create_execution_ctx())
                 .unwrap()
         );
 
         assert!(
             result
-                .is_valid(2, &mut array_session().create_execution_ctx())
+                .is_valid(2, &mut test_session().create_execution_ctx())
                 .unwrap()
         );
         assert_eq!(
             result
-                .execute_scalar(2, &mut array_session().create_execution_ctx())
+                .execute_scalar(2, &mut test_session().create_execution_ctx())
                 .unwrap(),
             Scalar::list(
                 Arc::clone(&element_dtype),
@@ -940,12 +940,12 @@ mod test {
 
         assert!(
             result
-                .is_valid(3, &mut array_session().create_execution_ctx())
+                .is_valid(3, &mut test_session().create_execution_ctx())
                 .unwrap()
         );
         assert_eq!(
             result
-                .execute_scalar(3, &mut array_session().create_execution_ctx())
+                .execute_scalar(3, &mut test_session().create_execution_ctx())
                 .unwrap(),
             Scalar::list(element_dtype, vec![], Nullability::Nullable)
         );
@@ -953,7 +953,7 @@ mod test {
 
     #[test]
     fn null_index_ignores_out_of_bounds_payload() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let list = ListArray::try_new(
             buffer![1i32, 2, 3, 4].into_array(),
             buffer![0u32, 2, 4].into_array(),
@@ -979,7 +979,7 @@ mod test {
 
     #[test]
     fn null_source_row_uses_valid_empty_output_range() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let list = ListArray::new(
             buffer![1i32, 2, 7, 8].into_array(),
             buffer![0u32, 2, 4].into_array(),
@@ -1023,7 +1023,7 @@ mod test {
 
     #[test]
     fn non_nullable_take() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let list = ListArray::try_new(
             buffer![0i32, 5, 3, 4].into_array(),
             buffer![0, 2, 3, 3, 4].into_array(),
@@ -1052,12 +1052,12 @@ mod test {
 
         assert!(
             result
-                .is_valid(0, &mut array_session().create_execution_ctx())
+                .is_valid(0, &mut test_session().create_execution_ctx())
                 .unwrap()
         );
         assert_eq!(
             result
-                .execute_scalar(0, &mut array_session().create_execution_ctx())
+                .execute_scalar(0, &mut test_session().create_execution_ctx())
                 .unwrap(),
             Scalar::list(
                 Arc::clone(&element_dtype),
@@ -1068,12 +1068,12 @@ mod test {
 
         assert!(
             result
-                .is_valid(1, &mut array_session().create_execution_ctx())
+                .is_valid(1, &mut test_session().create_execution_ctx())
                 .unwrap()
         );
         assert_eq!(
             result
-                .execute_scalar(1, &mut array_session().create_execution_ctx())
+                .execute_scalar(1, &mut test_session().create_execution_ctx())
                 .unwrap(),
             Scalar::list(
                 Arc::clone(&element_dtype),
@@ -1084,12 +1084,12 @@ mod test {
 
         assert!(
             result
-                .is_valid(2, &mut array_session().create_execution_ctx())
+                .is_valid(2, &mut test_session().create_execution_ctx())
                 .unwrap()
         );
         assert_eq!(
             result
-                .execute_scalar(2, &mut array_session().create_execution_ctx())
+                .execute_scalar(2, &mut test_session().create_execution_ctx())
                 .unwrap(),
             Scalar::list(element_dtype, vec![], Nullability::NonNullable)
         );
@@ -1097,7 +1097,7 @@ mod test {
 
     #[test]
     fn piecewise_sequence_take() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let list = ListArray::try_new(
             buffer![0i32, 1, 2, 3, 4, 5, 6].into_array(),
             buffer![0u32, 2, 5, 5, 7].into_array(),
@@ -1145,7 +1145,7 @@ mod test {
 
     #[test]
     fn piecewise_sequence_take_nullable_list_constant_lengths() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let list = ListArray::try_new(
             buffer![0i32, 1, 99, 100, 2, 3, 4, 5].into_array(),
             buffer![0u32, 2, 4, 7, 8].into_array(),
@@ -1197,7 +1197,7 @@ mod test {
 
     #[test]
     fn piecewise_sequence_take_nullable_list_array_lengths() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let list = ListArray::try_new(
             buffer![0i32, 1, 99, 100, 2, 3, 4, 5].into_array(),
             buffer![0u32, 2, 4, 7, 8].into_array(),
@@ -1305,13 +1305,13 @@ mod test {
     fn test_take_list_conformance(#[case] list: ListArray) {
         test_take_conformance(
             &list.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 
     #[test]
     fn test_u64_offset_accumulation_non_nullable() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let elements = buffer![0i32; 200].into_array();
         let offsets = buffer![0u8, 200].into_array();
         let list = ListArray::try_new(elements, offsets, Validity::NonNullable)
@@ -1328,19 +1328,19 @@ mod test {
         assert_eq!(result_view.len(), 2);
         assert!(
             result_view
-                .is_valid(0, &mut array_session().create_execution_ctx())
+                .is_valid(0, &mut test_session().create_execution_ctx())
                 .unwrap()
         );
         assert!(
             result_view
-                .is_valid(1, &mut array_session().create_execution_ctx())
+                .is_valid(1, &mut test_session().create_execution_ctx())
                 .unwrap()
         );
     }
 
     #[test]
     fn test_u64_offset_accumulation_nullable() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let elements = buffer![0i32; 150].into_array();
         let offsets = buffer![0u8, 150, 150].into_array();
         let validity = BoolArray::from_iter(vec![true, false]).into_array();
@@ -1358,17 +1358,17 @@ mod test {
         assert_eq!(result_view.len(), 3);
         assert!(
             result_view
-                .is_valid(0, &mut array_session().create_execution_ctx())
+                .is_valid(0, &mut test_session().create_execution_ctx())
                 .unwrap()
         );
         assert!(
             result_view
-                .is_invalid(1, &mut array_session().create_execution_ctx())
+                .is_invalid(1, &mut test_session().create_execution_ctx())
                 .unwrap()
         );
         assert!(
             result_view
-                .is_valid(2, &mut array_session().create_execution_ctx())
+                .is_valid(2, &mut test_session().create_execution_ctx())
                 .unwrap()
         );
     }

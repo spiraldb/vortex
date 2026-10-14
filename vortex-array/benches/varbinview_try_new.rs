@@ -7,11 +7,11 @@ use std::sync::LazyLock;
 use divan::Bencher;
 use mimalloc::MiMalloc;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::VarBinViewArray;
 use vortex_array::arrays::varbinview::BinaryView;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability;
+use vortex_array::test_harness::test_session;
 use vortex_array::validity::Validity;
 use vortex_buffer::BitBuffer;
 use vortex_buffer::Buffer;
@@ -28,7 +28,7 @@ fn main() {
 
 const SIZES: &[usize] = &[1 << 12, 1 << 16];
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(test_session);
 
 fn garbage_view() -> BinaryView {
     BinaryView::new_ref(13, *b"AAAA", 0xDEAD_BEEF, 0xF000_0000)

@@ -294,7 +294,7 @@ impl ArrayRef {
     /// use vortex_array::arrays::PrimitiveArray;
     ///
     /// let array = PrimitiveArray::from_iter([10i32, 20, 30]).into_array();
-    /// let mut ctx = vortex_array::array_session().create_execution_ctx();
+    /// let mut ctx = vortex_array::test_harness::test_session().create_execution_ctx();
     /// assert_eq!(array.probe().execute_scalar(2, &mut ctx)?, 30i32.into());
     /// # Ok::<(), vortex_error::VortexError>(())
     /// ```
@@ -311,7 +311,7 @@ impl ArrayRef {
     /// use vortex_array::arrays::PrimitiveArray;
     ///
     /// let array = PrimitiveArray::from_iter([10i32, 20, 30]).into_array();
-    /// let mut ctx = vortex_array::array_session().create_execution_ctx();
+    /// let mut ctx = vortex_array::test_harness::test_session().create_execution_ctx();
     /// let mut probe = array.repeated_probe();
     /// assert_eq!(probe.execute_scalar(2, &mut ctx)?, 30i32.into());
     /// assert_eq!(probe.execute_scalar(0, &mut ctx)?, 10i32.into());

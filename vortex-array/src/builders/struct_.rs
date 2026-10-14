@@ -235,7 +235,6 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::VarBinArray;
     use crate::assert_arrays_eq;
@@ -247,6 +246,7 @@ mod tests {
     use crate::dtype::PType::I32;
     use crate::dtype::StructFields;
     use crate::scalar::Scalar;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[test]
@@ -291,7 +291,7 @@ mod tests {
         assert_eq!(struct_.dtype(), &dtype);
         assert_eq!(
             struct_
-                .valid_count(&mut array_session().create_execution_ctx())
+                .valid_count(&mut test_session().create_execution_ctx())
                 .unwrap(),
             1
         );
@@ -299,7 +299,7 @@ mod tests {
 
     #[test]
     fn test_append_scalar() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         use crate::scalar::Scalar;
 
         let dtype = DType::Struct(

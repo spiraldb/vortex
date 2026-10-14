@@ -699,7 +699,6 @@ mod tests {
 
     use rstest::rstest;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::validity::Validity;
     use vortex_buffer::BitBuffer;
@@ -714,7 +713,7 @@ mod tests {
 
     #[test]
     fn test_naive_count_distinct_values() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let array = PrimitiveArray::new(buffer![217u8, 0], Validity::NonNullable);
         let stats = typed_int_stats::<u8>(&array, true, &mut ctx)?;
         assert_eq!(stats.distinct_count().unwrap(), 2);
@@ -723,7 +722,7 @@ mod tests {
 
     #[test]
     fn test_naive_count_distinct_values_nullable() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let array = PrimitiveArray::new(
             buffer![217u8, 0],
             Validity::from(BitBuffer::from(vec![true, false])),
@@ -735,7 +734,7 @@ mod tests {
 
     #[test]
     fn test_count_distinct_values() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let array = PrimitiveArray::new((0..128u8).collect::<Buffer<u8>>(), Validity::NonNullable);
         let stats = typed_int_stats::<u8>(&array, true, &mut ctx)?;
         assert_eq!(stats.distinct_count().unwrap(), 128);
@@ -744,7 +743,7 @@ mod tests {
 
     #[test]
     fn test_count_distinct_values_nullable() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let array = PrimitiveArray::new(
             (0..128u8).collect::<Buffer<u8>>(),
             Validity::from(BitBuffer::from_iter(
@@ -758,7 +757,7 @@ mod tests {
 
     #[test]
     fn dense_distinct_signed_full_range() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let values: Buffer<i8> = (i8::MIN..=i8::MAX)
             .chain(i8::MIN..=i8::MAX)
             .chain(iter::once(i8::MAX))
@@ -776,7 +775,7 @@ mod tests {
 
     #[test]
     fn dense_distinct_ignores_values_under_nulls() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let array = PrimitiveArray::new(
             buffer![1000i32, 1001, 1000, 5_000_000, 1003],
             Validity::from_iter([true, true, true, false, true]),
@@ -793,7 +792,7 @@ mod tests {
 
     #[test]
     fn wide_range_distinct() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let array = PrimitiveArray::new(buffer![0u64, u64::MAX, 0], Validity::NonNullable);
 
         let stats = typed_int_stats::<u64>(&array, true, &mut ctx)?;
@@ -807,7 +806,7 @@ mod tests {
 
     #[test]
     fn test_integer_stats_leading_nulls() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let ints = PrimitiveArray::new(buffer![0, 1, 2], Validity::from_iter([false, true, true]));
 
         let stats = IntegerStats::generate_opts(
@@ -862,7 +861,7 @@ mod tests {
             Some(_) => Validity::from(BitBuffer::from(valid)),
         };
         let array = PrimitiveArray::new(Buffer::from(values), validity);
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let stats = typed_int_stats::<u32>(&array, count_distinct_values, &mut ctx)?;
 
         let ErasedStats::U32(typed) = stats.erased() else {

@@ -548,7 +548,7 @@ mod tests {
     use crate::min_max::make_minmax_dtype;
     use crate::min_max::min_max;
 
-    static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::array_session);
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(crate::session);
 
     #[test]
     fn test_prim_min_max() -> VortexResult<()> {

@@ -414,7 +414,6 @@ mod tests {
     use vortex_error::VortexResult;
     use vortex_error::vortex_err;
 
-    use crate::test_session;
     use crate::uncompressed_size_in_bytes::UncompressedSizeInBytes;
     use crate::uncompressed_size_in_bytes::UncompressedSizeOpts;
     use crate::uncompressed_size_in_bytes::uncompressed_size_in_bytes;
@@ -427,7 +426,7 @@ mod tests {
     /// Builders no longer canonicalize their children, so the finished array is only canonical at
     /// the top level - recursively canonicalize it before measuring.
     fn materialized_uncompressed_size_in_bytes(array: &ArrayRef) -> u64 {
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         let mut builder = builder_with_capacity_in(
             array.dtype(),
             array.len(),
@@ -450,7 +449,7 @@ mod tests {
     }
 
     fn aggregate_with(array: &ArrayRef, opts: UncompressedSizeOpts) -> VortexResult<u64> {
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         let mut acc = Accumulator::try_new(UncompressedSizeInBytes, opts, array.dtype().clone())?;
         acc.accumulate(array, &mut ctx)?;
         acc.finish()?
@@ -599,7 +598,7 @@ mod tests {
 
         // The lists are out of order and leave element 1 unreferenced, so compare against the
         // exact layout rather than a builder round-trip.
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         let exact = array
             .clone()
             .execute::<ListViewArray>(&mut ctx)?
@@ -711,7 +710,7 @@ mod tests {
     #[test]
     fn exact_result_is_cached_as_exact_stat() -> VortexResult<()> {
         let sliced = views_into_shared_page(0..10)?;
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
 
         let size = uncompressed_size_in_bytes(&sliced, UncompressedSizeOpts::exact(), &mut ctx)?;
 
@@ -725,7 +724,7 @@ mod tests {
     #[test]
     fn inexact_result_is_cached_as_upper_bound() -> VortexResult<()> {
         let sliced = views_into_shared_page(0..10)?;
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
 
         let inexact =
             uncompressed_size_in_bytes(&sliced, UncompressedSizeOpts::inexact(), &mut ctx)?;
@@ -845,7 +844,7 @@ mod tests {
     fn variant_stat_is_unsupported() -> VortexResult<()> {
         let child = ConstantArray::new(Scalar::variant(Scalar::from(42i32)), 3).into_array();
         let array = VariantArray::try_new(child, None)?.into_array();
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
 
         assert_eq!(
             array
@@ -898,7 +897,7 @@ mod tests {
     #[test]
     fn helper_caches_result() -> VortexResult<()> {
         let array = PrimitiveArray::new(buffer![1i32, 2, 3], Validity::NonNullable).into_array();
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
 
         let size = uncompressed_size_in_bytes(&array, UncompressedSizeOpts::exact(), &mut ctx)?;
 

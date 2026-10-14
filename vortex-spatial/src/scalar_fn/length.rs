@@ -250,7 +250,7 @@ mod tests {
 
     #[test]
     fn measures_each_linestring() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let lines = linestring_column(vec![
             vec![(0.0, 0.0), (3.0, 4.0)],
@@ -268,7 +268,7 @@ mod tests {
 
     #[test]
     fn measures_each_multilinestring() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let lines = multilinestring_column(vec![
             vec![
@@ -288,7 +288,7 @@ mod tests {
 
     #[test]
     fn propagates_nullable_multilinestring_rows() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let lines = MaskedArray::try_new(
             multilinestring_column(vec![
@@ -313,7 +313,7 @@ mod tests {
 
     #[test]
     fn constant_is_computed_once_and_remains_constant() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let lines = line_constant(vec![(0.0, 0.0), (3.0, 4.0), (3.0, 8.0)], 3, &mut ctx)?;
 
@@ -330,7 +330,7 @@ mod tests {
 
     #[test]
     fn null_constant_is_all_null() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let dtype = linestring_column(vec![vec![]])?.dtype().as_nullable();
         let lines = ConstantArray::new(Scalar::null(dtype), 2).into_array();
@@ -350,7 +350,7 @@ mod tests {
 
     #[test]
     fn propagates_nullable_rows() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let lines = MaskedArray::try_new(
             linestring_column(vec![
@@ -374,7 +374,7 @@ mod tests {
 
     #[test]
     fn propagates_all_null_rows() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let lines = MaskedArray::try_new(
             linestring_column(vec![

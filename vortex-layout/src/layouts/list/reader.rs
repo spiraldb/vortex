@@ -837,7 +837,7 @@ mod tests {
     }
 
     fn layout_test_session() -> VortexSession {
-        vortex_array::array_session()
+        vortex_aggregates::session()
             .with::<LayoutSession>()
             .with::<RuntimeSession>()
     }

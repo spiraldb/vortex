@@ -225,17 +225,17 @@ mod tests {
     use crate::ArrayContext;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::PrimitiveArray;
     use crate::assert_arrays_eq;
     use crate::buffer::BufferHandle;
     use crate::serde::SerializeOptions;
     use crate::serde::SerializedArray;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[test]
     fn test_nullable_primitive_serde_roundtrip() {
-        let session = array_session();
+        let session = test_session();
         let mut ctx = session.create_execution_ctx();
         let array = PrimitiveArray::new(
             buffer![1i32, 2, 3, 4],
@@ -265,7 +265,7 @@ mod tests {
 
     #[test]
     fn test_with_buffers_replaces_primitive_buffer_with_equivalent_contents() -> VortexResult<()> {
-        let session = array_session();
+        let session = test_session();
         let mut ctx = session.create_execution_ctx();
 
         let array = PrimitiveArray::from_iter([1i32, 2, 3, 4]).into_array();

@@ -20,13 +20,13 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::arrays::ListArray;
     use crate::arrays::PrimitiveArray;
     use crate::compute::conformance::consistency::test_array_consistency;
     use crate::compute::conformance::filter::test_filter_conformance;
     use crate::compute::conformance::mask::test_mask_conformance;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[test]
@@ -39,7 +39,7 @@ mod tests {
 
         test_mask_conformance(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 
@@ -53,7 +53,7 @@ mod tests {
 
         test_filter_conformance(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 
@@ -88,7 +88,7 @@ mod tests {
     fn test_list_consistency(#[case] array: ListArray) {
         test_array_consistency(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 }

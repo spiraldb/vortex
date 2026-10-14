@@ -40,7 +40,7 @@ use crate::extension::polygon_storage_dtype;
 
 /// A fresh session with the spatial types, functions, and pruning rules registered.
 pub fn spatial_session() -> VortexSession {
-    let session = vortex_array::array_session();
+    let session = vortex_aggregates::session();
     crate::initialize(&session);
     session
 }

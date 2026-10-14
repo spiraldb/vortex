@@ -11,7 +11,6 @@ use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::MaskFuture;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldMask;
@@ -35,7 +34,7 @@ use crate::SplitRange;
 use crate::session::LayoutSession;
 
 pub fn new_session() -> VortexSession {
-    array_session()
+    vortex_aggregates::session()
         .with::<LayoutSession>()
         .with::<RuntimeSession>()
 }
@@ -249,7 +248,7 @@ pub fn collect_scan_values<I>(iter: I) -> VortexResult<Vec<i32>>
 where
     I: IntoIterator<Item = VortexResult<ArrayRef>>,
 {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = vortex_aggregates::session().create_execution_ctx();
     let mut values = Vec::new();
     for chunk in iter {
         let primitive = chunk?.execute::<PrimitiveArray>(&mut ctx)?;

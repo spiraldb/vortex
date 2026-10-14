@@ -81,7 +81,6 @@ fn slice_bitpacked(
 mod tests {
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::arrays::SliceArray;
     use vortex_error::VortexResult;
@@ -91,7 +90,7 @@ mod tests {
 
     #[test]
     fn test_reduce_parent_returns_bitpacked_slice() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let values = PrimitiveArray::from_iter(0u32..2048);
         let bitpacked = bitpack_encode(&values, 11, None, &mut ctx)?;
 

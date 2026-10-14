@@ -1463,7 +1463,6 @@ mod tests {
     use vortex::array::ArrayRef;
     use vortex::array::IntoArray;
     use vortex::array::VortexSessionExecute;
-    use vortex::array::array_session;
     use vortex::array::arrays::BoolArray;
     use vortex::array::arrays::ChunkedArray;
     use vortex::array::arrays::DecimalArray;
@@ -1545,7 +1544,7 @@ mod tests {
     }
 
     fn cuda_ctx_with_varbin_layout(layout: VarBinExportLayout) -> VortexResult<CudaExecutionCtx> {
-        let session = array_session()
+        let session = vortex::aggregates::session()
             .with_some(CudaSession::try_default()?.with_varbin_export_layout(layout));
         CudaSession::create_execution_ctx(&session)
     }
@@ -1713,7 +1712,7 @@ mod tests {
             Arc::from([first, second]),
             dtype,
             Validity::NonNullable,
-            &mut array_session().create_execution_ctx(),
+            &mut vortex::aggregates::session().create_execution_ctx(),
         )
         .vortex_expect("valid multi-buffer VarBinViewArray")
         .into_array();

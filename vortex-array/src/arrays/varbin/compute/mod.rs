@@ -18,11 +18,11 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::VarBinArray;
     use crate::compute::conformance::consistency::test_array_consistency;
     use crate::dtype::DType;
     use crate::dtype::Nullability;
+    use crate::test_harness::test_session;
 
     #[rstest]
     // UTF-8 strings
@@ -66,7 +66,7 @@ mod tests {
     fn test_varbin_consistency(#[case] array: VarBinArray) {
         test_array_consistency(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 }

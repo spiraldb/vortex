@@ -13,7 +13,6 @@ use crate::ArrayRef;
 use crate::Canonical;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
-use crate::array_session;
 use crate::arrays::PrimitiveArray;
 use crate::arrays::Union;
 use crate::arrays::UnionArray;
@@ -24,6 +23,7 @@ use crate::dtype::DType;
 use crate::dtype::Nullability;
 use crate::dtype::PType;
 use crate::scalar::Scalar;
+use crate::test_harness::test_session;
 
 /// Take `indices`, asserting the result reduced back to a union instead of staying a dictionary.
 #[track_caller]
@@ -39,7 +39,7 @@ fn take(array: &UnionArray, indices: ArrayRef) -> VortexResult<UnionArray> {
 /// Assert that `array` holds exactly `expected`, row for row.
 #[track_caller]
 fn assert_rows(array: &UnionArray, expected: Vec<Scalar>) -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     assert_eq!(array.len(), expected.len());
     for (index, expected) in expected.into_iter().enumerate() {
@@ -145,7 +145,7 @@ fn take_from_empty_union_is_all_null() -> VortexResult<()> {
 
     let via_take = empty
         .take(indices.clone())?
-        .execute::<Canonical>(&mut array_session().create_execution_ctx())?
+        .execute::<Canonical>(&mut test_session().create_execution_ctx())?
         .into_union();
     let via_reduce = <Union as TakeReduce>::take(empty.as_::<Union>(), &indices)?
         .ok_or_else(|| vortex_err!("Union take must never decline"))?
@@ -164,7 +164,7 @@ fn take_from_empty_union_is_all_null() -> VortexResult<()> {
 fn take_conformance(#[case] array: VortexResult<UnionArray>) -> VortexResult<()> {
     test_take_conformance(
         &array?.into_array(),
-        &mut array_session().create_execution_ctx(),
+        &mut test_session().create_execution_ctx(),
     );
 
     Ok(())

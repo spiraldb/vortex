@@ -15,7 +15,6 @@ use divan::counter::ItemsCount;
 use mimalloc::MiMalloc;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldNames;
 use vortex_array::dtype::Nullability;
@@ -28,6 +27,7 @@ use vortex_array::scalar::PValue;
 use vortex_array::scalar::Scalar;
 use vortex_array::scalar::ScalarValue;
 use vortex_array::stats::StatsSet;
+use vortex_array::test_harness::test_session;
 use vortex_buffer::Buffer;
 use vortex_buffer::BufferString;
 use vortex_session::VortexSession;
@@ -39,7 +39,7 @@ const N: usize = 1024;
 /// A merge costs about 300ns, so it runs fewer times to keep the CodSpeed simulation under 1ms.
 const MERGES: usize = 64;
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(test_session);
 
 fn main() {
     LazyLock::force(&SESSION);

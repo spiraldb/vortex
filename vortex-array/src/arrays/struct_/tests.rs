@@ -6,7 +6,6 @@ use vortex_error::VortexResult;
 
 use crate::IntoArray;
 use crate::VortexSessionExecute;
-use crate::array_session;
 use crate::arrays::BoolArray;
 use crate::arrays::PrimitiveArray;
 use crate::arrays::StructArray;
@@ -18,11 +17,12 @@ use crate::dtype::FieldName;
 use crate::dtype::FieldNames;
 use crate::dtype::Nullability;
 use crate::dtype::PType;
+use crate::test_harness::test_session;
 use crate::validity::Validity;
 
 #[test]
 fn test_project() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let xs = PrimitiveArray::new(buffer![0i64, 1, 2, 3, 4], Validity::NonNullable);
     let ys = VarBinArray::from_vec(
         vec!["a", "b", "c", "d", "e"],
@@ -65,7 +65,7 @@ fn test_project() {
 
 #[test]
 fn test_remove_column() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let xs = PrimitiveArray::new(buffer![0i64, 1, 2, 3, 4], Validity::NonNullable);
     let ys = PrimitiveArray::new(buffer![4u64, 5, 6, 7, 8], Validity::NonNullable);
 
@@ -111,7 +111,7 @@ fn test_remove_column() {
 
 #[test]
 fn test_duplicate_field_names() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     // Test that StructArray allows duplicate field names and returns the first match
     let field1 = buffer![1i32, 2, 3].into_array();
     let field2 = buffer![10i32, 20, 30].into_array();
@@ -149,7 +149,7 @@ fn test_duplicate_field_names() {
 
 #[test]
 fn test_push_validity_into_children_drops_struct_validity() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let struct_array = StructArray::try_new(
         FieldNames::from(["a", "b"]),
         vec![
@@ -188,7 +188,7 @@ fn test_push_validity_into_children_drops_struct_validity() -> VortexResult<()> 
 
 #[test]
 fn test_push_validity_into_children_preserves_struct_validity() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let struct_array = StructArray::try_new(
         FieldNames::from(["a", "b"]),
         vec![
@@ -227,7 +227,7 @@ fn test_push_validity_into_children_preserves_struct_validity() -> VortexResult<
 
 #[test]
 fn test_push_validity_into_children_intersects_field_validity() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     // Fields carry their own nulls (a at row 1, b at row 2) and the struct is null at row 1,
     // so pushing intersects both levels rather than overwriting the fields.
@@ -260,7 +260,7 @@ fn test_push_validity_into_children_intersects_field_validity() -> VortexResult<
 
 #[test]
 fn test_push_validity_into_children_all_invalid() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let struct_array = StructArray::try_new(
         FieldNames::from(["a", "b"]),
         vec![
@@ -290,7 +290,7 @@ fn test_push_validity_into_children_all_invalid() -> VortexResult<()> {
 
 #[test]
 fn test_push_validity_into_children_no_nulls() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     // No nulls: the fields are untouched, only the top-level nullability changes.
     let struct_array = StructArray::try_new(

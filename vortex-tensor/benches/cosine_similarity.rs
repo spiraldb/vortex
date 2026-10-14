@@ -81,7 +81,7 @@ fn constant_vector(width: usize) -> ArrayRef {
 }
 
 fn bench_cosine(bencher: Bencher, lhs: ArrayRef, rhs: ArrayRef) {
-    let session = vortex_array::array_session();
+    let session = vortex_aggregates::session();
     bencher
         .with_inputs(|| {
             (

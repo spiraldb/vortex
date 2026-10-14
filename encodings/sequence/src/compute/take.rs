@@ -121,7 +121,6 @@ mod test {
     use vortex_array::Canonical;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::compute::conformance::take::test_take_conformance;
     use vortex_array::dtype::Nullability;
@@ -204,7 +203,7 @@ mod test {
     fn sequence_take_conformance(#[case] sequence: SequenceArray) {
         test_take_conformance(
             &sequence.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         );
     }
 
@@ -216,7 +215,7 @@ mod test {
         let _array = array
             .take(indices.into_array())
             .unwrap()
-            .execute::<Canonical>(&mut array_session().create_execution_ctx())
+            .execute::<Canonical>(&mut vortex_aggregates::session().create_execution_ctx())
             .unwrap();
     }
 }

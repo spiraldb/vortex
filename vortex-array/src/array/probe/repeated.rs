@@ -229,7 +229,7 @@ mod tests {
 
     #[test]
     fn repeated_probe_initializes_lazily_and_outlives_handle() -> VortexResult<()> {
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_harness::test_session().create_execution_ctx();
         let array = nullable_ints();
         let mut probe = RepeatedArrayProbe::new(array.clone());
         drop(array);
@@ -244,7 +244,7 @@ mod tests {
 
     #[test]
     fn repeated_probe_resolves_uniform_validity_once() -> VortexResult<()> {
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_harness::test_session().create_execution_ctx();
         let array = PrimitiveArray::from_option_iter([Some(1i32), Some(2)]).into_array();
         let mut probe = array.repeated_probe();
         assert!(probe.execute_is_valid(1, &mut ctx)?);
@@ -259,7 +259,7 @@ mod tests {
 
     #[test]
     fn validity_and_scalar_reads_share_the_validity_slot() -> VortexResult<()> {
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_harness::test_session().create_execution_ctx();
         let mut probe = nullable_ints().repeated_probe();
         assert!(!probe.execute_is_valid(1, &mut ctx)?);
         let Some(ResolvedValidity::Array(validity)) =
@@ -278,7 +278,7 @@ mod tests {
 
     #[test]
     fn repeated_probe_reads_null_rows_through_encoding() -> VortexResult<()> {
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_harness::test_session().create_execution_ctx();
         let array = PrimitiveArray::from_option_iter([Some(1i32), None]).into_array();
         let mut probe = array.repeated_probe();
         assert!(probe.execute_scalar(1, &mut ctx)?.is_null());
@@ -289,7 +289,7 @@ mod tests {
 
     #[test]
     fn repeated_state_creates_children_on_demand() -> VortexResult<()> {
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_harness::test_session().create_execution_ctx();
         let array = struct_of_two_fields()?;
         let typed = array
             .as_opt::<Struct>()

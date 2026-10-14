@@ -48,7 +48,6 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::ChunkedArray;
     use crate::arrays::VarBinArray;
     use crate::arrays::VarBinViewArray;
@@ -57,6 +56,7 @@ mod tests {
     use crate::builders::VarBinViewBuilder;
     use crate::dtype::DType;
     use crate::dtype::Nullability;
+    use crate::test_harness::test_session;
 
     #[rstest]
     #[case(DType::Utf8(Nullability::Nullable))]
@@ -77,13 +77,13 @@ mod tests {
 
         let varbin = varbin.slice(1..4).unwrap();
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let canonical = varbin.execute::<VarBinViewArray>(&mut ctx).unwrap();
         assert_eq!(canonical.dtype(), &dtype);
 
         assert!(
             !canonical
-                .is_valid(0, &mut array_session().create_execution_ctx())
+                .is_valid(0, &mut test_session().create_execution_ctx())
                 .unwrap()
         );
 
@@ -100,7 +100,7 @@ mod tests {
     #[case(DType::Utf8(Nullability::NonNullable))]
     #[case(DType::Binary(Nullability::NonNullable))]
     fn test_canonical_varbin_unsliced(#[case] dtype: DType) {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let varbin = VarBinArray::from_iter_nonnull(["foo", "bar", "baz"], dtype.clone());
         let canonical = varbin
             .as_array()
@@ -122,7 +122,7 @@ mod tests {
     #[case(DType::Utf8(Nullability::Nullable))]
     #[case(DType::Binary(Nullability::Nullable))]
     fn append_varbin_to_varbinview_builder(#[case] dtype: DType) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let long = "a value long enough that its view has to reference a buffer";
         let longer = "another value long enough that its view has to reference a buffer";
 
@@ -170,7 +170,7 @@ mod tests {
     /// drops the fully-inlined heap.
     #[test]
     fn append_varbin_to_a_compacting_builder_still_compacts() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let dtype = DType::Utf8(Nullability::NonNullable);
         // Every value inlines, so nothing references the value bytes at all.
         let array = VarBinArray::from_iter_nonnull(["short", "tiny", "small"], dtype.clone());
@@ -203,7 +203,7 @@ mod tests {
     fn test_canonical_varbin_empty() {
         let varbin =
             VarBinArray::from_iter_nonnull([] as [&str; 0], DType::Utf8(Nullability::NonNullable));
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let canonical = varbin
             .as_array()
             .clone()

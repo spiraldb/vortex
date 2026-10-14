@@ -783,9 +783,9 @@ mod tests {
     use crate::ArraySerialization;
     use crate::ArrayVTable;
     use crate::IntoArray;
-    use crate::array_session;
     use crate::arrays::Primitive;
     use crate::arrays::PrimitiveArray;
+    use crate::test_harness::test_session;
 
     static SERIALIZER_CALLS: AtomicUsize = AtomicUsize::new(0);
 
@@ -894,7 +894,7 @@ mod tests {
     }
 
     fn versioned_primitive_session() -> VortexSession {
-        let session = array_session();
+        let session = test_session();
         session.arrays().register(VersionedPrimitivePlugin);
         session
     }
@@ -917,7 +917,7 @@ mod tests {
 
     #[test]
     fn one_serializer_selects_the_earliest_lossless_wire_id() -> VortexResult<()> {
-        let session = array_session();
+        let session = test_session();
         session.arrays().register(CountingVersionedPrimitivePlugin);
         let ctx = restricted_context(&[old_primitive_id(), new_primitive_id()]);
         let array = PrimitiveArray::from_iter([1i32, 2, 3, 4]).into_array();
@@ -971,7 +971,7 @@ mod tests {
         let serialized = SerializedArray::try_from(serialize_blob(&array, &ctx, &writer_session)?)?;
         let read_ctx = ReadContext::new(ctx.to_ids());
 
-        let old_session = array_session();
+        let old_session = test_session();
         let error = serialized
             .decode(array.dtype(), array.len(), &read_ctx, &old_session)
             .expect_err("an old reader must not recognize the new wire ID");
@@ -1004,7 +1004,7 @@ mod tests {
     /// such a buffer must return a [`VortexError`] rather than panicking (see issue #8819).
     #[test]
     fn from_flatbuffer_and_segment_rejects_out_of_bounds_buffer() -> VortexResult<()> {
-        let session = array_session();
+        let session = test_session();
         let array_ctx = ArrayContext::empty();
 
         // Serialize a simple array so we have a valid array tree flatbuffer whose declared buffer

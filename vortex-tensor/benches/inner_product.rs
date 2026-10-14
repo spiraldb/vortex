@@ -57,7 +57,7 @@ fn vectors(width: usize, seed: usize) -> ArrayRef {
 }
 
 fn bench_inner_product(bencher: Bencher, lhs: ArrayRef, rhs: ArrayRef) {
-    let session = vortex_array::array_session();
+    let session = vortex_aggregates::session();
     bencher
         .counter(ItemsCount::new(lhs.len()))
         .with_inputs(|| {

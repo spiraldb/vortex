@@ -86,7 +86,7 @@ mod tests {
     use crate::dtype::DType;
     use crate::dtype::Nullability;
 
-    static SESSION: LazyLock<VortexSession> = LazyLock::new(crate::array_session);
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(crate::test_harness::test_session);
 
     #[rstest]
     #[case(

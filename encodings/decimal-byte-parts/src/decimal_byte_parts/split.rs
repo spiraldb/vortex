@@ -240,7 +240,6 @@ pub const fn i256_to_parts(value: i256) -> (i64, [u64; MAX_I256_LOWER_PARTS]) {
 mod tests {
     use rstest::rstest;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::DecimalArray;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::assert_arrays_eq;
@@ -258,7 +257,7 @@ mod tests {
 
     #[test]
     fn test_split_i256_part_count_and_types() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let decimal = DecimalArray::new(
             Buffer::from(vec![i256::from_i128(i128::MAX), i256::MIN]),
             DecimalDType::new(76, 0),
@@ -278,7 +277,7 @@ mod tests {
         #[values(Validity::NonNullable, Validity::from_iter([true, false, true]))]
         validity: Validity,
     ) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let decimal = DecimalArray::new(
             buffer![
                 i256::from_parts((2u128 << 64) | 3, (1i128 << 64) | 4),

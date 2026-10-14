@@ -39,7 +39,7 @@ const BENCH_ARGS: &[(usize, usize, f64)] = &[
 ];
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-    let session = vortex_array::array_session();
+    let session = vortex_aggregates::session();
     vortex_fastlanes::initialize(&session);
     session
 });

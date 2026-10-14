@@ -215,11 +215,11 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::VarBinViewArray;
     use crate::builtins::ArrayBuiltins;
     use crate::dtype::DType;
     use crate::dtype::Nullability;
+    use crate::test_harness::test_session;
 
     #[test]
     fn zip_varbinview_kernel_zips() -> VortexResult<()> {
@@ -249,14 +249,14 @@ mod tests {
 
         let mask = Mask::from_iter([true, false, true, false, false, true]);
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let zipped = mask
             .clone()
             .into_array()
             .zip(a.into_array(), b.into_array())?
             .execute::<VarBinViewArray>(&mut ctx)?;
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let validity_mask = zipped.validity()?.execute_mask(zipped.len(), &mut ctx)?;
         let values = (0..zipped.len())
             .map(|i| {

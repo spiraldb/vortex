@@ -498,7 +498,6 @@ mod tests {
     use crate::Canonical;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::DecimalArray;
     use crate::arrays::PrimitiveArray;
     use crate::assert_arrays_eq;
@@ -514,6 +513,7 @@ mod tests {
     use crate::match_each_decimal_value_type;
     use crate::match_each_integer_ptype;
     use crate::scalar::Scalar;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[rstest]
@@ -532,7 +532,7 @@ mod tests {
         #[case] values: Vec<i128>,
         #[case] expected: Vec<i64>,
     ) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let decimal_dtype = DecimalDType::new(76, scale);
         let array = DecimalArray::new(
             values.iter().copied().map(i256::from_i128).collect(),
@@ -564,7 +564,7 @@ mod tests {
     #[case::negative_scale(-5)]
     #[case::extreme_negative_scale(-128)]
     fn cast_decimal_to_f64_matches_scalar_cast(#[case] scale: i8) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let decimal_dtype = DecimalDType::new(76, scale);
         let beyond_i128 = i256::from_i128(i128::MAX) + i256::ONE;
         let values = vec![
@@ -621,7 +621,7 @@ mod tests {
         )]
         target: PType,
     ) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let decimal_dtype = DecimalDType::new(3, 1);
         let array = match_each_decimal_value_type!(storage, |F| {
             DecimalArray::from_option_iter(
@@ -659,7 +659,7 @@ mod tests {
         )]
         target: PType,
     ) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let decimal_dtype = DecimalDType::new(76, 1);
         let dtype = DType::Primitive(target, Nullability::NonNullable);
         match_each_integer_ptype!(target, |T| {
@@ -714,7 +714,7 @@ mod tests {
 
     #[test]
     fn cast_decimal_to_integer_masks_and_empty() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let decimal_dtype = DecimalDType::new(21, 0);
         let target = DType::Primitive(PType::I8, Nullability::Nullable);
         for validity in [Validity::from_iter([false, true]), Validity::AllInvalid] {
@@ -749,7 +749,7 @@ mod tests {
 
     #[test]
     fn cast_decimal_to_integer_wide_storage() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let factor = i256::from_i128(10).checked_pow(40).unwrap();
         let value = i256::from_i128(123) * factor + i256::ONE;
         let decimal_dtype = DecimalDType::new(76, 40);
@@ -780,7 +780,7 @@ mod tests {
 
     #[test]
     fn cast_decimal_to_nullable() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let decimal_dtype = DecimalDType::new(10, 2);
         let array = DecimalArray::new(
             buffer![100i32, 200, 300],
@@ -804,7 +804,7 @@ mod tests {
 
     #[test]
     fn cast_nullable_to_non_nullable() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let decimal_dtype = DecimalDType::new(10, 2);
 
         // Create nullable array with no nulls
@@ -826,7 +826,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Cannot cast array with invalid values to non-nullable type")]
     fn cast_nullable_with_nulls_to_non_nullable_fails() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let decimal_dtype = DecimalDType::new(10, 2);
 
         // Create nullable array with nulls
@@ -843,7 +843,7 @@ mod tests {
 
     #[test]
     fn cast_different_scale_rescales() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let array = DecimalArray::new(
             buffer![100i32],
             DecimalDType::new(10, 2),
@@ -867,7 +867,7 @@ mod tests {
 
     #[test]
     fn cast_downcast_precision_succeeds_when_values_fit() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let array = DecimalArray::new(
             buffer![100i64],
             DecimalDType::new(18, 2),
@@ -890,7 +890,7 @@ mod tests {
 
     #[test]
     fn cast_downcast_precision_checks_values() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let array = DecimalArray::new(
             buffer![1000i64],
             DecimalDType::new(18, 0),
@@ -914,7 +914,7 @@ mod tests {
 
     #[test]
     fn cast_lower_scale_requires_exact_rescale() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let array = DecimalArray::new(
             buffer![123456i64],
             DecimalDType::new(10, 4),
@@ -938,7 +938,7 @@ mod tests {
 
     #[test]
     fn cast_lower_scale_ignores_null_lane_failures() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let array = DecimalArray::new(
             buffer![100i64, 123456],
             DecimalDType::new(10, 4),
@@ -959,7 +959,7 @@ mod tests {
             .unwrap()
             .execute_mask(
                 casted.as_ref().len(),
-                &mut array_session().create_execution_ctx(),
+                &mut test_session().create_execution_ctx(),
             )
             .unwrap();
         assert!(mask.value(0));
@@ -969,7 +969,7 @@ mod tests {
 
     #[test]
     fn cast_upcast_precision_succeeds() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let array = DecimalArray::new(
             buffer![100i32, 200, 300],
             DecimalDType::new(10, 2),
@@ -994,7 +994,7 @@ mod tests {
 
     #[test]
     fn cast_widening_same_physical_type_is_zero_copy() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         // Decimal(10,2) and Decimal(18,2) are both physically i64 with the same scale, so widening
         // the precision must reuse the values buffer rather than allocate and re-scan it.
         let array = DecimalArray::new(
@@ -1026,7 +1026,7 @@ mod tests {
 
     #[test]
     fn cast_to_non_decimal_returns_err() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let array = DecimalArray::new(
             buffer![100i32],
             DecimalDType::new(10, 2),
@@ -1056,7 +1056,7 @@ mod tests {
     fn test_cast_decimal_conformance(#[case] array: DecimalArray) {
         test_cast_conformance(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 
@@ -1136,7 +1136,7 @@ mod tests {
             .unwrap()
             .execute_mask(
                 casted.as_ref().len(),
-                &mut array_session().create_execution_ctx(),
+                &mut test_session().create_execution_ctx(),
             )
             .unwrap();
         assert!(mask.value(0));
@@ -1178,7 +1178,7 @@ mod tests {
         let casted = array.into_array().cast(target.clone()).unwrap();
         assert_eq!(casted.dtype(), &target);
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let primitive = casted
             .execute::<Canonical>(&mut ctx)
             .unwrap()
@@ -1194,7 +1194,7 @@ mod tests {
         let casted = array.into_array().cast(target.clone()).unwrap();
         assert_eq!(casted.dtype(), &target);
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let primitive = casted
             .execute::<Canonical>(&mut ctx)
             .unwrap()
@@ -1224,10 +1224,10 @@ mod tests {
         assert_eq!(casted.dtype(), &target);
 
         let primitive = casted
-            .execute::<Canonical>(&mut array_session().create_execution_ctx())
+            .execute::<Canonical>(&mut test_session().create_execution_ctx())
             .unwrap()
             .into_primitive();
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         for i in 0..2 {
             assert!(!primitive.is_valid(i, &mut ctx).unwrap());
         }

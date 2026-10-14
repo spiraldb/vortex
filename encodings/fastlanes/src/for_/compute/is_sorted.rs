@@ -67,7 +67,6 @@ mod test {
     use vortex_aggregates::is_sorted::is_sorted;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::validity::Validity;
     use vortex_buffer::buffer;
@@ -77,7 +76,7 @@ mod test {
 
     #[test]
     fn test_sorted() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
 
         let a = PrimitiveArray::new(buffer![-1, 0, i8::MAX], Validity::NonNullable);
         let b = FoRData::encode(a, &mut ctx).unwrap();

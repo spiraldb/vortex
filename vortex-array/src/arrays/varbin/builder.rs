@@ -738,7 +738,6 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::ChunkedArray;
     use crate::arrays::ConstantArray;
     use crate::arrays::VarBinArray;
@@ -753,6 +752,7 @@ mod tests {
     use crate::expr::stats::Stat;
     use crate::expr::stats::StatsProviderExt;
     use crate::scalar::Scalar;
+    use crate::test_harness::test_session;
 
     #[test]
     fn test_builder() {
@@ -770,13 +770,13 @@ mod tests {
         assert_eq!(array.dtype().nullability(), Nullable);
         assert_eq!(
             array
-                .execute_scalar(0, &mut array_session().create_execution_ctx())
+                .execute_scalar(0, &mut test_session().create_execution_ctx())
                 .unwrap(),
             Scalar::utf8("hello".to_string(), Nullable)
         );
         assert!(
             array
-                .execute_scalar(1, &mut array_session().create_execution_ctx())
+                .execute_scalar(1, &mut test_session().create_execution_ctx())
                 .unwrap()
                 .is_null()
         );
@@ -798,7 +798,7 @@ mod tests {
         )
         .into_array()
         .slice(1..4)?;
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
 
         let actual = with_offsets(large_offsets, source.dtype().clone(), |builder| {
             source.append_to_builder(builder, &mut ctx)
@@ -853,7 +853,7 @@ mod tests {
 
     #[test]
     fn append_decoded_writes_into_the_builder_storage() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mut builder = VarBinBuilder::<i32>::new_in(
             DType::Utf8(Nullable),
             vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -985,7 +985,7 @@ mod tests {
     #[case(false)]
     #[case(true)]
     fn test_array_builder_methods(#[case] large_offsets: bool) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let result = with_offsets(large_offsets, DType::Utf8(Nullable), |builder| {
             builder.reserve_exact(3);
             builder.append_zero();
@@ -1014,7 +1014,7 @@ mod tests {
             [None, None, Some("hello"), None, Some(long)],
             DType::Utf8(Nullable),
         );
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
 
         let actual = with_offsets(large_offsets, expected.dtype().clone(), |builder| {
             all_null
@@ -1041,7 +1041,7 @@ mod tests {
     #[case::i32(VarBinBuilder::<i32>::new_in(DType::Utf8(Nullable), vortex_buffer::BufferAllocatorRef::static_ref()))]
     #[case::i64(VarBinBuilder::<i64>::new_in(DType::Utf8(Nullable), vortex_buffer::BufferAllocatorRef::static_ref()))]
     fn append_to_every_offset_width(#[case] mut builder: impl ArrayBuilder) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let long = "a string that is far too long to be inlined in a view";
         let values = [Some("hello"), None, Some(long), Some("")];
 

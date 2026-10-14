@@ -13,7 +13,6 @@ use vortex_array::validity::Validity;
 use vortex_buffer::buffer;
 
 use crate::is_constant::is_constant;
-use crate::test_session;
 
 // Parameterized tests for is_constant scenarios.
 #[rstest]
@@ -67,7 +66,7 @@ fn test_is_constant_basic(
     )
     .into_array();
 
-    let mut ctx = test_session().create_execution_ctx();
+    let mut ctx = crate::session().create_execution_ctx();
     assert_eq!(is_constant(&listview, &mut ctx).unwrap(), expected);
 }
 
@@ -86,7 +85,7 @@ fn test_constant_with_constant_elements() {
     .into_array();
 
     // All lists contain [42, 42] so should be constant.
-    let mut ctx = test_session().create_execution_ctx();
+    let mut ctx = crate::session().create_execution_ctx();
     assert!(is_constant(&listview, &mut ctx).unwrap());
 }
 
@@ -110,7 +109,7 @@ fn test_constant_with_nulls() {
         .with_zero_copy_to_list(true)
     }
     .into_array();
-    let mut ctx = test_session().create_execution_ctx();
+    let mut ctx = crate::session().create_execution_ctx();
     assert!(!is_constant(&listview_mixed, &mut ctx).unwrap());
 
     // Case 2: All nulls - should be constant.
@@ -120,7 +119,7 @@ fn test_constant_with_nulls() {
             .with_zero_copy_to_list(true)
     }
     .into_array();
-    let mut ctx2 = test_session().create_execution_ctx();
+    let mut ctx2 = crate::session().create_execution_ctx();
     assert!(is_constant(&listview_all_null, &mut ctx2).unwrap());
 }
 
@@ -135,6 +134,6 @@ fn test_constant_repeated_same_lists() {
     let listview = ListViewArray::new(elements, offsets, sizes, Validity::NonNullable).into_array();
 
     // All lists are [10, 20, 30] so should be constant.
-    let mut ctx = test_session().create_execution_ctx();
+    let mut ctx = crate::session().create_execution_ctx();
     assert!(is_constant(&listview, &mut ctx).unwrap());
 }

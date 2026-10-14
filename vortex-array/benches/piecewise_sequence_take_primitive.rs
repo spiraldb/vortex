@@ -20,10 +20,10 @@ use rand::prelude::*;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::PiecewiseSequenceArray;
 use vortex_array::arrays::PrimitiveArray;
+use vortex_array::test_harness::test_session;
 use vortex_session::VortexSession;
 
 #[global_allocator]
@@ -34,7 +34,7 @@ fn main() {
     divan::main();
 }
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(test_session);
 
 const SOURCE_LEN: usize = 512 * 1024;
 // Sized to keep CodSpeed simulation under 1ms at run length 1.

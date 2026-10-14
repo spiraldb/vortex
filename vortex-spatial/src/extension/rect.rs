@@ -405,7 +405,7 @@ mod tests {
     /// A `Rect` column decodes to 2D `geo_types` rectangles.
     #[test]
     fn box_decodes_to_geo_types_rect() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
 
         let rects = crate::test_harness::rect_column(vec![(0.0, 0.0, 2.0, 3.0)])?;

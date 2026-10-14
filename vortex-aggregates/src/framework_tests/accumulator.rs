@@ -32,7 +32,6 @@ use vortex_session::VortexSession;
 
 use crate::min::Min;
 use crate::sum::Sum;
-use crate::test_session;
 
 /// A sentinel sum of `42.0`, distinguishable from `dict_of_seven()`'s natural sum of `7.0`.
 #[derive(Debug)]
@@ -49,7 +48,7 @@ impl DynAggregateKernel for SentinelSumPartialKernel {
 }
 
 fn fresh_session() -> VortexSession {
-    test_session()
+    crate::session()
 }
 
 fn dict_of_seven() -> ArrayRef {

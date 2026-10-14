@@ -135,7 +135,6 @@ mod tests {
     use crate::sum::SumPartial;
     use crate::sum::SumState;
     use crate::sum::sum;
-    use crate::test_session;
 
     /// A partial whose running decimal sum is `value` (test-only helper bypassing scalar parsing).
     fn partial_with_decimal(value: DecimalValue) -> SumPartial {
@@ -154,7 +153,7 @@ mod tests {
 
         let result = sum(
             &decimal.into_array(),
-            &mut test_session().create_execution_ctx(),
+            &mut crate::session().create_execution_ctx(),
         )?;
 
         let expected = Scalar::try_new(
@@ -176,7 +175,7 @@ mod tests {
 
         let result = sum(
             &decimal.into_array(),
-            &mut test_session().create_execution_ctx(),
+            &mut crate::session().create_execution_ctx(),
         )?;
 
         let expected = Scalar::try_new(
@@ -198,7 +197,7 @@ mod tests {
 
         let result = sum(
             &decimal.into_array(),
-            &mut test_session().create_execution_ctx(),
+            &mut crate::session().create_execution_ctx(),
         )?;
 
         let expected = Scalar::try_new(
@@ -221,7 +220,7 @@ mod tests {
 
         let result = sum(
             &decimal.into_array(),
-            &mut test_session().create_execution_ctx(),
+            &mut crate::session().create_execution_ctx(),
         )?;
 
         let expected_sum = near_max as i64 + 500 + 400;
@@ -245,7 +244,7 @@ mod tests {
 
         let result = sum(
             &decimal.into_array(),
-            &mut test_session().create_execution_ctx(),
+            &mut crate::session().create_execution_ctx(),
         )?;
 
         let expected_sum = (large_val as i128) * 4 + 1;
@@ -268,7 +267,7 @@ mod tests {
 
         let result = sum(
             &decimal.into_array(),
-            &mut test_session().create_execution_ctx(),
+            &mut crate::session().create_execution_ctx(),
         )?;
 
         let expected = Scalar::try_new(
@@ -287,7 +286,7 @@ mod tests {
 
         let result = sum(
             &decimal.into_array(),
-            &mut test_session().create_execution_ctx(),
+            &mut crate::session().create_execution_ctx(),
         )?;
 
         let expected = Scalar::try_new(
@@ -309,7 +308,7 @@ mod tests {
 
         let result = sum(
             &decimal.into_array(),
-            &mut test_session().create_execution_ctx(),
+            &mut crate::session().create_execution_ctx(),
         )?;
 
         let expected = Scalar::try_new(
@@ -332,7 +331,7 @@ mod tests {
 
         let result = sum(
             &decimal.into_array(),
-            &mut test_session().create_execution_ctx(),
+            &mut crate::session().create_execution_ctx(),
         )?;
 
         let expected_sum =
@@ -358,7 +357,7 @@ mod tests {
         assert_eq!(
             sum(
                 &decimal.into_array(),
-                &mut test_session().create_execution_ctx()
+                &mut crate::session().create_execution_ctx()
             )
             .vortex_expect("operation should succeed in test"),
             Scalar::null(DType::Decimal(decimal_dtype, Nullable))
@@ -455,7 +454,7 @@ mod tests {
 
         // Drive accumulate through the vtable directly.
         let columnar = vortex_array::Columnar::Canonical(vortex_array::Canonical::Decimal(decimal));
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         Sum.accumulate(dtypes.args(&options), &mut state, &columnar, &mut ctx)?;
 
         let result = Sum.to_scalar(dtypes.args(&options), &state)?;

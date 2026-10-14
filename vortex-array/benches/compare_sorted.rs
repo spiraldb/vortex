@@ -42,7 +42,7 @@ fn bench_compare(bencher: Bencher, lhs: ArrayRef, constant: Scalar, op: Operator
         lhs.statistics()
             .set(Stat::IsSorted, Precision::exact(ScalarValue::from(true)));
     }
-    let session = vortex_array::array_session();
+    let session = vortex_array::test_harness::test_session();
     let rhs = ConstantArray::new(constant, lhs.len()).into_array();
     bencher
         .counter(ItemsCount::new(lhs.len()))

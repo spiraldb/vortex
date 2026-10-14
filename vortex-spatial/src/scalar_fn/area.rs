@@ -141,7 +141,7 @@ mod tests {
         #[case] geometry: VortexResult<ArrayRef>,
         #[case] expected: &[f64],
     ) -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let areas = SpatialArea::try_new(geometry?)?.into_array();
         let expected = PrimitiveArray::from_iter(expected.iter().copied()).into_array();
@@ -151,7 +151,7 @@ mod tests {
 
     #[test]
     fn propagates_nulls() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let multipolygons = nullable_multipolygon_column(vec![
             Some(vec![vec![vec![

@@ -233,7 +233,7 @@ mod test {
     use crate::builders::dict::dict_encoder_in;
     use crate::builders::dict::primitive::PrimitiveArray;
 
-    static SESSION: LazyLock<VortexSession> = LazyLock::new(crate::array_session);
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(crate::test_harness::test_session);
 
     #[test]
     fn encode_primitive() {

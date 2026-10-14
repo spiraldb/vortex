@@ -11,10 +11,10 @@ use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::RecursiveCanonical;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ListViewArray;
 use vortex_array::builtins::ArrayBuiltins;
+use vortex_array::test_harness::test_session;
 use vortex_array::validity::Validity;
 use vortex_buffer::BufferMut;
 use vortex_mask::Mask;
@@ -27,7 +27,7 @@ fn main() {
     divan::main();
 }
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(test_session);
 
 // Smaller than the value-path benches: listview zip cost is dominated by element concatenation and
 // per-list canonicalization. A few thousand lists already exercise the select while keeping each

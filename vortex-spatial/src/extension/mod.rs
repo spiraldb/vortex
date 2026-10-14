@@ -348,7 +348,7 @@ mod tests {
     fn native_geometry_scalar_from_wkb(
         bytes: &[u8],
     ) -> VortexResult<Option<vortex_array::scalar::Scalar>> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         super::native_geometry_scalar_from_wkb(bytes, &session.arrow())
     }
 

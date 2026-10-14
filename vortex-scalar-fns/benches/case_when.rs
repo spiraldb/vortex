@@ -12,7 +12,6 @@ use vortex_array::ArrayRef;
 use vortex_array::Canonical;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::DecimalArray;
@@ -42,7 +41,7 @@ use vortex_session::VortexSession;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_aggregates::session);
 
 fn main() {
     LazyLock::force(&SESSION);

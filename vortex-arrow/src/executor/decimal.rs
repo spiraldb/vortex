@@ -230,7 +230,6 @@ mod tests {
     use rstest::rstest;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::builders::ArrayBuilder;
     use vortex_array::builders::DecimalBuilder;
     use vortex_array::dtype::DecimalDType;
@@ -244,7 +243,7 @@ mod tests {
 
     #[test]
     fn decimal_to_arrow() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         // Make a very simple i128 and i256 array.
         let decimal_vortex = DecimalArray::new(
             buffer![1i128, 2i128, 3i128, 4i128, 5i128],
@@ -273,7 +272,7 @@ mod tests {
     fn test_to_arrow_decimal128<T: NativeDecimalType>(
         #[case] _decimal_type: T,
     ) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let mut decimal = DecimalBuilder::new_in::<T>(
             DecimalDType::new(2, 1),
             false.into(),
@@ -305,7 +304,7 @@ mod tests {
     fn test_to_arrow_decimal32<T: NativeDecimalType>(#[case] _decimal_type: T) -> VortexResult<()> {
         use arrow_array::Decimal32Array;
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let mut decimal = DecimalBuilder::new_in::<T>(
             DecimalDType::new(2, 1),
             false.into(),
@@ -337,7 +336,7 @@ mod tests {
     fn test_to_arrow_decimal64<T: NativeDecimalType>(#[case] _decimal_type: T) -> VortexResult<()> {
         use arrow_array::Decimal64Array;
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let mut decimal = DecimalBuilder::new_in::<T>(
             DecimalDType::new(2, 1),
             false.into(),
@@ -369,7 +368,7 @@ mod tests {
     fn test_to_arrow_decimal256<T: NativeDecimalType>(
         #[case] _decimal_type: T,
     ) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let mut decimal = DecimalBuilder::new_in::<T>(
             DecimalDType::new(2, 1),
             false.into(),

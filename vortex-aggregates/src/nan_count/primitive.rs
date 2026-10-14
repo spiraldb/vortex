@@ -45,7 +45,6 @@ mod tests {
     use vortex_error::VortexResult;
 
     use crate::nan_count::nan_count;
-    use crate::test_session;
 
     #[test]
     fn primitive_nan_count() -> VortexResult<()> {
@@ -61,7 +60,7 @@ mod tests {
             ],
             Validity::NonNullable,
         );
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         assert_eq!(nan_count(&p.into_array(), &mut ctx)?, 2);
         Ok(())
     }
@@ -69,7 +68,7 @@ mod tests {
     #[test]
     fn primitive_nan_count_with_nulls() -> VortexResult<()> {
         let p = PrimitiveArray::from_option_iter([Some(f64::NAN), None, Some(f64::NAN), Some(1.0)]);
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         assert_eq!(nan_count(&p.into_array(), &mut ctx)?, 2);
         Ok(())
     }
@@ -77,7 +76,7 @@ mod tests {
     #[test]
     fn primitive_nan_count_all_valid_no_nans() -> VortexResult<()> {
         let p = PrimitiveArray::new(buffer![1.0f64, 2.0, 3.0], Validity::NonNullable);
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         assert_eq!(nan_count(&p.into_array(), &mut ctx)?, 0);
         Ok(())
     }

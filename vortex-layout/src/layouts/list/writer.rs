@@ -342,7 +342,7 @@ mod tests {
     use crate::session::LayoutSession;
 
     fn layout_test_session() -> VortexSession {
-        vortex_array::array_session()
+        vortex_aggregates::session()
             .with::<LayoutSession>()
             .with::<RuntimeSession>()
             .with_tokio()

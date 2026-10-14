@@ -283,10 +283,10 @@ mod tests {
     use crate::ArrayContext;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::assert_arrays_eq;
     use crate::serde::SerializeOptions;
     use crate::serde::SerializedArray;
+    use crate::test_harness::test_session;
 
     #[test]
     fn test_nullable_varbinview_serde_roundtrip() {
@@ -300,7 +300,7 @@ mod tests {
         let dtype = array.dtype().clone();
         let len = array.len();
 
-        let session = array_session();
+        let session = test_session();
         let mut ctx = session.create_execution_ctx();
         let array_ctx = ArrayContext::empty();
         let serialized = array

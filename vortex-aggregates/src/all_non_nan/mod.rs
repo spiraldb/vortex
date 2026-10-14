@@ -155,11 +155,10 @@ mod tests {
     use vortex_error::VortexResult;
 
     use crate::all_non_nan::AllNonNan;
-    use crate::test_session;
 
     #[test]
     fn all_non_nan_aggregate_fn() -> VortexResult<()> {
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         let dtype = DType::Primitive(PType::F32, Nullability::Nullable);
         let mut acc = Accumulator::try_new(AllNonNan, EmptyOptions, dtype)?;
 
@@ -172,7 +171,7 @@ mod tests {
 
     #[test]
     fn all_non_nan_false_with_nan() -> VortexResult<()> {
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         let dtype = DType::Primitive(PType::F32, Nullability::Nullable);
         let mut acc = Accumulator::try_new(AllNonNan, EmptyOptions, dtype)?;
 
@@ -201,7 +200,7 @@ mod tests {
 
     #[test]
     fn all_non_nan_true_with_nulls() -> VortexResult<()> {
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         let dtype = DType::Primitive(PType::F32, Nullability::Nullable);
         let mut acc = Accumulator::try_new(AllNonNan, EmptyOptions, dtype)?;
 

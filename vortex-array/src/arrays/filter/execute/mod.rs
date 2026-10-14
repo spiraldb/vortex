@@ -192,9 +192,9 @@ mod tests {
 
     use super::*;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::Primitive;
     use crate::arrays::PrimitiveArray;
+    use crate::test_harness::test_session;
 
     #[test]
     fn uncached_contiguous_filter_executes_as_zero_copy_slice() -> VortexResult<()> {
@@ -210,7 +210,7 @@ mod tests {
         let filtered = array.into_array().filter(mask)?;
         assert!(filtered.is::<Primitive>());
         let filtered =
-            filtered.execute::<PrimitiveArray>(&mut array_session().create_execution_ctx())?;
+            filtered.execute::<PrimitiveArray>(&mut test_session().create_execution_ctx())?;
         let filtered_values = filtered.to_buffer::<i32>();
 
         assert_eq!(filtered_values.as_slice(), &(37..91).collect::<Vec<_>>());

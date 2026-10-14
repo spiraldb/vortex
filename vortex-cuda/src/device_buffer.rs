@@ -548,7 +548,7 @@ mod tests {
         let context = CudaContext::new(0)
             .map_err(|err| vortex_err!("failed to create CUDA context: {err}"))?;
         let cuda_session = CudaSession::with_stream_pool_capacity(context, 2);
-        let session = vortex::array::array_session().with_some(cuda_session);
+        let session = vortex::aggregates::session().with_some(cuda_session);
         let allocation_ctx = CudaSession::create_execution_ctx(&session)?;
         let mut launch_ctx = CudaSession::create_execution_ctx(&session)?;
         assert_ne!(

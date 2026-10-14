@@ -78,13 +78,13 @@ mod tests {
     use super::bool_bounds;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::BoolArray;
+    use crate::test_harness::test_session;
 
     #[test]
     fn bounds_of_mixed_values() -> VortexResult<()> {
         let array = BoolArray::from_iter([true, false, true]).into_array();
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         assert_eq!(
             bool_bounds(&array, &mut ctx)?,
             Some(BoolBounds {
@@ -98,7 +98,7 @@ mod tests {
     #[test]
     fn bounds_skip_nulls() -> VortexResult<()> {
         let array = BoolArray::from_iter([Some(true), None, Some(true)]).into_array();
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         assert_eq!(
             bool_bounds(&array, &mut ctx)?,
             Some(BoolBounds {
@@ -112,7 +112,7 @@ mod tests {
     #[test]
     fn bounds_of_all_null_array() -> VortexResult<()> {
         let array = BoolArray::from_iter([None::<bool>, None]).into_array();
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         assert_eq!(bool_bounds(&array, &mut ctx)?, None);
         Ok(())
     }

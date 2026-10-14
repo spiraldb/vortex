@@ -554,13 +554,12 @@ impl ArrowSession {
     /// use arrow_array::Array;
     /// use vortex_array::IntoArray;
     /// use vortex_array::VortexSessionExecute;
-    /// use vortex_array::array_session;
     /// use vortex_array::arrays::VarBinViewArray;
     /// use vortex_arrow::ArrowExportOptions;
     /// use vortex_arrow::ArrowSessionExt;
     /// use vortex_arrow::CompactBuffers;
     ///
-    /// let session = array_session();
+    /// let session = vortex_aggregates::session();
     /// let array = VarBinViewArray::from_iter_str(["a", "b"]).into_array();
     /// let options = ArrowExportOptions::default().with(CompactBuffers(false));
     /// let arrow = session.arrow().exporter(&options).execute_arrow(
@@ -905,7 +904,6 @@ mod tests {
     use arrow_schema::Field;
     use rstest::rstest;
     use vortex_array::VortexSessionExecute as _;
-    use vortex_array::array_session;
     use vortex_array::arrays::Dict;
     use vortex_array::assert_arrays_eq;
     use vortex_array::dtype::DType;
@@ -950,7 +948,7 @@ mod tests {
         let sliced = session.from_arrow_array(lists(0..1000).slice(start, len), false)?;
         let fresh = session.from_arrow_array(lists(start as i64..(start + len) as i64), false)?;
         assert_eq!(sliced.nbytes(), fresh.nbytes());
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         assert_arrays_eq!(sliced, fresh, &mut ctx);
         Ok(())
     }

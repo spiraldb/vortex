@@ -224,7 +224,6 @@ impl WriteFlatBuffer for LayoutFlatBufferWriter<'_> {
 #[cfg(test)]
 mod tests {
     use flatbuffers::FlatBufferBuilder;
-    use vortex_array::array_session;
     use vortex_array::dtype::DType;
     use vortex_array::dtype::Nullability;
     use vortex_session::registry::ReadContext;
@@ -275,7 +274,7 @@ mod tests {
             LayoutEncodingId::new("vortex.test.foreign_child_layout"),
         ]);
         let array_ctx = ReadContext::new([]);
-        let session = array_session().with::<LayoutSession>();
+        let session = vortex_aggregates::session().with::<LayoutSession>();
 
         let layout = layout_from_flatbuffer_with_options(
             layout_buffer,

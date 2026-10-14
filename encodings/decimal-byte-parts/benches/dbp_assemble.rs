@@ -107,7 +107,6 @@ mod arrays {
     use vortex_array::ArrayRef;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::dtype::DecimalDType;
     use vortex_array::dtype::DecimalType;
     use vortex_array::validity::Validity;
@@ -123,7 +122,7 @@ mod arrays {
     #[divan::bench(args = cases())]
     fn dbp_assemble(bencher: Bencher, (values_type, len): (DecimalType, usize)) {
         let decimal = decimal_array(values_type, len, Validity::NonNullable);
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let parts = split_decimal(&decimal, &mut ctx).vortex_expect("split benchmark input");
         bench_parts(
             bencher,
@@ -162,7 +161,7 @@ mod arrays {
         lower_parts: Vec<ArrayRef>,
         decimal_dtype: DecimalDType,
     ) {
-        let session = array_session();
+        let session = vortex_aggregates::session();
         bencher
             .with_inputs(|| session.create_execution_ctx())
             .bench_refs(|ctx| {

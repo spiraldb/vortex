@@ -30,7 +30,7 @@ mod tests {
         let taken = arr.take(buffer![0, 3].into_array())?;
 
         assert!(taken.dtype().is_nullable());
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let taken = taken.execute::<VarBinViewArray>(&mut ctx)?;
         let mask = taken.validity()?.execute_mask(taken.len(), &mut ctx)?;
         let result = (0..taken.len())
@@ -46,10 +46,10 @@ mod tests {
     use rstest::rstest;
 
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::compute::conformance::consistency::test_array_consistency;
     use crate::dtype::DType;
     use crate::dtype::Nullability;
+    use crate::test_harness::test_session;
 
     #[rstest]
     // From test_all_consistency
@@ -87,7 +87,7 @@ mod tests {
     fn test_varbinview_consistency(#[case] array: VarBinViewArray) {
         test_array_consistency(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 }

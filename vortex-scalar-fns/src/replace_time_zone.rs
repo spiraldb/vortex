@@ -315,7 +315,6 @@ mod tests {
     use rstest::rstest;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::ExtensionArray;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::arrays::StructArray;
@@ -545,7 +544,7 @@ mod tests {
             ])
             .into_array(),
         );
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         assert_arrays_eq!(result, expected, &mut ctx);
         Ok(())
     }

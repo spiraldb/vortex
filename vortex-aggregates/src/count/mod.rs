@@ -172,7 +172,7 @@ mod tests {
 
     use crate::count::Count;
 
-    static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::array_session);
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(crate::session);
 
     pub fn count(array: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<usize> {
         let mut acc = Accumulator::try_new(

@@ -75,18 +75,18 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::ConstantArray;
     use crate::arrays::PrimitiveArray;
     use crate::assert_arrays_eq;
     use crate::compute::conformance::take::test_take_conformance;
     use crate::dtype::Nullability;
     use crate::scalar::Scalar;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[test]
     fn take_nullable_indices() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let array = ConstantArray::new(42, 10).into_array();
         let taken = array
             .take(
@@ -123,7 +123,7 @@ mod tests {
 
     #[test]
     fn take_all_valid_indices() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let array = ConstantArray::new(42, 10).into_array();
         let taken = array
             .take(PrimitiveArray::new(buffer![0, 5, 7], Validity::AllValid).into_array())
@@ -157,7 +157,7 @@ mod tests {
     fn test_take_constant_conformance(#[case] array: ConstantArray) {
         test_take_conformance(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 }

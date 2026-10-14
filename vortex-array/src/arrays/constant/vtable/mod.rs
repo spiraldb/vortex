@@ -447,7 +447,7 @@ mod tests {
 
     /// Appends `array` into a fresh builder and asserts the result matches `constant_canonicalize`.
     fn assert_append_matches_canonical(array: ConstantArray) -> VortexResult<()> {
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_harness::test_session().create_execution_ctx();
 
         let expected = constant_canonicalize(array.as_view(), &mut ctx)?.into_array();
         let mut builder = builder_with_capacity_in(
@@ -582,7 +582,7 @@ mod tests {
     /// across the whole run.
     #[test]
     fn test_list_constant_append_keeps_one_copy_of_the_elements() -> VortexResult<()> {
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_harness::test_session().create_execution_ctx();
         let scalar = Scalar::list(
             Arc::new(DType::Primitive(PType::I32, Nullability::NonNullable)),
             vec![Scalar::from(1i32), Scalar::from(2i32), Scalar::from(3i32)],
@@ -612,7 +612,7 @@ mod tests {
     /// share its elements there and takes the canonical path instead.
     #[test]
     fn test_list_constant_append_into_list_builder() -> VortexResult<()> {
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_harness::test_session().create_execution_ctx();
         let element_dtype: Arc<DType> =
             Arc::new(DType::Primitive(PType::I32, Nullability::NonNullable));
         let scalar = Scalar::list(
@@ -668,7 +668,7 @@ mod tests {
     /// a value per row per field.
     #[test]
     fn test_struct_constant_append_keeps_fields_constant() -> VortexResult<()> {
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_harness::test_session().create_execution_ctx();
         let fields = StructFields::new(
             ["x", "y"].into(),
             vec![
@@ -731,7 +731,7 @@ mod tests {
     /// tile's chunks stay constant-encoded rather than materializing a value per row.
     #[test]
     fn test_uniform_fixed_size_list_constant_append_keeps_elements_constant() -> VortexResult<()> {
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_harness::test_session().create_execution_ctx();
         let scalar = Scalar::fixed_size_list(
             Arc::new(DType::Primitive(PType::I32, Nullability::NonNullable)),
             vec![Scalar::from(7i32), Scalar::from(7i32)],
@@ -770,7 +770,7 @@ mod tests {
     /// the storage constant-encoded.
     #[test]
     fn test_extension_constant_append_keeps_storage_constant() -> VortexResult<()> {
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_harness::test_session().create_execution_ctx();
         let scalar = Scalar::extension::<Date>(TimeUnit::Days, Scalar::from(Some(42i32)));
         let array = ConstantArray::new(scalar, 1_000);
 

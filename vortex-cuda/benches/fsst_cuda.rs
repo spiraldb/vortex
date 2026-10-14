@@ -49,7 +49,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 const BENCH_SIZES: &[(usize, &str)] = &[(10_000_000, "10M")];
 
 fn session_with_varbin_layout(layout: VarBinExportLayout) -> vortex::session::VortexSession {
-    vortex::array::array_session().with_some(
+    vortex::aggregates::session().with_some(
         CudaSession::try_default()
             .vortex_expect("failed to create CUDA session")
             .with_varbin_export_layout(layout),

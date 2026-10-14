@@ -129,7 +129,7 @@ mod tests {
         )?
         .into_array();
         let allowed = HashSet::from_iter([array.encoding_id(), field.encoding_id()]);
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_harness::test_session().create_execution_ctx();
 
         let normalized = array.clone().normalize(&mut NormalizeOptions {
             allowed: &allowed,
@@ -174,7 +174,7 @@ mod tests {
         )?
         .into_array();
         let allowed = HashSet::from_iter([array.encoding_id(), unchanged.encoding_id()]);
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_harness::test_session().create_execution_ctx();
 
         let normalized = array.clone().normalize(&mut NormalizeOptions {
             allowed: &allowed,
@@ -213,7 +213,7 @@ mod tests {
         assert_eq!(sliced.encoding_id(), Slice.id());
 
         let allowed = HashSet::from_iter([Dict.id(), Primitive.id()]);
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_harness::test_session().create_execution_ctx();
 
         let normalized = sliced.normalize(&mut NormalizeOptions {
             allowed: &allowed,

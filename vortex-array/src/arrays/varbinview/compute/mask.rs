@@ -36,15 +36,15 @@ impl MaskReduce for VarBinView {
 mod tests {
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::VarBinViewArray;
     use crate::compute::conformance::mask::test_mask_conformance;
+    use crate::test_harness::test_session;
 
     #[test]
     fn take_mask_var_bin_view_array() {
         test_mask_conformance(
             &VarBinViewArray::from_iter_str(["one", "two", "three", "four", "five"]).into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
 
         test_mask_conformance(
@@ -56,7 +56,7 @@ mod tests {
                 Some("five"),
             ])
             .into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 }

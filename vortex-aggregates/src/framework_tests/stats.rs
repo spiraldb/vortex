@@ -20,8 +20,6 @@ use vortex_array::expr::stats::StatsProviderExt;
 use vortex_array::validity::Validity;
 use vortex_error::VortexResult;
 
-use crate::test_session;
-
 #[test]
 fn test_uncompressed_size_in_bytes() -> VortexResult<()> {
     let struct_array = StructArray::new(
@@ -34,12 +32,12 @@ fn test_uncompressed_size_in_bytes() -> VortexResult<()> {
     let canonical_size = struct_array
         .clone()
         .into_array()
-        .execute::<Canonical>(&mut test_session().create_execution_ctx())?
+        .execute::<Canonical>(&mut crate::session().create_execution_ctx())?
         .into_array()
         .nbytes();
     let uncompressed_size = struct_array
         .statistics()
-        .compute_uncompressed_size_in_bytes(&mut test_session().create_execution_ctx());
+        .compute_uncompressed_size_in_bytes(&mut crate::session().create_execution_ctx());
 
     assert_eq!(canonical_size, 2);
     assert_eq!(uncompressed_size, Some(4000));
@@ -56,7 +54,7 @@ fn merge_unordered() {
         .collect_vec();
     array
         .statistics()
-        .compute_all(&all_stats, &mut test_session().create_execution_ctx())
+        .compute_all(&all_stats, &mut crate::session().create_execution_ctx())
         .unwrap();
 
     let stats = array.statistics().to_owned();

@@ -42,11 +42,10 @@ use vortex_error::VortexResult;
 use super::SumV2;
 use super::sum_v2;
 use crate::sum::Sum;
-use crate::test_session;
 
 fn sum_with_options(array: &ArrayRef, options: NumericalAggregateOpts) -> VortexResult<Scalar> {
     let mut accumulator = Accumulator::try_new(SumV2, options, array.dtype().clone())?;
-    accumulator.accumulate(array, &mut test_session().create_execution_ctx())?;
+    accumulator.accumulate(array, &mut crate::session().create_execution_ctx())?;
     accumulator.finish()
 }
 
@@ -70,7 +69,7 @@ fn distinct_id_and_struct_partial() -> VortexResult<()> {
 
     let proto = aggregate.serialize_proto()?;
     let decoded = pb::AggregateFn::decode(proto.encode_to_vec().as_slice())?;
-    let round_tripped = AggregateFnRef::from_proto(&decoded, &test_session())?;
+    let round_tripped = AggregateFnRef::from_proto(&decoded, &crate::session())?;
     assert_eq!(round_tripped, aggregate);
     Ok(())
 }
@@ -112,7 +111,7 @@ fn legacy_sum_is_unchanged() -> VortexResult<()> {
     .into_array()
 )]
 fn all_null_is_null(#[case] array: ArrayRef) -> VortexResult<()> {
-    assert!(sum_v2(&array, &mut test_session().create_execution_ctx())?.is_null());
+    assert!(sum_v2(&array, &mut crate::session().create_execution_ctx())?.is_null());
     Ok(())
 }
 
@@ -120,7 +119,7 @@ fn all_null_is_null(#[case] array: ArrayRef) -> VortexResult<()> {
 fn valid_zero_is_not_empty() -> VortexResult<()> {
     let zeros = PrimitiveArray::from_iter([0i32, 0]).into_array();
     assert_eq!(
-        sum_v2(&zeros, &mut test_session().create_execution_ctx())?
+        sum_v2(&zeros, &mut crate::session().create_execution_ctx())?
             .as_primitive()
             .typed_value::<i64>(),
         Some(0)
@@ -128,7 +127,7 @@ fn valid_zero_is_not_empty() -> VortexResult<()> {
 
     let false_values = BoolArray::from_iter([false, false]).into_array();
     assert_eq!(
-        sum_v2(&false_values, &mut test_session().create_execution_ctx())?
+        sum_v2(&false_values, &mut crate::session().create_execution_ctx())?
             .as_primitive()
             .typed_value::<u64>(),
         Some(0)
@@ -141,7 +140,7 @@ fn all_nan_is_nonempty_zero_when_skipped() -> VortexResult<()> {
     let array =
         PrimitiveArray::new(buffer![f64::NAN, f64::NAN], Validity::NonNullable).into_array();
     assert_eq!(
-        sum_v2(&array, &mut test_session().create_execution_ctx())?
+        sum_v2(&array, &mut crate::session().create_execution_ctx())?
             .as_primitive()
             .typed_value::<f64>(),
         Some(0.0)
@@ -165,7 +164,7 @@ fn ignores_ambiguous_legacy_sum_stat() -> VortexResult<()> {
         .statistics()
         .set(Stat::Sum, Precision::Exact(ScalarValue::from(42i64)));
 
-    assert!(sum_v2(&array, &mut test_session().create_execution_ctx())?.is_null());
+    assert!(sum_v2(&array, &mut crate::session().create_execution_ctx())?.is_null());
     Ok(())
 }
 
@@ -174,7 +173,7 @@ fn overflow_is_explicit_and_absorbing() -> VortexResult<()> {
     let dtype = DType::Primitive(PType::I64, Nullability::NonNullable);
     let mut accumulator = Accumulator::try_new(SumV2, NumericalAggregateOpts::default(), dtype)?;
     let batch = PrimitiveArray::new(buffer![i64::MAX, 1, 7], Validity::NonNullable).into_array();
-    accumulator.accumulate(&batch, &mut test_session().create_execution_ctx())?;
+    accumulator.accumulate(&batch, &mut crate::session().create_execution_ctx())?;
     assert!(accumulator.is_saturated());
 
     let partial = accumulator.partial_scalar()?;
@@ -210,7 +209,7 @@ fn empty_chunk_is_a_merge_identity() -> VortexResult<()> {
             .into_array();
 
     assert_eq!(
-        sum_v2(&chunked, &mut test_session().create_execution_ctx())?
+        sum_v2(&chunked, &mut crate::session().create_execution_ctx())?
             .as_primitive()
             .typed_value::<i64>(),
         Some(7)
@@ -228,7 +227,7 @@ fn accumulated(value: i64, ctx: &mut ExecutionCtx) -> VortexResult<Accumulator<S
 
 #[test]
 fn merge_from_empty_is_identity() -> VortexResult<()> {
-    let mut ctx = test_session().create_execution_ctx();
+    let mut ctx = crate::session().create_execution_ctx();
     let dtype = DType::Primitive(PType::I64, Nullability::NonNullable);
     let new_accumulator =
         || Accumulator::try_new(SumV2, NumericalAggregateOpts::default(), dtype.clone());
@@ -257,7 +256,7 @@ fn merge_from_empty_is_identity() -> VortexResult<()> {
 
 #[test]
 fn merge_from_overflow_is_absorbing() -> VortexResult<()> {
-    let mut ctx = test_session().create_execution_ctx();
+    let mut ctx = crate::session().create_execution_ctx();
     let dtype = DType::Primitive(PType::I64, Nullability::NonNullable);
     let options = NumericalAggregateOpts::default();
 
@@ -318,7 +317,7 @@ fn grouped_primitive_tracks_empty_overflow_and_null_groups() -> VortexResult<()>
         NumericalAggregateOpts::default(),
         DType::Primitive(PType::I64, Nullable),
     )?;
-    let mut ctx = test_session().create_execution_ctx();
+    let mut ctx = crate::session().create_execution_ctx();
     accumulator.accumulate_list(&groups, &mut ctx)?;
 
     let result = accumulator.finish()?;
@@ -343,7 +342,7 @@ fn grouped_bool_fallback_tracks_empty_groups() -> VortexResult<()> {
         NumericalAggregateOpts::default(),
         DType::Bool(Nullable),
     )?;
-    let mut ctx = test_session().create_execution_ctx();
+    let mut ctx = crate::session().create_execution_ctx();
     accumulator.accumulate_list(&groups, &mut ctx)?;
 
     let result = accumulator.finish()?;
@@ -386,7 +385,7 @@ fn finalize_struct_applies_partial_and_struct_validity(
     assert_arrays_eq!(
         &result,
         &expected,
-        &mut test_session().create_execution_ctx()
+        &mut crate::session().create_execution_ctx()
     );
     Ok(())
 }

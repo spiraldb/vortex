@@ -15,7 +15,6 @@ use crate::ArrayRef;
 use crate::Canonical;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
-use crate::array_session;
 use crate::arrays::ConstantArray;
 use crate::arrays::FixedSizeListArray;
 use crate::arrays::PiecewiseSequenceArray;
@@ -28,6 +27,7 @@ use crate::dtype::DType;
 use crate::dtype::Nullability;
 use crate::dtype::PType;
 use crate::scalar::Scalar;
+use crate::test_harness::test_session;
 use crate::validity::Validity;
 
 // Conformance tests for common take scenarios.
@@ -40,7 +40,7 @@ use crate::validity::Validity;
 fn test_take_fsl_conformance(#[case] fsl: FixedSizeListArray) {
     test_take_conformance(
         &fsl.into_array(),
-        &mut array_session().create_execution_ctx(),
+        &mut test_session().create_execution_ctx(),
     );
 }
 
@@ -48,7 +48,7 @@ fn test_take_fsl_conformance(#[case] fsl: FixedSizeListArray) {
 
 #[test]
 fn test_take_basic_smoke_test() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let elements = buffer![1i32, 2, 3, 4, 5, 6].into_array();
     let fsl = FixedSizeListArray::new(elements.into_array(), 2, Validity::NonNullable, 3);
 
@@ -98,7 +98,7 @@ fn test_take_degenerate_lists(
 
     test_take_conformance(
         &fsl.clone().into_array(),
-        &mut array_session().create_execution_ctx(),
+        &mut test_session().create_execution_ctx(),
     );
 
     // Also test the specific behavior.
@@ -109,7 +109,7 @@ fn test_take_degenerate_lists(
     for (i, expected_null) in expected_nulls.iter().enumerate() {
         assert_eq!(
             result
-                .execute_scalar(i, &mut array_session().create_execution_ctx())
+                .execute_scalar(i, &mut test_session().create_execution_ctx())
                 .unwrap()
                 .is_null(),
             *expected_null
@@ -119,7 +119,7 @@ fn test_take_degenerate_lists(
 
 #[test]
 fn test_take_large_list_size() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let elements = buffer![0i32..300].into_array();
     let fsl = FixedSizeListArray::new(elements, 100, Validity::NonNullable, 3);
 
@@ -134,7 +134,7 @@ fn test_take_large_list_size() {
 
 #[test]
 fn test_take_fsl_with_null_indices_preserves_elements() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let elements = buffer![1i32, 2, 3, 4, 5, 6].into_array();
     let fsl = FixedSizeListArray::new(elements.into_array(), 2, Validity::NonNullable, 3);
 
@@ -154,7 +154,7 @@ fn test_take_fsl_with_null_indices_preserves_elements() {
 
 #[test]
 fn test_take_fsl_null_index_ignores_out_of_bounds_payload() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let elements = buffer![1i32, 2, 3, 4, 5, 6].into_array();
     let fsl = FixedSizeListArray::new(elements.into_array(), 2, Validity::NonNullable, 3);
 
@@ -207,7 +207,7 @@ fn test_take_piecewise(
     #[case] lengths: &[u64],
     #[case] expanded: &[u64],
 ) -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let fsl = nullable_fsl_i32();
 
     let result = fsl.take(contiguous_pieces(starts, lengths)?)?;
@@ -219,7 +219,7 @@ fn test_take_piecewise(
 
 #[test]
 fn test_take_piecewise_out_of_bounds() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let fsl = nullable_fsl_i32();
 
     let indices = contiguous_pieces(&[2], &[3])?;
@@ -233,7 +233,7 @@ fn test_take_piecewise_out_of_bounds() -> VortexResult<()> {
 
 #[test]
 fn test_take_piecewise_non_unit_multiplier() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let fsl = nullable_fsl_i32();
 
     // Multiplier 2 falls back to the generic path but must stay correct.
@@ -280,7 +280,7 @@ fn test_element_index_overflow(
     #[case] indices: ArrayRef,
     #[case] expected: FixedSizeListArray,
 ) {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let result = fsl.take(indices).unwrap();
     assert_arrays_eq!(result, expected, &mut ctx);
 }
@@ -346,7 +346,7 @@ fn test_take_nullable_arrays_fsl_specific(
     for (i, expected_null) in expected_nulls.iter().enumerate() {
         assert_eq!(
             result
-                .execute_scalar(i, &mut array_session().create_execution_ctx())
+                .execute_scalar(i, &mut test_session().create_execution_ctx())
                 .unwrap()
                 .is_null(),
             *expected_null

@@ -213,14 +213,14 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::SliceArray;
     use crate::assert_arrays_eq;
+    use crate::test_harness::test_session;
 
     #[test]
     fn test_slice_slice() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         // Slice(1..4, Slice(2..8, base)) combines to Slice(3..6, base)
         let arr = PrimitiveArray::from_iter(0i32..10).into_array();
         let inner_slice = SliceArray::new(arr, 2..8).into_array();

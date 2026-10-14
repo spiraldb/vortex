@@ -80,7 +80,6 @@ mod arrays {
     use rand::SeedableRng;
     use rand::rngs::StdRng;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::dtype::DecimalType;
     use vortex_array::validity::Validity;
     use vortex_decimal_byte_parts::split_decimal;
@@ -108,7 +107,7 @@ mod arrays {
 
     fn bench_split(bencher: Bencher, values_type: DecimalType, len: usize, validity: Validity) {
         let decimal = decimal_array(values_type, len, validity);
-        let session = array_session();
+        let session = vortex_aggregates::session();
         bencher
             .with_inputs(|| session.create_execution_ctx())
             .bench_refs(|ctx| {

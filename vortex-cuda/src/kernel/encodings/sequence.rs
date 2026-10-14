@@ -139,7 +139,7 @@ mod tests {
         len: usize,
         nullability: Nullability,
     ) {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session()).unwrap();
 
         let array = Sequence::try_new_typed(base, multiplier, nullability, len)
@@ -160,7 +160,7 @@ mod tests {
 
     #[crate::test]
     async fn test_sequence_arithmetic_ptype_differs_from_output() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session()).unwrap();
 
         let array = Sequence::try_new_typed(100i32, -10i32, Nullability::NonNullable, 5)?

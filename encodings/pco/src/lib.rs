@@ -14,7 +14,7 @@
 //! ```rust
 //! use vortex_array::session::ArraySessionExt;
 //!
-//! let session = vortex_array::array_session();
+//! let session = vortex_aggregates::session();
 //! session.arrays().register(vortex_pco::Pco);
 //! ```
 

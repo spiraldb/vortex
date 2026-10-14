@@ -25,7 +25,6 @@ use vortex_buffer::buffer;
 use vortex_error::VortexResult;
 
 use super::all_non_distinct;
-use crate::test_session;
 
 /// Baseline oracle: compare two arrays element-wise using `execute_scalar`.
 /// Returns true iff every position has the same scalar (null == null is true).
@@ -43,7 +42,7 @@ fn scalar_baseline(a: &ArrayRef, b: &ArrayRef, ctx: &mut ExecutionCtx) -> Vortex
 
 /// Assert that `all_non_distinct` agrees with the scalar baseline.
 fn assert_matches_baseline(a: &ArrayRef, b: &ArrayRef) -> VortexResult<()> {
-    let mut ctx = test_session().create_execution_ctx();
+    let mut ctx = crate::session().create_execution_ctx();
     let expected = scalar_baseline(a, b, &mut ctx)?;
     let actual = all_non_distinct(a, b, &mut ctx)?;
     assert_eq!(
@@ -88,7 +87,7 @@ fn bool_non_nullable(
 ) -> VortexResult<()> {
     let a = BoolArray::from_iter(a.iter().copied()).into_array();
     let b = BoolArray::from_iter(b.iter().copied()).into_array();
-    let mut ctx = test_session().create_execution_ctx();
+    let mut ctx = crate::session().create_execution_ctx();
     assert_eq!(all_non_distinct(&a, &b, &mut ctx)?, expected);
     assert_matches_baseline(&a, &b)
 }
@@ -121,7 +120,7 @@ fn bool_nullable(
 ) -> VortexResult<()> {
     let a = BoolArray::from_iter(a.iter().copied()).into_array();
     let b = BoolArray::from_iter(b.iter().copied()).into_array();
-    let mut ctx = test_session().create_execution_ctx();
+    let mut ctx = crate::session().create_execution_ctx();
     assert_eq!(all_non_distinct(&a, &b, &mut ctx)?, expected);
     assert_matches_baseline(&a, &b)
 }
@@ -140,7 +139,7 @@ fn primitive_i32(
 ) -> VortexResult<()> {
     let a = PrimitiveArray::from_iter(a).into_array();
     let b = PrimitiveArray::from_iter(b).into_array();
-    let mut ctx = test_session().create_execution_ctx();
+    let mut ctx = crate::session().create_execution_ctx();
     assert_eq!(all_non_distinct(&a, &b, &mut ctx)?, expected);
     assert_matches_baseline(&a, &b)
 }
@@ -206,7 +205,7 @@ fn primitive_nullable(
 ) -> VortexResult<()> {
     let a = PrimitiveArray::from_option_iter(a.iter().copied()).into_array();
     let b = PrimitiveArray::from_option_iter(b.iter().copied()).into_array();
-    let mut ctx = test_session().create_execution_ctx();
+    let mut ctx = crate::session().create_execution_ctx();
     assert_eq!(all_non_distinct(&a, &b, &mut ctx)?, expected);
     assert_matches_baseline(&a, &b)
 }
@@ -235,7 +234,7 @@ fn strings_non_nullable(
 ) -> VortexResult<()> {
     let a = VarBinViewArray::from_iter_str(a.iter().copied()).into_array();
     let b = VarBinViewArray::from_iter_str(b.iter().copied()).into_array();
-    let mut ctx = test_session().create_execution_ctx();
+    let mut ctx = crate::session().create_execution_ctx();
     assert_eq!(all_non_distinct(&a, &b, &mut ctx)?, expected);
     assert_matches_baseline(&a, &b)
 }
@@ -258,7 +257,7 @@ fn strings_nullable(
 ) -> VortexResult<()> {
     let a = VarBinViewArray::from_iter_nullable_str(a.iter().copied()).into_array();
     let b = VarBinViewArray::from_iter_nullable_str(b.iter().copied()).into_array();
-    let mut ctx = test_session().create_execution_ctx();
+    let mut ctx = crate::session().create_execution_ctx();
     assert_eq!(all_non_distinct(&a, &b, &mut ctx)?, expected);
     assert_matches_baseline(&a, &b)
 }

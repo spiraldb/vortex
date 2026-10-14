@@ -9,7 +9,7 @@
 //! used by zone maps, and the [`combined`] adapter that composes two aggregates into one.
 //!
 //! Array statistics resolve their aggregate through the session's registry, so call
-//! [`initialize`] on any session that computes statistics.
+//! [`initialize`] on any session that computes statistics, or start from [`session`].
 
 use vortex_array::VTable;
 use vortex_array::aggregate_fn::AggregateFnRef;
@@ -17,11 +17,17 @@ use vortex_array::aggregate_fn::AggregateFnVTable;
 use vortex_array::aggregate_fn::AggregateFnVTableExt;
 use vortex_array::aggregate_fn::EmptyOptions;
 use vortex_array::aggregate_fn::NumericalAggregateOpts;
+use vortex_array::aggregate_fn::session::AggregateFnSession;
 use vortex_array::aggregate_fn::session::AggregateFnSessionExt;
 use vortex_array::aggregate_fn::stat_aggregates::UncompressedSizeOpts;
 use vortex_array::arrays::Dict;
 use vortex_array::arrays::Primitive;
+use vortex_array::dtype::session::DTypeSession;
 use vortex_array::expr::stats::Stat;
+use vortex_array::memory::MemorySession;
+use vortex_array::optimizer::kernels::KernelSession;
+use vortex_array::scalar_fn::session::ScalarFnSession;
+use vortex_array::session::ArraySession;
 use vortex_session::VortexSession;
 
 pub mod all_nan;
@@ -52,6 +58,25 @@ pub mod uncompressed_size_in_bytes;
 mod combined_tests;
 #[cfg(test)]
 mod framework_tests;
+
+/// Builds a fresh [`VortexSession`] with vortex-array's built-in session variables and this crate's
+/// aggregate functions registered.
+///
+/// The session holds arrays, dtypes, scalar functions, optimizer kernels, aggregate functions and
+/// memory, so it can execute arrays and compute their statistics. Each call returns an independent
+/// session, so callers may register further encodings or kernels into it. File, layout and runtime
+/// state live in higher-level crates.
+pub fn session() -> VortexSession {
+    let session = VortexSession::empty()
+        .with::<ArraySession>()
+        .with::<KernelSession>()
+        .with::<DTypeSession>()
+        .with::<ScalarFnSession>()
+        .with::<AggregateFnSession>()
+        .with::<MemorySession>();
+    initialize(&session);
+    session
+}
 
 /// Register this crate's aggregate functions and kernels with the given session.
 pub fn initialize(session: &VortexSession) {
@@ -122,11 +147,4 @@ pub fn stat_aggregate_fn(stat: Stat) -> Option<AggregateFnRef> {
         }
         Stat::IsConstant | Stat::IsSorted | Stat::IsStrictSorted => return None,
     })
-}
-
-#[cfg(test)]
-fn test_session() -> VortexSession {
-    let session = vortex_array::array_session();
-    initialize(&session);
-    session
 }

@@ -18,7 +18,6 @@ use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::DecimalArray;
 use vortex_array::arrays::DictArray;
@@ -58,7 +57,7 @@ fn main() {
 }
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-    let session = array_session();
+    let session = vortex_aggregates::session();
     vortex_fsst::initialize(&session);
     vortex_onpair::initialize(&session);
     session.arrays().register(Zstd);

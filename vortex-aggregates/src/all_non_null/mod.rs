@@ -148,11 +148,10 @@ mod tests {
     use vortex_error::VortexResult;
 
     use crate::all_non_null::AllNonNull;
-    use crate::test_session;
 
     #[test]
     fn all_non_null_aggregate_fn() -> VortexResult<()> {
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         let dtype = DType::Primitive(PType::I32, Nullability::Nullable);
         let mut acc = Accumulator::try_new(AllNonNull, EmptyOptions, dtype)?;
 
@@ -165,7 +164,7 @@ mod tests {
 
     #[test]
     fn all_non_null_false_with_nulls() -> VortexResult<()> {
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         let dtype = DType::Primitive(PType::I32, Nullability::Nullable);
         let mut acc = Accumulator::try_new(AllNonNull, EmptyOptions, dtype)?;
 
@@ -178,7 +177,7 @@ mod tests {
 
     #[test]
     fn all_non_null_true_for_empty_input() -> VortexResult<()> {
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         let dtype = DType::Primitive(PType::I32, Nullability::Nullable);
         let mut acc = Accumulator::try_new(AllNonNull, EmptyOptions, dtype)?;
 

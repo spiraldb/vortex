@@ -786,7 +786,6 @@ impl OperationsVTable<Pco> for Pco {
 mod tests {
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::assert_arrays_eq;
     use vortex_array::validity::Validity;
@@ -798,7 +797,7 @@ mod tests {
 
     #[test]
     fn test_slice_nullable() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         // Create a nullable array with some nulls
         let values = PrimitiveArray::new(
             buffer![10u32, 20, 30, 40, 50, 60],
@@ -828,7 +827,7 @@ mod tests {
 
     #[test]
     fn test_decompress_bounds_initial_allocation() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let values = PrimitiveArray::from_iter([42u32]);
         let pco = Pco::from_primitive(values.as_view(), 0, 128, &mut ctx)?;
         let mut data = pco.data().clone();
@@ -845,7 +844,7 @@ mod tests {
 
     #[test]
     fn test_validate_rejects_oversized_chunk() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let values = PrimitiveArray::from_iter([42u32]);
         let pco = Pco::from_primitive(values.as_view(), 0, 128, &mut ctx)?;
         let mut data = pco.data().clone();

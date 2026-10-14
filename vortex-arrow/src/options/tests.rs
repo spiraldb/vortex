@@ -20,7 +20,6 @@ use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::DictArray;
 use vortex_array::arrays::FixedSizeListArray;
 use vortex_array::arrays::ListArray;
@@ -122,7 +121,7 @@ impl ArrowExportVTable for Plugin {
 
 #[test]
 fn external_options_reach_nested_exporters() -> VortexResult<()> {
-    let session = array_session();
+    let session = vortex_aggregates::session();
     session.arrow().register_exporter(Arc::new(Plugin));
     let mut ctx = session.create_execution_ctx();
     let child = Field::new("item", DataType::Int32, false).with_metadata(
@@ -280,7 +279,7 @@ fn compaction_option_reaches_nested_views(
     #[values(false, true)] binary: bool,
     #[values(None, Some(false), Some(true))] compact: Option<bool>,
 ) -> VortexResult<()> {
-    let session = array_session();
+    let session = vortex_aggregates::session();
     let mut ctx = session.create_execution_ctx();
     let options = compact.map_or_else(ArrowExportOptions::default, |compact| {
         ArrowExportOptions::default().with(CompactBuffers(compact))
@@ -312,7 +311,7 @@ fn compaction_option_reaches_nested_views(
 
 #[rstest]
 fn execute_arrow_compacts_by_default(#[values(false, true)] binary: bool) -> VortexResult<()> {
-    let session = array_session();
+    let session = vortex_aggregates::session();
     let mut ctx = session.create_execution_ctx();
     let view = sparse_views(binary, &mut ctx)?;
     let backing = view.data_buffers()[0].as_host().as_ptr();

@@ -531,7 +531,7 @@ mod tests {
     use crate::array::parquet_typed_value_from_logical_shredded;
 
     static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         crate::initialize(&session);
         session
     });

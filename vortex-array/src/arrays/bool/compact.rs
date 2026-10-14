@@ -34,10 +34,10 @@ mod tests {
 
     use crate::Canonical;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::assert_arrays_eq;
     use crate::buffer::BufferHandle;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[rstest]
@@ -51,7 +51,7 @@ mod tests {
         #[case] len: usize,
         #[case] validity: Validity,
     ) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let bytes: ByteBuffer = (0..64u8).collect();
         let handle = BufferHandle::new_host(bytes.clone());
 
@@ -66,7 +66,7 @@ mod tests {
 
     #[test]
     fn canonical_compact_trims_bits() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let handle = BufferHandle::new_host((0..64u8).collect());
         let array = BoolArray::try_new_from_handle(handle, 0, 20, Validity::NonNullable)?;
 

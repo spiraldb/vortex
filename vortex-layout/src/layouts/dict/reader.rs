@@ -364,7 +364,6 @@ mod tests {
     use vortex_array::IntoArray as _;
     use vortex_array::MaskFuture;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::BoolArray;
     use vortex_array::arrays::StructArray;
     use vortex_array::arrays::VarBinArray;
@@ -415,7 +414,7 @@ mod tests {
     // FIXME(ngates): Deprecate the global `runtime::single::block_on` helper and require tests
     // to call `block_on` on an explicit runtime instance.
     fn session_with_handle(handle: Handle) -> VortexSession {
-        array_session()
+        vortex_aggregates::session()
             .with::<LayoutSession>()
             .with::<RuntimeSession>()
             .with_handle(handle)
@@ -768,7 +767,7 @@ mod tests {
         outer: BoundExpression,
         inner: BoundExpression,
     ) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let array = VarBinArray::from_iter(
             [Some("abc"), Some("def"), None],
             DType::Utf8(Nullability::Nullable),

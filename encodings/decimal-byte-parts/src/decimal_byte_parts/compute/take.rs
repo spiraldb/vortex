@@ -33,7 +33,6 @@ mod tests {
     use rstest::rstest;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::DecimalArray;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::assert_arrays_eq;
@@ -51,7 +50,7 @@ mod tests {
     /// must rewrite that into a `DecimalByteParts` of taken parts.
     #[test]
     fn take_pushes_down_without_executing() -> VortexResult<()> {
-        let session = array_session();
+        let session = vortex_aggregates::session();
         crate::initialize(&session);
 
         let decimal = DecimalArray::new(
@@ -86,7 +85,7 @@ mod tests {
         Validity::NonNullable,
     ))]
     fn take_with_nullable_indices(#[case] decimal: DecimalArray) -> VortexResult<()> {
-        let session = array_session();
+        let session = vortex_aggregates::session();
         crate::initialize(&session);
         let mut ctx = session.create_execution_ctx();
 

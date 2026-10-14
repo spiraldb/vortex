@@ -421,7 +421,7 @@ mod tests {
     use crate::session::VarBinExportLayout;
 
     fn cuda_ctx_with_varbin_layout(layout: VarBinExportLayout) -> VortexResult<CudaExecutionCtx> {
-        let session = vortex::array::array_session()
+        let session = vortex::aggregates::session()
             .with_some(CudaSession::try_default()?.with_varbin_export_layout(layout));
         CudaSession::create_execution_ctx(&session)
     }
@@ -476,7 +476,7 @@ mod tests {
         #[case] strings: Vec<Option<&'static [u8]>>,
         #[case] dtype: DType,
     ) -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -500,7 +500,7 @@ mod tests {
     /// Verifies that the view kernel applies a sliced validity bitmap's nonzero bit offset.
     #[crate::test]
     async fn test_cuda_fsst_decompression_sliced_validity() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
         let values = [
@@ -616,7 +616,7 @@ mod tests {
     /// Exercises the multi-block grid-stride path on a larger dataset.
     #[crate::test]
     async fn test_cuda_fsst_decompression_roundtrip_large() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         use vortex_fsst::test_utils::make_fsst_clickbench_urls;
 
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())

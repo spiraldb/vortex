@@ -16,12 +16,12 @@ use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::RecursiveCanonical;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::FixedSizeListArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::dtype::FieldNames;
+use vortex_array::test_harness::test_session;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
 
@@ -341,7 +341,7 @@ fn take_indices(case: Case) -> ArrayRef {
 fn take(bencher: Bencher, case: Case) {
     let values = chunked_values(case);
     let indices = take_indices(case);
-    let session = array_session();
+    let session = test_session();
 
     bencher
         .counter(ItemsCount::new(case.indices))

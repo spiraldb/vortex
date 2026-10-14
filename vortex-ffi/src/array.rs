@@ -724,7 +724,6 @@ mod tests {
 
     use vortex::array::IntoArray;
     use vortex::array::VortexSessionExecute;
-    use vortex::array::array_session;
     use vortex::array::arrays::BoolArray;
     use vortex::array::arrays::PrimitiveArray;
     use vortex::array::arrays::StructArray;
@@ -1010,7 +1009,7 @@ mod tests {
             assert!(!res.is_null());
             {
                 let res = vx_array::as_ref(res);
-                let mut ctx = array_session().create_execution_ctx();
+                let mut ctx = vortex::aggregates::session().create_execution_ctx();
                 let bool_array = res.clone().execute::<BoolArray>(&mut ctx).unwrap();
                 let buffer = bool_array.to_bit_buffer();
                 let expected = BoolArray::from_iter(vec![false, false, true, true]);

@@ -259,11 +259,10 @@ mod tests {
     use vortex_error::VortexResult;
 
     use crate::min::Min;
-    use crate::test_session;
 
     #[test]
     fn min_aggregate_fn() -> VortexResult<()> {
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
         let mut acc = Accumulator::try_new(Min, NumericalAggregateOpts::default(), dtype)?;
 
@@ -294,7 +293,7 @@ mod tests {
 
     #[test]
     fn min_with_nan_not_skipping() -> VortexResult<()> {
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         let dtype = DType::Primitive(PType::F64, Nullability::NonNullable);
         let mut acc = Accumulator::try_new(Min, NumericalAggregateOpts::include_nans(), dtype)?;
 
@@ -315,7 +314,7 @@ mod tests {
 
     #[test]
     fn min_not_skipping_shortcircuits_on_exact_nan_count_stat() -> VortexResult<()> {
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         // The array has no NaNs; a planted exact NaNCount stat proves the poisoning came from
         // the stat rather than a scan.
         let batch = PrimitiveArray::new(buffer![1.0f64, 2.0], Validity::NonNullable).into_array();
@@ -342,7 +341,7 @@ mod tests {
     fn min_nan_including_nullable_cached_stat() -> VortexResult<()> {
         // A nullable float array's cached Min stat is reconstructed as a nullable scalar. The
         // NaN-including shortcircuit merges it as-is; `to_scalar` re-casts to the result dtype.
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         let array =
             PrimitiveArray::from_option_iter([Some(1.0f64), Some(2.0), Some(3.0)]).into_array();
         array
@@ -366,7 +365,7 @@ mod tests {
 
     #[test]
     fn min_casts_nonnullable_legacy_stat_to_nullable_partial() -> VortexResult<()> {
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         let batch = PrimitiveArray::new(buffer![10i32, 20], Validity::NonNullable).into_array();
         batch
             .statistics()

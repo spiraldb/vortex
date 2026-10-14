@@ -45,13 +45,13 @@ mod tests {
     use crate::EqMode;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::Bool;
     use crate::arrays::BoolArray;
     use crate::buffer::BufferHandle;
     use crate::buffer::DeviceBuffer;
     use crate::compute::conformance::mask::test_mask_conformance;
     use crate::scalar_fn::fns::mask::MaskReduce;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     // Any access beyond buffer metadata would invalidate the metadata-only reduction.
@@ -121,7 +121,7 @@ mod tests {
     fn test_mask_bool_conformance(#[case] array: BoolArray) {
         test_mask_conformance(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 }

@@ -52,7 +52,6 @@ mod test {
     use rstest::rstest;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::BoolArray;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::compute::conformance::mask::test_mask_conformance;
@@ -73,7 +72,7 @@ mod test {
         1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0
     ].into_array())]
     fn test_mask_alp_conformance(#[case] array: vortex_array::ArrayRef) {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let array_primitive = array.execute::<PrimitiveArray>(&mut ctx).unwrap();
         let alp = alp_encode(array_primitive.as_view(), None, &mut ctx).unwrap();
         test_mask_conformance(&alp.into_array(), &mut ctx);
@@ -82,7 +81,7 @@ mod test {
     #[test]
     fn test_mask_alp_with_patches() {
         use std::f64::consts::PI;
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         // PI doesn't encode cleanly with ALP, so it creates patches.
         let values: Vec<f64> = (0..100)
             .map(|i| if i % 4 == 3 { PI } else { 1.0 })
@@ -95,7 +94,7 @@ mod test {
 
     #[test]
     fn test_mask_alp_with_patches_casts_surviving_patch_values_to_nullable() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let values = PrimitiveArray::from_iter([1.234f32, f32::NAN, 2.345, f32::INFINITY, 3.456]);
         let alp = alp_encode(values.as_view(), None, &mut ctx).unwrap();
         assert!(alp.patches().is_some(), "expected patches");

@@ -648,7 +648,7 @@ mod tests {
             )
             .into_layout(),
         ]);
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let build_read_ctx = ReadContext::new([]);
         let build_ctx = LayoutBuildContext {
             session: &session,
@@ -679,7 +679,7 @@ mod tests {
             aggregate_specs: Arc::new([]),
         };
         let children = OwnedLayoutChildren::layout_children(vec![]);
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let build_read_ctx = ReadContext::new([]);
         let build_ctx = LayoutBuildContext {
             session: &session,
@@ -707,7 +707,7 @@ mod tests {
             FlatLayout::new(0, dtype.clone(), SegmentId::from(0), read_ctx.clone()).into_layout(),
             FlatLayout::new(0, dtype.clone(), SegmentId::from(1), read_ctx).into_layout(),
         ]);
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         session.allow_unknown();
         let build_read_ctx = ReadContext::new([]);
         let build_ctx = LayoutBuildContext {
@@ -744,7 +744,7 @@ mod tests {
             FlatLayout::new(0, dtype.clone(), SegmentId::from(0), read_ctx.clone()).into_layout(),
             FlatLayout::new(0, dtype.clone(), SegmentId::from(1), read_ctx).into_layout(),
         ]);
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let build_read_ctx = ReadContext::new([]);
         let build_ctx = LayoutBuildContext {
             session: &session,

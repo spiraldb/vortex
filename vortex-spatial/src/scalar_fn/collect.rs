@@ -365,7 +365,7 @@ mod tests {
 
     /// Assert that `ST_Collect` of `input` equals `expected`.
     fn assert_collects(input: ArrayRef, expected: ArrayRef) -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let result = SpatialCollect::try_new(input)?.into_array();
 
         assert_arrays_eq!(result, expected, &mut ctx);
@@ -409,7 +409,7 @@ mod tests {
     #[test]
     fn all_valid_collect_reuses_geometry_storage() -> VortexResult<()> {
         let points = point_column(vec![0.0, 1.0, 2.0], vec![3.0, 4.0, 5.0])?;
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let point_storage = points
             .clone()
             .execute::<ExtensionArray>(&mut ctx)?
@@ -440,7 +440,7 @@ mod tests {
         } else {
             point_column(vec![0.0, 1.0, 2.0], vec![3.0, 4.0, 5.0])?
         };
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let input = list(points, &[0, 2, 3])?;
         assert!(
             input
@@ -499,7 +499,7 @@ mod tests {
             nullable_point_column(vec![Some((0.0, 2.0)), None, Some((1.0, 3.0))])?,
             &[0, 3],
         )?;
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let scalar = input.execute_scalar(0, &mut ctx)?;
         let input = ConstantArray::new(scalar, 3).into_array();
 

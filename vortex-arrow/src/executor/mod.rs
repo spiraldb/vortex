@@ -300,7 +300,6 @@ mod tests {
     use vortex_array::ArrayRef;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::BoolArray;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::arrays::VarBinViewArray;
@@ -344,7 +343,7 @@ mod tests {
     #[case::byte_from_primitive(primitive(), DataType::Utf8)]
     #[case::byte_from_bool(boolean(), DataType::Binary)]
     fn incompatible_target_returns_error(#[case] array: ArrayRef, #[case] target: DataType) {
-        let session = array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let field = Field::new("f", target.clone(), array.dtype().is_nullable());
 
@@ -366,7 +365,7 @@ mod tests {
     #[case::utf8_to_binary(utf8(), DataType::Binary)]
     #[case::utf8_to_large_utf8(utf8(), DataType::LargeUtf8)]
     fn supported_cross_class_target_still_works(#[case] array: ArrayRef, #[case] target: DataType) {
-        let session = array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let field = Field::new("f", target.clone(), array.dtype().is_nullable());
 

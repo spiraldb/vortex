@@ -391,7 +391,6 @@ mod tests {
     use parquet_variant_compute::VariantArray as ArrowVariantArray;
     use parquet_variant_compute::VariantArrayBuilder;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::dtype::DType;
     use vortex_array::dtype::Nullability;
     use vortex_array::scalar::Scalar;
@@ -406,7 +405,7 @@ mod tests {
     use crate::operations::parquet_variant_to_scalar;
 
     static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-        let session = array_session();
+        let session = vortex_aggregates::session();
         crate::initialize(&session);
         session
     });
@@ -432,7 +431,10 @@ mod tests {
                 Some(ScalarValue::Variant(Box::new(expected_inner))),
             )?;
             assert_eq!(
-                vortex_arr.execute_scalar(index, &mut array_session().create_execution_ctx())?,
+                vortex_arr.execute_scalar(
+                    index,
+                    &mut vortex_aggregates::session().create_execution_ctx()
+                )?,
                 expected
             );
         }
@@ -464,17 +466,17 @@ mod tests {
 
         assert!(
             vortex_arr
-                .execute_scalar(1, &mut array_session().create_execution_ctx())?
+                .execute_scalar(1, &mut vortex_aggregates::session().create_execution_ctx())?
                 .is_null()
         );
         assert!(
             !vortex_arr
-                .execute_scalar(0, &mut array_session().create_execution_ctx())?
+                .execute_scalar(0, &mut vortex_aggregates::session().create_execution_ctx())?
                 .is_null()
         );
         assert!(
             !vortex_arr
-                .execute_scalar(2, &mut array_session().create_execution_ctx())?
+                .execute_scalar(2, &mut vortex_aggregates::session().create_execution_ctx())?
                 .is_null()
         );
 
@@ -498,21 +500,21 @@ mod tests {
         let arrow_variant = ArrowVariantArray::try_new(&null_struct)?;
         let vortex_arr = ParquetVariant::from_arrow_variant(&arrow_variant, &SESSION.arrow())?;
 
-        let present_variant_null =
-            vortex_arr.execute_scalar(0, &mut array_session().create_execution_ctx())?;
+        let present_variant_null = vortex_arr
+            .execute_scalar(0, &mut vortex_aggregates::session().create_execution_ctx())?;
         assert!(!present_variant_null.is_null());
         assert_eq!(
             present_variant_null.as_variant().is_variant_null(),
             Some(true)
         );
 
-        let outer_null =
-            vortex_arr.execute_scalar(1, &mut array_session().create_execution_ctx())?;
+        let outer_null = vortex_arr
+            .execute_scalar(1, &mut vortex_aggregates::session().create_execution_ctx())?;
         assert!(outer_null.is_null());
         assert_eq!(outer_null.as_variant().is_variant_null(), None);
 
-        let present_value =
-            vortex_arr.execute_scalar(2, &mut array_session().create_execution_ctx())?;
+        let present_value = vortex_arr
+            .execute_scalar(2, &mut vortex_aggregates::session().create_execution_ctx())?;
         assert!(!present_value.is_null());
         assert_eq!(present_value.as_variant().is_variant_null(), Some(false));
 
@@ -538,17 +540,17 @@ mod tests {
         assert_eq!(vortex_arr.dtype(), &DType::Variant(Nullability::Nullable));
         assert!(
             vortex_arr
-                .execute_scalar(0, &mut array_session().create_execution_ctx())?
+                .execute_scalar(0, &mut vortex_aggregates::session().create_execution_ctx())?
                 .is_null()
         );
         assert!(
             vortex_arr
-                .execute_scalar(1, &mut array_session().create_execution_ctx())?
+                .execute_scalar(1, &mut vortex_aggregates::session().create_execution_ctx())?
                 .is_null()
         );
 
         let inner_pv = vortex_arr.as_opt::<ParquetVariant>().unwrap();
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let roundtripped = inner_pv.to_arrow(&ArrowExportOptions::default(), &mut ctx)?;
         assert_eq!(roundtripped.inner().null_count(), 2);
 
@@ -570,12 +572,12 @@ mod tests {
         );
         assert!(
             !vortex_arr
-                .execute_scalar(0, &mut array_session().create_execution_ctx())?
+                .execute_scalar(0, &mut vortex_aggregates::session().create_execution_ctx())?
                 .is_null()
         );
         assert!(
             !vortex_arr
-                .execute_scalar(1, &mut array_session().create_execution_ctx())?
+                .execute_scalar(1, &mut vortex_aggregates::session().create_execution_ctx())?
                 .is_null()
         );
         assert_scalar_at_matches_arrow_try_value(&arrow_variant, [0, 1])?;
@@ -685,7 +687,8 @@ mod tests {
         let arrow_variant = ArrowVariantArray::try_new(&struct_array)?;
         let vortex_arr = ParquetVariant::from_arrow_variant(&arrow_variant, &SESSION.arrow())?;
 
-        let row0 = vortex_arr.execute_scalar(0, &mut array_session().create_execution_ctx())?;
+        let row0 = vortex_arr
+            .execute_scalar(0, &mut vortex_aggregates::session().create_execution_ctx())?;
         let row0 = row0.as_variant().value().unwrap().as_list();
         assert_eq!(row0.len(), 2);
         assert_eq!(
@@ -709,7 +712,8 @@ mod tests {
             Some(20)
         );
 
-        let row1 = vortex_arr.execute_scalar(1, &mut array_session().create_execution_ctx())?;
+        let row1 = vortex_arr
+            .execute_scalar(1, &mut vortex_aggregates::session().create_execution_ctx())?;
         let row1 = row1.as_variant().value().unwrap().as_list();
         assert_eq!(row1.len(), 1);
         assert_eq!(
@@ -776,7 +780,8 @@ mod tests {
 
         let arrow_variant = ArrowVariantArray::try_new(&struct_array)?;
         let vortex_arr = ParquetVariant::from_arrow_variant(&arrow_variant, &SESSION.arrow())?;
-        let object = vortex_arr.execute_scalar(0, &mut array_session().create_execution_ctx())?;
+        let object = vortex_arr
+            .execute_scalar(0, &mut vortex_aggregates::session().create_execution_ctx())?;
         let object = object.as_variant().value().unwrap().as_struct();
 
         assert_eq!(

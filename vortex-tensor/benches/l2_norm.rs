@@ -55,7 +55,7 @@ fn vectors(width: usize) -> ArrayRef {
 }
 
 fn bench_l2_norm(bencher: Bencher, input: ArrayRef) {
-    let session = vortex_array::array_session();
+    let session = vortex_aggregates::session();
     bencher
         .counter(ItemsCount::new(input.len()))
         .with_inputs(|| {

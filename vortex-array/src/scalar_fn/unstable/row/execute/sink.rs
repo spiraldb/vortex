@@ -345,12 +345,12 @@ mod tests {
     use crate::ArrayRef;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::PrimitiveArray;
     use crate::dtype::DType;
     use crate::dtype::NativePType;
     use crate::scalar_fn::VecExecutionArgs;
     use crate::scalar_fn::unstable::row::OutputSink;
+    use crate::test_harness::test_session;
 
     struct ShrinkingSink(Vec<i64>);
 
@@ -399,7 +399,7 @@ mod tests {
         let Mask::Values(valid) = Mask::from_iter([false, true]) else {
             vortex_bail!("the test validity must be partially valid");
         };
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
 
         let result = execute_sink_valid_rows::<(i64,), (), ShrinkingSink, ()>(
             &args,

@@ -21,7 +21,6 @@ use crate::ArrayRef;
 use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
-use crate::array_session;
 use crate::arrays::BoolArray;
 use crate::arrays::Constant;
 use crate::arrays::ConstantArray;
@@ -56,6 +55,7 @@ use crate::scalar_fn::unstable::row::Utf8Sink;
 use crate::scalar_fn::unstable::row::execute::execute_bool_dense_attempt;
 use crate::scalar_fn::unstable::row::execute_rows;
 use crate::scalar_fn::unstable::row::row_fn_return_dtype;
+use crate::test_harness::test_session;
 use crate::validity::Validity;
 
 #[derive(Clone, Default)]
@@ -555,7 +555,7 @@ fn test_fixed_size_list_sink_uses_runtime_width(
     let row_count = input_values.len();
     let input = PrimitiveArray::new(input_values, validity.clone()).into_array();
     let args = VecExecutionArgs::new(vec![input], row_count);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let actual = execute_rows(&RepeatValue, &width, &args, &mut ctx)?;
     let expected = FixedSizeListArray::new(
@@ -702,7 +702,7 @@ fn test_finalize_kernel_output_rejects_nested_dtype_mismatch() -> VortexResult<(
         Arc::new(DType::Primitive(i64::PTYPE, Nullability::Nullable)),
         Nullability::NonNullable,
     );
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     assert!(finalize_kernel_output(*ID, &result_dtype, 2, values, &mut ctx).is_err());
     Ok(())
@@ -712,7 +712,7 @@ fn test_finalize_kernel_output_rejects_nested_dtype_mismatch() -> VortexResult<(
 fn test_kernel_output_rejects_nulls_at_function_boundary() -> VortexResult<()> {
     let input = PrimitiveArray::new(vec![1_i64, 2], Validity::NonNullable).into_array();
     let args = VecExecutionArgs::new(vec![input], 2);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let execution = execute_rows(&InvalidKernelOutput, &EmptyOptions, &args, &mut ctx);
     let error = match execution {
         Err(error) => error,
@@ -742,7 +742,7 @@ fn test_bool_output_builds_packed_values() -> VortexResult<()> {
     )
     .into_array();
     let args = VecExecutionArgs::new(vec![input], 5);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let actual = execute_rows(&PackedPositive, &EmptyOptions, &args, &mut ctx)?;
     let expected =
@@ -763,7 +763,7 @@ fn test_bool_output_word_boundaries(#[case] len: usize) -> VortexResult<()> {
     let values: Vec<_> = (0..len).map(|index| index as i64 - 32).collect();
     let input = PrimitiveArray::from_iter(values.iter().copied()).into_array();
     let args = VecExecutionArgs::new(vec![input], len);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let actual = execute_rows(&PackedPositive, &EmptyOptions, &args, &mut ctx)?;
     let expected = BoolArray::from_iter(values.iter().map(|value| *value > 0)).into_array();
@@ -776,7 +776,7 @@ fn assert_bool_output_handles_partial_constants<const MULTIVERSIONED: bool>() ->
     let values: Vec<_> = (0_i64..65).collect();
     let varying = PrimitiveArray::from_iter(values.iter().copied()).into_array();
     let constant = ConstantArray::new(32_i64, values.len()).into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let function = PackedGreaterThan::<MULTIVERSIONED>;
 
     let lhs_varying = VecExecutionArgs::new(vec![varying.clone(), constant.clone()], values.len());
@@ -802,7 +802,7 @@ fn test_bool_output_handles_partial_constants() -> VortexResult<()> {
 fn test_bool_output_handles_all_constant_input() -> VortexResult<()> {
     let input = ConstantArray::new(7_i64, 65).into_array();
     let args = VecExecutionArgs::new(vec![input], 65);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let actual = execute_rows(&PackedPositive, &EmptyOptions, &args, &mut ctx)?;
     let expected = BoolArray::from_iter(std::iter::repeat_n(true, 65)).into_array();
@@ -814,7 +814,7 @@ fn test_bool_output_handles_all_constant_input() -> VortexResult<()> {
 #[test]
 fn test_bool_output_handles_nullary_rows() -> VortexResult<()> {
     let args = VecExecutionArgs::new(vec![], 65);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let actual = execute_rows(&NullaryTrue, &EmptyOptions, &args, &mut ctx)?;
     let expected = BoolArray::from_iter(std::iter::repeat_n(true, 65)).into_array();
@@ -831,7 +831,7 @@ fn test_valid_only_bool_output_skips_invalid_rows() -> VortexResult<()> {
     )
     .into_array();
     let args = VecExecutionArgs::new(vec![input], 3);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let actual = execute_rows(&ValidOnlyPositive, &EmptyOptions, &args, &mut ctx)?;
     let expected = BoolArray::from_iter([Some(true), None, Some(false)]).into_array();
@@ -846,7 +846,7 @@ fn test_filtered_execution_skips_invalid_decode_payloads() -> VortexResult<()> {
     let input =
         PrimitiveArray::new(vec![i64::MIN, 10, i64::MIN, 30], validity.clone()).into_array();
     let args = VecExecutionArgs::new(vec![input], 4);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let actual = execute_rows(&FilteredIdentity, &EmptyOptions, &args, &mut ctx)?;
     let expected = PrimitiveArray::new(vec![0_i64, 10, 0, 30], validity).into_array();
@@ -865,7 +865,7 @@ fn test_filtered_execution_preserves_runtime_sink_params(
     let validity = Validity::from_iter([false, true]);
     let input = PrimitiveArray::new(vec![i64::MIN, 7], validity.clone()).into_array();
     let args = VecExecutionArgs::new(vec![input], 2);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let actual = execute_rows(&FilteredRepeat, &width, &args, &mut ctx)?;
     let expected = FixedSizeListArray::new(
@@ -887,7 +887,7 @@ fn test_deferred_bool_output_builds_packed_values() -> VortexResult<()> {
     let lhs = PrimitiveArray::from_iter(values.iter().copied()).into_array();
     let rhs = PrimitiveArray::from_iter(std::iter::repeat_n(32_i64, values.len())).into_array();
     let args = VecExecutionArgs::new(vec![lhs, rhs], values.len());
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let actual = execute_rows(&DeferredGreaterThan::<true>, &EmptyOptions, &args, &mut ctx)?;
     let expected = BoolArray::from_iter(values.iter().map(|value| *value > 32)).into_array();
@@ -901,7 +901,7 @@ fn test_deferred_bool_output_handles_partial_constants() -> VortexResult<()> {
     let values: Vec<_> = (0_i64..65).collect();
     let varying = PrimitiveArray::from_iter(values.iter().copied()).into_array();
     let constant = ConstantArray::new(32_i64, values.len()).into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let function = DeferredGreaterThan::<false>;
 
     let lhs_varying = VecExecutionArgs::new(vec![varying.clone(), constant.clone()], values.len());
@@ -962,7 +962,7 @@ fn test_deferred_bool_sliced_validity_and_constants(
         BooleanInputShape::ConstantRhs => (varying, constant),
     };
     let args = VecExecutionArgs::new(vec![lhs, rhs], len);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let actual = if multiversioned {
         execute_rows(&DeferredGreaterThan::<true>, &EmptyOptions, &args, &mut ctx)?
     } else {
@@ -996,7 +996,7 @@ fn test_deferred_bool_decode_error_is_terminal() {
     )
     .into_array();
     let args = VecExecutionArgs::new(vec![input], 1);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let result = execute_bool_dense_attempt::<(Utf8Column,), (), bool, true>(
         &args,
@@ -1016,7 +1016,7 @@ fn test_deferred_bool_output_reports_valid_row_failure() -> VortexResult<()> {
     let lhs = PrimitiveArray::from_iter([1_i64, i64::MIN, -1]).into_array();
     let rhs = ConstantArray::new(0_i64, 3).into_array();
     let args = VecExecutionArgs::new(vec![lhs, rhs], 3);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let error = match execute_rows(&DeferredGreaterThan::<true>, &EmptyOptions, &args, &mut ctx) {
         Err(error) => error.to_string(),
@@ -1035,7 +1035,7 @@ fn test_deferred_owned_execution_handles_constant_lhs() -> VortexResult<()> {
     let lhs = ConstantArray::new(10_i64, 3).into_array();
     let rhs = PrimitiveArray::from_iter([1_i64, 2, 3]).into_array();
     let args = VecExecutionArgs::new(vec![lhs, rhs], 3);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let actual = execute_rows(&DeferredAdd::default(), &EmptyOptions, &args, &mut ctx)?;
     let expected = PrimitiveArray::from_iter([11_i64, 12, 13]).into_array();
@@ -1052,7 +1052,7 @@ fn test_deferred_owned_execution_retries_null_row_failure() -> VortexResult<()> 
     let rhs = ConstantArray::new(1_i64, 2).into_array();
     let args = VecExecutionArgs::new(vec![lhs, rhs], 2);
     let (allocator, tracker) = tracking_allocator();
-    let mut ctx = array_session()
+    let mut ctx = test_session()
         .create_execution_ctx()
         .with_allocator(allocator);
 
@@ -1072,7 +1072,7 @@ fn test_dense_retry_filters_when_direct_valid_rows_are_unavailable() -> VortexRe
     let validity = Validity::from_iter([true, false, true]);
     let input = PrimitiveArray::new(vec![1_i64, i64::MAX, 3], validity.clone()).into_array();
     let args = VecExecutionArgs::new(vec![input], 3);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let actual = execute_rows(&DenseRetryIncrement, &EmptyOptions, &args, &mut ctx)?;
     let expected = PrimitiveArray::new(vec![2_i64, 0, 4], validity).into_array();
@@ -1088,7 +1088,7 @@ fn test_deferred_owned_execution_does_not_retry_partially_valid_success() -> Vor
     let lhs = PrimitiveArray::new(vec![1_i64, 2], validity.clone()).into_array();
     let rhs = ConstantArray::new(1_i64, 2).into_array();
     let args = VecExecutionArgs::new(vec![lhs, rhs], 2);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let actual = execute_rows(&function, &EmptyOptions, &args, &mut ctx)?;
     let expected = PrimitiveArray::new(vec![2_i64, 0], validity).into_array();
@@ -1105,7 +1105,7 @@ fn test_deferred_owned_execution_retries_and_reports_valid_row_failure() -> Vort
     let lhs = PrimitiveArray::new(vec![i64::MAX, 1], validity).into_array();
     let rhs = ConstantArray::new(1_i64, 2).into_array();
     let args = VecExecutionArgs::new(vec![lhs, rhs], 2);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let error = execute_rows(&function, &EmptyOptions, &args, &mut ctx)
         .expect_err("a valid-row overflow must remain observable");
@@ -1126,7 +1126,7 @@ fn test_deferred_owned_array_backed_all_valid_error_does_not_retry() -> VortexRe
     let lhs = PrimitiveArray::new(vec![i64::MAX, 1], validity).into_array();
     let rhs = ConstantArray::new(1_i64, 2).into_array();
     let args = VecExecutionArgs::new(vec![lhs, rhs], 2);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let error = execute_rows(&function, &EmptyOptions, &args, &mut ctx)
         .expect_err("an all-valid deferred error must remain observable");
@@ -1144,7 +1144,7 @@ fn test_deferred_owned_array_backed_all_valid_error_does_not_retry() -> VortexRe
 fn test_valid_only_empty_batch_preserves_nonnullable_dtype() -> VortexResult<()> {
     let input = PrimitiveArray::from_iter(std::iter::empty::<i64>()).into_array();
     let args = VecExecutionArgs::new(vec![input], 0);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let actual = execute_rows(&ValidOnlyIdentity, &EmptyOptions, &args, &mut ctx)?;
 
@@ -1285,7 +1285,7 @@ fn test_declared_output_dtype_labels_batch(#[case] validity: Validity) -> Vortex
     let values = vec![1_i64, 2, 3];
     let input = PrimitiveArray::new(values.clone(), validity.clone()).into_array();
     let args = VecExecutionArgs::new(vec![input], 3);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let actual = execute_rows(
         &DeclaredOutput::timestamps(),
@@ -1306,7 +1306,7 @@ fn test_declared_output_dtype_labels_sink_output(#[case] validity: Validity) -> 
     let values = vec![1_i64, 2, 3];
     let input = PrimitiveArray::new(values.clone(), validity.clone()).into_array();
     let args = VecExecutionArgs::new(vec![input], 3);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let actual = execute_rows(&DeclaredSinkOutput, &EmptyOptions, &args, &mut ctx)?;
     let expected = expected_timestamps(values, validity)?;
@@ -1319,7 +1319,7 @@ fn test_declared_output_dtype_labels_sink_output(#[case] validity: Validity) -> 
 fn test_declared_output_dtype_labels_empty_batch() -> VortexResult<()> {
     let input = PrimitiveArray::from_iter(std::iter::empty::<i64>()).into_array();
     let args = VecExecutionArgs::new(vec![input], 0);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let actual = execute_rows(
         &DeclaredOutput::timestamps(),
@@ -1338,7 +1338,7 @@ fn test_declared_output_dtype_labels_all_null_batch() -> VortexResult<()> {
     let null_i64 = Scalar::null(DType::Primitive(i64::PTYPE, Nullability::Nullable));
     let input = ConstantArray::new(null_i64, 3).into_array();
     let args = VecExecutionArgs::new(vec![input], 3);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let actual = execute_rows(
         &DeclaredOutput::timestamps(),
@@ -1357,7 +1357,7 @@ fn test_declared_output_dtype_labels_all_null_batch() -> VortexResult<()> {
 fn test_declared_output_dtype_labels_constant_batch() -> VortexResult<()> {
     let input = ConstantArray::new(7_i64, 3).into_array();
     let args = VecExecutionArgs::new(vec![input], 3);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let actual = execute_rows(
         &DeclaredOutput::timestamps(),
@@ -1393,7 +1393,7 @@ fn test_declared_output_dtype_rejects_bad_label(
     };
     let input = PrimitiveArray::from_iter(vec![1_i64, 2]).into_array();
     let args = VecExecutionArgs::new(vec![input], 2);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let error = execute_rows(&function, &EmptyOptions, &args, &mut ctx)
         .expect_err("an invalid output dtype must be rejected")
@@ -1437,7 +1437,7 @@ impl RowFn for MismatchedStorage {
 fn test_declared_output_dtype_rejects_mismatched_storage() -> VortexResult<()> {
     let input = PrimitiveArray::from_iter(vec![1_u64, 2]).into_array();
     let args = VecExecutionArgs::new(vec![input], 2);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let error = execute_rows(&MismatchedStorage, &EmptyOptions, &args, &mut ctx)
         .expect_err("an extension label over another storage dtype must be rejected")
@@ -1457,7 +1457,7 @@ fn test_execution_rejects_a_changed_output_dtype() -> VortexResult<()> {
     };
     let input = PrimitiveArray::from_iter(vec![1_i64, 2]).into_array();
     let args = VecExecutionArgs::new(vec![input], 2);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let error = execute_rows(&function, &EmptyOptions, &args, &mut ctx)
         .expect_err("an execution dispatch must declare the planned output dtype")
@@ -1476,7 +1476,7 @@ fn test_undeclared_output_dtype_keeps_the_storage_dtype() -> VortexResult<()> {
     let values = vec![1_i64, 2];
     let input = PrimitiveArray::from_iter(values.clone()).into_array();
     let args = VecExecutionArgs::new(vec![input], 2);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let actual = execute_rows(&function, &EmptyOptions, &args, &mut ctx)?;
     let expected = PrimitiveArray::from_iter(values).into_array();
@@ -1516,7 +1516,7 @@ fn constant_output_retains_execution_allocator_payload() -> VortexResult<()> {
     let input = ConstantArray::new(1_i64, 3).into_array();
     let args = VecExecutionArgs::new(vec![input], 3);
     let (allocator, tracker) = tracking_allocator();
-    let mut ctx = array_session()
+    let mut ctx = test_session()
         .create_execution_ctx()
         .with_allocator(allocator);
 

@@ -46,7 +46,7 @@ fn strings() -> ArrayRef {
 }
 
 fn bench_like(bencher: Bencher, pattern: &str, options: LikeOptions) {
-    let session = vortex_array::array_session();
+    let session = vortex_array::test_harness::test_session();
     let array = strings();
     bencher
         .with_inputs(|| {
@@ -91,7 +91,7 @@ fn like_regex(bencher: Bencher) {
 
 #[divan::bench]
 fn like_per_row_patterns(bencher: Bencher) {
-    let session = vortex_array::array_session();
+    let session = vortex_array::test_harness::test_session();
     let array = strings();
     // A non-constant pattern child takes the per-row path; repeated patterns hit the
     // compile cache.

@@ -56,7 +56,6 @@ mod tests {
     use rstest::rstest;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::compute::conformance::filter::LARGE_SIZE;
     use vortex_array::compute::conformance::filter::MEDIUM_SIZE;
     use vortex_array::compute::conformance::filter::test_filter_conformance;
@@ -95,7 +94,7 @@ mod tests {
     fn test_filter_sequence_conformance(#[case] array: SequenceArray) {
         test_filter_conformance(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         );
     }
 }

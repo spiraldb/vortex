@@ -19,7 +19,7 @@ fn shared_array_caches_on_canonicalize() -> VortexResult<()> {
     let array = PrimitiveArray::new(buffer![1i32, 2, 3], Validity::NonNullable).into_array();
     let shared = Shared::new(array);
 
-    let session = vortex_array::array_session();
+    let session = vortex_aggregates::session();
     let mut ctx = session.create_execution_ctx();
 
     let first = shared.get_or_compute(|source| source.clone().execute::<Canonical>(&mut ctx))?;

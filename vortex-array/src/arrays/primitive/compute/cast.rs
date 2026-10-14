@@ -674,7 +674,6 @@ mod test {
     use crate::ArrayRef;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::DecimalArray;
     use crate::arrays::PrimitiveArray;
     use crate::assert_arrays_eq;
@@ -687,11 +686,12 @@ mod test {
     use crate::dtype::PType;
     use crate::dtype::i256;
     use crate::expr::stats::Stat;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[test]
     fn cast_u32_u8() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr = buffer![0u32, 10, 200].into_array();
 
         // cast from u32 to u8
@@ -754,7 +754,7 @@ mod test {
 
     #[test]
     fn cast_u32_f32() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr = buffer![0u32, 10, 200].into_array();
         let u8arr = arr
             .cast(PType::F32.into())
@@ -770,7 +770,7 @@ mod test {
 
     #[test]
     fn cast_integer_to_decimal_rescales() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let decimal_dtype = DecimalDType::new(5, 2);
         let casted = PrimitiveArray::from_iter([42i32, -7])
             .into_array()
@@ -788,7 +788,7 @@ mod test {
 
     #[test]
     fn cast_same_width_signed_integer_to_decimal_reuses_buffer() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let source = PrimitiveArray::from_iter([42i32, -7]);
         let source_ptr = source.as_slice::<i32>().as_ptr();
         let casted = source
@@ -807,7 +807,7 @@ mod test {
     #[test]
     fn cast_same_width_signed_integer_to_decimal_reuses_buffer_with_cached_bounds()
     -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let source = PrimitiveArray::from_iter([42i32, -7]);
         let source_ptr = source.as_slice::<i32>().as_ptr();
         let source = source.into_array();
@@ -827,7 +827,7 @@ mod test {
 
     #[test]
     fn cast_same_width_signed_integer_to_decimal_ignores_out_of_range_nulls() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let source = PrimitiveArray::new(buffer![i32::MAX, 42], Validity::from_iter([false, true]));
         let source_ptr = source.as_slice::<i32>().as_ptr();
         let casted = source
@@ -848,7 +848,7 @@ mod test {
 
     #[test]
     fn cast_same_width_signed_integer_to_decimal_checks_precision() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let casted = PrimitiveArray::from_iter([i32::MAX])
             .into_array()
             .cast(DType::Decimal(
@@ -863,7 +863,7 @@ mod test {
 
     #[test]
     fn cast_u64_to_decimal() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let decimal_dtype = DecimalDType::new(20, 0);
         let casted = PrimitiveArray::from_iter([u64::MAX])
             .into_array()
@@ -877,7 +877,7 @@ mod test {
 
     #[test]
     fn cast_integer_to_decimal_reports_scale_up_overflow() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let dtype = DType::Decimal(DecimalDType::new(38, 20), Nullability::NonNullable);
         let casted = PrimitiveArray::from_iter([u64::MAX])
             .into_array()
@@ -894,7 +894,7 @@ mod test {
 
     #[test]
     fn cast_u8_to_negative_scale_decimal() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let decimal_dtype = DecimalDType::new(2, -2);
         let casted = PrimitiveArray::from_iter([200u8])
             .into_array()
@@ -908,7 +908,7 @@ mod test {
 
     #[test]
     fn cast_u64_to_negative_scale_decimal() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let decimal_dtype = DecimalDType::new(1, -19);
         let casted = PrimitiveArray::from_iter([10_000_000_000_000_000_000u64])
             .into_array()
@@ -922,7 +922,7 @@ mod test {
 
     #[test]
     fn cast_integer_to_i256_decimal() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let decimal_dtype = DecimalDType::new(39, 2);
         let casted = PrimitiveArray::from_iter([42i64])
             .into_array()
@@ -936,7 +936,7 @@ mod test {
 
     #[test]
     fn cast_all_null_integer_to_decimal() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let decimal_dtype = DecimalDType::new(39, 2);
         let casted = PrimitiveArray::new(buffer![i64::MAX, i64::MIN], Validity::AllInvalid)
             .into_array()
@@ -950,7 +950,7 @@ mod test {
 
     #[test]
     fn cast_integer_to_negative_scale_decimal_requires_exact_rescale() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let decimal_dtype = DecimalDType::new(3, -2);
         let casted = PrimitiveArray::from_iter([1_200i32, -500])
             .into_array()
@@ -970,7 +970,7 @@ mod test {
 
     #[test]
     fn cast_zero_to_large_negative_scale_decimal() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let decimal_dtype = DecimalDType::new(3, -128);
         let casted = PrimitiveArray::from_iter([0i32])
             .into_array()
@@ -983,7 +983,7 @@ mod test {
 
     #[test]
     fn cast_integer_to_decimal_ignores_out_of_range_null_lanes() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let decimal_dtype = DecimalDType::new(3, 1);
         let casted = PrimitiveArray::new(buffer![999i32, 42], Validity::from_iter([false, true]))
             .into_array()
@@ -1000,7 +1000,7 @@ mod test {
 
     #[test]
     fn cast_integer_to_decimal_checks_precision() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let casted = PrimitiveArray::from_iter([100i32])
             .into_array()
             .cast(DType::Decimal(
@@ -1015,7 +1015,7 @@ mod test {
 
     #[test]
     fn cast_floating_primitive_to_decimal_fails() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let casted = PrimitiveArray::from_iter([1.0f64])
             .into_array()
             .cast(DType::Decimal(
@@ -1063,7 +1063,7 @@ mod test {
 
     #[test]
     fn cast_with_invalid_nulls() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr = PrimitiveArray::new(
             buffer![-1i32, 0, 10],
             Validity::from_iter([false, true, true]),
@@ -1083,10 +1083,7 @@ mod test {
             p.as_ref()
                 .validity()
                 .unwrap()
-                .execute_mask(
-                    p.as_ref().len(),
-                    &mut array_session().create_execution_ctx()
-                )
+                .execute_mask(p.as_ref().len(), &mut test_session().create_execution_ctx())
                 .unwrap(),
             Mask::from(BitBuffer::from(vec![false, true, true]))
         );
@@ -1096,7 +1093,7 @@ mod test {
     /// buffer without allocation (pointer identity).
     #[test]
     fn cast_same_width_int_reinterprets_buffer() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let src = PrimitiveArray::from_iter([0u32, 10, 100]);
         let src_ptr = src.as_slice::<u32>().as_ptr();
 
@@ -1129,7 +1126,7 @@ mod test {
     /// touching the buffer contents.
     #[test]
     fn cast_same_width_all_null() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr = PrimitiveArray::new(buffer![0xFFu8, 0xFF], Validity::AllInvalid);
         let casted = arr
             .into_array()
@@ -1144,7 +1141,7 @@ mod test {
     /// not prevent the cast from succeeding.
     #[test]
     fn cast_same_width_int_nullable_with_out_of_range_nulls() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         // The null position holds u32::MAX which doesn't fit in i32, but it's
         // masked as invalid so the cast should still succeed via reinterpret.
         let arr = PrimitiveArray::new(
@@ -1165,7 +1162,7 @@ mod test {
 
     #[test]
     fn cast_u32_to_u8_with_out_of_range_nulls() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr = PrimitiveArray::new(
             buffer![1000u32, 10u32, 42u32],
             Validity::from_iter([false, true, true]),
@@ -1199,6 +1196,6 @@ mod test {
     #[case(PrimitiveArray::from_option_iter([Some(1i32), None, Some(-100), Some(0), None]).into_array())]
     #[case(buffer![42u32].into_array())]
     fn test_cast_primitive_conformance(#[case] array: ArrayRef) {
-        test_cast_conformance(&array, &mut array_session().create_execution_ctx());
+        test_cast_conformance(&array, &mut test_session().create_execution_ctx());
     }
 }

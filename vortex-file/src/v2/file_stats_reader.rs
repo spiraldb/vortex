@@ -205,7 +205,7 @@ mod tests {
     use super::*;
 
     static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-        vortex_array::array_session()
+        vortex_aggregates::session()
             .with::<LayoutSession>()
             .with::<RuntimeSession>()
     });

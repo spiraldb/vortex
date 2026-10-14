@@ -118,12 +118,12 @@ mod tests {
     use super::compute_mask_for_fsl_elements;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::FixedSizeListArray;
     use crate::arrays::PrimitiveArray;
     use crate::assert_arrays_eq;
     use crate::compute::conformance::filter::test_filter_conformance;
     use crate::dtype::Nullability;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[test]
@@ -132,7 +132,7 @@ mod tests {
         let array = FixedSizeListArray::new(elements.into_array(), 3, Validity::NonNullable, 3);
         test_filter_conformance(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 
@@ -144,13 +144,13 @@ mod tests {
         let array = FixedSizeListArray::new(elements.into_array(), 2, validity, 3);
         test_filter_conformance(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 
     #[test]
     fn filter_fixed_size_list_selects_correct_lists() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let elements = PrimitiveArray::from_iter([10i32, 20, 30, 40, 50, 60]);
         let array = FixedSizeListArray::new(elements.into_array(), 2, Validity::NonNullable, 3);
 
@@ -167,7 +167,7 @@ mod tests {
 
     #[test]
     fn filter_degenerate_list_size_zero() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let elements = PrimitiveArray::empty::<i32>(Nullability::NonNullable);
         let array = FixedSizeListArray::new(elements.into_array(), 0, Validity::NonNullable, 5);
 
@@ -183,7 +183,7 @@ mod tests {
 
     #[test]
     fn filter_nested_fixed_size_lists() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         // Inner lists of size 2, outer lists of size 2 (so 2 outer lists, each with 2 inner lists).
         let inner_elements = buffer![1i32, 2, 3, 4, 5, 6, 7, 8].into_array();
         let inner_fsl = FixedSizeListArray::new(inner_elements, 2, Validity::NonNullable, 4);

@@ -15,7 +15,6 @@ use crate::ArrayRef;
 use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
-use crate::array_session;
 use crate::arrays::Constant;
 use crate::arrays::ConstantArray;
 use crate::arrays::ExtensionArray;
@@ -27,6 +26,7 @@ use crate::extension::datetime::TimeUnit;
 use crate::extension::datetime::Timestamp;
 use crate::scalar_fn::VecExecutionArgs;
 use crate::scalar_fn::unstable::row::InputElement;
+use crate::test_harness::test_session;
 use crate::validity::Validity;
 
 static DECODE_CALLS: AtomicUsize = AtomicUsize::new(0);
@@ -118,7 +118,7 @@ fn test_null_tolerant_decline_precedes_decoding() -> VortexResult<()> {
     let first = PrimitiveArray::from_iter([1_i64, 2]).into_array();
     let second = PrimitiveArray::from_iter([3_i64, 4]).into_array();
     let args = VecExecutionArgs::new(vec![first, second], 2);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let columns = <(DecodeProbe, DenseFallible)>::decode_null_tolerant(&args, &mut ctx)?;
 
@@ -132,7 +132,7 @@ fn test_batch_constant_uses_constant_decoder() -> VortexResult<()> {
     DECODE_CALLS.store(0, Ordering::Relaxed);
     CONSTANT_DECODE_LEN.store(0, Ordering::Relaxed);
     let args = VecExecutionArgs::new(vec![ConstantArray::new(7_i64, 3).into_array()], 3);
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
 
     let columns = <(DecodeProbe,)>::decode(&args, &mut ctx)?;
 

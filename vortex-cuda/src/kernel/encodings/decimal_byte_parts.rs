@@ -93,7 +93,7 @@ mod tests {
         #[case] precision: u8,
         #[case] scale: i8,
     ) {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("create execution context");
 

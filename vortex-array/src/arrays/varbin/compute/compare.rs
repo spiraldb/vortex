@@ -178,7 +178,6 @@ mod test {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::arrays::ConstantArray;
     use crate::arrays::VarBinArray;
@@ -189,10 +188,11 @@ mod test {
     use crate::dtype::Nullability;
     use crate::scalar::Scalar;
     use crate::scalar_fn::fns::operators::Operator;
+    use crate::test_harness::test_session;
 
     #[test]
     fn test_binary_compare() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let array = VarBinArray::from_iter(
             [Some(b"abc".to_vec()), None, Some(b"def".to_vec())],
             DType::Binary(Nullability::Nullable),
@@ -229,7 +229,7 @@ mod test {
 
     #[test]
     fn varbinview_compare() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let array = VarBinArray::from_iter(
             [Some(b"abc".to_vec()), None, Some(b"def".to_vec())],
             DType::Binary(Nullability::Nullable),
@@ -268,7 +268,6 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::arrays::ConstantArray;
     use crate::arrays::VarBinArray;
@@ -279,6 +278,7 @@ mod tests {
     use crate::dtype::Nullability;
     use crate::scalar::Scalar;
     use crate::scalar_fn::fns::operators::Operator;
+    use crate::test_harness::test_session;
 
     #[test]
     fn test_null_compare() {
@@ -302,7 +302,7 @@ mod tests {
     /// [`CompareKernel`]: super::CompareKernel
     #[test]
     fn varbin_i64_offsets_compare_constant() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mut builder = VarBinBuilder::<i64>::with_capacity_in(
             DType::Utf8(Nullability::NonNullable),
             3,
@@ -327,7 +327,7 @@ mod tests {
 
     #[test]
     fn varbin_i64_offsets_compare_constant_binary() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mut builder = VarBinBuilder::<i64>::with_capacity_in(
             DType::Binary(Nullability::NonNullable),
             3,

@@ -349,7 +349,6 @@ mod tests {
     use vortex_array::ArrayRef;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::Constant;
     use vortex_array::arrays::ConstantArray;
     use vortex_array::arrays::ScalarFnArray;
@@ -384,7 +383,7 @@ mod tests {
 
     #[test]
     pub fn include_columns() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let st = test_array();
         let select = select(vec![FieldName::from("a")], root());
         let selected = st
@@ -399,7 +398,7 @@ mod tests {
 
     #[test]
     pub fn exclude_columns() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let st = test_array();
         let select = select_exclude(vec![FieldName::from("a")], root());
         let selected = st
@@ -488,7 +487,7 @@ mod tests {
             (0..128).map(Scalar::from),
         );
         let array = ConstantArray::new(scalar, 1_000_000).into_array();
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
 
         let item: ArrayRef = ScalarFnArray::try_new(
             Select.bind(FieldSelection::Include(FieldNames::from(["f97", "f3"]))),

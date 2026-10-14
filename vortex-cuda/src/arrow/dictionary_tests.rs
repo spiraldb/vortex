@@ -177,7 +177,7 @@ fn test_decode_mixed_dictionary_device_stream(
     #[values(false, true)] schema_first: bool,
 ) -> VortexResult<()> {
     let runtime = CurrentThreadRuntime::new();
-    let session = vortex::array::array_session()
+    let session = vortex::aggregates::session()
         .with_some(CudaSession::try_default()?.with_dictionary_export(DictionaryExport::Decode));
     let mut ctx = CudaSession::create_execution_ctx(&session)?;
     let (values, expected) = values_and_expected(strings);
@@ -235,7 +235,7 @@ fn test_decode_stream_schema_does_not_poll(
     #[case] consume: bool,
 ) -> VortexResult<()> {
     let runtime = CurrentThreadRuntime::new();
-    let session = vortex::array::array_session()
+    let session = vortex::aggregates::session()
         .with_some(CudaSession::try_default()?.with_dictionary_export(DictionaryExport::Decode));
     let array = PrimitiveArray::from_iter([10i32, 20, 30]).into_array();
     let dtype = array.dtype().clone();
@@ -287,7 +287,7 @@ fn test_decode_stream_schema_does_not_poll(
 #[crate::test]
 fn test_decode_stream_validates_dtype_and_device() -> VortexResult<()> {
     let runtime = CurrentThreadRuntime::new();
-    let session = vortex::array::array_session()
+    let session = vortex::aggregates::session()
         .with_some(CudaSession::try_default()?.with_dictionary_export(DictionaryExport::Decode));
     let array = PrimitiveArray::from_iter([10i32, 20, 30]).into_array();
     let mut stream = array
@@ -320,7 +320,7 @@ fn test_decode_stream_validates_dtype_and_device() -> VortexResult<()> {
 
 #[crate::test]
 async fn test_decode_non_contiguous_dictionary_list_view() -> VortexResult<()> {
-    let session = vortex::array::array_session()
+    let session = vortex::aggregates::session()
         .with_some(CudaSession::try_default()?.with_dictionary_export(DictionaryExport::Decode));
     let mut ctx = CudaSession::create_execution_ctx(&session)?;
     let (values, expected) = values_and_expected(true);
@@ -358,7 +358,7 @@ async fn test_decode_non_contiguous_dictionary_list_view() -> VortexResult<()> {
 
 #[crate::test]
 async fn test_decode_unsupported_device_dictionary_does_not_fall_back_to_cpu() -> VortexResult<()> {
-    let session = vortex::array::array_session().with_some(CudaSession::try_default()?);
+    let session = vortex::aggregates::session().with_some(CudaSession::try_default()?);
     let mut ctx = CudaSession::create_execution_ctx(&session)?;
     // A dictionary of structs can be preserved, but has no CUDA gather kernel today.
     let (values, _) = values_and_expected(false);

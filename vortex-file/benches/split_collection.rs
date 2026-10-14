@@ -60,7 +60,7 @@ static RUNTIME: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     let _guard = RUNTIME.enter();
-    let session = vortex_array::array_session()
+    let session = vortex_aggregates::session()
         .with::<LayoutSession>()
         .with::<RuntimeSession>()
         .with_tokio();

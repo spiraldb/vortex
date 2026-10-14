@@ -29,7 +29,7 @@ use vortex_onpair::DEFAULT_CONFIG;
 use vortex_onpair::onpair_compress;
 use vortex_session::VortexSession;
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_aggregates::session);
 
 fn corpus(n: usize) -> Vec<String> {
     let templates: &[&str] = &[

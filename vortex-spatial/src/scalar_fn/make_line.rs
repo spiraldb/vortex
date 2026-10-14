@@ -302,7 +302,7 @@ mod tests {
 
     #[test]
     fn connects_paired_points_in_operand_order() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let starts = point_column(vec![0.0, 3.0], vec![0.0, 4.0])?;
         let ends = point_column(vec![3.0, 0.0], vec![4.0, 0.0])?;
@@ -327,7 +327,7 @@ mod tests {
 
     #[test]
     fn two_constants_are_built_once_and_remain_constant() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let starts = point_constant(0.0, 0.0, 3, &mut ctx)?;
         let ends = point_constant(3.0, 4.0, 3, &mut ctx)?;
@@ -358,7 +358,7 @@ mod tests {
     #[case::constant_start(true)]
     #[case::constant_end(false)]
     fn constant_and_column_are_paired_by_row(#[case] constant_start: bool) -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let constant = point_constant(0.0, 0.0, 2, &mut ctx)?;
         let column = point_column(vec![3.0, 6.0], vec![4.0, 8.0])?;
@@ -388,7 +388,7 @@ mod tests {
 
     #[test]
     fn null_constant_is_all_null() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let point_dtype = point_column(vec![0.0], vec![0.0])?.dtype().as_nullable();
         let starts = ConstantArray::new(Scalar::null(point_dtype), 2).into_array();
@@ -454,7 +454,7 @@ mod tests {
         #[case] expected_z: Option<[f64; 2]>,
         #[case] expected_m: Option<[f64; 2]>,
     ) -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let expected_x = [start[0], end[0]];
         let expected_y = [start[1], end[1]];

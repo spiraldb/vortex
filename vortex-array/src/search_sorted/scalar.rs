@@ -59,7 +59,6 @@ mod tests {
     use vortex_error::VortexResult;
 
     use crate::IntoArray;
-    use crate::array_session;
     use crate::arrays::PrimitiveArray;
     use crate::executor::VortexSessionExecute;
     use crate::scalar::Scalar;
@@ -67,13 +66,14 @@ mod tests {
     use crate::search_sorted::SearchSorted;
     use crate::search_sorted::SearchSortedArray;
     use crate::search_sorted::SearchSortedSide;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[test]
     fn search_sorted_scalar() -> VortexResult<()> {
         let array =
             PrimitiveArray::new(buffer![1i32, 2, 3, 3, 4], Validity::NonNullable).into_array();
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let searcher = SearchSortedArray::new(&array, &mut ctx);
         assert_eq!(
             searcher.search_sorted(&Scalar::from(3i32), SearchSortedSide::Left)?,
@@ -94,7 +94,7 @@ mod tests {
     fn search_sorted_scalar_with_nulls() -> VortexResult<()> {
         let array =
             PrimitiveArray::from_option_iter([None, None, Some(2i32), Some(3)]).into_array();
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let searcher = SearchSortedArray::new(&array, &mut ctx);
         assert_eq!(
             searcher.search_sorted(&Scalar::from(Some(2i32)), SearchSortedSide::Left)?,

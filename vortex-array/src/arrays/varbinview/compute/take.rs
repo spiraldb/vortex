@@ -232,12 +232,12 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::VarBinViewArray;
     use crate::arrays::varbinview::compute::take::PrimitiveArray;
     use crate::compute::conformance::take::test_take_conformance;
     use crate::dtype::DType;
     use crate::dtype::Nullability::NonNullable;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[test]
@@ -254,7 +254,7 @@ mod tests {
         let taken = arr.take(buffer![0, 3].into_array())?;
 
         assert!(taken.dtype().is_nullable());
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let taken = taken.execute::<VarBinViewArray>(&mut ctx)?;
         let mask = taken.validity()?.execute_mask(taken.len(), &mut ctx)?;
         let result = (0..taken.len())
@@ -280,7 +280,7 @@ mod tests {
         let taken = arr.take(indices.into_array())?;
 
         assert!(taken.dtype().is_nullable());
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let taken = taken.execute::<VarBinViewArray>(&mut ctx)?;
         let mask = taken.validity()?.execute_mask(taken.len(), &mut ctx)?;
         let result = (0..taken.len())
@@ -313,7 +313,7 @@ mod tests {
     fn test_take_varbinview_conformance(#[case] array: VarBinViewArray) {
         test_take_conformance(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 }

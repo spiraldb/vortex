@@ -171,7 +171,7 @@ mod tests {
 
     /// Decodes `array` on the GPU and asserts it matches the CPU canonical form.
     async fn assert_gpu_matches_cpu(delta: DeltaArray) -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -193,7 +193,7 @@ mod tests {
     /// spans several chunks.
     #[crate::test]
     async fn test_cuda_delta_u8() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let primitive = PrimitiveArray::new(
             Buffer::from_iter((0u8..=255).cycle().take(3000)),
             Validity::NonNullable,
@@ -205,7 +205,7 @@ mod tests {
 
     #[crate::test]
     async fn test_cuda_delta_u16() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let primitive = PrimitiveArray::new(Buffer::from_iter(0u16..3000), Validity::NonNullable);
 
         let delta = Delta::try_from_primitive_array(&primitive, &mut ctx)?;
@@ -214,7 +214,7 @@ mod tests {
 
     #[crate::test]
     async fn test_cuda_delta_u32() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let primitive = PrimitiveArray::new(
             Buffer::from_iter((0u32..3000).map(|i| i * 7)),
             Validity::NonNullable,
@@ -226,7 +226,7 @@ mod tests {
 
     #[crate::test]
     async fn test_cuda_delta_u64() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let primitive = PrimitiveArray::new(
             Buffer::from_iter((0u64..3000).map(|i| i * 1_000_003)),
             Validity::NonNullable,
@@ -240,7 +240,7 @@ mod tests {
     /// through the unsigned kernel unchanged.
     #[crate::test]
     async fn test_cuda_delta_signed_values() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let primitive = PrimitiveArray::new(
             Buffer::from_iter((0..3000i32).map(|i| i - 1500)),
             Validity::NonNullable,
@@ -257,7 +257,7 @@ mod tests {
     #[case::across_chunks(1000, 1500)]
     #[crate::test]
     async fn test_cuda_delta_sliced(#[case] start: usize, #[case] end: usize) -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let primitive = PrimitiveArray::new(
             Buffer::from_iter((0..3000u32).map(|i| i * 3)),
             Validity::NonNullable,
@@ -276,7 +276,7 @@ mod tests {
     /// Nulls ride alongside the values, and the validity is narrowed to the logical slice.
     #[crate::test]
     async fn test_cuda_delta_nullable() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let primitive = PrimitiveArray::from_option_iter(
             (0..3000u32).map(|value| (value % 7 != 0).then_some(value)),
         );

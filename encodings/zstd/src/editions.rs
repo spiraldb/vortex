@@ -42,14 +42,14 @@ mod tests {
 
     #[test]
     fn zstd_edition_is_valid() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         crate::initialize(&session);
         validate_edition(&session.editions(), &ZSTD_2026_02)
     }
 
     #[test]
     fn initialize_does_not_enable_zstd_edition() {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         crate::initialize(&session);
         assert!(
             !session

@@ -9,7 +9,6 @@ use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::DecimalArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::assert_arrays_eq;
@@ -38,7 +37,7 @@ const MAX_LEN: usize = 48;
 const MAX_MSP: i64 = 10i64.pow(18) - 1;
 
 fn ctx() -> ExecutionCtx {
-    let session = array_session();
+    let session = vortex_aggregates::session();
     crate::initialize(&session);
     session.create_execution_ctx()
 }

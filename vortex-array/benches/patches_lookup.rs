@@ -13,16 +13,16 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::patches::PATCH_CHUNK_SIZE;
 use vortex_array::patches::Patches;
+use vortex_array::test_harness::test_session;
 use vortex_buffer::Buffer;
 use vortex_session::VortexSession;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(test_session);
 
 fn main() {
     divan::main();

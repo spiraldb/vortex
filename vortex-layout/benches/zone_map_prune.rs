@@ -53,7 +53,7 @@ fn main() {
 }
 
 static SESSION: LazyLock<VortexSession> =
-    LazyLock::new(|| vortex_array::array_session().with::<LayoutSession>());
+    LazyLock::new(|| vortex_aggregates::session().with::<LayoutSession>());
 
 /// Zone counts to sweep. The small case exposes per-call fixed cost, the large case exposes
 /// per-zone evaluation cost.

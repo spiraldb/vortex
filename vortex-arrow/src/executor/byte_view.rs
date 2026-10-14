@@ -76,14 +76,13 @@ pub(super) fn to_arrow_byte_view<T: ByteViewType>(
 mod tests {
     use arrow_array::types::StringViewType;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
 
     use super::*;
 
     #[test]
     fn empty_views_are_aligned() -> VortexResult<()> {
         let array = VarBinViewArray::from_iter_str(std::iter::empty::<&str>());
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
 
         let arrow = canonical_varbinview_to_arrow::<StringViewType>(&array, &mut ctx)?;
 

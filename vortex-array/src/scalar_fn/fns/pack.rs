@@ -172,7 +172,6 @@ mod tests {
     use crate::ArrayRef;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::struct_::StructArrayExt;
     use crate::assert_arrays_eq;
@@ -181,6 +180,7 @@ mod tests {
     use crate::expr::pack;
     use crate::scalar_fn::ScalarFnVTableExt;
     use crate::scalar_fn::fns::pack::StructArray;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     fn test_array() -> ArrayRef {
@@ -193,7 +193,7 @@ mod tests {
     }
 
     fn primitive_field(array: &ArrayRef, field_path: &[&str]) -> VortexResult<PrimitiveArray> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mut field_path = field_path.iter();
 
         let Some(field) = field_path.next() else {
@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     pub fn test_empty_pack() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let expr = Pack.new_expr(
             PackOptions {
                 names: Default::default(),
@@ -241,7 +241,7 @@ mod tests {
 
     #[test]
     pub fn test_simple_pack() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let expr = Pack.new_expr(
             PackOptions {
                 names: ["one", "two", "three"].into(),
@@ -278,7 +278,7 @@ mod tests {
 
     #[test]
     pub fn test_nested_pack() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let expr = Pack.new_expr(
             PackOptions {
                 names: ["one", "two", "three"].into(),
@@ -329,7 +329,7 @@ mod tests {
 
     #[test]
     pub fn test_pack_nullable() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let expr = Pack.new_expr(
             PackOptions {
                 names: ["one", "two", "three"].into(),

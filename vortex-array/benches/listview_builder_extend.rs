@@ -11,7 +11,6 @@ use divan::Bencher;
 use mimalloc::MiMalloc;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::ListViewArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::builders::ListViewBuilder;
@@ -19,6 +18,7 @@ use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability::NonNullable;
 use vortex_array::dtype::Nullability::Nullable;
 use vortex_array::dtype::PType::I32;
+use vortex_array::test_harness::test_session;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
 
@@ -71,7 +71,7 @@ fn extend_from_array_zctl(bencher: Bencher, (num_lists, list_size): (usize, usiz
     let source = source.into_array();
 
     bencher.with_inputs(|| &source).bench_refs(|source| {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mut builder = ListViewBuilder::<u64, u64>::with_capacity_in(
             Arc::new(DType::Primitive(I32, NonNullable)),
             NonNullable,
@@ -95,7 +95,7 @@ fn extend_from_array_non_zctl_overlapping(
     let source = source.into_array();
 
     bencher.with_inputs(|| &source).bench_refs(|source| {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mut builder = ListViewBuilder::<u64, u64>::with_capacity_in(
             Arc::new(DType::Primitive(I32, NonNullable)),
             Nullable,

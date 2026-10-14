@@ -822,7 +822,6 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::VarBinArray;
     use crate::arrays::VarBinViewArray;
     use crate::arrays::varbin::compute::take::PrimitiveArray;
@@ -831,6 +830,7 @@ mod tests {
     use crate::dtype::DType;
     use crate::dtype::Nullability;
     use crate::dtype::PType;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[test]
@@ -869,13 +869,13 @@ mod tests {
     fn test_take_varbin_conformance(#[case] array: VarBinArray) {
         test_take_conformance(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 
     #[test]
     fn test_take_overflow() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let scream = iter::once("a").cycle().take(128).collect::<String>();
         let bytes = ByteBuffer::copy_from(scream.as_bytes());
         let offsets = buffer![0u8, 128u8].into_array();
@@ -920,7 +920,7 @@ mod tests {
 
     #[test]
     fn test_offset_widen_values() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let big = u32::MAX as usize + 5;
         let mut sink = super::Offsets::with_capacity(PType::U32, 3);
         sink.push(0);
@@ -934,7 +934,7 @@ mod tests {
 
     #[test]
     fn test_take_signed() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let array = VarBinArray::new(
             buffer![0i32, 5, 10].into_array(),
             ByteBuffer::copy_from(b"helloworld"),

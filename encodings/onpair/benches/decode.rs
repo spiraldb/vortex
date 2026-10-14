@@ -34,7 +34,6 @@ use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::VarBinArray;
 use vortex_array::arrays::VarBinViewArray;
@@ -84,7 +83,7 @@ use vortex_onpair::onpair_compress;
 use vortex_session::VortexSession;
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-    let session = array_session();
+    let session = vortex_aggregates::session();
     vortex_onpair::initialize(&session);
     session
 });

@@ -279,7 +279,7 @@ mod tests {
         #[case] subseconds: Vec<i64>,
         #[case] time_unit: TimeUnit,
     ) -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -302,7 +302,7 @@ mod tests {
     /// entirely unsigned components, which is what panicked on `taxi`.
     #[crate::test]
     async fn test_cuda_datetimeparts_unsigned_components() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -343,7 +343,7 @@ mod tests {
     /// seconds, which is only decoded correctly if each component keeps its own signedness.
     #[crate::test]
     async fn test_cuda_datetimeparts_mixed_signedness() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -381,7 +381,7 @@ mod tests {
 
     #[crate::test]
     async fn test_cuda_datetimeparts_large_array() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -406,7 +406,7 @@ mod tests {
 
     #[crate::test]
     async fn test_cuda_datetimeparts_with_nulls() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 

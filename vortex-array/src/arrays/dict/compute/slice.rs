@@ -92,7 +92,6 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::DictArray;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::dict::compute::slice::ConstantArray;
@@ -101,10 +100,11 @@ mod tests {
     use crate::dtype::Nullability::Nullable;
     use crate::dtype::PType;
     use crate::scalar::Scalar;
+    use crate::test_harness::test_session;
 
     #[test]
     fn slice_constant_valid_code() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let dict = DictArray::new(
             ConstantArray::new(1u8, 5).into_array(),
             buffer![10i32, 20, 30].into_array(),
@@ -117,7 +117,7 @@ mod tests {
 
     #[test]
     fn slice_constant_null_code() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let dict = DictArray::new(
             ConstantArray::new(Scalar::null(DType::Primitive(PType::U8, Nullable)), 5).into_array(),
             buffer![10i32, 20, 30].into_array(),

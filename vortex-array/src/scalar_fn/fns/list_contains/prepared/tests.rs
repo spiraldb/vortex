@@ -12,7 +12,6 @@ use crate::ArrayRef;
 use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
-use crate::array_session;
 use crate::arrays::Bool;
 use crate::arrays::BoolArray;
 use crate::arrays::Chunked;
@@ -45,6 +44,7 @@ use crate::scalar::Scalar;
 use crate::scalar_fn::fns::list_contains::ListContains;
 use crate::scalar_fn::fns::list_contains::ListContainsOptions;
 use crate::scalar_fn::fns::list_contains::PreparedSetData;
+use crate::test_harness::test_session;
 use crate::validity::Validity;
 
 /// Prepares the non-null list scalar `list`.
@@ -80,7 +80,7 @@ fn nested_needles() -> ArrayRef {
 }
 
 fn map_needles() -> ArrayRef {
-    let ctx = array_session().create_execution_ctx();
+    let ctx = test_session().create_execution_ctx();
     let dtype = DType::map(
         DType::Primitive(PType::I32, Nullability::NonNullable),
         DType::Utf8(Nullability::Nullable),
@@ -122,7 +122,7 @@ fn test_row_set_returns_membership_bits(
     #[case] needles: ArrayRef,
     #[values(false, true)] sql_null_semantics: bool,
 ) -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let dtype = needles.dtype().as_nullable();
     // Unsorted, repeated members and a top-level null exercise normalization and SQL's
     // unknown non-match independently of any nulls nested inside the members.
@@ -184,7 +184,7 @@ fn test_decimal_bitmap_across_storage_widths(
     needle_width: DecimalType,
     #[values(false, true)] sql_null_semantics: bool,
 ) -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let decimal = DecimalDType::new(precision, 1);
     let dtype = DType::Decimal(decimal, Nullability::Nullable);
     let mut elements: Vec<_> = [1i8, -2, 1]
@@ -221,7 +221,7 @@ fn test_decimal_wide_values(
     #[case] base: i256,
     #[case] dense: bool,
 ) -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let decimal = DecimalDType::new(precision, 2);
     let second = if dense { base + i256::ONE } else { -base };
     let list = Scalar::list(
@@ -283,7 +283,7 @@ fn test_primitive_integers(
     #[case] needles: ArrayRef,
     #[case] expected: [Option<bool>; 4],
 ) -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let set = PreparedSetData::try_new(list_scalar(&elements, &mut ctx)?)?;
     assert_arrays_eq!(
         set.contains(&needles, &ListContainsOptions::default(), &mut ctx)?,
@@ -308,7 +308,7 @@ fn set_with_null() -> Scalar {
 
 #[test]
 fn test_prepared_set_rows_are_the_constant_list() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let set = prepare_array(&set_with_null(), 4)?;
 
     assert_arrays_eq!(set, ConstantArray::new(set_with_null(), 4), &mut ctx);
@@ -338,7 +338,7 @@ fn test_list_contains_looks_up_in_a_prepared_set_list(
     #[case] options: ListContainsOptions,
     #[case] expected: [Option<bool>; 4],
 ) -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let set = prepare_array(&set_with_null(), 4)?;
     let needles =
         PrimitiveArray::from_option_iter([Some(1i32), Some(2), None, Some(3)]).into_array();
@@ -356,7 +356,7 @@ fn test_constant_needle_gives_a_constant(
     #[case] expected: Option<bool>,
 ) -> VortexResult<()> {
     // `3 IN (2, NULL)` against the prepared set is looked up once, and gives a constant.
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let set = prepare_array(&set_with_null(), 4)?;
     let needle = ConstantArray::new(Scalar::primitive(3i32, Nullability::Nullable), 4).into_array();
 
@@ -374,7 +374,7 @@ fn test_constant_needle_gives_a_constant(
 #[test]
 fn test_constant_row_needle_looks_up_one_row() -> VortexResult<()> {
     // A row haystack cannot look a scalar needle up, so execution looks up one row.
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let needles = nested_needles();
     let dtype = needles.dtype().as_nullable();
     let member = needles.execute_scalar(2, &mut ctx)?.cast(&dtype)?;
@@ -400,7 +400,7 @@ fn test_result_from_bits_applies_null_semantics(
     #[case] expected: [Option<bool>; 3],
 ) -> VortexResult<()> {
     // Against `{2, null}`: a match, a non-match, and a null needle whose bit has no effect.
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let set = prepare(&set_with_null())?;
     let needle_dtype = DType::Primitive(PType::I32, Nullability::Nullable);
     let bits = BitBuffer::from_iter([true, false, true]);
@@ -436,7 +436,7 @@ fn test_result_from_bits_rejects_mismatched_needles() -> VortexResult<()> {
 
 #[test]
 fn test_bytes_set_short_and_long_views() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let elements = VarBinViewArray::from_iter_nullable_str([
         Some("ab"),
         Some(""),
@@ -522,7 +522,7 @@ fn test_constant_list_over_chunked_needles(
     #[case] options: ListContainsOptions,
     #[case] expected: [Option<bool>; 5],
 ) -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let needles = chunked_needles()?;
     let list = ConstantArray::new(set_with_null(), needles.len()).into_array();
 
@@ -538,7 +538,7 @@ fn test_constant_list_over_chunked_needles(
 
 #[test]
 fn test_optimized_expression_over_chunked_needles() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let needles = chunked_needles()?;
     let expr = list_contains(lit(set_with_null()), root())
         .bind(needles.dtype())?

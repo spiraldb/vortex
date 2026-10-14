@@ -13,7 +13,6 @@ use vortex_array::dtype::UnionVariants;
 use vortex_array::scalar::Scalar;
 use vortex_error::VortexResult;
 
-use crate::test_session;
 use crate::uncompressed_size_in_bytes::UncompressedSizeOpts;
 use crate::uncompressed_size_in_bytes::uncompressed_size_in_bytes;
 
@@ -30,7 +29,7 @@ fn variants() -> VortexResult<UnionVariants> {
 
 #[test]
 fn constant_union_reports_uncompressed_size() -> VortexResult<()> {
-    let mut ctx = test_session().create_execution_ctx();
+    let mut ctx = crate::session().create_execution_ctx();
     let scalar = Scalar::union(variants()?, 5, 10i32.into(), Nullability::NonNullable)?;
 
     // Four `u8` type IDs, four `i32` rows, and four `bool` placeholder bits rounded up to a byte.

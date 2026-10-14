@@ -312,7 +312,6 @@ mod tests {
 
     use vortex::array::IntoArray;
     use vortex::array::VortexSessionExecute;
-    use vortex::array::array_session;
     use vortex::array::arrays::BoolArray;
     use vortex::array::arrays::ListArray;
     use vortex::array::arrays::PrimitiveArray;
@@ -369,7 +368,7 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn test_get_item() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let (array, names_array, ages_array) = struct_array();
         unsafe {
             let root = vx_expression_root();
@@ -420,7 +419,7 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn test_literal() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let array =
             PrimitiveArray::new(buffer![1i32, 2i32, 3i32], Validity::NonNullable).into_array();
 
@@ -504,7 +503,7 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn test_and_or() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let col1 = BoolArray::from_iter([true, false, true, true]);
         let col2 = BoolArray::from_iter([false, true, true, false]);
         let col3 = BoolArray::from_iter([false, true, true, true]);
@@ -581,7 +580,7 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn test_list_contains() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let elements = buffer![1i32, 2, 3, 4, 5].into_array();
         let offsets = buffer![0u32, 2, 5, 5].into_array();
         let array = ListArray::try_new(elements, offsets, Validity::NonNullable).unwrap();

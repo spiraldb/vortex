@@ -33,7 +33,7 @@ const CASES: &[(usize, bool, bool)] = &[
     (1024, false, true),
 ];
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_aggregates::session);
 
 fn pco(nullable: bool) -> ArrayRef {
     let validity = if nullable {

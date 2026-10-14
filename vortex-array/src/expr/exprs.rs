@@ -184,13 +184,13 @@ pub fn bound_binary(
 /// # use vortex_array::arrays::{BoolArray, PrimitiveArray};
 /// # use vortex_array::arrays::bool::BoolArrayExt;
 /// # use vortex_array::IntoArray;
-/// # use vortex_array::{VortexSessionExecute, array_session};
+/// # use vortex_array::{VortexSessionExecute, test_harness::test_session};
 /// # use vortex_array::validity::Validity;
 /// # use vortex_buffer::buffer;
 /// # use vortex_array::expr::{eq, root, lit};
 /// let xs = PrimitiveArray::new(buffer![1i32, 2i32, 3i32], Validity::NonNullable);
 /// let result = xs.into_array().apply(&eq(root(), lit(3))).unwrap();
-/// let mut ctx = array_session().create_execution_ctx();
+/// let mut ctx = test_session().create_execution_ctx();
 ///
 /// assert_eq!(
 ///     result.execute::<BoolArray>(&mut ctx).unwrap().to_bit_buffer(),
@@ -216,13 +216,13 @@ pub fn bound_eq(lhs: BoundExpression, rhs: BoundExpression) -> BoundExpression {
 /// # use vortex_array::arrays::{BoolArray, PrimitiveArray};
 /// # use vortex_array::arrays::bool::BoolArrayExt;
 /// # use vortex_array::IntoArray;
-/// # use vortex_array::{VortexSessionExecute, array_session};
+/// # use vortex_array::{VortexSessionExecute, test_harness::test_session};
 /// # use vortex_array::validity::Validity;
 /// # use vortex_buffer::buffer;
 /// # use vortex_array::expr::{root, lit, not_eq};
 /// let xs = PrimitiveArray::new(buffer![1i32, 2i32, 3i32], Validity::NonNullable);
 /// let result = xs.into_array().apply(&not_eq(root(), lit(3))).unwrap();
-/// let mut ctx = array_session().create_execution_ctx();
+/// let mut ctx = test_session().create_execution_ctx();
 ///
 /// assert_eq!(
 ///     result.execute::<BoolArray>(&mut ctx).unwrap().to_bit_buffer(),
@@ -248,13 +248,13 @@ pub fn bound_not_eq(lhs: BoundExpression, rhs: BoundExpression) -> BoundExpressi
 /// # use vortex_array::arrays::{BoolArray, PrimitiveArray };
 /// # use vortex_array::arrays::bool::BoolArrayExt;
 /// # use vortex_array::IntoArray;
-/// # use vortex_array::{VortexSessionExecute, array_session};
+/// # use vortex_array::{VortexSessionExecute, test_harness::test_session};
 /// # use vortex_array::validity::Validity;
 /// # use vortex_buffer::buffer;
 /// # use vortex_array::expr::{gt_eq, root, lit};
 /// let xs = PrimitiveArray::new(buffer![1i32, 2i32, 3i32], Validity::NonNullable);
 /// let result = xs.into_array().apply(&gt_eq(root(), lit(3))).unwrap();
-/// let mut ctx = array_session().create_execution_ctx();
+/// let mut ctx = test_session().create_execution_ctx();
 ///
 /// assert_eq!(
 ///     result.execute::<BoolArray>(&mut ctx).unwrap().to_bit_buffer(),
@@ -280,13 +280,13 @@ pub fn bound_gt_eq(lhs: BoundExpression, rhs: BoundExpression) -> BoundExpressio
 /// # use vortex_array::arrays::{BoolArray, PrimitiveArray };
 /// # use vortex_array::arrays::bool::BoolArrayExt;
 /// # use vortex_array::IntoArray;
-/// # use vortex_array::{VortexSessionExecute, array_session};
+/// # use vortex_array::{VortexSessionExecute, test_harness::test_session};
 /// # use vortex_array::validity::Validity;
 /// # use vortex_buffer::buffer;
 /// # use vortex_array::expr::{gt, root, lit};
 /// let xs = PrimitiveArray::new(buffer![1i32, 2i32, 3i32], Validity::NonNullable);
 /// let result = xs.into_array().apply(&gt(root(), lit(2))).unwrap();
-/// let mut ctx = array_session().create_execution_ctx();
+/// let mut ctx = test_session().create_execution_ctx();
 ///
 /// assert_eq!(
 ///     result.execute::<BoolArray>(&mut ctx).unwrap().to_bit_buffer(),
@@ -312,13 +312,13 @@ pub fn bound_gt(lhs: BoundExpression, rhs: BoundExpression) -> BoundExpression {
 /// # use vortex_array::arrays::{BoolArray, PrimitiveArray };
 /// # use vortex_array::arrays::bool::BoolArrayExt;
 /// # use vortex_array::IntoArray;
-/// # use vortex_array::{VortexSessionExecute, array_session};
+/// # use vortex_array::{VortexSessionExecute, test_harness::test_session};
 /// # use vortex_array::validity::Validity;
 /// # use vortex_buffer::buffer;
 /// # use vortex_array::expr::{root, lit, lt_eq};
 /// let xs = PrimitiveArray::new(buffer![1i32, 2i32, 3i32], Validity::NonNullable);
 /// let result = xs.into_array().apply(&lt_eq(root(), lit(2))).unwrap();
-/// let mut ctx = array_session().create_execution_ctx();
+/// let mut ctx = test_session().create_execution_ctx();
 ///
 /// assert_eq!(
 ///     result.execute::<BoolArray>(&mut ctx).unwrap().to_bit_buffer(),
@@ -344,13 +344,13 @@ pub fn bound_lt_eq(lhs: BoundExpression, rhs: BoundExpression) -> BoundExpressio
 /// # use vortex_array::arrays::{BoolArray, PrimitiveArray };
 /// # use vortex_array::arrays::bool::BoolArrayExt;
 /// # use vortex_array::IntoArray;
-/// # use vortex_array::{VortexSessionExecute, array_session};
+/// # use vortex_array::{VortexSessionExecute, test_harness::test_session};
 /// # use vortex_array::validity::Validity;
 /// # use vortex_buffer::buffer;
 /// # use vortex_array::expr::{root, lit, lt};
 /// let xs = PrimitiveArray::new(buffer![1i32, 2i32, 3i32], Validity::NonNullable);
 /// let result = xs.into_array().apply(&lt(root(), lit(3))).unwrap();
-/// let mut ctx = array_session().create_execution_ctx();
+/// let mut ctx = test_session().create_execution_ctx();
 ///
 /// assert_eq!(
 ///     result.execute::<BoolArray>(&mut ctx).unwrap().to_bit_buffer(),
@@ -376,11 +376,11 @@ pub fn bound_lt(lhs: BoundExpression, rhs: BoundExpression) -> BoundExpression {
 /// # use vortex_array::arrays::BoolArray;
 /// # use vortex_array::arrays::bool::BoolArrayExt;
 /// # use vortex_array::IntoArray;
-/// # use vortex_array::{VortexSessionExecute, array_session};
+/// # use vortex_array::{VortexSessionExecute, test_harness::test_session};
 /// # use vortex_array::expr::{root, lit, or};
 /// let xs = BoolArray::from_iter(vec![true, false, true]);
 /// let result = xs.into_array().apply(&or(root(), lit(false))).unwrap();
-/// let mut ctx = array_session().create_execution_ctx();
+/// let mut ctx = test_session().create_execution_ctx();
 ///
 /// assert_eq!(
 ///     result.execute::<BoolArray>(&mut ctx).unwrap().to_bit_buffer(),
@@ -427,11 +427,11 @@ where
 /// # use vortex_array::arrays::BoolArray;
 /// # use vortex_array::arrays::bool::BoolArrayExt;
 /// # use vortex_array::IntoArray;
-/// # use vortex_array::{VortexSessionExecute, array_session};
+/// # use vortex_array::{VortexSessionExecute, test_harness::test_session};
 /// # use vortex_array::expr::{and, root, lit};
 /// let xs = BoolArray::from_iter(vec![true, false, true]).into_array();
 /// let result = xs.apply(&and(root(), lit(true))).unwrap();
-/// let mut ctx = array_session().create_execution_ctx();
+/// let mut ctx = test_session().create_execution_ctx();
 ///
 /// assert_eq!(
 ///     result.execute::<BoolArray>(&mut ctx).unwrap().to_bit_buffer(),
@@ -478,13 +478,13 @@ where
 /// # use vortex_array::IntoArray;
 /// # use vortex_array::arrays::PrimitiveArray;
 /// # use vortex_array::builtins::ArrayBuiltins;
-/// # use vortex_array::{VortexSessionExecute, array_session};
+/// # use vortex_array::{VortexSessionExecute, test_harness::test_session};
 /// # use vortex_buffer::buffer;
 /// # use vortex_array::expr::{checked_add, lit, root};
 /// let xs = buffer![1, 2, 3].into_array();
 /// let result = xs.apply(&checked_add(root(), lit(5))).unwrap();
 ///
-/// let mut ctx = array_session().create_execution_ctx();
+/// let mut ctx = test_session().create_execution_ctx();
 /// let result = result.execute::<PrimitiveArray>(&mut ctx).unwrap();
 /// assert_eq!(result.as_slice::<i32>(), [6, 7, 8]);
 /// ```

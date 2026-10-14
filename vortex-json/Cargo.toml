@@ -26,6 +26,7 @@ vortex-error = { workspace = true, default-features = false }
 vortex-session = { workspace = true }
 
 [dev-dependencies]
+vortex-aggregates = { workspace = true }
 vortex-array = { workspace = true, default-features = false, features = [
     "_test-harness",
 ] }

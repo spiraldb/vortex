@@ -4,7 +4,6 @@
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
-use vortex_array::array_session;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::ExtensionArray;
 use vortex_array::arrays::ListArray;
@@ -377,7 +376,7 @@ static WRITER_TEST_DECLARATION: EditionDeclaration = EditionDeclaration {
 };
 
 fn writer_test_session() -> VortexResult<VortexSession> {
-    let session = array_session()
+    let session = vortex_aggregates::session()
         .with::<EditionSession>()
         .with::<LayoutSession>()
         .with::<RuntimeSession>();
@@ -389,7 +388,7 @@ fn writer_test_session() -> VortexResult<VortexSession> {
 
 #[tokio::test]
 async fn disabling_editions_allows_uneditioned_components() -> VortexResult<()> {
-    let enforced_session = array_session()
+    let enforced_session = vortex_aggregates::session()
         .with::<EditionSession>()
         .with::<LayoutSession>()
         .with::<RuntimeSession>();
@@ -416,7 +415,7 @@ async fn disabling_editions_allows_uneditioned_components() -> VortexResult<()> 
         "unexpected error: {error}"
     );
 
-    let uneditioned_session = array_session()
+    let uneditioned_session = vortex_aggregates::session()
         .with::<LayoutSession>()
         .with::<RuntimeSession>();
     vortex_file::register_default_encodings(&uneditioned_session);
@@ -467,7 +466,7 @@ fn session_declaring(members: &[(ComponentKind, Id)]) -> VortexResult<VortexSess
         "vortex.null_count",
     ];
 
-    let session = array_session()
+    let session = vortex_aggregates::session()
         .with::<EditionSession>()
         .with::<LayoutSession>()
         .with::<RuntimeSession>();

@@ -32,6 +32,7 @@ tempfile = { workspace = true }
 # So the registry's key resolution can be tested end to end against a real file open, which is
 # where the key reaches the store.
 tokio = { workspace = true, features = ["rt", "macros"] }
+vortex-aggregates = { workspace = true }
 vortex-array = { workspace = true }
 vortex-error = { workspace = true, features = ["object_store"] }
 vortex-file = { workspace = true, features = ["object_store", "tokio"] }

@@ -23,7 +23,7 @@ fn main() {
     divan::main();
 }
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::test_harness::test_session);
 
 // Chunk counts sized to keep CodSpeed simulation under 1ms per benchmark.
 const BENCH_ARGS: &[(usize, usize, usize)] = &[

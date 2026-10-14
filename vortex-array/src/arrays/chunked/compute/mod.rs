@@ -20,7 +20,6 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::ChunkedArray;
     use crate::arrays::DecimalArray;
     use crate::arrays::PrimitiveArray;
@@ -30,6 +29,7 @@ mod tests {
     use crate::dtype::DecimalDType;
     use crate::dtype::Nullability;
     use crate::dtype::PType;
+    use crate::test_harness::test_session;
 
     #[rstest]
     // Basic chunked arrays
@@ -86,7 +86,7 @@ mod tests {
     fn test_chunked_consistency(#[case] array: ChunkedArray) {
         test_array_consistency(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 
@@ -171,7 +171,7 @@ mod tests {
     fn test_chunked_binary_numeric(#[case] array: ChunkedArray) {
         test_binary_numeric_array(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         )
     }
 }

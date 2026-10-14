@@ -8,7 +8,6 @@ mod tests {
     use rstest::rstest;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::compute::conformance::consistency::test_array_consistency;
 
@@ -21,7 +20,7 @@ mod tests {
             values.as_view(),
             0,
             128,
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )
         .unwrap()
     }
@@ -32,7 +31,7 @@ mod tests {
             values.as_view(),
             0,
             128,
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )
         .unwrap()
     }
@@ -43,7 +42,7 @@ mod tests {
             values.as_view(),
             0,
             128,
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )
         .unwrap()
     }
@@ -54,7 +53,7 @@ mod tests {
             values.as_view(),
             0,
             128,
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )
         .unwrap()
     }
@@ -65,7 +64,7 @@ mod tests {
             values.as_view(),
             0,
             128,
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )
         .unwrap()
     }
@@ -76,7 +75,7 @@ mod tests {
             values.as_view(),
             0,
             128,
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )
         .unwrap()
     }
@@ -87,7 +86,7 @@ mod tests {
             values.as_view(),
             0,
             128,
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )
         .unwrap()
     }
@@ -98,7 +97,7 @@ mod tests {
             values.as_view(),
             3,
             128,
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         )
         .unwrap()
     }
@@ -115,7 +114,7 @@ mod tests {
     fn test_pco_consistency(#[case] array: PcoArray) {
         test_array_consistency(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         );
     }
 }

@@ -122,13 +122,13 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::ChunkedArray;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::chunked::paired_chunks::PairedChunksExt;
     use crate::dtype::DType;
     use crate::dtype::Nullability;
     use crate::dtype::PType;
+    use crate::test_harness::test_session;
 
     fn i32_dtype() -> DType {
         DType::Primitive(PType::I32, Nullability::NonNullable)
@@ -139,7 +139,7 @@ mod tests {
         left: &ChunkedArray,
         right: &ChunkedArray,
     ) -> VortexResult<Vec<(Vec<i32>, Vec<i32>, std::ops::Range<usize>)>> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mut result = Vec::new();
         for pair in left.paired_chunks(right) {
             let pair = pair?;

@@ -6,7 +6,6 @@ use vortex_buffer::buffer;
 use super::DictArray;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
-use crate::array_session;
 use crate::arrays::BoolArray;
 use crate::arrays::FixedSizeListArray;
 use crate::arrays::ListArray;
@@ -14,11 +13,12 @@ use crate::arrays::PrimitiveArray;
 use crate::arrays::VarBinArray;
 use crate::assert_arrays_eq;
 use crate::builders::builder_with_capacity_in;
+use crate::test_harness::test_session;
 use crate::validity::Validity;
 
 #[test]
 fn test_scalar_at_null_code() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let dict = DictArray::try_new(
         PrimitiveArray::from_option_iter(vec![None, Some(0u32), None]).into_array(),
         buffer![1i32].into_array(),
@@ -31,7 +31,7 @@ fn test_scalar_at_null_code() {
 
 #[test]
 fn test_canonicalize_dict_with_all_null_array_validity_codes() -> vortex_error::VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let codes = PrimitiveArray::new(
         buffer![0u32, 1],
         Validity::Array(BoolArray::from_iter([false, false]).into_array()),

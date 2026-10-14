@@ -47,7 +47,7 @@ mod tests {
     use super::*;
 
     fn json_session() -> vortex_session::VortexSession {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         crate::initialize(&session);
         session
     }

@@ -504,7 +504,7 @@ mod tests {
     use crate::expr::case_when_no_else;
     use crate::expr::nested_case_when;
 
-    static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::array_session);
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_aggregates::session);
 
     #[test]
     fn compact_and_run_merges_agree_for_nested_and_nullable_values() -> VortexResult<()> {

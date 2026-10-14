@@ -11,7 +11,6 @@ use super::*;
 use crate::Canonical;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
-use crate::array_session;
 use crate::arrays::BoolArray;
 use crate::arrays::ListViewArray;
 use crate::arrays::PrimitiveArray;
@@ -19,11 +18,12 @@ use crate::assert_arrays_eq;
 use crate::dtype::DType;
 use crate::dtype::Nullability;
 use crate::scalar::Scalar;
+use crate::test_harness::test_session;
 use crate::validity::Validity;
 
 #[test]
 fn test_repeated_probe_preserves_masked_nulls() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let array = MaskedArray::try_new(
         PrimitiveArray::from_iter([1i32, 2, 3]).into_array(),
         Validity::from_iter([true, false, true]),
@@ -76,7 +76,7 @@ fn test_empty_child_with_array_validity() -> VortexResult<()> {
     let validity =
         Validity::Array(BoolArray::new(BitBuffer::new_set(0), Validity::NonNullable).into_array());
 
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     assert!(child.all_valid(&mut ctx)?);
     assert!(child.all_invalid(&mut ctx)?);
 
@@ -95,7 +95,7 @@ fn test_canonical_dtype_matches_array_dtype() -> VortexResult<()> {
     let canonical = array
         .clone()
         .into_array()
-        .execute::<Canonical>(&mut array_session().create_execution_ctx())?;
+        .execute::<Canonical>(&mut test_session().create_execution_ctx())?;
     assert_eq!(canonical.dtype(), array.dtype());
     Ok(())
 }
@@ -108,7 +108,7 @@ fn test_masked_child_with_validity() {
         MaskedArray::try_new(child, Validity::from_iter([true, false, true, false, true])).unwrap();
 
     // Positions where validity is false should be null in masked_child.
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let prim = array
         .as_array()
         .clone()
@@ -116,32 +116,32 @@ fn test_masked_child_with_validity() {
         .unwrap();
     assert_eq!(prim.valid_count(&mut ctx).unwrap(), 3);
     assert!(
-        prim.is_valid(0, &mut array_session().create_execution_ctx())
+        prim.is_valid(0, &mut test_session().create_execution_ctx())
             .unwrap()
     );
     assert!(
         !prim
-            .is_valid(1, &mut array_session().create_execution_ctx())
+            .is_valid(1, &mut test_session().create_execution_ctx())
             .unwrap()
     );
     assert!(
-        prim.is_valid(2, &mut array_session().create_execution_ctx())
+        prim.is_valid(2, &mut test_session().create_execution_ctx())
             .unwrap()
     );
     assert!(
         !prim
-            .is_valid(3, &mut array_session().create_execution_ctx())
+            .is_valid(3, &mut test_session().create_execution_ctx())
             .unwrap()
     );
     assert!(
-        prim.is_valid(4, &mut array_session().create_execution_ctx())
+        prim.is_valid(4, &mut test_session().create_execution_ctx())
             .unwrap()
     );
 }
 
 #[test]
 fn test_masked_child_all_valid() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     // When validity is AllValid, masked_child should invert to AllInvalid.
     let child = PrimitiveArray::from_iter([10i32, 20, 30]).into_array();
     let array = MaskedArray::try_new(child, Validity::AllValid).unwrap();
@@ -149,7 +149,7 @@ fn test_masked_child_all_valid() {
     assert_eq!(array.len(), 3);
     assert_eq!(
         array
-            .valid_count(&mut array_session().create_execution_ctx())
+            .valid_count(&mut test_session().create_execution_ctx())
             .unwrap(),
         3
     );
@@ -177,7 +177,7 @@ fn test_masked_child_preserves_length(#[case] validity: Validity) {
 
     assert_eq!(array.len(), len);
 
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     assert!(
         array
             .validity()
@@ -202,7 +202,7 @@ fn masked_listview_execute_preserves_zctl_true() -> VortexResult<()> {
     let masked = MaskedArray::try_new(list_view.into_array(), Validity::from_iter([true, false]))?;
     let canonical = masked
         .into_array()
-        .execute::<Canonical>(&mut array_session().create_execution_ctx())?;
+        .execute::<Canonical>(&mut test_session().create_execution_ctx())?;
     assert!(canonical.into_listview().is_zero_copy_to_list());
     Ok(())
 }

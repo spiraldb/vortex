@@ -15,7 +15,6 @@ mod tests {
     use rstest::rstest;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::compute::conformance::consistency::test_array_consistency;
     use vortex_array::dtype::Nullability;
     use vortex_array::dtype::PType;
@@ -112,7 +111,7 @@ mod tests {
     fn test_sequence_consistency(#[case] array: SequenceArray) {
         test_array_consistency(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         );
     }
 }

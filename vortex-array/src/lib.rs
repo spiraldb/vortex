@@ -158,15 +158,11 @@ pub fn initialize(session: &VortexSession) {
 }
 
 /// Builds a fresh [`VortexSession`] registered with all of vortex-array's built-in session
-/// variables: arrays, dtypes, scalar functions, optimizer kernels, aggregate functions,
-/// and memory.
+/// variables: arrays, dtypes, scalar functions, optimizer kernels, aggregate functions, and memory.
 ///
-/// Each call returns an independent session (with its own registries), so callers may register
-/// additional encodings or kernels into it without affecting any other session. This does not
-/// register file, layout, or runtime state — those live in higher-level crates. Arrow
-/// interoperability lives in the `vortex-arrow` crate, whose session variables are registered
-/// lazily on first use (or eagerly by consumers).
-pub fn array_session() -> VortexSession {
+/// No concrete aggregate functions are registered, so statistics cannot be computed through it.
+/// Sessions that need them register the `vortex-aggregates` crate.
+pub(crate) fn core_session() -> VortexSession {
     VortexSession::empty()
         .with::<ArraySession>()
         .with::<KernelSession>()
@@ -183,7 +179,7 @@ pub fn array_session() -> VortexSession {
 /// cannot yet thread an explicit session through.
 #[inline]
 pub fn legacy_session() -> &'static VortexSession {
-    static LEGACY_SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+    static LEGACY_SESSION: LazyLock<VortexSession> = LazyLock::new(core_session);
     &LEGACY_SESSION
 }
 

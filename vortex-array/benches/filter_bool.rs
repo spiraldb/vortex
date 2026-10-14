@@ -19,8 +19,8 @@ use rand::prelude::*;
 use rand_distr::Zipf;
 use vortex_array::RecursiveCanonical;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::BoolArray;
+use vortex_array::test_harness::test_session;
 use vortex_buffer::BitBuffer;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
@@ -33,7 +33,7 @@ fn main() {
     divan::main();
 }
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(test_session);
 
 const SIZES: &[usize] = &[1_000, 10_000, 100_000, 250_000];
 const DENSITY_SWEEP_SIZE: usize = 100_000;

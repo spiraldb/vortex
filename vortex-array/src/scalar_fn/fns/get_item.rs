@@ -333,7 +333,7 @@ mod tests {
             (0..128).map(|idx| Scalar::primitive(idx, NonNullable)),
         );
         let array = ConstantArray::new(scalar, 1_000_000).into_array();
-        let mut ctx = crate::array_session().create_execution_ctx();
+        let mut ctx = crate::test_harness::test_session().create_execution_ctx();
 
         let item: ArrayRef = GetItem::try_new(array, "f97")?
             .into_array()

@@ -175,7 +175,6 @@ mod tests {
 
     use crate::sum::Sum;
     use crate::sum::sum;
-    use crate::test_session;
 
     /// Run a grouped sum through the accumulator.
     fn grouped_sum_actual(groups: &ArrayRef, elem_dtype: &DType) -> VortexResult<ArrayRef> {
@@ -184,7 +183,7 @@ mod tests {
             NumericalAggregateOpts::default(),
             elem_dtype.clone(),
         )?;
-        acc.accumulate_list(groups, &mut test_session().create_execution_ctx())?;
+        acc.accumulate_list(groups, &mut crate::session().create_execution_ctx())?;
         acc.finish()
     }
 
@@ -198,7 +197,7 @@ mod tests {
     ) -> VortexResult<ArrayRef> {
         use vortex_array::aggregate_fn::AggregateFnVTable;
 
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         let sum_dtype = Sum
             .partial_dtype(&NumericalAggregateOpts::default(), elem_dtype)
             .expect("sum partial dtype");
@@ -240,7 +239,7 @@ mod tests {
 
     #[test]
     fn listview_matches_reference_unsigned() -> VortexResult<()> {
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         let elements =
             PrimitiveArray::new(buffer![1u32, 2, 3, 4, 5, 6], Validity::NonNullable).into_array();
         let elem_dtype = DType::Primitive(PType::U32, NonNullable);
@@ -260,7 +259,7 @@ mod tests {
 
     #[test]
     fn listview_out_of_order_offsets_with_null_group() -> VortexResult<()> {
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         // Offsets are not in group order and a group is null: the group validity must be indexed by
         // group index, not by element offset.
         let elements =
@@ -282,7 +281,7 @@ mod tests {
 
     #[test]
     fn listview_interior_and_full_nulls() -> VortexResult<()> {
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         // Group 1 has an interior null, group 2 is entirely null, group 3 is empty.
         let elements =
             PrimitiveArray::from_option_iter([Some(1i32), None, Some(3), None, None, Some(9)])
@@ -304,7 +303,7 @@ mod tests {
 
     #[test]
     fn listview_overflow_group_is_null() -> VortexResult<()> {
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         let elements =
             PrimitiveArray::new(buffer![i64::MAX, 1, 2, 3], Validity::NonNullable).into_array();
         let elem_dtype = DType::Primitive(PType::I64, NonNullable);
@@ -338,7 +337,7 @@ mod tests {
 
         // Group 0: NaN skipped -> 3.0. Group 1: INF + -INF = NaN. (Avoid array equality here since
         // NaN != NaN; compare element scalars against the reference path instead.)
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         let expected = grouped_sum_reference(&elements, &ranges, &valid, &elem_dtype)?;
         let g0 = actual.execute_scalar(0, &mut ctx)?;
         assert_eq!(g0.as_primitive().typed_value::<f64>(), Some(3.0));
@@ -374,10 +373,10 @@ mod tests {
 
         let mut acc =
             GroupedAccumulator::try_new(Sum, NumericalAggregateOpts::include_nans(), elem_dtype)?;
-        acc.accumulate_list(&groups, &mut test_session().create_execution_ctx())?;
+        acc.accumulate_list(&groups, &mut crate::session().create_execution_ctx())?;
         let actual = acc.finish()?;
 
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         // Group 0 contains a NaN -> NaN sum; group 1 sums normally.
         let g0 = actual.execute_scalar(0, &mut ctx)?;
         assert!(g0.as_primitive().typed_value::<f64>().unwrap().is_nan());
@@ -388,7 +387,7 @@ mod tests {
 
     #[test]
     fn fixed_size_overflow_and_nan() -> VortexResult<()> {
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         // FixedSize path: first group overflows -> null sum, second sums normally.
         let elements =
             PrimitiveArray::new(buffer![i64::MAX, 1, 2, 3], Validity::NonNullable).into_array();

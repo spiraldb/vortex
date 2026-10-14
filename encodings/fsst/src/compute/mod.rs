@@ -162,7 +162,6 @@ mod tests {
     use vortex_array::ExecutionCtx;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::DictArray;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::arrays::VarBinArray;
@@ -186,7 +185,7 @@ mod tests {
 
     #[test]
     fn test_take_null() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let arr =
             VarBinArray::from_iter([Some("h")], DType::Utf8(Nullability::NonNullable)).into_array();
         let compr = fsst_train_compressor(&arr, &mut ctx)?;
@@ -222,7 +221,7 @@ mod tests {
         DType::Utf8(Nullability::NonNullable),
     ))]
     fn test_take_fsst_conformance(#[case] varbin: VarBinArray) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let varbin = varbin.into_array();
         let compressor = fsst_train_compressor(&varbin, &mut ctx)?;
         let array = fsst_compress(&varbin, &compressor, &mut ctx)?;
@@ -241,7 +240,7 @@ mod tests {
         #[case] nullable: bool,
         #[case] gathers: bool,
     ) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let input = VarBinArray::from_iter(
             (0..16).map(|row| {
                 (!(nullable && row == 0)).then(|| format!("{}{row}", "caption ".repeat(repeats)))
@@ -270,7 +269,7 @@ mod tests {
 
     #[test]
     fn test_take_small_slice_uses_logical_byte_span() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let input = VarBinArray::from_iter(
             (0..16).map(|row| Some("caption ".repeat(if row < 4 { 4096 } else { 2 }))),
             DType::Utf8(Nullability::NonNullable),
@@ -308,7 +307,7 @@ mod tests {
         #[case] indices: ArrayRef,
         #[case] gathers: bool,
     ) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let input = VarBinArray::from_iter(
             (0..256).map(|row| Some("caption ".repeat(if row < long_rows { 8192 } else { 1 }))),
             DType::Utf8(Nullability::NonNullable),
@@ -418,11 +417,11 @@ mod tests {
     })]
 
     fn test_fsst_consistency(#[case] build: FsstBuilder) {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let array = build(&mut ctx);
         test_array_consistency(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut vortex_aggregates::session().create_execution_ctx(),
         );
     }
 }

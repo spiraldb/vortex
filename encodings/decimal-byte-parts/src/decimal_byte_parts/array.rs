@@ -416,7 +416,6 @@ mod tests {
     use vortex_array::ArrayRef;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::BoolArray;
     use vortex_array::arrays::DecimalArray;
     use vortex_array::arrays::PrimitiveArray;
@@ -461,7 +460,7 @@ mod tests {
         assert_eq!(
             Scalar::null(dtype.clone()),
             array
-                .execute_scalar(0, &mut array_session().create_execution_ctx())
+                .execute_scalar(0, &mut vortex_aggregates::session().create_execution_ctx())
                 .unwrap()
         );
         assert_eq!(
@@ -471,13 +470,13 @@ mod tests {
             )
             .unwrap(),
             array
-                .execute_scalar(1, &mut array_session().create_execution_ctx())
+                .execute_scalar(1, &mut vortex_aggregates::session().create_execution_ctx())
                 .unwrap()
         );
         assert_eq!(
             Scalar::try_new(dtype, Some(ScalarValue::Decimal(DecimalValue::I64(400)))).unwrap(),
             array
-                .execute_scalar(2, &mut array_session().create_execution_ctx())
+                .execute_scalar(2, &mut vortex_aggregates::session().create_execution_ctx())
                 .unwrap()
         );
     }
@@ -489,7 +488,7 @@ mod tests {
         assert_eq!(array.msp().dtype().as_ptype(), PType::I64);
         assert_eq!(array.lower_parts()[0].dtype(), &LOWER_PART_DTYPE);
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let msp = array.msp().clone().execute::<PrimitiveArray>(&mut ctx)?;
         let lower = array.lower_parts()[0]
             .clone()
@@ -507,7 +506,7 @@ mod tests {
         );
         assert_eq!(array.lower_parts().len(), MAX_LOWER_PARTS);
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let msp = array.msp().clone().execute::<PrimitiveArray>(&mut ctx)?;
         assert_eq!(msp.as_slice::<i64>(), &[5]);
         for (part, expected) in array.lower_parts().iter().zip([6u64, 7, 8]) {
@@ -535,7 +534,7 @@ mod tests {
             .collect();
         let dtype = DecimalDType::new(if lower_count <= 1 { 38 } else { 76 }, 0);
         let array = DecimalByteParts::try_new_with_lower_parts(msp.into_array(), lower, dtype)?;
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let canonical = array
             .clone()
             .into_array()
@@ -556,7 +555,7 @@ mod tests {
             Validity::Array(BoolArray::from_iter([false, true, true]).into_array()),
         )
         .into_array();
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         assert_eq!(
             array.execute_scalar(0, &mut ctx)?,
             Scalar::null(array.dtype().clone())
@@ -582,7 +581,7 @@ mod tests {
         #[values(PType::I8, PType::I16, PType::I32, PType::I64)] msp_ptype: PType,
         #[values(1, 2, 3)] lower_count: usize,
     ) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let validity = Validity::from_iter([false, true, true]);
         let msp = PrimitiveArray::new(buffer![0i64, 1, -1], validity.clone())
             .into_array()
@@ -696,7 +695,7 @@ mod tests {
 
     #[test]
     fn test_wide_decimal_buffer_types() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
 
         let i128_array = i128_parts(vec![1i128 << 100], Validity::NonNullable);
         let canonical = i128_array.into_array().execute::<DecimalArray>(&mut ctx)?;
@@ -748,7 +747,7 @@ mod tests {
         )?
         .into_array();
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         assert_eq!(
             array.execute_scalar(0, &mut ctx)?,
             Scalar::null(array.dtype().clone())

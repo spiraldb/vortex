@@ -180,7 +180,7 @@ mod tests {
     /// Export a JSON extension array to Arrow's canonical JSON extension.
     #[test]
     fn exports_json_extension_array_as_arrow_json() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         initialize(&session);
 
         let storage = VarBinArray::from_iter(
@@ -218,7 +218,7 @@ mod tests {
     /// Import Arrow's canonical JSON extension as a Vortex JSON extension array.
     #[test]
     fn imports_arrow_json_extension_array_as_vortex_json() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         initialize(&session);
 
         let mut field = Field::new("data", DataType::Utf8, false);
@@ -246,7 +246,7 @@ mod tests {
     /// The plugin must forward export options to its storage export.
     #[test]
     fn export_options_reach_json_storage() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         initialize(&session);
         let mut ctx = session.create_execution_ctx();
 

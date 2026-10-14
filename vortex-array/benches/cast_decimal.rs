@@ -43,7 +43,7 @@ fn main() {
 // and to keep the CodSpeed simulation under 1ms per benchmark.
 const SIZES: &[usize] = &[16_384];
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::test_harness::test_session);
 
 /// Builds an `i64`-backed `Decimal(precision, scale)` array of `n` values that all fit in
 /// precision 10, optionally with ~50% nulls.

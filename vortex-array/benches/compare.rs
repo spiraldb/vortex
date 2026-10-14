@@ -57,7 +57,7 @@ fn main() {
 const ARRAY_SIZE: usize = 8_192;
 
 fn bench_compare(bencher: Bencher, lhs: ArrayRef, rhs: ArrayRef, op: Operator) {
-    let session = vortex_array::array_session();
+    let session = vortex_array::test_harness::test_session();
     let len = lhs.len();
 
     bencher

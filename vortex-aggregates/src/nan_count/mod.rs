@@ -240,11 +240,10 @@ mod tests {
 
     use crate::nan_count::NanCount;
     use crate::nan_count::nan_count;
-    use crate::test_session;
 
     #[test]
     fn nan_count_multi_batch() -> VortexResult<()> {
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         let dtype = DType::Primitive(PType::F64, Nullability::NonNullable);
         let mut acc = Accumulator::try_new(NanCount, EmptyOptions, dtype)?;
 
@@ -264,7 +263,7 @@ mod tests {
 
     #[test]
     fn nan_count_finish_resets_state() -> VortexResult<()> {
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         let dtype = DType::Primitive(PType::F64, Nullability::NonNullable);
         let mut acc = Accumulator::try_new(NanCount, EmptyOptions, dtype)?;
 
@@ -297,7 +296,7 @@ mod tests {
     #[test]
     fn nan_count_constant_nan() -> VortexResult<()> {
         let array = ConstantArray::new(f64::NAN, 10);
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         assert_eq!(nan_count(&array.into_array(), &mut ctx)?, 10);
         Ok(())
     }
@@ -305,7 +304,7 @@ mod tests {
     #[test]
     fn nan_count_constant_non_nan() -> VortexResult<()> {
         let array = ConstantArray::new(1.0f64, 10);
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         assert_eq!(nan_count(&array.into_array(), &mut ctx)?, 0);
         Ok(())
     }
@@ -325,7 +324,7 @@ mod tests {
         let chunk2 = PrimitiveArray::from_option_iter([Some(f64::NAN), Some(f64::NAN), None]);
         let dtype = chunk1.dtype().clone();
         let chunked = ChunkedArray::try_new(vec![chunk1.into_array(), chunk2.into_array()], dtype)?;
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         assert_eq!(nan_count(&chunked.into_array(), &mut ctx)?, 3);
         Ok(())
     }
@@ -333,7 +332,7 @@ mod tests {
     #[test]
     fn nan_count_all_null() -> VortexResult<()> {
         let p = PrimitiveArray::from_option_iter::<f64, _>([None, None, None]);
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         assert_eq!(nan_count(&p.into_array(), &mut ctx)?, 0);
         Ok(())
     }

@@ -353,7 +353,6 @@ mod tests {
     use crate::ArrayRef;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::ConstantArray;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::Struct;
@@ -373,6 +372,7 @@ mod tests {
     use crate::expr::root;
     use crate::expr::zip_expr;
     use crate::scalar::Scalar;
+    use crate::test_harness::test_session;
 
     #[test]
     fn dtype() {
@@ -393,7 +393,7 @@ mod tests {
 
     #[test]
     fn test_zip_basic() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mask = Mask::from_iter([true, false, false, true, false]);
         let if_true = buffer![10, 20, 30, 40, 50].into_array();
         let if_false = buffer![1, 2, 3, 4, 5].into_array();
@@ -406,7 +406,7 @@ mod tests {
 
     #[test]
     fn test_zip_all_true() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mask = Mask::new_true(4);
         let if_true = buffer![10, 20, 30, 40].into_array();
         let if_false =
@@ -422,7 +422,7 @@ mod tests {
 
     #[test]
     fn test_zip_all_false_widens_nullability() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let mask = Mask::new_false(4);
         let if_true =
             PrimitiveArray::from_option_iter([Some(10), Some(20), Some(30), None]).into_array();
@@ -443,7 +443,7 @@ mod tests {
         let if_false =
             PrimitiveArray::from_option_iter([Some(1), Some(2), Some(3), None]).into_array();
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let result = zip_impl(&if_true, &if_false, &mask, &mut ctx)?;
         assert_arrays_eq!(
             result,
@@ -462,7 +462,7 @@ mod tests {
             PrimitiveArray::from_option_iter([Some(10), Some(20), Some(30), None]).into_array();
         let if_false = buffer![1i32, 2, 3, 4].into_array();
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let result = zip_impl(&if_true, &if_false, &mask, &mut ctx)?;
         assert_arrays_eq!(
             result,
@@ -503,7 +503,7 @@ mod tests {
         let mask = Mask::from_indices(len, indices);
         let mask_array = mask.into_array();
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let result = mask_array
             .zip(const1.clone(), const2.clone())?
             .execute::<Columnar>(&mut ctx)?
@@ -565,7 +565,7 @@ mod tests {
         let mask = Mask::from_indices(200, (0..100).filter(|i| i % 3 != 0));
         let mask_array = mask.clone().into_array();
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let zipped = mask_array
             .zip(if_true, if_false)
             .unwrap()

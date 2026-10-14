@@ -287,7 +287,6 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::array_session;
     use crate::dtype::DType;
     use crate::dtype::DecimalDType;
     use crate::dtype::Field;
@@ -301,6 +300,7 @@ mod tests {
     use crate::dtype::test::SESSION;
     use crate::extension::datetime::TimeUnit;
     use crate::extension::datetime::Timestamp;
+    use crate::test_harness::test_session;
 
     fn round_trip_dtype(dtype: &DType) -> DType {
         let pb_dtype = pb::DType::try_from(dtype).unwrap();
@@ -693,7 +693,7 @@ mod tests {
 
     #[test]
     fn test_unknown_extension_allow_unknown() {
-        let session = array_session();
+        let session = test_session();
         session.allow_unknown();
         let proto = pb::DType {
             dtype_type: Some(DtypeType::Extension(Box::new(pb::Extension {

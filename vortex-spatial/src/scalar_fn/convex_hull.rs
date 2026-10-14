@@ -145,7 +145,7 @@ mod tests {
             (2.0, 0.0),
         ]]])?;
         let result = SpatialConvexHull::try_new(input)?.into_array();
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
 
         assert_arrays_eq!(result, expected, &mut ctx);
         Ok(())
@@ -168,7 +168,7 @@ mod tests {
         let input = multipoint_column(vec![points])?;
         let expected = polygon_column(vec![expected_rings])?;
         let result = SpatialConvexHull::try_new(input)?.into_array();
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
 
         assert_arrays_eq!(result, expected, &mut ctx);
         Ok(())
@@ -193,7 +193,7 @@ mod tests {
         )?
         .into_array();
         let result = SpatialConvexHull::try_new(input)?.into_array();
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
 
         assert_arrays_eq!(result, expected, &mut ctx);
         Ok(())
@@ -201,7 +201,7 @@ mod tests {
 
     #[test]
     fn constant_remains_constant() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
         let scalar = multipoint_column(vec![vec![(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]])?
             .execute_scalar(0, &mut ctx)?;
         let input = ConstantArray::new(scalar, 3).into_array();
@@ -236,7 +236,7 @@ mod tests {
         let hulls = SpatialConvexHull::try_new(collected)?.into_array();
         let areas = SpatialArea::try_new(hulls)?.into_array();
         let expected = PrimitiveArray::from_iter([4.0_f64, 0.0]).into_array();
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
 
         assert_arrays_eq!(areas, expected, &mut ctx);
         Ok(())

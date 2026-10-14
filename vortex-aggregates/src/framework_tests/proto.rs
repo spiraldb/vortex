@@ -23,7 +23,6 @@ use vortex_error::vortex_panic;
 use vortex_session::VortexSession;
 
 use crate::sum::Sum;
-use crate::test_session;
 
 /// A minimal serializable aggregate function used solely to exercise the serde round-trip.
 #[derive(Clone, Debug)]
@@ -127,7 +126,7 @@ impl AggregateFnVTable for TestAgg {
 
 #[test]
 fn aggregate_fn_serde() {
-    let session = test_session();
+    let session = crate::session();
     session.aggregate_fns().register(TestAgg);
 
     let agg_fn = TestAgg.bind(EmptyOptions);
@@ -148,7 +147,7 @@ fn aggregate_fn_serde() {
 fn numeric_aggregate_options_round_trip(
     #[case] options: NumericalAggregateOpts,
 ) -> VortexResult<()> {
-    let session = test_session();
+    let session = crate::session();
     let agg_fn = Sum.bind(options);
 
     let proto = agg_fn.serialize_proto()?;

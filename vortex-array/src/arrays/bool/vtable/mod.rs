@@ -232,15 +232,15 @@ mod tests {
     use crate::ArrayContext;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::assert_arrays_eq;
     use crate::serde::SerializeOptions;
     use crate::serde::SerializedArray;
+    use crate::test_harness::test_session;
 
     #[test]
     fn test_nullable_bool_serde_roundtrip() {
-        let session = array_session();
+        let session = test_session();
         let mut ctx = session.create_execution_ctx();
         let array = BoolArray::from_iter([Some(true), None, Some(false), None]);
         let dtype = array.dtype().clone();

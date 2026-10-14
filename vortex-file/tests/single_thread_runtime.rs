@@ -49,7 +49,7 @@ fn test_array() -> ArrayRef {
 fn roundtrip_on_single_thread_runtime() -> VortexResult<()> {
     let runtime = SingleThreadRuntime::default();
 
-    let session = vortex_array::array_session()
+    let session = vortex_aggregates::session()
         .with::<LayoutSession>()
         .with::<RuntimeSession>()
         .with_handle(runtime.handle());

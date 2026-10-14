@@ -147,7 +147,6 @@ mod tests {
     use super::ScalarFilterPushdownRule;
     use crate::VortexSessionExecute;
     use crate::array::IntoArray;
-    use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::arrays::ChunkedArray;
     use crate::arrays::Constant;
@@ -173,6 +172,7 @@ mod tests {
     use crate::scalar_fn::fns::binary::Binary;
     use crate::scalar_fn::fns::literal::Literal;
     use crate::scalar_fn::fns::operators::Operator;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[rstest]
@@ -219,11 +219,7 @@ mod tests {
             }
         }
         let expected = PrimitiveArray::from_iter(expected);
-        assert_arrays_eq!(
-            result,
-            expected,
-            &mut array_session().create_execution_ctx()
-        );
+        assert_arrays_eq!(result, expected, &mut test_session().create_execution_ctx());
         Ok(())
     }
 
@@ -248,7 +244,7 @@ mod tests {
         assert_arrays_eq!(
             result,
             ConstantArray::new(7i32, 2),
-            &mut array_session().create_execution_ctx()
+            &mut test_session().create_execution_ctx()
         );
         Ok(())
     }
@@ -277,7 +273,7 @@ mod tests {
 
     #[test]
     fn test_reduce_isnull() -> VortexResult<()> {
-        let session = array_session();
+        let session = test_session();
         let ctx = &mut session.create_execution_ctx();
         let validity = BoolArray::from_iter([true, false, true]).into_array();
 

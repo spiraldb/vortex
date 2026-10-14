@@ -187,13 +187,12 @@ mod tests {
 
     use crate::null_count::NullCount;
     use crate::null_count::null_count;
-    use crate::test_session;
 
     #[test]
     fn null_count_with_nulls() -> VortexResult<()> {
         let array =
             PrimitiveArray::from_option_iter([Some(1i32), None, Some(3), None]).into_array();
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
 
         assert_eq!(null_count(&array, &mut ctx)?, 2);
         assert_eq!(
@@ -205,7 +204,7 @@ mod tests {
 
     #[test]
     fn null_count_multi_batch() -> VortexResult<()> {
-        let mut ctx = test_session().create_execution_ctx();
+        let mut ctx = crate::session().create_execution_ctx();
         let dtype = DType::Primitive(PType::I32, Nullability::Nullable);
         let mut acc = Accumulator::try_new(NullCount, EmptyOptions, dtype)?;
 

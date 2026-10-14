@@ -36,7 +36,6 @@ mod test {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::ChunkedArray;
     use crate::arrays::PrimitiveArray;
     use crate::assert_arrays_eq;
@@ -45,10 +44,11 @@ mod test {
     use crate::dtype::DType;
     use crate::dtype::Nullability;
     use crate::dtype::PType;
+    use crate::test_harness::test_session;
 
     #[test]
     fn test_cast_chunked() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr0 = buffer![0u32, 1].into_array();
         let arr1 = buffer![2u32, 3].into_array();
 
@@ -97,6 +97,6 @@ mod test {
         DType::Primitive(PType::U8, Nullability::NonNullable)
     ).unwrap().into_array())]
     fn test_cast_chunked_conformance(#[case] array: crate::ArrayRef) {
-        test_cast_conformance(&array, &mut array_session().create_execution_ctx());
+        test_cast_conformance(&array, &mut test_session().create_execution_ctx());
     }
 }

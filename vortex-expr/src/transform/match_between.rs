@@ -218,7 +218,6 @@ mod tests {
     use rstest::rstest;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::BoolArray;
     use vortex_array::arrays::StructArray;
     use vortex_array::dtype::DType;
@@ -375,7 +374,7 @@ mod tests {
     /// keeps a row false when the surviving comparison is false, so the rewrite cannot null it.
     #[test]
     fn null_literal_bound_is_value_preserving() -> VortexResult<()> {
-        let session = array_session();
+        let session = vortex_aggregates::session();
         let ctx = &mut session.create_execution_ctx();
         let data = StructArray::from_fields(&[("x", buffer![10, 1].into_array())])?.into_array();
 

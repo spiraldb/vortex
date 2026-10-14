@@ -245,7 +245,7 @@ mod tests {
     #[case::u64_ends_i32_values(|ctx: &mut ExecutionCtx| make_runend_array(vec![2u64, 5, 10], vec![1i32, 2, 3], ctx))]
     #[crate::test]
     async fn test_cuda_runend_types(#[case] build: RunEndBuilder) -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -265,7 +265,7 @@ mod tests {
 
     #[crate::test]
     async fn test_cuda_runend_large_array() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -294,7 +294,7 @@ mod tests {
 
     #[crate::test]
     async fn test_cuda_runend_single_run() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -315,7 +315,7 @@ mod tests {
 
     #[crate::test]
     async fn test_cuda_runend_many_small_runs() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -341,7 +341,7 @@ mod tests {
 
     #[crate::test]
     async fn test_cuda_runend_nullable_values() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -375,7 +375,7 @@ mod tests {
     /// straddle output byte boundaries.
     #[crate::test]
     async fn test_cuda_runend_nullable_values_across_byte_boundaries() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = vortex::aggregates::session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 

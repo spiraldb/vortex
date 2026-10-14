@@ -15,7 +15,6 @@ use vortex_session::registry::ReadContext;
 use crate::ArrayContext;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
-use crate::array_session;
 use crate::arrays::VarBinView;
 use crate::arrays::VarBinViewArray;
 use crate::arrays::varbinview::BinaryView;
@@ -25,11 +24,12 @@ use crate::dtype::DType;
 use crate::dtype::Nullability;
 use crate::serde::SerializeOptions;
 use crate::serde::SerializedArray;
+use crate::test_harness::test_session;
 use crate::validity::Validity;
 
 #[test]
 pub fn varbin_view() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let binary_arr =
         VarBinViewArray::from_iter_str(["hello world", "hello world this is a long string"]);
     assert_arrays_eq!(
@@ -41,7 +41,7 @@ pub fn varbin_view() {
 
 #[test]
 pub fn slice_array() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let binary_arr =
         VarBinViewArray::from_iter_str(["hello world", "hello world this is a long string"])
             .slice(1..2)
@@ -55,7 +55,7 @@ pub fn slice_array() {
 
 #[test]
 pub fn flatten_array() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let binary_arr = VarBinViewArray::from_iter_str(["string1", "string2"]);
     assert_arrays_eq!(
         binary_arr,
@@ -72,7 +72,7 @@ pub fn binary_view_size_and_alignment() {
 
 #[test]
 pub fn validate_replaces_null_views() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let views = Buffer::<BinaryView>::copy_from(vec![
         BinaryView::new_inlined(b"ololo"),
         BinaryView::new_ref(13, *b"AAAA", 0xDEAD_BEEF, 0xF000_0000),
@@ -107,7 +107,7 @@ pub fn deserialize_null_views() -> VortexResult<()> {
     let dtype = DType::Utf8(Nullability::Nullable);
     let buffer = BitBuffer::from_iter([true, false]);
     let validity = Validity::from_bit_buffer(buffer, Nullability::Nullable);
-    let session = array_session();
+    let session = test_session();
     let array = VarBinViewArray::try_new(
         views.clone(),
         buffers,
@@ -149,7 +149,7 @@ fn validate_utf8_views(
     views: Vec<BinaryView>,
     validity: Validity,
 ) -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = test_session().create_execution_ctx();
     let buffers: Arc<[ByteBuffer]> = Arc::new([ByteBuffer::from(buffer.to_vec())]);
     let views = Buffer::copy_from(views);
     let dtype = DType::Utf8(Nullability::Nullable);

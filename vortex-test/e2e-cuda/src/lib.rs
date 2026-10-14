@@ -35,7 +35,6 @@ use futures::executor::block_on;
 use vortex::array::ArrayRef as VortexArrayRef;
 use vortex::array::IntoArray;
 use vortex::array::VortexSessionExecute;
-use vortex::array::array_session;
 use vortex::array::arrays::BoolArray;
 use vortex::array::arrays::DecimalArray;
 use vortex::array::arrays::DictArray as VortexDictArray;
@@ -70,7 +69,7 @@ use vortex_cuda::arrow::DeviceArrayStreamExt;
 const PRIMITIVE_DTYPE_ENV: &str = "VORTEX_CUDF_PRIMITIVE_DTYPE";
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-    array_session()
+    vortex::aggregates::session()
         .with::<LayoutSession>()
         .with::<RuntimeSession>()
         .with::<CudaSession>()
@@ -202,7 +201,7 @@ fn multi_buffer_varbinview(dtype: DType) -> VortexArrayRef {
         Arc::from([first, second]),
         dtype,
         Validity::NonNullable,
-        &mut array_session().create_execution_ctx(),
+        &mut vortex::aggregates::session().create_execution_ctx(),
     )
     .expect("multi-buffer VarBinViewArray")
     .into_array()

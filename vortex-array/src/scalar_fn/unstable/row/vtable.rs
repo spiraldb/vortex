@@ -243,7 +243,6 @@ mod tests {
     use super::row_fn_return_dtype;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::PrimitiveArray;
     use crate::assert_arrays_eq;
     use crate::dtype::DType;
@@ -252,6 +251,7 @@ mod tests {
     use crate::scalar_fn::VecExecutionArgs;
     use crate::scalar_fn::unstable::row::RowFn;
     use crate::scalar_fn::unstable::row::RowVisitor;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[derive(Clone)]
@@ -357,7 +357,7 @@ mod tests {
     #[test]
     fn test_execute_rejects_wrong_arity_before_dispatch() {
         let args = VecExecutionArgs::new(vec![], 0);
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let error = execute_rows(&IndexingRowFn, &EmptyOptions, &args, &mut ctx)
             .expect_err("wrong arity must fail before dispatch");
 
@@ -369,7 +369,7 @@ mod tests {
     #[case::nonempty(3)]
     fn test_execute_nullary_rows(#[case] row_count: usize) -> VortexResult<()> {
         let args = VecExecutionArgs::new(vec![], row_count);
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
 
         let actual = execute_rows(&NullarySeven, &EmptyOptions, &args, &mut ctx)?;
         let expected = PrimitiveArray::from_iter(vec![7_i64; row_count]).into_array();
@@ -386,7 +386,7 @@ mod tests {
         };
         let input = PrimitiveArray::new(vec![1_i64, 2], Validity::NonNullable).into_array();
         let args = VecExecutionArgs::new(vec![input], 2);
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
 
         let error = match execute_rows(&function, &EmptyOptions, &args, &mut ctx) {
             Err(error) => error,
@@ -413,7 +413,7 @@ mod tests {
         };
         let input = PrimitiveArray::new(vec![1_i64, 2], Validity::NonNullable).into_array();
         let args = VecExecutionArgs::new(vec![input], 2);
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
 
         let error = match execute_rows(&function, &EmptyOptions, &args, &mut ctx) {
             Err(error) => error,

@@ -14,13 +14,13 @@ use rand::rngs::StdRng;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::ScalarFnArray;
 use vortex_array::scalar_fn::TypedScalarFnInstance;
 use vortex_array::scalar_fn::fns::binary::Binary;
 use vortex_array::scalar_fn::fns::operators::Operator;
+use vortex_array::test_harness::test_session;
 use vortex_session::VortexSession;
 
 #[global_allocator]
@@ -34,7 +34,7 @@ fn main() {
 const ARRAY_SIZE: usize = 100_000;
 const NUM_ACCESSES: usize = 50;
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(test_session);
 
 /// evaluating ADD's validity is cheaper than evaluating ADD
 fn binary_add() -> ArrayRef {

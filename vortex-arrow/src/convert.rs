@@ -967,7 +967,6 @@ mod tests {
     use rstest::rstest;
     use vortex_array::ArrayRef;
     use vortex_array::VortexSessionExecute as _;
-    use vortex_array::array_session;
     use vortex_array::arrays::Decimal;
     use vortex_array::arrays::FixedSizeList;
     use vortex_array::arrays::List;
@@ -1483,7 +1482,7 @@ mod tests {
             }
             builder.finish()
         };
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = vortex_aggregates::session().create_execution_ctx();
 
         // A slice keeps its parent's whole child; the import must not.
         let sliced = ArrayRef::from_arrow(&strings(0..1000).slice(500, 2), false)?;

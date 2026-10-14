@@ -212,7 +212,7 @@ mod tests {
 
     #[test]
     fn combines_multiple_falsifiers_with_or() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
         session.stats().register_rewrite(StaticNotRule {
             falsifier: Some(lit(false).bind(&dtype)?),
@@ -232,7 +232,7 @@ mod tests {
 
     #[test]
     fn combines_multiple_satisfiers_with_or() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
         session.stats().register_rewrite(StaticNotRule {
             falsifier: None,
@@ -252,7 +252,7 @@ mod tests {
 
     #[test]
     fn unregistered_expression_has_no_rewrite() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
 
         let expr = not(lit(true)).bind(&dtype)?;
@@ -263,7 +263,7 @@ mod tests {
 
     #[test]
     fn non_predicate_expression_errors() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
 
         let expr = lit(7).bind(&dtype)?;

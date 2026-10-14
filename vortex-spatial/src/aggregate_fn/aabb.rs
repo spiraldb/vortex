@@ -302,7 +302,7 @@ mod tests {
     /// The aggregate must be serializable so the zoned writer can persist its zone-stat descriptor.
     #[test]
     fn serializes_for_zone_storage() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let metadata = GeometryAabb
             .serialize(&EmptyOptions)?
             .expect("GeometryAabb must be serializable to be stored as a zone statistic");
@@ -319,7 +319,7 @@ mod tests {
     /// The AABB of a Point column is the min/max of its coordinates, accumulated across batches.
     #[test]
     fn point_aabb_across_batches() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
 
         let dtype = point_column(vec![0.0], vec![0.0])?.dtype().clone();
@@ -336,7 +336,7 @@ mod tests {
     /// the origin (matching min/max, which skip nulls).
     #[test]
     fn null_rows_do_not_widen_aabb() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
 
         // The valid points sit far from the origin; the null row's storage placeholder is (0, 0).
@@ -353,7 +353,7 @@ mod tests {
     /// unwrap, not just the bare Point struct.
     #[test]
     fn polygon_aabb_union_all_vertices() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
 
         // Two rectangles: (0,0)-(2,3) and (5,5)-(7,8). The chunk AABB is their union: (0,0)-(7,8).
@@ -373,7 +373,7 @@ mod tests {
     /// covers the whole type family.
     #[test]
     fn aabb_covers_every_native_geometry_type() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
 
         for column in every_native_column(&[(1.0, 2.0), (-1.0, 5.0), (3.0, 4.0)])? {
@@ -393,7 +393,7 @@ mod tests {
     /// the triple-`List` unwrap.
     #[test]
     fn multipolygon_aabb_union_all_vertices() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
 
         // Multipolygon 0: squares (0,0)-(1,1) and (4,4)-(5,5); multipolygon 1: square (-3,7)-(-2,9).
@@ -460,7 +460,7 @@ mod tests {
     /// never satisfy `distance <= r` anyway.
     #[test]
     fn all_nan_coordinates_kept() -> VortexResult<()> {
-        let session = vortex_array::array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
 
         let column = point_column(vec![f64::NAN, f64::NAN], vec![f64::NAN, f64::NAN])?;

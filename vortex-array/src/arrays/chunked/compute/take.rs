@@ -568,7 +568,6 @@ mod tests {
     use crate::Canonical;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::arrays::ChunkedArray;
     use crate::arrays::ConstantArray;
@@ -584,6 +583,7 @@ mod tests {
     use crate::dtype::Nullability;
     use crate::dtype::PType;
     use crate::scalar::Scalar;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     fn chunked_i32() -> VortexResult<ChunkedArray> {
@@ -614,7 +614,7 @@ mod tests {
 
     #[test]
     fn test_take_piecewise_monotonic_spanning_chunks() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr = chunked_i32()?;
 
         // The second piece crosses the first chunk boundary, the third spans the last two chunks.
@@ -631,7 +631,7 @@ mod tests {
 
     #[test]
     fn test_take_piecewise_interleaved() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr = chunked_i32()?;
 
         // Pieces visit chunks out of order, forcing the reorder take.
@@ -648,7 +648,7 @@ mod tests {
 
     #[test]
     fn test_take_piecewise_whole_array() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr = chunked_i32()?;
 
         let indices = contiguous_pieces(&[0], &[15])?;
@@ -660,7 +660,7 @@ mod tests {
 
     #[test]
     fn test_take_piecewise_across_empty_chunk() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr = ChunkedArray::try_new(
             vec![
                 buffer![0i32, 1, 2, 3, 4].into_array(),
@@ -679,7 +679,7 @@ mod tests {
 
     #[test]
     fn test_take_piecewise_adjacent_pieces_merge() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr = chunked_i32()?;
 
         // The first two pieces are contiguous within one chunk, so they merge into a single run
@@ -697,7 +697,7 @@ mod tests {
 
     #[test]
     fn test_take_piecewise_same_chunk_out_of_order() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr = chunked_i32()?;
 
         // Non-contiguous pieces in the same chunk must stay separate runs in piece order.
@@ -710,7 +710,7 @@ mod tests {
 
     #[test]
     fn test_take_piecewise_zero_length_pieces() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr = chunked_i32()?;
 
         let indices = contiguous_pieces(&[5, 0, 2], &[0, 4, 0])?;
@@ -722,7 +722,7 @@ mod tests {
 
     #[test]
     fn test_take_piecewise_out_of_bounds() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr = chunked_i32()?;
 
         let indices = contiguous_pieces(&[12], &[5])?;
@@ -736,7 +736,7 @@ mod tests {
 
     #[test]
     fn test_take_piecewise_non_unit_multiplier() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr = chunked_i32()?;
 
         // Multiplier 2 falls back to the generic path but must stay correct.
@@ -759,7 +759,7 @@ mod tests {
 
     #[test]
     fn test_take_piecewise_nullable_values() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr = ChunkedArray::try_new(
             vec![
                 PrimitiveArray::from_option_iter([Some(0i32), None, Some(2)]).into_array(),
@@ -781,7 +781,7 @@ mod tests {
 
     #[test]
     fn test_take_fsl_over_chunked_elements() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         // Chunk boundaries at 8 and 13 do not line up with the list size of 3.
         let elements = ChunkedArray::try_new(
             vec![
@@ -822,14 +822,14 @@ mod tests {
         let fsl = FixedSizeListArray::try_new(elements, 3, Validity::NonNullable, 6)?;
         test_take_conformance(
             &fsl.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
         Ok(())
     }
 
     #[test]
     fn test_take_chunked_fsl() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let c0 = FixedSizeListArray::try_new(
             PrimitiveArray::from_iter(0i32..6).into_array(),
             2,
@@ -861,7 +861,7 @@ mod tests {
 
     #[test]
     fn test_take_chunked_fsl_nullable() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let c0 = FixedSizeListArray::try_new(
             PrimitiveArray::from_iter(0i32..6).into_array(),
             2,
@@ -894,7 +894,7 @@ mod tests {
 
     #[test]
     fn test_take_chunked_fsl_non_fsl_chunk() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let c0 = FixedSizeListArray::try_new(
             PrimitiveArray::from_iter(0i32..6).into_array(),
             2,
@@ -929,7 +929,7 @@ mod tests {
 
     #[test]
     fn test_take_chunked_fsl_constant_chunk() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let c0 = FixedSizeListArray::try_new(
             PrimitiveArray::from_iter(0i32..6).into_array(),
             2,
@@ -957,7 +957,7 @@ mod tests {
 
     #[test]
     fn test_take_piecewise_chunked_fsl() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let c0 = FixedSizeListArray::try_new(
             PrimitiveArray::from_iter(0i32..6).into_array(),
             2,
@@ -999,7 +999,7 @@ mod tests {
 
     #[test]
     fn test_take_chunked_struct_nested_flatten() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let s0 = StructArray::try_new(
             ["a"].into(),
             vec![buffer![0i32, 1, 2].into_array()],
@@ -1045,14 +1045,14 @@ mod tests {
         let arr = ChunkedArray::try_new(vec![c0.into_array(), c1.into_array()], dtype)?;
         test_take_conformance(
             &arr.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
         Ok(())
     }
 
     #[test]
     fn test_take() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let a = buffer![1i32, 2, 3].into_array();
         let arr = ChunkedArray::try_new(vec![a.clone(), a.clone(), a.clone()], a.dtype().clone())
             .unwrap();
@@ -1066,7 +1066,7 @@ mod tests {
 
     #[test]
     fn test_take_nullable_values() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let a = PrimitiveArray::new(buffer![1i32, 2, 3], Validity::AllValid).into_array();
         let arr = ChunkedArray::try_new(vec![a.clone(), a.clone(), a.clone()], a.dtype().clone())
             .unwrap();
@@ -1084,7 +1084,7 @@ mod tests {
 
     #[test]
     fn test_take_nullable_indices() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let a = buffer![1i32, 2, 3].into_array();
         let arr = ChunkedArray::try_new(vec![a.clone(), a.clone(), a.clone()], a.dtype().clone())
             .unwrap();
@@ -1105,7 +1105,7 @@ mod tests {
 
     #[test]
     fn test_take_nullable_struct() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let struct_array =
             StructArray::try_new(FieldNames::default(), vec![], 100, Validity::NonNullable)
                 .unwrap();
@@ -1131,7 +1131,7 @@ mod tests {
 
     #[test]
     fn test_empty_take() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let a = buffer![1i32, 2, 3].into_array();
         let arr = ChunkedArray::try_new(vec![a.clone(), a.clone(), a.clone()], a.dtype().clone())
             .unwrap();
@@ -1152,7 +1152,7 @@ mod tests {
 
     #[test]
     fn test_take_shuffled_indices() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let c0 = buffer![0i32, 1, 2].into_array();
         let c1 = buffer![3i32, 4, 5].into_array();
         let c2 = buffer![6i32, 7, 8].into_array();
@@ -1177,7 +1177,7 @@ mod tests {
 
     #[test]
     fn test_take_shuffled_duplicates_with_empty_chunks() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let empty = PrimitiveArray::empty::<i32>(Nullability::NonNullable).into_array();
         let arr = ChunkedArray::try_new(
             vec![
@@ -1204,7 +1204,7 @@ mod tests {
 
     #[test]
     fn test_take_small_shuffled_fixed_size_lists() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let first = FixedSizeListArray::new(
             buffer![0i32, 1, 2, 3].into_array(),
             2,
@@ -1236,7 +1236,7 @@ mod tests {
 
     #[test]
     fn test_take_shuffled_large() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let nchunks: i32 = 100;
         let chunk_len: i32 = 1_000;
         let total = nchunks * chunk_len;
@@ -1277,7 +1277,7 @@ mod tests {
 
     #[test]
     fn test_take_null_indices() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let c0 = buffer![10i32, 20, 30].into_array();
         let c1 = buffer![40i32, 50, 60].into_array();
         let arr = ChunkedArray::try_new(
@@ -1309,7 +1309,7 @@ mod tests {
 
     #[test]
     fn test_take_sorted_indices() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr = chunked_i32()?;
 
         // Strictly increasing indices spanning chunks hit the sorted fast path.
@@ -1326,7 +1326,7 @@ mod tests {
 
     #[test]
     fn test_take_out_of_bounds() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr = chunked_i32()?;
 
         // Sorted indices hit the fast path, unsorted the generic path; both must fail.
@@ -1341,7 +1341,7 @@ mod tests {
 
     #[test]
     fn test_take_all_null_indices() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let arr = chunked_i32()?;
 
         let indices = PrimitiveArray::from_option_iter([None::<u64>, None]).into_array();
@@ -1368,7 +1368,7 @@ mod tests {
         .unwrap();
         test_take_conformance(
             &arr.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
 
         // Test with nullable chunked array
@@ -1378,7 +1378,7 @@ mod tests {
         let arr = ChunkedArray::try_new(vec![a.into_array(), b.into_array()], dtype).unwrap();
         test_take_conformance(
             &arr.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
 
         // Test with multiple identical chunks
@@ -1390,7 +1390,7 @@ mod tests {
         .unwrap();
         test_take_conformance(
             &arr.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 }

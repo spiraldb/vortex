@@ -56,7 +56,6 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::arrays::DictArray;
     use crate::arrays::VarBinArray;
@@ -65,10 +64,11 @@ mod tests {
     use crate::optimizer::ArrayOptimizer;
     use crate::scalar_fn::fns::like::Like;
     use crate::scalar_fn::fns::like::LikeOptions;
+    use crate::test_harness::test_session;
 
     #[test]
     fn like_reduce_dict() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let dict = DictArray::try_new(
             buffer![0u8, 1, 0, 2].into_array(),
             VarBinArray::from(vec!["hello", "world", "help"]).into_array(),

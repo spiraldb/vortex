@@ -199,7 +199,6 @@ mod tests {
     use rstest::rstest;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::BoolArray;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::arrays::VarBinArray;
@@ -217,7 +216,7 @@ mod tests {
 
     #[test]
     fn mask_wrapped_varbin_exports() -> VortexResult<()> {
-        let session = array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
 
         let varbin = VarBinArray::from_vec(
@@ -271,7 +270,7 @@ mod tests {
         #[case] vortex_array: VarBinViewArray,
         #[case] target_dtype: DataType,
     ) {
-        let session = array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let field = Field::new("test_field", target_dtype.clone(), true);
         let arrow = session
@@ -320,7 +319,7 @@ mod tests {
             vortex_dtype,
         );
 
-        let session = array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let field = Field::new("test_field", target_dtype.clone(), true);
         let arrow = session
@@ -345,7 +344,7 @@ mod tests {
             b"\xff\xfe invalid utf8".as_slice(),
         ]);
 
-        let session = array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let field = Field::new("test_field", target_dtype, true);
         let result =
@@ -370,7 +369,7 @@ mod tests {
             Validity::NonNullable,
         );
 
-        let session = array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let field = Field::new("test_field", target_dtype, false);
         let result = session
@@ -394,7 +393,7 @@ mod tests {
             Validity::NonNullable,
         );
 
-        let session = array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let field = Field::new("test_field", target_dtype.clone(), false);
         let arrow = session
@@ -425,7 +424,7 @@ mod tests {
             Validity::from_mask(Mask::from_iter([true, false, true]), Nullability::Nullable),
         );
 
-        let session = array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let field = Field::new("test_field", target_dtype, true);
         let arrow = session
@@ -443,7 +442,7 @@ mod tests {
     #[case(DataType::Binary)]
     #[case(DataType::LargeBinary)]
     fn incompatible_vortex_dtype_returns_error(#[case] target_dtype: DataType) {
-        let session = array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let field = Field::new("test_field", target_dtype, true);
         let result = session.arrow().execute_arrow(
@@ -464,7 +463,7 @@ mod tests {
             .into_array()
             .filter(Mask::from_iter([true, false, false]))?;
 
-        let session = array_session();
+        let session = vortex_aggregates::session();
         let mut ctx = session.create_execution_ctx();
         let arrow = session
             .arrow()

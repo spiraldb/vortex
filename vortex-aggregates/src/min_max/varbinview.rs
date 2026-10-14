@@ -178,7 +178,7 @@ mod tests {
     use super::*;
     use crate::min_max::min_max;
 
-    static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::array_session);
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(crate::session);
 
     fn utf8_min_max(values: &[Option<&str>]) -> VortexResult<Option<(String, String)>> {
         let array =

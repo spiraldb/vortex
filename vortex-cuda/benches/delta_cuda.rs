@@ -25,7 +25,6 @@ use futures::executor::block_on;
 use mimalloc::MiMalloc;
 use vortex::array::IntoArray;
 use vortex::array::VortexSessionExecute;
-use vortex::array::array_session;
 use vortex::array::arrays::PrimitiveArray;
 use vortex::array::validity::Validity;
 use vortex::buffer::Buffer;
@@ -56,7 +55,7 @@ where
         .collect();
     let primitive = PrimitiveArray::new(Buffer::from(data), Validity::NonNullable);
 
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = vortex::aggregates::session().create_execution_ctx();
     Delta::try_from_primitive_array(&primitive, &mut ctx).vortex_expect("failed to delta encode")
 }
 

@@ -15,12 +15,12 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::DecimalArray;
     use crate::compute::conformance::binary_numeric::test_binary_numeric_array;
     use crate::compute::conformance::consistency::test_array_consistency;
     use crate::dtype::DecimalDType;
     use crate::dtype::NativeDecimalType;
+    use crate::test_harness::test_session;
     use crate::validity::Validity;
 
     #[rstest]
@@ -59,7 +59,7 @@ mod tests {
     fn test_decimal_consistency(#[case] array: DecimalArray) {
         test_array_consistency(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 
@@ -115,7 +115,7 @@ mod tests {
     fn test_decimal_binary_numeric(#[case] array: DecimalArray) {
         test_binary_numeric_array(
             &array.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 }

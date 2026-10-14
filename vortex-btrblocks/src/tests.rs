@@ -154,7 +154,7 @@ fn test_cuda_binary_zstd_follows_editions(
     let input = VarBinViewArray::from_iter_bin(values.iter().map(Vec::as_slice)).into_array();
 
     // The CUDA preset enables both Zstd schemes; the edition filter must choose between them.
-    let session = vortex_array::array_session();
+    let session = vortex_aggregates::session();
     vortex_zstd::initialize(&session);
     for family in EDITION_FAMILIES {
         session.editions().declare_family(family)?;

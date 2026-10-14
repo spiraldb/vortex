@@ -44,13 +44,13 @@ mod test {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::ChunkedArray;
     use crate::arrays::PrimitiveArray;
     use crate::compute::conformance::mask::test_mask_conformance;
     use crate::dtype::DType;
     use crate::dtype::Nullability;
     use crate::dtype::PType;
+    use crate::test_harness::test_session;
 
     #[rstest]
     #[case(ChunkedArray::try_new(
@@ -82,7 +82,7 @@ mod test {
     fn test_mask_chunked_conformance(#[case] chunked: ChunkedArray) {
         test_mask_conformance(
             &chunked.into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut test_session().create_execution_ctx(),
         );
     }
 }
