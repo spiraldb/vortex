@@ -7,7 +7,6 @@ use std::sync::Arc;
 
 use futures::FutureExt;
 use futures::TryFutureExt;
-use futures::future;
 use futures::future::BoxFuture;
 use futures::future::Shared;
 use vortex_error::SharedVortexResult;
@@ -100,25 +99,6 @@ impl MaskFuture {
             }
         }
     }
-
-    /// Run `f` on the result once it is available.
-    ///
-    /// The result is then pending until polled, even for a ready mask, so that `f` runs lazily.
-    pub fn inspect(
-        self,
-        f: impl FnOnce(&SharedVortexResult<Mask>) + 'static + Send + Sync,
-    ) -> Self {
-        let len = self.len;
-        let shared = match self.inner {
-            Inner::Ready(mask) => future::ready(Ok(mask)).boxed().shared(),
-            Inner::Pending(inner) => inner,
-        };
-
-        Self {
-            inner: Inner::Pending(shared.inspect(f).boxed().shared()),
-            len,
-        }
-    }
 }
 
 impl Future for MaskFuture {
@@ -137,9 +117,7 @@ impl Future for MaskFuture {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::AtomicBool;
-    use std::sync::atomic::Ordering;
-
+    use futures::future;
     use vortex_buffer::BitBuffer;
 
     use super::*;
@@ -186,22 +164,6 @@ mod tests {
         let slice = pending.slice(0..2);
         assert!(!slice.is_ready());
         assert_eq!(futures::executor::block_on(slice)?, mask.slice(0..2));
-        Ok(())
-    }
-
-    #[test]
-    fn inspect_runs_lazily_on_a_ready_mask() -> VortexResult<()> {
-        let seen = Arc::new(AtomicBool::new(false));
-        let flag = Arc::clone(&seen);
-        let fut = MaskFuture::new_true(2).inspect(move |result| {
-            assert!(result.is_ok());
-            flag.store(true, Ordering::SeqCst);
-        });
-
-        assert!(!fut.is_ready());
-        assert!(!seen.load(Ordering::SeqCst));
-        assert_eq!(futures::executor::block_on(fut)?, Mask::new_true(2));
-        assert!(seen.load(Ordering::SeqCst));
         Ok(())
     }
 }
