@@ -119,7 +119,7 @@ impl StructReader {
             expanded_root_expr,
             lazy_children,
             field_lookup,
-            partitioned_expr_cache: Default::default(),
+            partitioned_expr_cache: DashMap::with_hasher_and_shard_amount(Default::default(), 8),
         })
     }
 
