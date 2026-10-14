@@ -7,15 +7,18 @@ Edit this file when changing CI benchmark coverage. The other modules in this pa
 validate, and render these declarations.
 """
 
+from dataclasses import replace
+
 from ..config import Benchmark, Format
 from .model import BenchmarkCase, Catalog, Coverage, Storage
+from .render import merge_coverage
 from .targets import df, duck
 
 PRESETS = {
     "develop": "Every regular SQL benchmark at full target coverage.",
     "pr": "The quicker pull-request SQL benchmark matrix (action/bench-sql).",
     "pr-compact": "Pull-request SQL benchmarks for Vortex Compact plus Parquet controls.",
-    "pr-all": "The PR and PR Compact benchmark matrices plus extended-only default targets (action/bench-all).",
+    "pr-all": "The union of the pr, pr-compact and pr-full matrices (action/bench-all).",
     "pr-full": "Every regular SQL benchmark at full PR target coverage (action/bench-sql-extended).",
     "nightly": "Large-scale SF=100 TPC-H on NVMe and S3 at default targets.",
 }
@@ -71,6 +74,7 @@ DEFAULT_WITH_DUCKDB_PR_FULL = Coverage(
 STANDARD_WITH_DUCKDB = Coverage(STANDARD_WITH_DUCKDB_TARGETS)
 DATAFUSION_VORTEX = Coverage(DATAFUSION_VORTEX_TARGETS)
 COMPACT = Coverage(COMPACT_TARGETS)
+JOB_DUCKDB = Coverage(duck(Format.PARQUET, Format.VORTEX, Format.DUCKDB))
 
 # Concrete benchmark cases
 
@@ -82,7 +86,6 @@ BENCHMARKS = (
         runs={
             "pr": DEFAULT,
             "pr-compact": COMPACT,
-            "pr-all": STANDARD,
             "pr-full": DEFAULT_WITH_DUCKDB_PR_FULL,
             "develop": FULL_LOCAL,
         },
@@ -93,7 +96,6 @@ BENCHMARKS = (
         name="Clickbench Sorted on NVME",
         runs={
             "pr-compact": COMPACT,
-            "pr-all": STANDARD,
             "pr-full": DEFAULT_WITH_DUCKDB_PR_FULL,
             "develop": FULL_LOCAL,
         },
@@ -107,7 +109,6 @@ BENCHMARKS = (
         runs={
             "pr": DEFAULT,
             "pr-compact": COMPACT,
-            "pr-all": STANDARD,
             "pr-full": FULL_PR,
             "develop": FULL_LOCAL,
         },
@@ -124,7 +125,6 @@ BENCHMARKS = (
         runs={
             "pr": DEFAULT,
             "pr-compact": COMPACT,
-            "pr-all": STANDARD,
             "pr-full": STANDARD,
             "develop": STANDARD,
         },
@@ -138,7 +138,6 @@ BENCHMARKS = (
         runs={
             "pr": DEFAULT,
             "pr-compact": COMPACT,
-            "pr-all": STANDARD,
             "pr-full": FULL_PR,
             "develop": FULL_LOCAL,
         },
@@ -154,7 +153,6 @@ BENCHMARKS = (
         remote_key="tpch/10.0",
         runs={
             "pr-compact": COMPACT,
-            "pr-all": COMPACT,
             "pr-full": STANDARD,
             "develop": STANDARD,
         },
@@ -184,7 +182,6 @@ BENCHMARKS = (
         runs={
             "pr": DEFAULT,
             "pr-compact": COMPACT,
-            "pr-all": STANDARD,
             "pr-full": STANDARD_WITH_DUCKDB,
             "develop": STANDARD_WITH_DUCKDB,
         },
@@ -197,7 +194,6 @@ BENCHMARKS = (
         local_dir="vortex-bench/data/statpopgen",
         runs={
             "pr-compact": COMPACT,
-            "pr-all": STANDARD,
             "pr-full": STANDARD,
             "develop": STANDARD,
         },
@@ -210,7 +206,6 @@ BENCHMARKS = (
         runs={
             "pr": DEFAULT,
             "pr-compact": COMPACT,
-            "pr-all": STANDARD,
             "pr-full": STANDARD,
             "develop": STANDARD,
         },
@@ -225,7 +220,6 @@ BENCHMARKS = (
         remote_key="fineweb",
         runs={
             "pr-compact": COMPACT,
-            "pr-all": STANDARD,
             "pr-full": STANDARD,
             "develop": STANDARD,
         },
@@ -237,7 +231,6 @@ BENCHMARKS = (
         scale_factor=1,
         runs={
             "pr": DATAFUSION_VORTEX,
-            "pr-all": DATAFUSION_VORTEX,
             "pr-full": DATAFUSION_VORTEX,
             "develop": DATAFUSION_VORTEX,
         },
@@ -249,10 +242,16 @@ BENCHMARKS = (
         iterations=10,
         runs={
             "pr-compact": COMPACT,
-            "pr-all": COMPACT,
             "pr-full": DEFAULT_WITH_DUCKDB_PR_FULL,
             "develop": STANDARD_WITH_DUCKDB,
         },
+    ),
+    BenchmarkCase(
+        id="job-nvme",
+        benchmark=Benchmark.JOB,
+        name="JOB on NVME",
+        # DuckDB only: DataFusion spends minutes per pass on the 17x queries' join orders.
+        runs={"pr-full": JOB_DUCKDB},
     ),
     BenchmarkCase(
         id="vortex-queries",
@@ -266,4 +265,14 @@ BENCHMARKS = (
     ),
 )
 
-CATALOG = Catalog(presets=PRESETS, benchmarks=BENCHMARKS)
+PR_ALL_SOURCES = ("pr", "pr-compact", "pr-full")
+
+
+def _with_pr_all(benchmark: BenchmarkCase) -> BenchmarkCase:
+    sources = [benchmark.runs[preset] for preset in PR_ALL_SOURCES if preset in benchmark.runs]
+    if not sources:
+        return benchmark
+    return replace(benchmark, runs={**benchmark.runs, "pr-all": merge_coverage(sources)})
+
+
+CATALOG = Catalog(presets=PRESETS, benchmarks=tuple(map(_with_pr_all, BENCHMARKS)))

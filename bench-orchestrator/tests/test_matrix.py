@@ -36,7 +36,7 @@ REGULAR_IDS = (
 COMPACT_IDS = tuple(
     benchmark_id for benchmark_id in REGULAR_IDS if benchmark_id not in {"polarsignals", "vortex-queries"}
 )
-PR_ALL_IDS = tuple(benchmark_id for benchmark_id in REGULAR_IDS if benchmark_id != "vortex-queries")
+PR_FULL_IDS = (*REGULAR_IDS[:-1], "job-nvme", "vortex-queries")
 EXPECTED_IDS = {
     "develop": REGULAR_IDS,
     "pr": tuple(
@@ -53,8 +53,8 @@ EXPECTED_IDS = {
         }
     ),
     "pr-compact": COMPACT_IDS,
-    "pr-all": PR_ALL_IDS,
-    "pr-full": REGULAR_IDS,
+    "pr-all": PR_FULL_IDS,
+    "pr-full": PR_FULL_IDS,
     "nightly": ("tpch-nvme", "tpch-s3"),
 }
 
@@ -102,16 +102,15 @@ def test_pr_target_selection() -> None:
         assert set(cast("list[str]", entry["data_formats"])) == {"parquet", "vortex-compact"}
 
 
-def test_pr_all_covers_focused_presets() -> None:
-    pr = {entry["id"]: entry for entry in _entries("pr")}
-    pr_compact = {entry["id"]: entry for entry in _entries("pr-compact")}
+def test_pr_all_is_union_of_pr_compact_and_full() -> None:
+    sources = [{entry["id"]: entry for entry in _entries(preset)} for preset in ("pr", "pr-compact", "pr-full")]
     pr_all = {entry["id"]: entry for entry in _entries("pr-all")}
 
-    assert set(pr_all) == set(pr) | set(pr_compact)
+    assert set(pr_all) == set().union(*sources)
     for benchmark_id, entry in pr_all.items():
-        for preset in (pr, pr_compact):
+        assert _targets(entry) == set().union(*(_targets(p[benchmark_id]) for p in sources if benchmark_id in p))
+        for preset in sources:
             if source := preset.get(benchmark_id):
-                assert _targets(source) <= _targets(entry)
                 assert set(cast("list[str]", source["data_formats"])) <= set(cast("list[str]", entry["data_formats"]))
 
 

@@ -11,6 +11,7 @@ use criterion::Throughput;
 use cudarc::driver::DevicePtrMut;
 use cudarc::driver::sys::CUevent_flags;
 use futures::executor::block_on;
+use mimalloc::MiMalloc;
 use vortex::array::arrays::VarBinViewArray;
 use vortex::array::vtable::child_to_validity;
 use vortex::encodings::zstd::Zstd;
@@ -27,6 +28,9 @@ use vortex_cuda_macros::cuda_available;
 use vortex_cuda_macros::cuda_not_available;
 
 use crate::bench_config::BENCH_SIZES;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 /// Generate compressible string data by repeating patterns.
 fn generate_string_data(count: usize) -> Vec<&'static str> {

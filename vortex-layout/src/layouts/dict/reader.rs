@@ -94,7 +94,7 @@ impl DictReader {
             session,
             values_len,
             values_array: Default::default(),
-            values_evals: Default::default(),
+            values_evals: DashMap::with_hasher_and_shard_amount(Default::default(), 8),
             values,
             codes,
         })
