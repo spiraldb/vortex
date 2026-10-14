@@ -180,10 +180,10 @@ fn is_constant_zero(array: &ArrayRef) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use vortex_aggregates::sum::sum;
     use vortex_array::ArrayRef;
     use vortex_array::ExecutionCtx;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::aggregate_fn::fns::sum::sum;
     use vortex_array::array_session;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::arrays::TemporalArray;

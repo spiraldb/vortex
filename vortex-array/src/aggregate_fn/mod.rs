@@ -35,7 +35,6 @@ pub use erased::*;
 mod options;
 pub use options::*;
 
-pub mod fns;
 pub mod kernels;
 pub mod proto;
 pub mod session;

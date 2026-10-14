@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use vortex_aggregates::all_nan::AllNan;
+use vortex_aggregates::all_non_nan::AllNonNan;
+use vortex_aggregates::all_non_null::AllNonNull;
+use vortex_aggregates::all_null::AllNull;
+use vortex_aggregates::stat_aggregate_fn;
 use vortex_array::aggregate_fn::AggregateFnRef;
 use vortex_array::aggregate_fn::AggregateFnVTableExt;
 use vortex_array::aggregate_fn::EmptyOptions as AggregateEmptyOptions;
-use vortex_array::aggregate_fn::fns::all_nan::AllNan;
-use vortex_array::aggregate_fn::fns::all_non_nan::AllNonNan;
-use vortex_array::aggregate_fn::fns::all_non_null::AllNonNull;
-use vortex_array::aggregate_fn::fns::all_null::AllNull;
 use vortex_array::dtype::DType;
 use vortex_array::expr::BoundExpression;
 use vortex_array::expr::bound::and;
@@ -732,7 +733,7 @@ fn stat_expr(expr: &BoundExpression, stat: Stat) -> Option<BoundExpression> {
         return cast_stat(expr.child(0), dtype, stat);
     }
 
-    let aggregate_fn = stat.aggregate_fn()?;
+    let aggregate_fn = stat_aggregate_fn(stat)?;
     // The aggregate may not support the expression's dtype, e.g. min/max over structs,
     // even when the predicate itself is well-typed. Such stats cannot be lowered later,
     // so do not reference them in the rewrite.
@@ -806,10 +807,11 @@ mod tests {
     use std::sync::atomic::AtomicUsize;
     use std::sync::atomic::Ordering;
 
+    use vortex_aggregates::all_non_nan::AllNonNan;
+    use vortex_aggregates::stat_aggregate_fn;
     use vortex_array::aggregate_fn::AggregateFnRef;
     use vortex_array::aggregate_fn::AggregateFnVTableExt;
     use vortex_array::aggregate_fn::EmptyOptions as AggregateEmptyOptions;
-    use vortex_array::aggregate_fn::fns::all_non_nan::AllNonNan;
     use vortex_array::array_session;
     use vortex_array::dtype::DType;
     use vortex_array::dtype::Nullability;
@@ -859,7 +861,7 @@ mod tests {
     static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
 
     fn stat(expr: Expression, stat: Stat) -> Expression {
-        let aggregate_fn = stat.aggregate_fn().expect("stat should have aggregate fn");
+        let aggregate_fn = stat_aggregate_fn(stat).expect("stat should have aggregate fn");
         stat_fn(expr, aggregate_fn)
     }
 

@@ -4,12 +4,10 @@
 use vortex_buffer::buffer;
 use vortex_error::VortexResult;
 
-use crate::Canonical;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
 use crate::array_session;
 use crate::arrays::BoolArray;
-use crate::arrays::ConstantArray;
 use crate::arrays::PrimitiveArray;
 use crate::arrays::StructArray;
 use crate::arrays::VarBinArray;
@@ -147,30 +145,6 @@ fn test_duplicate_field_names() {
         PrimitiveArray::from_iter([100i32, 200, 300]),
         &mut ctx
     );
-}
-
-#[test]
-fn test_uncompressed_size_in_bytes() -> VortexResult<()> {
-    let struct_array = StructArray::new(
-        FieldNames::from(["integers"]),
-        vec![ConstantArray::new(5, 1000).into_array()],
-        1000,
-        Validity::NonNullable,
-    );
-
-    let canonical_size = struct_array
-        .clone()
-        .into_array()
-        .execute::<Canonical>(&mut array_session().create_execution_ctx())?
-        .into_array()
-        .nbytes();
-    let uncompressed_size = struct_array
-        .statistics()
-        .compute_uncompressed_size_in_bytes(&mut array_session().create_execution_ctx());
-
-    assert_eq!(canonical_size, 2);
-    assert_eq!(uncompressed_size, Some(4000));
-    Ok(())
 }
 
 #[test]

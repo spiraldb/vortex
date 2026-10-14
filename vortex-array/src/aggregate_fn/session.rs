@@ -13,34 +13,12 @@ use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnPluginRef;
 use crate::aggregate_fn::AggregateFnRef;
 use crate::aggregate_fn::AggregateFnVTable;
-use crate::aggregate_fn::fns::all_nan::AllNan;
-use crate::aggregate_fn::fns::all_non_distinct::AllNonDistinct;
-use crate::aggregate_fn::fns::all_non_nan::AllNonNan;
-use crate::aggregate_fn::fns::all_non_null::AllNonNull;
-use crate::aggregate_fn::fns::all_null::AllNull;
-use crate::aggregate_fn::fns::is_constant::IsConstant;
-use crate::aggregate_fn::fns::is_sorted::IsSorted;
-use crate::aggregate_fn::fns::max::Max;
-use crate::aggregate_fn::fns::min::Min;
-use crate::aggregate_fn::fns::min_max::MinMax;
-use crate::aggregate_fn::fns::nan_count::NanCount;
-use crate::aggregate_fn::fns::null_count::NullCount;
-use crate::aggregate_fn::fns::sum::PrimitiveGroupedSumEncodingKernel;
-use crate::aggregate_fn::fns::sum::Sum;
-use crate::aggregate_fn::fns::sum_v2::PrimitiveGroupedSumV2EncodingKernel;
-use crate::aggregate_fn::fns::sum_v2::SumV2;
-use crate::aggregate_fn::fns::uncompressed_size_in_bytes::UncompressedSizeInBytes;
 use crate::aggregate_fn::kernels::DynAggregateKernel;
 use crate::aggregate_fn::kernels::DynGroupedAggregateKernel;
 use crate::array::ArrayId;
 use crate::array::VTable;
 use crate::arrays::Chunked;
-use crate::arrays::Dict;
-use crate::arrays::Primitive;
 use crate::arrays::chunked::compute::aggregate::ChunkedArrayAggregate;
-use crate::arrays::dict::compute::is_constant::DictIsConstantKernel;
-use crate::arrays::dict::compute::is_sorted::DictIsSortedKernel;
-use crate::arrays::dict::compute::min_max::DictMinMaxKernel;
 use crate::dtype::DType;
 
 /// Session state for aggregate functions and encoding-specific aggregate kernels.
@@ -89,40 +67,8 @@ impl Default for AggregateFnSession {
             grouped_encoding_kernels: GroupedEncodingKernelRegistry::default(),
         };
 
-        // Register the built-in aggregate functions
-        this.register(AllNonDistinct);
-        this.register(AllNonNan);
-        this.register(AllNonNull);
-        this.register(AllNan);
-        this.register(AllNull);
-        this.register(IsConstant);
-        this.register(IsSorted);
-        this.register(Max);
-        this.register(Min);
-        this.register(MinMax);
-        this.register(NanCount);
-        this.register(NullCount);
-        this.register(Sum);
-        this.register(SumV2);
-        this.register(UncompressedSizeInBytes);
-
         // Register the built-in aggregate kernels.
         this.register_aggregate_kernel(Chunked.id(), None::<AggregateFnId>, &ChunkedArrayAggregate);
-        this.register_aggregate_kernel(Dict.id(), Some(MinMax.id()), &DictMinMaxKernel);
-        this.register_aggregate_kernel(Dict.id(), Some(IsConstant.id()), &DictIsConstantKernel);
-        this.register_aggregate_kernel(Dict.id(), Some(IsSorted.id()), &DictIsSortedKernel);
-
-        // Register the built-in grouped aggregate kernels.
-        this.register_grouped_encoding_kernel(
-            Primitive.id(),
-            Sum.id(),
-            &PrimitiveGroupedSumEncodingKernel,
-        );
-        this.register_grouped_encoding_kernel(
-            Primitive.id(),
-            SumV2.id(),
-            &PrimitiveGroupedSumV2EncodingKernel,
-        );
 
         this
     }

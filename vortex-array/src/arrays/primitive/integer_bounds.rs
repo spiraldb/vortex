@@ -30,13 +30,16 @@ pub struct IntegerBounds {
     pub max: i128,
     /// Whether the valid values are in non-decreasing order.
     pub is_sorted: bool,
+    /// Whether the valid values are in strictly increasing order.
+    pub is_strict_sorted: bool,
 }
 
 /// Returns the [`IntegerBounds`] of the valid values of `array`, or `None` if it has no valid
 /// values.
 ///
-/// Null positions are skipped, so `is_sorted` only describes the order of the valid values. The
-/// `IsSorted` statistic is only cached for arrays without nulls, where the two meanings agree.
+/// Null positions are skipped, so `is_sorted` only describes the order of the valid values. Only
+/// `Min`, `Max` and `NullCount` are cached, matching what computing the minimum and maximum
+/// statistics caches.
 ///
 /// # Errors
 ///
@@ -59,23 +62,26 @@ pub fn integer_bounds(
     let primitive = array.clone().execute::<PrimitiveArray>(ctx)?;
     let mask = PrimitiveArrayExt::validity(&primitive).execute_mask(primitive.len(), ctx)?;
 
+    let stats = array.statistics();
+    stats.set(
+        Stat::NullCount,
+        Precision::exact(primitive.len() - mask.true_count()),
+    );
+
     match_each_integer_ptype!(ptype, |P| {
         let values = primitive.as_slice::<P>();
-        let Some((min, max, is_sorted)) = scan(values, &mask) else {
+        let Some(scanned) = scan(values, &mask) else {
             return Ok(None);
         };
 
-        let stats = array.statistics();
-        stats.set(Stat::Min, Precision::exact(min));
-        stats.set(Stat::Max, Precision::exact(max));
-        if matches!(mask, Mask::AllTrue(_)) {
-            stats.set(Stat::IsSorted, Precision::exact(is_sorted));
-        }
+        stats.set(Stat::Min, Precision::exact(scanned.min));
+        stats.set(Stat::Max, Precision::exact(scanned.max));
 
         Ok(Some(IntegerBounds {
-            min: i128::from(min),
-            max: i128::from(max),
-            is_sorted,
+            min: i128::from(scanned.min),
+            max: i128::from(scanned.max),
+            is_sorted: scanned.is_sorted,
+            is_strict_sorted: scanned.is_strict_sorted,
         }))
     })
 }
@@ -84,6 +90,7 @@ pub fn integer_bounds(
 fn cached_bounds(array: &ArrayRef) -> Option<IntegerBounds> {
     let stats = array.statistics();
     let is_sorted = stats.get_as::<bool>(Stat::IsSorted).as_exact()?;
+    let is_strict_sorted = stats.get_as::<bool>(Stat::IsStrictSorted).as_exact()?;
     match_each_integer_ptype!(array.dtype().as_ptype(), |P| {
         let min = stats.get_as::<P>(Stat::Min).as_exact()?;
         let max = stats.get_as::<P>(Stat::Max).as_exact()?;
@@ -91,12 +98,21 @@ fn cached_bounds(array: &ArrayRef) -> Option<IntegerBounds> {
             min: i128::from(min),
             max: i128::from(max),
             is_sorted,
+            is_strict_sorted,
         })
     })
 }
 
+/// The bounds of the values selected by a mask, in the values' own type.
+struct Scanned<P> {
+    min: P,
+    max: P,
+    is_sorted: bool,
+    is_strict_sorted: bool,
+}
+
 /// Returns the minimum, maximum and sortedness of the values selected by `mask`.
-fn scan<P: Copy + PartialOrd>(values: &[P], mask: &Mask) -> Option<(P, P, bool)> {
+fn scan<P: Copy + PartialOrd>(values: &[P], mask: &Mask) -> Option<Scanned<P>> {
     let mut valid = values
         .iter()
         .enumerate()
@@ -108,18 +124,25 @@ fn scan<P: Copy + PartialOrd>(values: &[P], mask: &Mask) -> Option<(P, P, bool)>
         .map(|(_, value)| *value);
 
     let first = valid.next()?;
-    let (mut min, mut max, mut prev, mut is_sorted) = (first, first, first, true);
+    let mut scanned = Scanned {
+        min: first,
+        max: first,
+        is_sorted: true,
+        is_strict_sorted: true,
+    };
+    let mut prev = first;
     for value in valid {
-        if value < min {
-            min = value;
+        if value < scanned.min {
+            scanned.min = value;
         }
-        if value > max {
-            max = value;
+        if value > scanned.max {
+            scanned.max = value;
         }
-        is_sorted &= prev <= value;
+        scanned.is_sorted &= prev <= value;
+        scanned.is_strict_sorted &= prev < value;
         prev = value;
     }
-    Some((min, max, is_sorted))
+    Some(scanned)
 }
 
 #[cfg(test)]
@@ -145,12 +168,13 @@ mod tests {
             Some(IntegerBounds {
                 min: 0,
                 max: 7,
-                is_sorted: true
+                is_sorted: true,
+                is_strict_sorted: false,
             })
         );
         assert_eq!(
             array.statistics().get_as::<bool>(Stat::IsSorted),
-            Precision::exact(true)
+            Precision::Absent
         );
         Ok(())
     }
@@ -165,12 +189,13 @@ mod tests {
             Some(IntegerBounds {
                 min: -3,
                 max: 5,
-                is_sorted: false
+                is_sorted: false,
+                is_strict_sorted: false,
             })
         );
         assert_eq!(
-            array.statistics().get_as::<bool>(Stat::IsSorted),
-            Precision::Absent
+            array.statistics().get_as::<usize>(Stat::NullCount),
+            Precision::exact(2usize)
         );
         Ok(())
     }

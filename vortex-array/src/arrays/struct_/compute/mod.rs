@@ -15,12 +15,10 @@ mod tests {
     use rstest::rstest;
     use vortex_buffer::BitBuffer;
     use vortex_buffer::buffer;
-    use vortex_error::VortexExpect;
 
     use crate::Canonical;
     use crate::IntoArray as _;
     use crate::VortexSessionExecute;
-    use crate::aggregate_fn::fns::is_constant::is_constant;
     use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::arrays::PrimitiveArray;
@@ -255,15 +253,6 @@ mod tests {
         );
         let casted = fully_nullable_array.cast(non_null_xs.clone()).unwrap();
         assert_eq!(casted.dtype(), &non_null_xs);
-    }
-
-    #[test]
-    fn test_empty_struct_is_constant() {
-        let array = StructArray::new_fieldless_with_len(2);
-        let mut ctx = array_session().create_execution_ctx();
-        let result = is_constant(&array.into_array(), &mut ctx)
-            .vortex_expect("operation should succeed in test");
-        assert!(result);
     }
 
     #[test]

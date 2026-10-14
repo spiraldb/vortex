@@ -6,6 +6,7 @@ use vortex_array::ArrayView;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::arrays::ConstantArray;
+use vortex_array::arrays::bool::bool_bounds;
 use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability;
@@ -88,7 +89,7 @@ fn compare_eq(
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<ArrayRef> {
     let mut comparison = compare_dtp(lhs.days(), ts_parts.days, CompareOperator::Eq, nullability)?;
-    if comparison.statistics().compute_max::<bool>(ctx) == Some(false) {
+    if bool_bounds(&comparison, ctx)?.is_some_and(|bounds| !bounds.any_true) {
         return Ok(comparison);
     }
 
@@ -100,7 +101,7 @@ fn compare_eq(
     )?
     .binary(comparison, Operator::And)?;
 
-    if comparison.statistics().compute_max::<bool>(ctx) == Some(false) {
+    if bool_bounds(&comparison, ctx)?.is_some_and(|bounds| !bounds.any_true) {
         return Ok(comparison);
     }
 
@@ -125,7 +126,7 @@ fn compare_ne(
         CompareOperator::NotEq,
         nullability,
     )?;
-    if comparison.statistics().compute_min::<bool>(ctx) == Some(true) {
+    if bool_bounds(&comparison, ctx)?.is_some_and(|bounds| bounds.all_true) {
         return Ok(comparison);
     }
 
@@ -137,7 +138,7 @@ fn compare_ne(
     )?
     .binary(comparison, Operator::Or)?;
 
-    if comparison.statistics().compute_min::<bool>(ctx) == Some(true) {
+    if bool_bounds(&comparison, ctx)?.is_some_and(|bounds| bounds.all_true) {
         return Ok(comparison);
     }
 
@@ -171,11 +172,11 @@ fn compare_ordered(
     };
 
     let days_strict = compare_dtp(lhs.days(), ts_parts.days, strict, nullability)?;
-    if days_strict.statistics().compute_min::<bool>(ctx) == Some(true) {
+    if bool_bounds(&days_strict, ctx)?.is_some_and(|bounds| bounds.all_true) {
         return Ok(days_strict);
     }
     let days_eq = compare_dtp(lhs.days(), ts_parts.days, CompareOperator::Eq, nullability)?;
-    if days_eq.statistics().compute_max::<bool>(ctx) == Some(false) {
+    if bool_bounds(&days_eq, ctx)?.is_some_and(|bounds| !bounds.any_true) {
         return Ok(days_strict);
     }
 
@@ -247,10 +248,10 @@ fn compare_dtp(
 #[cfg(test)]
 mod test {
     use rstest::rstest;
+    use vortex_aggregates::sum::sum;
     use vortex_array::ArrayRef;
     use vortex_array::ExecutionCtx;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::aggregate_fn::fns::sum::sum;
     use vortex_array::array_session;
     use vortex_array::arrays::BoolArray;
     use vortex_array::arrays::ConstantArray;

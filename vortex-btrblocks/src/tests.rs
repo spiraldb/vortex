@@ -12,6 +12,7 @@ use rand::Rng;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 use rstest::rstest;
+use vortex_aggregates::sum::sum;
 #[cfg(feature = "zstd")]
 use vortex_array::ArrayId;
 #[cfg(feature = "zstd")]
@@ -19,7 +20,6 @@ use vortex_array::ArrayPlugin;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::aggregate_fn::fns::sum::sum;
 use vortex_array::arrays::DecimalArray;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::PrimitiveArray;

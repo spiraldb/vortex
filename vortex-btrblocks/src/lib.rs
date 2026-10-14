@@ -97,7 +97,11 @@ pub use vortex_compressor::stats::StringStats;
 
 #[cfg(test)]
 static SESSION: std::sync::LazyLock<vortex_session::VortexSession> =
-    std::sync::LazyLock::new(vortex_array::array_session);
+    std::sync::LazyLock::new(|| {
+        let session = vortex_array::array_session();
+        vortex_aggregates::initialize(&session);
+        session
+    });
 
 #[cfg(test)]
 mod tests;

@@ -93,7 +93,6 @@ mod tests {
     use vortex_array::aggregate_fn::DynGroupedAccumulator;
     use vortex_array::aggregate_fn::GroupedAccumulator;
     use vortex_array::aggregate_fn::NumericalAggregateOpts;
-    use vortex_array::array_session;
     use vortex_array::arrays::FixedSizeListArray;
     use vortex_array::arrays::ListViewArray;
     use vortex_array::arrays::PrimitiveArray;
@@ -109,6 +108,7 @@ mod tests {
     use vortex_error::VortexResult;
 
     use crate::count::Count;
+    use crate::test_session;
 
     /// Run a grouped count through the accumulator.
     fn grouped_count_actual(
@@ -130,7 +130,7 @@ mod tests {
         elements: &ArrayRef,
         ranges: &[(usize, usize)],
     ) -> VortexResult<ArrayRef> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let counts: Buffer<u64> = ranges
             .iter()
             .map(|&(offset, size)| {
@@ -156,7 +156,7 @@ mod tests {
 
     #[test]
     fn listview_counts_all_valid() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let elements =
             PrimitiveArray::new(buffer![1i32, 2, 3, 4, 5, 6], Validity::NonNullable).into_array();
         let elem_dtype = DType::Primitive(PType::I32, NonNullable);
@@ -175,7 +175,7 @@ mod tests {
 
     #[test]
     fn listview_counts_with_nulls() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let elements =
             PrimitiveArray::from_option_iter([Some(1i32), None, Some(3), None, None, Some(9)])
                 .into_array();
@@ -195,7 +195,7 @@ mod tests {
 
     #[test]
     fn listview_counts_varbinview_with_nulls() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let elements = VarBinViewArray::from_iter_nullable_str([
             Some("a"),
             None,
@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn fixed_size_counts_float_nans() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let elements =
             PrimitiveArray::from_option_iter([Some(1.0f64), Some(f64::NAN), None, Some(2.0)])
                 .into_array();
@@ -243,7 +243,7 @@ mod tests {
 
     #[test]
     fn fixed_size_counts_with_nulls() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = test_session().create_execution_ctx();
         let elements =
             PrimitiveArray::from_option_iter([Some(1i32), None, Some(3), Some(4)]).into_array();
         let elem_dtype = DType::Primitive(PType::I32, Nullable);

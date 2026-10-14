@@ -12,7 +12,9 @@ use crate::session::LayoutSession;
 pub static SESSION: LazyLock<VortexSession> = LazyLock::new(|| new_session().with_tokio());
 
 pub fn new_session() -> VortexSession {
-    vortex_array::array_session()
+    let session = vortex_array::array_session()
         .with::<LayoutSession>()
-        .with::<RuntimeSession>()
+        .with::<RuntimeSession>();
+    vortex_aggregates::initialize(&session);
+    session
 }

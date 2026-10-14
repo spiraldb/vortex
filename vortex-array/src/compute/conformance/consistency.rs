@@ -34,9 +34,11 @@ use crate::arrays::BoolArray;
 use crate::arrays::ConstantArray;
 use crate::arrays::PrimitiveArray;
 use crate::builtins::ArrayBuiltins;
+use crate::compute::conformance::conformance_stat;
 use crate::dtype::DType;
 use crate::dtype::Nullability;
 use crate::dtype::PType;
+use crate::expr::stats::Stat;
 use crate::scalar_fn::fns::operators::Operator;
 
 /// Tests that filter and take operations produce consistent results.
@@ -998,11 +1000,12 @@ fn test_boolean_demorgan_consistency(array: &ArrayRef, ctx: &mut ExecutionCtx) {
 /// # Why This Matters
 /// Aggregate operations on sliced arrays must produce correct results
 /// regardless of the underlying encoding's offset handling.
-fn test_slice_aggregate_consistency(array: &ArrayRef, ctx: &mut ExecutionCtx) {
-    use crate::aggregate_fn::NumericalAggregateOpts;
-    use crate::aggregate_fn::fns::min_max::min_max;
-    use crate::aggregate_fn::fns::nan_count::nan_count;
-    use crate::aggregate_fn::fns::sum::sum;
+///
+/// # Panics
+///
+/// Panics if the session has no aggregate functions registered for these statistics; register
+/// them with `vortex_aggregates::initialize`.
+pub fn test_slice_aggregate_consistency(array: &ArrayRef, ctx: &mut ExecutionCtx) {
     use crate::dtype::DType;
 
     let len = array.len();
@@ -1045,51 +1048,30 @@ fn test_slice_aggregate_consistency(array: &ArrayRef, ctx: &mut ExecutionCtx) {
         return;
     }
 
-    if let (Ok(slice_sum), Ok(canonical_sum)) = (sum(&sliced, ctx), sum(&canonical_sliced, ctx)) {
-        // Compare sum scalars
-        assert_eq!(
-            slice_sum, canonical_sum,
-            "sum on sliced array should match canonical. \
-                 Sliced: {slice_sum:?}, Canonical: {canonical_sum:?}"
-        );
-    }
-
-    // Test min_max
-    if let (Ok(slice_minmax), Ok(canonical_minmax)) = (
-        min_max(&sliced, ctx, NumericalAggregateOpts::default()),
-        min_max(&canonical_sliced, ctx, NumericalAggregateOpts::default()),
-    ) {
-        match (slice_minmax, canonical_minmax) {
-            (Some(s_result), Some(c_result)) => {
-                assert_eq!(
-                    s_result.min, c_result.min,
-                    "min on sliced array should match canonical. \
-                         Sliced: {:?}, Canonical: {:?}",
-                    s_result.min, c_result.min
-                );
-                assert_eq!(
-                    s_result.max, c_result.max,
-                    "max on sliced array should match canonical. \
-                         Sliced: {:?}, Canonical: {:?}",
-                    s_result.max, c_result.max
-                );
-            }
-            (None, None) => {} // Both empty, OK
-            _ => vortex_panic!("min_max results don't match"),
+    for stat in [Stat::Sum, Stat::Min, Stat::Max, Stat::NaNCount] {
+        if stat.dtype(array.dtype()).is_none() {
+            continue;
         }
-    }
-
-    // Test nan_count for floating point types
-    if array.dtype().is_float()
-        && let (Ok(slice_nan_count), Ok(canonical_nan_count)) =
-            (nan_count(&sliced, ctx), nan_count(&canonical_sliced, ctx))
-    {
+        let sliced_stat = conformance_stat(&sliced, stat, ctx);
+        let canonical_stat = conformance_stat(&canonical_sliced, stat, ctx);
         assert_eq!(
-            slice_nan_count, canonical_nan_count,
-            "nan_count on sliced array should match canonical. \
-                 Sliced: {slice_nan_count}, Canonical: {canonical_nan_count}"
+            sliced_stat, canonical_stat,
+            "{stat} on sliced array should match canonical. \
+                 Sliced: {sliced_stat:?}, Canonical: {canonical_stat:?}"
         );
     }
+}
+
+/// Whether the session can compute the statistics [`test_slice_aggregate_consistency`] checks.
+fn aggregates_registered(ctx: &ExecutionCtx) -> bool {
+    [Stat::Sum, Stat::Min, Stat::Max, Stat::NaNCount]
+        .into_iter()
+        .all(|stat| {
+            stat.resolve_aggregate_fn(ctx.session())
+                .ok()
+                .flatten()
+                .is_some()
+        })
 }
 
 fn widened_primitive_dtype(dtype: &DType) -> Option<DType> {
@@ -1502,7 +1484,10 @@ pub fn test_array_consistency(array: &ArrayRef, ctx: &mut ExecutionCtx) {
     test_comparison_symmetry_consistency(array, ctx);
 
     // Aggregate operations
-    test_slice_aggregate_consistency(array, ctx);
+    // Aggregates resolve through the session, and the core array crate cannot register them.
+    if aggregates_registered(ctx) {
+        test_slice_aggregate_consistency(array, ctx);
+    }
 
     // Identity operations
     test_filter_identity(array, ctx);

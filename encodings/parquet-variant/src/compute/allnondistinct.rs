@@ -3,11 +3,11 @@
 
 use std::fmt::Debug;
 
+use vortex_aggregates::all_non_distinct::AllNonDistinct;
+use vortex_aggregates::all_non_distinct::all_non_distinct;
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::aggregate_fn::AggregateFnRef;
-use vortex_array::aggregate_fn::fns::all_non_distinct::AllNonDistinct;
-use vortex_array::aggregate_fn::fns::all_non_distinct::all_non_distinct;
 use vortex_array::aggregate_fn::kernels::DynAggregateKernel;
 use vortex_array::arrays::Struct;
 use vortex_array::arrays::struct_::StructArrayExt;
@@ -85,13 +85,13 @@ impl DynAggregateKernel for AllNonDistinctParquetVariant {
 mod tests {
     use std::sync::LazyLock;
 
+    use vortex_aggregates::all_non_distinct::AllNonDistinct;
+    use vortex_aggregates::all_non_distinct::all_non_distinct;
     use vortex_array::ArrayRef;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
     use vortex_array::aggregate_fn::AggregateFnVTableExt;
     use vortex_array::aggregate_fn::EmptyOptions;
-    use vortex_array::aggregate_fn::fns::all_non_distinct::AllNonDistinct;
-    use vortex_array::aggregate_fn::fns::all_non_distinct::all_non_distinct;
     use vortex_array::aggregate_fn::kernels::DynAggregateKernel;
     use vortex_array::arrays::StructArray;
     use vortex_array::arrays::VarBinViewArray;
