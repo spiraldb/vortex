@@ -30,6 +30,7 @@ use crate::layouts::zoned::LegacyStats;
 use crate::layouts::zoned::Zoned;
 use crate::plan::physical::ConcatPlan;
 use crate::plan::physical::FilterPlan;
+use crate::plan::physical::LegacyStatsPlan;
 use crate::plan::physical::ListPackPlan;
 use crate::plan::physical::PackPlan;
 use crate::plan::physical::PlanChildren;
@@ -62,7 +63,7 @@ pub fn lower(layout: &LayoutRef) -> VortexResult<PlanRef> {
         return Ok(lower_list(layout)?.into_plan());
     }
     if layout.is::<Zoned>() || layout.is::<LegacyStats>() {
-        return Ok(lower_zoned(layout)?.into_plan());
+        return lower_zoned(layout);
     }
     vortex_bail!(
         "No physical plan implementation for layout '{}'",
@@ -164,7 +165,7 @@ fn lazy_children(layout: LayoutRef, slots: Vec<usize>) -> PlanChildren {
     })
 }
 
-fn lower_zoned(layout: &LayoutRef) -> VortexResult<ZonedPlan> {
+fn lower_zoned(layout: &LayoutRef) -> VortexResult<PlanRef> {
     // Zoned and legacy stats layouts share a child shape: transparent data, auxiliary zones.
     let metadata = if let Some(layout) = layout.as_opt::<Zoned>() {
         layout.data()
@@ -173,12 +174,25 @@ fn lower_zoned(layout: &LayoutRef) -> VortexResult<ZonedPlan> {
     } else {
         vortex_bail!("Zoned plan requires a zoned layout")
     };
-    Ok(ZonedPlan::from_children(
-        layout.dtype().clone(),
-        layout.row_count(),
-        lazy_children(Arc::clone(layout), vec![0, 1]),
-        u64::try_from(metadata.zone_len())?,
-        metadata.aggregate_fns(),
-        metadata.legacy_stats(),
-    ))
+    let children = lazy_children(Arc::clone(layout), vec![0, 1]);
+    let zone_len = u64::try_from(metadata.zone_len())?;
+    // A legacy table is converted to the aggregate schema when the plan is optimized.
+    Ok(match metadata.legacy_stats() {
+        Some(stats) => LegacyStatsPlan::from_children(
+            layout.dtype().clone(),
+            layout.row_count(),
+            children,
+            zone_len,
+            Arc::clone(stats),
+        )
+        .into_plan(),
+        None => ZonedPlan::from_children(
+            layout.dtype().clone(),
+            layout.row_count(),
+            children,
+            zone_len,
+            metadata.aggregate_fns(),
+        )
+        .into_plan(),
+    })
 }

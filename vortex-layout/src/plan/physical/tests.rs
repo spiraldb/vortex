@@ -5,10 +5,15 @@ use std::fmt;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
+use vortex_array::IntoArray;
+use vortex_array::VortexSessionExecute;
 use vortex_array::aggregate_fn::AggregateFnRef;
 use vortex_array::aggregate_fn::AggregateFnVTableExt;
 use vortex_array::aggregate_fn::NumericalAggregateOpts;
 use vortex_array::aggregate_fn::fns::max::Max;
+use vortex_array::arrays::BoolArray;
+use vortex_array::arrays::PrimitiveArray;
+use vortex_array::arrays::StructArray;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
@@ -25,8 +30,10 @@ use vortex_array::expr::is_null;
 use vortex_array::expr::lit;
 use vortex_array::expr::pack;
 use vortex_array::expr::root;
+use vortex_array::expr::stats::Stat;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
+use vortex_mask::Mask;
 use vortex_session::registry::CachedId;
 use vortex_session::registry::ReadContext;
 
@@ -43,8 +50,12 @@ use crate::layouts::list::ListLayout;
 use crate::layouts::row_idx::row_idx;
 use crate::layouts::struct_::StructLayout;
 use crate::layouts::zoned::LegacyStatsLayoutEncoding;
+use crate::layouts::zoned::MAX_IS_TRUNCATED;
 use crate::layouts::zoned::ZonedLayout;
+use crate::layouts::zoned::legacy_stats_to_aggregates;
+use crate::layouts::zoned::zone_map::ZoneMap;
 use crate::segments::SegmentId;
+use crate::test::SESSION;
 
 fn primitive(ptype: PType, nullability: Nullability) -> DType {
     DType::Primitive(ptype, nullability)
@@ -1335,7 +1346,7 @@ fn pruning_expression_partitions_across_row_idx_and_zoned_struct_field() -> Vort
 }
 
 #[test]
-fn legacy_stats_layout_uses_zoned_plan() -> VortexResult<()> {
+fn legacy_stats_layout_lowers_to_legacy_stats_plan() -> VortexResult<()> {
     let dtype = primitive(PType::I32, Nullability::NonNullable);
     let zones_dtype = DType::Struct(StructFields::empty(), Nullability::NonNullable);
     let children = OwnedLayoutChildren::layout_children(vec![
@@ -1359,13 +1370,178 @@ fn legacy_stats_layout_uses_zoned_plan() -> VortexResult<()> {
     )?;
 
     let plan = make_plan(layout)?;
-    assert!(plan.is::<Zoned>());
+    assert!(plan.is::<LegacyStats>());
     insta::assert_snapshot!(plan.display_tree(), @"
-    root: vortex.plan.zoned(i32, rows=5)
+    root: vortex.plan.legacy_stats(i32, rows=5)
       data: vortex.plan.filter(i32, rows=5)
         child: vortex.plan.segment_scan(i32, rows=5)
       zones: vortex.plan.filter({}, rows=2)
         child: vortex.plan.segment_scan({}, rows=2)
     ");
+    // A table holding no stat an aggregate can stand for leaves only the data.
+    assert!(optimize(plan)?.is::<Filter>());
+    Ok(())
+}
+
+/// A legacy zone table holding the max of a `dtype` column.
+fn legacy_max_zones_dtype(dtype: &DType) -> DType {
+    DType::Struct(
+        StructFields::from_iter([
+            (Stat::Max.name(), dtype.as_nullable()),
+            (MAX_IS_TRUNCATED, DType::Bool(Nullability::NonNullable)),
+        ]),
+        Nullability::NonNullable,
+    )
+}
+
+/// Legacy stats over a 5-row i32 column in 3-row zones, holding each zone's max.
+fn legacy_max_plan(dtype: &DType) -> VortexResult<PlanRef> {
+    Ok(LegacyStatsPlan::new(
+        make_plan(flat(5, dtype.clone(), 0))?,
+        make_plan(flat(2, legacy_max_zones_dtype(dtype), 1))?,
+        3,
+        vec![Stat::Max].into(),
+    )
+    .into_plan())
+}
+
+/// The aggregate zone table of a max over `dtype`, and the max aggregate.
+fn max_zones_dtype(dtype: &DType) -> VortexResult<(AggregateFnRef, DType)> {
+    let max = Max.bind(NumericalAggregateOpts::skip_nans());
+    let max_dtype = max
+        .state_dtype(dtype)
+        .ok_or_else(|| vortex_err!("max does not support {dtype}"))?;
+    let zones_dtype = DType::Struct(
+        StructFields::from_iter([(max.to_string(), max_dtype.as_nullable())]),
+        Nullability::NonNullable,
+    );
+    Ok((max, zones_dtype))
+}
+
+#[test]
+fn legacy_stats_rewrite_to_zoned_over_converted_zones() -> VortexResult<()> {
+    let dtype = primitive(PType::I32, Nullability::NonNullable);
+    let (max, zones_dtype) = max_zones_dtype(&dtype)?;
+    let legacy = legacy_max_plan(&dtype)?;
+
+    let optimized = optimize(legacy.clone())?;
+    let zoned = optimized
+        .as_opt::<Zoned>()
+        .ok_or_else(|| vortex_err!("legacy stats did not become zoned"))?;
+    assert!(!zoned.is_pruning());
+    assert_eq!(zoned.zone_len(), 3);
+    assert_eq!(
+        zoned
+            .aggregate_fns()
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        vec![max.to_string()]
+    );
+    let zones = zoned.zones_plan()?;
+    assert!(zones.is::<Eval>());
+    assert_eq!(zones.dtype(), &zones_dtype);
+
+    let falsifier = gt(root(), lit(5_i32))
+        .bind(&dtype)?
+        .falsify(&SESSION)?
+        .ok_or_else(|| vortex_err!("filter has no falsifier"))?;
+    let pruning = optimize(EvalPlan::try_new(falsifier, legacy)?.into_plan())?;
+    let pruning = pruning
+        .as_opt::<Zoned>()
+        .ok_or_else(|| vortex_err!("legacy stats predicate did not become a pruning plan"))?;
+    assert!(pruning.is_pruning());
+    assert!(pruning.zones_plan()?.is::<Eval>());
+    Ok(())
+}
+
+#[test]
+fn converted_legacy_zones_prune() -> VortexResult<()> {
+    let dtype = primitive(PType::I32, Nullability::NonNullable);
+    let table_dtype = legacy_max_zones_dtype(&dtype);
+    let (aggregate_fns, conversion) =
+        legacy_stats_to_aggregates(&dtype, &table_dtype, &[Stat::Max]);
+    let table = StructArray::from_fields(&[
+        (
+            Stat::Max.name(),
+            PrimitiveArray::from_option_iter([Some(3_i32), Some(9)]).into_array(),
+        ),
+        (
+            MAX_IS_TRUNCATED,
+            BoolArray::from_iter([false, true]).into_array(),
+        ),
+    ])?;
+    assert_eq!(table.dtype(), &table_dtype);
+
+    let converted = table
+        .into_array()
+        .apply_bound(&conversion.bind(&table_dtype)?)?
+        .execute::<StructArray>(&mut SESSION.create_execution_ctx())?;
+    let zone_map = ZoneMap::try_new(dtype.clone(), converted, aggregate_fns, 3, 5)?;
+    let falsifier = gt(root(), lit(5_i32))
+        .bind(&dtype)?
+        .falsify(&SESSION)?
+        .ok_or_else(|| vortex_err!("filter has no falsifier"))?;
+    // Only the first zone's max proves no row exceeds 5.
+    assert_eq!(
+        zone_map.prune(&falsifier, &SESSION)?,
+        Mask::from_iter([true, false])
+    );
+    Ok(())
+}
+
+#[test]
+fn legacy_stats_under_zoned_are_dropped() -> VortexResult<()> {
+    let dtype = primitive(PType::I32, Nullability::NonNullable);
+    let (max, zones_dtype) = max_zones_dtype(&dtype)?;
+    let zones = make_plan(flat(2, zones_dtype, 2))?;
+    let plan = ZonedPlan::new(legacy_max_plan(&dtype)?, zones.clone(), 3, vec![max].into())
+        .into_plan();
+
+    let optimized = optimize(plan)?;
+    let zoned = optimized
+        .as_opt::<Zoned>()
+        .ok_or_else(|| vortex_err!("zoned plan was rewritten away"))?;
+    assert!(zoned.data_plan()?.is_some_and(|data| data.is::<Filter>()));
+    assert!(PlanRef::ptr_eq(&zoned.zones_plan()?, &zones));
+    Ok(())
+}
+
+#[test]
+fn legacy_stats_over_zoned_are_dropped() -> VortexResult<()> {
+    let dtype = primitive(PType::I32, Nullability::NonNullable);
+    let (max, zones_dtype) = max_zones_dtype(&dtype)?;
+    let zoned = ZonedPlan::new(
+        make_plan(flat(5, dtype.clone(), 0))?,
+        make_plan(flat(2, zones_dtype, 2))?,
+        3,
+        vec![max].into(),
+    )
+    .into_plan();
+    let legacy = LegacyStatsPlan::new(
+        zoned.clone(),
+        make_plan(flat(2, legacy_max_zones_dtype(&dtype), 1))?,
+        3,
+        vec![Stat::Max].into(),
+    )
+    .into_plan();
+
+    assert!(PlanRef::ptr_eq(&optimize(legacy)?, &zoned));
+    Ok(())
+}
+
+#[test]
+fn legacy_stats_with_zero_zone_length_keep_only_data() -> VortexResult<()> {
+    let dtype = primitive(PType::I32, Nullability::NonNullable);
+    let data = make_plan(flat(5, dtype.clone(), 0))?;
+    let legacy = LegacyStatsPlan::new(
+        data.clone(),
+        make_plan(flat(2, legacy_max_zones_dtype(&dtype), 1))?,
+        0,
+        vec![Stat::Max].into(),
+    )
+    .into_plan();
+
+    assert!(PlanRef::ptr_eq(&optimize(legacy)?, &data));
     Ok(())
 }

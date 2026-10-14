@@ -111,7 +111,8 @@ impl ZoneMap {
         legacy_stats_table_dtype(column_dtype, present_stats)
     }
 
-    pub(crate) fn try_new_legacy(
+    #[cfg(test)]
+    fn try_new_legacy(
         column_dtype: DType,
         array: StructArray,
         stats: Arc<[Stat]>,
