@@ -11920,10 +11920,13 @@ name = "vortex-expr"
 version = "0.1.0"
 dependencies = [
  "itertools 0.14.0",
+ "parking_lot",
  "rstest",
  "vortex-array",
+ "vortex-buffer",
  "vortex-error",
  "vortex-scalar-fns",
+ "vortex-session",
  "vortex-utils",
 ]
 
@@ -12010,6 +12013,7 @@ dependencies = [
  "vortex-decimal-byte-parts",
  "vortex-edition",
  "vortex-error",
+ "vortex-expr",
  "vortex-fastlanes",
  "vortex-fsst",
  "vortex-io",
@@ -12554,6 +12558,7 @@ dependencies = [
  "vortex-buffer",
  "vortex-edition",
  "vortex-error",
+ "vortex-expr",
  "vortex-interleave",
  "vortex-layout",
  "vortex-mask",

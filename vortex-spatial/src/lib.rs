@@ -8,11 +8,11 @@ use std::sync::Arc;
 use vortex_array::aggregate_fn::session::AggregateFnSessionExt;
 use vortex_array::dtype::session::DTypeSessionExt;
 use vortex_array::scalar_fn::session::ScalarFnSessionExt;
-use vortex_array::stats::session::StatsSessionExt;
 use vortex_arrow::ArrowSessionExt;
 use vortex_edition::EditionSessionExt;
 use vortex_error::VortexExpect;
 use vortex_error::vortex_err;
+use vortex_expr::stats::session::StatsSessionExt;
 use vortex_session::VortexSession;
 
 use crate::aggregate_fn::GeometryAabb;

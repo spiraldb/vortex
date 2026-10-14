@@ -14,9 +14,11 @@ version = { workspace = true }
 
 [dependencies]
 itertools = { workspace = true }
+parking_lot = { workspace = true }
 vortex-array = { workspace = true }
 vortex-error = { workspace = true }
 vortex-scalar-fns = { workspace = true }
+vortex-session = { workspace = true }
 vortex-utils = { workspace = true }
 
 [lints]
@@ -25,3 +27,4 @@ workspace = true
 [dev-dependencies]
 rstest = { workspace = true }
 vortex-array = { workspace = true, features = ["_test-harness"] }
+vortex-buffer = { workspace = true }

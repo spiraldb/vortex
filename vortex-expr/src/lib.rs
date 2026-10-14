@@ -7,10 +7,12 @@
 //! [`BoundExpression`](vortex_array::expr::BoundExpression)) and their optimizer live in
 //! `vortex_array::expr`. This crate holds the tooling that scan planning builds on top of them:
 //! tree annotation and labeling ([`analysis`]), normal forms such as conjunct extraction
-//! ([`forms`]), and partitioning and substitution rewrites ([`transform`]).
+//! ([`forms`]), partitioning and substitution rewrites ([`transform`]), and statistics-based
+//! pruning ([`stats`]).
 
 pub mod analysis;
 pub mod forms;
+pub mod stats;
 pub mod transform;
 
 pub use analysis::*;
