@@ -46,7 +46,6 @@ use crate::scan::splits::Splits;
 use crate::scan::tasks::SplitFuture;
 use crate::scan::tasks::TaskContext;
 use crate::scan::tasks::split_exec;
-use crate::scan::tasks::split_projection;
 
 /// A projected subset (by indices, range, and filter) of rows from a Vortex data source.
 ///
@@ -125,7 +124,7 @@ impl<A: 'static + Send> RepeatedScan<A> {
         Ok((tasks, counters))
     }
 
-    pub(super) fn execute_inner(
+    fn execute_inner(
         &self,
         row_range: Option<Range<u64>>,
         counters: Option<Arc<ScanCounters>>,
@@ -258,9 +257,7 @@ impl<A: 'static + Send> RepeatedScan<A> {
     fn split_masks(&self, row_range: Option<Range<u64>>) -> impl Iterator<Item = RowMask> + '_ {
         self.split_ranges(row_range)
             .into_iter()
-            .filter(|range| range.start < range.end)
-            .map(|range| self.selection.row_mask(&range))
-            .filter(|row_mask| !row_mask.mask().all_false())
+            .filter_map(|range| selected_mask(&self.selection, &range))
     }
 
     /// Execute the scan over `row_range` as a stream of the mapped split arrays.
@@ -297,10 +294,9 @@ impl<A: 'static + Send> RepeatedScan<A> {
         }
         let ctx = self.task_context(counters);
         let mut ranges = self.split_ranges(row_range).into_iter();
-        let first_mask = ranges.by_ref().find_map(|range| {
-            let mask = self.selection.row_mask(&range);
-            (!mask.mask().all_false()).then_some(mask)
-        });
+        let first_mask = ranges
+            .by_ref()
+            .find_map(|range| selected_mask(&self.selection, &range));
         let Some(first_mask) = first_mask else {
             return Ok(stream::empty().boxed());
         };
@@ -330,13 +326,11 @@ impl<A: 'static + Send> RepeatedScan<A> {
                     split_handle.spawn_nested(move |handle| async move {
                         let task = handle
                             .spawn_cpu(move || {
-                                let row_mask = match split {
-                                    Either::Left(mask) => mask,
-                                    Either::Right(range) => selection.row_mask(&range),
-                                };
-                                if row_mask.mask().all_false() {
+                                let Some(row_mask) =
+                                    split.either(Some, |range| selected_mask(&selection, &range))
+                                else {
                                     return Ok(None);
-                                }
+                                };
                                 split_exec(&ctx, row_mask).map(Some)
                             })
                             .await?;
@@ -360,21 +354,18 @@ impl<A: 'static + Send> RepeatedScan<A> {
                 // Build eagerly to register I/O up front. Without a filter, selected row counts
                 // are exact, so a limit can also be reserved here in split order.
                 let mut tasks = Vec::new();
-                for row_mask in iter::once(first_mask).chain(
-                    ranges
-                        .map(|range| self.selection.row_mask(&range))
-                        .filter(|mask| !mask.mask().all_false()),
-                ) {
-                    let task = if let Some(limit) = &limit {
-                        if limit.is_exhausted() {
-                            break;
-                        }
-                        let mask = limit.limit(row_mask.mask().clone());
-                        split_projection(&ctx, &row_mask.row_range(), mask)?
-                    } else {
-                        split_exec(&ctx, row_mask)?
+                for row_mask in iter::once(first_mask)
+                    .chain(ranges.filter_map(|range| selected_mask(&self.selection, &range)))
+                {
+                    let row_mask = match &limit {
+                        Some(limit) if limit.is_exhausted() => break,
+                        Some(limit) => RowMask::new(
+                            row_mask.row_range().start,
+                            limit.limit(row_mask.mask().clone()),
+                        ),
+                        None => row_mask,
                     };
-                    tasks.push(map_split(task, map_fn));
+                    tasks.push(map_split(split_exec(&ctx, row_mask)?, map_fn));
                 }
                 buffer(
                     stream::iter(tasks).map(move |task| handle.spawn(task)),
@@ -388,6 +379,12 @@ impl<A: 'static + Send> RepeatedScan<A> {
 
         Ok(stop_on_error(arrays))
     }
+}
+
+/// This function returns `None` if the selection excludes every row in `range`.
+fn selected_mask(selection: &Selection, range: &Range<u64>) -> Option<RowMask> {
+    let mask = selection.row_mask(range);
+    (!mask.mask().all_false()).then_some(mask)
 }
 
 fn can_prune_file(ctx: &TaskContext) -> VortexResult<bool> {

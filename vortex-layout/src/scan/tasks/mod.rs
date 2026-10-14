@@ -23,9 +23,10 @@ use crate::scan::filter::FilterExpr;
 use crate::scan::metrics::ScanCounters;
 use crate::scan::metrics::ScanMetrics;
 
-/// A future for the projected rows of one split.
+/// This future returns the projected rows of one split or `None`.
 pub(crate) type SplitFuture = BoxFuture<'static, VortexResult<Option<ArrayRef>>>;
 
+/// The caller must exclude empty masks before task construction.
 pub(crate) fn split_exec(ctx: &Arc<TaskContext>, read_mask: RowMask) -> VortexResult<SplitFuture> {
     if ctx.counters.is_some() {
         split_exec_inner::<true>(ctx, read_mask)
@@ -41,12 +42,65 @@ fn split_exec_inner<const TRACK_COUNTERS: bool>(
     let row_range = read_mask.row_range();
     let row_mask = read_mask.mask().clone();
     if ctx.filter.is_none() {
-        return split_projection_inner::<TRACK_COUNTERS>(ctx, &row_range, row_mask);
+        return split_projection::<TRACK_COUNTERS>(ctx, &row_range, row_mask);
     }
-    let ctx_for_filter = Arc::clone(ctx);
-    let filter_row_range = row_range.clone();
-    let filter_mask = MaskFuture::new(row_mask.len(), async move {
-        let ctx = ctx_for_filter;
+    let filter_mask = build_filter_mask::<TRACK_COUNTERS>(ctx, &row_range, row_mask);
+
+    // Construct the projection before the filter has run so the reader can prefetch its I/O.
+    let projection =
+        ctx.reader
+            .projection_evaluation(&row_range, &ctx.projection, filter_mask.clone())?;
+    Ok(considered::<TRACK_COUNTERS>(ctx, async move {
+        if filter_mask.await?.all_false() {
+            return Ok(None);
+        }
+        projection.await.map(Some)
+    }))
+}
+
+/// Project the rows selected by an already-evaluated `mask`.
+fn split_projection<const TRACK_COUNTERS: bool>(
+    ctx: &Arc<TaskContext>,
+    row_range: &Range<u64>,
+    mask: Mask,
+) -> VortexResult<SplitFuture> {
+    if mask.all_false() {
+        return Ok(futures::future::ready(Ok(None)).boxed());
+    }
+    let projection =
+        ctx.reader
+            .projection_evaluation(row_range, &ctx.projection, MaskFuture::ready(mask))?;
+    Ok(considered::<TRACK_COUNTERS>(
+        ctx,
+        projection.map(|array| array.map(Some)),
+    ))
+}
+
+/// With counters enabled, this future counts the split when its task first runs.
+/// It holds the context until it stops, so registry totals include its counts.
+fn considered<const TRACK_COUNTERS: bool>(
+    ctx: &Arc<TaskContext>,
+    split: impl Future<Output = VortexResult<Option<ArrayRef>>> + Send + 'static,
+) -> SplitFuture {
+    if !TRACK_COUNTERS {
+        return split.boxed();
+    }
+    let ctx = Arc::clone(ctx);
+    async move {
+        ctx.count::<TRACK_COUNTERS>(ScanCounters::consider_split);
+        split.await
+    }
+    .boxed()
+}
+
+fn build_filter_mask<const TRACK_COUNTERS: bool>(
+    ctx: &Arc<TaskContext>,
+    row_range: &Range<u64>,
+    row_mask: Mask,
+) -> MaskFuture {
+    let ctx = Arc::clone(ctx);
+    let row_range = row_range.clone();
+    MaskFuture::new(row_mask.len(), async move {
         let reader = &ctx.reader;
         let filter = ctx.filter.as_ref().vortex_expect("filter exists");
         let mut mask = row_mask;
@@ -58,15 +112,8 @@ fn split_exec_inner<const TRACK_COUNTERS: bool>(
             // We will re-run the pruning later if the version has changed in the meantime.
             *version = filter.dynamic_updates(idx).map(|du| du.version());
 
-            mask = prune_conjunct::<TRACK_COUNTERS>(
-                &ctx,
-                filter,
-                idx,
-                *version,
-                &filter_row_range,
-                mask,
-            )
-            .await?;
+            mask = prune_conjunct::<TRACK_COUNTERS>(&ctx, filter, idx, *version, &row_range, mask)
+                .await?;
             if mask.all_false() {
                 return Ok(mask);
             }
@@ -86,15 +133,9 @@ fn split_exec_inner<const TRACK_COUNTERS: bool>(
             {
                 // The dynamic expression has been updated, re-run the pruning.
                 dynamic_versions[idx] = Some(dv);
-                mask = prune_conjunct::<TRACK_COUNTERS>(
-                    &ctx,
-                    filter,
-                    idx,
-                    Some(dv),
-                    &filter_row_range,
-                    mask,
-                )
-                .await?;
+                mask =
+                    prune_conjunct::<TRACK_COUNTERS>(&ctx, filter, idx, Some(dv), &row_range, mask)
+                        .await?;
                 if mask.all_false() {
                     return Ok(mask);
                 }
@@ -102,7 +143,7 @@ fn split_exec_inner<const TRACK_COUNTERS: bool>(
 
             let input_true_count = mask.true_count();
             let conjunct_mask = reader
-                .filter_evaluation(&filter_row_range, conjunct, MaskFuture::ready(mask))?
+                .filter_evaluation(&row_range, conjunct, MaskFuture::ready(mask))?
                 .await?;
             filter.report_selectivity(
                 idx,
@@ -118,54 +159,7 @@ fn split_exec_inner<const TRACK_COUNTERS: bool>(
         }
 
         Ok(mask)
-    });
-    let projection =
-        ctx.reader
-            .projection_evaluation(&row_range, &ctx.projection, filter_mask.clone())?;
-    let count_ctx = TRACK_COUNTERS.then(|| Arc::clone(ctx));
-    Ok(async move {
-        if let Some(ctx) = &count_ctx {
-            ctx.count::<TRACK_COUNTERS>(ScanCounters::consider_split);
-        }
-        if filter_mask.await?.all_false() {
-            return Ok(None);
-        }
-        projection.await.map(Some)
-    }
-    .boxed())
-}
-
-pub(crate) fn split_projection(
-    ctx: &Arc<TaskContext>,
-    row_range: &Range<u64>,
-    mask: Mask,
-) -> VortexResult<SplitFuture> {
-    if ctx.counters.is_some() {
-        split_projection_inner::<true>(ctx, row_range, mask)
-    } else {
-        split_projection_inner::<false>(ctx, row_range, mask)
-    }
-}
-
-fn split_projection_inner<const TRACK_COUNTERS: bool>(
-    ctx: &Arc<TaskContext>,
-    row_range: &Range<u64>,
-    mask: Mask,
-) -> VortexResult<SplitFuture> {
-    if mask.all_false() {
-        return Ok(futures::future::ready(Ok(None)).boxed());
-    }
-    let projection =
-        ctx.reader
-            .projection_evaluation(row_range, &ctx.projection, MaskFuture::ready(mask))?;
-    let count_ctx = TRACK_COUNTERS.then(|| Arc::clone(ctx));
-    Ok(async move {
-        if let Some(ctx) = &count_ctx {
-            ctx.count::<TRACK_COUNTERS>(ScanCounters::consider_split);
-        }
-        projection.await.map(Some)
-    }
-    .boxed())
+    })
 }
 
 /// Applies whole-file statistics for a dynamic conjunct, then split statistics.
@@ -185,16 +179,14 @@ async fn prune_conjunct<const TRACK_COUNTERS: bool>(
         return Ok(Mask::new_false(mask.len()));
     }
 
+    let conjunct = &filter.conjuncts()[idx];
     let conjunct_mask = ctx
         .reader
-        .split_pruning_evaluation(row_range, &filter.conjuncts()[idx], mask.clone())?
+        .split_pruning_evaluation(row_range, conjunct, mask.clone())?
         .await?;
     let mask = mask.bitand(&conjunct_mask);
     if TRACK_COUNTERS && mask.all_false() {
-        if ctx
-            .reader
-            .split_pruning_is_statistics(&filter.conjuncts()[idx])?
-        {
+        if ctx.reader.split_pruning_is_statistics(conjunct)? {
             ctx.count::<TRACK_COUNTERS>(ScanCounters::prune_split);
         } else {
             ctx.count::<TRACK_COUNTERS>(ScanCounters::filter_split);
