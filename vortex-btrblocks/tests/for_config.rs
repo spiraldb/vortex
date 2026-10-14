@@ -33,7 +33,7 @@ use vortex_session::VortexSession;
 use vortex_session::registry::ReadContext;
 
 static FOR_V1: FoRScheme = FoRScheme::v1();
-static BITPACKING: BitPackingScheme = BitPackingScheme;
+static BITPACKING: BitPackingScheme = BitPackingScheme::v1();
 
 /// Registers the fastlanes encodings, and enables no editions.
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
