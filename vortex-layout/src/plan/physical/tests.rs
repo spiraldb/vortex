@@ -21,7 +21,6 @@ use vortex_array::dtype::StructFields;
 use vortex_array::expr::Expression;
 use vortex_array::expr::and;
 use vortex_array::expr::bound::and as bound_and;
-use vortex_array::expr::byte_length;
 use vortex_array::expr::cast;
 use vortex_array::expr::checked_add;
 use vortex_array::expr::dynamic;
@@ -39,6 +38,7 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_expr::stats::rewrite::BoundExpressionPruneExt;
 use vortex_mask::Mask;
+use vortex_scalar_fns::expr::byte_length;
 use vortex_session::registry::CachedId;
 use vortex_session::registry::ReadContext;
 

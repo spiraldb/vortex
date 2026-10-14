@@ -24,9 +24,7 @@ use vortex_array::aggregate_fn::AggregateFnVTableExt;
 use vortex_array::aggregate_fn::EmptyOptions;
 use vortex_array::expr::BoundExpression;
 use vortex_array::expr::bound::binary;
-use vortex_array::expr::bound::case_when;
 use vortex_array::expr::bound::checked_add;
-use vortex_array::expr::bound::ext_storage;
 use vortex_array::expr::bound::get_item;
 use vortex_array::expr::bound::gt;
 use vortex_array::expr::bound::gt_eq;
@@ -38,6 +36,8 @@ use vortex_array::scalar_fn::fns::literal::Literal;
 use vortex_array::scalar_fn::fns::operators::Operator;
 use vortex_error::VortexResult;
 use vortex_expr::stats::bound::stat;
+use vortex_scalar_fns::expr::bound::case_when;
+use vortex_scalar_fns::expr::bound::ext_storage;
 use vortex_session::VortexSession;
 
 use crate::aggregate_fn::GeometryAabb;

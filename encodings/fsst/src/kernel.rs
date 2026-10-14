@@ -10,12 +10,12 @@ use vortex_array::optimizer::kernels::ArrayKernelsExt;
 use vortex_array::scalar_fn::ScalarFnVTable;
 use vortex_array::scalar_fn::fns::binary::Binary;
 use vortex_array::scalar_fn::fns::binary::CompareExecuteAdaptor;
-use vortex_array::scalar_fn::fns::byte_length::ByteLength;
-use vortex_array::scalar_fn::fns::byte_length::ByteLengthExecuteAdaptor;
 use vortex_array::scalar_fn::fns::cast::Cast;
 use vortex_array::scalar_fn::fns::cast::CastExecuteAdaptor;
 use vortex_array::scalar_fn::fns::like::Like;
 use vortex_array::scalar_fn::fns::like::LikeExecuteAdaptor;
+use vortex_scalar_fns::byte_length::ByteLength;
+use vortex_scalar_fns::byte_length::ByteLengthExecuteAdaptor;
 use vortex_session::VortexSession;
 
 use crate::FSST;
@@ -44,10 +44,10 @@ mod tests {
     use vortex_array::assert_arrays_eq;
     use vortex_array::dtype::DType;
     use vortex_array::dtype::Nullability;
-    use vortex_array::expr::byte_length;
     use vortex_array::expr::root;
     use vortex_error::VortexResult;
     use vortex_mask::Mask;
+    use vortex_scalar_fns::expr::byte_length;
     use vortex_session::VortexSession;
 
     use crate::FSST;

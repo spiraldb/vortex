@@ -617,11 +617,11 @@ mod tests {
     use vortex_array::expr::gt;
     use vortex_array::expr::is_not_null;
     use vortex_array::expr::is_null;
-    use vortex_array::expr::list_length;
     use vortex_array::expr::lit;
     use vortex_buffer::buffer;
     use vortex_io::session::RuntimeSession;
     use vortex_io::session::RuntimeSessionExt;
+    use vortex_scalar_fns::expr::list_length;
 
     use super::*;
     use crate::LayoutRef;

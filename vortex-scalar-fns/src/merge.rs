@@ -7,33 +7,32 @@ use std::hash::Hash;
 use std::sync::Arc;
 
 use itertools::Itertools as _;
+use vortex_array::ArrayRef;
+use vortex_array::ExecutionCtx;
+use vortex_array::IntoArray as _;
+use vortex_array::arrays::StructArray;
+use vortex_array::arrays::struct_::StructArrayExt;
+use vortex_array::dtype::DType;
+use vortex_array::dtype::FieldNames;
+use vortex_array::dtype::Nullability;
+use vortex_array::dtype::StructFields;
+use vortex_array::scalar_fn::Arity;
+use vortex_array::scalar_fn::ChildName;
+use vortex_array::scalar_fn::ExecutionArgs;
+use vortex_array::scalar_fn::ReduceNode;
+use vortex_array::scalar_fn::ScalarFnId;
+use vortex_array::scalar_fn::ScalarFnVTable;
+use vortex_array::scalar_fn::ScalarFnVTableExt;
+use vortex_array::scalar_fn::fns::get_item::GetItem;
+use vortex_array::scalar_fn::fns::pack::Pack;
+use vortex_array::scalar_fn::fns::pack::PackOptions;
+use vortex_array::validity::Validity;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
 use vortex_utils::aliases::hash_set::HashSet;
-
-use crate::ArrayRef;
-use crate::ExecutionCtx;
-use crate::IntoArray as _;
-use crate::arrays::StructArray;
-use crate::arrays::struct_::StructArrayExt;
-use crate::dtype::DType;
-use crate::dtype::FieldNames;
-use crate::dtype::Nullability;
-use crate::dtype::StructFields;
-use crate::scalar_fn::Arity;
-use crate::scalar_fn::ChildName;
-use crate::scalar_fn::ExecutionArgs;
-use crate::scalar_fn::ReduceNode;
-use crate::scalar_fn::ScalarFnId;
-use crate::scalar_fn::ScalarFnVTable;
-use crate::scalar_fn::ScalarFnVTableExt;
-use crate::scalar_fn::fns::get_item::GetItem;
-use crate::scalar_fn::fns::pack::Pack;
-use crate::scalar_fn::fns::pack::PackOptions;
-use crate::validity::Validity;
 
 /// Merge zero or more expressions that ALL return structs.
 ///
@@ -254,31 +253,31 @@ impl Display for DuplicateHandling {
 
 #[cfg(test)]
 mod tests {
+    use vortex_array::ArrayRef;
+    use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
+    use vortex_array::array_session;
+    use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::arrays::struct_::StructArrayExt;
+    use vortex_array::assert_arrays_eq;
+    use vortex_array::dtype::DType;
+    use vortex_array::dtype::Nullability::NonNullable;
+    use vortex_array::dtype::PType::I32;
+    use vortex_array::dtype::PType::I64;
+    use vortex_array::dtype::PType::U32;
+    use vortex_array::dtype::PType::U64;
+    use vortex_array::expr::Expression;
+    use vortex_array::expr::get_item;
+    use vortex_array::expr::root;
+    use vortex_array::scalar_fn::fns::pack::Pack;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
     use vortex_error::vortex_bail;
 
-    use crate::ArrayRef;
-    use crate::IntoArray;
-    use crate::VortexSessionExecute;
-    use crate::array_session;
-    use crate::arrays::PrimitiveArray;
-    use crate::arrays::struct_::StructArrayExt;
-    use crate::assert_arrays_eq;
-    use crate::dtype::DType;
-    use crate::dtype::Nullability::NonNullable;
-    use crate::dtype::PType::I32;
-    use crate::dtype::PType::I64;
-    use crate::dtype::PType::U32;
-    use crate::dtype::PType::U64;
-    use crate::expr::Expression;
-    use crate::expr::get_item;
     use crate::expr::merge;
     use crate::expr::merge_opts;
-    use crate::expr::root;
-    use crate::scalar_fn::fns::merge::DuplicateHandling;
-    use crate::scalar_fn::fns::merge::StructArray;
-    use crate::scalar_fn::fns::pack::Pack;
+    use crate::merge::DuplicateHandling;
+    use crate::merge::StructArray;
 
     fn primitive_field(array: &ArrayRef, field_path: &[&str]) -> VortexResult<PrimitiveArray> {
         let mut ctx = array_session().create_execution_ctx();

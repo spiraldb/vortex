@@ -27,6 +27,7 @@ vortex-edition = { workspace = true }
 vortex-error = { workspace = true }
 vortex-expr = { workspace = true }
 vortex-mask = { workspace = true }
+vortex-scalar-fns = { workspace = true }
 vortex-session = { workspace = true }
 wkb = { workspace = true }
 

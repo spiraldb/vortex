@@ -60,10 +60,7 @@ impl GetItem {
     /// `get_item` node themselves. The optimizer visits children before their parent, so a
     /// `get_item` that a rule introduces is never simplified again. Removing it here keeps the
     /// output of the rule a fixed point.
-    pub(crate) fn apply_now<T: ReduceNode>(
-        struct_node: &T,
-        field_name: &FieldName,
-    ) -> VortexResult<T> {
+    pub fn apply_now<T: ReduceNode>(struct_node: &T, field_name: &FieldName) -> VortexResult<T> {
         if let Some(field) = Self::maybe_apply_now(struct_node, field_name)? {
             return Ok(field);
         }

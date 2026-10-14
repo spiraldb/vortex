@@ -34,8 +34,6 @@ use vortex_array::scalar_fn::fns::is_not_null::IsNotNull;
 use vortex_array::scalar_fn::fns::is_null::IsNull;
 use vortex_array::scalar_fn::fns::mask::Mask as MaskFn;
 use vortex_array::scalar_fn::fns::pack::Pack;
-use vortex_array::scalar_fn::fns::select::FieldSelection;
-use vortex_array::scalar_fn::fns::select::Select;
 use vortex_array::validity::Validity;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
@@ -46,6 +44,8 @@ use vortex_expr::make_bound_free_field_annotator;
 use vortex_expr::transform::BoundPartitionedExpr;
 use vortex_expr::transform::partition_bound;
 use vortex_mask::Mask;
+use vortex_scalar_fns::select::FieldSelection;
+use vortex_scalar_fns::select::Select;
 use vortex_session::VortexSession;
 use vortex_utils::aliases::dash_map::DashMap;
 use vortex_utils::aliases::hash_map::HashMap;
@@ -732,8 +732,6 @@ mod tests {
     use vortex_array::expr::or;
     use vortex_array::expr::pack;
     use vortex_array::expr::root;
-    use vortex_array::expr::select;
-    use vortex_array::expr::select_exclude;
     use vortex_array::scalar::Scalar;
     use vortex_array::validity::Validity;
     use vortex_buffer::buffer;
@@ -741,6 +739,8 @@ mod tests {
     use vortex_io::runtime::single::block_on;
     use vortex_io::session::RuntimeSessionExt;
     use vortex_mask::Mask;
+    use vortex_scalar_fns::expr::select;
+    use vortex_scalar_fns::expr::select_exclude;
 
     use crate::LayoutReaderRef;
     use crate::LayoutRef;

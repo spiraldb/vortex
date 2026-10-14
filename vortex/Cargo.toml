@@ -42,6 +42,7 @@ vortex-metrics = { workspace = true }
 vortex-parquet-variant = { workspace = true, optional = true }
 vortex-pco = { workspace = true }
 vortex-runend = { workspace = true }
+vortex-scalar-fns = { workspace = true }
 vortex-scan = { workspace = true }
 vortex-sequence = { workspace = true }
 vortex-session = { workspace = true }

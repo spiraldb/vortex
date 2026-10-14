@@ -24,7 +24,6 @@ use vortex_array::expr::ExactBoundExpr;
 use vortex_array::expr::bound::pack as bound_pack;
 use vortex_array::expr::root;
 use vortex_array::optimizer::ArrayOptimizer;
-use vortex_array::scalar_fn::is_negative_cost;
 use vortex_error::VortexError;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
@@ -32,6 +31,7 @@ use vortex_expr::direct_bound_annotations;
 use vortex_expr::label_bound_tree;
 use vortex_expr::transform::partition_bound_annotations;
 use vortex_mask::Mask;
+use vortex_scalar_fns::is_negative_cost;
 use vortex_session::VortexSession;
 use vortex_utils::aliases::dash_map::DashMap;
 
@@ -378,7 +378,6 @@ mod tests {
     use vortex_array::expr::BoundExpression;
     use vortex_array::expr::Expression;
     use vortex_array::expr::bound::pack as bound_pack;
-    use vortex_array::expr::byte_length;
     use vortex_array::expr::cast;
     use vortex_array::expr::eq;
     use vortex_array::expr::get_item;
@@ -395,6 +394,7 @@ mod tests {
     use vortex_io::runtime::single::block_on;
     use vortex_io::session::RuntimeSession;
     use vortex_io::session::RuntimeSessionExt;
+    use vortex_scalar_fns::expr::byte_length;
     use vortex_session::VortexSession;
 
     use crate::LayoutId;

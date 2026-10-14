@@ -244,7 +244,7 @@ pub trait ScalarFnVTable: 'static + Sized + Clone + Send + Sync {
     /// is not because `false AND null` returns `false`. `is_null` is also not strict.
     ///
     /// Strictness does not require valid inputs to produce a valid output. For example,
-    /// [`crate::expr::list_sum`] returns null for a valid empty list. Implement
+    /// `list_sum` returns null for a valid empty list. Implement
     /// [`ScalarFnVTable::validity`] only when the output validity can be derived without
     /// evaluation.
     ///
@@ -262,7 +262,7 @@ pub trait ScalarFnVTable: 'static + Sized + Clone + Send + Sync {
     ///
     /// Return `true` only when a well-typed call cannot error because of its values. `checked_add`
     /// is fallible on integer overflow, and integer division is fallible when its divisor is zero.
-    /// A null result is not an error: [`crate::expr::list_sum`] is infallible for an empty list.
+    /// A null result is not an error: `list_sum` is infallible for an empty list.
     ///
     /// Ignore incidental execution errors, such as canonicalization failures, allocation errors,
     /// and encoding mismatches. They are not part of the function's semantics.
