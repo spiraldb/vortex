@@ -709,8 +709,9 @@ fn try_from_expression_inner(
     }))
 }
 
-/// Converts IN and NOT IN. Constants go into one `in_list`, other values become equalities,
-/// joined with Kleene OR: `x IN (y, 1, 2)` becomes `x = y OR in_list(x, [1, 2])`.
+/// Converts IN and NOT IN to `in_list`. DuckDB's `in_clause` optimizer rewrites lists with
+/// nonconstant values to equalities, so those reach us only when it is disabled. Then each
+/// nonconstant value becomes an equality, joined to the `in_list` with Kleene OR.
 fn try_from_compare_in(
     operator: BoundOperator,
     ctx: ConvertCtx<'_>,
