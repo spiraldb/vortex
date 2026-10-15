@@ -427,9 +427,12 @@ impl FileOpener for VortexOpener {
 
             // Set before the byte-range translation below, which computes natural splits for
             // the fields the scan's projection and filter reference.
+            // DataFusion's dynamic filters are enforced again by the operators that produce them,
+            // so the scan may stop evaluating one that keeps almost every row.
             scan_builder = scan_builder
                 .with_projection(scan_projection)
-                .with_some_filter(native_filter);
+                .with_some_filter(native_filter)
+                .with_skip_unselective_dynamic(true);
 
             if let Some(file_range) = &file.range {
                 let byte_range = Range {

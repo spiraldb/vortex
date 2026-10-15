@@ -8,8 +8,9 @@
 //! emit [`dynamic`] comparisons whose right-hand sides are re-read from the DataFusion filter
 //! whenever its generation changes. If the filter already has bounds when a file is opened, only
 //! the comparisons those bounds use are emitted, since a TopK filter keeps its shape as it
-//! tightens. Before its first update (it starts as `true`) the shape is unknown, so every column
-//! gets the full template (`<`, `<=`, `>`, `>=`).
+//! tightens. Before its first update (it starts as `true`) the shape is unknown, so the leading
+//! column gets the template `<=` and `>=`; a strict bound is applied through its non-strict
+//! comparison, which keeps a superset of the rows.
 //!
 //! Every comparison defaults to `true` when the current DataFusion predicate has no matching
 //! bound, so the Vortex filter only ever keeps a superset of the rows DataFusion's filter keeps.
@@ -19,10 +20,15 @@
 //! Filters that are already complete when the file is opened (typically hash-join filters, whose
 //! build side has finished) can never change again. Their bounds are read once and only applied
 //! when the file's statistics suggest they will skip a meaningful share of rows, because
-//! evaluating a non-selective filter costs more than it saves.
+//! evaluating a non-selective filter costs more than it saves. A live filter that completes while
+//! the file is being scanned gets the same check: bounds on columns where they are not selective
+//! are dropped, so their comparisons always pass. The scan then stops evaluating them (see
+//! `ScanBuilder::with_skip_unselective_dynamic`).
 
 use std::cmp::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering as AtomicOrdering;
 
 use arc_swap::ArcSwapOption;
 use datafusion_common::ScalarValue as DFScalarValue;
@@ -48,6 +54,7 @@ use vortex::expr::or;
 use vortex::expr::root;
 use vortex::expr::stats::Stat;
 use vortex::file::FileStatistics;
+use vortex::scalar::PValue;
 use vortex::scalar::Scalar;
 use vortex::scalar::ScalarValue;
 use vortex::scalar_fn::fns::between::BetweenOptions;
@@ -66,12 +73,10 @@ const MAX_KEPT_FRACTION: f64 = 0.5;
 /// it saves. DataFusion's own `hash_join_inlist_pushdown_max_distinct_values` is 150.
 const MAX_MEMBERS: usize = 256;
 
-const TEMPLATE_OPS: [CompareOperator; 4] = [
-    CompareOperator::Lt,
-    CompareOperator::Lte,
-    CompareOperator::Gt,
-    CompareOperator::Gte,
-];
+/// Comparisons emitted for a live filter's columns. A strict bound is applied through its
+/// non-strict comparison, which keeps a superset of the rows, so two comparisons per column
+/// serve every bound a TopK or hash-join filter produces.
+const TEMPLATE_OPS: [CompareOperator; 2] = [CompareOperator::Lte, CompareOperator::Gte];
 
 /// The column referenced by `expr`, looking through casts the expression adapter adds when a
 /// file's type differs from the table's (e.g. a different timestamp unit).
@@ -149,9 +154,17 @@ fn convert_dynamic_filter(
         return None;
     }
 
+    let file_ranges = columns
+        .iter()
+        .map(|(name, dtype)| {
+            file_stats.and_then(|stats| file_range(file_fields, stats, name, dtype))
+        })
+        .collect();
     let bounds = Arc::new(LiveBounds {
         filter: Arc::clone(expr),
         columns: columns.clone(),
+        file_ranges,
+        complete: AtomicBool::new(false),
         session: session.clone(),
         cache: ArcSwapOption::empty(),
     });
@@ -160,7 +173,7 @@ fn convert_dynamic_filter(
         DynamicFilterTracking::classify(expr),
         DynamicFilterTracking::AllComplete
     ) {
-        return bounds.selective_static_filter(file_fields, file_stats?);
+        return bounds.selective_static_filter();
     }
 
     let current = bounds.current_bounds();
@@ -180,7 +193,11 @@ fn convert_dynamic_filter(
             } else {
                 TEMPLATE_OPS
                     .into_iter()
-                    .filter(|op| current.iter().any(|(c, o, _)| *c == idx && o == op))
+                    .filter(|op| {
+                        current
+                            .iter()
+                            .any(|(c, o, _)| *c == idx && non_strict(*o) == *op)
+                    })
                     .collect()
             };
             let lhs = get_item(name, root());
@@ -213,12 +230,19 @@ type Bound = (usize, CompareOperator, ScalarValue);
 struct Snapshot {
     generation: u64,
     bounds: Arc<[Bound]>,
+    /// Whether the filter was complete when the bounds were read. Completing a filter does not
+    /// change its generation, so an incomplete snapshot is re-read once completion is seen.
+    complete: bool,
 }
 
 struct LiveBounds {
     /// Always a [`DynamicFilterPhysicalExpr`]; kept type-erased because that type is not `Clone`.
     filter: Arc<dyn PhysicalExpr>,
     columns: Vec<(String, DType)>,
+    /// Each column's `(min, max)` in the file, when its statistics are known and numeric.
+    file_ranges: Vec<Option<(f64, f64)>>,
+    /// Set once the filter is seen complete, after which it can never change again.
+    complete: AtomicBool,
     session: VortexSession,
     /// Read on every evaluation of the Vortex filter but replaced only when the DataFusion filter
     /// changes, a few dozen times per query for TopK, so reads must not contend.
@@ -228,11 +252,7 @@ struct LiveBounds {
 impl LiveBounds {
     /// Builds static comparisons from the filter's current bounds and membership lists, keeping
     /// only columns whose constraints are estimated to exclude a meaningful share of the file.
-    fn selective_static_filter(
-        &self,
-        file_fields: &StructFields,
-        file_stats: &FileStatistics,
-    ) -> Option<Expression> {
+    fn selective_static_filter(&self) -> Option<Expression> {
         let current = self
             .filter
             .downcast_ref::<DynamicFilterPhysicalExpr>()?
@@ -261,9 +281,7 @@ impl LiveBounds {
                 if column_bounds.is_empty() && column_members.is_none() {
                     return None;
                 }
-                let (stats, _) = file_stats.get(file_fields.find(name)?);
-                let stat = |stat| Scalar::try_new(dtype.clone(), stats.get(stat).into_inner()).ok();
-                let range = (as_f64(&stat(Stat::Min)?)?, as_f64(&stat(Stat::Max)?)?);
+                let range = self.file_ranges[idx]?;
                 // A complete filter never changes again, so nulls only need to survive when it
                 // can admit them.
                 let keep_nulls = dtype.is_nullable() && !rejects_nulls(&current, name);
@@ -280,34 +298,93 @@ impl LiveBounds {
     }
 
     fn value(&self, column: usize, op: CompareOperator) -> Option<ScalarValue> {
-        let generation = self.filter.snapshot_generation();
-        if let Some(snapshot) = self.cache.load().as_ref()
-            && snapshot.generation == generation
-        {
-            return find_bound(&snapshot.bounds, column, op);
-        }
-        find_bound(&self.refresh(generation), column, op)
+        find_bound(&self.current_bounds(), column, op)
     }
 
     /// The bounds of the filter's current generation, re-read only when the generation changes.
     fn current_bounds(&self) -> Arc<[Bound]> {
         let generation = self.filter.snapshot_generation();
         match self.cache.load().as_ref() {
-            Some(snapshot) if snapshot.generation == generation => Arc::clone(&snapshot.bounds),
+            Some(snapshot)
+                if snapshot.generation == generation
+                    && (snapshot.complete || !self.is_complete()) =>
+            {
+                Arc::clone(&snapshot.bounds)
+            }
             _ => self.refresh(generation),
         }
+    }
+
+    /// Whether the filter is complete. Remembered once seen, as a complete filter never changes.
+    fn is_complete(&self) -> bool {
+        if self.complete.load(AtomicOrdering::Relaxed) {
+            return true;
+        }
+        let complete = matches!(
+            DynamicFilterTracking::classify(&self.filter),
+            DynamicFilterTracking::AllComplete
+        );
+        if complete {
+            self.complete.store(true, AtomicOrdering::Relaxed);
+        }
+        complete
+    }
+
+    /// Keeps the bounds of a complete filter only on columns where they are estimated to exclude
+    /// a meaningful share of the file, as for a filter that is already complete when the file is
+    /// opened. The comparisons on other columns then always pass and stop costing evaluations.
+    fn selective_bounds(&self, mut bounds: Vec<Bound>) -> Vec<Bound> {
+        let selective: Vec<bool> = self
+            .columns
+            .iter()
+            .zip(&self.file_ranges)
+            .enumerate()
+            .map(|(idx, ((_, dtype), range))| {
+                let Some(range) = *range else {
+                    return false;
+                };
+                let column_bounds = bounds
+                    .iter()
+                    .filter(|(c, ..)| *c == idx)
+                    .map(|(_, op, value)| {
+                        Some((
+                            *op,
+                            Scalar::try_new(dtype.clone(), Some(value.clone())).ok()?,
+                        ))
+                    })
+                    .collect::<Option<Vec<_>>>();
+                column_bounds
+                    .and_then(|column_bounds| bounded_range(&column_bounds, range))
+                    .is_some_and(|bounded| range_fraction(bounded, range) <= MAX_KEPT_FRACTION)
+            })
+            .collect();
+        bounds.retain(|(c, ..)| selective[*c]);
+        bounds
     }
 
     /// Re-reads the bounds for `generation` and caches them, unless a concurrent refresh has
     /// already cached a newer generation.
     fn refresh(&self, generation: u64) -> Arc<[Bound]> {
-        let bounds: Arc<[Bound]> = self.extract_bounds().into();
+        // Read completion first: once complete, the bounds read below are final.
+        let complete = self.is_complete();
+        let bounds = self.extract_bounds();
+        let bounds: Arc<[Bound]> = if complete {
+            self.selective_bounds(bounds).into()
+        } else {
+            bounds.into()
+        };
         let snapshot = Arc::new(Snapshot {
             generation,
             bounds: Arc::clone(&bounds),
+            complete,
         });
         self.cache.rcu(|cached| match cached {
-            Some(cached) if cached.generation > generation => Some(Arc::clone(cached)),
+            Some(cached)
+                if cached.generation > generation
+                    || (cached.generation == generation && cached.complete && !complete) =>
+            {
+                Some(Arc::clone(cached))
+            }
             _ => Some(Arc::clone(&snapshot)),
         });
         bounds
@@ -598,6 +675,18 @@ fn as_f64(scalar: &Scalar) -> Option<f64> {
     scalar.as_primitive_opt()?.as_::<f64>()
 }
 
+/// The `(min, max)` of column `name` in the file, when its statistics are known and numeric.
+fn file_range(
+    file_fields: &StructFields,
+    file_stats: &FileStatistics,
+    name: &str,
+    dtype: &DType,
+) -> Option<(f64, f64)> {
+    let (stats, _) = file_stats.get(file_fields.find(name)?);
+    let stat = |stat| Scalar::try_new(dtype.clone(), stats.get(stat).into_inner()).ok();
+    Some((as_f64(&stat(Stat::Min)?)?, as_f64(&stat(Stat::Max)?)?))
+}
+
 /// Static comparisons for one column of a complete filter: its bounds, when they are selective
 /// against the file's `(min, max)` range, and its membership list, when that list is sparse in
 /// the range the bounds keep. With `keep_nulls`, null rows always pass.
@@ -733,11 +822,62 @@ fn range_fraction((lower, upper): (f64, f64), (min, max): (f64, f64)) -> f64 {
     ((upper - lower) / (max - min)).clamp(0.0, 1.0)
 }
 
+/// The bound on `column` for comparison `op`, preferring an exact match over a strict bound the
+/// non-strict comparison also enforces.
+///
+/// A strict integer bound is stepped to its equivalent non-strict one (`a < 5` is `a <= 4`). Other
+/// strict bounds are applied as they are, which also keeps rows equal to the bound.
 fn find_bound(bounds: &[Bound], column: usize, op: CompareOperator) -> Option<ScalarValue> {
-    bounds
+    if let Some((_, _, value)) = bounds.iter().find(|(c, o, _)| *c == column && *o == op) {
+        return Some(value.clone());
+    }
+    let (_, strict, value) = bounds
         .iter()
-        .find(|(c, o, _)| *c == column && *o == op)
-        .map(|(_, _, value)| value.clone())
+        .find(|(c, o, _)| *c == column && *o != op && non_strict(*o) == op)?;
+    Some(step_strict_integer(value, *strict).unwrap_or_else(|| value.clone()))
+}
+
+/// The non-strict integer bound equivalent to strict bound `value`, or `None` for non-integers
+/// and bounds that would overflow.
+fn step_strict_integer(value: &ScalarValue, strict: CompareOperator) -> Option<ScalarValue> {
+    let ScalarValue::Primitive(value) = value else {
+        return None;
+    };
+    let up = match strict {
+        CompareOperator::Gt => true,
+        CompareOperator::Lt => false,
+        _ => return None,
+    };
+    macro_rules! step {
+        ($v:expr, $variant:ident) => {
+            if up {
+                $v.checked_add(1).map(PValue::$variant)
+            } else {
+                $v.checked_sub(1).map(PValue::$variant)
+            }
+        };
+    }
+    let stepped = match *value {
+        PValue::U8(v) => step!(v, U8),
+        PValue::U16(v) => step!(v, U16),
+        PValue::U32(v) => step!(v, U32),
+        PValue::U64(v) => step!(v, U64),
+        PValue::I8(v) => step!(v, I8),
+        PValue::I16(v) => step!(v, I16),
+        PValue::I32(v) => step!(v, I32),
+        PValue::I64(v) => step!(v, I64),
+        _ => None,
+    }?;
+    Some(ScalarValue::Primitive(stepped))
+}
+
+/// The non-strict comparison keeping every row `op` keeps.
+fn non_strict(op: CompareOperator) -> CompareOperator {
+    match op {
+        CompareOperator::Lt => CompareOperator::Lte,
+        CompareOperator::Gt => CompareOperator::Gte,
+        op => op,
+    }
 }
 
 /// `Some(true)` for upper bounds (`<`, `<=`), `Some(false)` for lower bounds (`>`, `>=`).
@@ -803,9 +943,11 @@ mod tests {
     use vortex::expr::stats::Stat;
     use vortex::file::FileStatistics;
     use vortex::scalar::ScalarValue as VxScalarValue;
+    use vortex::scalar_fn::fns::operators::CompareOperator;
     use vortex::session::VortexSession;
 
     use super::dynamic_filter_to_vortex;
+    use super::step_strict_integer;
 
     type PhysicalExprRef = Arc<dyn PhysicalExpr>;
 
@@ -1340,7 +1482,8 @@ mod tests {
         let fields = input.dtype().as_struct_fields_opt().expect("struct input");
         let converted = dynamic_filter_to_vortex(&filter, fields, None, &session)
             .expect("filter should convert");
-        assert_eq!(converted.to_string().matches("dynamic(").count(), 4);
+        // The leading column's `<=` and `>=` placeholders.
+        assert_eq!(converted.to_string().matches("dynamic(").count(), 2);
         assert!(!converted.to_string().contains("$.b"));
 
         dynamic.update(binary(
@@ -1356,6 +1499,99 @@ mod tests {
             input.apply(&converted)?,
             BoolArray::from_iter([true, true, false]),
             &mut session.create_execution_ctx()
+        );
+        Ok(())
+    }
+
+    /// A strict integer bound is stepped to its non-strict equivalent; one that would overflow,
+    /// or a non-integer bound, is applied as is.
+    #[rstest]
+    #[case(
+        VxScalarValue::from(5i32),
+        CompareOperator::Lt,
+        Some(VxScalarValue::from(4i32))
+    )]
+    #[case(
+        VxScalarValue::from(5u8),
+        CompareOperator::Gt,
+        Some(VxScalarValue::from(6u8))
+    )]
+    #[case(VxScalarValue::from(i32::MIN), CompareOperator::Lt, None)]
+    #[case(VxScalarValue::from(u64::MAX), CompareOperator::Gt, None)]
+    #[case(VxScalarValue::from(4.5f64), CompareOperator::Lt, None)]
+    #[case(VxScalarValue::from(5i32), CompareOperator::Lte, None)]
+    fn strict_integer_bounds_step(
+        #[case] value: VxScalarValue,
+        #[case] op: CompareOperator,
+        #[case] expected: Option<VxScalarValue>,
+    ) {
+        assert_eq!(step_strict_integer(&value, op), expected);
+    }
+
+    /// A strict float bound is applied through `<=`, which keeps a superset of the rows.
+    #[test]
+    fn strict_float_bound_keeps_ties() -> anyhow::Result<()> {
+        let session = VortexSession::default();
+        let input = StructArray::from_fields(&[("a", buffer![1.0f64, 4.5, 10.0].into_array())])?
+            .into_array();
+        let dynamic = Arc::new(DynamicFilterPhysicalExpr::new(
+            vec![col_a()],
+            lit_bool(true),
+        ));
+        let filter: PhysicalExprRef = Arc::clone(&dynamic) as _;
+        let fields = input.dtype().as_struct_fields_opt().expect("struct input");
+        let converted = dynamic_filter_to_vortex(&filter, fields, None, &session)
+            .expect("filter should convert");
+        dynamic.update(binary(
+            col_a(),
+            DFOperator::Lt,
+            Arc::new(df_expr::Literal::new(ScalarValue::Float64(Some(4.5)))),
+        ))?;
+        assert_arrays_eq!(
+            input.apply(&converted)?,
+            BoolArray::from_iter([true, true, false]),
+            &mut session.create_execution_ctx()
+        );
+        Ok(())
+    }
+
+    /// A live filter that completes mid-scan keeps its bounds only where file statistics predict
+    /// they are selective, as a filter already complete at file open would.
+    #[rstest]
+    // Keeps 1 of the file's 9-wide range: applied.
+    #[case(range(4, 5), [false, true, false])]
+    // Keeps 8 of 9: dropped, so every row passes.
+    #[case(range(2, 10), [true, true, true])]
+    fn live_filter_completing_mid_scan_applies_file_stats(
+        #[case] current: PhysicalExprRef,
+        #[case] expected: [bool; 3],
+    ) -> anyhow::Result<()> {
+        let session = VortexSession::default();
+        let input =
+            StructArray::from_fields(&[("a", buffer![1i32, 5, 10].into_array())])?.into_array();
+        let file_stats = stats_1_to_10(&input);
+        let dynamic = Arc::new(DynamicFilterPhysicalExpr::new(
+            vec![col_a()],
+            lit_bool(true),
+        ));
+        let filter: PhysicalExprRef = Arc::clone(&dynamic) as _;
+        let fields = input.dtype().as_struct_fields_opt().expect("struct input");
+        let converted = dynamic_filter_to_vortex(&filter, fields, Some(&file_stats), &session)
+            .expect("live filter should convert");
+        let mut ctx = session.create_execution_ctx();
+
+        // Cache the bounds before completion, as a scan would, so completion alone (which
+        // keeps the generation) must invalidate them.
+        dynamic.update(current)?;
+        input
+            .clone()
+            .apply(&converted)?
+            .execute::<BoolArray>(&mut ctx)?;
+        dynamic.mark_complete();
+        assert_arrays_eq!(
+            input.apply(&converted)?,
+            BoolArray::from_iter(expected),
+            &mut ctx
         );
         Ok(())
     }
