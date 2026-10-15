@@ -81,8 +81,6 @@ pub fn try_from_table_filter(
             });
         }
         TableFilterClass::InFilter(values) => {
-            // TODO(ngates): I'm pretty sure we actually need this as ScalarValue with the
-            //  scope dtype
             let scalars: Vec<_> = values.iter().map(Scalar::try_from).try_collect()?;
             assert!(
                 !scalars.is_empty(),
