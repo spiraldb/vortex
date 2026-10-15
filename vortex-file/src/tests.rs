@@ -2110,6 +2110,57 @@ fn map_array_from_rows(rows: &[MapRowFixture<'_>], keys_sorted: bool) -> VortexR
     Ok(builder.finish_into_map().into_array())
 }
 
+fn nullable_struct(a: [i32; 3], b: [i32; 3], valid: [bool; 3]) -> VortexResult<ArrayRef> {
+    Ok(StructArray::try_from_iter_with_validity(
+        [
+            ("a", Buffer::from_iter(a).into_array()),
+            ("b", Buffer::from_iter(b).into_array()),
+        ],
+        Validity::Array(BoolArray::from_iter(valid).into_array()),
+    )?
+    .into_array())
+}
+
+/// Nullable struct columns (top-level and nested in another nullable struct) with non-nullable
+/// fields read back through the default writer equal the same projection evaluated in memory.
+#[rstest]
+#[case::full_scan(root())]
+#[case::select_s(select(["s"], root()))]
+#[case::get_s(get_item("s", root()))]
+#[case::get_o(get_item("o", root()))]
+#[case::get_o_t(get_item("t", get_item("o", root())))]
+#[case::get_o_t_a(get_item("a", get_item("t", get_item("o", root()))))]
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn nullable_struct_column_projection(#[case] expr: Expression) -> VortexResult<()> {
+    let s = nullable_struct([7, 2, 3], [4, 5, 6], [false, true, true])?;
+    let t = nullable_struct([1, 2, 3], [4, 5, 6], [true, false, true])?;
+    let o = StructArray::try_from_iter_with_validity(
+        [("t", t), ("c", buffer![9i32, 8, 7].into_array())],
+        Validity::Array(BoolArray::from_iter([true, true, false]).into_array()),
+    )?
+    .into_array();
+    let st = StructArray::from_fields(&[("s", s), ("o", o)])?.into_array();
+
+    let mut buf = ByteBufferMut::empty();
+    SESSION
+        .write_options()
+        .write(&mut buf, st.to_array_stream())
+        .await?;
+    let file = SESSION.open_options().open_buffer(buf)?;
+    let actual = file
+        .scan()?
+        .with_projection(bind_scan_expr(&file, expr.clone()))
+        .into_array_stream()?
+        .read_all()
+        .await?;
+
+    let expected = st.apply(&expr)?;
+    assert_eq!(actual.dtype(), expected.dtype());
+    assert_arrays_eq!(actual, expected, &mut SESSION.create_execution_ctx());
+    Ok(())
+}
+
 /// A struct containing a Map column crosses both the default flat writer and the list layout
 /// strategy without changing map nullability, empty rows, duplicate keys, or scalar values.
 #[tokio::test]

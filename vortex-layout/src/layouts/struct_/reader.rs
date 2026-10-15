@@ -34,6 +34,7 @@ use vortex_array::scalar_fn::fns::get_item::GetItem;
 use vortex_array::scalar_fn::fns::merge::Merge;
 use vortex_array::scalar_fn::fns::pack::Pack;
 use vortex_array::scalar_fn::fns::select::Select;
+use vortex_array::validity::Validity;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
@@ -500,14 +501,38 @@ impl LayoutReader for StructReader {
             ),
         };
 
+        // `root()` or `select(.., root())` evaluates to this struct itself (or a subset of its
+        // fields). Anything else, including a pack pushed down from a parent struct with this
+        // struct as one of its fields, wraps or extracts field values.
+        let is_struct_itself = expr.is_root()
+            || (expr.as_scalar().is_some_and(|f| f.is::<Select>())
+                && expr
+                    .children()
+                    .first()
+                    .is_some_and(BoundExpression::is_root));
+
         let session = self.session.clone();
         Ok(Box::pin(async move {
             if let Some(validity_fut) = validity_fut {
                 let (array, validity) = try_join!(projected, validity_fut)?;
+                let mut ctx = session.create_execution_ctx();
 
-                // If root expression was a pack, then we apply the validity to each child field
-                if is_pack_merge {
-                    let mut ctx = session.create_execution_ctx();
+                if is_struct_itself {
+                    // The result is this struct, so its validity applies at the struct level and
+                    // the fields keep their declared dtypes. Pushing the validity into each field
+                    // would change the field dtypes and turn a null struct into a valid struct of
+                    // null fields.
+                    let struct_array = array.execute::<StructArray>(&mut ctx)?;
+                    let combined = struct_array.validity()?.and(Validity::Array(validity))?;
+                    Ok(StructArray::try_new_with_dtype(
+                        struct_array.iter_unmasked_fields().cloned(),
+                        struct_array.struct_fields().clone(),
+                        struct_array.len(),
+                        combined,
+                    )?
+                    .into_array())
+                } else if is_pack_merge {
+                    // If root expression was a pack, then we apply the validity to each child field
                     let struct_array = array.execute::<StructArray>(&mut ctx)?;
                     let masked_fields: Vec<ArrayRef> = struct_array
                         .iter_unmasked_fields()
@@ -906,6 +931,62 @@ mod tests {
         );
         assert_nth_scalar!(result, 1, 2, &mut ctx);
         assert_nth_scalar!(result, 2, 3, &mut ctx);
+    }
+
+    /// A nullable struct read through `root()` must keep its fields' declared (non-nullable)
+    /// dtypes and carry the nulls on the struct itself.
+    #[rstest]
+    fn test_struct_layout_nulls_root_projection(
+        #[from(null_struct_layout)] (segments, layout): (Arc<dyn SegmentSource>, LayoutRef),
+    ) {
+        let reader = layout
+            .new_reader("".into(), segments, &SESSION, &Default::default())
+            .unwrap();
+        let expr = root().bind(reader.dtype()).unwrap();
+        let project = reader
+            .projection_evaluation(&(0..3), &expr, MaskFuture::new_true(3))
+            .unwrap();
+        let result = block_on(move |_| project).unwrap();
+
+        assert_eq!(result.dtype(), reader.dtype());
+        assert_eq!(
+            result.dtype(),
+            &DType::Struct(
+                StructFields::from_iter([
+                    ("a", DType::Primitive(PType::I32, Nullability::NonNullable)),
+                    ("b", DType::Primitive(PType::I32, Nullability::NonNullable)),
+                    ("c", DType::Primitive(PType::I32, Nullability::NonNullable)),
+                ]),
+                Nullability::Nullable,
+            )
+        );
+
+        let mut ctx = array_session().create_execution_ctx();
+        assert!(
+            result
+                .execute_scalar(0, &mut ctx)
+                .unwrap()
+                .as_struct()
+                .is_null()
+        );
+        assert_eq!(
+            result
+                .execute_scalar(1, &mut ctx)
+                .unwrap()
+                .as_struct()
+                .field_by_idx(0)
+                .unwrap(),
+            Scalar::primitive(2, Nullability::NonNullable)
+        );
+        assert_eq!(
+            result
+                .execute_scalar(2, &mut ctx)
+                .unwrap()
+                .as_struct()
+                .field_by_idx(2)
+                .unwrap(),
+            Scalar::primitive(6, Nullability::NonNullable)
+        );
     }
 
     #[rstest]
