@@ -401,7 +401,7 @@ impl LiveBounds {
 
     /// Per-column value lists that every row satisfying `expr` draws its value from, unless the
     /// column is null, or `None` if no row can satisfy `expr`. Columns without a list are
-    /// unconstrained. Lists longer than [`MAX_MEMBERS`] are dropped.
+    /// unconstrained. Lists with more than [`MAX_MEMBERS`] distinct values are dropped.
     fn members_of(&self, expr: &Arc<dyn PhysicalExpr>) -> Option<Vec<Members>> {
         if let Some(literal) = expr.downcast_ref::<df_expr::Literal>() {
             return match literal.value() {
@@ -429,22 +429,26 @@ impl LiveBounds {
             else {
                 return Some(vec![]);
             };
-            if in_list.list().len() > MAX_MEMBERS {
-                return Some(vec![]);
-            }
-            let values = in_list
-                .list()
-                .iter()
-                .map(|element| {
-                    let literal = element.downcast_ref::<df_expr::Literal>()?;
-                    if literal.value().is_null() {
-                        return None;
+            // A hash join's list repeats each build-side key once per build row, so only the
+            // distinct values count towards the limit.
+            let mut values = Vec::new();
+            for element in in_list.list() {
+                let value = element
+                    .downcast_ref::<df_expr::Literal>()
+                    .filter(|literal| !literal.value().is_null())
+                    .and_then(|literal| self.literal_value(idx, literal.value()));
+                // A list we can't convert exactly, or that is too long, constrains nothing.
+                let Some(value) = value else {
+                    return Some(vec![]);
+                };
+                if !values.contains(&value) {
+                    if values.len() == MAX_MEMBERS {
+                        return Some(vec![]);
                     }
-                    self.literal_value(idx, literal.value())
-                })
-                .collect::<Option<Vec<_>>>();
-            // A list we can't convert exactly constrains nothing.
-            return Some(values.map_or_else(Vec::new, |values| vec![(idx, values)]));
+                    values.push(value);
+                }
+            }
+            return Some(vec![(idx, values)]);
         }
         let Some(binary) = expr.downcast_ref::<df_expr::BinaryExpr>() else {
             return Some(vec![]);
@@ -1358,6 +1362,8 @@ mod tests {
     )]
     // Six of ten values is not selective enough.
     #[case(lit_bool(true), in_list_a(&[1, 2, 3, 4, 5, 6]), None)]
+    // A join's list repeats each key per build row; only distinct values count towards the limit.
+    #[case(lit_bool(true), in_list_a(&[1, 5].repeat(200)), Some([true, true, false]))]
     fn complete_filter_membership(
         #[case] left: PhysicalExprRef,
         #[case] right: PhysicalExprRef,
