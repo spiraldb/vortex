@@ -128,7 +128,6 @@ mod tests {
     use crate::aggregate_fn::AggregateFnVTable;
     use crate::aggregate_fn::DynAccumulator;
     use crate::aggregate_fn::NumericalAggregateOpts;
-    use crate::aggregate_fn::fns::min_max::MAX_FIXED_SIZE_LIST_MIN_MAX_BYTES;
     use crate::aggregate_fn::fns::min_max::MinMax;
     use crate::aggregate_fn::fns::min_max::MinMaxResult;
     use crate::aggregate_fn::fns::min_max::min_max;
@@ -405,64 +404,35 @@ mod tests {
         Ok(())
     }
 
-    /// Lists wider than the cap, such as embedding vectors, get no extrema.
-    #[rstest]
-    #[case::bytes_at_cap(
-        list_array::<u8, MAX_FIXED_SIZE_LIST_MIN_MAX_BYTES>(
-            &[Some([Some(1); MAX_FIXED_SIZE_LIST_MIN_MAX_BYTES])],
-            NonNullable,
-        ),
-        true
-    )]
-    #[case::bytes_over_cap(
-        list_array::<u8, { MAX_FIXED_SIZE_LIST_MIN_MAX_BYTES + 1 }>(
-            &[Some([Some(1); MAX_FIXED_SIZE_LIST_MIN_MAX_BYTES + 1])],
-            NonNullable,
-        ),
-        false
-    )]
-    #[case::floats_at_cap(
-        list_array::<f32, { MAX_FIXED_SIZE_LIST_MIN_MAX_BYTES / 4 }>(
-            &[Some([Some(1.0); MAX_FIXED_SIZE_LIST_MIN_MAX_BYTES / 4])],
-            Nullable,
-        ),
-        true
-    )]
-    #[case::floats_over_cap(
-        list_array::<f32, { MAX_FIXED_SIZE_LIST_MIN_MAX_BYTES / 4 + 1 }>(
-            &[Some([Some(1.0); MAX_FIXED_SIZE_LIST_MIN_MAX_BYTES / 4 + 1])],
-            Nullable,
-        ),
-        false
-    )]
-    #[case::embedding(list_array::<f32, 768>(&[Some([Some(1.0); 768])], NonNullable), false)]
-    fn extrema_only_up_to_size_cap(
-        #[case] array: ArrayRef,
-        #[case] has_extrema: bool,
-    ) -> VortexResult<()> {
-        assert_eq!(min_max_of(&array)?.is_some(), has_extrema);
-        Ok(())
-    }
-
-    /// Lists over the cap get no extrema from the aggregate in any encoding, as from `min_max`.
+    /// Wide lists such as embedding vectors get extrema like any other list, in every encoding.
+    /// Keeping stored statistics small is up to the writers that store them.
     #[test]
-    fn accumulator_skips_lists_over_cap_in_every_encoding() -> VortexResult<()> {
-        const WIDE: usize = MAX_FIXED_SIZE_LIST_MIN_MAX_BYTES + 1;
+    fn wide_lists_get_extrema_in_every_encoding() -> VortexResult<()> {
+        const WIDTH: usize = 768;
         let mut ctx = SESSION.create_execution_ctx();
-        let lists =
-            list_array::<u8, WIDE>(&[Some([Some(1); WIDE]), Some([Some(2); WIDE])], NonNullable);
-        let constant = ConstantArray::new(lists.execute_scalar(0, &mut ctx)?, 3).into_array();
+        let low = list_scalar([Some(1.0f32); WIDTH], NonNullable);
+        let high = list_scalar([Some(2.0f32); WIDTH], NonNullable);
+        let lists = list_array::<f32, WIDTH>(
+            &[Some([Some(2.0); WIDTH]), Some([Some(1.0); WIDTH])],
+            NonNullable,
+        );
+        let constant = ConstantArray::new(high.clone(), 3).into_array();
         let dict = DictArray::new(buffer![1u32, 0].into_array(), lists.clone()).into_array();
 
-        for array in [lists, constant, dict] {
+        for (array, min) in [(lists, &low), (dict, &low), (constant, &high)] {
             let mut acc = Accumulator::try_new(
                 MinMax,
                 NumericalAggregateOpts::default(),
                 array.dtype().clone(),
             )?;
             acc.accumulate(&array, &mut ctx)?;
-            assert!(
-                acc.finish()?.is_null(),
+            let extrema = MinMaxResult::from_scalar(&acc.finish()?)?;
+            assert_eq!(
+                extrema,
+                Some(MinMaxResult {
+                    min: min.clone(),
+                    max: high.clone(),
+                }),
                 "extrema for {}",
                 array.encoding_id()
             );

@@ -49,13 +49,6 @@ use crate::scalar::Scalar;
 
 static NAMES: LazyLock<FieldNames> = LazyLock::new(|| FieldNames::from(["min", "max"]));
 
-/// The largest fixed-size list value, in bytes, whose min and max [`min_max`] computes.
-///
-/// Statistics such as zone maps and file footers store the extrema of every chunk they cover, so
-/// the extrema of wide lists such as embedding vectors would grow them without enabling useful
-/// pruning. UUIDs (16 bytes) and small fixed-size vectors fit.
-const MAX_FIXED_SIZE_LIST_MIN_MAX_BYTES: usize = 64;
-
 /// The minimum and maximum non-null values of an array, or `None` if there are no non-null values.
 ///
 /// NaN handling for float inputs is controlled by [`NumericalAggregateOpts`]: with `skip_nans` (the
@@ -308,10 +301,9 @@ fn minmax_supported_dtype(input_dtype: &DType) -> bool {
 ///
 /// This is intentionally narrower than [`minmax_supported_dtype`]. List extrema have a defined
 /// output dtype for aggregate expression lowering, but the accumulator does not yet compute them.
-/// Fixed-size lists are computed only over fixed-width scalar elements and only up to
-/// [`MAX_FIXED_SIZE_LIST_MIN_MAX_BYTES`] per value, so the extrema that statistics keep for every
-/// chunk stay small. Extension types are computed on their storage, so only those whose storage
-/// order is their own order ([`ExtVTable::orders_by_storage`]) are computed.
+/// Fixed-size lists are computed only over fixed-width scalar elements. Extension types are
+/// computed on their storage, so only those whose storage order is their own order
+/// ([`ExtVTable::orders_by_storage`]) are computed.
 ///
 /// [`ExtVTable::orders_by_storage`]: crate::dtype::extension::ExtVTable::orders_by_storage
 fn minmax_compute_supported_dtype(input_dtype: &DType) -> bool {
@@ -322,14 +314,10 @@ fn minmax_compute_supported_dtype(input_dtype: &DType) -> bool {
         | DType::Utf8(..)
         | DType::Binary(..) => true,
         DType::Extension(ext_dtype) => ext_dtype.orders_by_storage(),
-        DType::FixedSizeList(element_dtype, ..) => {
-            matches!(
-                element_dtype.as_ref(),
-                DType::Bool(_) | DType::Primitive(..) | DType::Decimal(..)
-            ) && input_dtype
-                .element_size()
-                .is_some_and(|bytes| bytes <= MAX_FIXED_SIZE_LIST_MIN_MAX_BYTES)
-        }
+        DType::FixedSizeList(element_dtype, ..) => matches!(
+            element_dtype.as_ref(),
+            DType::Bool(_) | DType::Primitive(..) | DType::Decimal(..)
+        ),
         _ => false,
     }
 }
@@ -461,9 +449,8 @@ impl AggregateFnVTable for MinMax {
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<()> {
-        // Fixed-size lists and extension types that `min_max` does not compute, such as lists over
-        // the size cap or types whose storage order is not their own, have no extrema in any
-        // encoding.
+        // Fixed-size lists and extension types that `min_max` does not compute, such as lists of
+        // strings or types whose storage order is not their own, have no extrema in any encoding.
         let dtype = batch.dtype();
         if (dtype.is_fixed_size_list() || dtype.is_extension())
             && !minmax_compute_supported_dtype(dtype)
