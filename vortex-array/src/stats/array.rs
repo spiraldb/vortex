@@ -116,6 +116,24 @@ impl StatsSetRef<'_> {
         *self.array_stats.shared().write() = stats;
     }
 
+    /// Set every stat in `stats`, overwriting existing values for the same stats.
+    ///
+    /// When the array has no stats yet, the set is moved in whole rather than merged one stat at
+    /// a time.
+    pub fn set_all(&self, stats: StatsSet) {
+        if stats.is_empty() {
+            return;
+        }
+        let mut guard = self.array_stats.shared().write();
+        if guard.is_empty() {
+            *guard = stats;
+        } else {
+            for (stat, value) in stats {
+                guard.set(stat, value);
+            }
+        }
+    }
+
     pub fn set_iter(&self, iter: StatsSetIntoIter) {
         let mut iter = iter.peekable();
         if iter.peek().is_none() {
