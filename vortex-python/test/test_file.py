@@ -109,3 +109,37 @@ def test_stream_pyarrow(tmpdir_factory) -> None:
 
     df = pq.read_table(str(data_dir / "names.parquet"))
     vx.io.write(df, str(data_dir / "names.vortex"))
+
+
+def test_memory_map_matches_file_reads(vxf: VortexFile) -> None:
+    mapped = vx.open(vxf.path, memory_map=True)
+    indices = vx.array([0, 10, 500_000, 999_999])
+
+    expected = vxf.scan(indices=indices).read_all().to_arrow_table()
+    assert mapped.scan(indices=indices).read_all().to_arrow_table() == expected
+    assert len(mapped) == len(vxf)
+
+
+def test_memory_map_with_footer(vxf: VortexFile) -> None:
+    mapped = vx.open(vxf.path, memory_map=True, footer=vxf.footer)
+    assert (
+        mapped.scan(indices=vx.array([7])).read_all().to_arrow_table()
+        == vxf.scan(indices=vx.array([7])).read_all().to_arrow_table()
+    )
+
+
+def test_memory_map_pickle_reopens_mapped(vxf: VortexFile) -> None:
+    import pickle
+
+    mapped = pickle.loads(pickle.dumps(vx.open(vxf.path, memory_map=True)))
+    assert len(mapped) == len(vxf)
+
+
+def test_memory_map_rejects_segment_cache(vxf: VortexFile) -> None:
+    with pytest.raises(ValueError, match="segment_cache"):
+        vx.open(vxf.path, memory_map=True, segment_cache=vx.SegmentCache(1 << 20), cache_key="k")
+
+
+def test_memory_map_rejects_remote_url() -> None:
+    with pytest.raises(ValueError, match="local path"):
+        vx.open("s3://bucket/key.vortex", memory_map=True)
