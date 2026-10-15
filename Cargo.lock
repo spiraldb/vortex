@@ -8401,7 +8401,7 @@ version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "044b1fa4f259f4df9ad5078e587b208f5d288a25407575fcddb9face30c7c692"
 dependencies = [
- "rand 0.8.8",
+ "rand 0.9.5",
  "socket2",
  "thiserror 2.0.21",
 ]
@@ -12162,6 +12162,7 @@ dependencies = [
  "vortex-io",
  "vortex-mask",
  "vortex-metrics",
+ "vortex-onpair",
  "vortex-runend",
  "vortex-scan",
  "vortex-sequence",

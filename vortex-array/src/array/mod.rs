@@ -196,6 +196,9 @@ pub(crate) trait DynArrayData: 'static + private::Sealed + Send + Sync + Debug {
     /// Attempt to reduce the array to a simpler representation.
     fn reduce(&self, this: &ArrayRef) -> VortexResult<Option<ArrayRef>>;
 
+    /// Expose an equivalent source for parent-kernel dispatch.
+    fn parent_kernel_source<'a>(&self, this: &'a ArrayRef) -> VortexResult<Option<&'a ArrayRef>>;
+
     /// Attempt to reduce the parent of this array.
     fn reduce_parent(
         &self,
@@ -468,6 +471,11 @@ impl<V: VTable> DynArrayData for ArrayData<V> {
             reduced.dtype()
         );
         Ok(Some(reduced))
+    }
+
+    fn parent_kernel_source<'a>(&self, this: &'a ArrayRef) -> VortexResult<Option<&'a ArrayRef>> {
+        let view = this.as_opt::<V>().vortex_expect("array has its own vtable");
+        V::parent_kernel_source(view)
     }
 
     fn reduce_parent(

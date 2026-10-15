@@ -62,13 +62,12 @@ impl OnPairScheme {
     ///
     /// ```
     /// use vortex_btrblocks::schemes::string::OnPairScheme;
-    /// use vortex_btrblocks::{BtrBlocksCompressorBuilder, SchemeExt};
+    /// use vortex_btrblocks::{BtrBlocksCompressorBuilder};
     ///
     /// const FREQUENCY_INDEXED_ONPAIR: OnPairScheme =
     ///     OnPairScheme::new().with_token_frequency_index();
     ///
-    /// let compressor = BtrBlocksCompressorBuilder::default()
-    ///     .exclude_schemes([OnPairScheme::new().id()])
+    /// let compressor = BtrBlocksCompressorBuilder::empty()
     ///     .with_new_scheme(&FREQUENCY_INDEXED_ONPAIR)
     ///     .build();
     /// # let _ = compressor;

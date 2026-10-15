@@ -180,9 +180,11 @@ where
     let offsets = if code_start == 0 {
         offsets
     } else {
-        offsets
-            .map_each_in_place(|offset| <O as Offset>::from_usize(offset.to_usize() - code_start))
-            .freeze()
+        let mut offsets = offsets.into_mut();
+        for offset in offsets.as_mut_slice() {
+            *offset = <O as Offset>::from_usize(offset.to_usize() - code_start);
+        }
+        offsets.freeze()
     };
     Ok(TypedCodesWindow { offsets, codes })
 }

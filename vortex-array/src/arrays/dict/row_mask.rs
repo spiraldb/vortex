@@ -20,6 +20,7 @@ use vortex_mask::Mask;
 use crate::ArrayRef;
 use crate::ExecutionCtx;
 use crate::arrays::PrimitiveArray;
+use crate::builtins::ArrayBuiltins;
 use crate::dtype::DType;
 use crate::match_each_integer_ptype;
 
@@ -55,7 +56,7 @@ pub fn dict_row_mask(
         return Ok(Mask::new_false(rows));
     }
 
-    let value_mask = values.null_as_false().execute(ctx)?;
+    let value_mask = values.fill_null(false)?.execute::<Mask>(ctx)?;
     let value_bits = match value_mask.bit_buffer() {
         AllOr::All => return Ok(selection.bitand(&codes_validity)),
         AllOr::None => return Ok(Mask::new_false(rows)),
@@ -211,6 +212,7 @@ mod tests {
     use crate::arrays::BoolArray;
     use crate::arrays::ConstantArray;
     use crate::arrays::PrimitiveArray;
+use crate::builtins::ArrayBuiltins;
     use crate::assert_arrays_eq;
     use crate::dtype::Nullability;
     use crate::scalar::Scalar;

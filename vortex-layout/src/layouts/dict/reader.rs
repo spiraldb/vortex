@@ -14,9 +14,6 @@ use vortex_array::IntoArray;
 use vortex_array::MaskFuture;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::DictArray;
-use vortex_array::builtins::ArrayBuiltins;
-use crate::arrays::shared::SharedArraySlotsExt;
-use crate::arrays::shared::current_array_ref_for_dispatch;
 use vortex_array::arrays::dict::dict_row_mask;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldMask;
@@ -45,6 +42,8 @@ use crate::LayoutReaderRef;
 use crate::RowSplits;
 use crate::SplitRange;
 use crate::arrays::shared::Shared;
+use crate::arrays::shared::SharedArraySlotsExt;
+use crate::arrays::shared::current_array_ref_for_dispatch;
 use crate::layouts::SharedArrayFuture;
 use crate::segments::SegmentSource;
 

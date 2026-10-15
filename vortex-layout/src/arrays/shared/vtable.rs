@@ -33,6 +33,7 @@ use vortex_session::registry::CachedId;
 use crate::arrays::shared::SharedArrayExt;
 use crate::arrays::shared::SharedData;
 use crate::arrays::shared::SharedSlots;
+use crate::arrays::shared::current_array_ref_for_dispatch;
 
 /// A [`Shared`]-encoded Vortex array.
 pub type SharedArray = Array<Shared>;
@@ -118,6 +119,10 @@ impl VTable for Shared {
         _session: &VortexSession,
     ) -> VortexResult<ArrayParts<Self>> {
         vortex_error::vortex_bail!("Shared array is not serializable")
+    }
+
+    fn parent_kernel_source(array: ArrayView<'_, Self>) -> VortexResult<Option<&ArrayRef>> {
+        current_array_ref_for_dispatch(array).map(Some)
     }
 
     fn execute(array: Array<Self>, ctx: &mut ExecutionCtx) -> VortexResult<ExecutionResult> {

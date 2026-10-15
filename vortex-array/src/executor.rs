@@ -34,8 +34,6 @@ use crate::AnyCanonical;
 use crate::ArrayRef;
 use crate::IntoArray;
 use crate::array::ArrayId;
-use crate::arrays::Shared;
-use crate::arrays::shared::current_array_ref_for_dispatch;
 use crate::builders::ArrayBuilder;
 use crate::builders::builder_with_capacity_in;
 use crate::dtype::DType;
@@ -388,7 +386,7 @@ impl ExecutionCtx {
     }
 
     /// Try registered parent kernels without executing either array as a fallback.
-    pub fn try_execute_parent_kernel(
+    pub(crate) fn try_execute_parent_kernel(
         &mut self,
         parent: &ArrayRef,
         child: &ArrayRef,
@@ -684,12 +682,8 @@ fn execute_parent_for_child(
         }
     }
 
-    // A `Shared` child hides its source encoding from the kernel lookup, so a dictionary or
-    // scalar function over shared values would otherwise only be executable by canonicalizing
-    // every value. Retry against the source, or its cached canonical form once materialized.
-    if let Some(shared) = child.as_opt::<Shared>() {
-        let inner = current_array_ref_for_dispatch(shared)?;
-        return execute_parent_for_child(_phase, parent, inner, slot_idx, kernels, ctx);
+    if let Some(inner) = child.parent_kernel_source()? {
+        return execute_parent_for_child(phase, parent, inner, slot_idx, kernels, ctx);
     }
 
     Ok(None)

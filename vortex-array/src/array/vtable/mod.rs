@@ -196,6 +196,15 @@ pub trait VTable: 'static + Clone + Sized + Send + Sync + Debug {
         Ok(None)
     }
 
+    /// Expose an equivalent source for parent-kernel dispatch through a transparent wrapper.
+    ///
+    /// The source must have the same length and dtype and must not form a dispatch cycle.
+    /// Returning an error preserves a wrapper's cached execution failure.
+    fn parent_kernel_source(array: ArrayView<'_, Self>) -> VortexResult<Option<&ArrayRef>> {
+        _ = array;
+        Ok(None)
+    }
+
     /// Attempt to reduce `parent` after this array appears as one of its children.
     ///
     /// This is used by lazy arrays to let child execution unlock parent simplifications.

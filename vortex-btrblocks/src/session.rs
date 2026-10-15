@@ -37,6 +37,9 @@ pub struct CompressionSession {
     schemes: Vec<&'static dyn Scheme>,
 }
 
+// TODO: Remove this explicit index opt-in before opening the PR.
+const INDEXED_ONPAIR: string::OnPairScheme = string::OnPairScheme::new().with_token_frequency_index();
+
 impl Default for CompressionSession {
     fn default() -> Self {
         Self {
@@ -74,8 +77,7 @@ impl Default for CompressionSession {
                 // Both string-fragmentation schemes are registered; the sample-based
                 // selector keeps whichever is smaller per column.
                 &string::FSSTScheme,
-                // TODO: Remove this explicit index opt-in before opening the PR.
-                &string::OnPairScheme::new().with_token_frequency_index(),
+                &INDEXED_ONPAIR,
                 &string::NullDominatedSparseScheme,
                 #[cfg(feature = "zstd")]
                 &string::ZstdScheme,

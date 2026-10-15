@@ -692,6 +692,10 @@ impl ArrayRef {
         self.0.data.reduce(self)
     }
 
+    pub(crate) fn parent_kernel_source(&self) -> VortexResult<Option<&ArrayRef>> {
+        self.0.data.parent_kernel_source(self)
+    }
+
     pub fn reduce_parent(
         &self,
         parent: &ArrayRef,

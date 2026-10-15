@@ -52,6 +52,7 @@ impl TakeExecute for OnPair {
             Mask::Values(_) => indices.fill_null(Scalar::from(0).cast(indices.dtype())?)?,
         };
 
+        // SAFETY: code offsets delimit the token runs in the codes child.
         let codes = unsafe {
             ListArray::new_unchecked(
                 array.codes().clone(),
@@ -72,6 +73,7 @@ impl TakeExecute for OnPair {
             .union_nullability(indices.dtype().nullability());
 
         Ok(Some(
+            // SAFETY: all row children use the same indices, and stale indexes are removed.
             unsafe {
                 OnPair::new_unchecked(
                     dtype,
@@ -94,9 +96,7 @@ mod tests {
     use std::sync::LazyLock;
 
     use vortex_array::VortexSessionExecute;
-    use vortex_array::arrays::DictArray;
     use vortex_array::arrays::PrimitiveArray;
-    use vortex_array::arrays::SharedArray;
     use vortex_array::arrays::VarBinArray;
     use vortex_array::arrays::VarBinViewArray;
     use vortex_array::assert_arrays_eq;
@@ -187,25 +187,6 @@ mod tests {
         let mut ctx = SESSION.create_execution_ctx();
         let indices = PrimitiveArray::from_iter((0..60u32).map(|i| i % 50)).into_array();
         assert!(<OnPair as TakeExecute>::take(array.as_view(), &indices, &mut ctx)?.is_none());
-        Ok(())
-    }
-
-    #[test]
-    fn dict_over_shared_onpair_executes_taken_rows() -> VortexResult<()> {
-        let values = strings(1_000);
-        let array = encode(&values, Nullability::NonNullable)?;
-        let codes = PrimitiveArray::from_iter([999u16, 1, 500]).into_array();
-        let dict = unsafe {
-            DictArray::new_unchecked(codes, SharedArray::new(array.into_array()).into_array())
-        }
-        .into_array();
-        let mut ctx = SESSION.create_execution_ctx();
-        let expected = VarBinViewArray::from_iter_str([
-            values[999].as_str(),
-            values[1].as_str(),
-            values[500].as_str(),
-        ]);
-        assert_arrays_eq!(dict, expected, &mut ctx);
         Ok(())
     }
 }
