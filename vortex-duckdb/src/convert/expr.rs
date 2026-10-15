@@ -432,20 +432,15 @@ pub fn can_push_expression(value: &duckdb::ExpressionRef) -> bool {
             // columns are native.
         }
         ExpressionClass::BoundOperator(op) => {
-            if matches!(
-                op.op,
-                DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_COMPARE_IN
-                    | DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_COMPARE_NOT_IN
-            ) {
-                let mut children = op.children();
-                return children.next().is_some_and(can_push_expression)
-                    && children.all(|child| matches!(child.as_class(), Some(BoundConstant(_))));
-            }
+            // IN and NOT IN values do not have to be constants. `try_from_compare_in` converts
+            // the values that are not constants to equalities.
             if !matches!(
                 op.op,
                 DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_OPERATOR_NOT
                     | DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_OPERATOR_IS_NULL
                     | DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_OPERATOR_IS_NOT_NULL
+                    | DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_COMPARE_IN
+                    | DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_COMPARE_NOT_IN
             ) {
                 return false;
             }
@@ -716,6 +711,18 @@ fn try_from_expression_inner(
     }))
 }
 
+/// Converts DuckDB `element IN (values...)` and `element NOT IN (values...)`.
+///
+/// `in_list` needs a literal list, but DuckDB also accepts values that are not constants, such
+/// as column references. SQL defines `x IN (a, b, c)` as `x = a OR x = b OR x = c`, so we split
+/// the values in two groups:
+///
+/// - All constants go into one `in_list(element, [constants])`, which has SQL null semantics.
+/// - Each value that is not a constant becomes `element = value`.
+///
+/// The terms are joined with OR. Vortex OR uses Kleene logic, thus the result is the same as
+/// SQL IN, also when values are null. For example, `x IN (y, 1, 2)` becomes
+/// `x = y OR in_list(x, [1, 2])`. NOT IN is `not` of the full expression.
 fn try_from_compare_in(
     operator: BoundOperator,
     ctx: ConvertCtx<'_>,
@@ -728,26 +735,34 @@ fn try_from_compare_in(
         return Ok(None);
     };
 
-    let Some(list_elements) = children
+    let Some(values) = children
         .iter()
         .skip(1)
-        .map(|c| {
-            let Some(value) = try_from_expression_inner(c, ctx)? else {
-                return Ok(None);
-            };
-            Ok(value.as_opt::<Literal>().cloned())
-        })
+        .map(|c| try_from_expression_inner(c, ctx))
         .collect::<VortexResult<Option<Vec<_>>>>()?
     else {
         return Ok(None);
     };
-    let list = Scalar::list(
-        Arc::new(list_elements[0].dtype().clone()),
-        list_elements,
-        Nullability::NonNullable,
-    );
 
-    let expr = in_list(element, lit(list));
+    let mut constants = Vec::new();
+    let mut terms = Vec::new();
+    for value in values {
+        match value.as_opt::<Literal>() {
+            Some(constant) => constants.push(constant.clone()),
+            None => terms.push(Binary.new_expr(Operator::Eq, [element.clone(), value])),
+        }
+    }
+
+    if let Some(first) = constants.first() {
+        let list = Scalar::list(
+            Arc::new(first.dtype().clone()),
+            constants,
+            Nullability::NonNullable,
+        );
+        terms.push(in_list(element, lit(list)));
+    }
+
+    let expr = or_collect(terms).vortex_expect("IN has at least one value");
     Ok(Some(if not_in { not(expr) } else { expr }))
 }
 
