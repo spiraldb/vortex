@@ -38,6 +38,11 @@ pub struct FlatLayoutStrategy {
     pub include_padding: bool,
     /// Maximum length of variable length statistics
     pub max_variable_length_statistics_size: usize,
+    /// Whether to store the array encoding tree in the layout metadata instead of the segment.
+    ///
+    /// The segment then holds only the array's data buffers. Combined with a deduplicating footer
+    /// writer, columns with identical encoding trees share one copy of the tree.
+    pub inline_array_tree: bool,
 }
 
 impl Default for FlatLayoutStrategy {
@@ -45,6 +50,7 @@ impl Default for FlatLayoutStrategy {
         Self {
             include_padding: true,
             max_variable_length_statistics_size: 64,
+            inline_array_tree: false,
         }
     }
 }
@@ -59,6 +65,12 @@ impl FlatLayoutStrategy {
     /// Set the maximum length of variable length statistics.
     pub fn with_max_variable_length_statistics_size(mut self, size: usize) -> Self {
         self.max_variable_length_statistics_size = size;
+        self
+    }
+
+    /// Set whether to store the array encoding tree in the layout metadata instead of the segment.
+    pub fn with_inline_array_tree(mut self, inline_array_tree: bool) -> Self {
+        self.inline_array_tree = inline_array_tree;
         self
     }
 }
@@ -142,7 +154,7 @@ impl LayoutStrategy for FlatLayoutStrategy {
             _ => {}
         }
 
-        let buffers = chunk.serialize(
+        let mut buffers = chunk.serialize(
             ctx.array_ctx(),
             session,
             &SerializeOptions {
@@ -152,8 +164,34 @@ impl LayoutStrategy for FlatLayoutStrategy {
         )?;
         // there is at least the flatbuffer and the length
         assert!(buffers.len() >= 2);
-        let array_node =
-            flat_layout_inline_array_node().then(|| buffers[buffers.len() - 2].clone());
+        let array_node = if self.inline_array_tree {
+            // Keep only the data buffers in the segment: drop the trailing flatbuffer length,
+            // the flatbuffer, and any padding written to align the flatbuffer.
+            buffers.pop();
+            let array_node = buffers.pop();
+            let data_len = array_node
+                .as_ref()
+                .and_then(|fb| vortex_array::flatbuffers::array::root_as_array(fb).ok())
+                .and_then(|fb| fb.buffers())
+                .map(|fb_buffers| {
+                    fb_buffers
+                        .iter()
+                        .map(|b| b.padding() as usize + b.length() as usize)
+                        .sum::<usize>()
+                })
+                .unwrap_or(0);
+            let segment_len = buffers.iter().map(ByteBuffer::len).sum::<usize>();
+            if segment_len > data_len
+                && buffers
+                    .last()
+                    .is_some_and(|b| b.len() == segment_len - data_len)
+            {
+                buffers.pop();
+            }
+            array_node
+        } else {
+            flat_layout_inline_array_node().then(|| buffers[buffers.len() - 2].clone())
+        };
         let segment_id = segment_sink.write(sequence_id, buffers).await?;
 
         let None = stream.next().await else {

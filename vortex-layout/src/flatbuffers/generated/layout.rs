@@ -43,6 +43,7 @@ impl<'a> Layout<'a> {
   pub const VT_METADATA: ::flatbuffers::VOffsetT = 8;
   pub const VT_CHILDREN: ::flatbuffers::VOffsetT = 10;
   pub const VT_SEGMENTS: ::flatbuffers::VOffsetT = 12;
+  pub const VT_SEGMENT_MAP: ::flatbuffers::VOffsetT = 14;
 
   #[inline]
   pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
@@ -55,6 +56,7 @@ impl<'a> Layout<'a> {
   ) -> ::flatbuffers::WIPOffset<Layout<'bldr>> {
     let mut builder = LayoutBuilder::new(_fbb);
     builder.add_row_count(args.row_count);
+    if let Some(x) = args.segment_map { builder.add_segment_map(x); }
     if let Some(x) = args.segments { builder.add_segments(x); }
     if let Some(x) = args.children { builder.add_children(x); }
     if let Some(x) = args.metadata { builder.add_metadata(x); }
@@ -104,6 +106,21 @@ impl<'a> Layout<'a> {
     // which contains a valid value in this slot
     unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u32>>>(Layout::VT_SEGMENTS, None)}
   }
+  /// If present, every segment identifier in this layout's subtree, including this layout's own
+  /// `segments`, is an index into this map rather than a file segment identifier. Nested maps are
+  /// resolved through their enclosing map.
+  ///
+  /// This makes the subtrees of structurally identical layouts byte-identical, so a writer can
+  /// store them once and point every parent at the same table (for example, every column of a
+  /// wide table). Files using this field must be written with a file format version that
+  /// readers check, since older readers would misinterpret the slot indices as segment ids.
+  #[inline]
+  pub fn segment_map(&self) -> Option<::flatbuffers::Vector<'a, u32>> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u32>>>(Layout::VT_SEGMENT_MAP, None)}
+  }
 }
 
 impl ::flatbuffers::Verifiable for Layout<'_> {
@@ -117,6 +134,7 @@ impl ::flatbuffers::Verifiable for Layout<'_> {
      .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u8>>>("metadata", Self::VT_METADATA, false)?
      .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, ::flatbuffers::ForwardsUOffset<Layout>>>>("children", Self::VT_CHILDREN, false)?
      .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u32>>>("segments", Self::VT_SEGMENTS, false)?
+     .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u32>>>("segment_map", Self::VT_SEGMENT_MAP, false)?
      .finish();
     Ok(())
   }
@@ -127,6 +145,7 @@ pub struct LayoutArgs<'a> {
     pub metadata: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u8>>>,
     pub children: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<Layout<'a>>>>>,
     pub segments: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u32>>>,
+    pub segment_map: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u32>>>,
 }
 impl<'a> Default for LayoutArgs<'a> {
   #[inline]
@@ -137,6 +156,7 @@ impl<'a> Default for LayoutArgs<'a> {
       metadata: None,
       children: None,
       segments: None,
+      segment_map: None,
     }
   }
 }
@@ -167,6 +187,10 @@ impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> LayoutBuilder<'a, 'b, A> {
     self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(Layout::VT_SEGMENTS, segments);
   }
   #[inline]
+  pub fn add_segment_map(&mut self, segment_map: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , u32>>) {
+    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(Layout::VT_SEGMENT_MAP, segment_map);
+  }
+  #[inline]
   pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> LayoutBuilder<'a, 'b, A> {
     let start = _fbb.start_table();
     LayoutBuilder {
@@ -189,6 +213,7 @@ impl ::core::fmt::Debug for Layout<'_> {
       ds.field("metadata", &self.metadata());
       ds.field("children", &self.children());
       ds.field("segments", &self.segments());
+      ds.field("segment_map", &self.segment_map());
       ds.finish()
   }
 }

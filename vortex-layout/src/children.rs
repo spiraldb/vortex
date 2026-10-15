@@ -6,7 +6,6 @@ use std::fmt::Formatter;
 use std::sync::Arc;
 
 use flatbuffers::Follow;
-use itertools::Itertools;
 use once_cell::sync::OnceCell;
 use vortex_array::dtype::DType;
 use vortex_array::flatbuffers::FlatBuffer;
@@ -135,6 +134,45 @@ pub(crate) struct ViewedLayoutChildren {
     /// Per-child answers to [`LayoutChildren::child_is_indivisible`], precomputed at
     /// construction from the flatbuffer encoding tags alone.
     indivisible: Arc<[bool]>,
+    /// The segment map in effect for the children, see [`resolve_segments`].
+    segment_map: Option<Arc<[u32]>>,
+}
+
+/// Resolve a layout node's segment ids, and the segment map in effect for its children.
+///
+/// A node's `segment_map`, if present, maps every segment id in its subtree (its own included)
+/// from a slot index to the id in the enclosing map, or to a file segment id at the top level.
+pub(crate) fn resolve_segments(
+    fb_layout: fbl::Layout<'_>,
+    enclosing: Option<&Arc<[u32]>>,
+) -> VortexResult<(Vec<SegmentId>, Option<Arc<[u32]>>)> {
+    let lookup = |map: Option<&Arc<[u32]>>, id: u32| -> VortexResult<u32> {
+        match map {
+            None => Ok(id),
+            Some(map) => map.get(id as usize).copied().ok_or_else(|| {
+                vortex_err!(
+                    "Layout segment slot {id} out of bounds of a {}-entry segment map",
+                    map.len()
+                )
+            }),
+        }
+    };
+    let map = match fb_layout.segment_map() {
+        None => enclosing.cloned(),
+        Some(local) => Some(
+            local
+                .iter()
+                .map(|id| lookup(enclosing, id))
+                .collect::<VortexResult<Arc<[u32]>>>()?,
+        ),
+    };
+    let segments = fb_layout
+        .segments()
+        .unwrap_or_default()
+        .iter()
+        .map(|id| lookup(map.as_ref(), id).map(SegmentId::from))
+        .collect::<VortexResult<Vec<_>>>()?;
+    Ok((segments, map))
 }
 
 impl ViewedLayoutChildren {
@@ -151,6 +189,7 @@ impl ViewedLayoutChildren {
         layouts: LayoutRegistry,
         allow_unknown: bool,
         session: VortexSession,
+        segment_map: Option<Arc<[u32]>>,
     ) -> Self {
         // SAFETY: guaranteed by caller
         let fb_children = unsafe { fbl::Layout::follow(flatbuffer.as_ref(), flatbuffer_loc) }
@@ -180,6 +219,7 @@ impl ViewedLayoutChildren {
             session,
             cache,
             indivisible,
+            segment_map,
         }
     }
 
@@ -195,7 +235,9 @@ impl ViewedLayoutChildren {
         &self,
         fb_layout: fbl::Layout<'_>,
         dtype: &DType,
+        enclosing: Option<&Arc<[u32]>>,
     ) -> VortexResult<LayoutRef> {
+        let (segments, segment_map) = resolve_segments(fb_layout, enclosing)?;
         let encoding_id = self
             .layout_read_ctx
             .resolve(fb_layout.encoding())
@@ -205,7 +247,7 @@ impl ViewedLayoutChildren {
             .children()
             .unwrap_or_default()
             .iter()
-            .map(|child| self.foreign_layout_from_fb(child, dtype))
+            .map(|child| self.foreign_layout_from_fb(child, dtype, segment_map.as_ref()))
             .collect::<VortexResult<Vec<_>>>()?;
 
         Ok(new_foreign_layout(
@@ -216,12 +258,7 @@ impl ViewedLayoutChildren {
                 .metadata()
                 .map(|m| m.bytes().to_vec())
                 .unwrap_or_default(),
-            fb_layout
-                .segments()
-                .unwrap_or_default()
-                .iter()
-                .map(SegmentId::from)
-                .collect_vec(),
+            segments,
             children,
         ))
     }
@@ -239,6 +276,7 @@ impl LayoutChildren for ViewedLayoutChildren {
 
         let layout_ref = self.cache[idx].get_or_try_init(|| {
             let fb_child = self.flatbuffer().children().unwrap_or_default().get(idx);
+            let (segments, segment_map) = resolve_segments(fb_child, self.segment_map.as_ref())?;
 
             // SAFETY: same validated flatbuffer; fb_child._tab.loc() is a valid offset
             // We need this to avoid re-initializing cache here
@@ -251,6 +289,7 @@ impl LayoutChildren for ViewedLayoutChildren {
                     self.layouts.clone(),
                     self.allow_unknown,
                     self.session.clone(),
+                    segment_map,
                 )
             };
 
@@ -262,7 +301,11 @@ impl LayoutChildren for ViewedLayoutChildren {
                 })?;
             let Some(encoding) = self.layouts.get(&encoding_id) else {
                 if self.allow_unknown {
-                    return viewed_children.foreign_layout_from_fb(fb_child, dtype);
+                    return viewed_children.foreign_layout_from_fb(
+                        fb_child,
+                        dtype,
+                        self.segment_map.as_ref(),
+                    );
                 }
                 vortex_bail!("Unknown layout encoding: {encoding_id}");
             };
@@ -278,12 +321,7 @@ impl LayoutChildren for ViewedLayoutChildren {
                     .metadata()
                     .map(|m| m.bytes())
                     .unwrap_or_else(|| &[]),
-                fb_child
-                    .segments()
-                    .unwrap_or_default()
-                    .iter()
-                    .map(SegmentId::from)
-                    .collect_vec(),
+                segments,
                 &viewed_children,
                 &build_ctx,
             )

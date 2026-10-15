@@ -13,6 +13,8 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
 use vortex_session::VortexSession;
+use vortex_utils::aliases::hash_map::Entry;
+use vortex_utils::aliases::hash_map::HashMap;
 
 use crate::dtype::DType;
 use crate::dtype::DecimalDType;
@@ -422,9 +424,16 @@ impl WriteFlatBuffer for DType {
                     .collect_vec();
                 let names = Some(fbb.create_vector(&names));
 
-                let dtypes = st
-                    .fields()
-                    .map(|dtype| dtype.write_flatbuffer(fbb))
+                // Wide structs often repeat the same field dtype, so write each distinct dtype
+                // once and point every field with that dtype at the same table.
+                let fields = st.fields().collect_vec();
+                let mut written = HashMap::<&DType, WIPOffset<fb::DType<'fb>>>::default();
+                let dtypes = fields
+                    .iter()
+                    .map(|dtype| match written.entry(dtype) {
+                        Entry::Occupied(e) => Ok(*e.get()),
+                        Entry::Vacant(e) => Ok(*e.insert(dtype.write_flatbuffer(fbb)?)),
+                    })
                     .collect::<VortexResult<Vec<_>>>()?;
                 let dtypes = Some(fbb.create_vector(&dtypes));
 

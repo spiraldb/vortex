@@ -19,6 +19,7 @@ use crate::EOF_SIZE;
 use crate::Footer;
 use crate::MAGIC_BYTES;
 use crate::VERSION;
+use crate::VERSION_DEDUP_FOOTER;
 use crate::footer::FileStatistics;
 use crate::footer::SegmentSpec;
 use crate::footer::postscript::Postscript;
@@ -253,7 +254,7 @@ impl FooterDeserializer {
                 .try_into()
                 .map_err(|e| vortex_err!("Version was not a u16 {e}"))?,
         );
-        if version != VERSION {
+        if version != VERSION && version != VERSION_DEDUP_FOOTER {
             vortex_bail!("Malformed file, unsupported version {version}")
         }
 

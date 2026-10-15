@@ -20,6 +20,7 @@ use crate::Footer;
 use crate::MAGIC_BYTES;
 use crate::MAX_POSTSCRIPT_SIZE;
 use crate::VERSION;
+use crate::VERSION_DEDUP_FOOTER;
 use crate::footer::SegmentSpec;
 use crate::footer::file_layout::FooterFlatBufferWriter;
 use crate::footer::postscript::Postscript;
@@ -31,6 +32,7 @@ pub struct FooterSerializer {
     footer: Footer,
     metadata: HashMap<String, ByteBuffer>,
     exclude_dtype: bool,
+    dedup: bool,
     offset: u64,
     layout_ctx: LayoutContext,
 }
@@ -41,6 +43,7 @@ impl FooterSerializer {
             footer,
             metadata: HashMap::default(),
             exclude_dtype: false,
+            dedup: false,
             offset: 0,
             layout_ctx: LayoutContext::default(),
         }
@@ -76,6 +79,12 @@ impl FooterSerializer {
     /// If excluded, the reader must be provided the DType from an external source.
     pub fn with_exclude_dtype(mut self, exclude_dtype: bool) -> Self {
         self.exclude_dtype = exclude_dtype;
+        self
+    }
+
+    /// Store each distinct layout subtree once, see [`VERSION_DEDUP_FOOTER`].
+    pub fn with_dedup(mut self, dedup: bool) -> Self {
+        self.dedup = dedup;
         self
     }
 
@@ -139,10 +148,17 @@ impl FooterSerializer {
         //  doesn't need to look anything up in the registry.
         let layout_ctx = self.layout_ctx.clone();
 
-        let (buffer, layout_segment) = write_flatbuffer(
-            &mut self.offset,
-            &self.footer.layout().flatbuffer_writer(&layout_ctx),
-        )?;
+        let (buffer, layout_segment) = if self.dedup {
+            write_flatbuffer(
+                &mut self.offset,
+                &self.footer.layout().dedup_flatbuffer_writer(&layout_ctx),
+            )?
+        } else {
+            write_flatbuffer(
+                &mut self.offset,
+                &self.footer.layout().flatbuffer_writer(&layout_ctx),
+            )?
+        };
         buffers.push(buffer);
 
         let statistics_segment = match self.footer.statistics() {
@@ -188,7 +204,12 @@ impl FooterSerializer {
 
         // And finally, the EOF 8-byte footer.
         let mut eof = [0u8; EOF_SIZE];
-        eof[0..2].copy_from_slice(&VERSION.to_le_bytes());
+        let version = if self.dedup {
+            VERSION_DEDUP_FOOTER
+        } else {
+            VERSION
+        };
+        eof[0..2].copy_from_slice(&version.to_le_bytes());
         eof[2..4].copy_from_slice(&postscript_len.to_le_bytes());
         eof[4..8].copy_from_slice(&MAGIC_BYTES);
         buffers.push(ByteBuffer::copy_from(eof));

@@ -49,6 +49,7 @@ use vortex_layout::LayoutContext;
 use vortex_layout::LayoutStrategy;
 use vortex_layout::LayoutWriterContext;
 use vortex_layout::layouts::file_stats::accumulate_stats;
+use vortex_layout::layouts::flat::writer::FlatLayoutStrategy;
 use vortex_layout::sequence::SequenceId;
 use vortex_layout::sequence::SequentialStreamAdapter;
 use vortex_layout::sequence::SequentialStreamExt;
@@ -83,6 +84,7 @@ pub struct VortexWriteOptions {
     disable_editions: bool,
     buffered_bytes: BufferedBytesTracker,
     exclude_dtype: bool,
+    dedup_footer: bool,
     max_variable_length_statistics_size: usize,
     file_statistics: Vec<Stat>,
     metadata: HashMap<String, ByteBuffer>,
@@ -106,6 +108,7 @@ impl VortexWriteOptions {
             buffered_bytes: BufferedBytesTracker::new(),
             session,
             exclude_dtype: false,
+            dedup_footer: false,
             file_statistics: PRUNING_STATS.to_vec(),
             max_variable_length_statistics_size: 64,
             metadata: HashMap::default(),
@@ -144,6 +147,19 @@ impl VortexWriteOptions {
     /// the same counter for the push-based API.
     pub fn buffered_bytes_tracker(&self) -> BufferedBytesTracker {
         self.buffered_bytes.clone()
+    }
+
+    /// Experimental: store per-column metadata that is identical across columns only once.
+    ///
+    /// Array encoding trees move from each segment into the layout metadata, and the layout
+    /// flatbuffer stores each distinct subtree once. This shrinks files with many similarly
+    /// encoded columns. The file is written with
+    /// [`VERSION_DEDUP_FOOTER`](crate::VERSION_DEDUP_FOOTER), which older readers reject.
+    ///
+    /// Array trees are only inlined when the default layout strategy is used.
+    pub fn with_dedup_footer(mut self, dedup_footer: bool) -> Self {
+        self.dedup_footer = dedup_footer;
+        self
     }
 
     /// Exclude the DType from the Vortex file. You must provide the DType to the reader.
@@ -254,9 +270,16 @@ impl VortexWriteOptions {
                 if !enforce_editions {
                     compressor = compressor.disable_editions();
                 }
-                WriteStrategyBuilder::from_session(&self.session)
-                    .with_btrblocks_builder(compressor)
-                    .build()
+                let builder = WriteStrategyBuilder::from_session(&self.session)
+                    .with_btrblocks_builder(compressor);
+                let builder = if self.dedup_footer {
+                    builder.with_flat_strategy(Arc::new(
+                        FlatLayoutStrategy::default().with_inline_array_tree(true),
+                    ))
+                } else {
+                    builder
+                };
+                builder.build()
             }
         };
         let dtype = stream.dtype().clone();
@@ -343,6 +366,7 @@ impl VortexWriteOptions {
             .with_metadata_segments(self.metadata)
             .with_offset(position)
             .with_exclude_dtype(self.exclude_dtype)
+            .with_dedup(self.dedup_footer)
             .serialize_with_metadata()?;
         footer = footer
             .with_metadata_segments(metadata)

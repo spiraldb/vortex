@@ -13,6 +13,8 @@ mod file_layout;
 mod file_statistics;
 mod postscript;
 mod segment;
+#[cfg(test)]
+mod wide_size_tests;
 
 use std::sync::Arc;
 

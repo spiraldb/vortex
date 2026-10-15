@@ -135,6 +135,10 @@ pub use writer::*;
 
 /// The current version of the Vortex file format
 pub const VERSION: u16 = 1;
+/// Experimental file format version whose layout flatbuffer may use `segment_map` to store each
+/// distinct layout subtree once. Written only when [`VortexWriteOptions::with_dedup_footer`] is
+/// enabled; readers of [`VERSION`] reject it rather than misreading segment ids.
+pub const VERSION_DEDUP_FOOTER: u16 = 2;
 /// The size of the footer in bytes in Vortex version 1
 pub const V1_FOOTER_FBS_SIZE: usize = 32;
 

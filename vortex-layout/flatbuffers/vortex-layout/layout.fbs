@@ -27,6 +27,15 @@ table Layout {
     children: [Layout];
     /// Identifiers for each `SegmentSpec` of data required by this layout.
     segments: [uint32];
+    /// If present, every segment identifier in this layout's subtree, including this layout's own
+    /// `segments`, is an index into this map rather than a file segment identifier. Nested maps are
+    /// resolved through their enclosing map.
+    ///
+    /// This makes the subtrees of structurally identical layouts byte-identical, so a writer can
+    /// store them once and point every parent at the same table (for example, every column of a
+    /// wide table). Files using this field must be written with a file format version that
+    /// readers check, since older readers would misinterpret the slot indices as segment ids.
+    segment_map: [uint32];
 }
 
 root_type Layout;
