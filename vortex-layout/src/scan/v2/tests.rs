@@ -64,8 +64,7 @@ fn table_chunk(start: usize) -> VortexResult<ArrayRef> {
             .map(|row| i32::try_from(row).unwrap_or(i32::MAX)),
     );
     let strings = VarBinArray::from_iter(
-        rows.clone()
-            .map(|row| (row % 3 != 0).then(|| format!("row {row}"))),
+        rows.map(|row| (row % 3 != 0).then(|| format!("row {row}"))),
         DType::Utf8(true.into()),
     );
     let elements = Buffer::from_iter((0..2 * CHUNK_ROWS).map(|i| i64::try_from(i).unwrap_or(0)));

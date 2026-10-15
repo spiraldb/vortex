@@ -119,35 +119,30 @@ Depends on A. New `vortex-layout/src/scan/planning/` and `vortex-layout/src/scan
   `vortex-layout/src/plan/physical/pipeline/tests.rs` (`lower(&layout)`), driven by
   `Driver::run` from PR A; compare with `assert_arrays_eq!` against the default scan.
 
-### PR C: opt-in hook (~550 + tests)
+### PR C: opt-in executor behind a single fork
 
-- `scan/v2/mod.rs` (113): `ENV_VAR = "VORTEX_SCAN_V2"`, `enabled()`, `supports()` (no list
-  columns), `ScanFile { layout, locations, segments }`. Drop `io` and `plans` fields and the
-  `conjuncts`, `file`, `prefetch`, `pruning`, `repeated_scan`, `share` modules. Gate
-  `supports_scan` on `builder.filter.is_none()` (scans with a filter use the default executor).
-- `scan/v2/scan_builder.rs` (333): `ScanBuilder::from_default` and `into_stream`; replace
-  `prepare()` / `RepeatedScanV2` with a small local prepare: lower the projection with
-  `plan::physical::lower`, `optimize`, compute splits via `chunk_starts` + `projection_splits`,
-  build one `SplitPlan` per split.
-- `scan/v2/stream.rs` (141): `into_stream` and `LazyScanStream`; drop the
-  `pruning::file_pruning_enabled` import and branch.
-- `vortex-layout/src/scan/scan_builder.rs`: add `into_parts()` and `ScanParts` (+44 in the
-  source commit; drop `has_filter_and_limit`, which is subsumed by the no-filter gate).
-- `vortex-file/src/planning/mod.rs`: only `segment_locations` and `scan_file(&VortexFile)`
-  (source L51-78, ~30 lines). It must be in `vortex-file` because
-  `Footer::segment_specs_with_metadata` (`vortex-file/src/footer/mod.rs` L210) is `pub(crate)`.
-  Use `VortexFile::segment_source()` (`vortex-file/src/file.rs` L151); drop `file.scan_io()` and
-  `scan_file_cache` (both from #10463 / plan caching).
-- Tests: `v2/tests.rs` cases without filters, plus `vortex-file` round trips like the
-  `v2::into_stream(file.scan()?, scan_file(&file))` test in `vortex-file/src/open.rs` (~L571-608
-  in the source commit).
+The source commit forked at every caller (`if v2::enabled() && v2::supports_scan(..) {
+v2::into_stream(..) } else { b.into_stream() }` in the DataFusion opener, `vortex-file`, DuckDB).
+This slice forks in exactly one place instead, and nothing V2-specific is added to the V1 path:
 
-### PR D (optional): first caller
+- `ScanBuilder`'s lazy prepare step calls `prepare_stream`, which is the only fork:
+  `match v2::select(self)? { Executor::V1(b) => b.prepare()?.execute_stream(None),
+  Executor::V2(scan) => scan.execute_stream() }`. `into_stream`, `into_iter` and the Arrow
+  record-batch stream all go through it, so no caller changes.
+- `v2::select` owns the whole gate: `VORTEX_SCAN_V2=1`, the builder carries a `ScanFile`, no
+  filter, no limit, and every layout is Flat/Chunked/Struct/Dict/Zoned/LegacyStats (no List
+  layout; lists written as flat leaves, the default, are supported). It logs the decision at
+  `debug` on target `vortex_layout::scan::v2`. Each later PR widens this gate in one place.
+- `VortexFile::scan()` attaches `ScanFile` via `ScanBuilder::with_scan_file`, built from
+  `Footer::segment_specs_with_metadata`. Callers that build a `ScanBuilder` from a bare layout
+  reader (DataFusion opener, DuckDB) stay on V1 until they attach one with the same setter: wiring,
+  not a fork.
+- `ScanBuilder::prepare()` / `build()` keep returning the V1 `RepeatedScan`.
 
-- `vortex-datafusion/src/persistent/opener.rs` on develop, L454-468: keep the builder chain,
-  then `if scan::v2::enabled() && scan::v2::supports_scan(&b, &file) { v2::into_stream(...) }
-  else { b.into_stream() }` (~+15). Skip `diagnostics.rs` and `benchmark_segment_cache`.
-- Non-engine alternative: next to `VortexFile::scan()` (`vortex-file/src/file.rs` L217).
+### PR D (optional): more callers
+
+- `vortex-datafusion/src/persistent/opener.rs`: add `.with_scan_file(vxf.scan_file())` to the
+  builder chain. No `if`.
 
 ### Later
 

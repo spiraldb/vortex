@@ -162,7 +162,7 @@ impl<A: 'static + Send> PreparedScan<A> {
         let root = lower(&file.layout)?;
         let projection = optimize(plan_row_idx_expression(builder.projection, root.clone())?)?;
         let projection_starts: Arc<[u64]> = chunk_starts([&projection])?.into();
-        let rows = builder.row_range.unwrap_or(0..root.row_count());
+        let rows = builder.row_range.unwrap_or_else(|| 0..root.row_count());
         let splits = projection_splits(&projection_starts, rows);
         let io = Arc::new(SegmentScanIo::new(
             file.segments,
