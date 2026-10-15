@@ -87,6 +87,8 @@ pub fn try_from_table_filter(
                 "IN filter must have at least one value"
             );
             let dtype = scalars[0].dtype().clone();
+            // The IN list itself is never null. Null values are elements, and in_list handles
+            // them.
             let list_scalar = Scalar::list(Arc::new(dtype), scalars, Nullability::NonNullable);
             in_list(col.clone(), lit(list_scalar))
         }

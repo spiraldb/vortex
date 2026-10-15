@@ -741,6 +741,7 @@ fn try_from_compare_in(
     else {
         return Ok(None);
     };
+    // The IN list itself is never null. Null values are elements, and in_list handles them.
     let list = Scalar::list(
         Arc::new(list_elements[0].dtype().clone()),
         list_elements,
