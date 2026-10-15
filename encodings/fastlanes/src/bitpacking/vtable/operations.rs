@@ -8,6 +8,7 @@ use vortex_array::vtable::OperationsVTable;
 use vortex_error::VortexResult;
 
 use crate::BitPacked;
+use crate::BitWidthsView;
 use crate::bitpack_decompress;
 use crate::bitpacking::array::BitPackedArrayExt;
 impl OperationsVTable<BitPacked> for BitPacked {
@@ -16,15 +17,20 @@ impl OperationsVTable<BitPacked> for BitPacked {
     fn scalar_at(
         array: ArrayView<'_, BitPacked>,
         index: usize,
-        _ctx: &mut ExecutionCtx,
+        ctx: &mut ExecutionCtx,
     ) -> VortexResult<Scalar> {
         Ok(
             if let Some(patches) = array.patches()
-                && let Some(patch) = patches.get_patched(index)?
+                && let Some(patch) = patches.get_patched(index, ctx)?
             {
                 patch
             } else {
-                bitpack_decompress::unpack_single(array, index)?
+                match array.bit_widths() {
+                    BitWidthsView::Global(_) => bitpack_decompress::unpack_single(array, index)?,
+                    BitWidthsView::Blocked(offsets) => {
+                        bitpack_decompress::unpack_single_blocked(array, offsets, index, ctx)?
+                    }
+                }
             },
         )
     }

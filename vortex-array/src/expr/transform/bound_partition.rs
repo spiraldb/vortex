@@ -32,15 +32,6 @@ use crate::expr::traversal::TraversalOrder;
 /// Partition an expression into sub-expressions that are uniquely associated with an annotation.
 /// A root expression is also returned that can be used to recombine the results of the partitions
 /// into the result of the original expression.
-///
-/// ## Note
-///
-/// This function currently respects the validity of each field in the scope, but the not validity
-/// of the scope itself. The fix would be for the returned `BoundPartitionedExpr` to include a
-/// partition expression for computing the validity, or to include that expression as part of the
-/// root.
-///
-/// See <https://github.com/vortex-data/vortex/issues/1907>.
 pub fn partition_bound<A: AnnotationFn<BoundExpression>>(
     expr: BoundExpression,
     annotate_fn: A,

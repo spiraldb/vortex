@@ -283,6 +283,7 @@ fn canonical_tpc_scale_factor(scale_factor: &str) -> String {
 /// | `Fineweb`                   | `fineweb`      | `None`              | `None`                                              | |
 /// | `GhArchive`                 | `gharchive`    | `None`              | `None`                                              | |
 /// | `Appian`                    | `appian`       | `None`              | `None`                                              | Static dataset; no scale factor. |
+/// | `Job`                       | `job`          | `None`              | `None`                                              | Static IMDB dataset; no scale factor. |
 /// | `PublicBi { name }`         | `public-bi`    | dataset name (e.g. `cms-provider`) | `None`               | Sub-dataset name lives in `dataset_variant`. |
 /// | `SpatialBench { scale_factor }` | `spatialbench` | `None`         | SF as string | Same canonicalization as TPC-H; no historical v2 records to merge with. |
 /// | `VortexQueries` | `vortex` | `None` | `None` | Own microbenchmarks |
@@ -321,6 +322,7 @@ pub fn benchmark_dataset_dims(d: &BenchmarkDataset) -> (String, Option<String>, 
         BenchmarkDataset::Fineweb => ("fineweb".to_string(), None, None),
         BenchmarkDataset::GhArchive => ("gharchive".to_string(), None, None),
         BenchmarkDataset::Appian => ("appian".to_string(), None, None),
+        BenchmarkDataset::Job => ("job".to_string(), None, None),
         BenchmarkDataset::VortexQueries => ("vortex".to_string(), None, None),
     }
 }
@@ -736,6 +738,7 @@ mod tests {
             (BenchmarkDataset::Fineweb, "fineweb"),
             (BenchmarkDataset::GhArchive, "gharchive"),
             (BenchmarkDataset::Appian, "appian"),
+            (BenchmarkDataset::Job, "job"),
         ] {
             let (ds, variant, sf) = benchmark_dataset_dims(&case);
             assert_eq!(ds, expected, "dataset for {case:?}");

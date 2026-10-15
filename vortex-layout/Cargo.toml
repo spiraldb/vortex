@@ -20,6 +20,7 @@ all-features = true
 arcref = { workspace = true }
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
+async-lock = { workspace = true }
 async-stream = { workspace = true }
 async-trait = { workspace = true }
 bit-vec = { workspace = true }
@@ -35,6 +36,7 @@ pin-project-lite = { workspace = true }
 prost = { workspace = true }
 rustc-hash = { workspace = true }
 sketches-ddsketch = { workspace = true }
+smallvec = { workspace = true }
 termtree = { workspace = true }
 tokio = { workspace = true, features = ["rt"], optional = true }
 tracing = { workspace = true }

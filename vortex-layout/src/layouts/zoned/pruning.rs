@@ -72,9 +72,13 @@ impl PruningState {
             aggregate_fns,
             lazy_children,
             session,
-            pruning_result: Default::default(),
+            pruning_result: LazyLock::new(|| {
+                DashMap::with_hasher_and_shard_amount(Default::default(), 8)
+            }),
             zone_map: Default::default(),
-            pruning_predicates: Default::default(),
+            pruning_predicates: LazyLock::new(|| {
+                Arc::new(DashMap::with_hasher_and_shard_amount(Default::default(), 8))
+            }),
         }
     }
 
@@ -102,16 +106,23 @@ impl PruningState {
                         Some(
                             async move {
                                 let zone_map = zone_map.await?;
-                                let initial_mask =
-                                    zone_map.prune(&predicate, &session).map_err(|err| {
-                                        err.with_context(format!(
+                                let lowered = zone_map.lower_stats(predicate.clone()).and_then(
+                                    |lowered_predicate| {
+                                        let mask =
+                                            zone_map.prune_lowered(&lowered_predicate, &session)?;
+                                        Ok((lowered_predicate, mask))
+                                    },
+                                );
+                                let (lowered_predicate, initial_mask) = lowered.map_err(|err| {
+                                    err.with_context(format!(
                                         "While evaluating pruning predicate {} (derived from {})",
                                         predicate, expr
                                     ))
-                                    })?;
+                                })?;
+
                                 Ok(Arc::new(PruningResult {
                                     zone_map,
-                                    predicate,
+                                    lowered_predicate,
                                     dynamic_updates,
                                     latest_result: RwLock::new((0, initial_mask)),
                                     session,
@@ -191,7 +202,7 @@ impl PruningState {
 
 pub(super) struct PruningResult {
     zone_map: ZoneMap,
-    predicate: BoundExpression,
+    lowered_predicate: BoundExpression,
     dynamic_updates: Option<DynamicExprUpdates>,
     latest_result: RwLock<(u64, Mask)>,
     session: VortexSession,
@@ -219,17 +230,17 @@ impl PruningResult {
 
         trace!(
             version,
-            predicate = %self.predicate,
+            predicate = %self.lowered_predicate,
             "recomputing pruning mask"
         );
 
         let next_mask = self
             .zone_map
-            .prune(&self.predicate, &self.session)
+            .prune_lowered(&self.lowered_predicate, &self.session)
             .map_err(|err| {
                 err.with_context(format!(
                     "While evaluating pruning predicate {}",
-                    self.predicate
+                    self.lowered_predicate
                 ))
             })?;
         *guard = (version, next_mask.clone());

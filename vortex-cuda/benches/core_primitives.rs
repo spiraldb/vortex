@@ -23,8 +23,12 @@ use cudarc::driver::result;
 use cudarc::driver::sys;
 use cudarc::driver::sys::CU_MEMHOSTALLOC_WRITECOMBINED;
 use cudarc::driver::sys::CUmemPool_attribute_enum;
+use mimalloc::MiMalloc;
 use vortex_cuda_macros::cuda_available;
 use vortex_cuda_macros::cuda_not_available;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 const BUFFER_SIZE: usize = 1024 * 1024 * 1024;
 const BUFFER_SIZE_NAME: &str = "1GiB";

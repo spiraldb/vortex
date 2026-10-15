@@ -6,6 +6,7 @@ mod global;
 
 pub use blocked::bitpack_blocked_to_best_bit_widths;
 pub use blocked::bitpack_encode_blocked;
+pub use blocked::find_best_bit_widths;
 pub use global::bit_width_histogram;
 pub use global::bitpack_encode;
 pub use global::bitpack_encode_unchecked;

@@ -85,7 +85,7 @@ fn engages_on_supported_cpus() {
     let mask = mask_values(&mask).expect("alternating mask is mixed");
 
     #[cfg(target_arch = "x86_64")]
-    let expected = is_x86_feature_detected!("avx2");
+    let expected = is_x86_feature_detected!("avx2") && is_x86_feature_detected!("popcnt");
     #[cfg(target_arch = "aarch64")]
     let expected = true;
 
@@ -105,11 +105,11 @@ fn declines_sparse_and_short_masks() {
     assert!(filter_slice_by_bitmap(&values[..32], short).is_none());
 }
 
-// AVX-512 machines need direct coverage of the otherwise-unselected AVX2 tier.
+// AVX-512 machines need direct coverage of the otherwise-unselected AVX2-tier kernels.
 #[cfg(all(target_arch = "x86_64", not(miri)))]
 #[test]
 fn avx2_kernels_match_scalar() {
-    if !is_x86_feature_detected!("avx2") {
+    if !(is_x86_feature_detected!("avx2") && is_x86_feature_detected!("popcnt")) {
         return;
     }
 
@@ -126,7 +126,7 @@ fn avx2_kernels_match_scalar() {
         );
 
         let mut out = vec![T::default(); mask.true_count() + SLACK_BYTES / size_of::<T>()];
-        // SAFETY: AVX2 was detected above and the output has a vector of slack.
+        // SAFETY: AVX2 and POPCNT were detected above and the output has a vector of slack.
         let written =
             unsafe { kernel_out_of_place(values.as_ptr().cast(), out.as_mut_ptr().cast(), mask) };
         assert_eq!(written, mask.true_count());
@@ -134,7 +134,7 @@ fn avx2_kernels_match_scalar() {
 
         let mut compacted = values.to_vec();
         let ptr = compacted.as_mut_ptr().cast::<u8>();
-        // SAFETY: AVX2 was detected above; in-place compaction stays within the slice.
+        // SAFETY: AVX2 and POPCNT were detected above; in-place compaction stays within the slice.
         let written = unsafe { kernel_in_place(ptr.cast_const(), ptr, mask) };
         assert_eq!(written, mask.true_count());
         assert_eq!(&compacted[..written], expected.as_slice());
@@ -152,14 +152,14 @@ fn avx2_kernels_match_scalar() {
                 let u32_values: Vec<u32> = (0..len as u32).collect();
                 let u64_values: Vec<u64> = (0..len as u64).collect();
                 check_kernel(
-                    x86::compress_pshufb_epi8::<false>,
-                    x86::compress_pshufb_epi8::<true>,
+                    generic::compress_generic_8::<false>,
+                    generic::compress_generic_8::<true>,
                     &u8_values,
                     mask,
                 );
                 check_kernel(
-                    x86::compress_pshufb_epi16::<false>,
-                    x86::compress_pshufb_epi16::<true>,
+                    generic::compress_generic_16::<false>,
+                    generic::compress_generic_16::<true>,
                     &u16_values,
                     mask,
                 );
