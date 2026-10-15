@@ -300,8 +300,10 @@ fn assert_membership_filter_pushed(
             plan.push_str(&String::from_duckdb_value(value));
         }
     }
+    // EXPLAIN wraps text inside a box, so search for a token that is short enough to stay on
+    // one line.
     assert!(
-        plan.contains("list_contains"),
+        plan.contains("sql_null_semantics"),
         "missing membership filter:\n{plan}"
     );
     assert!(!plan.contains("FILTER"), "filter was not pushed:\n{plan}");
