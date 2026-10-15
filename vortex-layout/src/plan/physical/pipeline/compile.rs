@@ -16,6 +16,7 @@ use super::DEFAULT_CAPACITY;
 use super::port::PortId;
 use super::port::SourceEnd;
 use super::scan::Core;
+use super::values::ValueCache;
 use crate::plan::physical::ConcatPlan;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::SegmentScanPlan;
@@ -135,6 +136,11 @@ impl Compiler<'_> {
     /// The session used for decoding and evaluation.
     pub fn session(&self) -> &VortexSession {
         &self.core.session
+    }
+
+    /// Whole values kept between the scans of the split compiling.
+    pub(crate) fn values(&self) -> &ValueCache {
+        &self.core.values
     }
 
     /// The rows `rows` of `scan`'s segment, filtered by `filter`, read by the split compiling.
