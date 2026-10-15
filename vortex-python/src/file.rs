@@ -580,7 +580,16 @@ impl PyVortexFile {
     }
 }
 
-/// Decode row indices into a sorted `u64` buffer, releasing the GIL since this is O(n).
+/// Index counts below this are decoded with the GIL held.
+///
+/// Releasing the GIL costs a wait to take it back. When other threads hold it, that wait is much
+/// longer than decoding a short index list, which is the usual request for random row reads.
+const DETACHED_ROW_INDICES: usize = 1 << 16;
+
+/// Decode row indices into a sorted `u64` buffer.
+///
+/// The decode is O(n), so it releases the GIL, but only for long lists (see
+/// [`DETACHED_ROW_INDICES`]).
 pub(crate) fn row_indices(
     py: Python,
     indices: Option<PyArrayRef>,
@@ -589,13 +598,17 @@ pub(crate) fn row_indices(
         return Ok(None);
     };
     let indices = indices.into_inner();
-    py.detach(move || {
+    let detach = indices.len() >= DETACHED_ROW_INDICES;
+
+    let decode = move || {
         let casted = indices.cast(DType::Primitive(PType::U64, NonNullable))?;
         let indices = casted
             .execute::<PrimitiveArray>(&mut session().create_execution_ctx())?
             .into_buffer::<u64>();
         Ok(Some(StrictSortedBuffer::try_new(indices)?))
-    })
+    };
+
+    if detach { py.detach(decode) } else { decode() }
 }
 
 fn scan_builder(
