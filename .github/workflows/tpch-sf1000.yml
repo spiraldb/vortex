@@ -8,16 +8,16 @@
 # OOM-killed or times out is recorded and the rest still run, and system memory is sampled
 # throughout data generation, conversion and every query.
 
-name: TPC-H SF1000
+name: TPC-H SF1000 (pinned experiment)
 
 concurrency:
-  group: tpch-sf1000
+  group: tpch-sf1000-pinned
   cancel-in-progress: false
 
 on:
   # TEMPORARY: lets the branch run the workflow before it lands; drop this commit before merging.
   push:
-    branches: [ji/tpch-sf1000-weekly]
+    branches: [ji/jolly-edison-lerssr]
   schedule:
     - cron: "17 2 * * 6"  # weekly, Saturday
   workflow_dispatch:
@@ -124,6 +124,16 @@ jobs:
 
       - uses: ./.github/actions/system-info
 
+      # EXPERIMENT: pin the benchmark the way sql-bench-matrix does, to compare runtime and
+      # memory against the unpinned run. Runs before the memory monitor starts, so the monitor
+      # stays on the housekeeping CPUs.
+      - name: Setup benchmark environment
+        shell: bash
+        run: |
+          sudo bash scripts/setup-benchmark.sh
+          numactl --hardware || lscpu | grep -i numa
+          cat /tmp/vortex-benchmark.env
+
       - name: Check free disk
         shell: bash
         # Parquet and Vortex are each about 0.25 GB per scale factor unit, and DuckDB spills
@@ -157,12 +167,12 @@ jobs:
         run: |
           set -Eeuo pipefail
           echo gen-parquet > "$PHASE_FILE"
-          ${TIME_CMD:-} target/tpchgen-cli/bin/tpchgen-cli parquet \
+          bash scripts/bench-taskset.sh ${TIME_CMD:-} target/tpchgen-cli/bin/tpchgen-cli parquet \
             --scale-factor "$SCALE_FACTOR" \
             --output-dir "$DATA_DIR/parquet" \
             --compression 'ZSTD(3)' \
             --row-group-bytes 67108864 \
-            --num-threads "$(nproc)" \
+            --num-threads "$(bash scripts/bench-taskset.sh nproc)" \
             --no-progress
           echo idle > "$PHASE_FILE"
           du -sh "$DATA_DIR/parquet"/*
@@ -175,7 +185,7 @@ jobs:
           set -Eeuo pipefail
           echo convert-vortex > "$PHASE_FILE"
           # data-gen skips the Parquet tables that already exist and only converts.
-          ${TIME_CMD:-} target/release_debug/data-gen tpch \
+          bash scripts/bench-taskset.sh ${TIME_CMD:-} target/release_debug/data-gen tpch \
             --formats parquet,vortex \
             --opt scale-factor="$SCALE_FACTOR"
           echo idle > "$PHASE_FILE"
@@ -194,7 +204,7 @@ jobs:
           # Leave the job time for the summary and uploads once the queries have used 9 hours.
           # Word splitting of $QUERIES is intended.
           # shellcheck disable=SC2086
-          python3 scripts/bench-memory.py run-queries \
+          bash scripts/bench-taskset.sh python3 scripts/bench-memory.py run-queries \
             --binary "target/release_debug/${{ matrix.engine }}-bench" \
             --engine "${{ matrix.engine }}" \
             --formats parquet vortex \
