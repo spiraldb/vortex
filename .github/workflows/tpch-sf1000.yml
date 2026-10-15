@@ -15,6 +15,9 @@ concurrency:
   cancel-in-progress: false
 
 on:
+  # TEMPORARY: lets the branch run the workflow before it lands; drop this commit before merging.
+  push:
+    branches: [ji/tpch-sf1000-weekly]
   schedule:
     - cron: "17 2 * * 6"  # weekly, Saturday
   workflow_dispatch:
