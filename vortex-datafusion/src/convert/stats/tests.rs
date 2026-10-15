@@ -3,6 +3,7 @@
 
 use datafusion_common::ScalarValue as DFScalarValue;
 use rstest::rstest;
+use vortex::VortexSessionDefault;
 use vortex::dtype::half::f16;
 use vortex::error::vortex_err;
 use vortex::expr::stats::Precision as VortexPrecision;

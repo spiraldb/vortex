@@ -9,9 +9,9 @@ use vortex::dtype::DType;
 use vortex::dtype::Nullability;
 use vortex::dtype::PType;
 use vortex::error::VortexResult;
-use vortex::extension::datetime::AnyTemporal;
 use vortex::expr::stats::Precision as VortexPrecision;
 use vortex::expr::stats::Stat;
+use vortex::extension::datetime::AnyTemporal;
 use vortex::scalar::Scalar;
 
 use crate::PrecisionExt;
@@ -91,8 +91,7 @@ pub(crate) fn constant_distinct_count(
 
     // Float extrema skip NaNs, so equal extrema alone cannot prove a constant.
     if dtype.is_float()
-        && stats_set.get_as::<u64>(Stat::NaNCount, &PType::U64.into())
-            != VortexPrecision::Exact(0)
+        && stats_set.get_as::<u64>(Stat::NaNCount, &PType::U64.into()) != VortexPrecision::Exact(0)
     {
         return Precision::Absent;
     }

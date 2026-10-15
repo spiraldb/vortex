@@ -807,9 +807,9 @@ mod tests {
     use rstest::rstest;
     use vortex::array::stats::StatsSet;
     use vortex::dtype::Nullability;
+    use vortex::expr::Expression;
     use vortex::extension::datetime::TimeUnit as VortexTimeUnit;
     use vortex::extension::datetime::Timestamp;
-    use vortex::expr::Expression;
 
     use super::*;
     use crate::common_tests::TestSessionContext;
