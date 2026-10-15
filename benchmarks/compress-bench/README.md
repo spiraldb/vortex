@@ -17,6 +17,23 @@ data. This is the workload behind the `Compression` PR comment.
 See [`src/main.rs`](./src/main.rs) for the dataset list and CLI flags (`--formats`,
 `--datasets`, `--ops compress,decompress`).
 
+## CPU parallelism
+
+Vortex compresses and scans on the session's Tokio runtime, which scales to the available
+cores. So that the Parquet numbers reflect the format rather than a single-threaded reader,
+the Parquet compressor uses one worker per available core as well:
+
+- **Compress** splits the input into row groups at the writer's default
+  `max_row_group_row_count` (1,048,576 rows), the same boundaries `ArrowWriter` produces, then
+  encodes every (row group, root column) chunk in parallel with parquet-rs's
+  `ArrowRowGroupWriterFactory` and appends the chunks in order.
+- **Decompress** parses the footer once and decodes every (row group, root column) pair with
+  its own `ParquetRecordBatchReader` in parallel, so files with a single row group still decode
+  their columns concurrently.
+
+The written file has the same row groups, encodings and compression as a sequential
+`ArrowWriter` with the same settings.
+
 ## Running locally
 
 ```bash
