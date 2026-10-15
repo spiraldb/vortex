@@ -24,6 +24,7 @@ use vortex_array::expr::bound::and as bound_and;
 use vortex_array::expr::byte_length;
 use vortex_array::expr::cast;
 use vortex_array::expr::checked_add;
+use vortex_array::expr::dynamic;
 use vortex_array::expr::get_item;
 use vortex_array::expr::gt;
 use vortex_array::expr::is_null;
@@ -31,6 +32,9 @@ use vortex_array::expr::lit;
 use vortex_array::expr::pack;
 use vortex_array::expr::root;
 use vortex_array::expr::stats::Stat;
+use vortex_array::scalar::ScalarValue;
+use vortex_array::scalar_fn::fns::operators::CompareOperator;
+use vortex_array::stats::as_stat_bitset_bytes;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
@@ -1202,14 +1206,13 @@ fn nullable_struct_keeps_expression_above_parent_validity() -> VortexResult<()> 
 #[test]
 fn zoned_plan_exposes_data_and_zones() -> VortexResult<()> {
     let dtype = primitive(PType::I32, Nullability::NonNullable);
-    let zones_dtype = DType::Struct(StructFields::empty(), Nullability::NonNullable);
+    let (max, zones_dtype) = max_zones_dtype(&dtype)?;
     let zone_len = NonZeroUsize::new(3).ok_or_else(|| vortex_err!("zone length is zero"))?;
-    let aggregate_fns: Arc<[AggregateFnRef]> = Vec::new().into();
     let layout = ZonedLayout::try_new(
         flat(5, dtype, 0),
         flat(2, zones_dtype, 1),
         zone_len,
-        aggregate_fns,
+        vec![max].into(),
     )?
     .into_layout();
 
@@ -1219,8 +1222,8 @@ fn zoned_plan_exposes_data_and_zones() -> VortexResult<()> {
     root: vortex.plan.zoned(i32, rows=5)
       data: vortex.plan.filter(i32, rows=5)
         child: vortex.plan.segment_scan(i32, rows=5)
-      zones: vortex.plan.filter({}, rows=2)
-        child: vortex.plan.segment_scan({}, rows=2)
+      zones: vortex.plan.filter({vortex.max()=i32?}, rows=2)
+        child: vortex.plan.segment_scan({vortex.max()=i32?}, rows=2)
     ");
     Ok(())
 }
@@ -1345,10 +1348,14 @@ fn pruning_expression_partitions_across_row_idx_and_zoned_struct_field() -> Vort
     Ok(())
 }
 
-#[test]
-fn legacy_stats_layout_lowers_to_legacy_stats_plan() -> VortexResult<()> {
-    let dtype = primitive(PType::I32, Nullability::NonNullable);
-    let zones_dtype = DType::Struct(StructFields::empty(), Nullability::NonNullable);
+/// A legacy stats layout over 5 rows of `dtype` in zones of `zone_len` rows, whose zone table of
+/// `zones_dtype` holds `stats`.
+fn legacy_layout(
+    dtype: &DType,
+    zone_len: u32,
+    stats: &[Stat],
+    zones_dtype: DType,
+) -> VortexResult<LayoutRef> {
     let children = OwnedLayoutChildren::layout_children(vec![
         flat(5, dtype.clone(), 0),
         flat(2, zones_dtype, 1),
@@ -1359,15 +1366,23 @@ fn legacy_stats_layout_lowers_to_legacy_stats_plan() -> VortexResult<()> {
         session: &session,
         array_read_ctx: &read_ctx,
     };
-    let layout = LayoutEncoding::build(
+    let mut metadata = zone_len.to_le_bytes().to_vec();
+    metadata.extend(as_stat_bitset_bytes(stats));
+    LayoutEncoding::build(
         &LegacyStatsLayoutEncoding,
-        &dtype,
+        dtype,
         5,
-        &3_u32.to_le_bytes(),
+        &metadata,
         Vec::new(),
         children.as_ref(),
         &build_ctx,
-    )?;
+    )
+}
+
+#[test]
+fn legacy_stats_layout_lowers_to_legacy_stats_plan() -> VortexResult<()> {
+    let dtype = primitive(PType::I32, Nullability::NonNullable);
+    let layout = legacy_layout(&dtype, 3, &[Stat::Max], legacy_max_zones_dtype(&dtype))?;
 
     let plan = make_plan(layout)?;
     assert!(plan.is::<LegacyStats>());
@@ -1375,11 +1390,33 @@ fn legacy_stats_layout_lowers_to_legacy_stats_plan() -> VortexResult<()> {
     root: vortex.plan.legacy_stats(i32, rows=5)
       data: vortex.plan.filter(i32, rows=5)
         child: vortex.plan.segment_scan(i32, rows=5)
-      zones: vortex.plan.filter({}, rows=2)
-        child: vortex.plan.segment_scan({}, rows=2)
+      zones: vortex.plan.filter({max=i32?, max_is_truncated=bool}, rows=2)
+        child: vortex.plan.segment_scan({max=i32?, max_is_truncated=bool}, rows=2)
     ");
-    // A table holding no stat an aggregate can stand for leaves only the data.
-    assert!(optimize(plan)?.is::<Filter>());
+    Ok(())
+}
+
+/// Zoned layouts with no zones, or a zone table holding no statistics, lower to their data.
+#[test]
+fn zoned_layouts_without_statistics_lower_to_their_data() -> VortexResult<()> {
+    let dtype = primitive(PType::I32, Nullability::NonNullable);
+    let empty = DType::Struct(StructFields::empty(), Nullability::NonNullable);
+    let zone_len = NonZeroUsize::new(3).ok_or_else(|| vortex_err!("zone length is zero"))?;
+    let layouts = [
+        legacy_layout(&dtype, 0, &[Stat::Max], legacy_max_zones_dtype(&dtype))?,
+        legacy_layout(&dtype, 3, &[], empty.clone())?,
+        ZonedLayout::try_new(
+            flat(5, dtype.clone(), 0),
+            flat(2, empty, 1),
+            zone_len,
+            Vec::new().into(),
+        )?
+        .into_layout(),
+    ];
+    for layout in layouts {
+        let plan = make_plan(layout)?;
+        assert!(plan.is::<Filter>(), "{}", plan.display_tree());
+    }
     Ok(())
 }
 
@@ -1543,5 +1580,105 @@ fn legacy_stats_with_zero_zone_length_keep_only_data() -> VortexResult<()> {
     .into_plan();
 
     assert!(PlanRef::ptr_eq(&optimize(legacy)?, &data));
+    Ok(())
+}
+
+/// A dynamic predicate pushed onto dictionary values, then into their chunks, still makes the
+/// values uncacheable.
+#[test]
+fn take_over_dynamic_chunked_values_is_not_cacheable() -> VortexResult<()> {
+    let values_dtype = primitive(PType::I32, Nullability::NonNullable);
+    let codes_dtype = primitive(PType::U8, Nullability::NonNullable);
+    let values = ChunkedLayout::new(
+        4,
+        values_dtype.clone(),
+        OwnedLayoutChildren::layout_children(vec![
+            flat(2, values_dtype.clone(), 0),
+            flat(2, values_dtype.clone(), 1),
+        ]),
+    )
+    .into_layout();
+    let layout = DictLayout::new(values, flat(3, codes_dtype, 2)).into_layout();
+    let predicate = dynamic(
+        CompareOperator::Gt,
+        || Some(ScalarValue::from(5_i32)),
+        values_dtype,
+        true,
+        root(),
+    );
+
+    let optimized = optimize(make_eval(predicate, make_plan(layout)?)?.into_plan())?;
+    let take = optimized
+        .as_opt::<Take>()
+        .ok_or_else(|| vortex_err!("dynamic predicate was not pushed onto the values"))?;
+    assert!(
+        take.values()?.is::<Concat>(),
+        "{}",
+        optimized.display_tree()
+    );
+    assert!(!take.cacheable());
+    Ok(())
+}
+
+/// Codes that may be null make the take nullable while its values are not; the predicate is
+/// rebound to the values when pushed onto them. Dictionary layouts keep nulls in their values,
+/// so such a take is built rather than lowered.
+#[test]
+fn expression_pushes_onto_values_less_nullable_than_the_take() -> VortexResult<()> {
+    let values_dtype = primitive(PType::I32, Nullability::NonNullable);
+    let codes_dtype = primitive(PType::U8, Nullability::Nullable);
+    let take = TakePlan::new(
+        make_plan(flat(3, codes_dtype, 1))?,
+        make_plan(flat(2, values_dtype.clone(), 0))?,
+    )
+    .into_plan();
+    assert!(take.dtype().is_nullable());
+    let plan = make_eval(gt(root(), lit(5_i32)), take)?.into_plan();
+    let dtype = plan.dtype().clone();
+
+    let optimized = optimize(plan)?;
+    assert_eq!(optimized.dtype(), &dtype);
+    let take = optimized
+        .as_opt::<Take>()
+        .ok_or_else(|| vortex_err!("predicate was not pushed onto the values"))?;
+    let values = take.values()?;
+    let eval = values
+        .as_opt::<Eval>()
+        .ok_or_else(|| vortex_err!("values are not evaluated"))?;
+    assert!(eval.expression().is_root_bound_to(&values_dtype));
+    Ok(())
+}
+
+/// Rebuilding a pruning plan over new zones discards the proof over the old ones.
+#[test]
+fn zoned_pruning_plan_with_new_zones_proves_them_again() -> VortexResult<()> {
+    let dtype = primitive(PType::I32, Nullability::NonNullable);
+    let (max, zones_dtype) = max_zones_dtype(&dtype)?;
+    let zones = make_plan(flat(2, zones_dtype, 1))?;
+    let source = ZonedPlan::new(
+        make_plan(flat(5, dtype.clone(), 0))?,
+        zones.clone(),
+        3,
+        vec![max].into(),
+    )
+    .into_plan();
+    let falsifier = gt(root(), lit(5_i32))
+        .bind(&dtype)?
+        .falsify(&SESSION)?
+        .ok_or_else(|| vortex_err!("filter has no falsifier"))?;
+    let pruning = optimize(EvalPlan::try_new(falsifier, source)?.into_plan())?;
+    let pruning = pruning
+        .as_opt::<Zoned>()
+        .ok_or_else(|| vortex_err!("predicate did not become a pruning plan"))?;
+    let proof = pruning
+        .pruned_zones()
+        .ok_or_else(|| vortex_err!("pruning plan has no proof"))?;
+
+    let rebuilt = pruning.clone().into_plan().with_children(vec![zones])?;
+    let rebuilt_proof = rebuilt
+        .as_opt::<Zoned>()
+        .and_then(|zoned| zoned.pruned_zones())
+        .ok_or_else(|| vortex_err!("rebuilt plan has no proof"))?;
+    assert!(!Arc::ptr_eq(proof, rebuilt_proof));
     Ok(())
 }

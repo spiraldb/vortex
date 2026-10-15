@@ -39,7 +39,8 @@ use crate::plan::physical::ZonedPlan;
 /// Lowers `layout` into a physical plan.
 ///
 /// Zoned and legacy stats layouts keep their zone statistics: unoptimized they read only their
-/// data, and the optimizer rewrites a statistics predicate over them into a pruning plan.
+/// data, and the optimizer rewrites a statistics predicate over them into a pruning plan. Those
+/// with no zones or no statistics lower to their data.
 ///
 /// The root operator is built immediately. Its child container owns a hidden clone of the source
 /// layout and lowers each child independently on first access.
@@ -174,6 +175,17 @@ fn lower_zoned(layout: &LayoutRef) -> VortexResult<PlanRef> {
     } else {
         vortex_bail!("Zoned plan requires a zoned layout")
     };
+    // Without zones, or with a zone table holding no statistics, nothing can be pruned.
+    let no_stats = metadata
+        .stats_table_dtype()
+        .as_struct_fields_opt()
+        .is_none_or(|fields| fields.nfields() == 0);
+    if metadata.zone_len() == 0 || no_stats {
+        let data = layout
+            .slot(0)?
+            .ok_or_else(|| vortex_err!("Zoned layout has no data child"))?;
+        return lower(&data);
+    }
     let children = lazy_children(Arc::clone(layout), vec![0, 1]);
     let zone_len = u64::try_from(metadata.zone_len())?;
     // A legacy table is converted to the aggregate schema when the plan is optimized.

@@ -372,6 +372,11 @@ impl ZonedData {
         self.zone_len
     }
 
+    /// The dtype of the zone table.
+    pub(crate) fn stats_table_dtype(&self) -> &DType {
+        &self.stats_table_dtype
+    }
+
     pub(crate) fn aggregate_fns(&self) -> Arc<[AggregateFnRef]> {
         match &self.zone_map_schema {
             ZoneMapSchema::LegacyStats(stats) => stats

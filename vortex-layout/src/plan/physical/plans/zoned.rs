@@ -297,10 +297,15 @@ impl PlanVTable for Zoned {
     fn with_children(
         plan: &Plan<Self>,
         children: &PlanChildren,
-        _data: &mut Self::PlanData,
+        data: &mut Self::PlanData,
     ) -> VortexResult<()> {
         if plan.is_pruning() {
-            return check_child_count("Zoned pruning", children, 1);
+            check_child_count("Zoned pruning", children, 1)?;
+            // New zones may prove different zones, so the proof of the old ones is not kept.
+            if let Some(state) = &mut data.pruning {
+                state.pruned_zones = Arc::new(PrunedZones::new(&state.expression));
+            }
+            return Ok(());
         }
 
         check_child_count("Zoned", children, 2)?;

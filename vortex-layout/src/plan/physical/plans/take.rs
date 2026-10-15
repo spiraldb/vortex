@@ -14,7 +14,6 @@ use vortex_array::expr::ExactBoundExpr;
 use vortex_array::expr::label_bound_tree;
 use vortex_array::scalar_fn::fns::dynamic::DynamicComparison;
 use vortex_array::scalar_fn::is_negative_cost;
-use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_mask::Mask;
 use vortex_session::registry::CachedId;
@@ -28,6 +27,7 @@ use crate::plan::physical::PlanParts;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::PlanVTable;
 use crate::plan::physical::Share;
+use crate::plan::physical::Zoned;
 use crate::plan::physical::check_child_count;
 use crate::plan::physical::operators::OnceSource;
 use crate::plan::physical::operators::TakeSource;
@@ -63,14 +63,34 @@ impl Default for TakeData {
 
 impl TakeData {
     fn for_values(values: &PlanRef) -> VortexResult<Self> {
-        let dynamic = match values.as_opt::<Eval>() {
-            Some(eval) => eval.expression().contains::<DynamicComparison>()?,
-            None => false,
-        };
         Ok(Self {
-            cacheable: !dynamic,
+            cacheable: !is_dynamic(values)?,
         })
     }
+}
+
+/// Whether `plan` evaluates a dynamic comparison anywhere beneath it, so its output changes as
+/// the engine updates the comparison. Rewrites move expressions down the plan, as into the chunks
+/// of a concatenation, so the whole subtree is checked.
+fn is_dynamic(plan: &PlanRef) -> VortexResult<bool> {
+    if let Some(eval) = plan.as_opt::<Eval>()
+        && eval.expression().contains::<DynamicComparison>()?
+    {
+        return Ok(true);
+    }
+    if let Some(expression) = plan
+        .as_opt::<Zoned>()
+        .and_then(|zoned| zoned.pruning_expression())
+        && expression.contains::<DynamicComparison>()?
+    {
+        return Ok(true);
+    }
+    for child in plan.children().iter_refs() {
+        if is_dynamic(child?)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 impl TakePlan {
@@ -103,7 +123,8 @@ impl TakePlan {
             .dtype()
             .union_nullability(codes.dtype().nullability());
         let row_count = codes.row_count();
-        let data = TakeData::for_values(&values).vortex_expect("expression traversal cannot fail");
+        // A values plan that cannot be inspected is evaluated again by each scan.
+        let data = TakeData::for_values(&values).unwrap_or(TakeData { cacheable: false });
         PlanParts {
             vtable: Take,
             dtype,
@@ -284,8 +305,16 @@ impl PlanParentReduceRule<Take> for ExpressionTakeRule {
             if !expression.dtype().is_boolean() {
                 return Ok(None);
             }
-            let values = EvalPlan::try_new(expression.clone(), child.values()?)?.into_plan();
-            return Ok(Some(TakePlan::new(child.codes()?, values).into_plan()));
+            let values = child.values()?;
+            let Some(expression) = rebind_root(expression, child.dtype(), values.dtype()) else {
+                return Ok(None);
+            };
+            let values = EvalPlan::try_new(expression, values)?.into_plan();
+            let take = TakePlan::new(child.codes()?, values).into_plan();
+            if take.dtype() != parent.dtype() {
+                return Ok(None);
+            }
+            return Ok(Some(take));
         }
 
         let Some(inner) = negative_cost_part(expression, &labels) else {
@@ -296,7 +325,10 @@ impl PlanParentReduceRule<Take> for ExpressionTakeRule {
             Some(share) => share.child_plan()?,
             None => values,
         };
-        let values = EvalPlan::try_new(inner.clone(), values)?.into_plan();
+        let Some(pushed) = rebind_root(&inner, child.dtype(), values.dtype()) else {
+            return Ok(None);
+        };
+        let values = EvalPlan::try_new(pushed, values)?.into_plan();
         let take = TakePlan::new(child.codes()?, values).into_plan();
         let outer = replace(
             expression,
@@ -334,6 +366,23 @@ fn negative_cost_part(expression: &BoundExpression, labels: &Labels) -> Option<B
         return None;
     }
     negative_cost_part(child, labels)
+}
+
+/// `expression`, bound to the take's dtype `from`, bound instead to its values' dtype `to`, or
+/// `None` when it does not apply there.
+///
+/// Values are less nullable than the take when its codes may be null: the take's nulls come from
+/// its codes, which a strict expression keeps null.
+fn rebind_root(expression: &BoundExpression, from: &DType, to: &DType) -> Option<BoundExpression> {
+    if from == to {
+        return Some(expression.clone());
+    }
+    replace(
+        expression,
+        &BoundExpression::new_root(from.clone()),
+        &BoundExpression::new_root(to.clone()),
+    )
+    .ok()
 }
 
 /// `expression` with each occurrence of `needle` replaced by `replacement`.
