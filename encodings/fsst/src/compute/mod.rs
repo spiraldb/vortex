@@ -12,6 +12,7 @@ use vortex_array::ArrayView;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::arrays::dict::TakeExecute;
+use vortex_array::arrays::dict::take_referenced;
 use vortex_array::arrays::varbin::take_varbin;
 use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::scalar::Scalar;
@@ -25,9 +26,8 @@ use crate::FSSTArraySlotsExt;
 const MIN_GATHER_LEN: usize = 1024;
 
 /// A take with fewer indices than `1 / SPARSE_TAKE_DENOMINATOR` of the rows gathers compressed
-/// rows. A denser take decodes every row once and gathers the decoded strings instead: gathering
-/// decodes a row again for every index that repeats it, and costs more per row than decoding
-/// in bulk.
+/// rows. A denser take decodes each referenced row once instead: gathering decodes a row again
+/// for every index that repeats it, and costs more per row than decoding in bulk.
 const SPARSE_TAKE_DENOMINATOR: usize = 4;
 
 impl TakeExecute for FSST {
@@ -36,31 +36,41 @@ impl TakeExecute for FSST {
         indices: &ArrayRef,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<Option<ArrayRef>> {
-        if array.len() < MIN_GATHER_LEN
-            || indices.len().saturating_mul(SPARSE_TAKE_DENOMINATOR) >= array.len()
-        {
+        if array.len() < MIN_GATHER_LEN {
             return Ok(None);
         }
-
-        Ok(Some(
-            FSST::try_new_with_symbol_table(
-                array
-                    .dtype()
-                    .clone()
-                    .union_nullability(indices.dtype().nullability()),
-                array.symbol_table(),
-                take_varbin(array.codes().as_view(), indices, ctx)?,
-                array
-                    .uncompressed_lengths()
-                    .take(indices.clone())?
-                    .fill_null(Scalar::zero_value(
-                        &array.uncompressed_lengths_dtype().clone(),
-                    ))?,
-                ctx,
-            )?
-            .into_array(),
-        ))
+        if indices.len().saturating_mul(SPARSE_TAKE_DENOMINATOR) >= array.len() {
+            return take_referenced(array.array(), indices, ctx, |referenced, ctx| {
+                take_compressed(array, referenced, ctx)
+            })
+            .map(Some);
+        }
+        take_compressed(array, indices, ctx).map(Some)
     }
+}
+
+/// Takes the compressed rows, sharing the symbol table, without decoding.
+fn take_compressed(
+    array: ArrayView<'_, FSST>,
+    indices: &ArrayRef,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<ArrayRef> {
+    FSST::try_new_with_symbol_table(
+        array
+            .dtype()
+            .clone()
+            .union_nullability(indices.dtype().nullability()),
+        array.symbol_table(),
+        take_varbin(array.codes().as_view(), indices, ctx)?,
+        array
+            .uncompressed_lengths()
+            .take(indices.clone())?
+            .fill_null(Scalar::zero_value(
+                &array.uncompressed_lengths_dtype().clone(),
+            ))?,
+        ctx,
+    )
+    .map(IntoArray::into_array)
 }
 
 #[cfg(test)]
@@ -70,12 +80,16 @@ mod tests {
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
     use vortex_array::array_session;
+    use vortex_array::arrays::DictArray;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::arrays::VarBinArray;
+    use vortex_array::assert_arrays_eq;
     use vortex_array::compute::conformance::consistency::test_array_consistency;
     use vortex_array::compute::conformance::take::test_take_conformance;
     use vortex_array::dtype::DType;
     use vortex_array::dtype::Nullability;
+    use vortex_array::validity::Validity;
+    use vortex_buffer::Buffer;
     use vortex_error::VortexResult;
 
     use crate::FSSTArray;
@@ -125,6 +139,44 @@ mod tests {
         let compressor = fsst_train_compressor(&varbin, &mut ctx)?;
         let array = fsst_compress(&varbin, &compressor, &mut ctx)?;
         test_take_conformance(&array.into_array(), &mut ctx);
+        Ok(())
+    }
+
+    /// A dictionary over FSST values returns the right rows whichever way the take kernel goes:
+    /// gathering compressed rows, decoding the referenced rows, or decoding every row. Null
+    /// indices hold out-of-bounds values, which the kernel must ignore.
+    #[rstest]
+    #[case::sparse(300, 2_000)]
+    #[case::referenced(1_500, 40)]
+    #[case::every_row(2_000, 2_000)]
+    #[case::many_per_row(8_000, 2_000)]
+    fn test_dict_over_fsst_take(#[case] len: u32, #[case] range: u32) -> VortexResult<()> {
+        let session = array_session();
+        crate::initialize(&session);
+        let mut ctx = session.create_execution_ctx();
+
+        let input = VarBinArray::from_iter(
+            (0..2_000)
+                .map(|i| (i % 11 != 0).then(|| format!("https://www.example.com/items/{i:06}"))),
+            DType::Utf8(Nullability::Nullable),
+        )
+        .into_array();
+        let compressor = fsst_train_compressor(&input, &mut ctx)?;
+        let fsst = fsst_compress(&input, &compressor, &mut ctx)?;
+
+        let valid = (0..len).map(|i| i % 3 != 0).collect::<Vec<_>>();
+        let values = (0..len)
+            .zip(&valid)
+            .map(|(i, &valid)| if valid { i * 7 % range } else { u32::MAX })
+            .collect::<Buffer<u32>>();
+        let indices = PrimitiveArray::new(values, Validity::from_iter(valid.iter().copied()));
+        let dict = DictArray::try_new(indices.into_array(), fsst.into_array())?.into_array();
+
+        let in_bounds = (0..len)
+            .zip(&valid)
+            .map(|(i, &valid)| valid.then_some(i * 7 % range));
+        let expected = input.take(PrimitiveArray::from_option_iter(in_bounds).into_array())?;
+        assert_arrays_eq!(dict, expected, &mut ctx);
         Ok(())
     }
 
