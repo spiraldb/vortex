@@ -269,23 +269,7 @@ pub async fn parquet_decompress_read(buf: Bytes) -> anyhow::Result<usize> {
     let columns =
         read_projection(num_columns).map_or_else(|| (0..num_columns).collect(), <[usize]>::to_vec);
 
-    // Decode (row group, column range) units independently. Setting up a reader costs time
-    // proportional to the schema width, so the number of units is capped to keep the total setup
-    // cost bounded: narrow schemas decode one column per unit, wide ones batch contiguous columns
-    // into a few units per worker.
-    let column_units = columns.len() * num_row_groups;
-    let target_units = Handle::current().metrics().num_workers() * 4;
-    let max_units = target_units.max(DECODE_SETUP_BUDGET / num_columns.max(1));
-    let cols_per_unit = column_units.div_ceil(max_units).max(1);
-    let units: Vec<_> = (0..num_row_groups)
-        .flat_map(|rg| {
-            columns
-                .chunks(cols_per_unit)
-                .map(move |cols| (rg, cols.to_vec()))
-        })
-        .collect();
-
-    // Uncompressed bytes per (row group, root column), to schedule the largest units first.
+    // Uncompressed bytes per (row group, root column), to size and order the units.
     let parquet_schema = metadata.parquet_schema();
     let root_bytes: Vec<Vec<i64>> = metadata
         .metadata()
@@ -299,6 +283,32 @@ pub async fn parquet_decompress_read(buf: Bytes) -> anyhow::Result<usize> {
             bytes
         })
         .collect();
+
+    // Decode (row group, column range) units independently. Setting up a reader costs time
+    // proportional to the schema width, so the number of units is capped to keep the total setup
+    // cost bounded: narrow schemas decode one column per unit, wide ones batch contiguous columns
+    // into a few units per worker. Units are also kept large enough that decoding them outweighs
+    // that setup, so small files are not split into many tiny readers.
+    let total_bytes: usize = root_bytes
+        .iter()
+        .flat_map(|bytes| columns.iter().map(|&col| bytes[col]))
+        .map(|bytes| usize::try_from(bytes).unwrap_or(0))
+        .sum();
+    let column_units = columns.len() * num_row_groups;
+    let target_units = Handle::current().metrics().num_workers() * 4;
+    let max_units = target_units
+        .max(DECODE_SETUP_BUDGET / num_columns.max(1))
+        .min(total_bytes / MIN_DECODE_UNIT_BYTES)
+        .max(1);
+    let cols_per_unit = column_units.div_ceil(max_units).max(1);
+    let units: Vec<_> = (0..num_row_groups)
+        .flat_map(|rg| {
+            columns
+                .chunks(cols_per_unit)
+                .map(move |cols| (rg, cols.to_vec()))
+        })
+        .collect();
+
     let decode_cost = move |(rg, cols): &(usize, Vec<usize>)| {
         cols.iter()
             .map(|&col| usize::try_from(root_bytes[*rg][col]).unwrap_or(0))
@@ -326,6 +336,9 @@ pub async fn parquet_decompress_read(buf: Bytes) -> anyhow::Result<usize> {
 
 /// Footer bytes reserved per column chunk when sizing the output buffer.
 const FOOTER_BYTES_PER_CHUNK: usize = 1024;
+
+/// Fewest uncompressed bytes worth giving a decode unit of its own.
+const MIN_DECODE_UNIT_BYTES: usize = 256 * 1024;
 
 /// Rows per decoded batch: the Vortex writer's row block size, so both readers emit batches of
 /// the same length.
