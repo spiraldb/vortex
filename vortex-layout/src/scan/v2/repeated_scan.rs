@@ -11,6 +11,7 @@ use futures::future::BoxFuture;
 use futures::future::try_join_all;
 use itertools::Either;
 use itertools::Itertools;
+use parking_lot::Mutex;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::arrays::ChunkedArray;
@@ -24,6 +25,7 @@ use vortex_array::validity::Validity;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
+use vortex_error::vortex_ensure;
 use vortex_io::request::IoService;
 use vortex_io::runtime::Handle;
 use vortex_io::session::RuntimeSessionExt;
@@ -65,6 +67,7 @@ use crate::scan::v2::splits::chunk_starts;
 use crate::scan::v2::splits::filter_split_boundaries;
 use crate::scan::v2::splits::layout_chunk_starts;
 use crate::scan::v2::splits::max_split_rows;
+use crate::scan::v2::splits::projection_splits;
 use crate::scan::v2::splits::sparse_filter_split_boundaries;
 
 /// Computes split ranges for `builder` and returns an executable scan over `file`, the file the
@@ -359,6 +362,75 @@ impl<A: 'static + Send> RepeatedScanV2<A> {
         row_range: Option<Range<u64>>,
     ) -> VortexResult<Vec<BoxFuture<'static, VortexResult<Option<A>>>>> {
         self.execute_splits(self.execution_splits(row_range).await?)
+    }
+
+    /// Returns independently pollable, unordered tasks for the projection batches of each filter split.
+    ///
+    /// Tasks share the filter split's execution and IO, then apply the output mapping separately
+    /// to each batch. This lets an external executor distribute expensive output conversion
+    /// without repeating filtering. Within a bounded window, each split's first task precedes its
+    /// additional outputs, so workers start different filters without retaining batches across
+    /// the whole file. Unused tasks return `None`. File pruning follows [`Self::execute_pruned`].
+    pub async fn execute_projection_tasks(
+        &self,
+        row_range: Option<Range<u64>>,
+    ) -> VortexResult<Vec<BoxFuture<'static, VortexResult<Option<A>>>>> {
+        let splits = self.execution_splits(row_range).await?;
+        if self.sparse_projection {
+            // Sparse gathers emit one assembled batch, independent of physical chunk count.
+            return self.execute_splits(splits);
+        }
+        let mut tasks = Vec::with_capacity(splits.len());
+        let mut additional = Vec::new();
+        let window = get_available_parallelism().unwrap_or(1).saturating_mul(2);
+        for (split_index, split) in splits.into_iter().enumerate() {
+            let batch_count =
+                projection_splits(&self.plans.projection_starts, split.scope.rows.clone()).len();
+            if batch_count <= 1 {
+                tasks.extend(self.execute_splits(vec![split])?);
+                if (split_index + 1).is_multiple_of(window) {
+                    tasks.append(&mut additional);
+                }
+                continue;
+            }
+            let run = split.run(Arc::clone(&self.io));
+            let shared = Arc::clone(&self.shared);
+            let batches = async move {
+                let _shared = shared;
+                let batches = run.await?;
+                vortex_ensure!(
+                    batches.len() <= batch_count,
+                    "projection produced more batches than its chunk boundaries"
+                );
+                Ok(Arc::new(Mutex::new(
+                    batches.into_iter().map(Some).collect::<Vec<_>>(),
+                )))
+            }
+            .map(|result: VortexResult<_>| result.map_err(Arc::new))
+            .boxed()
+            .shared();
+            for index in 0..batch_count {
+                let batches = batches.clone();
+                let map_fn = Arc::clone(&self.map_fn);
+                let task = async move {
+                    let batches = batches.await?;
+                    // Transfer the batch so pending tasks do not retain consumed output.
+                    let array = batches.lock().get_mut(index).and_then(Option::take);
+                    array.map(|array| map_fn(array)).transpose()
+                }
+                .boxed();
+                if index == 0 {
+                    tasks.push(task);
+                } else {
+                    additional.push(task);
+                }
+            }
+            if (split_index + 1).is_multiple_of(window) {
+                tasks.append(&mut additional);
+            }
+        }
+        tasks.extend(additional);
+        Ok(tasks)
     }
 
     fn execute_splits(

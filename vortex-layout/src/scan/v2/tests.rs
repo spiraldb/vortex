@@ -17,6 +17,7 @@ use std::thread;
 
 use futures::FutureExt;
 use futures::TryStreamExt;
+use futures::future::try_join_all;
 use futures::stream;
 use parking_lot::Mutex;
 use rstest::rstest;
@@ -27,8 +28,10 @@ use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::PrimitiveArray;
+use vortex_array::arrays::Struct;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinArray;
+use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::assert_arrays_eq;
 use vortex_array::builders::dict::dict_encode;
 use vortex_array::dtype::DType;
@@ -456,6 +459,7 @@ async fn own_builder_matches_default(
 async fn execute_matches_default(
     #[case] case: Case,
     #[case] execute_range: Option<Range<u64>>,
+    #[values(false, true)] projection_tasks: bool,
 ) -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write_layout(&session).await?;
@@ -469,7 +473,12 @@ async fn execute_matches_default(
     let dtype = default.dtype().clone();
 
     let expected = await_tasks(dtype.clone(), default.execute(execute_range.clone())?).await?;
-    let actual = await_tasks(dtype, replacement.execute(execute_range)?).await?;
+    let tasks = if projection_tasks {
+        replacement.execute_projection_tasks(execute_range).await?
+    } else {
+        replacement.execute(execute_range)?
+    };
+    let actual = await_tasks(dtype, tasks).await?;
     assert_arrays_eq!(actual, expected, &mut session.create_execution_ctx());
     Ok(())
 }
@@ -534,6 +543,7 @@ async fn sparse_projection_reads_each_column_chunk_once(
     #[case] limit: Option<u64>,
     #[case] expected_indices: &[usize],
     #[case] expected_reads: usize,
+    #[values(false, true)] projection_tasks: bool,
 ) -> VortexResult<()> {
     let session = new_session().with_tokio();
     let written = Arc::new(TestSegments::default());
@@ -580,7 +590,12 @@ async fn sparse_projection_reads_each_column_chunk_once(
     let expected = expected.filter(Mask::from_indices(4000, expected_indices.iter().copied()))?;
     for _ in 0..2 {
         reads.lock().clear();
-        let actual = await_tasks(expected.dtype().clone(), scan.execute(None)?).await?;
+        let tasks = if projection_tasks {
+            scan.execute_projection_tasks(None).await?
+        } else {
+            scan.execute(None)?
+        };
+        let actual = await_tasks(expected.dtype().clone(), tasks).await?;
         assert_eq!(reads.lock().len(), expected_reads);
         assert_arrays_eq!(actual, expected, &mut session.create_execution_ctx());
     }
@@ -1166,14 +1181,15 @@ async fn zone_pruning_follows_dynamic_comparisons() -> VortexResult<()> {
     Ok(())
 }
 
-/// Four 1000-row chunks of a struct `{a, b}` with `a` over `0..4000` and `b = 2a`.
+/// 1000-row chunks of a struct with increasing `a` and `b = 2a`.
 async fn write_struct_layout(
     session: &VortexSession,
     field_count: usize,
+    chunk_count: i32,
 ) -> VortexResult<(Arc<dyn SegmentSource>, LayoutRef)> {
     let segments = Arc::new(TestSegments::default());
     let (mut sequence_id, eof) = SequenceId::root().split();
-    let chunks = (0..4)
+    let chunks = (0..chunk_count)
         .map(|chunk| {
             let a = Buffer::from_iter(chunk * CHUNK_ROWS..(chunk + 1) * CHUNK_ROWS);
             let b =
@@ -1216,9 +1232,17 @@ async fn write_struct_layout(
 #[case(2)]
 #[case(8)]
 #[tokio::test(flavor = "multi_thread")]
-async fn struct_projection_splits_match_default(#[case] field_count: usize) -> VortexResult<()> {
+async fn struct_projection_splits_match_default(
+    #[case] field_count: usize,
+    #[values(false, true)] reverse: bool,
+) -> VortexResult<()> {
     let session = new_session().with_tokio();
-    let (segments, layout) = write_struct_layout(&session, field_count).await?;
+    let (segments, layout) = write_struct_layout(&session, field_count, 4).await?;
+    let reads = Arc::default();
+    let segments: Arc<dyn SegmentSource> = Arc::new(CountedSegments {
+        inner: segments,
+        reads: Arc::clone(&reads),
+    });
     let builder = || -> VortexResult<ScanBuilder<ArrayRef>> {
         let reader = layout.new_reader(
             "".into(),
@@ -1233,10 +1257,34 @@ async fn struct_projection_splits_match_default(#[case] field_count: usize) -> V
     let expected = await_tasks(dtype.clone(), builder()?.prepare()?.execute(None)?).await?;
 
     let scan = v2::prepare(builder()?, scan_file(&segments, &layout)?)?;
+    reads.lock().clear();
     let tasks = scan.execute(None)?;
     assert_eq!(tasks.len(), 1, "4000 rows make one filter split");
     let joined = await_tasks(dtype.clone(), tasks).await?;
+    let joined_read_count = reads.lock().len();
     assert_arrays_eq!(joined, expected, &mut session.create_execution_ctx());
+
+    reads.lock().clear();
+    let tasks = scan.execute_projection_tasks(None).await?;
+    assert_eq!(tasks.len(), 4, "one output task per potential batch");
+    let batches = if reverse {
+        let mut batches = Vec::new();
+        for task in tasks.into_iter().rev() {
+            batches.push(task.await?);
+        }
+        batches.reverse();
+        batches
+    } else {
+        try_join_all(tasks).await?
+    };
+    assert_eq!(reads.lock().len(), joined_read_count, "filter IO is shared");
+    assert_eq!(batches.iter().flatten().count(), 3);
+    let batches = batches.into_iter().flatten();
+    assert_arrays_eq!(
+        ChunkedArray::try_new(batches, dtype.clone())?,
+        expected,
+        &mut session.create_execution_ctx()
+    );
 
     let streamed = v2::into_stream(builder()?, scan_file(&segments, &layout)?)?
         .try_collect::<Vec<_>>()
@@ -1250,6 +1298,84 @@ async fn struct_projection_splits_match_default(#[case] field_count: usize) -> V
         ChunkedArray::try_new(streamed, dtype)?,
         expected,
         &mut session.create_execution_ctx()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn projection_tasks_release_consumed_batches() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write_struct_layout(&session, 2, 4).await?;
+    let reader = layout.new_reader(
+        "".into(),
+        Arc::clone(&segments),
+        &session,
+        &Default::default(),
+    )?;
+    let builder = ScanBuilder::new(session, reader);
+    let scan = v2::prepare(builder, scan_file(&segments, &layout)?)?;
+    let mut tasks = scan.execute_projection_tasks(None).await?.into_iter();
+    let batch = tasks
+        .next()
+        .ok_or_else(|| vortex_err!("no projection task"))?
+        .await?
+        .ok_or_else(|| vortex_err!("no projection batch"))?;
+    assert_eq!(tasks.len(), 3);
+    assert!(
+        batch.downcast::<Struct>().data_mut().is_some(),
+        "pending tasks must not retain a consumed batch"
+    );
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn projection_tasks_start_distinct_filters_and_preserve_all_rows() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write_struct_layout(&session, 2, 12).await?;
+    let reader = layout.new_reader(
+        "".into(),
+        Arc::clone(&segments),
+        &session,
+        &Default::default(),
+    )?;
+    let filter = gt(get_item("a", root()), lit(1500_i32)).bind(layout.dtype())?;
+    let builder =
+        || ScanBuilder::new(session.clone(), Arc::clone(&reader)).with_filter(filter.clone());
+    let expected = await_tasks(layout.dtype().clone(), builder().prepare()?.execute(None)?).await?;
+    let scan = v2::prepare(builder(), scan_file(&segments, &layout)?)?;
+    let tasks = scan.execute_projection_tasks(None).await?;
+    assert_eq!(tasks.len(), 12);
+    let mut ctx = session.create_execution_ctx();
+    let mut batches = try_join_all(tasks)
+        .await?
+        .into_iter()
+        .flatten()
+        .map(|array| {
+            let fields = array.clone().execute::<StructArray>(&mut ctx)?;
+            let first = fields
+                .unmasked_field(0)
+                .clone()
+                .execute::<PrimitiveArray>(&mut ctx)?
+                .as_slice::<i32>()[0];
+            VortexResult::Ok((first, array))
+        })
+        .collect::<VortexResult<Vec<_>>>()?;
+    assert_eq!(
+        batches
+            .iter()
+            .take(2)
+            .map(|(first, _)| *first)
+            .collect::<Vec<_>>(),
+        [1501, 3000]
+    );
+    batches.sort_by_key(|(first, _)| *first);
+    assert_arrays_eq!(
+        ChunkedArray::try_new(
+            batches.into_iter().map(|(_, array)| array),
+            layout.dtype().clone(),
+        )?,
+        expected,
+        &mut ctx
     );
     Ok(())
 }
@@ -1319,10 +1445,13 @@ async fn wide_projection_with_mismatched_chunks_and_mask_holes_matches_default()
         .try_collect::<Vec<_>>()
         .await?;
     assert_arrays_eq!(
-        ChunkedArray::try_new(actual, dtype)?,
+        ChunkedArray::try_new(actual, dtype.clone())?,
         expected,
         &mut session.create_execution_ctx()
     );
+    let scan = v2::prepare(builder()?, scan_file(&segments, &layout)?)?;
+    let actual = await_tasks(dtype, scan.execute_projection_tasks(None).await?).await?;
+    assert_arrays_eq!(actual, expected, &mut session.create_execution_ctx());
     Ok(())
 }
 
