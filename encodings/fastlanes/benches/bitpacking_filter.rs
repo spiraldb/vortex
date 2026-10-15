@@ -108,8 +108,19 @@ fn dense_filter<const ROWS: usize>(bencher: Bencher, percent: usize) {
         });
 }
 
+// CodSpeed drops the type from benchmarks with const parameters, so name each type explicitly.
 #[vortex_bench_support::cpu_features]
-#[divan::bench(types = [u16, u64], consts = [65_536, 1_048_576], args = [1, 2, 8, 9, 16, 24, 32, 64])]
+#[divan::bench(consts = [65_536, 1_048_576], args = [1, 2, 8, 9, 16, 24, 32, 64])]
+fn spread_filter_u16<const ROWS: usize>(bencher: Bencher, selected_per_chunk: usize) {
+    spread_filter::<u16, ROWS>(bencher, selected_per_chunk);
+}
+
+#[vortex_bench_support::cpu_features]
+#[divan::bench(consts = [65_536, 1_048_576], args = [1, 2, 8, 9, 16, 24, 32, 64])]
+fn spread_filter_u64<const ROWS: usize>(bencher: Bencher, selected_per_chunk: usize) {
+    spread_filter::<u64, ROWS>(bencher, selected_per_chunk);
+}
+
 fn spread_filter<T: NativePType + TryFrom<usize>, const ROWS: usize>(
     bencher: Bencher,
     selected_per_chunk: usize,
