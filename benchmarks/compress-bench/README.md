@@ -27,9 +27,10 @@ the Parquet compressor uses one worker per available core as well:
   `max_row_group_row_count` (1,048,576 rows), the same boundaries `ArrowWriter` produces, then
   encodes every (row group, root column) chunk in parallel with parquet-rs's
   `ArrowRowGroupWriterFactory` and appends the chunks in order.
-- **Decompress** parses the footer once and decodes every (row group, root column) pair with
-  its own `ParquetRecordBatchReader` in parallel, so files with a single row group still decode
-  their columns concurrently.
+- **Decompress** parses the footer once and splits each row group's root columns into a few
+  contiguous ranges per worker, decoding each (row group, column range) with its own
+  `ParquetRecordBatchReader` in parallel, so files with a single row group still decode their
+  columns concurrently.
 
 The written file has the same row groups, encodings and compression as a sequential
 `ArrowWriter` with the same settings.

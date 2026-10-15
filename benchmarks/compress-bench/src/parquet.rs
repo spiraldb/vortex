@@ -218,15 +218,21 @@ pub fn parquet_decompress_read(buf: Bytes) -> anyhow::Result<usize> {
     let columns =
         read_projection(num_columns).map_or_else(|| (0..num_columns).collect(), <[usize]>::to_vec);
 
-    // Each (row group, root column) pair is an independent unit of decode work.
+    // Decode (row group, column range) units independently. Setting up a reader costs time
+    // proportional to the schema width, so contiguous columns are batched into a few units per
+    // worker rather than one reader per column.
+    let target_units = get_available_parallelism().unwrap_or(1) * 4;
+    let cols_per_unit = (columns.len() * num_row_groups)
+        .div_ceil(target_units)
+        .max(1);
     let units = (0..num_row_groups)
-        .flat_map(|rg| columns.iter().map(move |&col| (rg, col)))
+        .flat_map(|rg| columns.chunks(cols_per_unit).map(move |cols| (rg, cols)))
         .collect();
-    let sizes = parallel_map(units, |(rg, col)| {
+    let sizes = parallel_map(units, |(rg, cols)| {
         let reader =
             ParquetRecordBatchReaderBuilder::new_with_metadata(buf.clone(), metadata.clone())
                 .with_row_groups(vec![rg])
-                .with_projection(ProjectionMask::roots(parquet_schema, [col]))
+                .with_projection(ProjectionMask::roots(parquet_schema, cols.iter().copied()))
                 .build()?;
         let mut nbytes = 0;
         for batch in reader {
