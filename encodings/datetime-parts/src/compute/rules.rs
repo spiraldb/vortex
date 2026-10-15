@@ -127,9 +127,11 @@ impl ArrayParentReduceRule<DateTimeParts> for DTPComparisonPushDownRule {
                     return Ok(None);
                 };
                 let len = days.len();
-                let target_dtype = days.dtype();
+                // Keep the nullability of the replaced constant, so the rewritten comparison has
+                // the same result dtype as the original.
+                let target_dtype = days.dtype().with_nullability(c.dtype().nullability());
                 let constant = ConstantArray::new(days_value, len).into_array();
-                new_children.push(constant.cast(target_dtype.clone())?);
+                new_children.push(constant.cast(target_dtype)?);
             }
         }
 
@@ -327,6 +329,69 @@ mod tests {
         // Verify correctness: days [0, 1, 2, 3, 4] between 1 and 3 should give [false, true, true, true, false]
         let mut ctx = array_session().create_execution_ctx();
         assert_eq!(true_count(&optimized, &mut ctx), 3);
+    }
+
+    /// Create a non-nullable DTP array at midnight with constant-zero seconds and subseconds.
+    fn dtp_constant_zero_parts(days: &[i32]) -> VortexResult<ArrayRef> {
+        let dtype = midnight_constant(0, TimeUnit::Seconds, 1)
+            .dtype()
+            .as_nonnullable();
+        let len = days.len();
+
+        Ok(DateTimeParts::try_new(
+            dtype,
+            PrimitiveArray::new(Buffer::copy_from(days), Validity::NonNullable).into_array(),
+            ConstantArray::new(0u8, len).into_array(),
+            ConstantArray::new(0u8, len).into_array(),
+        )?
+        .into_array())
+    }
+
+    /// Create a nullable constant timestamp at midnight, as vortex-datafusion makes for literals.
+    fn nullable_midnight_constant(day: i64, len: usize) -> ArrayRef {
+        let scalar = midnight_constant(day, TimeUnit::Seconds, 1)
+            .as_constant()
+            .vortex_expect("midnight_constant must be constant")
+            .into_nullable();
+
+        ConstantArray::new(scalar, len).into_array()
+    }
+
+    #[test]
+    fn test_binary_comparison_pushdown_nullable_constant() -> VortexResult<()> {
+        let dtp = dtp_constant_zero_parts(&[0, 1, 2])?;
+        let constant = nullable_midnight_constant(1, dtp.len());
+        let comparison = Binary::try_new(dtp, constant, Operator::Lte)?.into_array();
+
+        let optimized = comparison.optimize()?;
+        assert_eq!(optimized.dtype(), comparison.dtype());
+
+        let mut ctx = array_session().create_execution_ctx();
+        assert_eq!(true_count(&optimized, &mut ctx), 2);
+        Ok(())
+    }
+
+    #[test]
+    fn test_between_pushdown_nullable_constant() -> VortexResult<()> {
+        let dtp = dtp_constant_zero_parts(&[0, 1, 2, 3, 4])?;
+        let len = dtp.len();
+        let between = Between::try_new(
+            dtp,
+            nullable_midnight_constant(1, len),
+            nullable_midnight_constant(3, len),
+            BetweenOptions {
+                lower_strict: StrictComparison::NonStrict,
+                upper_strict: StrictComparison::NonStrict,
+            },
+        )?
+        .into_array();
+
+        let optimized = between.optimize()?;
+        assert_eq!(optimized.dtype(), between.dtype());
+
+        let mut ctx = array_session().create_execution_ctx();
+        assert_eq!(true_count(&optimized, &mut ctx), 3);
+        Ok(())
     }
 
     #[test]
