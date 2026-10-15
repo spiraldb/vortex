@@ -118,6 +118,11 @@ impl<A: 'static + Send> RepeatedScan<A> {
             .collect()
     }
 
+    #[cfg(test)]
+    pub(crate) fn filter(&self) -> Option<&BoundExpression> {
+        self.filter.as_ref()
+    }
+
     pub fn dtype(&self) -> &DType {
         &self.dtype
     }

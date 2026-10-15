@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Simplifies `x >= a AND x < b` into `x BETWEEN a AND b`.
+//! Rewrites `x >= a AND x < b` into `x BETWEEN a AND b`.
 
 use std::ptr;
 
@@ -18,15 +18,48 @@ use crate::scalar_fn::fns::get_item::GetItem;
 use crate::scalar_fn::fns::literal::Literal;
 use crate::scalar_fn::fns::operators::Operator;
 
-/// Merge pairs of range comparisons on the same column that sit on opposite sides of the `AND`
-/// node `expr` into a single [`Between`].
+/// Merge pairs of range comparisons on the same column within any conjunction of `expr` into a
+/// single [`Between`].
 ///
-/// Only pairs that straddle `expr` are considered. The optimizer simplifies children before their
-/// parents, so a pair within one side was already considered at the `AND` node joining it, which
-/// keeps the rule linear in the size of the conjunction instead of re-pairing every conjunct at
-/// every level. The rest of the tree keeps its shape: the lhs conjunct becomes the between and the
-/// rhs conjunct is removed.
-pub(super) fn simplify_between(expr: &BoundExpression) -> VortexResult<Option<BoundExpression>> {
+/// This is not an optimizer rule because it is worth running only once, on a scan's filter.
+/// Subtrees without a match keep their identity, so an expression without any match is returned
+/// unchanged.
+pub fn find_between(expr: BoundExpression) -> VortexResult<BoundExpression> {
+    Ok(try_find_between(&expr)?.unwrap_or(expr))
+}
+
+fn try_find_between(expr: &BoundExpression) -> VortexResult<Option<BoundExpression>> {
+    let children = expr.children();
+    let mut new_children: Option<Vec<BoundExpression>> = None;
+    for (idx, child) in children.iter().enumerate() {
+        if let Some(rewritten) = try_find_between(child)? {
+            new_children
+                .get_or_insert_with(|| children[..idx].to_vec())
+                .push(rewritten);
+        } else if let Some(new_children) = new_children.as_mut() {
+            new_children.push(child.clone());
+        }
+    }
+    let rewritten = new_children
+        .map(|children| expr.clone().with_children(children))
+        .transpose()?;
+
+    let current = rewritten.as_ref().unwrap_or(expr);
+    if is_and(current)
+        && let Some(merged) = merge_straddling_pairs(current)?
+    {
+        return Ok(Some(merged));
+    }
+    Ok(rewritten)
+}
+
+/// Merge pairs of range comparisons that sit on opposite sides of the `AND` node `expr`.
+///
+/// Children are rewritten before their parents, so a pair within one side was already merged at
+/// the `AND` node joining it. Only considering straddling pairs keeps the pass linear in the size
+/// of the conjunction instead of re-pairing every conjunct at every level. The rest of the tree
+/// keeps its shape: the lhs conjunct becomes the between and the rhs conjunct is removed.
+fn merge_straddling_pairs(expr: &BoundExpression) -> VortexResult<Option<BoundExpression>> {
     let mut current: Option<BoundExpression> = None;
 
     loop {
@@ -47,6 +80,8 @@ pub(super) fn simplify_between(expr: &BoundExpression) -> VortexResult<Option<Bo
         }) else {
             break;
         };
+
+        tracing::debug!(%lower, %upper, "merged range comparisons into {between}");
 
         let new_lhs = rewrite_conjunct(lhs, lower, Some(&between))?
             .vortex_expect("matched conjunct is part of the lhs")
@@ -185,6 +220,7 @@ mod tests {
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
 
+    use super::find_between;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::array_session;
@@ -303,21 +339,15 @@ mod tests {
         and(gt_eq(col("x"), lit(2)), gt(col("x"), lit(5))),
         and(gt_eq(col("x"), lit(2)), gt(col("x"), lit(5)))
     )]
-    fn optimize_finds_between(
-        #[case] expr: Expression,
-        #[case] expected: Expression,
-    ) -> VortexResult<()> {
+    fn finds_between(#[case] expr: Expression, #[case] expected: Expression) -> VortexResult<()> {
         let scope = scope();
-        assert_eq!(
-            expr.bind(&scope)?.optimize_recursive()?,
-            expected.bind(&scope)?
-        );
+        assert_eq!(find_between(expr.bind(&scope)?)?, expected.bind(&scope)?);
         Ok(())
     }
 
-    /// Every pair straddling a single `AND` node is merged in one simplification.
+    /// Every pair straddling a single `AND` node is merged.
     #[test]
-    fn optimize_merges_many_pairs() -> VortexResult<()> {
+    fn merges_many_pairs() -> VortexResult<()> {
         let scope = scope();
         let lowers = ["x", "y", "z"].map(|name| gt_eq(col(name), lit(0)));
         let uppers = ["x", "y", "z"].map(|name| lt(col(name), lit(10)));
@@ -338,7 +368,7 @@ mod tests {
         };
         let expected = and(and(range("x"), range("y")), range("z"));
 
-        assert_eq!(expr.bind(&scope)?.optimize()?, expected.bind(&scope)?);
+        assert_eq!(find_between(expr.bind(&scope)?)?, expected.bind(&scope)?);
         Ok(())
     }
 
@@ -362,7 +392,7 @@ mod tests {
             .execute::<BoolArray>(ctx)?
             .opt_bool_vec(ctx);
 
-        let rewritten = expr.bind(data.dtype())?.optimize()?;
+        let rewritten = find_between(expr.bind(data.dtype())?)?;
         let after = data
             .apply_bound(&rewritten)?
             .execute::<BoolArray>(ctx)?
