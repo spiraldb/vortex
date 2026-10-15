@@ -658,7 +658,8 @@ fn column_static_filter(
 /// Whether a top-level conjunct of `current` compares column `name` or tests its membership, so
 /// no row with a null `name` can satisfy it. Bounds from an OR or CASE may still admit nulls.
 fn rejects_nulls(current: &Arc<dyn PhysicalExpr>, name: &str) -> bool {
-    let is_column = |expr: &Arc<dyn PhysicalExpr>| column_of(expr).is_some_and(|c| c.name() == name);
+    let is_column =
+        |expr: &Arc<dyn PhysicalExpr>| column_of(expr).is_some_and(|c| c.name() == name);
     split_conjunction(current).into_iter().any(|expr| {
         if let Some(binary) = expr.downcast_ref::<df_expr::BinaryExpr>() {
             return compare_op(binary.op()).is_some()
