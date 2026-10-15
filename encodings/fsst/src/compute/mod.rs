@@ -28,7 +28,9 @@ use crate::FSSTArraySlotsExt;
 
 /// Small arrays gather only when their compressed payload is large enough to amortize setup.
 const MIN_GATHER_LEN: usize = 1024;
-const MIN_GATHER_COMPRESSED_BYTES: u64 = 16 * 1024;
+/// From about this many bytes of codes, gathering beats decoding every row of a small array, even
+/// for the densest take [`SPARSE_TAKE_DENOMINATOR`] allows. Measured by the `fsst_take` benchmark.
+const MIN_GATHER_COMPRESSED_BYTES: u64 = 4 * 1024;
 
 /// A take with fewer indices than `1 / SPARSE_TAKE_DENOMINATOR` of the rows gathers compressed
 /// rows. A denser take decodes every row once and gathers the decoded strings instead: gathering
