@@ -690,31 +690,6 @@ mod test {
     }
 
     #[test]
-    fn prepare_rewrites_filter_ranges_into_between() -> VortexResult<()> {
-        let mut reader = CountingLayoutReader::new(Arc::new(AtomicUsize::new(0)));
-        reader.dtype = nested_dtype();
-        let filter =
-            and(gt_eq(col("b"), lit(2_i32)), lt(col("b"), lit(5_i32))).bind(&reader.dtype)?;
-        let expected = between(
-            col("b"),
-            lit(2_i32),
-            lit(5_i32),
-            BetweenOptions {
-                lower_strict: StrictComparison::NonStrict,
-                upper_strict: StrictComparison::Strict,
-            },
-        )
-        .bind(&reader.dtype)?;
-
-        let scan = ScanBuilder::new(SCAN_SESSION.clone(), Arc::new(reader))
-            .with_filter(filter)
-            .prepare()?;
-
-        assert_eq!(scan.filter(), Some(&expected));
-        Ok(())
-    }
-
-    #[test]
     fn into_stream_is_lazy() {
         let calls = Arc::new(AtomicUsize::new(0));
         let reader = Arc::new(CountingLayoutReader::new(Arc::clone(&calls)));
@@ -1128,6 +1103,42 @@ mod test {
         drain_runtime(&runtime);
 
         assert_eq!(values, [1, 3, 5]);
+        Ok(())
+    }
+
+    #[test]
+    fn scan_evaluates_filter_ranges_as_between() -> VortexResult<()> {
+        let runtime = SingleThreadRuntime::default();
+        let session = session_with_handle(runtime.handle());
+        let filter_exprs = Arc::new(Mutex::new(Vec::new()));
+        let dtype = nested_dtype();
+        let reader = Arc::new(
+            TestLayoutReader::new(4)
+                .with_dtype(dtype.clone())
+                .with_filter_exprs(Arc::clone(&filter_exprs)),
+        );
+        let filter = and(gt_eq(col("b"), lit(2_i32)), lt(col("b"), lit(5_i32))).bind(&dtype)?;
+
+        let values = collect_scan_values(
+            ScanBuilder::new(session, reader)
+                .with_projection(col("b").bind(&dtype)?)
+                .with_filter(filter)
+                .into_array_iter(&runtime)?,
+        )?;
+        drain_runtime(&runtime);
+
+        assert_eq!(values, [0, 1, 2, 3]);
+        let expected = between(
+            col("b"),
+            lit(2_i32),
+            lit(5_i32),
+            BetweenOptions {
+                lower_strict: StrictComparison::NonStrict,
+                upper_strict: StrictComparison::Strict,
+            },
+        )
+        .bind(&dtype)?;
+        assert_eq!(filter_exprs.lock().as_slice(), [expected]);
         Ok(())
     }
 
