@@ -13,14 +13,19 @@ use vortex_array::ArrayView;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::arrays::Primitive;
+use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::dict::TakeExecute;
+use vortex_array::arrays::primitive::PrimitiveArrayExt;
 use vortex_array::arrays::varbin::take_varbin;
 use vortex_array::builtins::ArrayBuiltins;
+use vortex_array::dtype::IntegerPType;
 use vortex_array::expr::stats::Stat;
 use vortex_array::expr::stats::StatsProviderExt;
 use vortex_array::match_each_integer_ptype;
+use vortex_array::match_each_unsigned_integer_ptype;
 use vortex_array::scalar::Scalar;
 use vortex_error::VortexResult;
+use vortex_mask::AllOr;
 
 use crate::FSST;
 use crate::FSSTArrayExt;
@@ -28,11 +33,10 @@ use crate::FSSTArraySlotsExt;
 
 /// Small arrays gather only when their compressed payload is large enough to amortize setup.
 const MIN_GATHER_LEN: usize = 1024;
-/// From about this many bytes of codes, gathering beats decoding every row of a small array, even
-/// for the densest take [`SPARSE_TAKE_DENOMINATOR`] allows. Measured by the `fsst_take` benchmark.
-const MIN_GATHER_COMPRESSED_BYTES: u64 = 4 * 1024;
+/// Minimum compressed payload for gathering from a small array, measured by `fsst_take`.
+const MIN_GATHER_COMPRESSED_BYTES: u64 = 8 * 1024;
 
-/// A take with fewer indices than `1 / SPARSE_TAKE_DENOMINATOR` of the rows gathers compressed
+/// Only takes with fewer indices than `1 / SPARSE_TAKE_DENOMINATOR` of the rows gather compressed
 /// rows. A denser take decodes every row once and gathers the decoded strings instead: gathering
 /// decodes a row again for every index that repeats it, and costs more per row than decoding
 /// in bulk.
@@ -47,11 +51,16 @@ impl TakeExecute for FSST {
         if indices.len().saturating_mul(SPARSE_TAKE_DENOMINATOR) >= array.len() {
             return Ok(None);
         }
-        if array.len() < MIN_GATHER_LEN
-            && !compressed_byte_span(array.codes_offsets())
-                .is_some_and(|bytes| bytes >= MIN_GATHER_COMPRESSED_BYTES)
-        {
-            return Ok(None);
+        if array.len() < MIN_GATHER_LEN {
+            let Some(bytes) = compressed_byte_span(array.codes_offsets())
+                .filter(|&bytes| bytes >= MIN_GATHER_COMPRESSED_BYTES)
+            else {
+                return Ok(None);
+            };
+            // Leave at least half the codes untouched to amortize gathering and the cost check.
+            if !take_fits_byte_budget(array.codes_offsets(), indices, bytes / 2, ctx)? {
+                return Ok(None);
+            }
         }
 
         Ok(Some(
@@ -73,6 +82,56 @@ impl TakeExecute for FSST {
             .into_array(),
         ))
     }
+}
+
+fn take_fits_byte_budget(
+    offsets: &ArrayRef,
+    indices: &ArrayRef,
+    budget: u64,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<bool> {
+    let offsets = offsets.clone().execute::<PrimitiveArray>(ctx)?;
+    let indices = indices.clone().execute::<PrimitiveArray>(ctx)?;
+    let validity = indices.validity()?.execute_mask(indices.len(), ctx)?;
+    // Dispatch only on widths: offsets and valid indices are nonnegative.
+    let offsets = offsets.reinterpret_cast(offsets.ptype().to_unsigned());
+    let indices = indices.reinterpret_cast(indices.ptype().to_unsigned());
+    Ok(match_each_unsigned_integer_ptype!(offsets.ptype(), |O| {
+        let offsets = offsets.as_slice::<O>();
+        match_each_unsigned_integer_ptype!(indices.ptype(), |I| {
+            let indices = indices.as_slice::<I>();
+            match validity.indices() {
+                AllOr::All => selected_bytes_fit(offsets, indices.iter().copied(), budget),
+                AllOr::None => true,
+                AllOr::Some(valid) => {
+                    selected_bytes_fit(offsets, valid.iter().map(|&i| indices[i]), budget)
+                }
+            }
+        })
+    }))
+}
+
+// Count repeats before copying codes: gathering decodes each selected occurrence separately.
+fn selected_bytes_fit<O: IntegerPType, I: IntegerPType>(
+    offsets: &[O],
+    mut indices: impl Iterator<Item = I>,
+    mut budget: u64,
+) -> bool {
+    indices.all(|index| {
+        let Some(index) = index.to_usize().filter(|&i| i < offsets.len() - 1) else {
+            return false;
+        };
+        let remaining = offsets[index + 1]
+            .to_u64()
+            .zip(offsets[index].to_u64())
+            .and_then(|(end, start)| end.checked_sub(start))
+            .and_then(|len| budget.checked_sub(len));
+        let Some(remaining) = remaining else {
+            return false;
+        };
+        budget = remaining;
+        true
+    })
 }
 
 // Slices retain their backing bytes, so only the logical offsets describe their decode cost.
@@ -99,6 +158,7 @@ mod tests {
     use fsst::Compressor;
     use fsst::Symbol;
     use rstest::rstest;
+    use vortex_array::ArrayRef;
     use vortex_array::ExecutionCtx;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
@@ -114,6 +174,7 @@ mod tests {
     use vortex_array::dtype::Nullability;
     use vortex_array::expr::stats::Precision;
     use vortex_array::expr::stats::Stat;
+    use vortex_array::validity::Validity;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
 
@@ -230,6 +291,40 @@ mod tests {
                 &mut ctx
             );
         }
+        Ok(())
+    }
+
+    #[rstest]
+    #[case::repeated_long_row(1, PrimitiveArray::from_iter([0u64; 63]).into_array(), false)]
+    #[case::distinct_long_rows(16, PrimitiveArray::from_iter(0i32..16).into_array(), false)]
+    #[case::short_row_with_null_index(1, PrimitiveArray::new(
+        buffer![u64::MAX, 1], Validity::from_iter([false, true]),
+    ).into_array(), true)]
+    #[case::encoded_indices(1, DictArray::new(
+        buffer![0u8, 0].into_array(), buffer![1u32].into_array(),
+    ).into_array(), true)]
+    fn test_take_small_uneven_lengths(
+        #[case] long_rows: usize,
+        #[case] indices: ArrayRef,
+        #[case] gathers: bool,
+    ) -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let input = VarBinArray::from_iter(
+            (0..256).map(|row| Some("caption ".repeat(if row < long_rows { 8192 } else { 1 }))),
+            DType::Utf8(Nullability::NonNullable),
+        )
+        .into_array();
+        let compressor = Compressor::rebuild_from([Symbol::from_slice(b"caption ")], [8u8]);
+        let array = fsst_compress(&input, &compressor, &mut ctx)?;
+        assert_eq!(
+            FSST::take(array.as_view(), &indices, &mut ctx)?.is_some(),
+            gathers
+        );
+        assert_arrays_eq!(
+            array.into_array().take(indices.clone())?,
+            input.take(indices)?,
+            &mut ctx
+        );
         Ok(())
     }
 

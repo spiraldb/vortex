@@ -17,6 +17,7 @@ use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::VarBinArray;
+use vortex_array::assert_arrays_eq;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability;
 use vortex_fsst::FSSTArray;
@@ -131,7 +132,21 @@ fn fixture((rows, compressed_kib, taken): (usize, usize, usize)) -> (ArrayRef, A
 #[divan::bench(args = BENCH_ARGS)]
 fn take(bencher: Bencher, args: (usize, usize, usize)) {
     let (array, indices) = fixture(args);
+    bench_take(bencher, array, indices);
+}
 
+fn bench_take(bencher: Bencher, array: ArrayRef, indices: ArrayRef) {
+    let mut ctx = SESSION.create_execution_ctx();
+    let canonical = array
+        .clone()
+        .execute::<Canonical>(&mut ctx)
+        .unwrap()
+        .into_array();
+    assert_arrays_eq!(
+        array.take(indices.clone()).unwrap(),
+        canonical.take(indices.clone()).unwrap(),
+        &mut ctx
+    );
     bencher
         .with_inputs(|| (&array, &indices, SESSION.create_execution_ctx()))
         .bench_refs(|(array, indices, ctx)| {
@@ -141,4 +156,78 @@ fn take(bencher: Bencher, args: (usize, usize, usize)) {
                 .execute::<Canonical>(ctx)
                 .unwrap()
         })
+}
+
+#[derive(Clone, Copy, Debug)]
+enum Selection {
+    Short,
+    AllLong,
+    RepeatLong,
+    HalfLong,
+    MajorityLong,
+    RepeatHalfLong,
+    RepeatMajorityLong,
+}
+
+// (long rows among 256, long string length, selection). Short strings contain 8 bytes.
+const UNEVEN_ARGS: &[(usize, usize, Selection)] = &[
+    (1, 1024, Selection::Short),
+    (1, 1024, Selection::AllLong),
+    (1, 1024, Selection::RepeatLong),
+    (1, 16384, Selection::Short),
+    (1, 16384, Selection::AllLong),
+    (1, 16384, Selection::RepeatLong),
+    (1, 32768, Selection::Short),
+    (1, 32768, Selection::AllLong),
+    (1, 32768, Selection::RepeatLong),
+    (16, 1024, Selection::Short),
+    (16, 1024, Selection::AllLong),
+    (16, 1024, Selection::RepeatLong),
+    (16, 4096, Selection::Short),
+    (16, 4096, Selection::AllLong),
+    (16, 4096, Selection::RepeatLong),
+    (16, 16384, Selection::Short),
+    (16, 16384, Selection::AllLong),
+    (16, 16384, Selection::RepeatLong),
+    (16, 16384, Selection::HalfLong),
+    (16, 16384, Selection::MajorityLong),
+    (16, 16384, Selection::RepeatHalfLong),
+    (16, 16384, Selection::RepeatMajorityLong),
+];
+
+#[divan::bench(args = UNEVEN_ARGS)]
+fn uneven_take(bencher: Bencher, args: (usize, usize, Selection)) {
+    let (long_rows, long_len, mode) = args;
+    let mut rng = StdRng::seed_from_u64(0);
+    let input = VarBinArray::from_iter(
+        (0..256).map(|i| {
+            let len = if i < long_rows { long_len } else { 8 };
+            let mut value = String::new();
+            while value.len() < len {
+                value.push_str(WORDS[rng.random_range(0..WORDS.len())]);
+                value.push(' ');
+            }
+            value.truncate(len);
+            Some(value)
+        }),
+        DType::Utf8(Nullability::NonNullable),
+    )
+    .into_array();
+    let mut ctx = SESSION.create_execution_ctx();
+    let compressor = fsst_train_compressor(&input, &mut ctx).unwrap();
+    let array = fsst_compress(&input, &compressor, &mut ctx).unwrap();
+    let selected: Vec<u32> = match mode {
+        Selection::Short => vec![long_rows as u32],
+        Selection::AllLong => (0..long_rows as u32).collect(),
+        Selection::RepeatLong => vec![0; 63],
+        Selection::HalfLong => (0..(long_rows / 2) as u32).collect(),
+        Selection::MajorityLong => (0..(long_rows / 2 + 1) as u32).collect(),
+        Selection::RepeatHalfLong => vec![0; long_rows / 2],
+        Selection::RepeatMajorityLong => vec![0; long_rows / 2 + 1],
+    };
+    bench_take(
+        bencher,
+        array.into_array(),
+        PrimitiveArray::from_iter(selected).into_array(),
+    );
 }
