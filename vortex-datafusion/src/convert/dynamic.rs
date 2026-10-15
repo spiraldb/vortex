@@ -61,6 +61,7 @@ use vortex::scalar_fn::fns::between::BetweenOptions;
 use vortex::scalar_fn::fns::between::StrictComparison;
 use vortex::scalar_fn::fns::operators::CompareOperator;
 use vortex::session::VortexSession;
+use vortex_utils::aliases::hash_set::HashSet;
 
 use crate::convert::scalar_from_df;
 
@@ -430,25 +431,26 @@ impl LiveBounds {
                 return Some(vec![]);
             };
             // A hash join's list repeats each build-side key once per build row, so only the
-            // distinct values count towards the limit.
-            let mut values = Vec::new();
+            // distinct values count towards the limit. Deduplicate before converting, as the
+            // list can be thousands of entries long.
+            let mut distinct = HashSet::new();
             for element in in_list.list() {
-                let value = element
+                let literal = element
                     .downcast_ref::<df_expr::Literal>()
-                    .filter(|literal| !literal.value().is_null())
-                    .and_then(|literal| self.literal_value(idx, literal.value()));
+                    .filter(|literal| !literal.value().is_null());
                 // A list we can't convert exactly, or that is too long, constrains nothing.
-                let Some(value) = value else {
+                let Some(literal) = literal else {
                     return Some(vec![]);
                 };
-                if !values.contains(&value) {
-                    if values.len() == MAX_MEMBERS {
-                        return Some(vec![]);
-                    }
-                    values.push(value);
+                if distinct.insert(literal.value()) && distinct.len() > MAX_MEMBERS {
+                    return Some(vec![]);
                 }
             }
-            return Some(vec![(idx, values)]);
+            let values = distinct
+                .into_iter()
+                .map(|value| self.literal_value(idx, value))
+                .collect::<Option<Vec<_>>>();
+            return Some(values.map_or_else(Vec::new, |values| vec![(idx, values)]));
         }
         let Some(binary) = expr.downcast_ref::<df_expr::BinaryExpr>() else {
             return Some(vec![]);
