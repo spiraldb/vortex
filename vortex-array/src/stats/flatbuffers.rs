@@ -131,8 +131,6 @@ impl StatsSet {
         let mut stats_set = StatsSet::default();
 
         for stat in Stat::all() {
-            let stat_dtype = stat.dtype(array_dtype);
-
             match stat {
                 Stat::IsConstant => {
                     if let Some(is_constant) = fb.is_constant() {
@@ -154,7 +152,7 @@ impl StatsSet {
                 }
                 Stat::Max => {
                     if let Some(max) = fb.max()
-                        && let Some(stat_dtype) = stat_dtype
+                        && let Some(stat_dtype) = stat.dtype(array_dtype)
                     {
                         let value =
                             ScalarValue::from_proto_bytes(max.bytes(), &stat_dtype, session)?;
@@ -174,7 +172,7 @@ impl StatsSet {
                 }
                 Stat::Min => {
                     if let Some(min) = fb.min()
-                        && let Some(stat_dtype) = stat_dtype
+                        && let Some(stat_dtype) = stat.dtype(array_dtype)
                     {
                         let value =
                             ScalarValue::from_proto_bytes(min.bytes(), &stat_dtype, session)?;
@@ -207,7 +205,7 @@ impl StatsSet {
                 }
                 Stat::Sum => {
                     if let Some(sum) = fb.sum()
-                        && let Some(stat_dtype) = stat_dtype
+                        && let Some(stat_dtype) = stat.dtype(array_dtype)
                     {
                         let value =
                             ScalarValue::from_proto_bytes(sum.bytes(), &stat_dtype, session)?;
