@@ -18,8 +18,8 @@ use vortex_array::extension::datetime::TimeUnit;
 use vortex_array::session::ArraySessionExt;
 use vortex_array::validity::Validity;
 use vortex_btrblocks::BtrBlocksCompressorBuilder;
-use vortex_buffer::buffer;
 use vortex_buffer::ByteBufferMut;
+use vortex_buffer::buffer;
 use vortex_edition::ComponentKind;
 use vortex_edition::Edition;
 use vortex_edition::EditionDeclaration;
@@ -441,11 +441,18 @@ async fn write_with(session: &VortexSession, array: ArrayRef) -> VortexResult<By
 }
 
 /// Write `array` with `session`, opting in to the list layout.
-async fn write_list_layout(session: &VortexSession, array: ArrayRef) -> VortexResult<ByteBufferMut> {
+async fn write_list_layout(
+    session: &VortexSession,
+    array: ArrayRef,
+) -> VortexResult<ByteBufferMut> {
     let mut buffer = ByteBufferMut::empty();
     session
         .write_options()
-        .with_strategy(WriteStrategyBuilder::from_session(session).with_list_layout().build())
+        .with_strategy(
+            WriteStrategyBuilder::from_session(session)
+                .with_list_layout()
+                .build(),
+        )
         .write(&mut buffer, array.to_array_stream())
         .await?;
     Ok(buffer)
