@@ -67,6 +67,7 @@ pub use plans::plan_row_idx_expression;
 pub use plans::row_idx_dtype;
 pub use typed::DynPlan;
 pub use typed::Plan;
+pub(crate) use typed::PlanByPtr;
 pub use typed::PlanParts;
 pub use typed::PlanRef;
 use vortex_error::VortexResult;
