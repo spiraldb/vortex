@@ -30,6 +30,7 @@ mod exporter;
 mod ffi;
 mod file_reader;
 mod projection;
+mod scan_order;
 mod table_function;
 
 #[rustfmt::skip]
@@ -54,6 +55,7 @@ static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
         .map_err(|error| vortex_err!("{error}"))
         .vortex_expect("DuckDB-supported draft core edition is registered");
     vortex_spatial::initialize(&session);
+    convert::initialize_join_filters(&session);
     session
 });
 

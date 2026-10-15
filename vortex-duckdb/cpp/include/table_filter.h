@@ -78,6 +78,23 @@ void duckdb_vx_table_filter_get_dynamic(duckdb_vx_table_filter ffi_filter,
 
 duckdb_vx_table_filter duckdb_vx_table_filter_get_optional(duckdb_vx_table_filter ffi_filter);
 
+// Selectivity-aware optional filters disable row evaluation after sampling mostly passing rows.
+bool duckdb_vx_table_filter_get_optional_policy(duckdb_vx_table_filter ffi_filter,
+                                                float *threshold,
+                                                uint64_t *sample_rows);
+
+typedef struct duckdb_vx_bloom_snapshot_ *duckdb_vx_bloom_snapshot;
+// Owns a copy of the finalized Bloom bits; it does not borrow the hash join or client context.
+duckdb_vx_bloom_snapshot duckdb_vx_table_filter_copy_bloom(duckdb_vx_table_filter ffi_filter);
+void duckdb_vx_bloom_snapshot_free(duckdb_vx_bloom_snapshot *snapshot);
+duckdb_logical_type duckdb_vx_bloom_snapshot_key_type(duckdb_vx_bloom_snapshot snapshot);
+// Uses a reusable HASH vector and writes ceil(count / 8) bytes, one bit per potentially matching row.
+void duckdb_vx_bloom_snapshot_apply(duckdb_vx_bloom_snapshot snapshot,
+                                    duckdb_vector keys,
+                                    duckdb_vector hashes,
+                                    idx_t count,
+                                    uint8_t *output);
+
 duckdb_vx_expr duckdb_vx_table_filter_get_expression(duckdb_vx_table_filter ffi_filter);
 
 typedef struct {

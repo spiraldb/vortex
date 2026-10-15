@@ -69,6 +69,15 @@ pub struct ZoneMap {
 }
 
 impl ZoneMap {
+    /// Returns one stored value per zone for `stat`, or `None` when unavailable.
+    ///
+    /// Values may be conservative bounds, for example truncated string maxima.
+    pub fn statistic(&self, stat: Stat) -> VortexResult<Option<ArrayRef>> {
+        self.stat_field_expr(stat)
+            .map(|expr| self.array.clone().into_array().apply(&expr))
+            .transpose()
+    }
+
     /// Create [`ZoneMap`] of given column_dtype from given array. Validates that the array matches expected
     /// structure for given list of stats.
     pub fn try_new(
@@ -111,8 +120,7 @@ impl ZoneMap {
         legacy_stats_table_dtype(column_dtype, present_stats)
     }
 
-    #[cfg(test)]
-    fn try_new_legacy(
+    pub(super) fn try_new_legacy(
         column_dtype: DType,
         array: StructArray,
         stats: Arc<[Stat]>,
@@ -446,6 +454,7 @@ mod tests {
     use vortex_error::VortexResult;
     use vortex_mask::Mask;
 
+    use crate::layouts::zoned::MIN_IS_TRUNCATED;
     use crate::layouts::zoned::zone_map::ZoneMap;
     use crate::test::SESSION;
 
@@ -464,6 +473,42 @@ mod tests {
     fn default_bounded_stat_max_bytes() -> NonZeroUsize {
         // SAFETY: 64 is non-zero.
         unsafe { NonZeroUsize::new_unchecked(64) }
+    }
+
+    #[rstest]
+    #[case::current(false)]
+    #[case::legacy(true)]
+    fn stored_statistic_preserves_zone_nulls(#[case] legacy: bool) -> VortexResult<()> {
+        let min = Min.bind(NumericalAggregateOpts::skip_nans());
+        let values = PrimitiveArray::from_option_iter([Some(1i32), None, Some(3)]).into_array();
+        let name = if legacy {
+            Stat::Min.name().to_string()
+        } else {
+            min.to_string()
+        };
+        let fields = if legacy {
+            vec![
+                (name, values.clone()),
+                (
+                    MIN_IS_TRUNCATED.to_string(),
+                    BoolArray::from_iter([false; 3]).into_array(),
+                ),
+            ]
+        } else {
+            vec![(name, values.clone())]
+        };
+        let array = StructArray::try_from_iter(fields)?;
+        let map = if legacy {
+            ZoneMap::try_new_legacy(PType::I32.into(), array, Arc::new([Stat::Min]), 4, 11)?
+        } else {
+            ZoneMap::try_new(PType::I32.into(), array, Arc::new([min]), 4, 11)?
+        };
+        let actual = map
+            .statistic(Stat::Min)?
+            .ok_or_else(|| vortex_error::vortex_err!("missing zone minima"))?;
+        assert_arrays_eq!(actual, values, &mut SESSION.create_execution_ctx());
+        assert!(map.statistic(Stat::Max)?.is_none());
+        Ok(())
     }
 
     #[test]

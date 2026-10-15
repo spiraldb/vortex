@@ -19,6 +19,8 @@ use crate::arrays::Chunked;
 use crate::arrays::ChunkedArray;
 use crate::arrays::ConstantArray;
 use crate::arrays::DecimalArray;
+use crate::arrays::Dict;
+use crate::arrays::DictArray;
 use crate::arrays::FixedSizeListArray;
 use crate::arrays::ListArray;
 use crate::arrays::PrimitiveArray;
@@ -26,9 +28,11 @@ use crate::arrays::ScalarFn;
 use crate::arrays::StructArray;
 use crate::arrays::VarBinViewArray;
 use crate::arrays::chunked::ChunkedArrayExt;
+use crate::arrays::dict::DictArraySlotsExt;
 use crate::arrays::scalar_fn::ScalarFnArrayExt;
 use crate::assert_arrays_eq;
 use crate::builders::builder_with_capacity_in;
+use crate::builtins::ArrayBuiltins;
 use crate::dtype::DType;
 use crate::dtype::DecimalDType;
 use crate::dtype::DecimalType;
@@ -551,6 +555,160 @@ fn test_optimized_expression_over_chunked_needles() -> VortexResult<()> {
         array,
         BoolArray::from_iter([Some(false), Some(true), None, Some(false), Some(true)]),
         &mut ctx
+    );
+    Ok(())
+}
+
+/// Dictionary needles with a null code, against a set that is empty or not.
+#[rstest]
+#[case::default(ListContainsOptions::default(), set_with_null(), [Some(true), Some(false), None, Some(true)])]
+#[case::sql(ListContainsOptions { sql_null_semantics: true }, set_with_null(), [Some(true), None, None, Some(true)])]
+// Off SQL null semantics an empty list answers `false` even for the null code.
+#[case::empty(ListContainsOptions::default(), empty_i32_set(), [Some(false); 4])]
+#[case::empty_sql(ListContainsOptions { sql_null_semantics: true }, empty_i32_set(), [Some(false), Some(false), None, Some(false)])]
+fn test_dictionary_needles_with_null_codes(
+    #[case] options: ListContainsOptions,
+    #[case] set: Scalar,
+    #[case] expected: [Option<bool>; 4],
+) -> VortexResult<()> {
+    let mut ctx = array_session().create_execution_ctx();
+    let needles = DictArray::try_new(
+        PrimitiveArray::from_option_iter([Some(0u8), Some(1), None, Some(0)]).into_array(),
+        buffer![2i32, 3].into_array(),
+    )?
+    .into_array();
+    let list = ConstantArray::new(set, needles.len()).into_array();
+
+    let array = ListContains::try_new_opts(list, needles, options)?
+        .into_array()
+        .optimize()?;
+    // The rule took the node: it is a dictionary of answers, or a constant for the empty list.
+    assert!(!array.is::<ScalarFn>());
+
+    assert_arrays_eq!(array, BoolArray::from_iter(expected), &mut ctx);
+    Ok(())
+}
+
+/// The empty set of nullable `i32`.
+fn empty_i32_set() -> Scalar {
+    Scalar::list(
+        DType::Primitive(PType::I32, Nullability::Nullable),
+        vec![],
+        Nullability::NonNullable,
+    )
+}
+
+#[test]
+fn test_constant_list_over_dictionary_needles() -> VortexResult<()> {
+    let mut ctx = array_session().create_execution_ctx();
+    let needles = DictArray::try_new(
+        buffer![0u8, 1, 0, 2, 1].into_array(),
+        PrimitiveArray::from_option_iter([Some(2i32), Some(3), None]).into_array(),
+    )?
+    .into_array();
+    let list = ConstantArray::new(set_with_null(), needles.len()).into_array();
+
+    // The prepared list still lets the function into the values of the dictionary.
+    let array = ListContains::try_new(list, needles)?
+        .into_array()
+        .optimize()?;
+    let values = array.as_::<Dict>().values().clone();
+    assert!(PreparedSet::set_of(values.as_::<ScalarFn>().get_child(0)).is_some());
+
+    assert_arrays_eq!(
+        array,
+        BoolArray::from_iter([Some(true), Some(false), Some(true), None, Some(false)]),
+        &mut ctx
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case::i8(PType::I8)]
+#[case::i16(PType::I16)]
+#[case::i32(PType::I32)]
+#[case::i64(PType::I64)]
+#[case::u8(PType::U8)]
+#[case::u16(PType::U16)]
+#[case::u32(PType::U32)]
+#[case::u64(PType::U64)]
+#[case::f16(PType::F16)]
+#[case::f32(PType::F32)]
+#[case::f64(PType::F64)]
+fn nullable_primitive_set_membership(
+    #[case] ptype: PType,
+    #[values(false, true)] sql_null_semantics: bool,
+    #[values(false, true)] null_element: bool,
+) -> VortexResult<()> {
+    let dtype = DType::Primitive(ptype, Nullability::Nullable);
+    let values = PrimitiveArray::from_option_iter([Some(0i64), Some(2), Some(3), None, Some(17)])
+        .into_array()
+        .cast(dtype.clone())?;
+    let elements = [0i64, 1, 4, 5, 6, 7, 8, 17]
+        .into_iter()
+        .enumerate()
+        .map(|(index, value)| {
+            if index == 1 && null_element {
+                Ok(Scalar::null(dtype.clone()))
+            } else {
+                Scalar::from(value).cast(&dtype)
+            }
+        })
+        .collect::<VortexResult<Vec<_>>>()?;
+    let list = ConstantArray::new(
+        Scalar::list(dtype, elements, Nullability::NonNullable),
+        values.len(),
+    )
+    .into_array();
+    let output =
+        ListContains::try_new_opts(list, values, ListContainsOptions { sql_null_semantics })?
+            .into_array();
+    let absent = (!(sql_null_semantics && null_element)).then_some(false);
+    assert_arrays_eq!(
+        output,
+        BoolArray::from_iter([Some(true), absent, absent, None, Some(true)]),
+        &mut array_session().create_execution_ctx()
+    );
+    Ok(())
+}
+
+#[test]
+fn floating_set_membership_uses_bitwise_equality() -> VortexResult<()> {
+    let nan = f64::from_bits(0x7ff8_0000_0000_0001);
+    let other_nan = f64::from_bits(0x7ff8_0000_0000_0002);
+    let values = PrimitiveArray::from_option_iter([
+        Some(nan),
+        Some(other_nan),
+        Some(-0.0),
+        Some(0.0),
+        Some(f64::INFINITY),
+        None,
+        Some(1.5),
+    ])
+    .into_array();
+    let list = Scalar::list(
+        DType::Primitive(PType::F64, Nullability::NonNullable),
+        [nan, -0.0, f64::INFINITY, 1.5, 3.0, 4.0, 5.0, 6.0]
+            .into_iter()
+            .map(Scalar::from)
+            .collect(),
+        Nullability::NonNullable,
+    );
+    let output =
+        ListContains::try_new(ConstantArray::new(list, values.len()).into_array(), values)?
+            .into_array();
+    assert_arrays_eq!(
+        output,
+        BoolArray::from_iter([
+            Some(true),
+            Some(false),
+            Some(true),
+            Some(false),
+            Some(true),
+            None,
+            Some(true),
+        ]),
+        &mut array_session().create_execution_ctx()
     );
     Ok(())
 }

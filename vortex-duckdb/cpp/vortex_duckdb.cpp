@@ -2,11 +2,14 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 #include "aggregate_fn_pushdown.hpp"
+#include "build_side.hpp"
 #include "data.hpp"
 #include "error.hpp"
 #include "scalar_fn_pushdown.hpp"
 #include "spatial_overrides.hpp"
 #include "cast_pushdown.hpp"
+#include "cast_join_filter.hpp"
+#include "table_function.hpp"
 #include "vortex_duckdb.h"
 
 #include "duckdb/catalog/catalog.hpp"
@@ -271,9 +274,12 @@ extern "C" duckdb_blob duckdb_vx_value_get_geometry(duckdb_value value) {
 }
 
 static void VortexOptimizeFunction(OptimizerExtensionInput &input, unique_ptr<LogicalOperator> &plan) {
+    optimize_vortex_join_build_sides(input.optimizer, *plan);
     plan = TryPushdown<CastCollect, CastReplace>(input.context, std::move(plan));
     plan = TryPushdown<ScalarFnCollect, ScalarFnReplace>(input.context, std::move(plan));
     plan = TryPushdownAggregateFunctions(input.context, std::move(plan));
+    add_exact_cast_join_filters(input.optimizer, *plan);
+    restore_join_filter_hints(*plan);
 }
 
 static void VortexPreOptimizeFunction(OptimizerExtensionInput &input, unique_ptr<LogicalOperator> &plan) {

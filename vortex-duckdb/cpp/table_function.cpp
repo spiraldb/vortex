@@ -22,7 +22,12 @@
 #include "duckdb/function/partition_stats.hpp"
 #include "duckdb/parser/parsed_data/create_table_function_info.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
+#include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/storage/storage_index.hpp"
+#include "duckdb/storage/table/row_group_reorderer.hpp"
+#include <map>
+#include <cstdlib>
+#include <cstring>
 
 using namespace std::string_literals;
 constexpr column_t COLUMN_IDENTIFIER_FILE_INDEX = MultiFileReader::COLUMN_IDENTIFIER_FILE_INDEX;
@@ -130,11 +135,62 @@ bool is_vortex_scan(const TableFunction &function) {
     return function.bind == MultiFileFunction<VortexReaderInterface>::MultiFileBind;
 }
 
+static bool RestoreConsumedFilterHints(LogicalOperator &op, bool require_reduced_estimate) {
+    if (op.type == LogicalOperatorType::LOGICAL_GET) {
+        auto &get = op.Cast<LogicalGet>();
+        if (is_vortex_scan(get.function) && get.bind_data) {
+            const auto *bind = get_ffi_bind(get.bind_data.get());
+            if (!require_reduced_estimate) {
+                return duckdb_table_function_has_consumed_filter(bind, 1, 0);
+            }
+            if (!get.has_estimated_cardinality) {
+                return false;
+            }
+            const auto &data = get.bind_data->Cast<MultiFileBindData>();
+            const auto count = data.file_list->GetFileCount();
+            if (count.type != FileExpansionType::ALL_FILES_EXPANDED) {
+                return false;
+            }
+            return duckdb_table_function_has_consumed_filter(bind, count.count, get.estimated_cardinality);
+        }
+    }
+
+    LogicalComparisonJoin *join = nullptr;
+    idx_t build_index = DConstants::INVALID_INDEX;
+    if (op.type == LogicalOperatorType::LOGICAL_COMPARISON_JOIN) {
+        join = &op.Cast<LogicalComparisonJoin>();
+        if (join->filter_pushdown && op.children.size() == 2) {
+            build_index = op.children[1]->type == LogicalOperatorType::LOGICAL_DELIM_GET ? 0 : 1;
+        }
+    }
+    bool has_consumed_filter = false;
+    for (idx_t index = 0; index < op.children.size(); ++index) {
+        const bool child_has_filter = RestoreConsumedFilterHints(*op.children[index], require_reduced_estimate);
+        has_consumed_filter |= child_has_filter;
+        if (child_has_filter && index == build_index) {
+            // DuckDB's IsFiltering cannot see consumed predicates. Requiring a reduced scan
+            // estimate excludes late join bounds that trim little and create costly Bloom filters.
+            join->filter_pushdown->build_side_has_filter = true;
+        }
+    }
+    return has_consumed_filter;
+}
+
+void restore_join_filter_hints(LogicalOperator &plan) {
+    const auto *enabled = std::getenv("VORTEX_DUCKDB_JOIN_FILTER_HINT");
+    if (!enabled || std::strcmp(enabled, "0") != 0) {
+        RestoreConsumedFilterHints(plan, !enabled || std::strcmp(enabled, "1") != 0);
+    }
+}
+
 unique_ptr<MultiFileReader> get_multi_file_reader(const TableFunction &) {
     return make_uniq<VortexMultiFileReader>();
 }
 
 unique_ptr<BaseStatistics> VortexRowGroup::GetColumnStatistics(const StorageIndex &storage_index) {
+    if (storage_index.HasChildren()) {
+        return {};
+    }
     duckdb_column_statistics statistics = {};
     const idx_t idx = storage_index.GetPrimaryIndex();
     const void *const ffi_footer_ptr = ffi_footer->DataPtr();
@@ -144,8 +200,7 @@ unique_ptr<BaseStatistics> VortexRowGroup::GetColumnStatistics(const StorageInde
     return to_duckdb_statistics(statistics);
 }
 
-static vector<PartitionStatistics> get_partition_stats(ClientContext &, GetPartitionStatsInput &input) {
-    const MultiFileBindData &bind_data = input.bind_data->Cast<MultiFileBindData>();
+static vector<PartitionStatistics> partition_stats(const MultiFileBindData &bind_data) {
     VortexBindData &bind = bind_data.bind_data->Cast<VortexBindData>();
     void *const ffi_bind = bind.ffi_bind_data->DataPtr();
 
@@ -177,6 +232,62 @@ static vector<PartitionStatistics> get_partition_stats(ClientContext &, GetParti
         stats.partition_row_group = make_shared_ptr<VortexRowGroup>(std::move(cdata));
     }
     return result;
+}
+
+static vector<PartitionStatistics> get_partition_stats(ClientContext &, GetPartitionStatsInput &input) {
+    return partition_stats(input.bind_data->Cast<MultiFileBindData>());
+}
+
+static void set_scan_order(unique_ptr<RowGroupOrderOptions> options, optional_ptr<FunctionData> bind_data) {
+    const auto &multi_bind = bind_data->Cast<MultiFileBindData>();
+    auto &bind = multi_bind.bind_data->Cast<VortexBindData>();
+    bind.offset_pruned_files.clear();
+    if (options->row_group_offset || options->leading_null_group_offset) {
+        // DuckDB has already reduced the query's OFFSET. Skip the corresponding original files,
+        // retaining their file IDs for the second scan used by late materialization.
+        auto partitions = partition_stats(multi_bind);
+        std::multimap<Value, idx_t> ordered;
+        vector<idx_t> null_only;
+        for (idx_t i = 0; i < partitions.size(); i++) {
+            auto stats = partitions[i].partition_row_group->GetColumnStatistics(options->column_idx);
+            if (!stats) {
+                throw InternalException("Missing Vortex statistics after offset pruning");
+            }
+            if (!stats->CanHaveNoNull()) {
+                null_only.push_back(i);
+                continue;
+            }
+            auto value = RowGroupReorderer::RetrieveStat(*stats, options->order_by, options->column_type);
+            if (!value.IsNull()) {
+                ordered.emplace(std::move(value), i);
+            }
+        }
+        if (null_only.size() < options->leading_null_group_offset ||
+            ordered.size() < options->row_group_offset) {
+            throw InternalException("Invalid Vortex offset-pruning groups");
+        }
+        bind.offset_pruned_files.insert(bind.offset_pruned_files.end(),
+                                        null_only.begin(),
+                                        null_only.begin() + options->leading_null_group_offset);
+        if (options->order_type == OrderType::ASCENDING) {
+            auto it = ordered.begin();
+            for (idx_t i = 0; i < options->row_group_offset; i++, ++it) {
+                bind.offset_pruned_files.push_back(it->second);
+            }
+        } else {
+            auto it = ordered.rbegin();
+            for (idx_t i = 0; i < options->row_group_offset; i++, ++it) {
+                bind.offset_pruned_files.push_back(it->second);
+            }
+        }
+    }
+    std::sort(bind.offset_pruned_files.begin(), bind.offset_pruned_files.end());
+    const auto column_idx =
+        options->column_idx.HasChildren() ? DConstants::INVALID_INDEX : options->column_idx.GetPrimaryIndex();
+    duckdb_table_function_set_scan_order(bind.ffi_bind_data->DataPtr(),
+                                         column_idx,
+                                         options->order_type == OrderType::DESCENDING,
+                                         options->null_order == OrderByNullType::NULLS_FIRST);
 }
 
 duckdb_state register_table_function(DatabaseInstance &db, LogicalType parameter, const std::string &name) {
@@ -211,6 +322,7 @@ duckdb_state register_table_function(DatabaseInstance &db, LogicalType parameter
 
     fn.statistics = MultiFileFunction<VortexReaderInterface>::MultiFileScanStats;
     fn.get_partition_stats = get_partition_stats;
+    fn.set_scan_order = set_scan_order;
     fn.get_multi_file_reader = get_multi_file_reader;
 
     /**

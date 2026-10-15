@@ -11843,6 +11843,7 @@ dependencies = [
  "paste",
  "reqwest 0.13.5",
  "rstest",
+ "serde_json",
  "static_assertions",
  "tempfile",
  "tracing",

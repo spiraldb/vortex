@@ -67,6 +67,8 @@ typedef struct {
     // upper bit: "length is set". lower 32 bits: DuckDB's max string length.
     // set only for strings
     uint64_t max_string_length;
+    // Non-null distinct count proved by strict ordering; zero means unavailable.
+    uint64_t distinct_count;
     bool has_null;
     // owned column type
     duckdb_logical_type type;

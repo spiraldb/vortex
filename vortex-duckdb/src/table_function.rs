@@ -57,6 +57,7 @@ use crate::projection::DuckdbField;
 use crate::projection::Filter;
 use crate::projection::Projection;
 use crate::projection::ProjectionInput;
+use crate::scan_order::ScanOrder;
 
 // Duckdb has two state machines for an extension. The outer one is the table
 // function state machine which calls the file reader state machine.
@@ -81,13 +82,14 @@ pub(crate) struct BindState {
     pub first_file_row_count: u64,
     pub filters: Vec<Expression>,
     pub columns: Vec<DuckdbField>,
-    // There exists at least one non-optional table filter or at least one
-    // complex filter is pushed down.
+    // During planning, at least one filter was consumed by Vortex. Runtime initialization also
+    // records non-optional table filters; retained equalities are estimated by DuckDB itself.
     pub has_non_optional_filter: AtomicBool,
     // Non-empty iff this scan is aggregate
     pub aggregates: Vec<ColumnAggregate>,
     // Any of files present in scan lack a footer
     pub no_footer_caches: bool,
+    pub scan_order: Option<ScanOrder>,
 }
 assert_impl_all!(BindState: Send, Clone);
 
@@ -103,6 +105,7 @@ impl Clone for BindState {
             ),
             aggregates: self.aggregates.clone(),
             no_footer_caches: false,
+            scan_order: self.scan_order.clone(),
         }
     }
 }
@@ -142,6 +145,7 @@ pub struct GlobalState {
     pub projection: BoundExpression,
     pub filter: Filter,
     pub file_row_number_column_pos: Option<usize>,
+    pub scan_order: Option<ScanOrder>,
 
     // Following fields are used only in aggregate scans.
     pub aggregate_state: Mutex<AggregateState>,
@@ -306,6 +310,7 @@ pub fn init_global(init_input: &TableInitInput) -> VortexResult<GlobalState> {
         aggregate_state: Mutex::new(AggregateState::default()),
         row_count: AtomicU64::new(0),
         file_row_number_column_pos,
+        scan_order: bind_data.scan_order.clone(),
     })
 }
 
@@ -445,11 +450,13 @@ pub fn pushdown_complex_filter(
         .map(|op| *op == Operator::Eq)
         .unwrap_or(false);
 
-    // Only table filters may be optional, any complex filter is
-    // non-optional by definition.
-    bind_data
-        .has_non_optional_filter
-        .store(true, Ordering::Relaxed);
+    // DuckDB estimates filters that remain in its plan. Discounting a retained equality here
+    // would apply the default selectivity twice to the same predicate.
+    if report_pushed {
+        bind_data
+            .has_non_optional_filter
+            .store(true, Ordering::Relaxed);
+    }
 
     debug!(%expr, report_pushed, "pushed down expression");
     bind_data.filters.push(expr);
@@ -605,8 +612,8 @@ fn try_push_projection_aggregate(
 /// See duckdb/src/optimizer/join_order/relation_statistics_helper.cpp
 ///
 /// As we don't report distinct values (same as Parquet), the only heuristic
-/// duckdb uses is a 0.2 filter if there is any non-optional filter. We mimic it
-/// here.
+/// duckdb uses is a 0.2 filter if there is any non-optional filter. We mimic it for filters
+/// consumed by Vortex; DuckDB estimates the retained predicates itself.
 const DEFAULT_SELECTIVITY: f64 = 0.2;
 pub fn cardinality(bind_data: &BindState, file_count: u64) -> Cardinality {
     // If we're doing an aggregate scan, we don't change output cardinality to
@@ -630,6 +637,17 @@ pub fn cardinality(bind_data: &BindState, file_count: u64) -> Cardinality {
 
 pub fn to_string(bind_data: &BindState, map: &mut DuckdbStringMapRef) {
     map.push("Function", "Vortex Scan");
+    if let Some(order) = &bind_data.scan_order {
+        map.push(
+            "Scan Order",
+            &format!(
+                "{} {} NULLS {}",
+                order.column,
+                if order.descending { "DESC" } else { "ASC" },
+                if order.nulls_first { "FIRST" } else { "LAST" }
+            ),
+        );
+    }
     if !bind_data.filters.is_empty() {
         let mut filters = bind_data.filters.iter().map(|f| format!("{f}"));
         map.push("Filters", &filters.join("\n"));

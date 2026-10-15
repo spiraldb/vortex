@@ -14,6 +14,9 @@ static_assert(sizeof(idx_t) == 8);
 
 bool is_vortex_scan(const TableFunction &function);
 
+// Preserve consumed predicates when DuckDB decides whether to build join Bloom filters.
+void restore_join_filter_hints(LogicalOperator &plan);
+
 struct TableFunctionProjectionExpressionInput {
     const LogicalGet &get;
     const Expression &expression;

@@ -19,6 +19,7 @@ use vortex_error::vortex_bail;
 
 use super::build_fused_table;
 use super::build_symbol_transitions;
+use super::ordered_byte_transitions;
 
 /// Flat `u8` transition table DFA for prefix matching on FSST codes.
 ///
@@ -69,10 +70,41 @@ impl FlatPrefixDfa {
 
         let accept_state = u8::try_from(prefix.len()).vortex_expect("prefix fits in u8");
         let fail_state = accept_state + 1;
+        Self::from_byte_table(
+            symbols,
+            symbol_lengths,
+            accept_state,
+            build_prefix_byte_table(prefix, accept_state, fail_state),
+        )
+    }
+
+    /// Builds a DFA for an anchored prefix followed by ordered literal pieces.
+    pub(crate) fn new_ordered(
+        symbols: &[Symbol],
+        symbol_lengths: &[u8],
+        needles: &[&[u8]],
+    ) -> VortexResult<Self> {
+        let total_len = needles.iter().map(|needle| needle.len()).sum::<usize>();
+        if total_len > Self::MAX_PREFIX_LEN {
+            vortex_bail!("ordered prefix literals exceed the flat DFA state space");
+        }
+        Self::from_byte_table(
+            symbols,
+            symbol_lengths,
+            u8::try_from(total_len).vortex_expect("bounded DFA state"),
+            ordered_byte_transitions(needles, true),
+        )
+    }
+
+    fn from_byte_table(
+        symbols: &[Symbol],
+        symbol_lengths: &[u8],
+        accept_state: u8,
+        byte_table: Vec<u8>,
+    ) -> VortexResult<Self> {
+        let fail_state = accept_state + 1;
         let n_states = fail_state + 1;
         let sentinel = fail_state + 1;
-
-        let byte_table = build_prefix_byte_table(prefix, accept_state, fail_state);
 
         let sym_trans =
             build_symbol_transitions(symbols, symbol_lengths, &byte_table, n_states, accept_state);

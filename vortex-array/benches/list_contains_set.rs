@@ -95,6 +95,20 @@ fn i64_random(bencher: Bencher, set_len: usize) {
     bench_in_set(bencher, i64_set(set), needles.into_array());
 }
 
+#[divan::bench(args = [8, 30, 256])]
+fn f64_random(bencher: Bencher, set_len: usize) {
+    let (set, needles) = random_i64(set_len);
+    let set = Scalar::list(
+        DType::Primitive(PType::F64, Nullability::NonNullable),
+        set.into_iter()
+            .map(|value| Scalar::from(value as f64))
+            .collect(),
+        Nullability::NonNullable,
+    );
+    let needles = PrimitiveArray::from_iter(needles.into_iter().map(|value| value as f64));
+    bench_in_set(bencher, set, needles.into_array());
+}
+
 #[divan::bench(args = SET_LENS)]
 fn i64_random_chunked(bencher: Bencher, set_len: usize) {
     let (set, needles) = random_i64(set_len);

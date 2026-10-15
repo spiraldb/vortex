@@ -38,9 +38,20 @@ bool duckdb_table_function_pushdown_projection_aggregates(void *bind,
 extern bool duckdb_table_function_pushdown_expression(duckdb_vx_expr expr);
 
 extern
+bool duckdb_table_function_has_consumed_filter(const void *bind,
+                                               uint64_t file_count,
+                                               uint64_t estimated_rows);
+
+extern
 void duckdb_table_function_cardinality(const void *bind,
                                        uint64_t file_count,
                                        duckdb_vx_node_statistics *stats);
+
+extern
+void duckdb_table_function_set_scan_order(void *bind,
+                                          uint64_t column_index,
+                                          bool descending,
+                                          bool nulls_first);
 
 extern
 duckdb_vx_data duckdb_table_function_init_global(const duckdb_vx_tfunc_init_input *init_input,
@@ -78,6 +89,8 @@ extern
 bool duckdb_footer_get_statistics(const void *footer,
                                   size_t column_index,
                                   duckdb_column_statistics *stats_out);
+
+extern void duckdb_reader_discard(void *file);
 
 extern bool duckdb_reader_initialize(const void *global, void *file, duckdb_vx_error *error);
 

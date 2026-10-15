@@ -4,10 +4,12 @@
 //! # FSST LIKE Pushdown via DFA Construction
 //!
 //! This module implements DFA-based pattern matching directly on FSST-compressed
-//! strings, without decompressing them. It handles two pattern shapes:
+//! strings, without decompressing them. It handles four pattern shapes:
 //!
 //! - **Prefix**: `'prefix%'`  — matches strings starting with a literal prefix.
 //! - **Contains**: `'%needle%'` — matches strings containing a literal substring.
+//! - **Ordered contains**: `'%first%second%'` — matches non-overlapping literal pieces in order.
+//! - **Ordered prefix**: `'first%second%'` — anchors the first piece at the start of the string.
 //!
 //! Pushdown is intentionally conservative. If the pattern shape is unsupported,
 //! or if the pattern exceeds the DFA's representable state space, construction
@@ -111,10 +113,12 @@
 //! The public behavior is shaped by two implementation limits, both measured in
 //! pattern **bytes** rather than Unicode scalar values:
 //!
-//! - `prefix%` pushdown is limited to **253 bytes**. The flat prefix DFA uses
+//! - Anchored patterns (`prefix%`, `first%second%`) are limited to **253 literal bytes**.
+//!   The flat prefix DFA uses
 //!   `u8` state ids and needs room for progress states, an accept state, a
 //!   fail state, and one escape sentinel (N+3 ≤ 256).
-//! - `%needle%` pushdown is limited to **254 bytes**. The contains DFA stores
+//! - Contains patterns (`%needle%`, `%first%second%`) are limited to **254 literal bytes**.
+//!   The contains DFA stores
 //!   states in `u8`, so it needs room for every match-progress state plus both
 //!   the accept state and the escape sentinel.
 //!
@@ -144,7 +148,7 @@ use vortex_error::VortexResult;
 ///
 /// Encapsulates pattern parsing and DFA variant selection. Returns `None` from
 /// [`try_new`](Self::try_new) for patterns that cannot be evaluated without
-/// decompression (e.g., `_` wildcards, multiple `%` in non-standard positions,
+/// decompression (e.g., `_` wildcards, patterns without a trailing `%`,
 /// or patterns that exceed the DFA's representable byte-length limits).
 pub(crate) struct FsstMatcher {
     inner: MatcherInner,
@@ -160,8 +164,8 @@ impl FsstMatcher {
     /// Try to build a matcher for the given LIKE pattern.
     ///
     /// Returns `Ok(None)` if the pattern shape is not supported for pushdown
-    /// (e.g. `_` wildcards, multiple non-bookend `%`, `prefix%` longer than
-    /// 253 bytes, or `%needle%` longer than 254 bytes).
+    /// (e.g. `_` wildcards, patterns without a trailing `%`, `prefix%` longer than
+    /// 253 bytes, or contains patterns with more than 254 literal bytes).
     pub(crate) fn try_new(
         symbols: &[Symbol],
         symbol_lengths: &[u8],
@@ -195,6 +199,36 @@ impl FsstMatcher {
                     needle.as_ref(),
                 )?)
             }
+            LikeKind::OrderedContains(needles) => {
+                let total_len = needles.iter().map(|needle| needle.len()).sum::<usize>();
+                if total_len > FlatContainsDfa::MAX_NEEDLE_LEN {
+                    return Ok(None);
+                }
+                let needles = needles
+                    .iter()
+                    .map(|needle| needle.as_ref())
+                    .collect::<Vec<_>>();
+                MatcherInner::Contains(FlatContainsDfa::new_ordered(
+                    symbols,
+                    symbol_lengths,
+                    &needles,
+                )?)
+            }
+            LikeKind::OrderedPrefix(needles) => {
+                let total_len = needles.iter().map(|needle| needle.len()).sum::<usize>();
+                if total_len > FlatPrefixDfa::MAX_PREFIX_LEN {
+                    return Ok(None);
+                }
+                let needles = needles
+                    .iter()
+                    .map(|needle| needle.as_ref())
+                    .collect::<Vec<_>>();
+                MatcherInner::Prefix(FlatPrefixDfa::new_ordered(
+                    symbols,
+                    symbol_lengths,
+                    &needles,
+                )?)
+            }
         };
 
         Ok(Some(Self { inner }))
@@ -216,11 +250,64 @@ enum LikeKind<'a> {
     Prefix(Cow<'a, [u8]>),
     /// `%needle%`
     Contains(Cow<'a, [u8]>),
+    /// `%first%second%`, with empty pieces removed.
+    OrderedContains(Vec<Cow<'a, [u8]>>),
+    /// `first%second%`, with the first literal anchored at the start.
+    OrderedPrefix(Vec<Cow<'a, [u8]>>),
 }
 
 impl<'a> LikeKind<'a> {
     fn parse(pattern: &'a [u8]) -> Option<Self> {
-        Self::parse_prefix(pattern).or_else(|| Self::parse_contains(pattern))
+        Self::parse_prefix(pattern)
+            .or_else(|| Self::parse_contains(pattern))
+            .or_else(|| Self::parse_ordered(pattern))
+    }
+
+    fn parse_ordered(pattern: &'a [u8]) -> Option<Self> {
+        let anchored = !pattern.starts_with(b"%");
+        let mut pieces = Vec::new();
+        let mut literal = None::<Vec<u8>>;
+        let mut start = usize::from(!anchored);
+        let mut idx = start;
+        while idx < pattern.len() {
+            match pattern[idx] {
+                b'\\' => {
+                    let escaped = *pattern.get(idx + 1)?;
+                    literal
+                        .get_or_insert_with(|| pattern[start..idx].to_vec())
+                        .push(escaped);
+                    idx += 2;
+                }
+                b'_' => return None,
+                b'%' => {
+                    let piece = match literal.take() {
+                        Some(bytes) => Cow::Owned(bytes),
+                        None => Cow::Borrowed(&pattern[start..idx]),
+                    };
+                    if !piece.is_empty() {
+                        pieces.push(piece);
+                    }
+                    if idx + 1 == pattern.len() {
+                        return Some(match (anchored, pieces.len()) {
+                            (_, 0) => Self::Contains(Cow::Borrowed(&[])),
+                            (true, 1) => Self::Prefix(pieces.remove(0)),
+                            (false, 1) => Self::Contains(pieces.remove(0)),
+                            (true, _) => Self::OrderedPrefix(pieces),
+                            (false, _) => Self::OrderedContains(pieces),
+                        });
+                    }
+                    idx += 1;
+                    start = idx;
+                }
+                byte => {
+                    if let Some(literal) = &mut literal {
+                        literal.push(byte);
+                    }
+                    idx += 1;
+                }
+            }
+        }
+        None
     }
 
     fn parse_prefix(pattern: &'a [u8]) -> Option<Self> {
@@ -305,6 +392,38 @@ where
 // ---------------------------------------------------------------------------
 // DFA construction helpers
 // ---------------------------------------------------------------------------
+
+/// Builds transitions for ordered, non-overlapping pieces, optionally anchored at the start.
+fn ordered_byte_transitions(needles: &[&[u8]], anchored: bool) -> Vec<u8> {
+    let total_len = needles.iter().map(|needle| needle.len()).sum::<usize>();
+    let accept = u8::try_from(total_len).vortex_expect("bounded DFA state");
+    let mut table = vec![0u8; (total_len + 1 + usize::from(anchored)) * 256];
+    let mut base = 0usize;
+    for (part, needle) in needles.iter().enumerate() {
+        if anchored && part == 0 {
+            let fail = accept + 1;
+            table[..needle.len() * 256].fill(fail);
+            for (state, &byte) in needle.iter().enumerate() {
+                table[state * 256 + usize::from(byte)] =
+                    u8::try_from(state + 1).vortex_expect("bounded DFA state");
+            }
+            table[(total_len + 1) * 256..].fill(fail);
+        } else {
+            let part_table = kmp_byte_transitions(needle);
+            let base_state = u8::try_from(base).vortex_expect("bounded DFA state");
+            for state in 0..needle.len() {
+                for byte in 0..256 {
+                    table[(base + state) * 256 + byte] =
+                        base_state + part_table[state * 256 + byte];
+                }
+            }
+        }
+        // The next piece starts at the following byte, preventing overlapping matches.
+        base += needle.len();
+    }
+    table[total_len * 256..(total_len + 1) * 256].fill(accept);
+    table
+}
 
 /// Builds the per-symbol transition table for FSST symbols.
 ///

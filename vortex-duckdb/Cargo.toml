@@ -56,6 +56,7 @@ geo-types = { workspace = true }
 jiff = { workspace = true }
 mimalloc = { workspace = true }
 rstest = { workspace = true }
+serde_json = { workspace = true }
 tempfile = { workspace = true }
 vortex-array = { workspace = true, features = ["_test-harness"] }
 vortex-runend = { workspace = true }

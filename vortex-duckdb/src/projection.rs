@@ -13,6 +13,7 @@ use vortex::expr::BoundExpression;
 use vortex::expr::Expression;
 use vortex::expr::and_collect;
 use vortex::expr::col;
+use vortex::expr::forms::conjuncts;
 use vortex::expr::get_item;
 use vortex::expr::lit;
 use vortex::expr::pack;
@@ -195,8 +196,10 @@ pub struct Filter {
 }
 
 fn push_filter_expr(filter_exprs: &mut Vec<Expression>, expr: &Expression) {
-    if !filter_exprs.iter().any(|existing| existing == expr) {
-        filter_exprs.push(expr.clone());
+    for conjunct in conjuncts(expr) {
+        if !filter_exprs.iter().any(|existing| existing == &conjunct) {
+            filter_exprs.push(conjunct);
+        }
     }
 }
 
@@ -281,6 +284,7 @@ pub fn extract_schema_from_dtype(dtype: &DType) -> VortexResult<Vec<DuckdbField>
 #[cfg(test)]
 mod tests {
     use vortex::dtype::DType;
+    use vortex::expr::and;
     use vortex::expr::lit;
     use vortex::expr::pack;
     use vortex::expr::root;
@@ -411,5 +415,16 @@ mod tests {
         push_filter_expr(&mut filter_exprs, &first);
 
         assert_eq!(filter_exprs, vec![first, second]);
+    }
+
+    #[test]
+    fn test_push_filter_expr_deduplicates_nested_conjunctions() {
+        let first = col("first");
+        let second = col("second");
+        let third = col("third");
+        let mut filter_exprs = Vec::new();
+        push_filter_expr(&mut filter_exprs, &and(first.clone(), second.clone()));
+        push_filter_expr(&mut filter_exprs, &and(second.clone(), third.clone()));
+        assert_eq!(filter_exprs, vec![first, second, third]);
     }
 }

@@ -59,6 +59,7 @@ use vortex_array::expr::lt_eq;
 use vortex_array::expr::or;
 use vortex_array::expr::root;
 use vortex_array::expr::select;
+use vortex_array::expr::stats::Precision;
 use vortex_array::expr::stats::Stat;
 use vortex_array::extension::datetime::TimeUnit;
 use vortex_array::extension::datetime::Timestamp;
@@ -2159,6 +2160,34 @@ async fn nested_struct_list_struct_roundtrip() -> VortexResult<()> {
 
     let result = write_read_roundtrip(st.clone()).await?;
     assert_arrays_eq!(result, st, &mut SESSION.create_execution_ctx());
+    Ok(())
+}
+
+#[tokio::test]
+async fn requested_writer_statistic_persists_strict_order_across_chunks() -> VortexResult<()> {
+    let mut output = ByteBufferMut::empty();
+    let first = StructArray::from_fields(&[("id", buffer![1i64, 2, 3].into_array())])?.into_array();
+    let mut writer = SESSION
+        .write_options()
+        .with_file_statistics(
+            PRUNING_STATS
+                .iter()
+                .copied()
+                .chain([Stat::IsStrictSorted])
+                .collect(),
+        )
+        .writer(&mut output, first.dtype().clone());
+    writer.push(first).await?;
+    writer
+        .push(StructArray::from_fields(&[("id", buffer![4i64, 5, 6].into_array())])?.into_array())
+        .await?;
+    writer.finish().await?;
+    let file = SESSION.open_options().open_buffer(output)?;
+    let stats = file.file_stats().vortex_expect("file statistics");
+    assert_eq!(
+        stats.stats_sets()[0].get(Stat::IsStrictSorted),
+        Precision::Exact(true.into())
+    );
     Ok(())
 }
 

@@ -17,6 +17,7 @@ struct VortexBindData final : TableFunctionData {
     bool Equals(const FunctionData &other) const override;
 
     unique_ptr<CData> ffi_bind_data;
+    vector<idx_t> offset_pruned_files;
 };
 
 struct VortexBindResult {

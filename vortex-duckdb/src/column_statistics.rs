@@ -19,6 +19,8 @@ pub struct ColumnStatistics {
     pub min: Option<Value>,
     pub max: Option<Value>,
     pub max_string_length: u64,
+    /// Exact non-null distinct count when strict ordering proves uniqueness.
+    pub distinct_count: Option<u64>,
     pub has_null: bool,
     pub logical_type: LogicalType,
 }
@@ -46,6 +48,7 @@ impl ColumnStatistics {
             min,
             max,
             max_string_length,
+            distinct_count: stats.distinct_count,
             has_null,
             logical_type,
         })
@@ -57,12 +60,15 @@ pub struct ColumnStatisticsAggregate {
     pub min: Option<ScalarValue>,
     pub max: Option<ScalarValue>,
     pub max_string_length: Option<u32>,
+    /// Exact non-null distinct count when strict ordering proves uniqueness.
+    pub distinct_count: Option<u64>,
     /// May be true if null count stat isn't present
     pub has_null: bool,
 }
 
 impl ColumnStatisticsAggregate {
-    pub fn new(stats: &StatsSet) -> Self {
+    /// Collects statistics and derives a distinct count only from a proven unique column.
+    pub fn new(stats: &StatsSet, dtype: &DType, row_count: u64) -> Self {
         let min = match stats.get(Stat::Min) {
             Precision::Exact(min) => Some(min),
             _ => None,
@@ -81,16 +87,72 @@ impl ColumnStatisticsAggregate {
                 None
             };
 
-        let has_null = match stats.get(Stat::NullCount) {
-            Precision::Exact(cnt) => cnt.as_primitive().as_u64().vortex_expect("not a u64") > 0,
-            _ => true,
+        let null_count = match stats.get(Stat::NullCount) {
+            Precision::Exact(cnt) => cnt.as_primitive().as_u64(),
+            _ if !dtype.is_nullable() => Some(0),
+            _ => None,
         };
+        let has_null = null_count.is_none_or(|count| count > 0);
+        let distinct_count =
+            if dtype.is_int() && stats.get(Stat::IsStrictSorted) == Precision::Exact(true.into()) {
+                null_count.and_then(|count| row_count.checked_sub(count))
+            } else {
+                None
+            };
 
         Self {
             min,
             max,
             max_string_length,
+            distinct_count,
             has_null,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+    use vortex::dtype::Nullability;
+    use vortex::dtype::PType;
+    use vortex::error::vortex_err;
+
+    use super::*;
+
+    #[rstest]
+    #[case::proven_unique(Precision::Exact(true), Some(0), false, PType::I64, Some(1000))]
+    #[case::nullable_unique(Precision::Exact(true), Some(1), true, PType::I64, Some(999))]
+    #[case::unknown_null_count(Precision::Exact(true), None, true, PType::I64, None)]
+    #[case::non_nullable(Precision::Exact(true), None, false, PType::I64, Some(1000))]
+    #[case::not_sorted(Precision::Exact(false), Some(0), false, PType::I64, None)]
+    #[case::range_is_insufficient(Precision::Absent, Some(0), false, PType::I64, None)]
+    #[case::inexact_property(Precision::Inexact(true), Some(0), false, PType::I64, None)]
+    #[case::invalid_null_count(Precision::Exact(true), Some(1001), true, PType::I64, None)]
+    #[case::float_equality_not_proven(Precision::Exact(true), Some(0), false, PType::F64, None)]
+    fn distinct_count_requires_a_proof(
+        #[case] strict: Precision<bool>,
+        #[case] null_count: Option<u64>,
+        #[case] nullable: bool,
+        #[case] ptype: PType,
+        #[case] expected: Option<u64>,
+    ) -> VortexResult<()> {
+        let dtype = DType::Primitive(ptype, Nullability::from(nullable));
+        let mut stats = StatsSet::default();
+        stats.set(Stat::IsStrictSorted, strict.map(ScalarValue::from));
+        if let Some(count) = null_count {
+            stats.set(Stat::NullCount, Precision::Exact(count.into()));
+        }
+        for (stat, value) in [(Stat::Min, 0i32), (Stat::Max, 999)] {
+            let value = Scalar::from(value)
+                .cast(&dtype)?
+                .into_value()
+                .ok_or_else(|| vortex_err!("missing numeric bound"))?;
+            stats.set(stat, Precision::Exact(value));
+        }
+        assert_eq!(
+            ColumnStatisticsAggregate::new(&stats, &dtype, 1000).distinct_count,
+            expected
+        );
+        Ok(())
     }
 }

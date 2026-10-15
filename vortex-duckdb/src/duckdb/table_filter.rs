@@ -15,6 +15,7 @@ use crate::cpp;
 use crate::cpp::idx_t;
 use crate::duckdb::Expression;
 use crate::duckdb::ExpressionRef;
+use crate::duckdb::LogicalType;
 use crate::duckdb::Value;
 use crate::duckdb::ValueRef;
 use crate::lifetime_wrapper;
@@ -140,7 +141,23 @@ impl TableFilterRef {
                 let child_filter = unsafe {
                     TableFilter::borrow(cpp::duckdb_vx_table_filter_get_optional(self.as_ptr()))
                 };
-                TableFilterClass::Optional(child_filter)
+                let mut threshold = 0.0;
+                let mut sample_rows = 0;
+                // SAFETY: the native filter is optional, and the output pointers are valid.
+                let adaptive = unsafe {
+                    cpp::duckdb_vx_table_filter_get_optional_policy(
+                        self.as_ptr(),
+                        &raw mut threshold,
+                        &raw mut sample_rows,
+                    )
+                };
+                TableFilterClass::Optional(OptionalFilter {
+                    child: child_filter,
+                    policy: adaptive.then_some(OptionalFilterPolicy {
+                        threshold,
+                        sample_rows,
+                    }),
+                })
             }
             cpp::DUCKDB_VX_TABLE_FILTER_TYPE::DUCKDB_VX_TABLE_FILTER_TYPE_IN_FILTER => {
                 let mut out = cpp::duckdb_vx_table_filter_in_filter {
@@ -174,8 +191,11 @@ impl TableFilterRef {
                 TableFilterClass::ExpressionRef(expr)
             }
             cpp::DUCKDB_VX_TABLE_FILTER_TYPE::DUCKDB_VX_TABLE_FILTER_TYPE_BLOOM_FILTER => {
-                // TODO(aduffy): actually extract these parameters
-                TableFilterClass::Bloom
+                // SAFETY: the native filter is a Bloom filter; the returned snapshot is owned.
+                let snapshot = unsafe { cpp::duckdb_vx_table_filter_copy_bloom(self.as_ptr()) };
+                TableFilterClass::Bloom(
+                    (!snapshot.is_null()).then(|| unsafe { BloomSnapshot::own(snapshot) }),
+                )
             }
         }
     }
@@ -198,11 +218,49 @@ pub enum TableFilterClass<'a> {
     ConjunctionOr(Conjunction<'a>),
     ConjunctionAnd(Conjunction<'a>),
     StructExtract(&'a str, &'a TableFilterRef),
-    Optional(&'a TableFilterRef),
+    Optional(OptionalFilter<'a>),
     InFilter(Values<'a>),
     Dynamic(DynamicFilter),
     ExpressionRef(&'a ExpressionRef),
-    Bloom,
+    Bloom(Option<BloomSnapshot>),
+}
+
+/// An optional scan predicate and its optional sampling policy.
+pub struct OptionalFilter<'a> {
+    /// The predicate that may be skipped without changing query results.
+    pub child: &'a TableFilterRef,
+    /// DuckDB's policy for stopping predicates that pass most rows.
+    pub policy: Option<OptionalFilterPolicy>,
+}
+
+/// The row budget and acceptance threshold of an adaptive optional predicate.
+#[derive(Clone, Copy, Debug)]
+pub struct OptionalFilterPolicy {
+    /// Stop row evaluation when at least this fraction of sampled rows passes.
+    pub threshold: f32,
+    /// DuckDB's vector count converted to rows, independent of Vortex's chunk sizes.
+    pub sample_rows: u64,
+}
+
+lifetime_wrapper!(
+    /// An immutable, owned snapshot of DuckDB's finalized Bloom filter.
+    #[derive(Debug)]
+    BloomSnapshot,
+    cpp::duckdb_vx_bloom_snapshot,
+    cpp::duckdb_vx_bloom_snapshot_free
+);
+
+// SAFETY: the snapshot owns immutable bits and type metadata, with no query or context references.
+unsafe impl Send for BloomSnapshot {}
+// SAFETY: probing uses local scratch vectors and never mutates the snapshot.
+unsafe impl Sync for BloomSnapshot {}
+
+impl BloomSnapshotRef {
+    /// Returns an owned copy of the DuckDB type used to hash the keys.
+    pub fn key_type(&self) -> LogicalType {
+        // SAFETY: the snapshot is live, and the native function returns an owned logical type.
+        unsafe { LogicalType::own(cpp::duckdb_vx_bloom_snapshot_key_type(self.as_ptr())) }
+    }
 }
 
 pub struct ConstantComparison<'a> {

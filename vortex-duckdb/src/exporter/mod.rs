@@ -28,6 +28,7 @@ mod vector;
 pub use cache::ConversionCache;
 pub use decimal::precision_to_duckdb_storage_size;
 use vortex::array::ArrayRef;
+use vortex::array::Canonical;
 use vortex::array::ExecutionCtx;
 use vortex::array::arrays::Chunked;
 use vortex::array::arrays::Constant;
@@ -184,6 +185,21 @@ pub trait ColumnExporter: 'static {
         vector: &mut VectorRef,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<()>;
+}
+
+/// Exports a scalar join key without constructing dictionary conversion caches.
+pub(crate) fn new_bloom_key_exporter(
+    array: ArrayRef,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<Box<dyn ColumnExporter>> {
+    match array.execute::<Canonical>(ctx)? {
+        Canonical::Bool(array) => bool::new_exporter(array, ctx),
+        Canonical::Primitive(array) => primitive::new_exporter(array, ctx),
+        Canonical::Decimal(array) => decimal::new_exporter(array, ctx),
+        Canonical::VarBinView(array) => varbinview::new_exporter(array, ctx),
+        Canonical::Extension(array) => extension::new_exporter(array, ctx),
+        _ => vortex_bail!("unsupported Bloom join key type"),
+    }
 }
 
 fn new_array_exporter(

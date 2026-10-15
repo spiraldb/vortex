@@ -11,6 +11,11 @@ use parking_lot::Mutex;
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::VortexSessionExecute;
+use vortex_array::aggregate_fn::Accumulator;
+use vortex_array::aggregate_fn::AggregateFnVTable;
+use vortex_array::aggregate_fn::DynAccumulator;
+use vortex_array::aggregate_fn::fns::is_sorted::IsSorted;
+use vortex_array::aggregate_fn::fns::is_sorted::IsSortedOptions;
 use vortex_array::aggregate_fn::fns::sum::sum;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::struct_::StructArrayExt;
@@ -68,6 +73,7 @@ pub fn accumulate_stats(
 /// Accumulates write-time statistics for a single file column.
 struct StatsAccumulator {
     builders: Vec<Box<dyn StatsArrayBuilder>>,
+    ordered: Vec<(Stat, Accumulator<IsSorted>)>,
     length: usize,
 }
 
@@ -76,12 +82,14 @@ impl StatsAccumulator {
         if !supports_file_stats(dtype) {
             return Self {
                 builders: Vec::new(),
+                ordered: Vec::new(),
                 length: 0,
             };
         }
 
         let builders = stats
             .iter()
+            .filter(|&&stat| !matches!(stat, Stat::IsSorted | Stat::IsStrictSorted))
             .filter_map(|&stat| {
                 stat.dtype(dtype).map(|stat_dtype| {
                     stats_builder_with_capacity(
@@ -94,13 +102,35 @@ impl StatsAccumulator {
             })
             .collect::<Vec<_>>();
 
+        let ordered = stats
+            .iter()
+            .filter_map(|&stat| {
+                let strict = match stat {
+                    Stat::IsSorted => false,
+                    Stat::IsStrictSorted => true,
+                    _ => return None,
+                };
+                let options = IsSortedOptions { strict };
+                IsSorted.return_dtype(&options, dtype)?;
+                Some((
+                    stat,
+                    Accumulator::try_new(IsSorted, options, dtype.clone())
+                        .vortex_expect("supported sortedness accumulator dtype"),
+                ))
+            })
+            .collect();
+
         Self {
             builders,
+            ordered,
             length: 0,
         }
     }
 
     fn push_chunk(&mut self, array: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<()> {
+        for (_, accumulator) in &mut self.ordered {
+            accumulator.accumulate(array, ctx)?;
+        }
         for builder in &mut self.builders {
             if let Some(value) = array.statistics().compute_stat(builder.stat(), ctx)? {
                 builder.append_scalar(value.cast(&value.dtype().as_nullable())?)?;
@@ -143,6 +173,11 @@ impl StatsAccumulator {
     /// Returns an aggregated stats set for the table.
     fn as_stats_set(&mut self, stats: &[Stat], ctx: &mut ExecutionCtx) -> VortexResult<StatsSet> {
         let mut stats_set = StatsSet::default();
+        for (stat, accumulator) in &mut self.ordered {
+            if let Some(value) = accumulator.finish()?.into_value() {
+                stats_set.set(*stat, Precision::exact(value));
+            }
+        }
         let Some(stats_table) = self.as_array(ctx)? else {
             return Ok(stats_set);
         };
@@ -545,6 +580,42 @@ mod tests {
     use vortex_buffer::buffer;
 
     use super::*;
+
+    #[rstest]
+    #[case::empty(vec![vec![]], true, true)]
+    #[case::singleton(vec![vec![Some(1)]], true, true)]
+    #[case::singleton_null(vec![vec![None]], true, true)]
+    #[case::null_in_first_batch(vec![vec![None], vec![Some(1), Some(2)]], true, true)]
+    #[case::ascending(vec![vec![Some(1), Some(2)], vec![Some(3), Some(4)]], true, true)]
+    #[case::boundary_duplicate(vec![vec![Some(1), Some(2)], vec![Some(2), Some(3)]], true, false)]
+    #[case::boundary_descending(vec![vec![Some(2), Some(3)], vec![Some(0), Some(1)]], false, false)]
+    #[case::within_chunk_duplicate(vec![vec![Some(1), Some(1)], vec![Some(2), Some(3)]], true, false)]
+    #[case::leading_null(vec![vec![None, Some(1)], vec![Some(2), Some(3)]], true, true)]
+    #[case::repeated_null(vec![vec![None, None], vec![Some(1), Some(2)]], true, false)]
+    #[case::later_null(vec![vec![Some(1), Some(2)], vec![None, Some(3)]], false, false)]
+    fn ordered_file_statistics_span_batches(
+        #[case] batches: Vec<Vec<Option<i32>>>,
+        #[case] sorted: bool,
+        #[case] strict: bool,
+    ) -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let dtype = DType::Primitive(PType::I32, Nullability::Nullable);
+        let requested = [Stat::IsSorted, Stat::IsStrictSorted];
+        let mut accumulator = StatsAccumulator::new(&dtype, &requested, 64);
+        for batch in batches {
+            accumulator.push_chunk(
+                &PrimitiveArray::from_option_iter(batch).into_array(),
+                &mut ctx,
+            )?;
+        }
+        let stats = accumulator.as_stats_set(&requested, &mut ctx)?;
+        assert_eq!(stats.get(Stat::IsSorted), Precision::Exact(sorted.into()));
+        assert_eq!(
+            stats.get(Stat::IsStrictSorted),
+            Precision::Exact(strict.into())
+        );
+        Ok(())
+    }
 
     #[rstest]
     #[case(DType::Utf8(Nullability::NonNullable))]
