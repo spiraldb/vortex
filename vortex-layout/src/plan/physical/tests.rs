@@ -1495,8 +1495,8 @@ fn legacy_stats_under_zoned_are_dropped() -> VortexResult<()> {
     let dtype = primitive(PType::I32, Nullability::NonNullable);
     let (max, zones_dtype) = max_zones_dtype(&dtype)?;
     let zones = make_plan(flat(2, zones_dtype, 2))?;
-    let plan = ZonedPlan::new(legacy_max_plan(&dtype)?, zones.clone(), 3, vec![max].into())
-        .into_plan();
+    let plan =
+        ZonedPlan::new(legacy_max_plan(&dtype)?, zones.clone(), 3, vec![max].into()).into_plan();
 
     let optimized = optimize(plan)?;
     let zoned = optimized

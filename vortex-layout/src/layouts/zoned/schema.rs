@@ -226,7 +226,10 @@ pub(crate) fn legacy_stats_to_aggregates(
         elements.push((aggregate_fn.to_string(), value));
         aggregate_fns.push(aggregate_fn);
     }
-    (aggregate_fns.into(), pack(elements, Nullability::NonNullable))
+    (
+        aggregate_fns.into(),
+        pack(elements, Nullability::NonNullable),
+    )
 }
 
 pub(crate) fn default_bounded_stat_max_bytes() -> std::num::NonZeroUsize {

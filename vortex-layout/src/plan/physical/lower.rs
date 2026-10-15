@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Test support for constructing physical plans from stored layout trees.
-//!
-//! This module is only used to build physical-plan fixtures for tests. It is not a production
-//! planning API.
+//! Lowering stored layout trees into physical plans.
 
 use std::sync::Arc;
 
@@ -39,7 +36,10 @@ use crate::plan::physical::SegmentScanPlan;
 use crate::plan::physical::TakePlan;
 use crate::plan::physical::ZonedPlan;
 
-/// Constructs a physical-plan fixture from `layout` for tests.
+/// Lowers `layout` into a physical plan.
+///
+/// Zoned and legacy stats layouts keep their zone statistics: unoptimized they read only their
+/// data, and the optimizer rewrites a statistics predicate over them into a pruning plan.
 ///
 /// The root operator is built immediately. Its child container owns a hidden clone of the source
 /// layout and lowers each child independently on first access.
