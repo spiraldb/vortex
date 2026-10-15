@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::cmp::Reverse;
 use std::fs::File;
 use std::io::Cursor;
 use std::path::Path;
@@ -10,6 +11,7 @@ use std::time::Instant;
 
 use anyhow::bail;
 use arrow_array::RecordBatch;
+use arrow_schema::DataType;
 use arrow_schema::Schema;
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -161,20 +163,43 @@ pub async fn parquet_compress_write(
     }
 
     let task_schema = Arc::clone(&schema);
-    let chunks = parallel_map(units, move |(rg_batches, field_idx, mut writers)| {
-        let field = task_schema.field(field_idx);
-        for batch in rg_batches.iter() {
-            let leaves = compute_leaves(field, batch.column(field_idx))?;
-            for (col_writer, leaf) in writers.iter_mut().zip(&leaves) {
-                col_writer.write(leaf)?;
+    let encode_cost = |(rg_batches, field_idx, _): &(Arc<[RecordBatch]>, usize, _)| {
+        rg_batches
+            .iter()
+            .map(|batch| batch.column(*field_idx).get_array_memory_size())
+            .sum()
+    };
+    let chunks = parallel_map(
+        units,
+        encode_cost,
+        move |(rg_batches, field_idx, mut writers)| {
+            let field = task_schema.field(field_idx);
+            for batch in rg_batches.iter() {
+                let leaves = compute_leaves(field, batch.column(field_idx))?;
+                for (col_writer, leaf) in writers.iter_mut().zip(&leaves) {
+                    col_writer.write(leaf)?;
+                }
             }
-        }
-        writers
-            .into_iter()
-            .map(|w| Ok(w.close()?))
-            .collect::<anyhow::Result<Vec<_>>>()
-    })
+            writers
+                .into_iter()
+                .map(|w| Ok(w.close()?))
+                .collect::<anyhow::Result<Vec<_>>>()
+        },
+    )
     .await?;
+
+    // Size the output once rather than growing it chunk by chunk: repeatedly reallocating a
+    // buffer of hundreds of megabytes costs as much as encoding. The slack covers the footer.
+    let chunk_bytes: u64 = chunks
+        .iter()
+        .flatten()
+        .map(|chunk| u64::try_from(chunk.close().metadata.compressed_size()).unwrap_or(0))
+        .sum();
+    let footer_slack = FOOTER_BYTES_PER_CHUNK * chunks.iter().map(Vec::len).sum::<usize>();
+    writer
+        .inner_mut()
+        .get_mut()
+        .reserve(usize::try_from(chunk_bytes)? + footer_slack);
 
     let fields_per_group = schema.fields().len();
     let mut chunks = chunks.into_iter();
@@ -218,30 +243,74 @@ fn split_row_groups(batches: &[RecordBatch], max_rows: usize) -> Vec<Vec<RecordB
 
 pub async fn parquet_decompress_read(buf: Bytes) -> anyhow::Result<usize> {
     let metadata = ArrowReaderMetadata::load(&buf, ArrowReaderOptions::default())?;
+    // Decode strings and binaries to view arrays, the Arrow types the Vortex reader produces.
+    let view_schema = Arc::new(Schema::new_with_metadata(
+        metadata
+            .schema()
+            .fields()
+            .iter()
+            .map(|field| {
+                let data_type = match field.data_type() {
+                    DataType::Utf8 | DataType::LargeUtf8 => DataType::Utf8View,
+                    DataType::Binary | DataType::LargeBinary => DataType::BinaryView,
+                    other => other.clone(),
+                };
+                field.as_ref().clone().with_data_type(data_type)
+            })
+            .collect::<Vec<_>>(),
+        metadata.schema().metadata().clone(),
+    ));
+    let metadata = ArrowReaderMetadata::try_new(
+        Arc::clone(metadata.metadata()),
+        ArrowReaderOptions::new().with_schema(view_schema),
+    )?;
     let num_row_groups = metadata.metadata().num_row_groups();
     let num_columns = metadata.schema().fields().len();
     let columns =
         read_projection(num_columns).map_or_else(|| (0..num_columns).collect(), <[usize]>::to_vec);
 
     // Decode (row group, column range) units independently. Setting up a reader costs time
-    // proportional to the schema width, so contiguous columns are batched into a few units per
-    // worker rather than one reader per column.
+    // proportional to the schema width, so the number of units is capped to keep the total setup
+    // cost bounded: narrow schemas decode one column per unit, wide ones batch contiguous columns
+    // into a few units per worker.
+    let column_units = columns.len() * num_row_groups;
     let target_units = Handle::current().metrics().num_workers() * 4;
-    let cols_per_unit = (columns.len() * num_row_groups)
-        .div_ceil(target_units)
-        .max(1);
-    let units = (0..num_row_groups)
+    let max_units = target_units.max(DECODE_SETUP_BUDGET / num_columns.max(1));
+    let cols_per_unit = column_units.div_ceil(max_units).max(1);
+    let units: Vec<_> = (0..num_row_groups)
         .flat_map(|rg| {
             columns
                 .chunks(cols_per_unit)
                 .map(move |cols| (rg, cols.to_vec()))
         })
         .collect();
-    let sizes = parallel_map(units, move |(rg, cols)| {
+
+    // Uncompressed bytes per (row group, root column), to schedule the largest units first.
+    let parquet_schema = metadata.parquet_schema();
+    let root_bytes: Vec<Vec<i64>> = metadata
+        .metadata()
+        .row_groups()
+        .iter()
+        .map(|rg| {
+            let mut bytes = vec![0; num_columns];
+            for (leaf_idx, chunk) in rg.columns().iter().enumerate() {
+                bytes[parquet_schema.get_column_root_idx(leaf_idx)] += chunk.uncompressed_size();
+            }
+            bytes
+        })
+        .collect();
+    let decode_cost = move |(rg, cols): &(usize, Vec<usize>)| {
+        cols.iter()
+            .map(|&col| usize::try_from(root_bytes[*rg][col]).unwrap_or(0))
+            .sum()
+    };
+
+    let sizes = parallel_map(units, decode_cost, move |(rg, cols)| {
         let projection = ProjectionMask::roots(metadata.parquet_schema(), cols);
         let reader =
             ParquetRecordBatchReaderBuilder::new_with_metadata(buf.clone(), metadata.clone())
                 .with_row_groups(vec![rg])
+                .with_batch_size(DECODE_BATCH_SIZE)
                 .with_projection(projection)
                 .build()?;
         let mut nbytes = 0;
@@ -255,28 +324,46 @@ pub async fn parquet_decompress_read(buf: Bytes) -> anyhow::Result<usize> {
     Ok(sizes.into_iter().sum())
 }
 
+/// Footer bytes reserved per column chunk when sizing the output buffer.
+const FOOTER_BYTES_PER_CHUNK: usize = 1024;
+
+/// Rows per decoded batch: the Vortex writer's row block size, so both readers emit batches of
+/// the same length.
+const DECODE_BATCH_SIZE: usize = 8192;
+
+/// Bound on (decode units × schema width), the total reader setup work in a parallel decode.
+const DECODE_SETUP_BUDGET: usize = 4096;
+
 /// Run `f` over `items` as tasks on the current Tokio runtime, returning the results in input
 /// order.
 ///
+/// Items are spawned in decreasing order of `cost`, so the largest units start first and do not
+/// end up as a straggler behind many small ones.
+///
 /// Vortex runs its CPU work as tasks on the same runtime, so both formats share one pool of
 /// worker threads, sized by `--threads`.
-async fn parallel_map<T, R, F>(items: Vec<T>, f: F) -> anyhow::Result<Vec<R>>
+async fn parallel_map<T, R, C, F>(items: Vec<T>, cost: C, f: F) -> anyhow::Result<Vec<R>>
 where
     T: Send + 'static,
     R: Send + 'static,
+    C: Fn(&T) -> usize,
     F: Fn(T) -> anyhow::Result<R> + Send + Sync + 'static,
 {
+    let mut items: Vec<(usize, T)> = items.into_iter().enumerate().collect();
+    items.sort_by_cached_key(|(_, item)| Reverse(cost(item)));
+
     let f = Arc::new(f);
-    let handles: Vec<_> = items
+    let mut handles: Vec<_> = items
         .into_iter()
-        .map(|item| {
+        .map(|(idx, item)| {
             let f = Arc::clone(&f);
-            tokio::spawn(async move { f(item) })
+            (idx, tokio::spawn(async move { f(item) }))
         })
         .collect();
+    handles.sort_unstable_by_key(|(idx, _)| *idx);
 
     let mut results = Vec::with_capacity(handles.len());
-    for handle in handles {
+    for (_, handle) in handles {
         results.push(handle.await??);
     }
     Ok(results)

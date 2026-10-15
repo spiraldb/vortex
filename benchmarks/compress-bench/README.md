@@ -31,11 +31,14 @@ compressor splits its work into tasks on the same runtime:
 - **Compress** splits the input into row groups at the writer's default
   `max_row_group_row_count` (1,048,576 rows), the same boundaries `ArrowWriter` produces, then
   encodes every (row group, top-level field) chunk as its own task with parquet-rs's
-  `ArrowRowGroupWriterFactory` and appends the chunks in order.
-- **Decompress** parses the footer once and splits each row group's top-level columns into a few
-  contiguous ranges per worker, decoding each (row group, column range) with its own
-  `ParquetRecordBatchReader`, so files with a single row group still decode their columns
-  concurrently.
+  `ArrowRowGroupWriterFactory`, largest first, and appends the chunks in order into an output
+  buffer sized once from the encoded chunk sizes.
+- **Decompress** parses the footer once and decodes (row group, column range) units as tasks,
+  largest first, each with its own `ParquetRecordBatchReader`. Narrow schemas get one column per
+  unit, so files with a single row group still decode their columns concurrently; very wide
+  schemas batch contiguous columns, because reader setup scales with the schema width. To match
+  the Vortex reader's output, strings and binaries decode to `Utf8View` / `BinaryView`, in
+  batches of 8,192 rows (the Vortex writer's row block size).
 
 The written file has the same row groups, encodings and compression as a sequential
 `ArrowWriter` with the same settings. Arrow IPC is a serialization baseline and stays
