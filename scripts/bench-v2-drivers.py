@@ -22,6 +22,8 @@ Use --baseline-projection-prefetch-bytes and --candidate-projection-prefetch-byt
 to compare V2 projection read-ahead, including two settings of the same binary.
 DataFusion's per-label scan-concurrency and io-threads flags require binaries with
 the corresponding CLI controls.
+Use --baseline-duckdb-projection-tasks 0 and --candidate-duckdb-projection-tasks 1
+to compare joined and separate projection tasks within one DuckDB binary.
 Optional perf-stat processes run separately. Add --perf-branches to collect
 branch counts and branch misses alongside instructions and cycles. The benchmark runner enables their
 counters around query callbacks after warmup, excluding initial setup and result
@@ -77,6 +79,7 @@ def environment(engine: str, threads: int, scan: str, prefetch: int) -> dict[str
         and key
         not in (
             "VORTEX_DUCKDB_FILE_PREFETCH",
+            "VORTEX_DUCKDB_PROJECTION_TASKS",
             "VORTEX_BENCH_SEGMENT_CACHE_MB",
             "VORTEX_BENCH_PRELOAD_SEGMENTS",
             "VORTEX_USE_SCAN_API",
@@ -161,6 +164,9 @@ def run(
     if not (data / directory).is_dir():
         raise ValueError(f"prepare {fmt} data before measuring: {data / directory}")
     env = environment(engine, threads, scan, prefetch)
+    projection_tasks = getattr(args, f"{label}_duckdb_projection_tasks")
+    if engine == "duckdb" and scan == "v2" and fmt != "parquet" and projection_tasks is not None:
+        env["VORTEX_DUCKDB_PROJECTION_TASKS"] = str(projection_tasks)
     projection_budget = getattr(args, f"{label}_projection_prefetch_bytes", None)
     if projection_budget is not None and scan == "v2" and fmt != "parquet":
         env["VORTEX_SCAN_PROJECTION_PREFETCH_BYTES"] = str(projection_budget)
@@ -199,6 +205,7 @@ def run(
             "prefetch": prefetch,
             "projection_prefetch_bytes": int(env.get("VORTEX_SCAN_PROJECTION_PREFETCH_BYTES", "0")),
             "datafusion_scan_concurrency": scan_concurrency if engine == "datafusion" else None,
+            "duckdb_projection_tasks": projection_tasks if engine == "duckdb" else None,
             "label": label,
             "round": round_id,
             "times_ms": measured,
@@ -311,6 +318,12 @@ def main():
     parser.add_argument("--scan", nargs="+", choices=("v1", "v2"), default=["v2"])
     parser.add_argument("--file-pruning", action="store_true", help="enable V2 whole-file statistics pruning")
     for label in ("baseline", "candidate"):
+        parser.add_argument(
+            f"--{label}-duckdb-projection-tasks",
+            type=int,
+            choices=(0, 1),
+            help=f"use separate V2 projection tasks in the {label} DuckDB scan",
+        )
         parser.add_argument(
             f"--{label}-datafusion-scan-concurrency",
             type=positive,

@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::env;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
@@ -208,6 +210,10 @@ pub(crate) async fn prepare_reader(
     projection: &BoundExpression,
     filter: &Filter,
 ) -> VortexResult<bool> {
+    // Keep the joined path available for comparisons within the same benchmark binary.
+    static PROJECTION_TASKS: LazyLock<bool> = LazyLock::new(|| {
+        !env::var("VORTEX_DUCKDB_PROJECTION_TASKS").is_ok_and(|value| value == "0")
+    });
     if file.can_skip(filter)? {
         // DuckDB releases a skipped file under the global lock. Here only the
         // file-local lock is held, so drop the scan state now.
@@ -225,9 +231,13 @@ pub(crate) async fn prepare_reader(
         .with_selection(filter.row_selection.clone());
     let scan_file = planning::scan_file(&file.file);
     let mut splits = if scan::v2::enabled() && scan::v2::supports_scan(&builder, &scan_file) {
-        scan::v2::prepare(builder, scan_file)?
-            .execute_projection_tasks(filter.row_range.clone())
-            .await?
+        let scan = scan::v2::prepare(builder, scan_file)?;
+        if *PROJECTION_TASKS {
+            scan.execute_projection_tasks(filter.row_range.clone())
+                .await?
+        } else {
+            scan.execute_pruned(filter.row_range.clone()).await?
+        }
     } else {
         builder.prepare()?.execute(filter.row_range.clone())?
     };

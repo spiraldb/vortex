@@ -180,7 +180,7 @@ logical_opt [
                                                         "children": [],
                                                         "extra_info": {
                                                             "Filters": [
-                                                                "vortex.list.contains([\"AIR\", \"AIR REG\"], $.l_shipmode)",
+                                                                "vortex.list.contains([\"AIR\", \"AIR REG\"], $.l_shipmode, opts=sql_null_semantics)",
                                                                 "($.l_shipinstruct = \"DELIVER IN PERSON\")"
                                                             ],
                                                             "Function": "Vortex Scan",

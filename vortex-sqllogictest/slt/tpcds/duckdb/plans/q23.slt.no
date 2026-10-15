@@ -1186,7 +1186,7 @@ logical_opt [
                                                                                         "children": [],
                                                                                         "extra_info": {
                                                                                             "Filters": [
-                                                                                                "vortex.list.contains([2000i64, 2001i64, 2002i64, 2003i64], $.d_year)",
+                                                                                                "vortex.list.contains([2000i64, 2001i64, 2002i64, 2003i64], $.d_year, opts=sql_null_semantics)",
                                                                                                 "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                                             ],
                                                                                             "Function": "Vortex Scan",
@@ -1445,7 +1445,7 @@ logical_opt [
                                                                                                                                                         "children": [],
                                                                                                                                                         "extra_info": {
                                                                                                                                                             "Filters": [
-                                                                                                                                                                "vortex.list.contains([2000i64, 2001i64, 2002i64, 2003i64], $.d_year)",
+                                                                                                                                                                "vortex.list.contains([2000i64, 2001i64, 2002i64, 2003i64], $.d_year, opts=sql_null_semantics)",
                                                                                                                                                                 "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                                                                                                             ],
                                                                                                                                                             "Function": "Vortex Scan",
@@ -1968,7 +1968,7 @@ physical_plan [
                                                                                 "extra_info": {
                                                                                     "Function": "Vortex Scan",
                                                                                     "Filters": [
-                                                                                        "vortex.list.contains([2000i64, 2001i64, 2002i64, 2003i64], $.d_year)",
+                                                                                        "vortex.list.contains([2000i64, 2001i64, 2002i64, 2003i64], $.d_year, opts=sql_null_semantics)",
                                                                                         "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                                     ],
                                                                                     "Projections": [
@@ -2182,7 +2182,7 @@ physical_plan [
                                                                                                                                                         "extra_info": {
                                                                                                                                                             "Function": "Vortex Scan",
                                                                                                                                                             "Filters": [
-                                                                                                                                                                "vortex.list.contains([2000i64, 2001i64, 2002i64, 2003i64], $.d_year)",
+                                                                                                                                                                "vortex.list.contains([2000i64, 2001i64, 2002i64, 2003i64], $.d_year, opts=sql_null_semantics)",
                                                                                                                                                                 "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                                                                                                             ],
                                                                                                                                                             "Projections": "d_date_sk",

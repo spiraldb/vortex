@@ -143,16 +143,6 @@ jobs:
           uv run --all-packages make check
         working-directory: docs/
 
-      # Keep this last: setup-benchmark.sh confines everything except the wrapped
-      # benchmark to the housekeeping CPUs, so any step after it runs on few cores.
-      - name: Setup benchmark environment
-        run: sudo bash scripts/setup-benchmark.sh
-
-      - name: Pytest Benchmarks - Vortex
-        run: |
-          bash ../scripts/bench-taskset.sh uv run --all-packages pytest --benchmark-only benchmark/
-        working-directory: vortex-python/
-
   python-windows:
     name: "Python (windows-x64)"
     timeout-minutes: 60

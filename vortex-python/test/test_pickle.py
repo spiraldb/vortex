@@ -85,6 +85,14 @@ def test_pickle_large_array() -> None:
     assert_arrow_array_roundtrip(arr, restored)
 
 
+@pytest.mark.parametrize("protocol", [4, 5])
+def test_pickle_protocols(protocol: int) -> None:
+    arr = vx.array(list(range(10_000)))
+    restored = cast(vx.Array, cast(object, pickle.loads(pickle.dumps(arr, protocol=protocol))))
+
+    assert_arrow_array_roundtrip(arr, restored)
+
+
 def test_pickle_empty_array() -> None:
     arr = vx.array(pa.array([], type=pa.int64()))
     restored = pickle_roundtrip_array(arr)
