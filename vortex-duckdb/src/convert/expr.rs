@@ -432,8 +432,6 @@ pub fn can_push_expression(value: &duckdb::ExpressionRef) -> bool {
             // columns are native.
         }
         ExpressionClass::BoundOperator(op) => {
-            // IN and NOT IN values do not have to be constants. `try_from_compare_in` converts
-            // the values that are not constants to equalities.
             if !matches!(
                 op.op,
                 DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_OPERATOR_NOT
@@ -711,18 +709,8 @@ fn try_from_expression_inner(
     }))
 }
 
-/// Converts DuckDB `element IN (values...)` and `element NOT IN (values...)`.
-///
-/// `in_list` needs a literal list, but DuckDB also accepts values that are not constants, such
-/// as column references. SQL defines `x IN (a, b, c)` as `x = a OR x = b OR x = c`, so we split
-/// the values in two groups:
-///
-/// - All constants go into one `in_list(element, [constants])`, which has SQL null semantics.
-/// - Each value that is not a constant becomes `element = value`.
-///
-/// The terms are joined with OR. Vortex OR uses Kleene logic, thus the result is the same as
-/// SQL IN, also when values are null. For example, `x IN (y, 1, 2)` becomes
-/// `x = y OR in_list(x, [1, 2])`. NOT IN is `not` of the full expression.
+/// Converts IN and NOT IN. Constants go into one `in_list`, other values become equalities,
+/// joined with Kleene OR: `x IN (y, 1, 2)` becomes `x = y OR in_list(x, [1, 2])`.
 fn try_from_compare_in(
     operator: BoundOperator,
     ctx: ConvertCtx<'_>,
