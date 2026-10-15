@@ -61,8 +61,9 @@ pub struct ScanPlans {
     pub projection_starts: Arc<[u64]>,
     /// The global row index of the root row domain's first row.
     pub row_offset: u64,
-    /// Whole values, such as dictionary values, kept between the scans of one split. Each split
-    /// starts with its own, dropped when the split finishes.
+    /// Whole values, such as dictionary values, shared by every split of the scan, so a
+    /// dictionary read by many chunks is decoded once, as the default executor's reader caches
+    /// it. Dropped with the scan.
     pub values: ValueCache,
 }
 
@@ -76,11 +77,5 @@ pub struct SelectedRows {
 
 /// The work for one split: project the rows of `scope` selected by `mask`.
 pub fn plan_projection(plans: ScanPlans, scope: WorkScope, mask: Mask) -> Box<dyn Planner> {
-    Box::new(ProjectionPlanner::new(
-        ScanPlans {
-            values: ValueCache::default(),
-            ..plans
-        },
-        SelectedRows { scope, mask },
-    ))
+    Box::new(ProjectionPlanner::new(plans, SelectedRows { scope, mask }))
 }
