@@ -134,15 +134,22 @@ fn build_filter_mask(
             if mask.all_false() {
                 return Ok(mask);
             }
+            // A dynamic conjunct that keeps almost every row is skipped until its values change.
+            if let Some(version) = current_version
+                && filter.skips_dynamic_conjunct(idx, version)
+            {
+                continue;
+            }
 
             let input_true_count = mask.true_count();
             let conjunct_mask = reader
                 .filter_evaluation(&filter_row_range, conjunct, MaskFuture::ready(mask))?
                 .await?;
-            filter.report_selectivity(
-                idx,
-                conditional_selectivity(input_true_count, conjunct_mask.true_count()),
-            );
+            let selectivity = conditional_selectivity(input_true_count, conjunct_mask.true_count());
+            filter.report_selectivity(idx, selectivity);
+            if let Some(version) = current_version {
+                filter.report_dynamic_selectivity(idx, version, selectivity);
+            }
 
             // Filter evaluations return a mask already intersected with the input mask.
             mask = conjunct_mask;

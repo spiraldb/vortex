@@ -4,6 +4,8 @@
 use std::ops::Range;
 use std::sync::Arc;
 use std::sync::LazyLock;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 use std::task::Poll;
 
 use parking_lot::Mutex;
@@ -64,6 +66,7 @@ pub struct TestLayoutReader {
     fail_first_projection: bool,
     fail_projection: bool,
     projection_masks: Option<Arc<Mutex<Vec<usize>>>>,
+    filter_evaluations: Option<Arc<AtomicUsize>>,
 }
 
 impl TestLayoutReader {
@@ -79,6 +82,7 @@ impl TestLayoutReader {
             fail_first_projection: false,
             fail_projection: false,
             projection_masks: None,
+            filter_evaluations: None,
         }
     }
 
@@ -100,6 +104,12 @@ impl TestLayoutReader {
 
     pub fn with_projection_masks(mut self, projection_masks: Arc<Mutex<Vec<usize>>>) -> Self {
         self.projection_masks = Some(projection_masks);
+        self
+    }
+
+    /// Counts every filter evaluation into `filter_evaluations`.
+    pub fn with_filter_evaluations(mut self, filter_evaluations: Arc<AtomicUsize>) -> Self {
+        self.filter_evaluations = Some(filter_evaluations);
         self
     }
 
@@ -165,6 +175,9 @@ impl LayoutReader for TestLayoutReader {
         _expr: &BoundExpression,
         mask: MaskFuture,
     ) -> VortexResult<MaskFuture> {
+        if let Some(filter_evaluations) = &self.filter_evaluations {
+            filter_evaluations.fetch_add(1, Ordering::Relaxed);
+        }
         if self.fail_first_filter && row_range.start == 0 {
             let len = mask.len();
             return Ok(MaskFuture::new(len, async move {
