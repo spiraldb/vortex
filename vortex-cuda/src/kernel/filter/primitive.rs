@@ -62,6 +62,10 @@ mod tests {
         PrimitiveArray::from_iter([10i32, 20, 30, 40, 50]),
         Mask::from_iter([true, true, true, false, true])
     )]
+    #[case::i32_offset(
+        PrimitiveArray::from_iter([10i32, 20, 30, 40, 50]),
+        Mask::from_iter([true, false, true, false, true, false, true, false]).slice(3..8)
+    )]
     #[case::i64_large(
         PrimitiveArray::from_iter((0..1000i64).collect::<Vec<_>>()),
         Mask::from_iter((0..1000).map(|i| i % 3 == 0))

@@ -63,6 +63,7 @@ fn main() {
     generate_arrow_device_array_bindings(Path::new(&manifest_dir), &out_dir);
     generate_dynamic_dispatch_bindings(&kernels_src, &out_dir);
     generate_patches_bindings(&kernels_src, &out_dir);
+    generate_compare_bindings(&kernels_src, &out_dir);
 
     if !is_cuda_available() {
         // The kernel loader unconditionally includes embedded_kernels.rs, so emit a Rust stub
@@ -303,6 +304,22 @@ fn generate_patches_bindings(kernels_src: &Path, out_dir: &Path) {
     bindings
         .write_to_file(out_dir.join("patches.rs"))
         .expect("Failed to write patches.rs");
+}
+
+/// Generate bindings for comparison opcodes shared with CUDA kernels.
+fn generate_compare_bindings(kernels_src: &Path, out_dir: &Path) {
+    let header = kernels_src.join("compare.h");
+    println!("cargo:rerun-if-changed={}", header.display());
+
+    let bindings = bindgen::Builder::default()
+        .header(header.to_string_lossy())
+        .allowlist_type("CompareOp")
+        .generate()
+        .expect("Failed to generate comparison bindings");
+
+    bindings
+        .write_to_file(out_dir.join("compare.rs"))
+        .expect("Failed to write compare.rs");
 }
 
 /// Check if CUDA is available based on nvcc.

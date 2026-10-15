@@ -1,21 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! CUDA wrappers around CUB scan primitives.
+//! CUDA wrappers around CUB scan and selection primitives.
 
 use std::ffi::c_void;
+use std::fmt::Debug;
+use std::sync::Arc;
 
 use cudarc::driver::CudaSlice;
+use cudarc::driver::CudaView;
 use cudarc::driver::DevicePtr;
 use cudarc::driver::DevicePtrMut;
+use cudarc::driver::DeviceRepr;
 use vortex::array::buffer::BufferHandle;
 use vortex::error::VortexResult;
+use vortex::error::vortex_ensure;
 use vortex::error::vortex_err;
+use vortex_cub::filter::CubFilterable;
 use vortex_cub::onpair;
 use vortex_cub::scan;
 use vortex_cub::scan::cudaStream_t;
 
 use crate::CudaBufferExt;
+use crate::CudaDeviceBuffer;
 use crate::CudaExecutionCtx;
 
 /// Regenerate the OnPair decode kernel's per-batch output offsets in one
@@ -103,6 +110,81 @@ pub(crate) fn exclusive_sum_i32(
     drop((record_input, record_output, record_temp));
 
     Ok(output)
+}
+
+/// Stable selection using packed, LSB-first device mask bits.
+///
+/// # Safety
+///
+/// Input values and the mask bits covering them must be initialized and available on the
+/// execution stream. `selected` must equal the number of set bits in that mask range: it
+/// determines output capacity and the number of initialized elements returned.
+pub(crate) unsafe fn select_bitmask<T>(
+    input: CudaView<'_, T>,
+    bitmask: &CudaView<'_, u8>,
+    bit_offset: usize,
+    selected: usize,
+    ctx: &CudaExecutionCtx,
+) -> VortexResult<BufferHandle>
+where
+    T: DeviceRepr + CubFilterable + Debug + Send + Sync + 'static,
+{
+    let mask_end = bit_offset
+        .checked_add(input.len())
+        .ok_or_else(|| vortex_err!("selection mask range overflow"))?;
+    vortex_ensure!(
+        mask_end.div_ceil(8) <= bitmask.len(),
+        "selection mask is too short"
+    );
+    vortex_ensure!(
+        selected <= input.len(),
+        "selection count exceeds input length"
+    );
+    let output_bytes = selected
+        .checked_mul(size_of::<T>())
+        .ok_or_else(|| vortex_err!("selection output size overflow"))?;
+    let num_items = i64::try_from(input.len())?;
+    let bit_offset = u64::try_from(bit_offset)?;
+    let temp_bytes = T::get_temp_size(num_items)
+        .map_err(|error| vortex_err!("CUB select temp size failed: {error}"))?;
+    let mut temp = ctx.device_alloc::<u8>(temp_bytes.max(1))?;
+    let mut output = ctx.device_alloc::<T>(selected.max(1))?;
+    let mut num_selected = ctx.device_alloc::<i64>(1)?;
+
+    let stream = ctx.stream();
+    let (input_ptr, record_input) = input.device_ptr(stream);
+    let (mask_ptr, record_mask) = bitmask.device_ptr(stream);
+    let (temp_ptr, record_temp) = temp.device_ptr_mut(stream);
+    let (output_ptr, record_output) = output.device_ptr_mut(stream);
+    let (num_selected_ptr, record_num_selected) = num_selected.device_ptr_mut(stream);
+    let stream_ptr = stream.cu_stream() as cudaStream_t;
+    ctx.launch_external(selected, || {
+        // SAFETY: Views and guards retain every allocation through this launch. Buffer sizes
+        // are checked above; the caller guarantees initialized inputs and the exact count.
+        unsafe {
+            T::filter_bitmask(
+                temp_ptr as *mut c_void,
+                temp_bytes,
+                input_ptr as *const T,
+                mask_ptr as *const u8,
+                bit_offset,
+                output_ptr as *mut T,
+                num_selected_ptr as *mut i64,
+                num_items,
+                stream_ptr,
+            )
+        }
+        .map_err(|error| vortex_err!("CUB select failed: {error}"))
+    })?;
+    drop((
+        record_input,
+        record_mask,
+        record_temp,
+        record_output,
+        record_num_selected,
+    ));
+
+    Ok(BufferHandle::new_device(Arc::new(CudaDeviceBuffer::new(output))).slice(0..output_bytes))
 }
 
 #[cfg(test)]
