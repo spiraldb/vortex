@@ -243,3 +243,37 @@ async fn wide_size_report() -> VortexResult<()> {
     }
     Ok(())
 }
+
+#[tokio::test]
+#[ignore = "timing report, run manually"]
+async fn wide_open_timing() -> VortexResult<()> {
+    use std::time::Instant;
+    for (kind, ncols) in [(ColumnKind::SmallI64, 10000), (ColumnKind::Mixed, 10000)] {
+        let array = wide_table(kind, ncols, 1000)?;
+        for dedup in [false, true] {
+            let bytes = write(&array, dedup).await?;
+            let mut open = std::time::Duration::ZERO;
+            let mut reader = std::time::Duration::ZERO;
+            let mut scan = std::time::Duration::ZERO;
+            let iters = 5;
+            for _ in 0..iters {
+                let t = Instant::now();
+                let file = SESSION.open_options().open_buffer(bytes.clone())?;
+                open += t.elapsed();
+                let t = Instant::now();
+                drop(file.layout_reader()?);
+                reader += t.elapsed();
+                let t = Instant::now();
+                file.scan()?.into_array_stream()?.read_all().await?;
+                scan += t.elapsed();
+            }
+            println!(
+                "{kind:?} cols={ncols} dedup={dedup}: open {:?}, layout reader {:?}, full scan {:?}",
+                open / iters,
+                reader / iters,
+                scan / iters
+            );
+        }
+    }
+    Ok(())
+}
