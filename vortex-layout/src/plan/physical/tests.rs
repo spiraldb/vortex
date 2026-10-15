@@ -1583,40 +1583,37 @@ fn legacy_stats_with_zero_zone_length_keep_only_data() -> VortexResult<()> {
     Ok(())
 }
 
-/// A dynamic predicate pushed onto dictionary values, then into their chunks, still makes the
-/// values uncacheable.
+/// A predicate holding a dynamic comparison is never pushed onto dictionary values, alone or
+/// alongside static conjuncts: it stays above the take, so the values never change.
 #[test]
-fn take_over_dynamic_chunked_values_is_not_cacheable() -> VortexResult<()> {
+fn dynamic_predicates_stay_above_dictionary_values() -> VortexResult<()> {
     let values_dtype = primitive(PType::I32, Nullability::NonNullable);
     let codes_dtype = primitive(PType::U8, Nullability::NonNullable);
-    let values = ChunkedLayout::new(
-        4,
-        values_dtype.clone(),
-        OwnedLayoutChildren::layout_children(vec![
-            flat(2, values_dtype.clone(), 0),
-            flat(2, values_dtype.clone(), 1),
-        ]),
-    )
-    .into_layout();
-    let layout = DictLayout::new(values, flat(3, codes_dtype, 2)).into_layout();
-    let predicate = dynamic(
-        CompareOperator::Gt,
-        || Some(ScalarValue::from(5_i32)),
-        values_dtype,
-        true,
-        root(),
-    );
+    let layout =
+        DictLayout::new(flat(2, values_dtype.clone(), 0), flat(3, codes_dtype, 1)).into_layout();
+    let threshold = || {
+        dynamic(
+            CompareOperator::Gt,
+            || Some(ScalarValue::from(5_i32)),
+            values_dtype.clone(),
+            true,
+            root(),
+        )
+    };
 
-    let optimized = optimize(make_eval(predicate, make_plan(layout)?)?.into_plan())?;
-    let take = optimized
-        .as_opt::<Take>()
-        .ok_or_else(|| vortex_err!("dynamic predicate was not pushed onto the values"))?;
-    assert!(
-        take.values()?.is::<Concat>(),
-        "{}",
-        optimized.display_tree()
-    );
-    assert!(!take.cacheable());
+    for predicate in [threshold(), and(gt(root(), lit(0_i32)), threshold())] {
+        let optimized =
+            optimize(make_eval(predicate, make_plan(Arc::clone(&layout))?)?.into_plan())?;
+        let eval = optimized
+            .as_opt::<Eval>()
+            .ok_or_else(|| vortex_err!("dynamic predicate was pushed down"))?;
+        let take = eval
+            .child_plan()?
+            .as_opt::<Take>()
+            .ok_or_else(|| vortex_err!("dynamic predicate is not over the take"))?
+            .clone();
+        assert!(!take.values()?.is::<Eval>(), "{}", optimized.display_tree());
+    }
     Ok(())
 }
 

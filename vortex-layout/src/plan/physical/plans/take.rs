@@ -27,7 +27,6 @@ use crate::plan::physical::PlanParts;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::PlanVTable;
 use crate::plan::physical::Share;
-use crate::plan::physical::Zoned;
 use crate::plan::physical::check_child_count;
 use crate::plan::physical::operators::OnceSource;
 use crate::plan::physical::operators::TakeSource;
@@ -47,52 +46,6 @@ pub struct Take;
 /// A plan that indexes one child by another.
 pub type TakePlan = Plan<Take>;
 
-/// Operator-specific data for a [`TakePlan`].
-#[derive(Clone, Debug)]
-pub struct TakeData {
-    /// Whether the values may be shared between the scans of a split. Values evaluated with a
-    /// dynamic comparison change as the engine updates it, so each scan evaluates them again.
-    cacheable: bool,
-}
-
-impl Default for TakeData {
-    fn default() -> Self {
-        Self { cacheable: true }
-    }
-}
-
-impl TakeData {
-    fn for_values(values: &PlanRef) -> VortexResult<Self> {
-        Ok(Self {
-            cacheable: !is_dynamic(values)?,
-        })
-    }
-}
-
-/// Whether `plan` evaluates a dynamic comparison anywhere beneath it, so its output changes as
-/// the engine updates the comparison. Rewrites move expressions down the plan, as into the chunks
-/// of a concatenation, so the whole subtree is checked.
-fn is_dynamic(plan: &PlanRef) -> VortexResult<bool> {
-    if let Some(eval) = plan.as_opt::<Eval>()
-        && eval.expression().contains::<DynamicComparison>()?
-    {
-        return Ok(true);
-    }
-    if let Some(expression) = plan
-        .as_opt::<Zoned>()
-        .and_then(|zoned| zoned.pruning_expression())
-        && expression.contains::<DynamicComparison>()?
-    {
-        return Ok(true);
-    }
-    for child in plan.children().iter_refs() {
-        if is_dynamic(child?)? {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
 impl TakePlan {
     /// Creates a take from potentially unresolved children without validation.
     ///
@@ -110,7 +63,7 @@ impl TakePlan {
             dtype,
             row_count,
             children,
-            data: TakeData::default(),
+            data: (),
         }
         .into_typed()
     }
@@ -123,14 +76,12 @@ impl TakePlan {
             .dtype()
             .union_nullability(codes.dtype().nullability());
         let row_count = codes.row_count();
-        // A values plan that cannot be inspected is evaluated again by each scan.
-        let data = TakeData::for_values(&values).unwrap_or(TakeData { cacheable: false });
         PlanParts {
             vtable: Take,
             dtype,
             row_count,
             children: vec![codes, values].into(),
-            data,
+            data: (),
         }
         .into_typed()
     }
@@ -144,15 +95,10 @@ impl TakePlan {
     pub fn values(&self) -> VortexResult<PlanRef> {
         self.child_required(VALUES)
     }
-
-    /// Whether the values may be shared between the scans of a split.
-    pub(crate) fn cacheable(&self) -> bool {
-        self.data().cacheable
-    }
 }
 
 impl PlanVTable for Take {
-    type PlanData = TakeData;
+    type PlanData = ();
     type Metadata = EmptyMetadata;
 
     fn id(&self) -> PlanId {
@@ -167,7 +113,7 @@ impl PlanVTable for Take {
     fn with_children(
         plan: &Plan<Self>,
         children: &PlanChildren,
-        data: &mut Self::PlanData,
+        _data: &mut Self::PlanData,
     ) -> VortexResult<()> {
         check_child_count("Take", children, 2)?;
         let codes = children
@@ -176,8 +122,6 @@ impl PlanVTable for Take {
         let values = children
             .get(VALUES)?
             .ok_or_else(|| vortex_error::vortex_err!("Take values child is absent"))?;
-        // New children may produce different values.
-        *data = TakeData::for_values(&values)?;
         let dtype = values
             .dtype()
             .union_nullability(codes.dtype().nullability());
@@ -206,9 +150,9 @@ impl PlanVTable for Take {
         let Some(codes) = compiler.compile(&plan.codes()?, rows, mask)? else {
             return Ok(None);
         };
-        let cache = plan.cacheable().then(|| compiler.values().clone());
+        let cache = compiler.values().clone();
         let values_plan = plan.values()?;
-        if let Some(values) = cache.as_ref().and_then(|cache| cache.get(&values_plan)) {
+        if let Some(values) = cache.get(&values_plan) {
             let source = TakeSource::new(plan.clone(), Some(values), None);
             return Ok(Some(compiler.join(vec![codes], source)));
         }
@@ -221,7 +165,7 @@ impl PlanVTable for Take {
                 Canonical::empty(values.dtype()).into_array(),
             )),
         };
-        let source = TakeSource::new(plan.clone(), None, cache);
+        let source = TakeSource::new(plan.clone(), None, Some(cache));
         Ok(Some(compiler.join_with(
             vec![codes, values],
             TakeSource::capacity,
@@ -271,6 +215,12 @@ impl PlanParentReduceRule<Take> for ExpressionTakeRule {
         _child_idx: usize,
     ) -> VortexResult<Option<PlanRef>> {
         let expression = parent.expression();
+        // A dynamic comparison stays above the take: evaluated per batch it reads the latest
+        // bound, and the dictionary batches the take emits evaluate it over their values anyway.
+        // Values it never reaches can always be kept between scans.
+        if expression.contains::<DynamicComparison>()? {
+            return Ok(None);
+        }
         // Strictness keeps a null code null. Without null codes every row takes its value's result.
         let codes_nullable = child.codes()?.dtype().is_nullable();
         let labels = label_bound_tree(
