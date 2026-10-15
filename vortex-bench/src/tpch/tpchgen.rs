@@ -75,9 +75,6 @@ pub struct TpchGenOptions {
     pub format: Format,
     /// Batch size for streaming
     pub batch_size: usize,
-    /// Split each table into files of about [`split::TARGET_FILE_COMPRESSED_BYTES`] named by
-    /// [`split::part_file_name`]. Otherwise each table is a single `{table}.{ext}` file.
-    pub split_files: bool,
 }
 
 impl Default for TpchGenOptions {
@@ -87,7 +84,6 @@ impl Default for TpchGenOptions {
             output_dir: "tpch".to_data_path(),
             format: Format::Parquet,
             batch_size: 8192 * 64,
-            split_files: true,
         }
     }
 }
@@ -110,11 +106,6 @@ impl TpchGenOptions {
         self.batch_size = batch_size;
         self
     }
-
-    pub fn with_split_files(mut self, split_files: bool) -> Self {
-        self.split_files = split_files;
-        self
-    }
 }
 
 /// Generate all TPC-H tables for a single scale factor
@@ -124,11 +115,7 @@ pub async fn generate_tpch_tables(options: TpchGenOptions) -> Result<()> {
     let scale_factor = options.scale_factor.parse::<f64>()?;
     let mut all_futures = Vec::new();
     for generator in TableGenerator::ALL {
-        let num_parts = if options.split_files {
-            generator.num_parts(scale_factor)?
-        } else {
-            1
-        };
+        let num_parts = generator.num_parts(scale_factor)?;
         info!(
             scale_factor = options.scale_factor,
             format = %options.format,
@@ -258,11 +245,7 @@ fn generate_table_file(
     fs::create_dir_all(&output_dir)?;
 
     let table_name = generator.name();
-    let output_file = if options.split_files {
-        output_dir.join(split::part_file_name(table_name, part, write_format.ext()))
-    } else {
-        output_dir.join(format!("{table_name}.{}", write_format.ext()))
-    };
+    let output_file = output_dir.join(split::part_file_name(table_name, part, write_format.ext()));
 
     let future = async move {
         let of = output_file.clone();
