@@ -25,7 +25,6 @@ use parquet::arrow::arrow_writer::compute_leaves;
 use parquet::basic::Compression;
 use parquet::basic::ZstdLevel;
 use parquet::file::properties::WriterProperties;
-use tokio::runtime::Handle;
 use vortex_bench::Format;
 use vortex_bench::compress::Compressed;
 use vortex_bench::compress::CompressedData;
@@ -264,71 +263,38 @@ pub async fn parquet_decompress_read(buf: Bytes) -> anyhow::Result<usize> {
         Arc::clone(metadata.metadata()),
         ArrowReaderOptions::new().with_schema(view_schema),
     )?;
-    let num_row_groups = metadata.metadata().num_row_groups();
     let num_columns = metadata.schema().fields().len();
     let columns =
         read_projection(num_columns).map_or_else(|| (0..num_columns).collect(), <[usize]>::to_vec);
+    let projection = ProjectionMask::roots(metadata.parquet_schema(), columns);
 
-    // Uncompressed bytes per (row group, root column), to size and order the units.
-    let parquet_schema = metadata.parquet_schema();
-    let root_bytes: Vec<Vec<i64>> = metadata
+    // Parallelise by row group, as DataFusion and DuckDB scan Parquet: each task decodes one whole
+    // row group, all projected columns, and the runtime's workers share the tasks.
+    let row_groups: Vec<(usize, usize)> = metadata
         .metadata()
         .row_groups()
         .iter()
-        .map(|rg| {
-            let mut bytes = vec![0; num_columns];
-            for (leaf_idx, chunk) in rg.columns().iter().enumerate() {
-                bytes[parquet_schema.get_column_root_idx(leaf_idx)] += chunk.uncompressed_size();
+        .enumerate()
+        .map(|(rg, rg_meta)| (rg, usize::try_from(rg_meta.num_rows()).unwrap_or(0)))
+        .collect();
+
+    let sizes = parallel_map(
+        row_groups,
+        |(_, rows)| *rows,
+        move |(rg, _)| {
+            let reader =
+                ParquetRecordBatchReaderBuilder::new_with_metadata(buf.clone(), metadata.clone())
+                    .with_row_groups(vec![rg])
+                    .with_projection(projection.clone())
+                    .with_batch_size(DECODE_BATCH_SIZE)
+                    .build()?;
+            let mut nbytes = 0;
+            for batch in reader {
+                nbytes += batch?.get_array_memory_size();
             }
-            bytes
-        })
-        .collect();
-
-    // Decode (row group, column range) units independently. Setting up a reader costs time
-    // proportional to the schema width, so the number of units is capped to keep the total setup
-    // cost bounded: narrow schemas decode one column per unit, wide ones batch contiguous columns
-    // into a few units per worker. Units are also kept large enough that decoding them outweighs
-    // that setup, so small files are not split into many tiny readers.
-    let total_bytes: usize = root_bytes
-        .iter()
-        .flat_map(|bytes| columns.iter().map(|&col| bytes[col]))
-        .map(|bytes| usize::try_from(bytes).unwrap_or(0))
-        .sum();
-    let column_units = columns.len() * num_row_groups;
-    let target_units = Handle::current().metrics().num_workers() * 4;
-    let max_units = target_units
-        .max(DECODE_SETUP_BUDGET / num_columns.max(1))
-        .min(total_bytes / MIN_DECODE_UNIT_BYTES)
-        .max(1);
-    let cols_per_unit = column_units.div_ceil(max_units).max(1);
-    let units: Vec<_> = (0..num_row_groups)
-        .flat_map(|rg| {
-            columns
-                .chunks(cols_per_unit)
-                .map(move |cols| (rg, cols.to_vec()))
-        })
-        .collect();
-
-    let decode_cost = move |(rg, cols): &(usize, Vec<usize>)| {
-        cols.iter()
-            .map(|&col| usize::try_from(root_bytes[*rg][col]).unwrap_or(0))
-            .sum()
-    };
-
-    let sizes = parallel_map(units, decode_cost, move |(rg, cols)| {
-        let projection = ProjectionMask::roots(metadata.parquet_schema(), cols);
-        let reader =
-            ParquetRecordBatchReaderBuilder::new_with_metadata(buf.clone(), metadata.clone())
-                .with_row_groups(vec![rg])
-                .with_batch_size(DECODE_BATCH_SIZE)
-                .with_projection(projection)
-                .build()?;
-        let mut nbytes = 0;
-        for batch in reader {
-            nbytes += batch?.get_array_memory_size();
-        }
-        Ok(nbytes)
-    })
+            Ok(nbytes)
+        },
+    )
     .await?;
 
     Ok(sizes.into_iter().sum())
@@ -337,15 +303,9 @@ pub async fn parquet_decompress_read(buf: Bytes) -> anyhow::Result<usize> {
 /// Footer bytes reserved per column chunk when sizing the output buffer.
 const FOOTER_BYTES_PER_CHUNK: usize = 1024;
 
-/// Fewest uncompressed bytes worth giving a decode unit of its own.
-const MIN_DECODE_UNIT_BYTES: usize = 256 * 1024;
-
 /// Rows per decoded batch: the Vortex writer's row block size, so both readers emit batches of
 /// the same length.
 const DECODE_BATCH_SIZE: usize = 8192;
-
-/// Bound on (decode units × schema width), the total reader setup work in a parallel decode.
-const DECODE_SETUP_BUDGET: usize = 4096;
 
 /// Run `f` over `items` as tasks on the current Tokio runtime, returning the results in input
 /// order.

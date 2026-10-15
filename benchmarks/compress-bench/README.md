@@ -19,7 +19,8 @@ See [`src/main.rs`](./src/main.rs) for the dataset list and CLI flags (`--format
 
 ## CPU parallelism
 
-Vortex and Parquet get the same CPU budget. The binary runs one multi-threaded Tokio runtime,
+Vortex and Parquet get the same CPU budget, and each uses it the way its own default reader and
+writer would. The binary runs one multi-threaded Tokio runtime,
 sized by `--threads` (default: one worker per available core), and every timed Vortex and
 Parquet operation runs as a task on it, so neither format uses threads outside that pool and the
 main thread does none of the timed work. `--threads 1` compares single-worker decoders;
@@ -32,13 +33,12 @@ compressor splits its work into tasks on the same runtime:
   `max_row_group_row_count` (1,048,576 rows), the same boundaries `ArrowWriter` produces, then
   encodes every (row group, top-level field) chunk as its own task with parquet-rs's
   `ArrowRowGroupWriterFactory`, largest first, and appends the chunks in order into an output
-  buffer sized once from the encoded chunk sizes.
-- **Decompress** parses the footer once and decodes (row group, column range) units as tasks,
-  largest first, each with its own `ParquetRecordBatchReader`. Narrow schemas get one column per
-  unit, so files with a single row group still decode their columns concurrently; very wide
-  schemas batch contiguous columns, because reader setup scales with the schema width. To match
-  the Vortex reader's output, strings and binaries decode to `Utf8View` / `BinaryView`, in
-  batches of 8,192 rows (the Vortex writer's row block size).
+  buffer sized once from the encoded chunk sizes. This is how DataFusion's parallel Parquet
+  writer (`ParquetSink`) uses multiple cores.
+- **Decompress** scans the way DataFusion and DuckDB do: one task per row group, each decoding
+  all projected columns of its row group, so the scan uses as many workers as the file has row
+  groups. To match the Vortex reader's output, strings and binaries decode to `Utf8View` /
+  `BinaryView`, in batches of 8,192 rows (the Vortex writer's row block size).
 
 The written file has the same row groups, encodings and compression as a sequential
 `ArrowWriter` with the same settings. Arrow IPC is a serialization baseline and stays
