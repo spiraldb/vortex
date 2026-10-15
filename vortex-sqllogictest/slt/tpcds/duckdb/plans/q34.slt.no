@@ -460,7 +460,7 @@ logical_opt [
                                                                                                         "extra_info": {
                                                                                                             "Filters": [
                                                                                                                 "((($.d_dom >= 1i64) and ($.d_dom <= 3i64)) or (($.d_dom >= 25i64) and ($.d_dom <= 28i64)))",
-                                                                                                                "vortex.list.contains([1999i64, 2000i64, 2001i64], $.d_year)",
+                                                                                                                "vortex.list.contains([1999i64, 2000i64, 2001i64], $.d_year, opts=sql_null_semantics)",
                                                                                                                 "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                                                             ],
                                                                                                             "Function": "Vortex Scan",
@@ -479,7 +479,7 @@ logical_opt [
                                                                                             "Expressions": [
                                                                                                 "CAST(#0 AS SMALLINT)",
                                                                                                 "CAST(#1 AS SMALLINT)",
-                                                                                                "__internal_compress_integral_usmallint(#2, 2450816)"
+                                                                                                "#2"
                                                                                             ],
                                                                                             "Estimated Cardinality": "11538"
                                                                                         }
@@ -737,7 +737,7 @@ physical_plan [
                                                                                                                     "Function": "Vortex Scan",
                                                                                                                     "Filters": [
                                                                                                                         "((($.d_dom >= 1i64) and ($.d_dom <= 3i64)) or (($.d_dom >= 25i64) and ($.d_dom <= 28i64)))",
-                                                                                                                        "vortex.list.contains([1999i64, 2000i64, 2001i64], $.d_year)",
+                                                                                                                        "vortex.list.contains([1999i64, 2000i64, 2001i64], $.d_year, opts=sql_null_semantics)",
                                                                                                                         "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                                                                     ],
                                                                                                                     "Projections": "d_date_sk",
@@ -756,7 +756,7 @@ physical_plan [
                                                                                                     "Projections": [
                                                                                                         "CAST(#0 AS SMALLINT)",
                                                                                                         "CAST(#1 AS SMALLINT)",
-                                                                                                        "__internal_compress_integral_usmallint(#2, 2450816)"
+                                                                                                        "#2"
                                                                                                     ],
                                                                                                     "Estimated Cardinality": "11538"
                                                                                                 }

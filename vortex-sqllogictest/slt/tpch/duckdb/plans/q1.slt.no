@@ -185,7 +185,7 @@ logical_opt [
                                         "sum(l_extendedprice)",
                                         "sum(#4)",
                                         "sum((#4 * (1.00 + l_tax)))",
-                                        "sum(l_discount)",
+                                        "avg(l_discount)",
                                         "count_star()"
                                     ],
                                     "Estimated Cardinality": "120113"
@@ -202,7 +202,7 @@ logical_opt [
                                 "#5",
                                 "\"/\"(CAST(#2 AS DOUBLE), CAST(#7 AS DOUBLE))",
                                 "\"/\"(CAST(#3 AS DOUBLE), CAST(#7 AS DOUBLE))",
-                                "\"/\"(CAST(#6 AS DOUBLE), CAST(#7 AS DOUBLE))",
+                                "#6",
                                 "#7"
                             ],
                             "Estimated Cardinality": "120113"
@@ -307,7 +307,7 @@ physical_plan [
                                 "sum(#3)",
                                 "sum(#4)",
                                 "sum(#5)",
-                                "sum(#6)",
+                                "avg(#6)",
                                 "count_star()"
                             ],
                             "Estimated Cardinality": "120113"
@@ -324,7 +324,7 @@ physical_plan [
                         "#5",
                         "\"/\"(CAST(#2 AS DOUBLE), CAST(#7 AS DOUBLE))",
                         "\"/\"(CAST(#3 AS DOUBLE), CAST(#7 AS DOUBLE))",
-                        "\"/\"(CAST(#6 AS DOUBLE), CAST(#7 AS DOUBLE))",
+                        "#6",
                         "#7"
                     ],
                     "Estimated Cardinality": "120113"

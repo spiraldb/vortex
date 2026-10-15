@@ -998,7 +998,7 @@ logical_opt [
                                                                                                                         ],
                                                                                                                         "extra_info": {
                                                                                                                             "Expressions": [
-                                                                                                                                "__internal_compress_integral_usmallint(#0, 2450816)",
+                                                                                                                                "#0",
                                                                                                                                 "CAST(#1 AS SMALLINT)",
                                                                                                                                 "#2",
                                                                                                                                 "#3",
@@ -1166,7 +1166,7 @@ logical_opt [
                                                                                                                         ],
                                                                                                                         "extra_info": {
                                                                                                                             "Expressions": [
-                                                                                                                                "__internal_compress_integral_usmallint(#0, 2450815)",
+                                                                                                                                "#0",
                                                                                                                                 "CAST(#1 AS SMALLINT)",
                                                                                                                                 "#2",
                                                                                                                                 "#3",
@@ -1338,7 +1338,7 @@ logical_opt [
                                                                                                                                 "#2",
                                                                                                                                 "#3",
                                                                                                                                 "#4",
-                                                                                                                                "__internal_compress_integral_usmallint(#5, 2450816)"
+                                                                                                                                "#5"
                                                                                                                             ],
                                                                                                                             "Estimated Cardinality": "13737"
                                                                                                                         }
@@ -1616,7 +1616,7 @@ physical_plan [
                                                                                                                                         ],
                                                                                                                                         "extra_info": {
                                                                                                                                             "Projections": [
-                                                                                                                                                "__internal_compress_integral_usmallint(#0, 2450816)",
+                                                                                                                                                "#0",
                                                                                                                                                 "CAST(#1 AS SMALLINT)",
                                                                                                                                                 "#2",
                                                                                                                                                 "#3",
@@ -1834,7 +1834,7 @@ physical_plan [
                                                                                                                                         ],
                                                                                                                                         "extra_info": {
                                                                                                                                             "Projections": [
-                                                                                                                                                "__internal_compress_integral_usmallint(#0, 2450815)",
+                                                                                                                                                "#0",
                                                                                                                                                 "CAST(#1 AS SMALLINT)",
                                                                                                                                                 "#2",
                                                                                                                                                 "#3",
@@ -2056,7 +2056,7 @@ physical_plan [
                                                                                                                                                 "#2",
                                                                                                                                                 "#3",
                                                                                                                                                 "#4",
-                                                                                                                                                "__internal_compress_integral_usmallint(#5, 2450816)"
+                                                                                                                                                "#5"
                                                                                                                                             ],
                                                                                                                                             "Estimated Cardinality": "13737"
                                                                                                                                         }

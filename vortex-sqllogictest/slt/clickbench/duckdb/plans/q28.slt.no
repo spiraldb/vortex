@@ -197,70 +197,43 @@ logical_opt [
                 "name": "PROJECTION",
                 "children": [
                     {
-                        "name": "PROJECTION",
+                        "name": "FILTER",
                         "children": [
                             {
-                                "name": "FILTER",
+                                "name": "AGGREGATE",
                                 "children": [
                                     {
-                                        "name": "AGGREGATE",
+                                        "name": "PROJECTION",
                                         "children": [
                                             {
-                                                "name": "PROJECTION",
-                                                "children": [
-                                                    {
-                                                        "name": "PROJECTION",
-                                                        "children": [
-                                                            {
-                                                                "name": "READ_VORTEX",
-                                                                "children": [],
-                                                                "extra_info": {
-                                                                    "Filters": "($.Referer != \"\")",
-                                                                    "Function": "Vortex Scan",
-                                                                    "Estimated Cardinality": "200000"
-                                                                }
-                                                            }
-                                                        ],
-                                                        "extra_info": {
-                                                            "Expressions": "Referer",
-                                                            "Estimated Cardinality": "200000"
-                                                        }
-                                                    }
-                                                ],
+                                                "name": "READ_VORTEX",
+                                                "children": [],
                                                 "extra_info": {
-                                                    "Expressions": [
-                                                        "Referer",
-                                                        "strlen(Referer)"
-                                                    ],
+                                                    "Filters": "($.Referer != \"\")",
+                                                    "Function": "Vortex Scan",
                                                     "Estimated Cardinality": "200000"
                                                 }
                                             }
                                         ],
                                         "extra_info": {
-                                            "Groups": "k",
-                                            "Expressions": [
-                                                "count_star()",
-                                                "sum(#1)",
-                                                "min(Referer)",
-                                                "count(#1)"
-                                            ],
-                                            "Estimated Cardinality": "100000"
+                                            "Expressions": "Referer",
+                                            "Estimated Cardinality": "200000"
                                         }
                                     }
                                 ],
                                 "extra_info": {
-                                    "Expressions": "(count_star() > 100000)",
-                                    "Estimated Cardinality": "20000"
+                                    "Groups": "k",
+                                    "Expressions": [
+                                        "count_star()",
+                                        "avg(strlen(Referer))",
+                                        "min(Referer)"
+                                    ],
+                                    "Estimated Cardinality": "100000"
                                 }
                             }
                         ],
                         "extra_info": {
-                            "Expressions": [
-                                "#0",
-                                "#1",
-                                "\"/\"(CAST(#2 AS DOUBLE), CAST(#4 AS DOUBLE))",
-                                "#3"
-                            ],
+                            "Expressions": "(count_star() > 100000)",
                             "Estimated Cardinality": "20000"
                         }
                     }
@@ -290,76 +263,48 @@ physical_plan [
                 "name": "PROJECTION",
                 "children": [
                     {
-                        "name": "PROJECTION",
+                        "name": "FILTER",
                         "children": [
                             {
-                                "name": "FILTER",
+                                "name": "HASH_GROUP_BY",
                                 "children": [
                                     {
-                                        "name": "HASH_GROUP_BY",
+                                        "name": "PROJECTION",
                                         "children": [
                                             {
-                                                "name": "PROJECTION",
-                                                "children": [
-                                                    {
-                                                        "name": "PROJECTION",
-                                                        "children": [
-                                                            {
-                                                                "name": "READ_VORTEX",
-                                                                "children": [],
-                                                                "extra_info": {
-                                                                    "Function": "Vortex Scan",
-                                                                    "Filters": "($.Referer != \"\")",
-                                                                    "Projections": "Referer",
-                                                                    "Estimated Cardinality": "200000"
-                                                                }
-                                                            }
-                                                        ],
-                                                        "extra_info": {
-                                                            "Projections": [
-                                                                "Referer",
-                                                                "strlen(Referer)"
-                                                            ],
-                                                            "Estimated Cardinality": "200000"
-                                                        }
-                                                    }
-                                                ],
+                                                "name": "READ_VORTEX",
+                                                "children": [],
                                                 "extra_info": {
-                                                    "Projections": [
-                                                        "k",
-                                                        "#1",
-                                                        "Referer",
-                                                        "#1"
-                                                    ],
+                                                    "Function": "Vortex Scan",
+                                                    "Filters": "($.Referer != \"\")",
+                                                    "Projections": "Referer",
                                                     "Estimated Cardinality": "200000"
                                                 }
                                             }
                                         ],
                                         "extra_info": {
-                                            "Groups": "#0",
-                                            "Aggregates": [
-                                                "count_star()",
-                                                "sum(#1)",
-                                                "min(#2)",
-                                                "count(#3)"
+                                            "Projections": [
+                                                "k",
+                                                "strlen(Referer)",
+                                                "Referer"
                                             ],
-                                            "Estimated Cardinality": "100000"
+                                            "Estimated Cardinality": "200000"
                                         }
                                     }
                                 ],
                                 "extra_info": {
-                                    "Expression": "(count_star() > 100000)",
-                                    "Estimated Cardinality": "20000"
+                                    "Groups": "#0",
+                                    "Aggregates": [
+                                        "count_star()",
+                                        "avg(#1)",
+                                        "min(#2)"
+                                    ],
+                                    "Estimated Cardinality": "100000"
                                 }
                             }
                         ],
                         "extra_info": {
-                            "Projections": [
-                                "#0",
-                                "#1",
-                                "\"/\"(CAST(#2 AS DOUBLE), CAST(#4 AS DOUBLE))",
-                                "#3"
-                            ],
+                            "Expression": "(count_star() > 100000)",
                             "Estimated Cardinality": "20000"
                         }
                     }

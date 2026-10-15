@@ -177,7 +177,7 @@ logical_opt [
                                         "children": [],
                                         "extra_info": {
                                             "Filters": [
-                                                "vortex.list.contains([\"MAIL\", \"SHIP\"], $.l_shipmode)",
+                                                "vortex.list.contains([\"MAIL\", \"SHIP\"], $.l_shipmode, opts=sql_null_semantics)",
                                                 "($.l_commitdate < $.l_receiptdate)",
                                                 "($.l_shipdate < $.l_commitdate)",
                                                 "(1994-01-01 <= $.l_receiptdate < 1995-01-01)",
@@ -253,7 +253,7 @@ physical_plan [
                                         "extra_info": {
                                             "Function": "Vortex Scan",
                                             "Filters": [
-                                                "vortex.list.contains([\"MAIL\", \"SHIP\"], $.l_shipmode)",
+                                                "vortex.list.contains([\"MAIL\", \"SHIP\"], $.l_shipmode, opts=sql_null_semantics)",
                                                 "($.l_commitdate < $.l_receiptdate)",
                                                 "($.l_shipdate < $.l_commitdate)",
                                                 "(1994-01-01 <= $.l_receiptdate < 1995-01-01)",

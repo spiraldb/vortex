@@ -181,10 +181,10 @@ logical_opt [
                 "name": "PROJECTION",
                 "children": [
                     {
-                        "name": "PROJECTION",
+                        "name": "CTE",
                         "children": [
                             {
-                                "name": "CTE",
+                                "name": "PROJECTION",
                                 "children": [
                                     {
                                         "name": "PROJECTION",
@@ -193,35 +193,21 @@ logical_opt [
                                                 "name": "PROJECTION",
                                                 "children": [
                                                     {
-                                                        "name": "PROJECTION",
-                                                        "children": [
-                                                            {
-                                                                "name": "READ_VORTEX",
-                                                                "children": [],
-                                                                "extra_info": {
-                                                                    "Filters": "",
-                                                                    "Function": "Vortex Scan",
-                                                                    "Estimated Cardinality": "1000000"
-                                                                }
-                                                            }
-                                                        ],
+                                                        "name": "READ_VORTEX",
+                                                        "children": [],
                                                         "extra_info": {
-                                                            "Expressions": [
-                                                                "RegionID",
-                                                                "UserID",
-                                                                "ResolutionWidth",
-                                                                "AdvEngineID"
-                                                            ],
+                                                            "Filters": "",
+                                                            "Function": "Vortex Scan",
                                                             "Estimated Cardinality": "1000000"
                                                         }
                                                     }
                                                 ],
                                                 "extra_info": {
                                                     "Expressions": [
-                                                        "#0",
-                                                        "#1",
-                                                        "#2",
-                                                        "#3"
+                                                        "RegionID",
+                                                        "UserID",
+                                                        "ResolutionWidth",
+                                                        "AdvEngineID"
                                                     ],
                                                     "Estimated Cardinality": "1000000"
                                                 }
@@ -236,12 +222,48 @@ logical_opt [
                                             ],
                                             "Estimated Cardinality": "1000000"
                                         }
-                                    },
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Expressions": [
+                                        "#0",
+                                        "#1",
+                                        "#2",
+                                        "#3"
+                                    ],
+                                    "Estimated Cardinality": "1000000"
+                                }
+                            },
+                            {
+                                "name": "PROJECTION",
+                                "children": [
                                     {
-                                        "name": "PROJECTION",
+                                        "name": "COMPARISON_JOIN",
                                         "children": [
                                             {
-                                                "name": "COMPARISON_JOIN",
+                                                "name": "AGGREGATE",
+                                                "children": [
+                                                    {
+                                                        "name": "CTE_SCAN",
+                                                        "children": [],
+                                                        "extra_info": {
+                                                            "CTE Index": "13",
+                                                            "Estimated Cardinality": "1000000"
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Groups": "RegionID",
+                                                    "Expressions": [
+                                                        "sum(AdvEngineID)",
+                                                        "count_star()",
+                                                        "avg(ResolutionWidth)"
+                                                    ],
+                                                    "Estimated Cardinality": "500000"
+                                                }
+                                            },
+                                            {
+                                                "name": "AGGREGATE",
                                                 "children": [
                                                     {
                                                         "name": "AGGREGATE",
@@ -250,109 +272,50 @@ logical_opt [
                                                                 "name": "CTE_SCAN",
                                                                 "children": [],
                                                                 "extra_info": {
-                                                                    "CTE Index": "14",
+                                                                    "CTE Index": "13",
                                                                     "Estimated Cardinality": "1000000"
                                                                 }
                                                             }
                                                         ],
                                                         "extra_info": {
-                                                            "Groups": "RegionID",
-                                                            "Expressions": [
-                                                                "sum(AdvEngineID)",
-                                                                "count_star()",
-                                                                "sum(ResolutionWidth)"
+                                                            "Groups": [
+                                                                "RegionID",
+                                                                "UserID"
                                                             ],
+                                                            "Expressions": "",
                                                             "Estimated Cardinality": "500000"
-                                                        }
-                                                    },
-                                                    {
-                                                        "name": "AGGREGATE",
-                                                        "children": [
-                                                            {
-                                                                "name": "PROJECTION",
-                                                                "children": [
-                                                                    {
-                                                                        "name": "AGGREGATE",
-                                                                        "children": [
-                                                                            {
-                                                                                "name": "PROJECTION",
-                                                                                "children": [
-                                                                                    {
-                                                                                        "name": "CTE_SCAN",
-                                                                                        "children": [],
-                                                                                        "extra_info": {
-                                                                                            "CTE Index": "14",
-                                                                                            "Estimated Cardinality": "1000000"
-                                                                                        }
-                                                                                    }
-                                                                                ],
-                                                                                "extra_info": {
-                                                                                    "Expressions": [
-                                                                                        "#0",
-                                                                                        "#1"
-                                                                                    ],
-                                                                                    "Estimated Cardinality": "1000000"
-                                                                                }
-                                                                            }
-                                                                        ],
-                                                                        "extra_info": {
-                                                                            "Groups": [
-                                                                                "RegionID",
-                                                                                "UserID"
-                                                                            ],
-                                                                            "Expressions": "",
-                                                                            "Estimated Cardinality": "500000"
-                                                                        }
-                                                                    }
-                                                                ],
-                                                                "extra_info": {
-                                                                    "Expressions": "#0",
-                                                                    "Estimated Cardinality": "500000"
-                                                                }
-                                                            }
-                                                        ],
-                                                        "extra_info": {
-                                                            "Groups": "#0",
-                                                            "Expressions": "count_star()",
-                                                            "Estimated Cardinality": "250000"
                                                         }
                                                     }
                                                 ],
                                                 "extra_info": {
-                                                    "Join Type": "INNER",
-                                                    "Conditions": "(#0 IS NOT DISTINCT FROM #0)",
-                                                    "Estimated Cardinality": "954715"
+                                                    "Groups": "#0",
+                                                    "Expressions": "count_star()",
+                                                    "Estimated Cardinality": "250000"
                                                 }
                                             }
                                         ],
                                         "extra_info": {
-                                            "Expressions": [
-                                                "#3",
-                                                "#0",
-                                                "#1",
-                                                "#2",
-                                                "#4",
-                                                "#1"
-                                            ],
+                                            "Join Type": "INNER",
+                                            "Conditions": "(#0 IS NOT DISTINCT FROM #0)",
                                             "Estimated Cardinality": "954715"
                                         }
                                     }
                                 ],
                                 "extra_info": {
-                                    "CTE Name": "__aggregate_cte_14",
-                                    "Table Index": "14",
+                                    "Expressions": [
+                                        "#3",
+                                        "#0",
+                                        "#1",
+                                        "#2",
+                                        "#4"
+                                    ],
                                     "Estimated Cardinality": "954715"
                                 }
                             }
                         ],
                         "extra_info": {
-                            "Expressions": [
-                                "#0",
-                                "#1",
-                                "#2",
-                                "\"/\"(CAST(#3 AS DOUBLE), CAST(#5 AS DOUBLE))",
-                                "#4"
-                            ],
+                            "CTE Name": "__aggregate_cte_13",
+                            "Table Index": "13",
                             "Estimated Cardinality": "954715"
                         }
                     }
@@ -380,176 +343,139 @@ physical_plan [
         "name": "TOP_N",
         "children": [
             {
-                "name": "PROJECTION",
+                "name": "CTE",
                 "children": [
                     {
-                        "name": "CTE",
+                        "name": "READ_VORTEX",
+                        "children": [],
+                        "extra_info": {
+                            "Function": "Vortex Scan",
+                            "Projections": [
+                                "RegionID",
+                                "UserID",
+                                "ResolutionWidth",
+                                "AdvEngineID"
+                            ],
+                            "Estimated Cardinality": "1000000"
+                        }
+                    },
+                    {
+                        "name": "PROJECTION",
                         "children": [
                             {
-                                "name": "READ_VORTEX",
-                                "children": [],
-                                "extra_info": {
-                                    "Function": "Vortex Scan",
-                                    "Projections": [
-                                        "RegionID",
-                                        "UserID",
-                                        "ResolutionWidth",
-                                        "AdvEngineID"
-                                    ],
-                                    "Estimated Cardinality": "1000000"
-                                }
-                            },
-                            {
-                                "name": "PROJECTION",
+                                "name": "HASH_JOIN",
                                 "children": [
                                     {
-                                        "name": "HASH_JOIN",
+                                        "name": "HASH_GROUP_BY",
                                         "children": [
                                             {
-                                                "name": "HASH_GROUP_BY",
+                                                "name": "PROJECTION",
                                                 "children": [
                                                     {
-                                                        "name": "PROJECTION",
-                                                        "children": [
-                                                            {
-                                                                "name": "CTE_SCAN",
-                                                                "children": [],
-                                                                "extra_info": {
-                                                                    "CTE Index": "14",
-                                                                    "Estimated Cardinality": "1000000"
-                                                                }
-                                                            }
-                                                        ],
+                                                        "name": "CTE_SCAN",
+                                                        "children": [],
                                                         "extra_info": {
-                                                            "Projections": [
-                                                                "RegionID",
-                                                                "AdvEngineID",
-                                                                "ResolutionWidth"
-                                                            ],
+                                                            "CTE Index": "13",
                                                             "Estimated Cardinality": "1000000"
                                                         }
                                                     }
                                                 ],
                                                 "extra_info": {
-                                                    "Groups": "#0",
-                                                    "Aggregates": [
-                                                        "sum(#1)",
-                                                        "count_star()",
-                                                        "sum(#2)"
+                                                    "Projections": [
+                                                        "RegionID",
+                                                        "AdvEngineID",
+                                                        "ResolutionWidth"
                                                     ],
-                                                    "Estimated Cardinality": "500000"
+                                                    "Estimated Cardinality": "1000000"
                                                 }
-                                            },
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Groups": "#0",
+                                            "Aggregates": [
+                                                "sum(#1)",
+                                                "count_star()",
+                                                "avg(#2)"
+                                            ],
+                                            "Estimated Cardinality": "500000"
+                                        }
+                                    },
+                                    {
+                                        "name": "HASH_GROUP_BY",
+                                        "children": [
                                             {
-                                                "name": "HASH_GROUP_BY",
+                                                "name": "PROJECTION",
                                                 "children": [
                                                     {
-                                                        "name": "PROJECTION",
+                                                        "name": "HASH_GROUP_BY",
                                                         "children": [
                                                             {
                                                                 "name": "PROJECTION",
                                                                 "children": [
                                                                     {
-                                                                        "name": "HASH_GROUP_BY",
-                                                                        "children": [
-                                                                            {
-                                                                                "name": "PROJECTION",
-                                                                                "children": [
-                                                                                    {
-                                                                                        "name": "PROJECTION",
-                                                                                        "children": [
-                                                                                            {
-                                                                                                "name": "CTE_SCAN",
-                                                                                                "children": [],
-                                                                                                "extra_info": {
-                                                                                                    "CTE Index": "14",
-                                                                                                    "Estimated Cardinality": "1000000"
-                                                                                                }
-                                                                                            }
-                                                                                        ],
-                                                                                        "extra_info": {
-                                                                                            "Projections": [
-                                                                                                "#0",
-                                                                                                "#1"
-                                                                                            ],
-                                                                                            "Estimated Cardinality": "1000000"
-                                                                                        }
-                                                                                    }
-                                                                                ],
-                                                                                "extra_info": {
-                                                                                    "Projections": [
-                                                                                        "RegionID",
-                                                                                        "UserID"
-                                                                                    ],
-                                                                                    "Estimated Cardinality": "1000000"
-                                                                                }
-                                                                            }
-                                                                        ],
+                                                                        "name": "CTE_SCAN",
+                                                                        "children": [],
                                                                         "extra_info": {
-                                                                            "Groups": [
-                                                                                "#0",
-                                                                                "#1"
-                                                                            ],
-                                                                            "Aggregates": "",
-                                                                            "Estimated Cardinality": "500000"
+                                                                            "CTE Index": "13",
+                                                                            "Estimated Cardinality": "1000000"
                                                                         }
                                                                     }
                                                                 ],
                                                                 "extra_info": {
-                                                                    "Projections": "#0",
-                                                                    "Estimated Cardinality": "500000"
+                                                                    "Projections": [
+                                                                        "RegionID",
+                                                                        "UserID"
+                                                                    ],
+                                                                    "Estimated Cardinality": "1000000"
                                                                 }
                                                             }
                                                         ],
                                                         "extra_info": {
-                                                            "Projections": "#0",
+                                                            "Groups": [
+                                                                "#0",
+                                                                "#1"
+                                                            ],
+                                                            "Aggregates": "",
                                                             "Estimated Cardinality": "500000"
                                                         }
                                                     }
                                                 ],
                                                 "extra_info": {
-                                                    "Groups": "#0",
-                                                    "Aggregates": "count_star()",
-                                                    "Estimated Cardinality": "250000"
+                                                    "Projections": "#0",
+                                                    "Estimated Cardinality": "500000"
                                                 }
                                             }
                                         ],
                                         "extra_info": {
-                                            "Join Type": "INNER",
-                                            "Conditions": "#0 IS NOT DISTINCT FROM #0",
-                                            "Estimated Cardinality": "954715"
+                                            "Groups": "#0",
+                                            "Aggregates": "count_star()",
+                                            "Estimated Cardinality": "250000"
                                         }
                                     }
                                 ],
                                 "extra_info": {
-                                    "Projections": [
-                                        "#3",
-                                        "#0",
-                                        "#1",
-                                        "#2",
-                                        "#4",
-                                        "#1"
-                                    ],
+                                    "Join Type": "INNER",
+                                    "Conditions": "#0 IS NOT DISTINCT FROM #0",
                                     "Estimated Cardinality": "954715"
                                 }
                             }
                         ],
                         "extra_info": {
-                            "CTE Name": "__aggregate_cte_14",
-                            "Table Index": "14",
-                            "Execution Mode": "PIPELINE_DEPENDENT",
+                            "Projections": [
+                                "#3",
+                                "#0",
+                                "#1",
+                                "#2",
+                                "#4"
+                            ],
                             "Estimated Cardinality": "954715"
                         }
                     }
                 ],
                 "extra_info": {
-                    "Projections": [
-                        "#0",
-                        "#1",
-                        "#2",
-                        "\"/\"(CAST(#3 AS DOUBLE), CAST(#5 AS DOUBLE))",
-                        "#4"
-                    ],
+                    "CTE Name": "__aggregate_cte_13",
+                    "Table Index": "13",
+                    "Execution Mode": "PIPELINE_DEPENDENT",
                     "Estimated Cardinality": "954715"
                 }
             }

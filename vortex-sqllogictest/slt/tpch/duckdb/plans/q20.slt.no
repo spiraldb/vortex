@@ -237,7 +237,7 @@ logical_plan [
                                                                                         "(l_partkey = ps_partkey)",
                                                                                         "(l_suppkey = ps_suppkey)",
                                                                                         "(l_shipdate >= CAST('1994-01-01' AS DATE))",
-                                                                                        "(CAST(l_shipdate AS TIMESTAMP) < (CAST('1994-01-01' AS DATE) + to_years(CAST(trunc(CAST('1' AS DOUBLE)) AS INTEGER))))"
+                                                                                        "(CAST(l_shipdate AS TIMESTAMP) < ('1994-01-01'::DATE + '1 year'::INTERVAL))"
                                                                                     ]
                                                                                 }
                                                                             }
@@ -475,7 +475,7 @@ logical_opt [
                                                                                                                                             "Expressions": [
                                                                                                                                                 "CAST(#0 AS SMALLINT)",
                                                                                                                                                 "CAST(#1 AS SMALLINT)",
-                                                                                                                                                "CAST(#2 AS SMALLINT)"
+                                                                                                                                                "#2"
                                                                                                                                             ],
                                                                                                                                             "Estimated Cardinality": "16000"
                                                                                                                                         }
@@ -783,7 +783,7 @@ physical_plan [
                                                                                                                                     "Projections": [
                                                                                                                                         "CAST(#0 AS SMALLINT)",
                                                                                                                                         "CAST(#1 AS SMALLINT)",
-                                                                                                                                        "CAST(#2 AS SMALLINT)"
+                                                                                                                                        "#2"
                                                                                                                                     ],
                                                                                                                                     "Estimated Cardinality": "16000"
                                                                                                                                 }

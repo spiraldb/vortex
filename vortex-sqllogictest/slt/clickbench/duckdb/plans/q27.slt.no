@@ -193,98 +193,71 @@ logical_opt [
                 "name": "PROJECTION",
                 "children": [
                     {
-                        "name": "PROJECTION",
+                        "name": "FILTER",
                         "children": [
                             {
-                                "name": "FILTER",
+                                "name": "PROJECTION",
                                 "children": [
                                     {
-                                        "name": "PROJECTION",
+                                        "name": "AGGREGATE",
                                         "children": [
                                             {
-                                                "name": "AGGREGATE",
+                                                "name": "PROJECTION",
                                                 "children": [
                                                     {
                                                         "name": "PROJECTION",
                                                         "children": [
                                                             {
-                                                                "name": "PROJECTION",
-                                                                "children": [
-                                                                    {
-                                                                        "name": "PROJECTION",
-                                                                        "children": [
-                                                                            {
-                                                                                "name": "READ_VORTEX",
-                                                                                "children": [],
-                                                                                "extra_info": {
-                                                                                    "Filters": "($.URL != \"\")",
-                                                                                    "Function": "Vortex Scan",
-                                                                                    "SELECT projections": "URL: cast(vortex.byte_length($.URL) as i64?)",
-                                                                                    "Estimated Cardinality": "200000"
-                                                                                }
-                                                                            }
-                                                                        ],
-                                                                        "extra_info": {
-                                                                            "Expressions": [
-                                                                                "CounterID",
-                                                                                "URL"
-                                                                            ],
-                                                                            "Estimated Cardinality": "200000"
-                                                                        }
-                                                                    }
-                                                                ],
+                                                                "name": "READ_VORTEX",
+                                                                "children": [],
                                                                 "extra_info": {
-                                                                    "Expressions": [
-                                                                        "CounterID",
-                                                                        "URL"
-                                                                    ],
+                                                                    "Filters": "($.URL != \"\")",
+                                                                    "Function": "Vortex Scan",
+                                                                    "SELECT projections": "CounterID: cast($.CounterID as i8?)",
                                                                     "Estimated Cardinality": "200000"
                                                                 }
                                                             }
                                                         ],
                                                         "extra_info": {
                                                             "Expressions": [
-                                                                "CAST(#0 AS TINYINT)",
-                                                                "#1"
+                                                                "CounterID",
+                                                                "URL"
                                                             ],
                                                             "Estimated Cardinality": "200000"
                                                         }
                                                     }
                                                 ],
                                                 "extra_info": {
-                                                    "Groups": "CounterID",
                                                     "Expressions": [
-                                                        "count_star()",
-                                                        "sum(#1)",
-                                                        "count(#1)"
+                                                        "#0",
+                                                        "#1"
                                                     ],
-                                                    "Estimated Cardinality": "46"
+                                                    "Estimated Cardinality": "200000"
                                                 }
                                             }
                                         ],
                                         "extra_info": {
+                                            "Groups": "CounterID",
                                             "Expressions": [
-                                                "CAST(#0 AS INTEGER)",
-                                                "#1",
-                                                "#2",
-                                                "#3"
+                                                "count_star()",
+                                                "avg(strlen(URL))"
                                             ],
                                             "Estimated Cardinality": "46"
                                         }
                                     }
                                 ],
                                 "extra_info": {
-                                    "Expressions": "(count_star() > 100000)",
-                                    "Estimated Cardinality": "9"
+                                    "Expressions": [
+                                        "CAST(#0 AS INTEGER)",
+                                        "#1",
+                                        "#2"
+                                    ],
+                                    "Estimated Cardinality": "46"
                                 }
                             }
                         ],
                         "extra_info": {
-                            "Expressions": [
-                                "#0",
-                                "#1",
-                                "\"/\"(CAST(#2 AS DOUBLE), CAST(#3 AS DOUBLE))"
-                            ],
+                            "Expressions": "(count_star() > 100000)",
                             "Estimated Cardinality": "9"
                         }
                     }
@@ -313,91 +286,63 @@ physical_plan [
                 "name": "PROJECTION",
                 "children": [
                     {
-                        "name": "PROJECTION",
+                        "name": "FILTER",
                         "children": [
                             {
-                                "name": "FILTER",
+                                "name": "PROJECTION",
                                 "children": [
                                     {
-                                        "name": "PROJECTION",
+                                        "name": "PERFECT_HASH_GROUP_BY",
                                         "children": [
                                             {
-                                                "name": "PERFECT_HASH_GROUP_BY",
+                                                "name": "PROJECTION",
                                                 "children": [
                                                     {
-                                                        "name": "PROJECTION",
-                                                        "children": [
-                                                            {
-                                                                "name": "PROJECTION",
-                                                                "children": [
-                                                                    {
-                                                                        "name": "READ_VORTEX",
-                                                                        "children": [],
-                                                                        "extra_info": {
-                                                                            "Function": "Vortex Scan",
-                                                                            "Filters": "($.URL != \"\")",
-                                                                            "SELECT projections": "URL: cast(vortex.byte_length($.URL) as i64?)",
-                                                                            "Projections": [
-                                                                                "CounterID",
-                                                                                "URL"
-                                                                            ],
-                                                                            "Estimated Cardinality": "200000"
-                                                                        }
-                                                                    }
-                                                                ],
-                                                                "extra_info": {
-                                                                    "Projections": [
-                                                                        "CAST(#0 AS TINYINT)",
-                                                                        "#1"
-                                                                    ],
-                                                                    "Estimated Cardinality": "200000"
-                                                                }
-                                                            }
-                                                        ],
+                                                        "name": "READ_VORTEX",
+                                                        "children": [],
                                                         "extra_info": {
+                                                            "Function": "Vortex Scan",
+                                                            "Filters": "($.URL != \"\")",
+                                                            "SELECT projections": "CounterID: cast($.CounterID as i8?)",
                                                             "Projections": [
                                                                 "CounterID",
-                                                                "#1",
-                                                                "#1"
+                                                                "URL"
                                                             ],
                                                             "Estimated Cardinality": "200000"
                                                         }
                                                     }
                                                 ],
                                                 "extra_info": {
-                                                    "Groups": "#0",
-                                                    "Aggregates": [
-                                                        "count_star()",
-                                                        "sum(#1)",
-                                                        "count(#2)"
+                                                    "Projections": [
+                                                        "CounterID",
+                                                        "strlen(URL)"
                                                     ],
-                                                    "Estimated Cardinality": "46"
+                                                    "Estimated Cardinality": "200000"
                                                 }
                                             }
                                         ],
                                         "extra_info": {
-                                            "Projections": [
-                                                "CAST(#0 AS INTEGER)",
-                                                "#1",
-                                                "#2",
-                                                "#3"
+                                            "Groups": "#0",
+                                            "Aggregates": [
+                                                "count_star()",
+                                                "avg(#1)"
                                             ],
                                             "Estimated Cardinality": "46"
                                         }
                                     }
                                 ],
                                 "extra_info": {
-                                    "Expression": "(count_star() > 100000)",
-                                    "Estimated Cardinality": "9"
+                                    "Projections": [
+                                        "CAST(#0 AS INTEGER)",
+                                        "#1",
+                                        "#2"
+                                    ],
+                                    "Estimated Cardinality": "46"
                                 }
                             }
                         ],
                         "extra_info": {
-                            "Projections": [
-                                "#0",
-                                "#1",
-                                "\"/\"(CAST(#2 AS DOUBLE), CAST(#3 AS DOUBLE))"
-                            ],
+                            "Expression": "(count_star() > 100000)",
                             "Estimated Cardinality": "9"
                         }
                     }

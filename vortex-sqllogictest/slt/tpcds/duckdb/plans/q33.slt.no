@@ -1130,7 +1130,7 @@ logical_opt [
                                                                                                                                                         "name": "READ_VORTEX",
                                                                                                                                                         "children": [],
                                                                                                                                                         "extra_info": {
-                                                                                                                                                            "Filters": "vortex.list.contains([\"Electronics\"], $.i_category)",
+                                                                                                                                                            "Filters": "vortex.list.contains([\"Electronics\"], $.i_category, opts=sql_null_semantics)",
                                                                                                                                                             "Function": "Vortex Scan",
                                                                                                                                                             "Estimated Cardinality": "360"
                                                                                                                                                         }
@@ -1202,7 +1202,7 @@ logical_opt [
                                                                                                     "Expressions": [
                                                                                                         "#0",
                                                                                                         "CAST(#1 AS SMALLINT)",
-                                                                                                        "__internal_compress_integral_usmallint(#2, 2450816)"
+                                                                                                        "#2"
                                                                                                     ],
                                                                                                     "Estimated Cardinality": "11538"
                                                                                                 }
@@ -1321,7 +1321,7 @@ logical_opt [
                                                                                                                                                         "name": "READ_VORTEX",
                                                                                                                                                         "children": [],
                                                                                                                                                         "extra_info": {
-                                                                                                                                                            "Filters": "vortex.list.contains([\"Electronics\"], $.i_category)",
+                                                                                                                                                            "Filters": "vortex.list.contains([\"Electronics\"], $.i_category, opts=sql_null_semantics)",
                                                                                                                                                             "Function": "Vortex Scan",
                                                                                                                                                             "Estimated Cardinality": "360"
                                                                                                                                                         }
@@ -1378,7 +1378,7 @@ logical_opt [
                                                                                                 ],
                                                                                                 "extra_info": {
                                                                                                     "Expressions": [
-                                                                                                        "__internal_compress_integral_usmallint(#0, 2450815)",
+                                                                                                        "#0",
                                                                                                         "#1",
                                                                                                         "CAST(#2 AS SMALLINT)"
                                                                                                     ],
@@ -1499,7 +1499,7 @@ logical_opt [
                                                                                                                                                         "name": "READ_VORTEX",
                                                                                                                                                         "children": [],
                                                                                                                                                         "extra_info": {
-                                                                                                                                                            "Filters": "vortex.list.contains([\"Electronics\"], $.i_category)",
+                                                                                                                                                            "Filters": "vortex.list.contains([\"Electronics\"], $.i_category, opts=sql_null_semantics)",
                                                                                                                                                             "Function": "Vortex Scan",
                                                                                                                                                             "Estimated Cardinality": "360"
                                                                                                                                                         }
@@ -1556,7 +1556,7 @@ logical_opt [
                                                                                                 ],
                                                                                                 "extra_info": {
                                                                                                     "Expressions": [
-                                                                                                        "__internal_compress_integral_usmallint(#0, 2450816)",
+                                                                                                        "#0",
                                                                                                         "#1",
                                                                                                         "CAST(#2 AS SMALLINT)"
                                                                                                     ],
@@ -1727,7 +1727,7 @@ physical_plan [
                                                                                                                         "children": [],
                                                                                                                         "extra_info": {
                                                                                                                             "Function": "Vortex Scan",
-                                                                                                                            "Filters": "vortex.list.contains([\"Electronics\"], $.i_category)",
+                                                                                                                            "Filters": "vortex.list.contains([\"Electronics\"], $.i_category, opts=sql_null_semantics)",
                                                                                                                             "Projections": "i_manufact_id",
                                                                                                                             "Estimated Cardinality": "360"
                                                                                                                         }
@@ -1789,7 +1789,7 @@ physical_plan [
                                                                                     "Projections": [
                                                                                         "#0",
                                                                                         "CAST(#1 AS SMALLINT)",
-                                                                                        "__internal_compress_integral_usmallint(#2, 2450816)"
+                                                                                        "#2"
                                                                                     ],
                                                                                     "Estimated Cardinality": "11538"
                                                                                 }
@@ -1888,7 +1888,7 @@ physical_plan [
                                                                                                                         "children": [],
                                                                                                                         "extra_info": {
                                                                                                                             "Function": "Vortex Scan",
-                                                                                                                            "Filters": "vortex.list.contains([\"Electronics\"], $.i_category)",
+                                                                                                                            "Filters": "vortex.list.contains([\"Electronics\"], $.i_category, opts=sql_null_semantics)",
                                                                                                                             "Projections": "i_manufact_id",
                                                                                                                             "Estimated Cardinality": "360"
                                                                                                                         }
@@ -1934,7 +1934,7 @@ physical_plan [
                                                                                 ],
                                                                                 "extra_info": {
                                                                                     "Projections": [
-                                                                                        "__internal_compress_integral_usmallint(#0, 2450815)",
+                                                                                        "#0",
                                                                                         "#1",
                                                                                         "CAST(#2 AS SMALLINT)"
                                                                                     ],
@@ -2035,7 +2035,7 @@ physical_plan [
                                                                                                                         "children": [],
                                                                                                                         "extra_info": {
                                                                                                                             "Function": "Vortex Scan",
-                                                                                                                            "Filters": "vortex.list.contains([\"Electronics\"], $.i_category)",
+                                                                                                                            "Filters": "vortex.list.contains([\"Electronics\"], $.i_category, opts=sql_null_semantics)",
                                                                                                                             "Projections": "i_manufact_id",
                                                                                                                             "Estimated Cardinality": "360"
                                                                                                                         }
@@ -2081,7 +2081,7 @@ physical_plan [
                                                                                 ],
                                                                                 "extra_info": {
                                                                                     "Projections": [
-                                                                                        "__internal_compress_integral_usmallint(#0, 2450816)",
+                                                                                        "#0",
                                                                                         "#1",
                                                                                         "CAST(#2 AS SMALLINT)"
                                                                                     ],

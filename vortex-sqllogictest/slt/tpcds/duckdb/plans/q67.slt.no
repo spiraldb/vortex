@@ -680,7 +680,7 @@ logical_opt [
                                                                                                                                 "#3",
                                                                                                                                 "__internal_compress_integral_utinyint(#4, 1900)",
                                                                                                                                 "CAST(#5 AS TINYINT)",
-                                                                                                                                "CAST(#6 AS TINYINT)",
+                                                                                                                                "#6",
                                                                                                                                 "#7"
                                                                                                                             ],
                                                                                                                             "Estimated Cardinality": "72116"
@@ -762,7 +762,7 @@ logical_opt [
                                                                                                                                                 "#2",
                                                                                                                                                 "#3",
                                                                                                                                                 "__internal_compress_integral_utinyint(#4, 1900)",
-                                                                                                                                                "CAST(#5 AS TINYINT)",
+                                                                                                                                                "#5",
                                                                                                                                                 "#6"
                                                                                                                                             ],
                                                                                                                                             "Estimated Cardinality": "36058"
@@ -817,56 +817,25 @@ logical_opt [
                                                                                                                                 "name": "PROJECTION",
                                                                                                                                 "children": [
                                                                                                                                     {
-                                                                                                                                        "name": "PROJECTION",
+                                                                                                                                        "name": "AGGREGATE",
                                                                                                                                         "children": [
                                                                                                                                             {
-                                                                                                                                                "name": "AGGREGATE",
-                                                                                                                                                "children": [
-                                                                                                                                                    {
-                                                                                                                                                        "name": "PROJECTION",
-                                                                                                                                                        "children": [
-                                                                                                                                                            {
-                                                                                                                                                                "name": "CTE_SCAN",
-                                                                                                                                                                "children": [],
-                                                                                                                                                                "extra_info": {
-                                                                                                                                                                    "CTE Index": "60",
-                                                                                                                                                                    "Estimated Cardinality": "18029"
-                                                                                                                                                                }
-                                                                                                                                                            }
-                                                                                                                                                        ],
-                                                                                                                                                        "extra_info": {
-                                                                                                                                                            "Expressions": [
-                                                                                                                                                                "#0",
-                                                                                                                                                                "#1",
-                                                                                                                                                                "#2",
-                                                                                                                                                                "#3",
-                                                                                                                                                                "__internal_compress_integral_utinyint(#4, 1900)",
-                                                                                                                                                                "#5"
-                                                                                                                                                            ],
-                                                                                                                                                            "Estimated Cardinality": "18029"
-                                                                                                                                                        }
-                                                                                                                                                    }
-                                                                                                                                                ],
+                                                                                                                                                "name": "CTE_SCAN",
+                                                                                                                                                "children": [],
                                                                                                                                                 "extra_info": {
-                                                                                                                                                    "Groups": [
-                                                                                                                                                        "#0",
-                                                                                                                                                        "#1",
-                                                                                                                                                        "#2",
-                                                                                                                                                        "#3"
-                                                                                                                                                    ],
-                                                                                                                                                    "Expressions": "combine_aggr(#5)",
-                                                                                                                                                    "Estimated Cardinality": "9014"
+                                                                                                                                                    "CTE Index": "60",
+                                                                                                                                                    "Estimated Cardinality": "18029"
                                                                                                                                                 }
                                                                                                                                             }
                                                                                                                                         ],
                                                                                                                                         "extra_info": {
-                                                                                                                                            "Expressions": [
+                                                                                                                                            "Groups": [
                                                                                                                                                 "#0",
                                                                                                                                                 "#1",
                                                                                                                                                 "#2",
-                                                                                                                                                "#3",
-                                                                                                                                                "#4"
+                                                                                                                                                "#3"
                                                                                                                                             ],
+                                                                                                                                            "Expressions": "combine_aggr(#5)",
                                                                                                                                             "Estimated Cardinality": "9014"
                                                                                                                                         }
                                                                                                                                     }
@@ -1832,7 +1801,7 @@ physical_plan [
                                                                                                 "#3",
                                                                                                 "__internal_compress_integral_utinyint(#4, 1900)",
                                                                                                 "CAST(#5 AS TINYINT)",
-                                                                                                "CAST(#6 AS TINYINT)",
+                                                                                                "#6",
                                                                                                 "#7"
                                                                                             ],
                                                                                             "Estimated Cardinality": "72116"
@@ -1911,7 +1880,7 @@ physical_plan [
                                                                                                         "#2",
                                                                                                         "#3",
                                                                                                         "__internal_compress_integral_utinyint(#4, 1900)",
-                                                                                                        "CAST(#5 AS TINYINT)",
+                                                                                                        "#5",
                                                                                                         "#6"
                                                                                                     ],
                                                                                                     "Estimated Cardinality": "36058"
@@ -1966,26 +1935,10 @@ physical_plan [
                                                                                         "name": "PROJECTION",
                                                                                         "children": [
                                                                                             {
-                                                                                                "name": "PROJECTION",
-                                                                                                "children": [
-                                                                                                    {
-                                                                                                        "name": "CTE_SCAN",
-                                                                                                        "children": [],
-                                                                                                        "extra_info": {
-                                                                                                            "CTE Index": "60",
-                                                                                                            "Estimated Cardinality": "18029"
-                                                                                                        }
-                                                                                                    }
-                                                                                                ],
+                                                                                                "name": "CTE_SCAN",
+                                                                                                "children": [],
                                                                                                 "extra_info": {
-                                                                                                    "Projections": [
-                                                                                                        "#0",
-                                                                                                        "#1",
-                                                                                                        "#2",
-                                                                                                        "#3",
-                                                                                                        "__internal_compress_integral_utinyint(#4, 1900)",
-                                                                                                        "#5"
-                                                                                                    ],
+                                                                                                    "CTE Index": "60",
                                                                                                     "Estimated Cardinality": "18029"
                                                                                                 }
                                                                                             }

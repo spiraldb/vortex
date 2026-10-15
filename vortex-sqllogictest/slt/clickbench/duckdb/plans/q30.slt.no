@@ -194,72 +194,56 @@ logical_opt [
                         "name": "PROJECTION",
                         "children": [
                             {
-                                "name": "PROJECTION",
+                                "name": "AGGREGATE",
                                 "children": [
                                     {
-                                        "name": "AGGREGATE",
+                                        "name": "PROJECTION",
                                         "children": [
                                             {
                                                 "name": "PROJECTION",
                                                 "children": [
                                                     {
-                                                        "name": "PROJECTION",
-                                                        "children": [
-                                                            {
-                                                                "name": "READ_VORTEX",
-                                                                "children": [],
-                                                                "extra_info": {
-                                                                    "Filters": "($.SearchPhrase != \"\")",
-                                                                    "Function": "Vortex Scan",
-                                                                    "SELECT projections": "SearchEngineID: cast($.SearchEngineID as u8?)",
-                                                                    "Estimated Cardinality": "200000"
-                                                                }
-                                                            }
-                                                        ],
+                                                        "name": "READ_VORTEX",
+                                                        "children": [],
                                                         "extra_info": {
-                                                            "Expressions": [
-                                                                "ClientIP",
-                                                                "IsRefresh",
-                                                                "ResolutionWidth",
-                                                                "SearchEngineID"
-                                                            ],
+                                                            "Filters": "($.SearchPhrase != \"\")",
+                                                            "Function": "Vortex Scan",
+                                                            "SELECT projections": "SearchEngineID: cast($.SearchEngineID as u8?)",
                                                             "Estimated Cardinality": "200000"
                                                         }
                                                     }
                                                 ],
                                                 "extra_info": {
                                                     "Expressions": [
-                                                        "#0",
-                                                        "#1",
-                                                        "#2",
-                                                        "#3"
+                                                        "ClientIP",
+                                                        "IsRefresh",
+                                                        "ResolutionWidth",
+                                                        "SearchEngineID"
                                                     ],
                                                     "Estimated Cardinality": "200000"
                                                 }
                                             }
                                         ],
                                         "extra_info": {
-                                            "Groups": [
-                                                "SearchEngineID",
-                                                "ClientIP"
-                                            ],
                                             "Expressions": [
-                                                "count_star()",
-                                                "sum(IsRefresh)",
-                                                "sum(ResolutionWidth)"
+                                                "#0",
+                                                "#1",
+                                                "#2",
+                                                "#3"
                                             ],
-                                            "Estimated Cardinality": "199543"
+                                            "Estimated Cardinality": "200000"
                                         }
                                     }
                                 ],
                                 "extra_info": {
+                                    "Groups": [
+                                        "SearchEngineID",
+                                        "ClientIP"
+                                    ],
                                     "Expressions": [
-                                        "CAST(#0 AS SMALLINT)",
-                                        "#1",
-                                        "#2",
-                                        "#3",
-                                        "#4",
-                                        "#2"
+                                        "count_star()",
+                                        "sum(IsRefresh)",
+                                        "avg(ResolutionWidth)"
                                     ],
                                     "Estimated Cardinality": "199543"
                                 }
@@ -267,11 +251,11 @@ logical_opt [
                         ],
                         "extra_info": {
                             "Expressions": [
-                                "#0",
+                                "CAST(#0 AS SMALLINT)",
                                 "#1",
                                 "#2",
                                 "#3",
-                                "\"/\"(CAST(#4 AS DOUBLE), CAST(#5 AS DOUBLE))"
+                                "#4"
                             ],
                             "Estimated Cardinality": "199543"
                         }
@@ -303,64 +287,48 @@ physical_plan [
                 "name": "PROJECTION",
                 "children": [
                     {
-                        "name": "PROJECTION",
+                        "name": "HASH_GROUP_BY",
                         "children": [
                             {
-                                "name": "HASH_GROUP_BY",
+                                "name": "PROJECTION",
                                 "children": [
                                     {
-                                        "name": "PROJECTION",
-                                        "children": [
-                                            {
-                                                "name": "READ_VORTEX",
-                                                "children": [],
-                                                "extra_info": {
-                                                    "Function": "Vortex Scan",
-                                                    "Filters": "($.SearchPhrase != \"\")",
-                                                    "SELECT projections": "SearchEngineID: cast($.SearchEngineID as u8?)",
-                                                    "Projections": [
-                                                        "ClientIP",
-                                                        "IsRefresh",
-                                                        "ResolutionWidth",
-                                                        "SearchEngineID"
-                                                    ],
-                                                    "Estimated Cardinality": "200000"
-                                                }
-                                            }
-                                        ],
+                                        "name": "READ_VORTEX",
+                                        "children": [],
                                         "extra_info": {
+                                            "Function": "Vortex Scan",
+                                            "Filters": "($.SearchPhrase != \"\")",
+                                            "SELECT projections": "SearchEngineID: cast($.SearchEngineID as u8?)",
                                             "Projections": [
-                                                "SearchEngineID",
                                                 "ClientIP",
                                                 "IsRefresh",
-                                                "ResolutionWidth"
+                                                "ResolutionWidth",
+                                                "SearchEngineID"
                                             ],
                                             "Estimated Cardinality": "200000"
                                         }
                                     }
                                 ],
                                 "extra_info": {
-                                    "Groups": [
-                                        "#0",
-                                        "#1"
+                                    "Projections": [
+                                        "SearchEngineID",
+                                        "ClientIP",
+                                        "IsRefresh",
+                                        "ResolutionWidth"
                                     ],
-                                    "Aggregates": [
-                                        "count_star()",
-                                        "sum(#2)",
-                                        "sum(#3)"
-                                    ],
-                                    "Estimated Cardinality": "199543"
+                                    "Estimated Cardinality": "200000"
                                 }
                             }
                         ],
                         "extra_info": {
-                            "Projections": [
-                                "CAST(#0 AS SMALLINT)",
-                                "#1",
-                                "#2",
-                                "#3",
-                                "#4",
-                                "#2"
+                            "Groups": [
+                                "#0",
+                                "#1"
+                            ],
+                            "Aggregates": [
+                                "count_star()",
+                                "sum(#2)",
+                                "avg(#3)"
                             ],
                             "Estimated Cardinality": "199543"
                         }
@@ -368,11 +336,11 @@ physical_plan [
                 ],
                 "extra_info": {
                     "Projections": [
-                        "#0",
+                        "CAST(#0 AS SMALLINT)",
                         "#1",
                         "#2",
                         "#3",
-                        "\"/\"(CAST(#4 AS DOUBLE), CAST(#5 AS DOUBLE))"
+                        "#4"
                     ],
                     "Estimated Cardinality": "199543"
                 }

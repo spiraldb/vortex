@@ -145,7 +145,7 @@ logical_plan [
                                 "extra_info": {
                                     "Expressions": [
                                         "(o_orderdate >= CAST('1993-07-01' AS DATE))",
-                                        "(CAST(o_orderdate AS TIMESTAMP) < (CAST('1993-07-01' AS DATE) + to_months(CAST(trunc(CAST('3' AS DOUBLE)) AS INTEGER))))",
+                                        "(CAST(o_orderdate AS TIMESTAMP) < ('1993-07-01'::DATE + '3 months'::INTERVAL))",
                                         "SUBQUERY"
                                     ]
                                 }

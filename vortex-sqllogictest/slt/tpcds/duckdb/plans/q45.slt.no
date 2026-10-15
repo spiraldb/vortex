@@ -497,7 +497,6 @@ logical_opt [
                                                                     "Filters": [
                                                                         "($.d_qoy = 2i64)",
                                                                         "($.d_year = 2001i64)",
-                                                                        "(2450816i64 <= $.d_date_sk <= 2452642i64)",
                                                                         "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                     ],
                                                                     "Function": "Vortex Scan",
@@ -707,7 +706,6 @@ physical_plan [
                                                                             "Filters": [
                                                                                 "($.d_qoy = 2i64)",
                                                                                 "($.d_year = 2001i64)",
-                                                                                "(2450816i64 <= $.d_date_sk <= 2452642i64)",
                                                                                 "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                             ],
                                                                             "Projections": "d_date_sk",

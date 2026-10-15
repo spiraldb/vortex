@@ -148,7 +148,7 @@ logical_opt [
                                 "children": [],
                                 "extra_info": {
                                     "Filters": [
-                                        "vortex.list.contains([\"AIR\", \"AIR REG\"], $.l_shipmode)",
+                                        "vortex.list.contains([\"AIR\", \"AIR REG\"], $.l_shipmode, opts=sql_null_semantics)",
                                         "(((($.l_quantity >= decimal128(100, precision=15, scale=2)) and ($.l_quantity <= decimal128(1100, precision=15, scale=2))) or (($.l_quantity >= decimal128(1000, precision=15, scale=2)) and ($.l_quantity <= decimal128(2000, precision=15, scale=2)))) or (($.l_quantity >= decimal128(2000, precision=15, scale=2)) and ($.l_quantity <= decimal128(3000, precision=15, scale=2))))",
                                         "($.l_shipinstruct = \"DELIVER IN PERSON\")"
                                     ],
@@ -161,9 +161,9 @@ logical_opt [
                                 "children": [],
                                 "extra_info": {
                                     "Filters": [
-                                        "(((((($.p_brand = \"Brand#12\") and vortex.list.contains([\"SM CASE\", \"SM BOX\", \"SM PACK\", \"SM PKG\"], $.p_container)) and ($.p_size >= 1i32)) and ($.p_size <= 5i32)) or (((($.p_brand = \"Brand#23\") and vortex.list.contains([\"MED BAG\", \"MED BOX\", \"MED PKG\", \"MED PACK\"], $.p_container)) and ($.p_size >= 1i32)) and ($.p_size <= 10i32))) or (((($.p_brand = \"Brand#34\") and vortex.list.contains([\"LG CASE\", \"LG BOX\", \"LG PACK\", \"LG PKG\"], $.p_container)) and ($.p_size >= 1i32)) and ($.p_size <= 15i32)))",
+                                        "(((((($.p_brand = \"Brand#12\") and vortex.list.contains([\"SM CASE\", \"SM BOX\", \"SM PACK\", \"SM PKG\"], $.p_container, opts=sql_null_semantics)) and ($.p_size >= 1i32)) and ($.p_size <= 5i32)) or (((($.p_brand = \"Brand#23\") and vortex.list.contains([\"MED BAG\", \"MED BOX\", \"MED PKG\", \"MED PACK\"], $.p_container, opts=sql_null_semantics)) and ($.p_size >= 1i32)) and ($.p_size <= 10i32))) or (((($.p_brand = \"Brand#34\") and vortex.list.contains([\"LG CASE\", \"LG BOX\", \"LG PACK\", \"LG PKG\"], $.p_container, opts=sql_null_semantics)) and ($.p_size >= 1i32)) and ($.p_size <= 15i32)))",
                                         "((($.p_brand = \"Brand#12\") or ($.p_brand = \"Brand#23\")) or ($.p_brand = \"Brand#34\"))",
-                                        "((vortex.list.contains([\"SM CASE\", \"SM BOX\", \"SM PACK\", \"SM PKG\"], $.p_container) or vortex.list.contains([\"MED BAG\", \"MED BOX\", \"MED PKG\", \"MED PACK\"], $.p_container)) or vortex.list.contains([\"LG CASE\", \"LG BOX\", \"LG PACK\", \"LG PKG\"], $.p_container))",
+                                        "((vortex.list.contains([\"SM CASE\", \"SM BOX\", \"SM PACK\", \"SM PKG\"], $.p_container, opts=sql_null_semantics) or vortex.list.contains([\"MED BAG\", \"MED BOX\", \"MED PKG\", \"MED PACK\"], $.p_container, opts=sql_null_semantics)) or vortex.list.contains([\"LG CASE\", \"LG BOX\", \"LG PACK\", \"LG PKG\"], $.p_container, opts=sql_null_semantics))",
                                         "(((($.p_size >= 1i32) or ($.p_size <= 5i32)) or ($.p_size <= 10i32)) or ($.p_size <= 15i32))"
                                     ],
                                     "Function": "Vortex Scan",
@@ -210,7 +210,7 @@ physical_plan [
                                 "extra_info": {
                                     "Function": "Vortex Scan",
                                     "Filters": [
-                                        "vortex.list.contains([\"AIR\", \"AIR REG\"], $.l_shipmode)",
+                                        "vortex.list.contains([\"AIR\", \"AIR REG\"], $.l_shipmode, opts=sql_null_semantics)",
                                         "(((($.l_quantity >= decimal128(100, precision=15, scale=2)) and ($.l_quantity <= decimal128(1100, precision=15, scale=2))) or (($.l_quantity >= decimal128(1000, precision=15, scale=2)) and ($.l_quantity <= decimal128(2000, precision=15, scale=2)))) or (($.l_quantity >= decimal128(2000, precision=15, scale=2)) and ($.l_quantity <= decimal128(3000, precision=15, scale=2))))",
                                         "($.l_shipinstruct = \"DELIVER IN PERSON\")"
                                     ],
@@ -229,9 +229,9 @@ physical_plan [
                                 "extra_info": {
                                     "Function": "Vortex Scan",
                                     "Filters": [
-                                        "(((((($.p_brand = \"Brand#12\") and vortex.list.contains([\"SM CASE\", \"SM BOX\", \"SM PACK\", \"SM PKG\"], $.p_container)) and ($.p_size >= 1i32)) and ($.p_size <= 5i32)) or (((($.p_brand = \"Brand#23\") and vortex.list.contains([\"MED BAG\", \"MED BOX\", \"MED PKG\", \"MED PACK\"], $.p_container)) and ($.p_size >= 1i32)) and ($.p_size <= 10i32))) or (((($.p_brand = \"Brand#34\") and vortex.list.contains([\"LG CASE\", \"LG BOX\", \"LG PACK\", \"LG PKG\"], $.p_container)) and ($.p_size >= 1i32)) and ($.p_size <= 15i32)))",
+                                        "(((((($.p_brand = \"Brand#12\") and vortex.list.contains([\"SM CASE\", \"SM BOX\", \"SM PACK\", \"SM PKG\"], $.p_container, opts=sql_null_semantics)) and ($.p_size >= 1i32)) and ($.p_size <= 5i32)) or (((($.p_brand = \"Brand#23\") and vortex.list.contains([\"MED BAG\", \"MED BOX\", \"MED PKG\", \"MED PACK\"], $.p_container, opts=sql_null_semantics)) and ($.p_size >= 1i32)) and ($.p_size <= 10i32))) or (((($.p_brand = \"Brand#34\") and vortex.list.contains([\"LG CASE\", \"LG BOX\", \"LG PACK\", \"LG PKG\"], $.p_container, opts=sql_null_semantics)) and ($.p_size >= 1i32)) and ($.p_size <= 15i32)))",
                                         "((($.p_brand = \"Brand#12\") or ($.p_brand = \"Brand#23\")) or ($.p_brand = \"Brand#34\"))",
-                                        "((vortex.list.contains([\"SM CASE\", \"SM BOX\", \"SM PACK\", \"SM PKG\"], $.p_container) or vortex.list.contains([\"MED BAG\", \"MED BOX\", \"MED PKG\", \"MED PACK\"], $.p_container)) or vortex.list.contains([\"LG CASE\", \"LG BOX\", \"LG PACK\", \"LG PKG\"], $.p_container))",
+                                        "((vortex.list.contains([\"SM CASE\", \"SM BOX\", \"SM PACK\", \"SM PKG\"], $.p_container, opts=sql_null_semantics) or vortex.list.contains([\"MED BAG\", \"MED BOX\", \"MED PKG\", \"MED PACK\"], $.p_container, opts=sql_null_semantics)) or vortex.list.contains([\"LG CASE\", \"LG BOX\", \"LG PACK\", \"LG PKG\"], $.p_container, opts=sql_null_semantics))",
                                         "(((($.p_size >= 1i32) or ($.p_size <= 5i32)) or ($.p_size <= 10i32)) or ($.p_size <= 15i32))"
                                     ],
                                     "Projections": [

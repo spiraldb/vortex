@@ -561,7 +561,7 @@ logical_plan [
                                             "Expressions": [
                                                 "(d_week_seq = d_week_seq)",
                                                 "(CAST(inv_quantity_on_hand AS BIGINT) < cs_quantity)",
-                                                "(CAST(d_date AS TIMESTAMP) > (d_date + to_days(CAST(trunc(CAST('5' AS DOUBLE)) AS INTEGER))))",
+                                                "(CAST(d_date AS TIMESTAMP) > (d_date + '5 days'::INTERVAL))",
                                                 "(hd_buy_potential = CAST('>10000' AS VARCHAR))",
                                                 "(d_year = CAST(1999 AS BIGINT))",
                                                 "(cd_marital_status = CAST('D' AS VARCHAR))"
@@ -823,24 +823,11 @@ logical_opt [
                                                         }
                                                     },
                                                     {
-                                                        "name": "PROJECTION",
-                                                        "children": [
-                                                            {
-                                                                "name": "READ_VORTEX",
-                                                                "children": [],
-                                                                "extra_info": {
-                                                                    "Filters": "(2450817i64 <= $.d_date_sk <= 2452740i64)",
-                                                                    "Function": "Vortex Scan",
-                                                                    "Estimated Cardinality": "73049"
-                                                                }
-                                                            }
-                                                        ],
+                                                        "name": "READ_VORTEX",
+                                                        "children": [],
                                                         "extra_info": {
-                                                            "Expressions": [
-                                                                "#0",
-                                                                "#1",
-                                                                "__internal_compress_integral_usmallint(#0, 2450817)"
-                                                            ],
+                                                            "Filters": "(2450817i64 <= $.d_date_sk <= 2452740i64)",
+                                                            "Function": "Vortex Scan",
                                                             "Estimated Cardinality": "73049"
                                                         }
                                                     }
@@ -861,8 +848,8 @@ logical_opt [
                                                 "#1",
                                                 "CAST(#2 AS SMALLINT)",
                                                 "#3",
-                                                "#5",
-                                                "#4"
+                                                "#4",
+                                                "#5"
                                             ],
                                             "Estimated Cardinality": "1445779"
                                         }
@@ -1162,27 +1149,14 @@ physical_plan [
                                                         }
                                                     },
                                                     {
-                                                        "name": "PROJECTION",
-                                                        "children": [
-                                                            {
-                                                                "name": "READ_VORTEX",
-                                                                "children": [],
-                                                                "extra_info": {
-                                                                    "Function": "Vortex Scan",
-                                                                    "Filters": "(2450817i64 <= $.d_date_sk <= 2452740i64)",
-                                                                    "Projections": [
-                                                                        "d_date_sk",
-                                                                        "d_date"
-                                                                    ],
-                                                                    "Estimated Cardinality": "73049"
-                                                                }
-                                                            }
-                                                        ],
+                                                        "name": "READ_VORTEX",
+                                                        "children": [],
                                                         "extra_info": {
+                                                            "Function": "Vortex Scan",
+                                                            "Filters": "(2450817i64 <= $.d_date_sk <= 2452740i64)",
                                                             "Projections": [
-                                                                "#0",
-                                                                "#1",
-                                                                "__internal_compress_integral_usmallint(#0, 2450817)"
+                                                                "d_date_sk",
+                                                                "d_date"
                                                             ],
                                                             "Estimated Cardinality": "73049"
                                                         }
@@ -1204,8 +1178,8 @@ physical_plan [
                                                 "#1",
                                                 "CAST(#2 AS SMALLINT)",
                                                 "#3",
-                                                "#5",
-                                                "#4"
+                                                "#4",
+                                                "#5"
                                             ],
                                             "Estimated Cardinality": "1445779"
                                         }

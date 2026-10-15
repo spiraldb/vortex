@@ -357,7 +357,7 @@ logical_opt [
                                                         "children": [],
                                                         "extra_info": {
                                                             "Filters": [
-                                                                "((vortex.list.contains([\"CO\", \"OH\", \"TX\"], $.ca_state) or vortex.list.contains([\"OR\", \"MN\", \"KY\"], $.ca_state)) or vortex.list.contains([\"VA\", \"CA\", \"MS\"], $.ca_state))",
+                                                                "((vortex.list.contains([\"CO\", \"OH\", \"TX\"], $.ca_state, opts=sql_null_semantics) or vortex.list.contains([\"OR\", \"MN\", \"KY\"], $.ca_state, opts=sql_null_semantics)) or vortex.list.contains([\"VA\", \"CA\", \"MS\"], $.ca_state, opts=sql_null_semantics))",
                                                                 "($.ca_country = \"United States\")"
                                                             ],
                                                             "Function": "Vortex Scan",
@@ -499,7 +499,7 @@ physical_plan [
                                                         "extra_info": {
                                                             "Function": "Vortex Scan",
                                                             "Filters": [
-                                                                "((vortex.list.contains([\"CO\", \"OH\", \"TX\"], $.ca_state) or vortex.list.contains([\"OR\", \"MN\", \"KY\"], $.ca_state)) or vortex.list.contains([\"VA\", \"CA\", \"MS\"], $.ca_state))",
+                                                                "((vortex.list.contains([\"CO\", \"OH\", \"TX\"], $.ca_state, opts=sql_null_semantics) or vortex.list.contains([\"OR\", \"MN\", \"KY\"], $.ca_state, opts=sql_null_semantics)) or vortex.list.contains([\"VA\", \"CA\", \"MS\"], $.ca_state, opts=sql_null_semantics))",
                                                                 "($.ca_country = \"United States\")"
                                                             ],
                                                             "Projections": [

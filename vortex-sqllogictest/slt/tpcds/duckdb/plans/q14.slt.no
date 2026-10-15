@@ -2698,27 +2698,15 @@ logical_opt [
                                                                                                                                                         }
                                                                                                                                                     },
                                                                                                                                                     {
-                                                                                                                                                        "name": "PROJECTION",
-                                                                                                                                                        "children": [
-                                                                                                                                                            {
-                                                                                                                                                                "name": "READ_VORTEX",
-                                                                                                                                                                "children": [],
-                                                                                                                                                                "extra_info": {
-                                                                                                                                                                    "Filters": [
-                                                                                                                                                                        "($.d_year = 2001i64)",
-                                                                                                                                                                        "($.d_moy = 11i64)",
-                                                                                                                                                                        "(2450816i64 <= $.d_date_sk <= 2452642i64)"
-                                                                                                                                                                    ],
-                                                                                                                                                                    "Function": "Vortex Scan",
-                                                                                                                                                                    "Estimated Cardinality": "14609"
-                                                                                                                                                                }
-                                                                                                                                                            }
-                                                                                                                                                        ],
+                                                                                                                                                        "name": "READ_VORTEX",
+                                                                                                                                                        "children": [],
                                                                                                                                                         "extra_info": {
-                                                                                                                                                            "Expressions": [
-                                                                                                                                                                "#0",
-                                                                                                                                                                "__internal_compress_integral_usmallint(#0, 2450816)"
+                                                                                                                                                            "Filters": [
+                                                                                                                                                                "($.d_year = 2001i64)",
+                                                                                                                                                                "($.d_moy = 11i64)",
+                                                                                                                                                                "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                                                                                                             ],
+                                                                                                                                                            "Function": "Vortex Scan",
                                                                                                                                                             "Estimated Cardinality": "14609"
                                                                                                                                                         }
                                                                                                                                                     }
@@ -2732,15 +2720,15 @@ logical_opt [
                                                                                                                                         ],
                                                                                                                                         "extra_info": {
                                                                                                                                             "Expressions": [
-                                                                                                                                                "__internal_compress_integral_usmallint(#0, 2450816)",
-                                                                                                                                                "CAST(#1 AS SMALLINT)",
+                                                                                                                                                "#0",
+                                                                                                                                                "#1",
                                                                                                                                                 "#2",
                                                                                                                                                 "#3",
-                                                                                                                                                "CAST(#4 AS SMALLINT)",
+                                                                                                                                                "#4",
                                                                                                                                                 "CAST(#5 AS INTEGER)",
                                                                                                                                                 "CAST(#6 AS TINYINT)",
                                                                                                                                                 "CAST(#7 AS TINYINT)",
-                                                                                                                                                "#9"
+                                                                                                                                                "#8"
                                                                                                                                             ],
                                                                                                                                             "Estimated Cardinality": "57692"
                                                                                                                                         }
@@ -2907,27 +2895,15 @@ logical_opt [
                                                                                                                                                         }
                                                                                                                                                     },
                                                                                                                                                     {
-                                                                                                                                                        "name": "PROJECTION",
-                                                                                                                                                        "children": [
-                                                                                                                                                            {
-                                                                                                                                                                "name": "READ_VORTEX",
-                                                                                                                                                                "children": [],
-                                                                                                                                                                "extra_info": {
-                                                                                                                                                                    "Filters": [
-                                                                                                                                                                        "($.d_year = 2001i64)",
-                                                                                                                                                                        "($.d_moy = 11i64)",
-                                                                                                                                                                        "(2450815i64 <= $.d_date_sk <= 2452652i64)"
-                                                                                                                                                                    ],
-                                                                                                                                                                    "Function": "Vortex Scan",
-                                                                                                                                                                    "Estimated Cardinality": "14609"
-                                                                                                                                                                }
-                                                                                                                                                            }
-                                                                                                                                                        ],
+                                                                                                                                                        "name": "READ_VORTEX",
+                                                                                                                                                        "children": [],
                                                                                                                                                         "extra_info": {
-                                                                                                                                                            "Expressions": [
-                                                                                                                                                                "#0",
-                                                                                                                                                                "__internal_compress_integral_usmallint(#0, 2450815)"
+                                                                                                                                                            "Filters": [
+                                                                                                                                                                "($.d_year = 2001i64)",
+                                                                                                                                                                "($.d_moy = 11i64)",
+                                                                                                                                                                "(2450815i64 <= $.d_date_sk <= 2452652i64)"
                                                                                                                                                             ],
+                                                                                                                                                            "Function": "Vortex Scan",
                                                                                                                                                             "Estimated Cardinality": "14609"
                                                                                                                                                         }
                                                                                                                                                     }
@@ -2941,15 +2917,15 @@ logical_opt [
                                                                                                                                         ],
                                                                                                                                         "extra_info": {
                                                                                                                                             "Expressions": [
-                                                                                                                                                "__internal_compress_integral_usmallint(#0, 2450815)",
-                                                                                                                                                "CAST(#1 AS SMALLINT)",
+                                                                                                                                                "#0",
+                                                                                                                                                "#1",
                                                                                                                                                 "#2",
                                                                                                                                                 "#3",
-                                                                                                                                                "CAST(#4 AS SMALLINT)",
+                                                                                                                                                "#4",
                                                                                                                                                 "CAST(#5 AS INTEGER)",
                                                                                                                                                 "CAST(#6 AS TINYINT)",
                                                                                                                                                 "CAST(#7 AS TINYINT)",
-                                                                                                                                                "#9"
+                                                                                                                                                "#8"
                                                                                                                                             ],
                                                                                                                                             "Estimated Cardinality": "28731"
                                                                                                                                         }
@@ -3138,15 +3114,15 @@ logical_opt [
                                                                                                                                         ],
                                                                                                                                         "extra_info": {
                                                                                                                                             "Expressions": [
-                                                                                                                                                "__internal_compress_integral_usmallint(#0, 2450816)",
-                                                                                                                                                "CAST(#1 AS SMALLINT)",
+                                                                                                                                                "#0",
+                                                                                                                                                "#1",
                                                                                                                                                 "#2",
                                                                                                                                                 "#3",
-                                                                                                                                                "CAST(#4 AS SMALLINT)",
+                                                                                                                                                "#4",
                                                                                                                                                 "CAST(#5 AS INTEGER)",
                                                                                                                                                 "CAST(#6 AS TINYINT)",
                                                                                                                                                 "CAST(#7 AS TINYINT)",
-                                                                                                                                                "__internal_compress_integral_usmallint(#8, 2450816)"
+                                                                                                                                                "#8"
                                                                                                                                             ],
                                                                                                                                             "Estimated Cardinality": "14326"
                                                                                                                                         }
@@ -3331,7 +3307,7 @@ logical_opt [
                                                                                                                 "__internal_compress_string_ubigint(#0)",
                                                                                                                 "CAST(#1 AS INTEGER)",
                                                                                                                 "CAST(#2 AS TINYINT)",
-                                                                                                                "CAST(#3 AS TINYINT)",
+                                                                                                                "#3",
                                                                                                                 "#4",
                                                                                                                 "#5"
                                                                                                             ],
@@ -3407,7 +3383,7 @@ logical_opt [
                                                                                                                             "Expressions": [
                                                                                                                                 "__internal_compress_string_ubigint(#0)",
                                                                                                                                 "CAST(#1 AS INTEGER)",
-                                                                                                                                "CAST(#2 AS TINYINT)",
+                                                                                                                                "#2",
                                                                                                                                 "#3",
                                                                                                                                 "#4"
                                                                                                                             ],
@@ -3479,7 +3455,7 @@ logical_opt [
                                                                                                                                         "extra_info": {
                                                                                                                                             "Expressions": [
                                                                                                                                                 "__internal_compress_string_ubigint(#0)",
-                                                                                                                                                "CAST(#1 AS INTEGER)",
+                                                                                                                                                "#1",
                                                                                                                                                 "#2",
                                                                                                                                                 "#3"
                                                                                                                                             ],
@@ -4514,28 +4490,16 @@ physical_plan [
                                                                                                                                         }
                                                                                                                                     },
                                                                                                                                     {
-                                                                                                                                        "name": "PROJECTION",
-                                                                                                                                        "children": [
-                                                                                                                                            {
-                                                                                                                                                "name": "READ_VORTEX",
-                                                                                                                                                "children": [],
-                                                                                                                                                "extra_info": {
-                                                                                                                                                    "Function": "Vortex Scan",
-                                                                                                                                                    "Filters": [
-                                                                                                                                                        "($.d_year = 2001i64)",
-                                                                                                                                                        "($.d_moy = 11i64)",
-                                                                                                                                                        "(2450816i64 <= $.d_date_sk <= 2452642i64)"
-                                                                                                                                                    ],
-                                                                                                                                                    "Projections": "d_date_sk",
-                                                                                                                                                    "Estimated Cardinality": "14609"
-                                                                                                                                                }
-                                                                                                                                            }
-                                                                                                                                        ],
+                                                                                                                                        "name": "READ_VORTEX",
+                                                                                                                                        "children": [],
                                                                                                                                         "extra_info": {
-                                                                                                                                            "Projections": [
-                                                                                                                                                "#0",
-                                                                                                                                                "__internal_compress_integral_usmallint(#0, 2450816)"
+                                                                                                                                            "Function": "Vortex Scan",
+                                                                                                                                            "Filters": [
+                                                                                                                                                "($.d_year = 2001i64)",
+                                                                                                                                                "($.d_moy = 11i64)",
+                                                                                                                                                "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                                                                                             ],
+                                                                                                                                            "Projections": "d_date_sk",
                                                                                                                                             "Estimated Cardinality": "14609"
                                                                                                                                         }
                                                                                                                                     }
@@ -4549,15 +4513,15 @@ physical_plan [
                                                                                                                         ],
                                                                                                                         "extra_info": {
                                                                                                                             "Projections": [
-                                                                                                                                "__internal_compress_integral_usmallint(#0, 2450816)",
-                                                                                                                                "CAST(#1 AS SMALLINT)",
+                                                                                                                                "#0",
+                                                                                                                                "#1",
                                                                                                                                 "#2",
                                                                                                                                 "#3",
-                                                                                                                                "CAST(#4 AS SMALLINT)",
+                                                                                                                                "#4",
                                                                                                                                 "CAST(#5 AS INTEGER)",
                                                                                                                                 "CAST(#6 AS TINYINT)",
                                                                                                                                 "CAST(#7 AS TINYINT)",
-                                                                                                                                "#9"
+                                                                                                                                "#8"
                                                                                                                             ],
                                                                                                                             "Estimated Cardinality": "57692"
                                                                                                                         }
@@ -4738,28 +4702,16 @@ physical_plan [
                                                                                                                                         }
                                                                                                                                     },
                                                                                                                                     {
-                                                                                                                                        "name": "PROJECTION",
-                                                                                                                                        "children": [
-                                                                                                                                            {
-                                                                                                                                                "name": "READ_VORTEX",
-                                                                                                                                                "children": [],
-                                                                                                                                                "extra_info": {
-                                                                                                                                                    "Function": "Vortex Scan",
-                                                                                                                                                    "Filters": [
-                                                                                                                                                        "($.d_year = 2001i64)",
-                                                                                                                                                        "($.d_moy = 11i64)",
-                                                                                                                                                        "(2450815i64 <= $.d_date_sk <= 2452652i64)"
-                                                                                                                                                    ],
-                                                                                                                                                    "Projections": "d_date_sk",
-                                                                                                                                                    "Estimated Cardinality": "14609"
-                                                                                                                                                }
-                                                                                                                                            }
-                                                                                                                                        ],
+                                                                                                                                        "name": "READ_VORTEX",
+                                                                                                                                        "children": [],
                                                                                                                                         "extra_info": {
-                                                                                                                                            "Projections": [
-                                                                                                                                                "#0",
-                                                                                                                                                "__internal_compress_integral_usmallint(#0, 2450815)"
+                                                                                                                                            "Function": "Vortex Scan",
+                                                                                                                                            "Filters": [
+                                                                                                                                                "($.d_year = 2001i64)",
+                                                                                                                                                "($.d_moy = 11i64)",
+                                                                                                                                                "(2450815i64 <= $.d_date_sk <= 2452652i64)"
                                                                                                                                             ],
+                                                                                                                                            "Projections": "d_date_sk",
                                                                                                                                             "Estimated Cardinality": "14609"
                                                                                                                                         }
                                                                                                                                     }
@@ -4773,15 +4725,15 @@ physical_plan [
                                                                                                                         ],
                                                                                                                         "extra_info": {
                                                                                                                             "Projections": [
-                                                                                                                                "__internal_compress_integral_usmallint(#0, 2450815)",
-                                                                                                                                "CAST(#1 AS SMALLINT)",
+                                                                                                                                "#0",
+                                                                                                                                "#1",
                                                                                                                                 "#2",
                                                                                                                                 "#3",
-                                                                                                                                "CAST(#4 AS SMALLINT)",
+                                                                                                                                "#4",
                                                                                                                                 "CAST(#5 AS INTEGER)",
                                                                                                                                 "CAST(#6 AS TINYINT)",
                                                                                                                                 "CAST(#7 AS TINYINT)",
-                                                                                                                                "#9"
+                                                                                                                                "#8"
                                                                                                                             ],
                                                                                                                             "Estimated Cardinality": "28731"
                                                                                                                         }
@@ -4985,15 +4937,15 @@ physical_plan [
                                                                                                                         ],
                                                                                                                         "extra_info": {
                                                                                                                             "Projections": [
-                                                                                                                                "__internal_compress_integral_usmallint(#0, 2450816)",
-                                                                                                                                "CAST(#1 AS SMALLINT)",
+                                                                                                                                "#0",
+                                                                                                                                "#1",
                                                                                                                                 "#2",
                                                                                                                                 "#3",
-                                                                                                                                "CAST(#4 AS SMALLINT)",
+                                                                                                                                "#4",
                                                                                                                                 "CAST(#5 AS INTEGER)",
                                                                                                                                 "CAST(#6 AS TINYINT)",
                                                                                                                                 "CAST(#7 AS TINYINT)",
-                                                                                                                                "__internal_compress_integral_usmallint(#8, 2450816)"
+                                                                                                                                "#8"
                                                                                                                             ],
                                                                                                                             "Estimated Cardinality": "14326"
                                                                                                                         }
@@ -5182,7 +5134,7 @@ physical_plan [
                                                                                 "__internal_compress_string_ubigint(#0)",
                                                                                 "CAST(#1 AS INTEGER)",
                                                                                 "CAST(#2 AS TINYINT)",
-                                                                                "CAST(#3 AS TINYINT)",
+                                                                                "#3",
                                                                                 "#4",
                                                                                 "#5"
                                                                             ],
@@ -5255,7 +5207,7 @@ physical_plan [
                                                                                     "Projections": [
                                                                                         "__internal_compress_string_ubigint(#0)",
                                                                                         "CAST(#1 AS INTEGER)",
-                                                                                        "CAST(#2 AS TINYINT)",
+                                                                                        "#2",
                                                                                         "#3",
                                                                                         "#4"
                                                                                     ],
@@ -5324,7 +5276,7 @@ physical_plan [
                                                                                         "extra_info": {
                                                                                             "Projections": [
                                                                                                 "__internal_compress_string_ubigint(#0)",
-                                                                                                "CAST(#1 AS INTEGER)",
+                                                                                                "#1",
                                                                                                 "#2",
                                                                                                 "#3"
                                                                                             ],

@@ -439,7 +439,7 @@ logical_opt [
                                                                                                                 "name": "READ_VORTEX",
                                                                                                                 "children": [],
                                                                                                                 "extra_info": {
-                                                                                                                    "Filters": "vortex.list.contains([\"Orange County\", \"Bronx County\", \"Franklin Parish\", \"Williamson County\"], $.s_county)",
+                                                                                                                    "Filters": "vortex.list.contains([\"Orange County\", \"Bronx County\", \"Franklin Parish\", \"Williamson County\"], $.s_county, opts=sql_null_semantics)",
                                                                                                                     "Function": "Vortex Scan",
                                                                                                                     "Estimated Cardinality": "1"
                                                                                                                 }
@@ -456,7 +456,7 @@ logical_opt [
                                                                                                         "children": [],
                                                                                                         "extra_info": {
                                                                                                             "Filters": [
-                                                                                                                "vortex.list.contains([1999i64, 2000i64, 2001i64], $.d_year)",
+                                                                                                                "vortex.list.contains([1999i64, 2000i64, 2001i64], $.d_year, opts=sql_null_semantics)",
                                                                                                                 "(1i64 <= $.d_dom <= 2i64)",
                                                                                                                 "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                                                             ],
@@ -476,7 +476,7 @@ logical_opt [
                                                                                             "Expressions": [
                                                                                                 "CAST(#0 AS SMALLINT)",
                                                                                                 "CAST(#1 AS SMALLINT)",
-                                                                                                "__internal_compress_integral_usmallint(#2, 2450816)"
+                                                                                                "#2"
                                                                                             ],
                                                                                             "Estimated Cardinality": "11538"
                                                                                         }
@@ -712,7 +712,7 @@ physical_plan [
                                                                                                                         "children": [],
                                                                                                                         "extra_info": {
                                                                                                                             "Function": "Vortex Scan",
-                                                                                                                            "Filters": "vortex.list.contains([\"Orange County\", \"Bronx County\", \"Franklin Parish\", \"Williamson County\"], $.s_county)",
+                                                                                                                            "Filters": "vortex.list.contains([\"Orange County\", \"Bronx County\", \"Franklin Parish\", \"Williamson County\"], $.s_county, opts=sql_null_semantics)",
                                                                                                                             "Projections": "s_store_sk",
                                                                                                                             "Estimated Cardinality": "1"
                                                                                                                         }
@@ -730,7 +730,7 @@ physical_plan [
                                                                                                                 "extra_info": {
                                                                                                                     "Function": "Vortex Scan",
                                                                                                                     "Filters": [
-                                                                                                                        "vortex.list.contains([1999i64, 2000i64, 2001i64], $.d_year)",
+                                                                                                                        "vortex.list.contains([1999i64, 2000i64, 2001i64], $.d_year, opts=sql_null_semantics)",
                                                                                                                         "(1i64 <= $.d_dom <= 2i64)",
                                                                                                                         "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                                                                     ],
@@ -750,7 +750,7 @@ physical_plan [
                                                                                                     "Projections": [
                                                                                                         "CAST(#0 AS SMALLINT)",
                                                                                                         "CAST(#1 AS SMALLINT)",
-                                                                                                        "__internal_compress_integral_usmallint(#2, 2450816)"
+                                                                                                        "#2"
                                                                                                     ],
                                                                                                     "Estimated Cardinality": "11538"
                                                                                                 }

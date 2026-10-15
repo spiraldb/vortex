@@ -71,7 +71,7 @@ logical_plan [
                                 "extra_info": {
                                     "Expressions": [
                                         "(l_shipdate >= CAST('1996-01-01' AS DATE))",
-                                        "(CAST(l_shipdate AS TIMESTAMP) < (CAST('1996-01-01' AS DATE) + to_months(CAST(trunc(CAST('3' AS DOUBLE)) AS INTEGER))))"
+                                        "(CAST(l_shipdate AS TIMESTAMP) < ('1996-01-01'::DATE + '3 months'::INTERVAL))"
                                     ]
                                 }
                             }
