@@ -1,8 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+//! Rewrites `x >= a AND x < b` into `x BETWEEN a AND b`.
+
+use std::ptr;
+
+use vortex_error::VortexExpect;
+use vortex_error::VortexResult;
+
 use crate::expr::BoundExpression;
-use crate::expr::bound;
 use crate::scalar_fn::ScalarFnVTableExt;
 use crate::scalar_fn::fns::between::Between;
 use crate::scalar_fn::fns::between::BetweenOptions;
@@ -12,169 +18,205 @@ use crate::scalar_fn::fns::get_item::GetItem;
 use crate::scalar_fn::fns::literal::Literal;
 use crate::scalar_fn::fns::operators::Operator;
 
-/// This pass looks for expression of the form
-///      `x >= a && x < b` and converts them into x between a and b`
-pub fn find_between(expr: BoundExpression) -> BoundExpression {
-    // We search all pairs of cnfs to find any pair of expressions can be converted into a between
-    // expression.
-    //
-    // Only leaf conjuncts (`GetItem op Literal`) can form a between; anything else is moved to the
-    // rest unexamined so pairs of non-leaf conjuncts are never compared.
-    let mut conjuncts = conjuncts(&expr)
-        .into_iter()
-        .map(|expression| {
-            let is_leaf = is_leaf_conjunct(&expression);
-            (expression, is_leaf)
-        })
-        .collect::<Vec<_>>();
-    let mut rest = vec![];
+/// Merge pairs of range comparisons on the same column within any conjunction of `expr` into a
+/// single [`Between`].
+///
+/// This is not an optimizer rule because it is worth running only once, on a scan's filter.
+/// Subtrees without a match keep their identity, so an expression without any match is returned
+/// unchanged.
+pub fn find_between(expr: BoundExpression) -> VortexResult<BoundExpression> {
+    Ok(try_find_between(&expr)?.unwrap_or(expr))
+}
 
-    for idx in 0..conjuncts.len() {
-        let Some((c, is_leaf)) = conjuncts.get(idx).cloned() else {
+fn try_find_between(expr: &BoundExpression) -> VortexResult<Option<BoundExpression>> {
+    let children = expr.children();
+    let mut new_children: Option<Vec<BoundExpression>> = None;
+    for (idx, child) in children.iter().enumerate() {
+        if let Some(rewritten) = try_find_between(child)? {
+            new_children
+                .get_or_insert_with(|| children[..idx].to_vec())
+                .push(rewritten);
+        } else if let Some(new_children) = new_children.as_mut() {
+            new_children.push(child.clone());
+        }
+    }
+    let rewritten = new_children
+        .map(|children| expr.clone().with_children(children))
+        .transpose()?;
+
+    let current = rewritten.as_ref().unwrap_or(expr);
+    if is_and(current)
+        && let Some(merged) = merge_straddling_pairs(current)?
+    {
+        return Ok(Some(merged));
+    }
+    Ok(rewritten)
+}
+
+/// Merge pairs of range comparisons that sit on opposite sides of the `AND` node `expr`.
+///
+/// Children are rewritten before their parents, so a pair within one side was already merged at
+/// the `AND` node joining it. Only considering straddling pairs keeps the pass linear in the size
+/// of the conjunction instead of re-pairing every conjunct at every level. The rest of the tree
+/// keeps its shape: the lhs conjunct becomes the between and the rhs conjunct is removed.
+fn merge_straddling_pairs(expr: &BoundExpression) -> VortexResult<Option<BoundExpression>> {
+    let mut current: Option<BoundExpression> = None;
+
+    loop {
+        let expr = current.as_ref().unwrap_or(expr);
+        if !is_and(expr) {
+            break;
+        }
+        let lhs = expr.child(0);
+        let rhs = expr.child(1);
+
+        let Some((lower, upper, between)) = find_conjunct(rhs, &mut |rhs_conjunct| {
+            let rhs_cmp = RangeComparison::try_new(rhs_conjunct)?;
+            find_conjunct(lhs, &mut |lhs_conjunct| {
+                let lhs_cmp = RangeComparison::try_new(lhs_conjunct)?;
+                let between = lhs_cmp.between(&rhs_cmp)?;
+                Some((lhs_conjunct, rhs_conjunct, between))
+            })
+        }) else {
+            break;
+        };
+
+        tracing::debug!(%lower, %upper, "merged range comparisons into {between}");
+
+        let new_lhs = rewrite_conjunct(lhs, lower, Some(&between))?
+            .vortex_expect("matched conjunct is part of the lhs")
+            .vortex_expect("replaced conjunct is never removed");
+        let new_rhs = rewrite_conjunct(rhs, upper, None)?
+            .vortex_expect("matched conjunct is part of the rhs");
+
+        current = Some(match new_rhs {
+            Some(new_rhs) => expr.clone().with_children([new_lhs, new_rhs])?,
+            None => new_lhs,
+        });
+    }
+
+    Ok(current)
+}
+
+fn is_and(expr: &BoundExpression) -> bool {
+    expr.as_opt::<Binary>() == Some(&Operator::And)
+}
+
+/// Return the first `Some` produced by `f` over the conjuncts of the `AND` tree rooted at `expr`.
+fn find_conjunct<'a, T>(
+    expr: &'a BoundExpression,
+    f: &mut impl FnMut(&'a BoundExpression) -> Option<T>,
+) -> Option<T> {
+    if is_and(expr) {
+        find_conjunct(expr.child(0), f).or_else(|| find_conjunct(expr.child(1), f))
+    } else {
+        f(expr)
+    }
+}
+
+/// Replace the conjunct `target`, identified by address, in the `AND` tree rooted at `expr`, or
+/// remove it when `replacement` is `None`.
+///
+/// Returns `None` when `target` is not a conjunct of `expr`, otherwise the rewritten tree, which
+/// is itself `None` when removing `target` leaves nothing behind.
+fn rewrite_conjunct(
+    expr: &BoundExpression,
+    target: &BoundExpression,
+    replacement: Option<&BoundExpression>,
+) -> VortexResult<Option<Option<BoundExpression>>> {
+    if ptr::eq(expr, target) {
+        return Ok(Some(replacement.cloned()));
+    }
+    if !is_and(expr) {
+        return Ok(None);
+    }
+
+    for idx in 0..2 {
+        let Some(new_child) = rewrite_conjunct(expr.child(idx), target, replacement)? else {
             continue;
         };
-        if !is_leaf {
-            rest.push(c);
-            continue;
+        let sibling = expr.child(1 - idx).clone();
+        let rewritten = match new_child {
+            Some(new_child) if idx == 0 => expr.clone().with_children([new_child, sibling])?,
+            Some(new_child) => expr.clone().with_children([sibling, new_child])?,
+            None => sibling,
+        };
+        return Ok(Some(Some(rewritten)));
+    }
+
+    Ok(None)
+}
+
+/// A conjunct `column op literal` (in either order) that bounds `column` from one side.
+struct RangeComparison<'a> {
+    column: &'a BoundExpression,
+    literal: &'a BoundExpression,
+    is_lower: bool,
+    strict: StrictComparison,
+}
+
+impl<'a> RangeComparison<'a> {
+    fn try_new(expr: &'a BoundExpression) -> Option<Self> {
+        let operator = *expr.as_opt::<Binary>()?;
+        let lhs = expr.child(0);
+        let rhs = expr.child(1);
+
+        // Normalize the column to the left of the operator.
+        let (column, literal, operator) = if lhs.is::<GetItem>() && rhs.is::<Literal>() {
+            (lhs, rhs, operator)
+        } else if rhs.is::<GetItem>() && lhs.is::<Literal>() {
+            (rhs, lhs, operator.swap()?)
+        } else {
+            return None;
+        };
+
+        let (is_lower, strict) = match operator {
+            Operator::Gt => (true, StrictComparison::Strict),
+            Operator::Gte => (true, StrictComparison::NonStrict),
+            Operator::Lt => (false, StrictComparison::Strict),
+            Operator::Lte => (false, StrictComparison::NonStrict),
+            _ => return None,
+        };
+
+        Some(Self {
+            column,
+            literal,
+            is_lower,
+            strict,
+        })
+    }
+
+    /// Combine two comparisons bounding the same column from opposite sides.
+    fn between(&self, other: &Self) -> Option<BoundExpression> {
+        if self.is_lower == other.is_lower || self.column != other.column {
+            return None;
         }
-        let mut matched = false;
-        for idx2 in (idx + 1)..conjuncts.len() {
-            // Since values are removed in iterations there might not be a value at idx2,
-            // but all values will have been considered.
-            let Some((c2, true)) = conjuncts.get(idx2) else {
-                continue;
-            };
-            if let Some(expr) = maybe_match(&c, c2) {
-                rest.push(expr);
-                conjuncts.remove(idx2);
-                matched = true;
-                break;
-            }
-        }
-        if !matched {
-            rest.push(c.clone())
-        }
-    }
+        let (lower, upper) = if self.is_lower {
+            (self, other)
+        } else {
+            (other, self)
+        };
 
-    bound::and_collect(rest).unwrap_or_else(|| bound::lit(true))
-}
-
-fn conjuncts(expr: &BoundExpression) -> Vec<BoundExpression> {
-    let mut conjuncts = vec![];
-    conjuncts_impl(expr, &mut conjuncts);
-    conjuncts
-}
-
-fn conjuncts_impl(expr: &BoundExpression, conjuncts: &mut Vec<BoundExpression>) {
-    if let Some(operator) = expr.as_opt::<Binary>()
-        && *operator == Operator::And
-    {
-        conjuncts_impl(expr.child(0), conjuncts);
-        conjuncts_impl(expr.child(1), conjuncts);
-    } else {
-        conjuncts.push(expr.clone())
-    }
-}
-
-/// A leaf conjunct is a strict-comparison binary between a `GetItem` and a `Literal`, in either
-/// order — the only shape that can be half of a between.
-fn is_leaf_conjunct(expr: &BoundExpression) -> bool {
-    let Some(operator) = expr.as_opt::<Binary>() else {
-        return false;
-    };
-    if is_strict_comparison(*operator).is_none() {
-        return false;
-    }
-
-    let lhs = expr.child(0);
-    let rhs = expr.child(1);
-    (lhs.is::<GetItem>() && rhs.is::<Literal>()) || (rhs.is::<GetItem>() && lhs.is::<Literal>())
-}
-
-fn maybe_match(lhs: &BoundExpression, rhs: &BoundExpression) -> Option<BoundExpression> {
-    let (Some(lhs_op), Some(rhs_op)) = (lhs.as_opt::<Binary>(), rhs.as_opt::<Binary>()) else {
-        return None;
-    };
-
-    // Extract the grandchildren
-    let lhs_lhs = lhs.child(0);
-    let lhs_rhs = lhs.child(1);
-    let rhs_lhs = rhs.child(0);
-    let rhs_rhs = rhs.child(1);
-
-    // Cannot compare to self
-    if lhs_lhs.eq(lhs_rhs) || rhs_lhs.eq(rhs_rhs) {
-        return None;
-    }
-
-    // First, get both halves to have GetItem on the left
-    let lhs = match (lhs_lhs.is::<GetItem>(), lhs_rhs.is::<GetItem>()) {
-        (true, false) => lhs.clone(),
-        (false, true) => Binary
-            .try_new_bound_expr(lhs_op.swap()?, [lhs_rhs.clone(), lhs_lhs.clone()])
-            .ok()?,
-        _ => return None,
-    };
-    let lhs_op = lhs.as_::<Binary>();
-    let lhs_lhs = lhs.child(0);
-
-    let rhs = match (rhs_lhs.is::<GetItem>(), rhs_rhs.is::<GetItem>()) {
-        (true, false) => rhs.clone(),
-        (false, true) => Binary
-            .try_new_bound_expr(rhs_op.swap()?, [rhs_rhs.clone(), rhs_lhs.clone()])
-            .ok()?,
-        _ => return None,
-    };
-    let rhs_op = rhs.as_::<Binary>();
-    let rhs_lhs = rhs.child(0);
-
-    // Both conjuncts must reference the same GetItem column
-    if !lhs_lhs.eq(rhs_lhs) {
-        return None;
-    }
-
-    let target = lhs_lhs.clone();
-
-    // Find the lower bound
-    let (lower, upper) = match (lhs_op, rhs_op) {
-        (Operator::Lt | Operator::Lte, Operator::Gt | Operator::Gte) => (rhs, lhs),
-        (Operator::Gt | Operator::Gte, Operator::Lt | Operator::Lte) => (lhs, rhs),
-        _ => return None,
-    };
-    let lower_op = lower.as_::<Binary>();
-    let lower_rhs = lower.child(1);
-    let upper_op = upper.as_::<Binary>();
-    let upper_rhs = upper.child(1);
-
-    // Ensure bounds are literals
-    let _ = lower_rhs.as_opt::<Literal>()?;
-    let _ = upper_rhs.as_opt::<Literal>()?;
-
-    let lower_strict = is_strict_comparison(*lower_op)?;
-    let upper_strict = is_strict_comparison(*upper_op)?;
-
-    // A between that fails to type-check leaves the comparisons in place.
-    Between
-        .try_new_bound_expr(
-            BetweenOptions {
-                lower_strict,
-                upper_strict,
-            },
-            [target, lower_rhs.clone(), upper_rhs.clone()],
-        )
-        .ok()
-}
-
-fn is_strict_comparison(op: Operator) -> Option<StrictComparison> {
-    match op {
-        Operator::Lt | Operator::Gt => Some(StrictComparison::Strict),
-        Operator::Lte | Operator::Gte => Some(StrictComparison::NonStrict),
-        _ => None,
+        // A between that fails to type-check leaves the comparisons in place.
+        Between
+            .try_new_bound_expr(
+                BetweenOptions {
+                    lower_strict: lower.strict,
+                    upper_strict: upper.strict,
+                },
+                [
+                    self.column.clone(),
+                    lower.literal.clone(),
+                    upper.literal.clone(),
+                ],
+            )
+            .ok()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
 
@@ -188,7 +230,6 @@ mod tests {
     use crate::dtype::Nullability;
     use crate::dtype::PType;
     use crate::dtype::StructFields;
-    use crate::expr::BoundExpression;
     use crate::expr::Expression;
     use crate::expr::and;
     use crate::expr::between;
@@ -198,6 +239,7 @@ mod tests {
     use crate::expr::lit;
     use crate::expr::lt;
     use crate::expr::lt_eq;
+    use crate::expr::or;
     use crate::scalar::Scalar;
     use crate::scalar_fn::fns::between::BetweenOptions;
     use crate::scalar_fn::fns::between::StrictComparison;
@@ -213,14 +255,127 @@ mod tests {
         )
     }
 
-    fn bind(expr: Expression) -> VortexResult<BoundExpression> {
-        expr.bind(&scope())
+    fn between_x(lower: i32, upper: i32, lower_strict: bool, upper_strict: bool) -> Expression {
+        let strictness = |strict| {
+            if strict {
+                StrictComparison::Strict
+            } else {
+                StrictComparison::NonStrict
+            }
+        };
+        between(
+            col("x"),
+            lit(lower),
+            lit(upper),
+            BetweenOptions {
+                lower_strict: strictness(lower_strict),
+                upper_strict: strictness(upper_strict),
+            },
+        )
+    }
+
+    #[rstest]
+    // An impossible range is still a between.
+    #[case::bad_match(
+        and(lt_eq(lit(100), col("x")), gt(lit(-100), col("x"))),
+        between_x(100, -100, false, true)
+    )]
+    #[case::literals_on_left(
+        and(lt(lit(2), col("x")), gt_eq(lit(5), col("x"))),
+        between_x(2, 5, true, false)
+    )]
+    #[case::columns_on_left(
+        and(gt_eq(col("x"), lit(2)), lt(col("x"), lit(5))),
+        between_x(2, 5, false, true)
+    )]
+    #[case::mixed_sides(
+        and(gt_eq(col("x"), lit(2)), gt_eq(lit(5), col("x"))),
+        between_x(2, 5, false, false)
+    )]
+    #[case::upper_first(
+        and(gt_eq(lit(5), col("x")), lt(lit(2), col("x"))),
+        between_x(2, 5, true, false)
+    )]
+    #[case::other_conjunct_first(
+        and(
+            and(gt_eq(col("y"), lit(10)), gt_eq(lit(5), col("x"))),
+            lt(lit(2), col("x")),
+        ),
+        and(gt_eq(col("y"), lit(10)), between_x(2, 5, true, false))
+    )]
+    #[case::other_conjunct_last(
+        and(
+            and(gt_eq(lit(5), col("x")), gt_eq(col("y"), lit(10))),
+            lt(lit(2), col("x")),
+        ),
+        and(between_x(2, 5, true, false), gt_eq(col("y"), lit(10)))
+    )]
+    #[case::skips_non_leaf_conjuncts(
+        and(
+            and(gt_eq(col("x"), lit(2)), gt(col("y"), col("z"))),
+            lt(col("x"), lit(5))
+        ),
+        and(between_x(2, 5, false, true), gt(col("y"), col("z")))
+    )]
+    #[case::pair_within_one_side(
+        and(
+            and(gt_eq(col("x"), lit(2)), lt(col("x"), lit(5))),
+            gt(col("y"), col("z"))
+        ),
+        and(between_x(2, 5, false, true), gt(col("y"), col("z")))
+    )]
+    #[case::under_or(
+        or(
+            and(gt_eq(col("x"), lit(2)), lt(col("x"), lit(5))),
+            gt(col("y"), col("z"))
+        ),
+        or(between_x(2, 5, false, true), gt(col("y"), col("z")))
+    )]
+    #[case::no_pair(
+        and(gt_eq(col("x"), lit(2)), lt(col("y"), lit(5))),
+        and(gt_eq(col("x"), lit(2)), lt(col("y"), lit(5)))
+    )]
+    #[case::same_direction(
+        and(gt_eq(col("x"), lit(2)), gt(col("x"), lit(5))),
+        and(gt_eq(col("x"), lit(2)), gt(col("x"), lit(5)))
+    )]
+    fn finds_between(#[case] expr: Expression, #[case] expected: Expression) -> VortexResult<()> {
+        let scope = scope();
+        assert_eq!(find_between(expr.bind(&scope)?)?, expected.bind(&scope)?);
+        Ok(())
+    }
+
+    /// Every pair straddling a single `AND` node is merged.
+    #[test]
+    fn merges_many_pairs() -> VortexResult<()> {
+        let scope = scope();
+        let lowers = ["x", "y", "z"].map(|name| gt_eq(col(name), lit(0)));
+        let uppers = ["x", "y", "z"].map(|name| lt(col(name), lit(10)));
+        let [lx, ly, lz] = lowers;
+        let [ux, uy, uz] = uppers;
+        let expr = and(and(and(lx, ly), lz), and(and(uz, uy), ux));
+
+        let range = |name| {
+            between(
+                col(name),
+                lit(0),
+                lit(10),
+                BetweenOptions {
+                    lower_strict: StrictComparison::NonStrict,
+                    upper_strict: StrictComparison::Strict,
+                },
+            )
+        };
+        let expected = and(and(range("x"), range("y")), range("z"));
+
+        assert_eq!(find_between(expr.bind(&scope)?)?, expected.bind(&scope)?);
+        Ok(())
     }
 
     /// A null literal bound must not change the values of the rewritten expression. Kleene `AND`
     /// keeps a row false when the surviving comparison is false, so the rewrite cannot null it.
     #[test]
-    fn test_null_literal_bound_is_value_preserving() -> VortexResult<()> {
+    fn null_literal_bound_is_value_preserving() -> VortexResult<()> {
         let session = array_session();
         let ctx = &mut session.create_execution_ctx();
         let data = StructArray::from_fields(&[("x", buffer![10, 1].into_array())])?.into_array();
@@ -237,7 +392,7 @@ mod tests {
             .execute::<BoolArray>(ctx)?
             .opt_bool_vec(ctx);
 
-        let rewritten = find_between(expr.bind(data.dtype())?);
+        let rewritten = find_between(expr.bind(data.dtype())?)?;
         let after = data
             .apply_bound(&rewritten)?
             .execute::<BoolArray>(ctx)?
@@ -247,194 +402,6 @@ mod tests {
         assert_eq!(before, [Some(false), None]);
         assert_eq!(before, after);
 
-        Ok(())
-    }
-
-    #[test]
-    fn test_bad_match() -> VortexResult<()> {
-        // An impossible expression
-        let expr = and(lt_eq(lit(100), col("x")), gt(lit(-100), col("x")));
-        let find = find_between(bind(expr)?);
-
-        assert_eq!(
-            &find,
-            &bind(between(
-                col("x"),
-                lit(100),
-                lit(-100),
-                BetweenOptions {
-                    lower_strict: StrictComparison::NonStrict,
-                    upper_strict: StrictComparison::Strict,
-                }
-            ))?
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn test_match_between() -> VortexResult<()> {
-        let expr = and(lt(lit(2), col("x")), gt_eq(lit(5), col("x")));
-        let find = find_between(bind(expr)?);
-
-        // 2 < x <= 5
-        assert_eq!(
-            &bind(between(
-                col("x"),
-                lit(2),
-                lit(5),
-                BetweenOptions {
-                    lower_strict: StrictComparison::Strict,
-                    upper_strict: StrictComparison::NonStrict,
-                }
-            ))?,
-            &find
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn test_match_2_between() -> VortexResult<()> {
-        let expr = and(gt_eq(col("x"), lit(2)), lt(col("x"), lit(5)));
-        let find = find_between(bind(expr)?);
-
-        // 2 <= x < 5
-        assert_eq!(
-            &bind(between(
-                col("x"),
-                lit(2),
-                lit(5),
-                BetweenOptions {
-                    lower_strict: StrictComparison::NonStrict,
-                    upper_strict: StrictComparison::Strict,
-                }
-            ))?,
-            &find
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn test_match_3_between() -> VortexResult<()> {
-        let expr = and(gt_eq(col("x"), lit(2)), gt_eq(lit(5), col("x")));
-        let find = find_between(bind(expr)?);
-
-        // 2 <= x < 5
-        assert_eq!(
-            &bind(between(
-                col("x"),
-                lit(2),
-                lit(5),
-                BetweenOptions {
-                    lower_strict: StrictComparison::NonStrict,
-                    upper_strict: StrictComparison::NonStrict,
-                }
-            ))?,
-            &find
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn test_match_4_between() -> VortexResult<()> {
-        let expr = and(gt_eq(lit(5), col("x")), lt(lit(2), col("x")));
-        let find = find_between(bind(expr)?);
-
-        // 2 < x <= 5
-        assert_eq!(
-            &bind(between(
-                col("x"),
-                lit(2),
-                lit(5),
-                BetweenOptions {
-                    lower_strict: StrictComparison::Strict,
-                    upper_strict: StrictComparison::NonStrict,
-                }
-            ))?,
-            &find
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn test_match_5_between() -> VortexResult<()> {
-        let expr = and(
-            and(gt_eq(col("y"), lit(10)), gt_eq(lit(5), col("x"))),
-            lt(lit(2), col("x")),
-        );
-        let find = find_between(bind(expr)?);
-
-        // $.y >= 10 /\ 2 < $.x <= 5
-        assert_eq!(
-            &bind(and(
-                gt_eq(col("y"), lit(10)),
-                between(
-                    col("x"),
-                    lit(2),
-                    lit(5),
-                    BetweenOptions {
-                        lower_strict: StrictComparison::Strict,
-                        upper_strict: StrictComparison::NonStrict,
-                    }
-                )
-            ))?,
-            &find
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn test_match_6_between() -> VortexResult<()> {
-        let expr = and(
-            and(gt_eq(lit(5), col("x")), gt_eq(col("y"), lit(10))),
-            lt(lit(2), col("x")),
-        );
-        let find = find_between(bind(expr)?);
-
-        // $.y >= 10 /\ 2 < $.x <= 5
-        assert_eq!(
-            &bind(and(
-                between(
-                    col("x"),
-                    lit(2),
-                    lit(5),
-                    BetweenOptions {
-                        lower_strict: StrictComparison::Strict,
-                        upper_strict: StrictComparison::NonStrict,
-                    }
-                ),
-                gt_eq(col("y"), lit(10)),
-            ))?,
-            &find
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn test_match_between_skips_non_leaf_conjuncts() -> VortexResult<()> {
-        let lower = gt_eq(col("x"), lit(2));
-        let non_leaf = gt(col("y"), col("z"));
-        let upper = lt(col("x"), lit(5));
-        assert!(super::is_leaf_conjunct(&bind(lower.clone())?));
-        assert!(!super::is_leaf_conjunct(&bind(non_leaf.clone())?));
-        assert!(super::is_leaf_conjunct(&bind(upper.clone())?));
-
-        let find = find_between(bind(and(and(lower, non_leaf.clone()), upper))?);
-
-        assert_eq!(
-            &bind(and(
-                between(
-                    col("x"),
-                    lit(2),
-                    lit(5),
-                    BetweenOptions {
-                        lower_strict: StrictComparison::NonStrict,
-                        upper_strict: StrictComparison::Strict,
-                    }
-                ),
-                non_leaf,
-            ))?,
-            &find
-        );
         Ok(())
     }
 }

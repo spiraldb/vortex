@@ -149,7 +149,7 @@ async fn test_eof_values() {
 #[rstest]
 #[case::default(
     BtrBlocksCompressorBuilder::from_session(&SESSION),
-    if cfg!(feature = "zstd") { 70_100 } else { 70_036 }
+    if cfg!(feature = "zstd") { 70_068 } else { 70_004 }
 )]
 #[cfg_attr(
     feature = "zstd",
@@ -1592,8 +1592,9 @@ async fn test_into_tokio_array_stream() -> VortexResult<()> {
 async fn test_array_stream_no_double_dict_encode() -> VortexResult<()> {
     let num_vals = 2048;
     let mut values = Vec::<i64>::with_capacity(num_vals);
-    values.extend(iter::repeat_n(0, num_vals / 2));
-    values.extend(iter::repeat_n(1, num_vals / 2));
+    // Far apart, so per-block bit widths can't pack them tighter than a dictionary.
+    values.extend(iter::repeat_n(1_000_000_000, num_vals / 2));
+    values.extend(iter::repeat_n(2_000_000_000, num_vals / 2));
 
     let array = PrimitiveArray::from_iter(values).into_array();
     let mut buf = Vec::new();

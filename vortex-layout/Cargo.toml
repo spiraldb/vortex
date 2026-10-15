@@ -20,6 +20,7 @@ all-features = true
 arcref = { workspace = true }
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
+async-lock = { workspace = true }
 async-stream = { workspace = true }
 async-trait = { workspace = true }
 bit-vec = { workspace = true }

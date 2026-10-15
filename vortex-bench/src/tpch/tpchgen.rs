@@ -14,9 +14,6 @@ use futures::FutureExt;
 use futures::StreamExt;
 use futures::future::BoxFuture;
 use parquet::arrow::AsyncArrowWriter;
-use parquet::basic::Compression;
-use parquet::basic::ZstdLevel;
-use parquet::file::properties::WriterProperties;
 use tokio::fs::File as TokioFile;
 use tokio::sync::Semaphore;
 use tokio::sync::mpsc;
@@ -43,6 +40,11 @@ use crate::Format;
 use crate::IdempotentPath;
 use crate::SESSION;
 use crate::utils::file::idempotent_async;
+use crate::utils::parquet::parquet_writer_properties;
+
+/// The parquet-rs default, kept explicit so the shared writer settings do not change the
+/// parallelism of existing TPC-H Parquet benchmarks.
+const ROW_GROUP_SIZE: usize = 1024 * 1024;
 
 /// Configuration for TPC-H data generation
 #[derive(Debug, Clone)]
@@ -303,8 +305,8 @@ struct ParquetWriter {
 impl ParquetWriter {
     async fn new(path: PathBuf, schema: SchemaRef) -> Result<Self> {
         let file = TokioFile::create(&path).await?;
-        let props = WriterProperties::builder()
-            .set_compression(Compression::ZSTD(ZstdLevel::try_new(3)?))
+        let props = parquet_writer_properties()
+            .set_max_row_group_row_count(Some(ROW_GROUP_SIZE))
             .build();
         let writer = AsyncArrowWriter::try_new(file, schema, Some(props))?;
         Ok(Self { writer })
