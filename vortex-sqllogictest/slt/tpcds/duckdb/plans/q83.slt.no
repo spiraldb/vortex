@@ -1236,7 +1236,7 @@ logical_opt [
                                                                                                                         "name": "READ_VORTEX",
                                                                                                                         "children": [],
                                                                                                                         "extra_info": {
-                                                                                                                            "Filters": "vortex.list.contains([2000-06-30, 2000-09-27, 2000-11-17], $.d_date)",
+                                                                                                                            "Filters": "vortex.list.contains([2000-06-30, 2000-09-27, 2000-11-17], $.d_date, opts=sql_null_semantics)",
                                                                                                                             "Function": "Vortex Scan",
                                                                                                                             "Estimated Cardinality": "14609"
                                                                                                                         }
@@ -1468,7 +1468,7 @@ logical_opt [
                                                                                                                                         "name": "READ_VORTEX",
                                                                                                                                         "children": [],
                                                                                                                                         "extra_info": {
-                                                                                                                                            "Filters": "vortex.list.contains([2000-06-30, 2000-09-27, 2000-11-17], $.d_date)",
+                                                                                                                                            "Filters": "vortex.list.contains([2000-06-30, 2000-09-27, 2000-11-17], $.d_date, opts=sql_null_semantics)",
                                                                                                                                             "Function": "Vortex Scan",
                                                                                                                                             "Estimated Cardinality": "14609"
                                                                                                                                         }
@@ -1635,7 +1635,7 @@ logical_opt [
                                                                                                                                         "name": "READ_VORTEX",
                                                                                                                                         "children": [],
                                                                                                                                         "extra_info": {
-                                                                                                                                            "Filters": "vortex.list.contains([2000-06-30, 2000-09-27, 2000-11-17], $.d_date)",
+                                                                                                                                            "Filters": "vortex.list.contains([2000-06-30, 2000-09-27, 2000-11-17], $.d_date, opts=sql_null_semantics)",
                                                                                                                                             "Function": "Vortex Scan",
                                                                                                                                             "Estimated Cardinality": "14609"
                                                                                                                                         }
@@ -1898,7 +1898,7 @@ physical_plan [
                                                                                         "children": [],
                                                                                         "extra_info": {
                                                                                             "Function": "Vortex Scan",
-                                                                                            "Filters": "vortex.list.contains([2000-06-30, 2000-09-27, 2000-11-17], $.d_date)",
+                                                                                            "Filters": "vortex.list.contains([2000-06-30, 2000-09-27, 2000-11-17], $.d_date, opts=sql_null_semantics)",
                                                                                             "Projections": "d_week_seq",
                                                                                             "Estimated Cardinality": "14609"
                                                                                         }
@@ -2045,7 +2045,7 @@ physical_plan [
                                                                                                 "children": [],
                                                                                                 "extra_info": {
                                                                                                     "Function": "Vortex Scan",
-                                                                                                    "Filters": "vortex.list.contains([2000-06-30, 2000-09-27, 2000-11-17], $.d_date)",
+                                                                                                    "Filters": "vortex.list.contains([2000-06-30, 2000-09-27, 2000-11-17], $.d_date, opts=sql_null_semantics)",
                                                                                                     "Projections": "d_week_seq",
                                                                                                     "Estimated Cardinality": "14609"
                                                                                                 }
@@ -2145,7 +2145,7 @@ physical_plan [
                                                                                                 "children": [],
                                                                                                 "extra_info": {
                                                                                                     "Function": "Vortex Scan",
-                                                                                                    "Filters": "vortex.list.contains([2000-06-30, 2000-09-27, 2000-11-17], $.d_date)",
+                                                                                                    "Filters": "vortex.list.contains([2000-06-30, 2000-09-27, 2000-11-17], $.d_date, opts=sql_null_semantics)",
                                                                                                     "Projections": "d_week_seq",
                                                                                                     "Estimated Cardinality": "14609"
                                                                                                 }

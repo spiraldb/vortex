@@ -44,7 +44,7 @@ use crate::layouts::dict::DictLayout;
 use crate::layouts::flat::FlatLayout;
 use crate::layouts::struct_::StructLayout;
 use crate::plan::physical::EvalPlan;
-use crate::plan::physical::FilterPlan;
+use crate::plan::physical::Filter;
 use crate::plan::physical::PackPlan;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::SegmentScan;
@@ -262,7 +262,20 @@ fn run(
     mask: Mask,
     pick: impl FnMut(&[ReadRequest]) -> usize,
 ) -> VortexResult<Run> {
-    let scan = Scan::try_new(SESSION.clone(), plan.clone(), vec![Split { rows, mask }])?;
+    run_with_values(store, plan, rows, mask, ValueCache::default(), pick)
+}
+
+/// [`run`], sharing whole values with the other scans given `values`.
+fn run_with_values(
+    store: &Store,
+    plan: &PlanRef,
+    rows: Range<u64>,
+    mask: Mask,
+    values: ValueCache,
+    pick: impl FnMut(&[ReadRequest]) -> usize,
+) -> VortexResult<Run> {
+    let scan = Scan::try_new(SESSION.clone(), plan.clone(), vec![Split { rows, mask }])?
+        .with_value_cache(values);
     let run = drive(store, scan, pick)?;
     assert_eq!(run.leftover, (0, 0), "a finished scan holds no port");
     Ok(run)
@@ -567,9 +580,12 @@ fn aligned_fields_stream_one_struct_per_chunk() -> VortexResult<()> {
 fn scan_keeps_the_selection_with_or_without_a_filter(#[case] sel: Sel) -> VortexResult<()> {
     let mut store = Store::default();
     let values = PrimitiveArray::from_iter(0..ROWS as i32).into_array();
-    let scan = lower(&store.flat(&values)?)?;
+    let filtered = lower(&store.flat(&values)?)?;
+    let scan = filtered
+        .as_opt::<Filter>()
+        .ok_or_else(|| vortex_err!("A flat layout lowers to a filter"))?
+        .child_plan()?;
     assert!(scan.is::<SegmentScan>());
-    let filtered = FilterPlan::new(scan.clone()).into_plan();
 
     let rows = 3..9;
     let mask = sel.mask(6);
@@ -591,7 +607,8 @@ fn scan_keeps_the_selection_with_or_without_a_filter(#[case] sel: Sel) -> Vortex
 
 /// A take reads its values over their whole domain and its codes over the selection, including
 /// when a predicate has been pushed onto the values, and emits nothing before the values are
-/// whole. Later scans of the plan reuse the values and read only the codes.
+/// whole. Later scans sharing its value cache reuse the values and read only the codes; a scan
+/// with a cache of its own reads them again.
 #[rstest]
 #[case::values(false)]
 #[case::predicate(true)]
@@ -612,8 +629,16 @@ fn take_waits_for_whole_values_and_keeps_them(#[case] predicate: bool) -> Vortex
     assert!(plan.is::<Take>());
 
     let mask = Sel::EveryOther.mask(10);
+    let cache = ValueCache::default();
     // Codes (segment 1) land first; nothing comes out until the values (segment 0) do.
-    let first = run(&store, &plan, 0..10, mask.clone(), scripted(&[1, 0]))?;
+    let first = run_with_values(
+        &store,
+        &plan,
+        0..10,
+        mask.clone(),
+        cache.clone(),
+        scripted(&[1, 0]),
+    )?;
     assert_eq!(reads(&first.events), 2);
     let first_piece = first
         .events
@@ -628,7 +653,31 @@ fn take_waits_for_whole_values_and_keeps_them(#[case] predicate: bool) -> Vortex
     );
     assert_view(&expected, &(0..10), &mask, first.arrays)?;
 
-    Ok(())
+    let rows = 10..20;
+    let shared = run_with_values(
+        &store,
+        &plan,
+        rows.clone(),
+        mask.clone(),
+        cache,
+        delivery(Delivery::Fifo),
+    )?;
+    assert_eq!(reads(&shared.events), 1, "only the codes are read again");
+    assert_view(&expected, &rows, &mask, shared.arrays)?;
+
+    let fresh = run(
+        &store,
+        &plan,
+        rows.clone(),
+        mask.clone(),
+        delivery(Delivery::Fifo),
+    )?;
+    assert_eq!(
+        reads(&fresh.events),
+        2,
+        "a new cache reads the values again"
+    );
+    assert_view(&expected, &rows, &mask, fresh.arrays)
 }
 
 #[test]

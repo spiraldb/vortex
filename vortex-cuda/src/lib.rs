@@ -79,7 +79,6 @@ use vortex::array::arrays::Dict;
 use vortex::array::arrays::Filter;
 use vortex::array::arrays::List;
 use vortex::array::arrays::Masked;
-use vortex::array::arrays::Shared;
 use vortex::array::arrays::Slice;
 use vortex::encodings::alp::ALP;
 use vortex::encodings::datetime_parts::DateTimeParts;
@@ -93,6 +92,7 @@ use vortex::encodings::sequence::Sequence;
 use vortex::encodings::zigzag::ZigZag;
 use vortex::encodings::zstd::Zstd;
 use vortex::encodings::zstd::ZstdBuffers;
+use vortex::layout::arrays::shared::Shared;
 #[cfg(test)]
 use vortex_cuda_macros::test;
 pub use vortex_nvcomp as nvcomp;

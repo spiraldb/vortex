@@ -293,9 +293,16 @@ mod tests {
         render_random_access_table(&mut buf, &runs, &[Format::Parquet], &[false, true])?;
         let rendered = strip_ansi(&String::from_utf8(buf)?);
 
-        assert!(
-            rendered.contains('-'),
-            "expected `-` placeholder for missing cell, got:\n{rendered}"
+        let row = rendered
+            .lines()
+            .find(|line| line.contains("random-access/taxi"))
+            .ok_or_else(|| anyhow::anyhow!("missing taxi row: {rendered}"))?;
+        assert_eq!(
+            row.trim_matches('│')
+                .split('│')
+                .map(str::trim)
+                .collect::<Vec<_>>(),
+            ["random-access/taxi", "100 μs (1.00)", "-"],
         );
         Ok(())
     }

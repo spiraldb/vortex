@@ -158,7 +158,7 @@ datafusion-sqllogictest = { version = "55.0.0" }
 divan = { package = "codspeed-divan-compat", version = "5.0.0" }
 enum-iterator = "2.0.0"
 env_logger = "0.11"
-fastlanes = { version = "0.7.0", features = ["runtime"] }
+fastlanes = { version = "0.7.1", features = ["runtime"] }
 fearless_simd = "1.0.0"
 fearless_simd_macros = "0.1.0"
 flatbuffers = "25.2.10"
@@ -278,6 +278,8 @@ tokio = { version = "1.52" }
 tokio-stream = "0.1.17"
 tokio-util = "0.7.17"
 toml = "1.0"
+tpcdsgen = "0.1.0-alpha.1"
+tpcdsgen-arrow = "0.1.0-alpha.1"
 tpchgen = "3.0.0"
 tpchgen-arrow = "3.0.0"
 tracing = { version = "0.1.41", default-features = false }
@@ -429,6 +431,14 @@ lto = false
 
 # This rule only applies to dependencies that are not members of the workspace.
 [profile.bench.package."*"]
+debug = false
+
+# Maturin builds with `cargo rustc`, which treats `--profile bench` as a request for a libtest
+# benchmark executable. This profile has the same settings and builds a normal library.
+[profile.bench_python]
+inherits = "bench"
+
+[profile.bench_python.package."*"]
 debug = false
 
 [profile.samply]

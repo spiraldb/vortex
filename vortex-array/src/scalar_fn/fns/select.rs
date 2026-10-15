@@ -13,6 +13,7 @@ use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
+use vortex_utils::aliases::hash_set::HashSet;
 
 use crate::ArrayRef;
 use crate::ExecutionCtx;
@@ -22,6 +23,7 @@ use crate::arrays::ConstantArray;
 use crate::arrays::StructArray;
 use crate::arrays::struct_::StructArrayExt;
 use crate::dtype::DType;
+use crate::dtype::FieldName;
 use crate::dtype::FieldNames;
 use crate::expr::BoundExpression;
 use crate::expr::display::ExprDisplay;
@@ -307,12 +309,11 @@ impl FieldSelection {
         &self,
         available_fields: &FieldNames,
     ) -> VortexResult<FieldNames> {
+        // Hash the available fields so that wide selections stay linear.
+        let available: HashSet<&FieldName> = available_fields.iter().collect();
+
         // Check that all of the field names exist in the available fields.
-        if self
-            .field_names()
-            .iter()
-            .any(|f| !available_fields.iter().contains(f))
-        {
+        if self.field_names().iter().any(|f| !available.contains(f)) {
             vortex_bail!(
                 "Select fields {:?} must be a subset of child fields {:?}",
                 self,
@@ -322,11 +323,14 @@ impl FieldSelection {
 
         match self {
             FieldSelection::Include(fields) => Ok(fields.clone()),
-            FieldSelection::Exclude(exc_fields) => Ok(available_fields
-                .iter()
-                .filter(|f| !exc_fields.iter().contains(f))
-                .cloned()
-                .collect()),
+            FieldSelection::Exclude(exc_fields) => {
+                let excluded: HashSet<&FieldName> = exc_fields.iter().collect();
+                Ok(available_fields
+                    .iter()
+                    .filter(|f| !excluded.contains(f))
+                    .cloned()
+                    .collect())
+            }
         }
     }
 }
