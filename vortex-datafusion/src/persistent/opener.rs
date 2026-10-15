@@ -33,6 +33,7 @@ use datafusion_physical_expr::utils::conjunction_opt;
 use datafusion_physical_expr::utils::reassign_expr_columns;
 use datafusion_physical_expr_adapter::PhysicalExprAdapterFactory;
 use datafusion_physical_expr_adapter::replace_columns_with_literals;
+use datafusion_physical_expr_common::physical_expr::snapshot_physical_expr;
 use datafusion_physical_plan::filter::batch_filter;
 use datafusion_physical_plan::metrics::ExecutionPlanMetricsSet;
 use datafusion_physical_plan::metrics::MetricBuilder;
@@ -82,6 +83,10 @@ pub(crate) struct VortexOpener {
     /// Exact filter accepted during planning. Per-file adaptation may move parts
     /// of it to DataFusion residual evaluation before projection and limits.
     pub filter: Option<PhysicalExprRef>,
+    /// Filters DataFusion keeps evaluating itself, including dynamic filters. Their convertible
+    /// conjuncts are also pushed into the Vortex scan, and the rest are dropped rather than
+    /// evaluated twice. Dynamic filters are read once, when the file is opened.
+    pub optional_filter: Option<PhysicalExprRef>,
     /// Filter expression used by DataFusion's FilePruner to eliminate files based on
     /// statistics and partition values without opening them.
     pub file_pruning_predicate: Option<PhysicalExprRef>,
@@ -131,6 +136,7 @@ impl FileOpener for VortexOpener {
 
         let mut projection = self.projection.clone();
         let mut filter = self.filter.clone();
+        let mut optional_filter = self.optional_filter.clone();
 
         let reader = self.vortex_reader_factory.create_reader(&file, &session)?;
 
@@ -172,6 +178,9 @@ impl FileOpener for VortexOpener {
                 replace_columns_with_literals(Arc::clone(&expr), &literal_value_cols)
             })?;
             filter = filter
+                .map(|p| replace_columns_with_literals(p, &literal_value_cols))
+                .transpose()?;
+            optional_filter = optional_filter
                 .map(|p| replace_columns_with_literals(p, &literal_value_cols))
                 .transpose()?;
             file_pruning_predicate = file_pruning_predicate
@@ -280,6 +289,15 @@ impl FileOpener for VortexOpener {
                 .map_err(|e| {
                     exec_datafusion_err!("Failed to adapt filter in {}: {e}", file.path())
                 })?;
+            let optional_filter = optional_filter
+                .map(|filter| {
+                    let filter = snapshot_physical_expr(filter)?;
+                    simplifier.simplify(expr_adapter.rewrite(filter)?)
+                })
+                .transpose()
+                .map_err(|e| {
+                    exec_datafusion_err!("Failed to adapt optional filter in {}: {e}", file.path())
+                })?;
             let projection =
                 projection.try_map_exprs(|p| simplifier.simplify(expr_adapter.rewrite(p)?))?;
 
@@ -311,6 +329,16 @@ impl FileOpener for VortexOpener {
                         None => residual_filters.push(Arc::clone(expr)),
                     }
                 }
+            }
+            if let Some(optional_filter) = &optional_filter {
+                native_filters.extend(split_conjunction(optional_filter).into_iter().filter_map(
+                    |expr| {
+                        expr_converter
+                            .try_convert(expr, &this_file_schema)
+                            .ok()
+                            .flatten()
+                    },
+                ));
             }
             let residual_filter = conjunction_opt(residual_filters);
             let native_filter = and_collect(native_filters)
@@ -698,6 +726,7 @@ mod tests {
     use datafusion_execution::cache::default_cache::DefaultCache;
     use datafusion_expr::Operator;
     use datafusion_physical_expr::PhysicalExpr;
+    use datafusion_physical_expr::conjunction;
     use datafusion_physical_expr::expressions as df_expr;
     use datafusion_physical_expr::projection::ProjectionExpr;
     use futures::TryStreamExt;
@@ -890,6 +919,7 @@ mod tests {
             vortex_reader_factory: Arc::new(DefaultVortexReaderFactory::new(object_store)),
             projection: ProjectionExprs::from_indices(&[0], table_schema.file_schema()),
             filter,
+            optional_filter: None,
             file_pruning_predicate: None,
             expr_adapter_factory: Arc::new(DefaultPhysicalExprAdapterFactory),
             table_schema,
@@ -999,6 +1029,61 @@ mod tests {
             .await?;
         assert_batches_eq!(
             ["+----+", "| a  |", "+----+", "| 20 |", "| 40 |", "+----+"],
+            &batches
+        );
+        Ok(())
+    }
+
+    /// A dynamic filter stays with DataFusion, but the conjuncts of its current value that Vortex
+    /// can evaluate are pushed into the scan. The rest are dropped, so their rows still reach
+    /// DataFusion.
+    #[tokio::test]
+    async fn test_open_pushes_down_dynamic_filter_conjuncts() -> anyhow::Result<()> {
+        let store = Arc::new(InMemory::new()) as Arc<dyn ObjectStore>;
+        let batch = record_batch!((
+            "a",
+            Int32,
+            vec![Some(1), Some(2), Some(3), Some(4), Some(5)]
+        ))?;
+        let size =
+            write_arrow_to_vortex(Arc::clone(&store), "dynamic.vortex", batch.clone()).await?;
+
+        let a: PhysicalExprRef = Arc::new(df_expr::Column::new("a", 0));
+        let int = |value: i32| -> PhysicalExprRef {
+            Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(value))))
+        };
+        let binary =
+            |lhs: PhysicalExprRef, op: Operator, rhs: PhysicalExprRef| -> PhysicalExprRef {
+                Arc::new(df_expr::BinaryExpr::new(lhs, op, rhs))
+            };
+        let dynamic = Arc::new(df_expr::DynamicFilterPhysicalExpr::new(
+            vec![Arc::clone(&a)],
+            Arc::new(df_expr::Literal::new(ScalarValue::Boolean(Some(true)))),
+        ));
+        // `a % 2 = 0` cannot be converted to a Vortex expression.
+        let even = binary(
+            binary(Arc::clone(&a), Operator::Modulo, int(2)),
+            Operator::Eq,
+            int(0),
+        );
+        dynamic.update(conjunction([
+            binary(Arc::clone(&a), Operator::GtEq, int(2)),
+            binary(Arc::clone(&a), Operator::LtEq, int(4)),
+            even,
+        ]))?;
+
+        let mut opener = make_opener(store, TableSchema::from(batch.schema()), None);
+        opener.optional_filter = Some(dynamic);
+        let batches = opener
+            .open(PartitionedFile::new("dynamic.vortex", size))?
+            .await?
+            .try_collect::<Vec<_>>()
+            .await?;
+
+        assert_batches_eq!(
+            [
+                "+---+", "| a |", "+---+", "| 2 |", "| 3 |", "| 4 |", "+---+"
+            ],
             &batches
         );
         Ok(())
@@ -1270,6 +1355,7 @@ mod tests {
             ))),
             projection: ProjectionExprs::from_indices(&[0], table_schema.file_schema()),
             filter: Some(filter),
+            optional_filter: None,
             file_pruning_predicate: None,
             expr_adapter_factory: Arc::new(DefaultPhysicalExprAdapterFactory),
             table_schema: table_schema.clone(),
@@ -1358,6 +1444,7 @@ mod tests {
             vortex_reader_factory: Arc::new(DefaultVortexReaderFactory::new(object_store)),
             projection: ProjectionExprs::from_indices(&[0, 1, 2], &table_schema),
             filter: None,
+            optional_filter: None,
             file_pruning_predicate: None,
             expr_adapter_factory: Arc::new(DefaultPhysicalExprAdapterFactory),
             table_schema: TableSchema::from(Arc::clone(&table_schema)),
@@ -1513,6 +1600,7 @@ mod tests {
                 table_schema.file_schema(),
             ),
             filter: None,
+            optional_filter: None,
             file_pruning_predicate: None,
             expr_adapter_factory: Arc::new(DefaultPhysicalExprAdapterFactory),
             table_schema: table_schema.clone(),
@@ -1574,6 +1662,7 @@ mod tests {
             vortex_reader_factory: Arc::new(DefaultVortexReaderFactory::new(object_store)),
             projection,
             filter: None,
+            optional_filter: None,
             file_pruning_predicate: None,
             expr_adapter_factory: Arc::new(DefaultPhysicalExprAdapterFactory),
             table_schema: TableSchema::from(schema),
@@ -1782,6 +1871,7 @@ mod tests {
             ))),
             projection,
             filter: None,
+            optional_filter: None,
             file_pruning_predicate: None,
             expr_adapter_factory: Arc::new(DefaultPhysicalExprAdapterFactory),
             table_schema,

@@ -192,6 +192,9 @@ pub struct VortexSource {
     pub(crate) full_predicate: Option<PhysicalExprRef>,
     /// Accepted exact predicates, evaluated natively or as per-file residuals.
     pub(crate) vortex_predicate: Option<PhysicalExprRef>,
+    /// Rejected predicates DataFusion keeps evaluating, such as dynamic filters or filters with
+    /// parts Vortex cannot evaluate. Each file pushes down whichever of their conjuncts it can.
+    pub(crate) optional_predicate: Option<PhysicalExprRef>,
     /// DataFusion-native metrics exposed through `DataSourceExec`.
     df_metrics: ExecutionPlanMetricsSet,
     /// Shared layout readers, the source only lives as long as one scan.
@@ -232,6 +235,7 @@ impl VortexSource {
             projection,
             full_predicate: None,
             vortex_predicate: None,
+            optional_predicate: None,
             df_metrics: Default::default(),
             layout_readers: Arc::new(DashMap::default()),
             natural_splits: Arc::new(DashMap::default()),
@@ -352,6 +356,7 @@ impl VortexSource {
             vortex_reader_factory,
             projection: self.projection.clone(),
             filter: self.vortex_predicate.clone(),
+            optional_filter: self.optional_predicate.clone(),
             file_pruning_predicate: self.full_predicate.clone(),
             expr_adapter_factory,
             table_schema: self.table_schema.clone(),
@@ -489,6 +494,24 @@ impl FileSource for VortexSource {
                 }
             })
             .collect::<DFResult<Vec<_>>>()?;
+
+        let unsupported = supported_filters
+            .iter()
+            .filter_map(|p| match p.discriminant {
+                PushedDown::Yes => None,
+                PushedDown::No => Some(&p.predicate),
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        if !unsupported.is_empty() {
+            source.optional_predicate = Some(conjunction(
+                source
+                    .optional_predicate
+                    .take()
+                    .into_iter()
+                    .chain(unsupported),
+            ));
+        }
 
         if supported_filters
             .iter()
@@ -733,6 +756,40 @@ mod tests {
             .clone();
         assert!(updated_source.full_predicate.is_some());
         assert!(updated_source.vortex_predicate.is_none());
+        assert!(updated_source.optional_predicate.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn try_pushdown_filters_keeps_rejected_filters_as_optional() -> anyhow::Result<()> {
+        let schema = Arc::new(Schema::new(vec![Field::new("name", DataType::Utf8, false)]));
+        let source = sort_test_source(Arc::clone(&schema));
+        let dynamic: PhysicalExprRef = Arc::new(df_expr::DynamicFilterPhysicalExpr::new(
+            vec![Arc::new(Column::new("name", 0))],
+            df_expr::lit(true),
+        ));
+
+        let result = source.try_pushdown_filters(
+            vec![Arc::clone(&dynamic), octet_length_filter(&schema)],
+            &ConfigOptions::new(),
+        )?;
+
+        assert!(matches!(
+            result.filters.as_slice(),
+            [PushedDown::No, PushedDown::Yes]
+        ));
+        let updated_source = result
+            .updated_node
+            .ok_or_else(|| anyhow::anyhow!("expected updated VortexSource"))?
+            .downcast_ref::<VortexSource>()
+            .ok_or_else(|| anyhow::anyhow!("expected VortexSource"))?
+            .clone();
+        assert!(updated_source.vortex_predicate.is_some());
+        assert!(
+            updated_source
+                .optional_predicate
+                .is_some_and(|predicate| Arc::ptr_eq(&predicate, &dynamic))
+        );
         Ok(())
     }
 }
