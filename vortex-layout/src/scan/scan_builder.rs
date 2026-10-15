@@ -69,10 +69,10 @@ pub struct ScanBuilder<A> {
     // TODO(joe): replace this is usage of row_id selection, see
     pub(super) selection: Selection,
     /// How to split the file for concurrent processing.
-    split_by: SplitBy,
+    pub(super) split_by: SplitBy,
     /// Precomputed full-file natural split boundaries; when set, [`prepare`](Self::prepare)
     /// uses them instead of walking the layout.
-    natural_splits: Option<Arc<[u64]>>,
+    pub(super) natural_splits: Option<Arc<[u64]>>,
     /// The number of splits to make progress on concurrently **per-thread**.
     pub(super) concurrency: usize,
     /// Function to apply to each [`ArrayRef`] within the spawned split tasks.

@@ -4,6 +4,8 @@
 use std::num::NonZeroUsize;
 use std::ops::Range;
 use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 
 use futures::TryStreamExt;
 use futures::stream;
@@ -28,6 +30,7 @@ use vortex_array::validity::Validity;
 use vortex_buffer::Alignment;
 use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
+use vortex_error::vortex_err;
 use vortex_io::session::RuntimeSessionExt;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
@@ -38,6 +41,7 @@ use super::select_supported;
 use crate::LayoutRef;
 use crate::LayoutStrategy;
 use crate::layouts::chunked::writer::ChunkedLayoutStrategy;
+use crate::layouts::dict::DictLayout;
 use crate::layouts::flat::writer::FlatLayoutStrategy;
 use crate::layouts::row_idx::row_idx;
 use crate::layouts::table::TableStrategy;
@@ -45,6 +49,9 @@ use crate::layouts::zoned::writer::ZonedLayoutOptions;
 use crate::layouts::zoned::writer::ZonedStrategy;
 use crate::scan::planning::SegmentLocation;
 use crate::scan::scan_builder::ScanBuilder;
+use crate::scan::split_by::SplitBy;
+use crate::segments::SegmentFuture;
+use crate::segments::SegmentId;
 use crate::segments::SegmentSource;
 use crate::segments::TestSegments;
 use crate::sequence::SequenceId;
@@ -254,6 +261,111 @@ async fn projection_matches_v1(
             .with_row_offset(100))
     })
     .await
+}
+
+#[tokio::test]
+async fn zoned_projection_keeps_data_splits() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, zoned_table().as_ref()).await?;
+    let projection = get_item("ints", root()).bind(layout.dtype())?;
+    let Executor::V2(scan) = select_supported(
+        builder(&session, &segments, &layout)?
+            .with_projection(projection)
+            .with_row_range(250..3100),
+    )?
+    else {
+        panic!("the scan should run on the planner-driven executor");
+    };
+    assert_eq!(
+        scan.splits,
+        vec![250..1000, 1000..2000, 2000..3000, 3000..3100]
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case::layout(SplitBy::Layout, vec![0..1000, 1000..2000, 2000..3000, 3000..4000])]
+#[case::bounded(
+    SplitBy::LayoutSubSplitting { max_rows: 600 },
+    vec![0..500, 500..1000, 1000..1500, 1500..2000, 2000..2500, 2500..3000, 3000..3500, 3500..4000]
+)]
+#[case::rows(SplitBy::RowCount(1500), vec![0..1500, 1500..3000, 3000..4000])]
+#[tokio::test]
+async fn split_policy_is_preserved(
+    #[case] policy: SplitBy,
+    #[case] expected: Vec<Range<u64>>,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, table().as_ref()).await?;
+    let Executor::V2(scan) =
+        select_supported(builder(&session, &segments, &layout)?.with_split_by(policy))?
+    else {
+        panic!("the scan should run on the planner-driven executor");
+    };
+    assert_eq!(scan.splits, expected);
+    Ok(())
+}
+
+#[tokio::test]
+async fn supplied_splits_take_precedence_and_are_clamped() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, table().as_ref()).await?;
+    let Executor::V2(scan) = select_supported(
+        builder(&session, &segments, &layout)?
+            .with_split_by(SplitBy::RowCount(1000))
+            .with_natural_splits(Arc::from([0, 2500, 4000]))
+            .with_row_range(500..3000),
+    )?
+    else {
+        panic!("the scan should run on the planner-driven executor");
+    };
+    assert_eq!(scan.splits, vec![500..2500, 2500..3000]);
+    Ok(())
+}
+
+struct CountingSegments {
+    inner: Arc<dyn SegmentSource>,
+    reads: AtomicUsize,
+}
+
+impl SegmentSource for CountingSegments {
+    fn request(&self, id: SegmentId) -> SegmentFuture {
+        self.reads.fetch_add(1, Ordering::Relaxed);
+        self.inner.request(id)
+    }
+}
+
+#[tokio::test]
+async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, table().as_ref()).await?;
+    let ints = layout.slot(1)?.ok_or_else(|| vortex_err!("missing ints"))?;
+    // The codes 0..4000 index the same values, so each split returns its own row numbers.
+    let layout = DictLayout::new(Arc::clone(&ints), ints).into_layout();
+    let counted = Arc::new(CountingSegments {
+        inner: segments,
+        reads: AtomicUsize::new(0),
+    });
+    let segments: Arc<dyn SegmentSource> = counted.clone();
+    let Executor::V2(scan) = select_supported(builder(&session, &segments, &layout)?)? else {
+        panic!("the scan should run on the planner-driven executor");
+    };
+    let splits = scan.split_plans();
+    assert_eq!(splits.len(), CHUNKS);
+    for (index, split) in splits.into_iter().enumerate() {
+        let before = counted.reads.load(Ordering::Relaxed);
+        let arrays = split.run(Arc::clone(&scan.io)).await?;
+        let reads = counted.reads.load(Ordering::Relaxed) - before;
+        assert_eq!(reads, if index == 0 { CHUNKS } else { 1 });
+        let start = i32::try_from(index * CHUNK_ROWS)?;
+        let expected = PrimitiveArray::from_iter(start..start + i32::try_from(CHUNK_ROWS)?);
+        assert_arrays_eq!(
+            ChunkedArray::try_new(arrays, layout.dtype().clone())?.into_array(),
+            expected,
+            &mut session.create_execution_ctx()
+        );
+    }
+    Ok(())
 }
 
 #[tokio::test]

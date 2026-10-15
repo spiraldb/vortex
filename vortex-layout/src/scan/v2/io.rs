@@ -79,6 +79,7 @@ pub(super) struct SegmentIoSource {
     segments: Arc<dyn SegmentSource>,
     ranges: SegmentRanges,
     reads: Mutex<FuturesUnordered<BoxFuture<'static, Completion>>>,
+    ready: Mutex<VecDeque<Completion>>,
     /// Reads started by prefetches, consumed by the next fetch of their segment.
     prefetched: Mutex<HashMap<SegmentId, Prefetched>>,
     /// Announced segments, requested and never polled.
@@ -94,6 +95,7 @@ impl SegmentIoSource {
             segments,
             ranges,
             reads: Mutex::new(FuturesUnordered::new()),
+            ready: Mutex::default(),
             prefetched: Mutex::default(),
             announced: Mutex::default(),
         }
@@ -103,6 +105,7 @@ impl SegmentIoSource {
 impl IoSource for SegmentIoSource {
     fn submit(&self, owner: IoOwnerId, batch: IoBatch) -> VortexResult<()> {
         let reads = self.reads.lock();
+        let mut ready = self.ready.lock();
         let mut prefetched = self.prefetched.lock();
         for request in batch {
             let IoTarget::Range { offset, len, .. } = request.target else {
@@ -143,7 +146,7 @@ impl IoSource for SegmentIoSource {
                 });
                 continue;
             }
-            let bytes = match prefetched.remove(&segment) {
+            let mut bytes = match prefetched.remove(&segment) {
                 Some(read) => read
                     .map_err(move |err| {
                         vortex_err!("prefetched read of segment {segment} failed: {err}")
@@ -157,6 +160,16 @@ impl IoSource for SegmentIoSource {
                     .unwrap_or_else(|| self.segments.request(segment)),
             };
             let id = request.request;
+            // In-memory and cached segments need no allocated asynchronous task. A pending
+            // read is polled again by FuturesUnordered before the driver can go to sleep.
+            if let Poll::Ready(result) = bytes.poll_unpin(&mut Context::from_waker(Waker::noop())) {
+                ready.push_back(Completion {
+                    owner,
+                    request: id,
+                    result: result.map(IoResult::Bytes),
+                });
+                continue;
+            }
             reads.push(
                 async move {
                     Completion {
@@ -172,6 +185,9 @@ impl IoSource for SegmentIoSource {
     }
 
     fn poll(&self) -> VortexResult<Option<Completion>> {
+        if let Some(completion) = self.ready.lock().pop_front() {
+            return Ok(Some(completion));
+        }
         // The split's future polls again with its own waker before it waits, so a read that
         // finishes after this check is not missed.
         let mut cx = Context::from_waker(Waker::noop());
@@ -182,6 +198,9 @@ impl IoSource for SegmentIoSource {
     }
 
     fn poll_completion(&self, cx: &mut Context<'_>) -> Poll<VortexResult<Completion>> {
+        if let Some(completion) = self.ready.lock().pop_front() {
+            return Poll::Ready(Ok(completion));
+        }
         match self.reads.lock().poll_next_unpin(cx) {
             Poll::Ready(Some(completion)) => Poll::Ready(Ok(completion)),
             Poll::Ready(None) => Poll::Ready(Err(vortex_err!(
@@ -199,6 +218,7 @@ impl IoSource for SegmentIoSource {
 
     fn clear(&self) {
         self.reads.lock().clear();
+        self.ready.lock().clear();
         self.prefetched.lock().clear();
         self.announced.lock().clear();
     }
@@ -211,11 +231,14 @@ mod tests {
     use std::sync::atomic::Ordering;
 
     use futures::FutureExt;
+    use futures::channel::oneshot;
     use futures::future;
+    use parking_lot::Mutex;
     use vortex_array::buffer::BufferHandle;
     use vortex_buffer::Alignment;
     use vortex_buffer::ByteBuffer;
     use vortex_error::VortexResult;
+    use vortex_error::vortex_err;
     use vortex_io::request::IoIntent;
     use vortex_io::request::IoOwnerId;
     use vortex_io::request::IoRequest;
@@ -248,6 +271,57 @@ mod tests {
             request: IoRequestId(id),
             target: IoTarget::range(0, 4),
         }
+    }
+
+    struct MixedSegments(Mutex<Option<oneshot::Receiver<ByteBuffer>>>);
+
+    impl SegmentSource for MixedSegments {
+        fn request(&self, id: SegmentId) -> SegmentFuture {
+            if *id == 0 {
+                return future::ready(Ok(BufferHandle::new_host(ByteBuffer::from(vec![0; 4]))))
+                    .boxed();
+            }
+            let receiver = self.0.lock().take().expect("one pending read");
+            async move {
+                receiver
+                    .await
+                    .map(BufferHandle::new_host)
+                    .map_err(|err| vortex_err!("{err}"))
+            }
+            .boxed()
+        }
+    }
+
+    #[tokio::test]
+    async fn pending_read_wakes_after_an_immediate_completion() -> VortexResult<()> {
+        let (sender, receiver) = oneshot::channel();
+        let segments = Arc::new(MixedSegments(Mutex::new(Some(receiver))));
+        let locations = [0, 4].map(|offset| SegmentLocation {
+            offset,
+            length: 4,
+            alignment: Alignment::none(),
+        });
+        let io = SegmentIoSource::new(segments, segment_ranges(&locations));
+        let mut pending = request(IoIntent::Fetch, 1);
+        pending.target = IoTarget::range(4, 4);
+        io.submit(IoOwnerId(0), vec![pending, request(IoIntent::Fetch, 0)])?;
+        let immediate = io.poll()?.expect("the in-memory read is already ready");
+        assert_eq!(immediate.request, IoRequestId(0));
+        assert!(immediate.result.is_ok());
+        assert!(io.poll()?.is_none());
+
+        let delivery = tokio::spawn(async move {
+            tokio::task::yield_now().await;
+            sender
+                .send(ByteBuffer::from(vec![1; 4]))
+                .expect("read is live");
+        });
+        let completed = std::future::poll_fn(|cx| io.poll_completion(cx)).await?;
+        assert_eq!(completed.request, IoRequestId(1));
+        assert!(completed.result.is_ok());
+        delivery.await.expect("delivery task succeeds");
+        assert!(io.poll()?.is_none());
+        Ok(())
     }
 
     /// A fetch of a prefetched segment waits on the prefetch's read rather than reading again,

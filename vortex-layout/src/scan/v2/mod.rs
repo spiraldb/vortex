@@ -21,6 +21,7 @@ pub(crate) mod splits;
 mod tests;
 
 use std::env;
+use std::iter;
 use std::ops::Range;
 use std::sync::Arc;
 use std::sync::LazyLock;
@@ -46,6 +47,7 @@ use crate::layouts::flat::Flat;
 use crate::layouts::struct_::Struct;
 use crate::layouts::zoned::LegacyStats;
 use crate::layouts::zoned::Zoned;
+use crate::plan::physical::PlanRef;
 use crate::plan::physical::lower;
 use crate::plan::physical::optimize;
 use crate::plan::physical::plan_row_idx_expression;
@@ -105,7 +107,9 @@ fn select_supported<A: 'static + Send>(builder: ScanBuilder<A>) -> VortexResult<
     } else {
         match &builder.scan_file {
             None => Some("no scan file"),
-            Some(file) if !supports_layout(&file.layout)? => Some("layout"),
+            Some(file) if !supports_layout(&file.layout, builder.projection.is_root())? => {
+                Some("layout")
+            }
             Some(_) => None,
         }
     };
@@ -117,10 +121,10 @@ fn select_supported<A: 'static + Send>(builder: ScanBuilder<A>) -> VortexResult<
     Ok(Executor::V2(PreparedScan::try_new(builder)?))
 }
 
-/// Whether every layout under `layout` lowers to plans with a pipeline implementation.
+/// Whether every required layout lowers to plans with a pipeline implementation.
 ///
 /// List layouts lower to a list assembly, which cannot compile before its offsets are read.
-fn supports_layout(layout: &LayoutRef) -> VortexResult<bool> {
+fn supports_layout(layout: &LayoutRef, identity: bool) -> VortexResult<bool> {
     if !(layout.is::<Flat>()
         || layout.is::<Chunked>()
         || layout.is::<Struct>()
@@ -130,8 +134,15 @@ fn supports_layout(layout: &LayoutRef) -> VortexResult<bool> {
     {
         return Ok(false);
     }
+    // An identity projection cannot use zone statistics. Leave their layouts uninitialized.
+    if identity && (layout.is::<Zoned>() || layout.is::<LegacyStats>()) {
+        return match layout.slot(0)? {
+            Some(data) => supports_layout(&data, identity),
+            None => Ok(false),
+        };
+    }
     for child in layout.children()? {
-        if !supports_layout(&child)? {
+        if !supports_layout(&child, identity)? {
             return Ok(false);
         }
     }
@@ -142,6 +153,8 @@ fn supports_layout(layout: &LayoutRef) -> VortexResult<bool> {
 pub(crate) struct PreparedScan<A: 'static + Send> {
     session: VortexSession,
     plans: ScanPlans,
+    /// Whole dictionary values and the root rows that use them, for an identity projection.
+    value_scopes: Option<Vec<(Range<u64>, PlanRef)>>,
     /// Serves the splits' reads.
     io: Arc<dyn IoService>,
     /// The scan's splits, over the root row domain, in row order.
@@ -160,10 +173,38 @@ impl<A: 'static + Send> PreparedScan<A> {
             .scan_file
             .ok_or_else(|| vortex_err!("a V2 scan needs a scan file"))?;
         let root = lower(&file.layout)?;
-        let projection = optimize(plan_row_idx_expression(builder.projection, root.clone())?)?;
-        let projection_starts: Arc<[u64]> = chunk_starts([&projection])?.into();
-        let rows = builder.row_range.unwrap_or_else(|| 0..root.row_count());
-        let splits = projection_splits(&projection_starts, rows);
+        let row_count = root.row_count();
+        // An identity projection needs no rewrites. Keep the lowered children lazy, including
+        // statistics that a projection-only scan never reads.
+        let identity = builder.projection.is_root() && builder.projection.dtype() == root.dtype();
+        let projection = if identity {
+            root
+        } else {
+            optimize(plan_row_idx_expression(builder.projection, root)?)?
+        };
+        let mut value_scopes = identity.then(Vec::new);
+        let projection_starts: Arc<[u64]> =
+            chunk_starts([&projection], value_scopes.as_mut())?.into();
+        let rows = builder.row_range.unwrap_or(0..row_count);
+        // Whole-column dictionaries already need the scan's full lifetime. Only dictionaries
+        // covering part of the scan need separate cache owners for their consuming splits.
+        let value_scopes = value_scopes.filter(|values| {
+            values
+                .iter()
+                .any(|(used, _)| used.start > rows.start || used.end < rows.end)
+        });
+        let splits = if let Some(boundaries) = builder.natural_splits {
+            projection_splits(&boundaries, rows)
+        } else {
+            let natural = projection_splits(&projection_starts, rows.clone());
+            let boundaries = natural
+                .iter()
+                .map(|split| split.start)
+                .chain(iter::once(rows.end))
+                .collect();
+            let boundaries = builder.split_by.split_boundaries(boundaries, &rows)?;
+            projection_splits(&boundaries, rows)
+        };
         let io = Arc::new(SegmentScanIo::new(
             file.segments,
             segment_ranges(&file.locations),
@@ -178,6 +219,7 @@ impl<A: 'static + Send> PreparedScan<A> {
                 row_offset: builder.row_offset,
                 values: Default::default(),
             },
+            value_scopes,
             io,
             splits,
             selection: builder.selection,
@@ -200,12 +242,17 @@ impl<A: 'static + Send> PreparedScan<A> {
                     file_ordinal: 0,
                     rows: row_mask.row_range(),
                 };
+                let mut plans = self.plans.clone();
+                if let Some(values) = &self.value_scopes {
+                    plans.values = self.plans.values.for_plans(
+                        values
+                            .iter()
+                            .filter(|(used, _)| used.start < rows.end && rows.start < used.end)
+                            .map(|(_, plan)| plan),
+                    );
+                }
                 Some(SplitPlan {
-                    root: plan_projection(
-                        self.plans.clone(),
-                        scope.clone(),
-                        row_mask.mask().clone(),
-                    ),
+                    root: plan_projection(plans, scope.clone(), row_mask.mask().clone()),
                     scope,
                 })
             })

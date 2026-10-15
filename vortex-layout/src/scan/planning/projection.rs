@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-use std::sync::Arc;
-
 use vortex_array::IntoArray;
 use vortex_array::arrays::ChunkedArray;
+use vortex_array::dtype::DType;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
@@ -32,7 +31,7 @@ use crate::scan::v2::splits::projection_splits;
 /// with a selected row becomes one [`ProjectionMorsel`], so a morsel reads at most one chunk of
 /// every column. The planner finishes once it has handed out every morsel.
 pub struct ProjectionPlanner {
-    plans: ScanPlans,
+    plans: Option<ScanPlans>,
     /// The split's selected rows, until the first compute cuts them.
     selected: Option<SelectedRows>,
     /// The projection splits not yet handed out, last first.
@@ -43,7 +42,7 @@ impl ProjectionPlanner {
     /// Creates a planner for `selected`.
     pub fn new(plans: ScanPlans, selected: SelectedRows) -> Self {
         Self {
-            plans,
+            plans: Some(plans),
             selected: Some(selected),
             pending: Vec::new(),
         }
@@ -54,7 +53,8 @@ impl ProjectionPlanner {
         let SelectedRows { scope, mask } = selected;
         let start = scope.rows.start;
         let index = |row: u64| usize::try_from(row - start).vortex_expect("split row fits usize");
-        let mut splits = projection_splits(&self.plans.projection_starts, scope.rows.clone())
+        let plans = self.plans.as_ref().vortex_expect("uncut planner has plans");
+        let mut splits = projection_splits(&plans.projection_starts, scope.rows.clone())
             .into_iter()
             .filter_map(|rows| {
                 let mask = mask.slice(index(rows.start)..index(rows.end));
@@ -94,9 +94,19 @@ impl Planner for ProjectionPlanner {
             return Ok(PlannerOutput::Done);
         };
         let scope = selected.scope.clone();
+        // The driver's continuation follows its children. Give the last morsel ownership so
+        // the completed planner does not keep the lowering tree alive while that morsel runs.
+        let plans = if self.pending.is_empty() {
+            self.plans.take().vortex_expect("planner has plans")
+        } else {
+            self.plans
+                .as_ref()
+                .vortex_expect("planner has plans")
+                .clone()
+        };
         Ok(PlannerOutput::Morsel(
             scope,
-            Box::new(ProjectionMorsel::new(self.plans.clone(), selected)),
+            Box::new(ProjectionMorsel::new(plans, selected)),
         ))
     }
 }
@@ -104,7 +114,8 @@ impl Planner for ProjectionPlanner {
 /// Runs the projection plan over a split's selected rows and returns them as one batch, in row
 /// order. A selection that projects to no rows finishes without a batch.
 pub struct ProjectionMorsel {
-    plans: ScanPlans,
+    plans: Option<ScanPlans>,
+    dtype: DType,
     selected: SelectedRows,
     graph: Option<ProtocolGraph>,
     pieces: Vec<Piece>,
@@ -115,7 +126,8 @@ impl ProjectionMorsel {
     /// Creates a morsel projecting `selected`.
     pub fn new(plans: ScanPlans, selected: SelectedRows) -> Self {
         Self {
-            plans,
+            dtype: plans.projection.dtype().clone(),
+            plans: Some(plans),
             selected,
             graph: None,
             pieces: Vec::new(),
@@ -134,7 +146,7 @@ impl ProjectionMorsel {
         let array = match arrays.len() {
             0 => return Ok(MorselOutput::Done),
             1 => arrays.remove(0),
-            _ => ChunkedArray::try_new(arrays, self.plans.projection.dtype().clone())?.into_array(),
+            _ => ChunkedArray::try_new(arrays, self.dtype.clone())?.into_array(),
         };
         Ok(MorselOutput::Batch(array))
     }
@@ -165,19 +177,19 @@ impl Morsel for ProjectionMorsel {
             vortex_bail!("ProjectionMorsel: compute called after Done");
         }
         let Some(graph) = self.graph.as_mut() else {
+            let plans = self
+                .plans
+                .take()
+                .vortex_expect("an uncompiled projection still has its plans");
             let graph = ScanGraph::try_new(
-                self.plans.session.clone(),
-                &self.plans.projection,
+                plans.session,
+                &plans.projection,
                 self.selected.scope.rows.clone(),
                 self.selected.mask.clone(),
-                self.plans.row_offset,
-                self.plans.values.clone(),
+                plans.row_offset,
+                plans.values,
             )?;
-            self.graph = Some(ProtocolGraph::new(
-                graph,
-                Arc::clone(&self.plans.locations),
-                0,
-            ));
+            self.graph = Some(ProtocolGraph::new(graph, plans.locations, 0));
             return Ok(MorselOutput::Continue);
         };
         if graph.state() == State::Done {

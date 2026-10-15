@@ -61,9 +61,8 @@ pub struct ScanPlans {
     pub projection_starts: Arc<[u64]>,
     /// The global row index of the root row domain's first row.
     pub row_offset: u64,
-    /// Whole values, such as dictionary values, shared by every split of the scan, so a
-    /// dictionary read by many chunks is decoded once, as the default executor's reader caches
-    /// it. Dropped with the scan.
+    /// Whole values, such as dictionary values, shared by the splits of this scan. Their plans
+    /// always read the same complete row domain, independently of a split's selection.
     pub values: ValueCache,
 }
 
