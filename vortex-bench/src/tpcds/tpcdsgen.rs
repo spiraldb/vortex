@@ -20,9 +20,6 @@ use arrow_schema::SchemaRef;
 use futures::StreamExt;
 use futures::stream;
 use parquet::arrow::ArrowWriter;
-use parquet::basic::Compression;
-use parquet::basic::ZstdLevel;
-use parquet::file::properties::WriterProperties;
 use tpcdsgen::config::CompatMode;
 use tpcdsgen::config::Session;
 use tpcdsgen::config::SessionBuilder;
@@ -56,16 +53,12 @@ use vortex::utils::parallelism::get_available_parallelism;
 
 use crate::Format;
 use crate::utils::file::idempotent;
+use crate::utils::parquet::parquet_writer_properties;
 
 const BATCH_SIZE: usize = 8192 * 16;
 
 /// Matches the row group size of DuckDB's Parquet writer, which previously generated this data.
 const ROW_GROUP_SIZE: usize = 122_880;
-
-/// Columns whose dictionary outgrows this fall back to plain encoding. The parquet-rs default
-/// (1 MiB) keeps dictionaries for unique keys such as `cd_demo_sk`, which compress far worse than
-/// plain values. A small limit approximates DuckDB's per-column choice.
-const DICTIONARY_PAGE_SIZE_LIMIT: usize = 64 * 1024;
 
 /// Generate every TPC-DS table as a single Parquet file per table under `base_dir/parquet`.
 ///
@@ -172,13 +165,8 @@ fn table_batches(table: &str, session: Session) -> Box<dyn RecordBatchIterator> 
 
 fn write_parquet(path: &Path, batches: Box<dyn RecordBatchIterator>) -> Result<()> {
     let schema = spec_schema(batches.schema());
-    let props = WriterProperties::builder()
-        .set_compression(Compression::ZSTD(ZstdLevel::try_new(3)?))
+    let props = parquet_writer_properties()
         .set_max_row_group_row_count(Some(ROW_GROUP_SIZE))
-        .set_dictionary_page_size_limit(DICTIONARY_PAGE_SIZE_LIMIT)
-        // Bound pages by bytes only. The default 20,000-row limit splits a row group into many
-        // small pages, which gives zstd too little context to compress repeating columns.
-        .set_data_page_row_count_limit(usize::MAX)
         .build();
     let mut writer = ArrowWriter::try_new(File::create(path)?, Arc::clone(&schema), Some(props))?;
     // Fail on values that do not fit the narrower spec types instead of silently nulling them.
