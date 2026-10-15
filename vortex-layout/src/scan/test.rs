@@ -53,7 +53,7 @@ pub static SCAN_SESSION: LazyLock<VortexSession> = LazyLock::new(new_session);
 /// `split_size` controls the split layout (`None` is a single split), `keep_row` filters rows, and
 /// the `fail_*` flags inject filter/projection errors. Every projection records its mask's
 /// true-count into `projection_masks`, letting tests assert that a limit is applied before
-/// projection.
+/// projection, and every filter evaluation records its expression into `filter_exprs`.
 #[derive(Debug)]
 pub struct TestLayoutReader {
     name: Arc<str>,
@@ -67,6 +67,7 @@ pub struct TestLayoutReader {
     fail_projection: bool,
     projection_masks: Option<Arc<Mutex<Vec<usize>>>>,
     filter_evaluations: Option<Arc<AtomicUsize>>,
+    filter_exprs: Option<Arc<Mutex<Vec<BoundExpression>>>>,
 }
 
 impl TestLayoutReader {
@@ -83,7 +84,13 @@ impl TestLayoutReader {
             fail_projection: false,
             projection_masks: None,
             filter_evaluations: None,
+            filter_exprs: None,
         }
+    }
+
+    pub fn with_dtype(mut self, dtype: DType) -> Self {
+        self.dtype = dtype;
+        self
     }
 
     /// Offset every produced value, so tests can tell which reader a row came from.
@@ -110,6 +117,11 @@ impl TestLayoutReader {
     /// Counts every filter evaluation into `filter_evaluations`.
     pub fn with_filter_evaluations(mut self, filter_evaluations: Arc<AtomicUsize>) -> Self {
         self.filter_evaluations = Some(filter_evaluations);
+        self
+    }
+
+    pub fn with_filter_exprs(mut self, filter_exprs: Arc<Mutex<Vec<BoundExpression>>>) -> Self {
+        self.filter_exprs = Some(filter_exprs);
         self
     }
 
@@ -172,11 +184,14 @@ impl LayoutReader for TestLayoutReader {
     fn filter_evaluation(
         &self,
         row_range: &Range<u64>,
-        _expr: &BoundExpression,
+        expr: &BoundExpression,
         mask: MaskFuture,
     ) -> VortexResult<MaskFuture> {
         if let Some(filter_evaluations) = &self.filter_evaluations {
             filter_evaluations.fetch_add(1, Ordering::Relaxed);
+        }
+        if let Some(filter_exprs) = &self.filter_exprs {
+            filter_exprs.lock().push(expr.clone());
         }
         if self.fail_first_filter && row_range.start == 0 {
             let len = mask.len();

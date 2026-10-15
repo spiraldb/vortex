@@ -17,6 +17,7 @@ use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldMask;
 use vortex_array::expr::BoundExpression;
 use vortex_array::expr::analysis::referenced_field_paths;
+use vortex_array::expr::transform::find_between;
 use vortex_array::iter::ArrayIterator;
 use vortex_array::iter::ArrayIteratorAdapter;
 use vortex_array::stream::ArrayStream;
@@ -314,7 +315,8 @@ impl<A: 'static + Send> ScanBuilder<A> {
         }
     }
 
-    /// Optimize expressions, compute split ranges, and return an executable repeated scan.
+    /// Rewrite range comparisons in the filter into betweens, compute split ranges, and return an
+    /// executable repeated scan.
     pub fn prepare(self) -> VortexResult<RepeatedScan<A>> {
         let dtype = self.dtype()?;
 
@@ -338,7 +340,7 @@ impl<A: 'static + Send> ScanBuilder<A> {
         }
 
         let bound_projection = self.projection;
-        let bound_filter = self.filter;
+        let bound_filter = self.filter.map(find_between).transpose()?;
 
         // Compute the row splits of the scan.
         let splits =
@@ -507,12 +509,19 @@ mod test {
     use vortex_array::dtype::StructFields;
     use vortex_array::expr::BoundExpression;
     use vortex_array::expr::ExactBoundExpr;
+    use vortex_array::expr::and;
+    use vortex_array::expr::between;
     use vortex_array::expr::bound;
+    use vortex_array::expr::col;
     use vortex_array::expr::eq;
     use vortex_array::expr::get_item;
+    use vortex_array::expr::gt_eq;
     use vortex_array::expr::is_not_null;
     use vortex_array::expr::lit;
+    use vortex_array::expr::lt;
     use vortex_array::expr::root;
+    use vortex_array::scalar_fn::fns::between::BetweenOptions;
+    use vortex_array::scalar_fn::fns::between::StrictComparison;
     use vortex_array::scalar_fn::fns::operators::CompareOperator;
     use vortex_error::VortexResult;
     use vortex_error::vortex_bail;
@@ -1000,8 +1009,8 @@ mod test {
         Ok(())
     }
 
-    /// A dynamic conjunct that keeps every row stops being evaluated once the scan may skip it,
-    /// and is evaluated on every split otherwise. Either way the scan returns the same rows.
+    /// A bound dynamic conjunct that keeps every row stops being evaluated once the scan may skip
+    /// it, and is evaluated on every split otherwise. Either way the scan returns the same rows.
     #[rstest]
     #[case::skipped(true, keep_all as fn(u64) -> bool, true)]
     #[case::not_opted_in(false, keep_all as fn(u64) -> bool, false)]
@@ -1022,7 +1031,8 @@ mod test {
         );
         let filter = bound::dynamic(
             CompareOperator::Lt,
-            || None,
+            // Bound, so the conjunct is evaluated rather than proven to accept every row.
+            || Some(1000_i32.into()),
             reader.dtype().clone(),
             true,
             root().bind(reader.dtype())?,
@@ -1162,6 +1172,42 @@ mod test {
         drain_runtime(&runtime);
 
         assert_eq!(values, [1, 3, 5]);
+        Ok(())
+    }
+
+    #[test]
+    fn scan_evaluates_filter_ranges_as_between() -> VortexResult<()> {
+        let runtime = SingleThreadRuntime::default();
+        let session = session_with_handle(runtime.handle());
+        let filter_exprs = Arc::new(Mutex::new(Vec::new()));
+        let dtype = nested_dtype();
+        let reader = Arc::new(
+            TestLayoutReader::new(4)
+                .with_dtype(dtype.clone())
+                .with_filter_exprs(Arc::clone(&filter_exprs)),
+        );
+        let filter = and(gt_eq(col("b"), lit(2_i32)), lt(col("b"), lit(5_i32))).bind(&dtype)?;
+
+        let values = collect_scan_values(
+            ScanBuilder::new(session, reader)
+                .with_projection(col("b").bind(&dtype)?)
+                .with_filter(filter)
+                .into_array_iter(&runtime)?,
+        )?;
+        drain_runtime(&runtime);
+
+        assert_eq!(values, [0, 1, 2, 3]);
+        let expected = between(
+            col("b"),
+            lit(2_i32),
+            lit(5_i32),
+            BetweenOptions {
+                lower_strict: StrictComparison::NonStrict,
+                upper_strict: StrictComparison::Strict,
+            },
+        )
+        .bind(&dtype)?;
+        assert_eq!(filter_exprs.lock().as_slice(), [expected]);
         Ok(())
     }
 
