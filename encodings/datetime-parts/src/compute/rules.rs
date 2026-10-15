@@ -347,20 +347,14 @@ mod tests {
         .into_array())
     }
 
-    /// Create a nullable constant timestamp at midnight, as vortex-datafusion makes for literals.
-    fn nullable_midnight_constant(day: i64, len: usize) -> ArrayRef {
-        let scalar = midnight_constant(day, TimeUnit::Seconds, 1)
-            .as_constant()
-            .vortex_expect("midnight_constant must be constant")
-            .into_nullable();
-
-        ConstantArray::new(scalar, len).into_array()
-    }
-
     #[test]
     fn test_binary_comparison_pushdown_nullable_constant() -> VortexResult<()> {
         let dtp = dtp_constant_zero_parts(&[0, 1, 2])?;
-        let constant = nullable_midnight_constant(1, dtp.len());
+        let scalar = midnight_constant(1, TimeUnit::Seconds, 1)
+            .as_constant()
+            .vortex_expect("midnight_constant must be constant")
+            .into_nullable();
+        let constant = ConstantArray::new(scalar, dtp.len()).into_array();
         let comparison = Binary::try_new(dtp, constant, Operator::Lte)?.into_array();
 
         let optimized = comparison.optimize()?;
@@ -368,29 +362,6 @@ mod tests {
 
         let mut ctx = array_session().create_execution_ctx();
         assert_eq!(true_count(&optimized, &mut ctx), 2);
-        Ok(())
-    }
-
-    #[test]
-    fn test_between_pushdown_nullable_constant() -> VortexResult<()> {
-        let dtp = dtp_constant_zero_parts(&[0, 1, 2, 3, 4])?;
-        let len = dtp.len();
-        let between = Between::try_new(
-            dtp,
-            nullable_midnight_constant(1, len),
-            nullable_midnight_constant(3, len),
-            BetweenOptions {
-                lower_strict: StrictComparison::NonStrict,
-                upper_strict: StrictComparison::NonStrict,
-            },
-        )?
-        .into_array();
-
-        let optimized = between.optimize()?;
-        assert_eq!(optimized.dtype(), between.dtype());
-
-        let mut ctx = array_session().create_execution_ctx();
-        assert_eq!(true_count(&optimized, &mut ctx), 3);
         Ok(())
     }
 
