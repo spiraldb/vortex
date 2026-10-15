@@ -3,7 +3,7 @@
 
 //! Layout-level planners and morsels for the planning protocol.
 //!
-//! A split is evaluated over physical plans: a [`ProjectionPlanner`] emits a [`ProjectionMorsel`]
+//! A split is evaluated over physical plans: a [`ProjectionPlanner`] emits a `ProjectionMorsel`
 //! per projection split, which runs the projection plan over the split's selected rows through
 //! the pipeline [`Scan`](crate::plan::physical::pipeline::Scan). Every segment read is published
 //! as a protocol request, so the planning driver decides when IO happens.
