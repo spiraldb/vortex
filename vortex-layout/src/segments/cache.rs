@@ -49,6 +49,9 @@ use crate::segments::SegmentSource;
 #[async_trait]
 pub trait SegmentCache: Send + Sync {
     /// Return a cached segment, or `None` on cache miss.
+    ///
+    /// Lookups may be polled while a segment request is constructed, before its returned
+    /// future is polled. Ready misses preserve the source's eager read registration.
     async fn get(&self, id: SegmentId) -> VortexResult<Option<ByteBuffer>>;
     /// Store a segment in the cache.
     async fn put(&self, id: SegmentId, buffer: ByteBuffer) -> VortexResult<()>;
@@ -262,28 +265,52 @@ impl SegmentCacheSourceAdapter {
 impl SegmentSource for SegmentCacheSourceAdapter {
     fn request(&self, id: SegmentId) -> SegmentFuture {
         let cache = Arc::clone(&self.cache);
-        let delegate = self.source.request(id);
+        let source = Arc::clone(&self.source);
+        let lookup_cache = Arc::clone(&cache);
+        let mut lookup = async move { lookup_cache.get(id).await }.boxed();
 
-        async move {
-            if let Ok(Some(segment)) = cache.get(id).await {
-                tracing::debug!("Resolved segment {} from cache", id);
-                return Ok(BufferHandle::new_host(segment));
+        // Resolve ready lookups while requests are being constructed, so cold reads remain
+        // eligible for coalescing before their futures are polled.
+        match lookup.as_mut().now_or_never() {
+            Some(result) => request_after_lookup(id, cache, source, result),
+            None => {
+                async move { request_after_lookup(id, cache, source, lookup.await).await }.boxed()
             }
-            let result = delegate.await?;
-            // Cache only CPU buffers; device buffers are not cached.
-            if let Some(buffer) = result.as_host_opt()
-                && let Err(e) = cache.put(id, buffer.clone()).await
-            {
-                tracing::warn!("Failed to store segment {} in cache: {}", id, e);
-            }
-            Ok(result)
         }
-        .boxed()
     }
+}
+
+fn request_after_lookup(
+    id: SegmentId,
+    cache: Arc<dyn SegmentCache>,
+    source: Arc<dyn SegmentSource>,
+    lookup: VortexResult<Option<ByteBuffer>>,
+) -> SegmentFuture {
+    if let Ok(Some(segment)) = lookup {
+        tracing::debug!("Resolved segment {} from cache", id);
+        return async move { Ok(BufferHandle::new_host(segment)) }.boxed();
+    }
+    let delegate = source.request(id);
+    async move {
+        let result = delegate.await?;
+        // Cache only CPU buffers; device buffers are not cached.
+        if let Some(buffer) = result.as_host_opt()
+            && let Err(e) = cache.put(id, buffer.clone()).await
+        {
+            tracing::warn!("Failed to store segment {} in cache: {}", id, e);
+        }
+        Ok(result)
+    }
+    .boxed()
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::Ordering;
+
+    use futures::channel::oneshot;
+    use parking_lot::Mutex;
     use rstest::rstest;
     use vortex_buffer::ByteBuffer;
 
@@ -334,6 +361,78 @@ mod tests {
         if eviction == SegmentEviction::Lru {
             assert!(file.get(SegmentId::from(9)).await?.is_some());
         }
+        Ok(())
+    }
+
+    struct CountingSource(AtomicUsize);
+
+    impl SegmentSource for CountingSource {
+        fn request(&self, _id: SegmentId) -> SegmentFuture {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            async { Ok(BufferHandle::new_host(ByteBuffer::copy_from(b"source"))) }.boxed()
+        }
+    }
+
+    #[tokio::test]
+    async fn cache_hits_do_not_register_source_reads() -> VortexResult<()> {
+        let cache = MokaSegmentCache::new(1024, SegmentEviction::Lru).for_file("file");
+        let hit = SegmentId::from(0);
+        cache.put(hit, ByteBuffer::copy_from(b"cached")).await?;
+        let source = Arc::new(CountingSource(AtomicUsize::new(0)));
+        let cached = SegmentCacheSourceAdapter::new(Arc::new(cache), source.clone());
+
+        assert_eq!(
+            cached.request(hit).await?.unwrap_host(),
+            ByteBuffer::copy_from(b"cached")
+        );
+        assert_eq!(source.0.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            cached.request(SegmentId::from(1)).await?.unwrap_host(),
+            ByteBuffer::copy_from(b"source")
+        );
+        assert_eq!(source.0.load(Ordering::SeqCst), 1);
+        Ok(())
+    }
+
+    struct DelayedCache(Mutex<Option<oneshot::Receiver<Option<ByteBuffer>>>>);
+
+    #[async_trait]
+    impl SegmentCache for DelayedCache {
+        async fn get(&self, _id: SegmentId) -> VortexResult<Option<ByteBuffer>> {
+            let lookup = self
+                .0
+                .lock()
+                .take()
+                .vortex_expect("lookup is not restarted");
+            Ok(lookup.await.expect("test supplies lookup result"))
+        }
+
+        async fn put(&self, _id: SegmentId, _buffer: ByteBuffer) -> VortexResult<()> {
+            Ok(())
+        }
+    }
+
+    #[rstest]
+    #[case::hit(true)]
+    #[case::miss(false)]
+    #[tokio::test]
+    async fn pending_lookup_finishes_before_registering_reads(
+        #[case] hit: bool,
+    ) -> VortexResult<()> {
+        let (sender, receiver) = oneshot::channel();
+        let cache = Arc::new(DelayedCache(Mutex::new(Some(receiver))));
+        let source = Arc::new(CountingSource(AtomicUsize::new(0)));
+        let cached = SegmentCacheSourceAdapter::new(cache, source.clone());
+        let mut request = cached.request(SegmentId::from(0));
+        assert_eq!(source.0.load(Ordering::SeqCst), 0);
+        assert!(futures::poll!(request.as_mut()).is_pending());
+        assert_eq!(source.0.load(Ordering::SeqCst), 0);
+        sender
+            .send(hit.then(|| ByteBuffer::copy_from(b"cached")))
+            .unwrap();
+        let expected: &[u8] = if hit { b"cached" } else { b"source" };
+        assert_eq!(request.await?.unwrap_host().as_ref(), expected);
+        assert_eq!(source.0.load(Ordering::SeqCst), usize::from(!hit));
         Ok(())
     }
 }
