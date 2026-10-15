@@ -15,15 +15,16 @@ use vortex::error::VortexExpect;
 use vortex::error::VortexResult;
 use vortex::error::vortex_panic;
 use vortex::file::Footer;
+use vortex::file::VortexFile;
 use vortex::file::multi::MultiFileSession;
 use vortex::file::multi::open_cached;
 use vortex::file::multi::parse_uri_or_path;
-use vortex::file::v2::FileStatsLayoutReader;
+use vortex::io::VortexReadAt;
 use vortex::io::compat::Compat;
 use vortex::io::filesystem::FileSystemRef;
 use vortex::io::object_store::ObjectStoreFileSystem;
 use vortex::io::runtime::BlockingRuntime as _;
-use vortex::io::std_file::StdFileSystem;
+use vortex::io::std_file::FileReadAt;
 use vortex::layout::LayoutReaderRef;
 use vortex::layout::scan::scan_builder::ScanBuilder;
 use vortex::mask::Mask;
@@ -77,15 +78,6 @@ use crate::table_function::convert_result;
 // separate thread.
 
 fn resolve_filesystem(url: &Url) -> VortexResult<(FileSystemRef, String)> {
-    // Compat makes us use tokio which is very bad for local reads on
-    // high-core machines because reads go into blocking pool
-    if url.scheme() == "file" {
-        return Ok((
-            Arc::new(StdFileSystem::new(RUNTIME.handle())),
-            url.path().to_string(),
-        ));
-    }
-
     let (object_store, path) = REGISTRY.resolve(url)?;
 
     Ok((
@@ -97,9 +89,35 @@ fn resolve_filesystem(url: &Url) -> VortexResult<(FileSystemRef, String)> {
     ))
 }
 
+fn open_file(path: &str) -> VortexResult<VortexFile> {
+    let url = parse_uri_or_path(path)?;
+    let source: Arc<dyn VortexReadAt> = if url.scheme() == "file" {
+        // Compat would make us use tokio which is very bad for local reads on high-core
+        // machines because reads go into blocking pool. DuckDB threads block on scans, so
+        // open and read the file on them, like DuckDB's own readers do.
+        Arc::new(FileReadAt::open(url.path(), RUNTIME.handle())?.with_inline_reads())
+    } else {
+        let (fs, fs_path) = resolve_filesystem(&url)?;
+        RUNTIME.block_on(fs.open_read(&fs_path))?
+    };
+    RUNTIME.block_on(open_cached(
+        &SESSION,
+        Some(path),
+        source,
+        None,
+        &|options| options,
+    ))
+}
+
 pub struct OpenFileReader {
-    /// The layout reader and conversion cache of the file. `None` after the file is skipped or
-    /// all its splits are taken.
+    path: String,
+    footer: Footer,
+    /// The layout reader and conversion cache of the file. `None` before the file is opened,
+    /// and after the file is skipped or all its splits are taken.
+    ///
+    /// A file whose footer is cached is opened only once `reader_initialize` decides to scan
+    /// it, so files pruned by DuckDB's virtual-column filters or by file statistics are never
+    /// opened.
     ///
     /// DuckDB releases its last reference to a file while it holds the global lock of the
     /// multi-file scan, and dropping this state takes long. So every local state that scans the
@@ -117,26 +135,21 @@ pub struct FileScanState {
     cache: ConversionCache,
 }
 
-impl OpenFileReader {
-    async fn open(path: String) -> VortexResult<Self> {
-        let (fs, fs_path) = resolve_filesystem(&parse_uri_or_path(&path)?)?;
-        let source = fs.open_read(&fs_path).await?;
-        let file = open_cached(&SESSION, Some(&path), source, None, &|options| options).await?;
-        Ok(OpenFileReader {
-            scan_state: Some(Arc::new(FileScanState {
-                reader: file.layout_reader()?,
-                cache: ConversionCache::default(),
-            })),
-            splits: vec![],
-            total_splits: 0,
-        })
+impl FileScanState {
+    fn new(file: &VortexFile) -> VortexResult<Arc<Self>> {
+        Ok(Arc::new(Self {
+            reader: file.layout_reader()?,
+            cache: ConversionCache::default(),
+        }))
     }
+}
 
+impl OpenFileReader {
     fn reader(&self) -> &LayoutReaderRef {
         &self
             .scan_state
             .as_ref()
-            .vortex_expect("file used after its scan state was released")
+            .vortex_expect("file used before it was opened or after its scan state was released")
             .reader
     }
 
@@ -156,9 +169,22 @@ impl OpenFileReader {
 }
 
 /// Called once per file while initializing the scan under file-local lock.
-/// Files are opened lazily.
+/// Files with a cached footer are opened lazily in `reader_initialize`.
 pub fn reader_open(file_path: &str) -> VortexResult<OpenFileReader> {
-    RUNTIME.block_on(OpenFileReader::open(file_path.to_owned()))
+    let (footer, scan_state) = match footer_lookup(file_path) {
+        Some(footer) => (footer, None),
+        None => {
+            let file = open_file(file_path)?;
+            (file.footer().clone(), Some(FileScanState::new(&file)?))
+        }
+    };
+    Ok(OpenFileReader {
+        path: file_path.to_owned(),
+        footer,
+        scan_state,
+        splits: vec![],
+        total_splits: 0,
+    })
 }
 
 /// Called once per scan with first file without locks. Populates "result"
@@ -166,7 +192,7 @@ pub fn reader_open(file_path: &str) -> VortexResult<OpenFileReader> {
 /// support schema evolution, so if any file schema doesn't match first schema,
 /// we break.
 pub fn reader_bind(file: &OpenFileReader, result: &mut BindResultRef) -> VortexResult<BindState> {
-    let dtype = file.reader().dtype().clone();
+    let dtype = file.footer.dtype().clone();
     let columns = extract_schema_from_dtype(&dtype)?;
 
     for column in &columns {
@@ -175,7 +201,7 @@ pub fn reader_bind(file: &OpenFileReader, result: &mut BindResultRef) -> VortexR
 
     Ok(BindState {
         dtype,
-        first_file_row_count: file.reader().row_count(),
+        first_file_row_count: file.footer.row_count(),
         filters: vec![],
         columns,
         has_non_optional_filter: AtomicBool::new(false),
@@ -188,6 +214,17 @@ pub fn reader_bind(file: &OpenFileReader, result: &mut BindResultRef) -> VortexR
 /// whether the opened file should be skipped. If this function returns false,
 /// duckdb closes the file and doesn't call reader_try_initialize_scan on it.
 pub fn reader_initialize(file: &mut OpenFileReader, global: &GlobalState) -> VortexResult<bool> {
+    if let Some(filter) = &global.filter.filter
+        && file.footer.can_prune(filter, &SESSION)?
+    {
+        file.scan_state = None;
+        return Ok(true);
+    }
+
+    if file.scan_state.is_none() {
+        file.scan_state = Some(FileScanState::new(&open_file(&file.path)?)?);
+    }
+
     if file.can_skip(&global.filter)? {
         // DuckDB releases a skipped file under the global lock. Here only the
         // file-local lock is held, so drop the scan state now.
@@ -318,16 +355,11 @@ pub fn reader_get_statistics(
         return None;
     }
 
-    let reader = file
-        .reader()
-        .as_any()
-        .downcast_ref::<FileStatsLayoutReader>()?;
-
-    let DType::Struct(fields, _) = &file.reader().dtype() else {
+    let DType::Struct(fields, _) = file.footer.dtype() else {
         return None;
     };
     let index = fields.find(column)?;
-    let stats_sets = reader.file_stats().stats_sets();
+    let stats_sets = file.footer.statistics()?.stats_sets();
 
     let dtype = fields.field_by_index(index)?;
 
@@ -364,12 +396,18 @@ pub fn can_get_partition_stats(bind: &BindState) -> bool {
 /// If any footer is not present, it sets a flag in BindState so we won't try
 /// again.
 pub fn footer_get_cached(bind: &mut BindState, path: &str) -> VortexResult<Option<Footer>> {
-    let footer = SESSION
-        .get_opt::<MultiFileSession>()
-        .vortex_expect("MultiFileSession not found")
-        .get_footer(path);
+    let footer = footer_lookup(path);
     bind.no_footer_caches |= footer.is_none();
     Ok(footer)
+}
+
+/// Returns the cached footer of the file at `path`, if any. Unlike
+/// `footer_get_cached`, a missing footer is not remembered in any bind state.
+pub fn footer_lookup(path: &str) -> Option<Footer> {
+    SESSION
+        .get_opt::<MultiFileSession>()
+        .vortex_expect("MultiFileSession not found")
+        .get_footer(path)
 }
 
 /// Called by one thread for every footer in planning phase

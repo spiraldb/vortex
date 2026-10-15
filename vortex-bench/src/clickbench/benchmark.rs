@@ -164,7 +164,7 @@ impl Benchmark for ClickBenchSortedBenchmark {
     }
 
     fn table_specs(&self) -> Vec<TableSpec> {
-        vec![TableSpec::new("hits", Some(HITS_SCHEMA.clone()))]
+        vec![TableSpec::new("hits", Some(HITS_SCHEMA.clone())).with_sort_order(&["EventTime"])]
     }
 }
 

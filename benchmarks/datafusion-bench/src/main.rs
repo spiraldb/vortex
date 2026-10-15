@@ -16,6 +16,7 @@ use datafusion::datasource::listing::ListingTable;
 use datafusion::datasource::listing::ListingTableConfig;
 use datafusion::datasource::listing::ListingTableUrl;
 use datafusion::prelude::SessionContext;
+use datafusion::prelude::ident;
 use datafusion_bench::format_to_df_format;
 use datafusion_bench::metrics::MetricsSetExt;
 use datafusion_bench::tracer::get_labelset_from_global;
@@ -263,7 +264,16 @@ async fn register_benchmark_tables<B: Benchmark + ?Sized>(
             let table_url = ListingTableUrl::try_new(benchmark_base.clone(), pattern)?
                 .with_table_ref(table_ref.clone());
 
-            let listing_options = ListingOptions::new(Arc::clone(&file_format));
+            let mut listing_options = ListingOptions::new(Arc::clone(&file_format));
+            if !table.sort_order.is_empty() {
+                listing_options = listing_options.with_file_sort_order(vec![
+                    table
+                        .sort_order
+                        .iter()
+                        .map(|column| ident(*column).sort(true, false))
+                        .collect(),
+                ]);
+            }
             let mut config =
                 ListingTableConfig::new(table_url).with_listing_options(listing_options);
 

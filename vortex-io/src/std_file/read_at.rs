@@ -66,6 +66,7 @@ pub struct FileReadAt {
     file: Arc<File>,
     handle: Handle,
     allocator: BufferAllocatorRef,
+    inline_reads: bool,
 }
 
 impl FileReadAt {
@@ -88,7 +89,18 @@ impl FileReadAt {
             file,
             handle,
             allocator,
+            inline_reads: false,
         })
+    }
+
+    /// Read on the thread that polls the read future instead of in the runtime's blocking pool.
+    ///
+    /// This saves a thread hop per read, which dominates reads served from the page cache. Use
+    /// it only when the polling thread may block, such as a query engine thread that drives the
+    /// scan with `block_on`.
+    pub fn with_inline_reads(mut self) -> Self {
+        self.inline_reads = true;
+        self
     }
 }
 
@@ -123,17 +135,16 @@ impl VortexReadAt for FileReadAt {
         let file = Arc::clone(&self.file);
         let handle = self.handle.clone();
         let allocator = self.allocator.clone();
-        async move {
-            handle
-                .spawn_blocking(move || {
-                    let mut buffer = allocator.with_capacity_aligned::<u8>(length, alignment);
-                    // SAFETY: read_exact_at initializes every byte before the buffer is frozen.
-                    unsafe { buffer.set_len(length) };
-                    read_exact_at(&file, buffer.as_mut_slice(), offset)?;
-                    Ok(BufferHandle::new_host(buffer.freeze()))
-                })
-                .await
+        let read = move || {
+            let mut buffer = allocator.with_capacity_aligned::<u8>(length, alignment);
+            // SAFETY: read_exact_at initializes every byte before the buffer is frozen.
+            unsafe { buffer.set_len(length) };
+            read_exact_at(&file, buffer.as_mut_slice(), offset)?;
+            Ok(BufferHandle::new_host(buffer.freeze()))
+        };
+        if self.inline_reads {
+            return async move { read() }.boxed();
         }
-        .boxed()
+        async move { handle.spawn_blocking(read).await }.boxed()
     }
 }

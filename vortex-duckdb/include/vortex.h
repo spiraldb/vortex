@@ -74,6 +74,8 @@ duckdb_vx_data duckdb_footer_get_cached(void *bind,
                                         uint64_t *row_count_out,
                                         duckdb_vx_error *error);
 
+extern duckdb_vx_data duckdb_footer_lookup(const char *path, size_t len);
+
 extern
 bool duckdb_footer_get_statistics(const void *footer,
                                   size_t column_index,

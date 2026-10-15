@@ -12,6 +12,7 @@ use std::sync::atomic::Ordering;
 use futures::FutureExt;
 use futures::channel::oneshot;
 use futures::future::BoxFuture;
+use rstest::rstest;
 use tempfile::NamedTempFile;
 use vortex_array::buffer::BufferHandle;
 use vortex_buffer::Alignment;
@@ -90,8 +91,8 @@ async fn test_file_read_with_tokio_runtime() {
 // Test with actual files
 // ============================================================================
 
-#[test]
-fn test_file_read_with_real_file_single_thread() {
+#[rstest]
+fn test_file_read_with_real_file_single_thread(#[values(false, true)] inline_reads: bool) {
     use std::io::Write;
 
     let result = block_on(|handle| {
@@ -102,8 +103,11 @@ fn test_file_read_with_real_file_single_thread() {
             temp_file.flush().unwrap();
 
             // Open and read the file
-            let file_read: Arc<dyn VortexReadAt> =
-                Arc::new(FileReadAt::open(temp_file.path(), handle.clone()).unwrap());
+            let mut file = FileReadAt::open(temp_file.path(), handle.clone()).unwrap();
+            if inline_reads {
+                file = file.with_inline_reads();
+            }
+            let file_read: Arc<dyn VortexReadAt> = Arc::new(file);
 
             // Read a slice
             let result = file_read

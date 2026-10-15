@@ -37,10 +37,48 @@ struct VortexLocalState final : LocalTableFunctionState {
     unique_ptr<CData> ffi_local_state;
 };
 
+/*
+ * A file list reordered for a Top-N scan, see
+ * VortexMultiFileReader::DynamicFilterPushdown.
+ *
+ * DuckDB numbers files by their position in the list it scans, and late
+ * materialization joins two scans of the same table on that "file_index". Only
+ * one of the scans is reordered, so each file keeps its position in the list it
+ * was reordered from.
+ */
+struct VortexReorderedFileList final : SimpleMultiFileList {
+    VortexReorderedFileList(vector<OpenFileInfo> files, vector<idx_t> original_indices)
+        : SimpleMultiFileList(std::move(files)), original_indices(std::move(original_indices)) {
+    }
+
+    inline unique_ptr<MultiFileList> Copy() const override {
+        return make_uniq<VortexReorderedFileList>(paths, original_indices);
+    }
+
+    const vector<idx_t> original_indices;
+};
+
 struct VortexMultiFileReader final : MultiFileReader {
     inline unique_ptr<MultiFileReader> Copy() const override {
         return make_uniq<VortexMultiFileReader>();
     }
+
+    /*
+     * Called once per scan before it starts, with the scan's filters.
+     *
+     * If a Top-N pushed a dynamic filter on a column, scan files in the order
+     * of that column's minimum (ascending Top-N) or maximum (descending Top-N)
+     * in the cached file footers. On sorted data the first files then hold the
+     * Top-N rows, the dynamic filter tightens right away, and later files are
+     * pruned by their footer statistics without being opened.
+     */
+    unique_ptr<MultiFileList> DynamicFilterPushdown(ClientContext &context,
+                                                    const MultiFileList &files,
+                                                    const MultiFileOptions &options,
+                                                    const vector<string> &names,
+                                                    const vector<LogicalType> &types,
+                                                    const vector<column_t> &column_ids,
+                                                    TableFilterSet &filters) override;
 
     /*
      * Called after InitializeGlobalState but before TryInitializeScan under
@@ -48,12 +86,9 @@ struct VortexMultiFileReader final : MultiFileReader {
      * statistics prove false for pushed filter or file index is not present in
      * file selection.
      *
-     * TODO(myrrc):
-     * InitializeReader prunes unused files e.g. ones filtered by "file_index".
-     * These files are opened but not initialized. Duckdb 2.0 allows filtering
-     * on virtual columns to skip opening files, but until it's released,
-     * filtered files (say, second pass in late materialization queries like
-     * clickbench 23) will be opened, and we will read their footers.
+     * Files whose footer is cached are opened only when they are scanned, so
+     * files pruned here, e.g. ones filtered by "file_index" in the second pass
+     * of late materialization queries like clickbench 23, are not opened.
      *
      * ComplexFilterPushdown/DynamicFilterPushdown callbacks technically allow
      * filtering file list via filter, but with file_index specifically it

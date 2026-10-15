@@ -39,6 +39,7 @@ use crate::file_reader::OpenFileReader;
 use crate::file_reader::can_get_partition_stats;
 use crate::file_reader::footer_get_cached;
 use crate::file_reader::footer_get_statistics;
+use crate::file_reader::footer_lookup;
 use crate::file_reader::reader_bind;
 use crate::file_reader::reader_get_progress_in_file;
 use crate::file_reader::reader_get_statistics;
@@ -250,6 +251,21 @@ pub unsafe extern "C-unwind" fn duckdb_footer_get_cached(
             }
             None => ptr::null_mut(),
         })
+    })
+}
+
+/// Returns the cached footer of the file at `path`, or null if it is not cached.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn duckdb_footer_lookup(
+    path: *const c_char,
+    len: usize,
+) -> cpp::duckdb_vx_data {
+    let path = unsafe { std::slice::from_raw_parts(path.cast::<u8>(), len) };
+    let Ok(path) = str::from_utf8(path) else {
+        return ptr::null_mut();
+    };
+    footer_lookup(path).map_or(ptr::null_mut(), |footer| {
+        Data::from(Box::new(footer)).as_ptr()
     })
 }
 

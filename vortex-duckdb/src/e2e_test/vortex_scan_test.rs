@@ -1163,3 +1163,87 @@ fn test_duplicate_struct_fields() {
             .is_err()
     );
 }
+
+/// Write `f0.vortex`..`f4.vortex` whose `ts` ranges descend as their names ascend, so a Top-N
+/// on `ts` scans them in the reverse of the listing order.
+fn write_reverse_sorted_files(dir: &Path) {
+    RUNTIME.block_on(async {
+        for i in 0..5i64 {
+            let ts: Vec<i64> = ((4 - i) * 10..(5 - i) * 10).collect();
+            let payload = VarBinViewArray::from_iter_str(ts.iter().map(|t| format!("p{t}")));
+            let array = StructArray::from_fields(&[
+                ("ts", PrimitiveArray::from_iter(ts).into_array()),
+                ("payload", payload.into_array()),
+            ])
+            .unwrap();
+            let mut file = async_fs::File::create(dir.join(format!("f{i}.vortex")))
+                .await
+                .unwrap();
+            SESSION
+                .write_options()
+                .write(&mut file, array.into_array().to_array_stream())
+                .await
+                .unwrap();
+        }
+    });
+}
+
+#[rstest::rstest]
+#[case::ascending("ORDER BY ts", &[(0, "p0"), (1, "p1"), (2, "p2")])]
+#[case::descending("ORDER BY ts DESC", &[(49, "p49"), (48, "p48"), (47, "p47")])]
+#[case::two_keys("ORDER BY ts, payload", &[(0, "p0"), (1, "p1"), (2, "p2")])]
+#[case::offset("ORDER BY ts LIMIT 3 OFFSET 9", &[(9, "p9"), (10, "p10"), (11, "p11")])]
+fn test_top_n_over_files_listed_out_of_order(
+    #[case] order: &str,
+    #[case] expected: &[(i64, &str)],
+) {
+    let tempdir = tempfile::tempdir().unwrap();
+    write_reverse_sorted_files(tempdir.path());
+    let glob = format!("{}/*.vortex", tempdir.path().display());
+    let limit = if order.contains("LIMIT") {
+        ""
+    } else {
+        "LIMIT 3"
+    };
+    let query = format!("SELECT ts, payload FROM read_vortex('{glob}') {order} {limit}");
+
+    let conn = database_connection();
+    // The first scan caches the file footers, which the second scan orders the files by.
+    for _ in 0..2 {
+        let mut rows = Vec::new();
+        for mut chunk in conn.query(&query).unwrap() {
+            let len = chunk.len().as_();
+            let ts = chunk.get_vector(0).as_slice_with_len::<i64>(len).to_vec();
+            let payload = unsafe { chunk.get_vector_mut(1).as_slice_mut::<duckdb_string_t>(len) }
+                .iter_mut()
+                .map(String::from_duckdb_value);
+            rows.extend(ts.into_iter().zip(payload));
+        }
+        let expected: Vec<(i64, String)> = expected
+            .iter()
+            .map(|(ts, payload)| (*ts, (*payload).to_string()))
+            .collect();
+        assert_eq!(rows, expected);
+    }
+}
+
+#[test]
+fn test_top_n_file_index_follows_listing_order() {
+    let tempdir = tempfile::tempdir().unwrap();
+    write_reverse_sorted_files(tempdir.path());
+    let glob = format!("{}/*.vortex", tempdir.path().display());
+    let query = format!("SELECT file_index, ts FROM read_vortex('{glob}') ORDER BY ts LIMIT 2");
+
+    let conn = database_connection();
+    for _ in 0..2 {
+        let mut rows = Vec::new();
+        for chunk in conn.query(&query).unwrap() {
+            let len = chunk.len().as_();
+            let file_index = chunk.get_vector(0).as_slice_with_len::<u64>(len).to_vec();
+            let ts = chunk.get_vector(1).as_slice_with_len::<i64>(len).to_vec();
+            rows.extend(file_index.into_iter().zip(ts));
+        }
+        // The smallest values are in the last listed file.
+        assert_eq!(rows, vec![(4, 0), (4, 1)]);
+    }
+}

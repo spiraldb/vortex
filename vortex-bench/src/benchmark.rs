@@ -18,11 +18,24 @@ use crate::Format;
 pub struct TableSpec {
     pub name: &'static str,
     pub schema: Option<Schema>,
+    /// Columns every file of the table is sorted by, ascending, in order of precedence.
+    pub sort_order: Vec<&'static str>,
 }
 
 impl TableSpec {
     pub fn new(name: &'static str, schema: Option<Schema>) -> Self {
-        Self { name, schema }
+        Self {
+            name,
+            schema,
+            sort_order: Vec::new(),
+        }
+    }
+
+    /// Declare that every file of the table is sorted ascending by `columns`, so engines can
+    /// use the order to order files and stop scans early.
+    pub fn with_sort_order(mut self, columns: &[&'static str]) -> Self {
+        self.sort_order = columns.to_vec();
+        self
     }
 }
 

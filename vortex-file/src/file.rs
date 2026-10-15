@@ -28,7 +28,6 @@ use vortex_utils::aliases::hash_map::HashMap;
 
 use crate::FileStatistics;
 use crate::footer::Footer;
-use crate::pruning::can_prune_file_stats;
 use crate::v2::FileStatsLayoutReader;
 
 /// Represents a Vortex file, providing access to its metadata and content.
@@ -227,21 +226,8 @@ impl VortexFile {
     /// Row-count-aware pruning predicates are evaluated with the file's total
     /// row count as their scope.
     pub fn can_prune(&self, filter: &Expression) -> VortexResult<bool> {
-        let Some((stats, fields)) = self
-            .footer
-            .statistics()
-            .zip(self.footer.dtype().as_struct_fields_opt())
-        else {
-            return Ok(false);
-        };
-
-        can_prune_file_stats(
-            &filter.bind(self.footer.dtype())?,
-            self.footer.row_count(),
-            stats,
-            fields,
-            &self.session,
-        )
+        self.footer
+            .can_prune(&filter.bind(self.footer.dtype())?, &self.session)
     }
 
     /// Return the file's natural row splits as root-coordinate ranges.

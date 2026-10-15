@@ -8,6 +8,13 @@
 #include "vortex.h"
 
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
+#include "duckdb/planner/filter/conjunction_filter.hpp"
+#include "duckdb/planner/filter/constant_filter.hpp"
+#include "duckdb/planner/filter/dynamic_filter.hpp"
+#include "duckdb/planner/filter/optional_filter.hpp"
+#include "duckdb/storage/statistics/numeric_stats.hpp"
+
+#include <algorithm>
 
 unique_ptr<FunctionData> VortexBindData::Copy() const {
     auto result = make_uniq<VortexBindData>();
@@ -37,6 +44,129 @@ bool SkipMultiFileReaderColumn(size_t i,
     return false;
 }
 
+static optional_ptr<DynamicFilterData> FindTopNFilter(const TableFilter &filter);
+
+static optional_ptr<DynamicFilterData> FindTopNFilter(const vector<unique_ptr<TableFilter>> &filters) {
+    for (const auto &child : filters) {
+        if (auto data = FindTopNFilter(*child)) {
+            return data;
+        }
+    }
+    return nullptr;
+}
+
+// Find the dynamic filter a Top-N pushed into the scan. It is wrapped in an
+// optional filter, and in an OR with IS NULL for NULLS FIRST orders.
+static optional_ptr<DynamicFilterData> FindTopNFilter(const TableFilter &filter) {
+    switch (filter.filter_type) {
+    case TableFilterType::DYNAMIC_FILTER:
+        return filter.Cast<DynamicFilter>().filter_data.get();
+    case TableFilterType::OPTIONAL_FILTER: {
+        const auto &child = filter.Cast<OptionalFilter>().child_filter;
+        return child ? FindTopNFilter(*child) : nullptr;
+    }
+    case TableFilterType::CONJUNCTION_AND:
+        return FindTopNFilter(filter.Cast<ConjunctionAndFilter>().child_filters);
+    case TableFilterType::CONJUNCTION_OR:
+        return FindTopNFilter(filter.Cast<ConjunctionOrFilter>().child_filters);
+    default:
+        return nullptr;
+    }
+}
+
+// The minimum (or maximum) of a column in the cached footer of a file, or a
+// NULL value if the footer is not cached or has no such statistic.
+static Value FooterBound(const OpenFileInfo &file, column_t column, bool minimum) {
+    const unique_ptr<CData> footer(
+        reinterpret_cast<CData *>(duckdb_footer_lookup(file.path.data(), file.path.size())));
+    if (!footer) {
+        return Value();
+    }
+    duckdb_column_statistics statistics = {};
+    if (!duckdb_footer_get_statistics(footer->DataPtr(), column, &statistics)) {
+        return Value();
+    }
+    const unique_ptr<BaseStatistics> stats = to_duckdb_statistics(statistics);
+    if (!stats || stats->GetStatsType() != StatisticsType::NUMERIC_STATS ||
+        !NumericStats::HasMinMax(*stats)) {
+        return Value();
+    }
+    return minimum ? NumericStats::Min(*stats) : NumericStats::Max(*stats);
+}
+
+static unique_ptr<MultiFileList>
+OrderFilesForTopN(const MultiFileList &files, const vector<column_t> &column_ids, TableFilterSet &filters) {
+    for (const auto &[local_index, filter] : filters.filters) {
+        const column_t column = column_ids[local_index];
+        if (IsVirtualColumn(column)) {
+            continue;
+        }
+        const auto data = FindTopNFilter(*filter);
+        if (!data) {
+            continue;
+        }
+
+        // Only the constant of the filter changes as the Top-N runs.
+        const ExpressionType comparison = data->filter->Cast<ConstantFilter>().comparison_type;
+        const bool ascending = comparison == ExpressionType::COMPARE_LESSTHAN ||
+                               comparison == ExpressionType::COMPARE_LESSTHANOREQUALTO;
+        const bool descending = comparison == ExpressionType::COMPARE_GREATERTHAN ||
+                                comparison == ExpressionType::COMPARE_GREATERTHANOREQUALTO;
+        if (!ascending && !descending) {
+            return nullptr;
+        }
+
+        vector<OpenFileInfo> all_files = files.GetAllFiles();
+        if (all_files.size() < 2) {
+            return nullptr;
+        }
+
+        vector<Value> bounds;
+        bounds.reserve(all_files.size());
+        bool any_bound = false;
+        for (const auto &file : all_files) {
+            bounds.push_back(FooterBound(file, column, ascending));
+            any_bound |= !bounds.back().IsNull();
+        }
+        if (!any_bound) {
+            return nullptr;
+        }
+
+        // Files without statistics can never be pruned, so scan them first.
+        vector<idx_t> order(all_files.size());
+        for (idx_t i = 0; i < order.size(); i++) {
+            order[i] = i;
+        }
+        std::stable_sort(order.begin(), order.end(), [&](idx_t l, idx_t r) {
+            if (bounds[l].IsNull() || bounds[r].IsNull()) {
+                return bounds[l].IsNull() && !bounds[r].IsNull();
+            }
+            return ascending ? bounds[l] < bounds[r] : bounds[r] < bounds[l];
+        });
+
+        vector<OpenFileInfo> ordered_files;
+        ordered_files.reserve(order.size());
+        for (const idx_t i : order) {
+            ordered_files.push_back(all_files[i]);
+        }
+        return make_uniq<VortexReorderedFileList>(std::move(ordered_files), std::move(order));
+    }
+    return nullptr;
+}
+
+unique_ptr<MultiFileList> VortexMultiFileReader::DynamicFilterPushdown(ClientContext &context,
+                                                                       const MultiFileList &files,
+                                                                       const MultiFileOptions &options,
+                                                                       const vector<string> &names,
+                                                                       const vector<LogicalType> &types,
+                                                                       const vector<column_t> &column_ids,
+                                                                       TableFilterSet &filters) {
+    unique_ptr<MultiFileList> pruned =
+        MultiFileReader::DynamicFilterPushdown(context, files, options, names, types, column_ids, filters);
+    unique_ptr<MultiFileList> ordered = OrderFilesForTopN(pruned ? *pruned : files, column_ids, filters);
+    return ordered ? std::move(ordered) : std::move(pruned);
+}
+
 ReaderInitializeType
 VortexMultiFileReader::InitializeReader(MultiFileReaderData &reader_data,
                                         const MultiFileBindData &bind_data,
@@ -50,6 +180,12 @@ VortexMultiFileReader::InitializeReader(MultiFileReaderData &reader_data,
 
     VortexBaseReader &reader = reader_data.reader->Cast<VortexBaseReader>();
     const VortexBindData &bind = bind_data.bind_data->Cast<VortexBindData>();
+
+    // Number a file of a reordered list by its position in the original list,
+    // which "file_index" filters and values refer to.
+    if (const auto *reordered = dynamic_cast<const VortexReorderedFileList *>(&gstate.file_list)) {
+        reader.file_list_idx = reordered->original_indices[reader.file_list_idx.GetIndex()];
+    }
 
     const void *const ffi_bind = bind.ffi_bind_data->DataPtr();
 

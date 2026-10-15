@@ -19,7 +19,8 @@ DuckDB baseline).
 
 `Clickbench Sorted on NVME` runs the same table sorted by event time, split into 100
 shards whose filenames are shuffled so engines cannot rely on file order, exercising sort
-pushdown and zone-map-style pruning on a subset of the queries. See
+pushdown and zone-map-style pruning on a subset of the queries. The table declares its
+`EventTime` order, which DataFusion uses to group files by their statistics. See
 [`ClickBenchSortedBenchmark`](../src/clickbench/benchmark.rs).
 
 ## Running locally

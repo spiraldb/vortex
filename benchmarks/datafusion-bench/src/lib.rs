@@ -39,8 +39,16 @@ pub fn get_session_context() -> SessionContext {
 
     let factory = VortexFormatFactory::new().with_options(vortex_table_options());
 
+    let mut config = SessionConfig::from_env().expect("shouldn't fail");
+    // Tables that declare a sort order get file groups ordered by file statistics, so the
+    // order survives the scan and sorts and Top-Ks on it need not re-sort.
+    config
+        .options_mut()
+        .execution
+        .split_file_groups_by_statistics = true;
+
     let mut session_state_builder = SessionStateBuilder::new()
-        .with_config(SessionConfig::from_env().expect("shouldn't fail"))
+        .with_config(config)
         .with_runtime_env(rt)
         .with_default_features();
 
