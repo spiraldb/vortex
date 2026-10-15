@@ -135,6 +135,12 @@ impl FilterPlans {
         }
     }
 
+    fn is_unbounded(&self, index: usize) -> bool {
+        self.order
+            .as_ref()
+            .is_some_and(|filter| filter.is_unbounded(index))
+    }
+
     /// Records that plan `index` kept `output` of `input` rows.
     fn report(&self, index: usize, input: usize, output: usize) {
         if let Some(filter) = &self.order
@@ -283,7 +289,7 @@ impl FilterPlanner {
         let mut ids = Vec::new();
         for range in selected_ranges(&self.scope.rows, &self.mask) {
             for (index, plan) in self.filters.plans.iter().enumerate() {
-                if index != running && self.remaining[index] {
+                if index != running && self.remaining[index] && !self.filters.is_unbounded(index) {
                     plan_segments(plan, range.clone(), &mut ids)?;
                 }
             }
@@ -361,6 +367,12 @@ impl FilterPlanner {
             })?;
             return Ok(PlannerOutput::Planner(scope, child));
         };
+        if self.filters.is_unbounded(index) {
+            self.remaining.set(index, false);
+            let count = self.mask.true_count();
+            self.filters.report(index, count, count);
+            return Ok(PlannerOutput::Continue);
+        }
         // Filtering compressed dictionary codes rebuilds their encoding before a cheap boolean
         // lookup. Evaluate that lookup first, as V1 does. Dense masks likewise cost less to AND
         // with a full predicate result than to compact and then scatter back by rank.

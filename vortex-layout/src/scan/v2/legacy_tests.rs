@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use futures::TryStreamExt;
 use futures::stream;
+use rstest::rstest;
 use vortex_array::ArrayContext;
 use vortex_array::ArrayRef;
 use vortex_array::DeserializeMetadata;
@@ -63,30 +64,45 @@ async fn flat(
         .await
 }
 
+#[rstest]
+#[case::stats(2, true)]
+#[case::no_stats(2, false)]
+#[case::no_zones(0, true)]
 #[tokio::test]
-async fn legacy_string_zones_scan() -> VortexResult<()> {
+async fn legacy_string_zones_scan(
+    #[case] zone_len: u32,
+    #[case] has_stats: bool,
+) -> VortexResult<()> {
     let session = new_session().with_tokio();
     let segments = Arc::new(TestSegments::default());
     let data = VarBinViewArray::from_iter_str(["a", "b", "y", "z"]).into_array();
-    let zones = StructArray::from_fields(&[
-        (
-            "max",
-            VarBinViewArray::from_iter([Some("b"), Some("z")], data.dtype().as_nullable())
-                .into_array(),
-        ),
-        (
-            "max_is_truncated",
-            BoolArray::from_iter([false, false]).into_array(),
-        ),
-    ])?
+    let zones = if has_stats {
+        StructArray::from_fields(&[
+            (
+                "max",
+                VarBinViewArray::from_iter([Some("b"), Some("z")], data.dtype().as_nullable())
+                    .into_array(),
+            ),
+            (
+                "max_is_truncated",
+                BoolArray::from_iter([false, false]).into_array(),
+            ),
+        ])?
+    } else {
+        StructArray::new_fieldless_with_len(2)
+    }
     .into_array();
     let children = OwnedLayoutChildren::layout_children(vec![
         flat(data.clone(), Arc::clone(&segments), &session).await?,
         flat(zones, Arc::clone(&segments), &session).await?,
     ]);
     let read_ctx = ReadContext::new([]);
-    let mut metadata = 2u32.to_le_bytes().to_vec();
-    metadata.extend(as_stat_bitset_bytes(&[Stat::Max]));
+    let mut metadata = zone_len.to_le_bytes().to_vec();
+    metadata.extend(as_stat_bitset_bytes(if has_stats {
+        &[Stat::Max]
+    } else {
+        &[]
+    }));
     let layout = <LegacyStats as VTable>::build(
         &LegacyStats,
         data.dtype(),

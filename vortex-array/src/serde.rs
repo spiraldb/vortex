@@ -420,7 +420,7 @@ impl SerializedArray {
         if let Some(stats) = self.flatbuffer().stats() {
             decoded
                 .statistics()
-                .set_iter(StatsSet::from_flatbuffer(&stats, dtype, session)?.into_iter());
+                .set_all(StatsSet::from_flatbuffer(&stats, dtype, session)?);
         }
 
         Ok(decoded)

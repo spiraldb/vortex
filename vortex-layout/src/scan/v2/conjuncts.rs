@@ -6,6 +6,7 @@ use vortex_array::dtype::FieldPath;
 use vortex_array::expr::BoundExpression;
 use vortex_array::expr::analysis::referenced_field_paths;
 use vortex_array::expr::bound::and as bound_and;
+use vortex_array::expr::transform::find_between;
 use vortex_error::VortexResult;
 
 use crate::plan::physical::Eval;
@@ -19,10 +20,10 @@ use crate::plan::physical::PlanRef;
 /// Evaluating two conjuncts separately reads and decodes their shared columns twice, so the
 /// conjuncts are grouped by the fields they share, transitively: in `a > 5 AND a < b AND b = 2`
 /// all three read a field another one reads, so they become one conjunct. Groups keep the order of
-/// their first member, and members keep their order within a group.
+/// their first member, and range comparisons within a group are folded into betweens.
 pub(super) fn group_conjuncts(conjuncts: &[BoundExpression]) -> VortexResult<Vec<BoundExpression>> {
     if conjuncts.len() < 2 {
-        return Ok(conjuncts.to_vec());
+        return conjuncts.iter().cloned().map(find_between).collect();
     }
     let fields = conjuncts
         .iter()
@@ -47,10 +48,11 @@ pub(super) fn group_conjuncts(conjuncts: &[BoundExpression]) -> VortexResult<Vec
     for (index, conjunct) in conjuncts.iter().enumerate() {
         groups[sets.find(index)].push(conjunct.clone());
     }
-    Ok(groups
+    groups
         .into_iter()
         .filter_map(|group| group.into_iter().reduce(bound_and))
-        .collect())
+        .map(find_between)
+        .collect()
 }
 
 /// Moves each filter above the predicate evaluated over it, so the predicate runs over every row
@@ -129,18 +131,22 @@ impl DisjointSets {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
     use vortex_array::dtype::DType;
     use vortex_array::dtype::Nullability::NonNullable;
     use vortex_array::dtype::PType;
     use vortex_array::dtype::StructFields;
     use vortex_array::expr::Expression;
     use vortex_array::expr::and;
+    use vortex_array::expr::between;
     use vortex_array::expr::col;
     use vortex_array::expr::eq;
     use vortex_array::expr::gt;
     use vortex_array::expr::lit;
     use vortex_array::expr::lt;
     use vortex_array::expr::root;
+    use vortex_array::scalar_fn::fns::between::BetweenOptions;
+    use vortex_array::scalar_fn::fns::between::StrictComparison;
     use vortex_error::VortexResult;
     use vortex_session::registry::ReadContext;
 
@@ -169,6 +175,32 @@ mod tests {
             .iter()
             .map(ToString::to_string)
             .collect())
+    }
+
+    #[rstest]
+    #[case::separate(true)]
+    #[case::combined(false)]
+    fn merges_range_conjuncts(#[case] separate: bool) -> VortexResult<()> {
+        let lower = gt(col("a"), lit(1_i32));
+        let upper = lt(col("a"), lit(5_i32));
+        let conjuncts = if separate {
+            vec![lower.bind(&dtype())?, upper.bind(&dtype())?]
+        } else {
+            vec![and(lower, upper).bind(&dtype())?]
+        };
+        let actual = group_conjuncts(&conjuncts)?;
+        let expected = between(
+            col("a"),
+            lit(1_i32),
+            lit(5_i32),
+            BetweenOptions {
+                lower_strict: StrictComparison::Strict,
+                upper_strict: StrictComparison::Strict,
+            },
+        )
+        .bind(&dtype())?;
+        assert_eq!(actual, vec![expected]);
+        Ok(())
     }
 
     #[test]

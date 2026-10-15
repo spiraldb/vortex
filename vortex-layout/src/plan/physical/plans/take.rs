@@ -250,6 +250,12 @@ impl PlanParentReduceRule<Take> for ExpressionTakeRule {
         _child_idx: usize,
     ) -> VortexResult<Option<PlanRef>> {
         let expression = parent.expression();
+        // A dynamic comparison stays above the take: evaluated per batch it reads the latest
+        // bound, and the dictionary batches the take emits evaluate it over their values anyway.
+        // Values it never reaches can always be kept between scans.
+        if expression.contains::<DynamicComparison>()? {
+            return Ok(None);
+        }
         // Strictness keeps a null code null. Without null codes every row takes its value's result.
         let codes_nullable = child.codes()?.dtype().is_nullable();
         let labels = label_bound_tree(
@@ -284,8 +290,16 @@ impl PlanParentReduceRule<Take> for ExpressionTakeRule {
             if !expression.dtype().is_boolean() {
                 return Ok(None);
             }
-            let values = EvalPlan::try_new(expression.clone(), child.values()?)?.into_plan();
-            return Ok(Some(TakePlan::new(child.codes()?, values).into_plan()));
+            let values = child.values()?;
+            let Some(expression) = rebind_root(expression, child.dtype(), values.dtype()) else {
+                return Ok(None);
+            };
+            let values = EvalPlan::try_new(expression, values)?.into_plan();
+            let take = TakePlan::new(child.codes()?, values).into_plan();
+            if take.dtype() != parent.dtype() {
+                return Ok(None);
+            }
+            return Ok(Some(take));
         }
 
         let Some(inner) = negative_cost_part(expression, &labels) else {
@@ -296,7 +310,10 @@ impl PlanParentReduceRule<Take> for ExpressionTakeRule {
             Some(share) => share.child_plan()?,
             None => values,
         };
-        let values = EvalPlan::try_new(inner.clone(), values)?.into_plan();
+        let Some(pushed) = rebind_root(&inner, child.dtype(), values.dtype()) else {
+            return Ok(None);
+        };
+        let values = EvalPlan::try_new(pushed, values)?.into_plan();
         let take = TakePlan::new(child.codes()?, values).into_plan();
         let outer = replace(
             expression,
@@ -334,6 +351,23 @@ fn negative_cost_part(expression: &BoundExpression, labels: &Labels) -> Option<B
         return None;
     }
     negative_cost_part(child, labels)
+}
+
+/// `expression`, bound to the take's dtype `from`, bound instead to its values' dtype `to`, or
+/// `None` when it does not apply there.
+///
+/// Values are less nullable than the take when its codes may be null: the take's nulls come from
+/// its codes, which a strict expression keeps null.
+fn rebind_root(expression: &BoundExpression, from: &DType, to: &DType) -> Option<BoundExpression> {
+    if from == to {
+        return Some(expression.clone());
+    }
+    replace(
+        expression,
+        &BoundExpression::new_root(from.clone()),
+        &BoundExpression::new_root(to.clone()),
+    )
+    .ok()
 }
 
 /// `expression` with each occurrence of `needle` replaced by `replacement`.

@@ -27,6 +27,7 @@ use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::ChunkedArray;
+use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::Struct;
 use vortex_array::arrays::StructArray;
@@ -1178,6 +1179,57 @@ async fn zone_pruning_follows_dynamic_comparisons() -> VortexResult<()> {
     let mut expected_reads = segment_ids(&data_chunks[2])?;
     expected_reads.extend(segment_ids(&data_chunks[3])?);
     assert_eq!(*recording.reads.lock(), expected_reads);
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn unbounded_filter_reads_no_data_until_updated() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write_zoned_layout(&session).await?;
+    let data = layout.slot(0)?.ok_or_else(|| vortex_err!("no data"))?;
+    let data_ids = segment_ids(&data)?;
+    let bound = Arc::new(Mutex::new(None::<i32>));
+    let value = Arc::clone(&bound);
+    let filter = dynamic(
+        CompareOperator::Gt,
+        move || value.lock().map(Into::into),
+        DTYPE,
+        true,
+        root(),
+    );
+    let recording = Arc::new(RecordingSegments {
+        registered: Default::default(),
+        inner: Arc::clone(&segments),
+        reads: Arc::default(),
+    });
+    let mut file = scan_file(&segments, &layout)?;
+    file.segments = Arc::clone(&recording) as _;
+    let reader = layout.new_reader(
+        "".into(),
+        Arc::clone(&segments),
+        &session,
+        &Default::default(),
+    )?;
+    let scan = v2::prepare(
+        ScanBuilder::new(session.clone(), reader)
+            .with_filter(filter.bind(&DTYPE)?)
+            .with_projection(lit(42_i32).bind(&DTYPE)?),
+        file,
+    )?;
+
+    let all = await_tasks(DTYPE, scan.execute(None)?).await?;
+    assert_eq!(all.len(), 4000);
+    assert!(recording.reads.lock().is_disjoint(&data_ids));
+
+    let pending = scan.execute(None)?;
+    *bound.lock() = Some(2500);
+    let above = await_tasks(DTYPE, pending).await?;
+    assert_arrays_eq!(
+        above,
+        ConstantArray::new(42_i32, 1499),
+        &mut session.create_execution_ctx()
+    );
+    assert!(!recording.reads.lock().is_disjoint(&data_ids));
     Ok(())
 }
 

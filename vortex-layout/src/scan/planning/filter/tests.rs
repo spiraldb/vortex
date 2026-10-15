@@ -3,16 +3,19 @@
 
 use std::sync::Arc;
 
+use parking_lot::Mutex;
 use rstest::rstest;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability::NonNullable;
 use vortex_array::dtype::PType;
 use vortex_array::expr::checked_add;
+use vortex_array::expr::dynamic;
 use vortex_array::expr::gt;
 use vortex_array::expr::lit;
 use vortex_array::expr::lt;
 use vortex_array::expr::or;
 use vortex_array::expr::root;
+use vortex_array::scalar_fn::fns::operators::CompareOperator;
 use vortex_buffer::Alignment;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
@@ -37,6 +40,68 @@ use crate::scan::planning::ScanPlans;
 use crate::scan::planning::SegmentLocation;
 use crate::segments::SegmentId;
 use crate::test::new_session;
+
+#[test]
+fn unbounded_conjunct_is_not_prefetched() -> VortexResult<()> {
+    let source = RowIdxPlan::new(8).into_plan();
+    let value = Arc::new(Mutex::new(None::<u64>));
+    let bound = Arc::clone(&value);
+    let expr = dynamic(
+        CompareOperator::Gt,
+        move || bound.lock().map(Into::into),
+        source.dtype().clone(),
+        true,
+        root(),
+    )
+    .bind(source.dtype())?;
+    let segment = SegmentScanPlan::new(
+        source.dtype().clone(),
+        8,
+        SegmentId::from(0),
+        ReadContext::new([]),
+        None,
+    )
+    .into_plan();
+    let static_expr = gt(root(), lit(3_u64)).bind(source.dtype())?;
+    let filters = FilterPlans::conjuncts(
+        Arc::new(FilterExpr::from_conjuncts(vec![
+            static_expr.clone(),
+            expr.clone(),
+        ])),
+        vec![
+            EvalPlan::try_new(static_expr, source.clone())?.into_plan(),
+            EvalPlan::try_new(expr, segment)?.into_plan(),
+        ],
+    )?;
+    let location = SegmentLocation {
+        offset: 0,
+        length: 64,
+        alignment: Alignment::none(),
+    };
+    let planner = FilterPlanner::new(
+        ScanPlans {
+            session: new_session(),
+            locations: Arc::from([location]),
+            projection: source,
+            projection_starts: Arc::from([]),
+            row_offset: 0,
+            values: Default::default(),
+        },
+        filters,
+        WorkScope {
+            file_ordinal: 0,
+            rows: 0..8,
+        },
+        Mask::new_true(8),
+        Arc::new(|_| vortex_bail!("test stops before handoff")),
+    );
+    assert!(planner.prefetch_others(0, 0)?.is_empty());
+    *value.lock() = Some(3);
+    let requested = planner.prefetch_others(0, 0)?;
+    assert_eq!(requested.len(), 1);
+    assert_eq!(requested[0].target, planner.plans.locations[0].target());
+    Ok(())
+}
 
 #[rstest]
 #[case::disabled(Keep::True, 0, false, &[])]

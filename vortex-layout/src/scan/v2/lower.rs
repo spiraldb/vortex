@@ -3,9 +3,8 @@
 
 //! Lowers a file's layout tree into the physical plan the V2 executor runs.
 //!
-//! A copy of the test-only [`plan::lower`](crate::plan::physical::lower) with two modes for zoned layouts:
-//! data plans lower them to their data child, and pruning plans keep them as a
-//! [`ZonedPlan`] so pruning proofs can reach the zone statistics.
+//! Data plans lower zoned layouts to their data child. Pruning plans retain their zone statistics,
+//! converting legacy tables to the aggregate schema through [`LegacyStatsPlan`].
 
 use std::sync::Arc;
 
@@ -31,6 +30,7 @@ use crate::layouts::zoned::LegacyStats;
 use crate::layouts::zoned::Zoned;
 use crate::plan::physical::ConcatPlan;
 use crate::plan::physical::FilterPlan;
+use crate::plan::physical::LegacyStatsPlan;
 use crate::plan::physical::ListPackPlan;
 use crate::plan::physical::PackPlan;
 use crate::plan::physical::PlanChildren;
@@ -75,7 +75,7 @@ fn lower_with(layout: &LayoutRef, zones: Zones) -> VortexResult<PlanRef> {
                     .ok_or_else(|| vortex_err!("Zoned layout has no data child"))?;
                 lower_with(&data, zones)
             }
-            Zones::Keep => Ok(lower_zoned(layout, zones)?.into_plan()),
+            Zones::Keep => lower_zoned(layout, zones),
         };
     }
     if let Some(layout) = layout.as_opt::<Flat>() {
@@ -174,7 +174,7 @@ fn lower_list(layout: &ListLayout, zones: Zones) -> VortexResult<ListPackPlan> {
     })
 }
 
-fn lower_zoned(layout: &LayoutRef, zones: Zones) -> VortexResult<ZonedPlan> {
+fn lower_zoned(layout: &LayoutRef, zones: Zones) -> VortexResult<PlanRef> {
     // Zoned and legacy stats layouts share a child shape: transparent data, auxiliary zones.
     let metadata = if let Some(layout) = layout.as_opt::<Zoned>() {
         layout.data()
@@ -183,14 +183,36 @@ fn lower_zoned(layout: &LayoutRef, zones: Zones) -> VortexResult<ZonedPlan> {
     } else {
         vortex_bail!("Zoned plan requires a zoned layout")
     };
-    Ok(ZonedPlan::from_children(
-        layout.dtype().clone(),
-        layout.row_count(),
-        lazy_children(Arc::clone(layout), vec![0, 1], zones),
-        u64::try_from(metadata.zone_len())?,
-        metadata.aggregate_fns(),
-        metadata.legacy_stats(),
-    ))
+    let no_stats = metadata
+        .stats_table_dtype()
+        .as_struct_fields_opt()
+        .is_none_or(|fields| fields.nfields() == 0);
+    if metadata.zone_len() == 0 || no_stats {
+        let data = layout
+            .slot(0)?
+            .ok_or_else(|| vortex_err!("Zoned layout has no data child"))?;
+        return lower_with(&data, zones);
+    }
+    let children = lazy_children(Arc::clone(layout), vec![0, 1], zones);
+    let zone_len = u64::try_from(metadata.zone_len())?;
+    Ok(match metadata.legacy_stats() {
+        Some(stats) => LegacyStatsPlan::from_children(
+            layout.dtype().clone(),
+            layout.row_count(),
+            children,
+            zone_len,
+            Arc::clone(stats),
+        )
+        .into_plan(),
+        None => ZonedPlan::from_children(
+            layout.dtype().clone(),
+            layout.row_count(),
+            children,
+            zone_len,
+            metadata.aggregate_fns(),
+        )
+        .into_plan(),
+    })
 }
 
 fn lazy_children(layout: LayoutRef, slots: Vec<usize>, zones: Zones) -> PlanChildren {
