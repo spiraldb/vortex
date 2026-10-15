@@ -19,26 +19,34 @@ See [`src/main.rs`](./src/main.rs) for the dataset list and CLI flags (`--format
 
 ## CPU parallelism
 
-Vortex compresses and scans on the session's Tokio runtime, which scales to the available
-cores. So that the Parquet numbers reflect the format rather than a single-threaded reader,
-the Parquet compressor uses one worker per available core as well:
+Vortex and Parquet get the same CPU budget. The binary runs one multi-threaded Tokio runtime,
+sized by `--threads` (default: one worker per available core), and every timed Vortex and
+Parquet operation runs as a task on it, so neither format uses threads outside that pool and the
+main thread does none of the timed work. `--threads 1` compares single-worker decoders;
+the default compares them at full width.
+
+Vortex schedules its own compression and scan work as tasks on the runtime. The Parquet
+compressor splits its work into tasks on the same runtime:
 
 - **Compress** splits the input into row groups at the writer's default
   `max_row_group_row_count` (1,048,576 rows), the same boundaries `ArrowWriter` produces, then
-  encodes every (row group, root column) chunk in parallel with parquet-rs's
+  encodes every (row group, top-level field) chunk as its own task with parquet-rs's
   `ArrowRowGroupWriterFactory` and appends the chunks in order.
-- **Decompress** parses the footer once and splits each row group's root columns into a few
+- **Decompress** parses the footer once and splits each row group's top-level columns into a few
   contiguous ranges per worker, decoding each (row group, column range) with its own
-  `ParquetRecordBatchReader` in parallel, so files with a single row group still decode their
-  columns concurrently.
+  `ParquetRecordBatchReader`, so files with a single row group still decode their columns
+  concurrently.
 
 The written file has the same row groups, encodings and compression as a sequential
-`ArrowWriter` with the same settings.
+`ArrowWriter` with the same settings. Arrow IPC is a serialization baseline and stays
+single-threaded.
 
 ## Running locally
 
 ```bash
 cargo run -p compress-bench --profile release_debug
+# single-worker comparison
+cargo run -p compress-bench --profile release_debug -- --threads 1
 ```
 
 ## GPU decompression

@@ -2198,7 +2198,6 @@ dependencies = [
  "indicatif",
  "itertools 0.14.0",
  "lance-bench",
- "parking_lot",
  "parquet 59.3.0",
  "regex",
  "serde",

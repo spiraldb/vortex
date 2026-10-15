@@ -13,8 +13,6 @@ use arrow_array::RecordBatch;
 use arrow_schema::Schema;
 use async_trait::async_trait;
 use bytes::Bytes;
-use itertools::Itertools;
-use parking_lot::Mutex;
 use parquet::arrow::ArrowWriter;
 use parquet::arrow::ProjectionMask;
 use parquet::arrow::arrow_reader::ArrowReaderMetadata;
@@ -25,7 +23,7 @@ use parquet::arrow::arrow_writer::compute_leaves;
 use parquet::basic::Compression;
 use parquet::basic::ZstdLevel;
 use parquet::file::properties::WriterProperties;
-use vortex::utils::parallelism::get_available_parallelism;
+use tokio::runtime::Handle;
 use vortex_bench::Format;
 use vortex_bench::compress::Compressed;
 use vortex_bench::compress::CompressedData;
@@ -85,11 +83,17 @@ impl Compressor for ParquetCompressor {
 
     async fn compress(&self, input: &Uncompressed) -> anyhow::Result<Compressed> {
         let (schema, batches) = input.arrow()?;
+        let (schema, batches) = (Arc::clone(schema), batches.to_vec());
+        let compression = self.compression;
 
-        // Compress with our compression settings
-        let mut buf = Vec::new();
+        // Run the timed work as a task so it uses only the runtime's worker threads.
         let start = Instant::now();
-        let size = parquet_compress_write(batches, Arc::clone(schema), self.compression, &mut buf)?;
+        let (buf, size) = tokio::spawn(async move {
+            let mut buf = Vec::new();
+            let size = parquet_compress_write(&batches, schema, compression, &mut buf).await?;
+            anyhow::Ok((buf, size))
+        })
+        .await??;
         let elapsed = start.elapsed();
 
         Ok(Compressed {
@@ -103,15 +107,15 @@ impl Compressor for ParquetCompressor {
         let CompressedData::Bytes(buf) = &compressed.data else {
             bail!("Parquet decompression expects in-memory bytes");
         };
+        let buf = buf.clone();
 
         let timer = Instant::now();
-        parquet_decompress_read(buf.clone())?;
+        tokio::spawn(parquet_decompress_read(buf)).await??;
         Ok(timer.elapsed())
     }
 }
 
-#[inline(never)]
-pub fn parquet_compress_write(
+pub async fn parquet_compress_write(
     batches: &[RecordBatch],
     schema: Arc<Schema>,
     compression: Compression,
@@ -125,7 +129,7 @@ pub fn parquet_compress_write(
         .max_row_group_row_count()
         .unwrap_or(usize::MAX);
     // `ArrowWriter` embeds the Arrow schema in the footer; converting it into the lower-level
-    // writer keeps that while letting each column chunk be encoded on its own thread.
+    // writer keeps that while letting each column chunk be encoded as its own task.
     let (mut writer, factory) =
         ArrowWriter::try_new(&mut buf, Arc::clone(&schema), Some(writer_properties))?
             .into_serialized_writer()?;
@@ -138,6 +142,7 @@ pub fn parquet_compress_write(
     let row_groups = split_row_groups(batches, max_rows);
     let mut units = Vec::new();
     for (rg_idx, rg_batches) in row_groups.iter().enumerate() {
+        let rg_batches: Arc<[RecordBatch]> = Arc::from(rg_batches.as_slice());
         let mut field_writers: Vec<Vec<ArrowColumnWriter>> =
             (0..schema.fields().len()).map(|_| Vec::new()).collect();
         for (leaf_idx, col_writer) in factory
@@ -151,13 +156,14 @@ pub fn parquet_compress_write(
             field_writers
                 .into_iter()
                 .enumerate()
-                .map(|(field_idx, writers)| (rg_batches.as_slice(), field_idx, writers)),
+                .map(|(field_idx, writers)| (Arc::clone(&rg_batches), field_idx, writers)),
         );
     }
 
-    let chunks = parallel_map(units, |(rg_batches, field_idx, mut writers)| {
-        let field = schema.field(field_idx);
-        for batch in rg_batches {
+    let task_schema = Arc::clone(&schema);
+    let chunks = parallel_map(units, move |(rg_batches, field_idx, mut writers)| {
+        let field = task_schema.field(field_idx);
+        for batch in rg_batches.iter() {
             let leaves = compute_leaves(field, batch.column(field_idx))?;
             for (col_writer, leaf) in writers.iter_mut().zip(&leaves) {
                 col_writer.write(leaf)?;
@@ -167,7 +173,8 @@ pub fn parquet_compress_write(
             .into_iter()
             .map(|w| Ok(w.close()?))
             .collect::<anyhow::Result<Vec<_>>>()
-    })?;
+    })
+    .await?;
 
     let fields_per_group = schema.fields().len();
     let mut chunks = chunks.into_iter();
@@ -209,10 +216,8 @@ fn split_row_groups(batches: &[RecordBatch], max_rows: usize) -> Vec<Vec<RecordB
     groups
 }
 
-#[inline(never)]
-pub fn parquet_decompress_read(buf: Bytes) -> anyhow::Result<usize> {
+pub async fn parquet_decompress_read(buf: Bytes) -> anyhow::Result<usize> {
     let metadata = ArrowReaderMetadata::load(&buf, ArrowReaderOptions::default())?;
-    let parquet_schema = metadata.parquet_schema();
     let num_row_groups = metadata.metadata().num_row_groups();
     let num_columns = metadata.schema().fields().len();
     let columns =
@@ -221,67 +226,60 @@ pub fn parquet_decompress_read(buf: Bytes) -> anyhow::Result<usize> {
     // Decode (row group, column range) units independently. Setting up a reader costs time
     // proportional to the schema width, so contiguous columns are batched into a few units per
     // worker rather than one reader per column.
-    let target_units = get_available_parallelism().unwrap_or(1) * 4;
+    let target_units = Handle::current().metrics().num_workers() * 4;
     let cols_per_unit = (columns.len() * num_row_groups)
         .div_ceil(target_units)
         .max(1);
     let units = (0..num_row_groups)
-        .flat_map(|rg| columns.chunks(cols_per_unit).map(move |cols| (rg, cols)))
+        .flat_map(|rg| {
+            columns
+                .chunks(cols_per_unit)
+                .map(move |cols| (rg, cols.to_vec()))
+        })
         .collect();
-    let sizes = parallel_map(units, |(rg, cols)| {
+    let sizes = parallel_map(units, move |(rg, cols)| {
+        let projection = ProjectionMask::roots(metadata.parquet_schema(), cols);
         let reader =
             ParquetRecordBatchReaderBuilder::new_with_metadata(buf.clone(), metadata.clone())
                 .with_row_groups(vec![rg])
-                .with_projection(ProjectionMask::roots(parquet_schema, cols.iter().copied()))
+                .with_projection(projection)
                 .build()?;
         let mut nbytes = 0;
         for batch in reader {
             nbytes += batch?.get_array_memory_size();
         }
         Ok(nbytes)
-    })?;
+    })
+    .await?;
 
     Ok(sizes.into_iter().sum())
 }
 
-/// Run `f` over `items` on one worker per available core, returning the results in input order.
-fn parallel_map<T, R, F>(items: Vec<T>, f: F) -> anyhow::Result<Vec<R>>
+/// Run `f` over `items` as tasks on the current Tokio runtime, returning the results in input
+/// order.
+///
+/// Vortex runs its CPU work as tasks on the same runtime, so both formats share one pool of
+/// worker threads, sized by `--threads`.
+async fn parallel_map<T, R, F>(items: Vec<T>, f: F) -> anyhow::Result<Vec<R>>
 where
-    T: Send,
-    R: Send,
-    F: Fn(T) -> anyhow::Result<R> + Sync,
+    T: Send + 'static,
+    R: Send + 'static,
+    F: Fn(T) -> anyhow::Result<R> + Send + Sync + 'static,
 {
-    let workers = get_available_parallelism().unwrap_or(1).min(items.len());
-    let queue = Mutex::new(items.into_iter().enumerate());
+    let f = Arc::new(f);
+    let handles: Vec<_> = items
+        .into_iter()
+        .map(|item| {
+            let f = Arc::clone(&f);
+            tokio::spawn(async move { f(item) })
+        })
+        .collect();
 
-    let mut results = std::thread::scope(|scope| {
-        let handles: Vec<_> = (0..workers)
-            .map(|_| {
-                scope.spawn(|| {
-                    let mut done = Vec::new();
-                    loop {
-                        let Some((idx, item)) = queue.lock().next() else {
-                            break;
-                        };
-                        done.push((idx, f(item)));
-                    }
-                    done
-                })
-            })
-            .collect();
-        handles
-            .into_iter()
-            .map(|handle| {
-                handle
-                    .join()
-                    .map_err(|_| anyhow::anyhow!("parquet worker thread panicked"))
-            })
-            .flatten_ok()
-            .collect::<anyhow::Result<Vec<_>>>()
-    })?;
-
-    results.sort_unstable_by_key(|(idx, _)| *idx);
-    results.into_iter().map(|(_, result)| result).collect()
+    let mut results = Vec::with_capacity(handles.len());
+    for handle in handles {
+        results.push(handle.await??);
+    }
+    Ok(results)
 }
 
 #[cfg(test)]
@@ -316,8 +314,8 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn parallel_write_round_trips() -> anyhow::Result<()> {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn parallel_write_round_trips() -> anyhow::Result<()> {
         let batches = [batch(0, 1000)?, batch(1000, 500)?];
         let schema = batches[0].schema();
         let mut buf = Vec::new();
@@ -326,7 +324,8 @@ mod tests {
             Arc::clone(&schema),
             Compression::ZSTD(ZstdLevel::default()),
             &mut buf,
-        )?;
+        )
+        .await?;
 
         let reader = ParquetRecordBatchReaderBuilder::try_new(Bytes::from(buf.clone()))?.build()?;
         let read = reader.collect::<Result<Vec<_>, _>>()?;
@@ -334,7 +333,7 @@ mod tests {
             arrow_select::concat::concat_batches(&schema, &read)?,
             arrow_select::concat::concat_batches(&schema, &batches)?
         );
-        assert!(parquet_decompress_read(Bytes::from(buf))? > 0);
+        assert!(parquet_decompress_read(Bytes::from(buf)).await? > 0);
         Ok(())
     }
 }
