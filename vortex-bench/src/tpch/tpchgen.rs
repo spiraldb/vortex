@@ -52,6 +52,24 @@ use crate::utils::parquet::parquet_writer_properties;
 /// parallelism of existing TPC-H Parquet benchmarks.
 const ROW_GROUP_SIZE: usize = 1024 * 1024;
 
+/// Target compressed size of each generated TPC-H file.
+///
+/// Tables expected to compress to more than this are split into several files. The split depends
+/// only on the scale factor, so Parquet and Vortex files cover identical row ranges and benchmarks
+/// compare the same partitioning across formats. At this target, a `lineitem` file holds roughly
+/// 7.3M rows, about 1.6GB as uncompressed Arrow.
+pub const TARGET_FILE_COMPRESSED_BYTES: u64 = 200 * 1024 * 1024;
+
+// Compressed size of each TPC-H table at scale factor 1: the mean of the zstd(3) Parquet and
+// default Vortex sizes, measured at scale factor 10. Every table but nation and region scales
+// linearly with the scale factor.
+const PART_BYTES_SF1: u64 = 4_983_319;
+const SUPPLIER_BYTES_SF1: u64 = 608_751;
+const CUSTOMER_BYTES_SF1: u64 = 8_842_254;
+const PARTSUPP_BYTES_SF1: u64 = 27_874_360;
+const ORDERS_BYTES_SF1: u64 = 45_455_425;
+const LINEITEM_BYTES_SF1: u64 = 171_537_513;
+
 /// Configuration for TPC-H data generation
 #[derive(Debug, Clone)]
 pub struct TpchGenOptions {
@@ -63,6 +81,9 @@ pub struct TpchGenOptions {
     pub format: Format,
     /// Batch size for streaming
     pub batch_size: usize,
+    /// Split each table into files of roughly this many compressed bytes, named
+    /// `{table}_{part}.{ext}`. `None` writes each table as a single `{table}.{ext}` file.
+    pub target_file_bytes: Option<u64>,
 }
 
 impl Default for TpchGenOptions {
@@ -72,6 +93,7 @@ impl Default for TpchGenOptions {
             output_dir: "tpch".to_data_path(),
             format: Format::Parquet,
             batch_size: 8192 * 64,
+            target_file_bytes: Some(TARGET_FILE_COMPRESSED_BYTES),
         }
     }
 }
@@ -94,43 +116,40 @@ impl TpchGenOptions {
         self.batch_size = batch_size;
         self
     }
+
+    pub fn with_target_file_bytes(mut self, target_file_bytes: Option<u64>) -> Self {
+        self.target_file_bytes = target_file_bytes;
+        self
+    }
 }
 
 /// Generate all TPC-H tables for a single scale factor
 pub async fn generate_tpch_tables(options: TpchGenOptions) -> Result<()> {
     fs::create_dir_all(&options.output_dir)?;
 
-    let tables = [
-        ("nation", TableGenerator::Nation),
-        ("region", TableGenerator::Region),
-        ("part", TableGenerator::Part),
-        ("supplier", TableGenerator::Supplier),
-        ("customer", TableGenerator::Customer),
-        ("partsupp", TableGenerator::PartSupp),
-        ("orders", TableGenerator::Orders),
-        ("lineitem", TableGenerator::LineItem),
-    ];
+    let scale_factor = options.scale_factor.parse::<f64>()?;
+    let mut all_futures = Vec::new();
+    for generator in TableGenerator::ALL {
+        let num_parts = generator.num_parts(scale_factor, options.target_file_bytes)?;
+        info!(
+            scale_factor = options.scale_factor,
+            format = %options.format,
+            table = generator.name(),
+            num_parts,
+            "Generating TPC-H table",
+        );
+        for part in 1..=num_parts {
+            all_futures.push(generate_table_file(
+                generator,
+                part,
+                num_parts,
+                options.clone(),
+            )?);
+        }
+    }
 
-    const MAX_CONCURRENT_FILES: usize = 32;
-
-    let all_futures = tables
-        .iter()
-        .map(|(table_name, generator)| {
-            info!(
-                scale_factor = options.scale_factor,
-                format = %options.format,
-                table = table_name,
-                "Generating TPC-H table",
-            );
-            let table_name = table_name.to_string();
-
-            generate_table_file(table_name, *generator, options.clone())
-        })
-        .collect::<Result<Vec<_>>>()?
-        .into_iter()
-        .collect::<Vec<BoxFuture<'static, Result<()>>>>();
-
-    let limiter = Arc::new(Semaphore::new(MAX_CONCURRENT_FILES));
+    let max_concurrent_files = get_available_parallelism().unwrap_or(1);
+    let limiter = Arc::new(Semaphore::new(max_concurrent_files));
     let (tx, rx) = mpsc::unbounded_channel();
 
     for f in all_futures {
@@ -167,10 +186,67 @@ enum TableGenerator {
     LineItem,
 }
 
+impl TableGenerator {
+    const ALL: [Self; 8] = [
+        Self::Nation,
+        Self::Region,
+        Self::Part,
+        Self::Supplier,
+        Self::Customer,
+        Self::PartSupp,
+        Self::Orders,
+        Self::LineItem,
+    ];
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Nation => "nation",
+            Self::Region => "region",
+            Self::Part => "part",
+            Self::Supplier => "supplier",
+            Self::Customer => "customer",
+            Self::PartSupp => "partsupp",
+            Self::Orders => "orders",
+            Self::LineItem => "lineitem",
+        }
+    }
+
+    /// Compressed size of the table at scale factor 1. Nation and region do not grow with the
+    /// scale factor and always fit in one file.
+    fn compressed_bytes_sf1(self) -> Option<u64> {
+        match self {
+            Self::Nation | Self::Region => None,
+            Self::Part => Some(PART_BYTES_SF1),
+            Self::Supplier => Some(SUPPLIER_BYTES_SF1),
+            Self::Customer => Some(CUSTOMER_BYTES_SF1),
+            Self::PartSupp => Some(PARTSUPP_BYTES_SF1),
+            Self::Orders => Some(ORDERS_BYTES_SF1),
+            Self::LineItem => Some(LINEITEM_BYTES_SF1),
+        }
+    }
+
+    /// Number of files to split the table into so each is close to `target_file_bytes`.
+    fn num_parts(self, scale_factor: f64, target_file_bytes: Option<u64>) -> Result<usize> {
+        let (Some(target), Some(bytes_sf1)) = (target_file_bytes, self.compressed_bytes_sf1())
+        else {
+            return Ok(1);
+        };
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_precision_loss,
+            clippy::cast_sign_loss,
+            reason = "estimated table sizes are far below the f64 and usize limits"
+        )]
+        let parts = ((bytes_sf1 as f64 * scale_factor) / target as f64).round() as u64;
+        Ok(usize::try_from(parts.max(1))?)
+    }
+}
+
 /// Generate one file for a specific table in streaming fashion
 fn generate_table_file(
-    table_name: String,
     generator: TableGenerator,
+    part: usize,
+    num_parts: usize,
     options: TpchGenOptions,
 ) -> Result<BoxFuture<'static, Result<()>>> {
     let write_format = match options.format {
@@ -186,7 +262,13 @@ fn generate_table_file(
 
     fs::create_dir_all(&output_dir)?;
 
-    let output_file = output_dir.join(format!("{table_name}.{}", write_format.ext()));
+    let table_name = generator.name();
+    let file_stem = if options.target_file_bytes.is_some() {
+        format!("{table_name}_{part:04}")
+    } else {
+        table_name.to_string()
+    };
+    let output_file = output_dir.join(format!("{file_stem}.{}", write_format.ext()));
 
     let future = async move {
         let of = output_file.clone();
@@ -196,13 +278,12 @@ fn generate_table_file(
                 of.to_string_lossy()
             );
 
-            let num_parts = table_num_parts(generator);
-
             if matches!(write_format, Format::Parquet) {
-                return write_parquet_parts(generator, &options, num_parts, &path).await;
+                return write_parquet(generator, &options, part, num_parts, &path).await;
             }
 
-            let schema = create_batch_iterator(generator, &options, 1, 1)?.schema();
+            let iter = create_batch_iterator(generator, &options, part, num_parts)?;
+            let schema = iter.schema();
 
             let mut writer: Box<dyn FileWriter + Send> = match write_format {
                 Format::OnDiskVortex => Box::new(VortexWriter::new(
@@ -218,7 +299,6 @@ fn generate_table_file(
                 _ => unreachable!(),
             };
 
-            let iter = create_batch_iterator(generator, &options, 1, 1)?;
             for batch in iter {
                 writer.write_batch(&batch?).await?;
             }
@@ -234,11 +314,35 @@ fn generate_table_file(
     Ok(future)
 }
 
+/// Number of parts generated in parallel for a table written as one Parquet file.
 fn table_num_parts(generator: TableGenerator) -> usize {
     match generator {
         TableGenerator::Nation | TableGenerator::Region => 1,
         _ => get_available_parallelism().unwrap_or(1),
     }
+}
+
+/// Write one part of a table as Parquet.
+///
+/// A table split into several files already writes its files in parallel. A table written as one
+/// file is generated in parallel parts that are then concatenated.
+async fn write_parquet(
+    generator: TableGenerator,
+    options: &TpchGenOptions,
+    part: usize,
+    num_parts: usize,
+    output: &Path,
+) -> Result<()> {
+    if num_parts > 1 {
+        let options = options.clone();
+        let output = output.to_path_buf();
+        return tokio::task::spawn_blocking(move || {
+            write_parquet_file(generator, &options, part, num_parts, &output)
+        })
+        .await?;
+    }
+
+    write_parquet_parts(generator, options, table_num_parts(generator), output).await
 }
 
 async fn write_parquet_parts(
@@ -252,17 +356,7 @@ async fn write_parquet_parts(
         let options = options.clone();
         let part_path = output.with_extension(format!("part{part}"));
         tasks.push(tokio::task::spawn_blocking(move || {
-            let iter = create_batch_iterator(generator, &options, part, num_parts)?;
-            let schema = iter.schema();
-            let props = parquet_writer_properties()
-                .set_max_row_group_row_count(Some(ROW_GROUP_SIZE))
-                .build();
-            let mut writer =
-                ArrowWriter::try_new(fs::File::create(&part_path)?, schema, Some(props))?;
-            for batch in iter {
-                writer.write(&batch?)?;
-            }
-            writer.close()?;
+            write_parquet_file(generator, &options, part, num_parts, &part_path)?;
             Ok::<_, anyhow::Error>(part_path)
         }));
     }
@@ -274,6 +368,27 @@ async fn write_parquet_parts(
 
     let output = output.to_path_buf();
     tokio::task::spawn_blocking(move || concat_parquet_parts(&part_paths, &output)).await?
+}
+
+fn write_parquet_file(
+    generator: TableGenerator,
+    options: &TpchGenOptions,
+    part: usize,
+    num_parts: usize,
+    output: &Path,
+) -> Result<()> {
+    let iter = create_batch_iterator(generator, options, part, num_parts)?;
+    let schema = iter.schema();
+    let props = parquet_writer_properties()
+        .set_max_row_group_row_count(Some(ROW_GROUP_SIZE))
+        .build();
+    let mut writer = ArrowWriter::try_new(fs::File::create(output)?, schema, Some(props))?;
+    for batch in iter {
+        writer.write(&batch?)?;
+    }
+    writer.close()?;
+
+    Ok(())
 }
 
 fn concat_parquet_parts(parts: &[PathBuf], output: &Path) -> Result<()> {
@@ -325,6 +440,7 @@ fn concat_parquet_parts(parts: &[PathBuf], output: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Create a batch iterator for one part (1-based) of a table split into `num_parts` parts.
 fn create_batch_iterator(
     generator: TableGenerator,
     options: &TpchGenOptions,
