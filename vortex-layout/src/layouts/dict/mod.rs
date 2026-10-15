@@ -66,6 +66,10 @@ impl VTable for Dict {
         ProstMetadata(metadata)
     }
 
+    fn reuse_data() -> bool {
+        true
+    }
+
     fn deserialize(
         &self,
         args: &LayoutDeserializeArgs<'_>,

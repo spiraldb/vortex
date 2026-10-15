@@ -41,6 +41,16 @@ pub trait VTable: 'static + Clone + Send + Sync + Debug {
     /// Returns the serializable metadata for a layout.
     fn metadata(layout: &Layout<Self>) -> Self::Metadata;
 
+    /// Whether [`VTable::deserialize`] depends only on the metadata, dtype and row count, and not
+    /// on segment ids or child contents.
+    ///
+    /// If so, layout nodes that share these reuse one deserialized [`VTable::LayoutData`] via
+    /// [`LayoutBuildCache`](crate::build_cache::LayoutBuildCache), skipping deserialization and
+    /// validation for every repeat.
+    fn reuse_data() -> bool {
+        false
+    }
+
     /// Deserialize and validate layout-specific data.
     fn deserialize(
         &self,

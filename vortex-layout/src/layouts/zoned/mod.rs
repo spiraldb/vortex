@@ -112,6 +112,10 @@ impl VTable for Zoned {
         }
     }
 
+    fn reuse_data() -> bool {
+        true
+    }
+
     fn deserialize(
         &self,
         args: &LayoutDeserializeArgs<'_>,
@@ -631,6 +635,7 @@ mod tests {
         let session = vortex_array::array_session();
         let build_read_ctx = ReadContext::new([]);
         let build_ctx = LayoutBuildContext {
+            cache: None,
             session: &session,
             array_read_ctx: &build_read_ctx,
         };
@@ -662,6 +667,7 @@ mod tests {
         let session = vortex_array::array_session();
         let build_read_ctx = ReadContext::new([]);
         let build_ctx = LayoutBuildContext {
+            cache: None,
             session: &session,
             array_read_ctx: &build_read_ctx,
         };
@@ -691,6 +697,7 @@ mod tests {
         session.allow_unknown();
         let build_read_ctx = ReadContext::new([]);
         let build_ctx = LayoutBuildContext {
+            cache: None,
             session: &session,
             array_read_ctx: &build_read_ctx,
         };
@@ -727,6 +734,7 @@ mod tests {
         let session = vortex_array::array_session();
         let build_read_ctx = ReadContext::new([]);
         let build_ctx = LayoutBuildContext {
+            cache: None,
             session: &session,
             array_read_ctx: &build_read_ctx,
         };

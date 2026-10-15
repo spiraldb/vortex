@@ -479,6 +479,7 @@ mod test {
         let session = array_session();
         let read_ctx = ReadContext::new([]);
         let build_ctx = LayoutBuildContext {
+            cache: None,
             session: &session,
             array_read_ctx: &read_ctx,
         };

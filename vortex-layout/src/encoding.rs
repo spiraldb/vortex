@@ -14,9 +14,12 @@ use vortex_error::VortexResult;
 use vortex_session::VortexSession;
 use vortex_session::registry::ReadContext;
 
+use crate::Layout;
 use crate::LayoutId;
+use crate::LayoutParts;
 use crate::LayoutRef;
 use crate::VTable;
+use crate::build_cache::LayoutBuildCache;
 use crate::children::LayoutChildren;
 use crate::segments::SegmentId;
 
@@ -49,6 +52,8 @@ pub struct LayoutBuildContext<'a> {
     pub session: &'a VortexSession,
     /// Array read context referenced by serialized array metadata.
     pub array_read_ctx: &'a ReadContext,
+    /// Cache of layout data shared by identical layout nodes, if enabled.
+    pub cache: Option<&'a LayoutBuildCache>,
 }
 
 /// Object-safe plugin registered for a layout ID.
@@ -96,8 +101,25 @@ impl<V: VTable> LayoutVTablePlugin for V {
         children: &dyn LayoutChildren,
         build_ctx: &LayoutBuildContext<'_>,
     ) -> VortexResult<LayoutRef> {
+        let cache = build_ctx.cache.filter(|_| V::reuse_data());
+        if let Some(cache) = cache
+            && let Some(data) =
+                cache.get::<V::LayoutData>(VTable::id(self), metadata, dtype, row_count)
+        {
+            return Ok(Layout::from_parts(LayoutParts::new(
+                self.clone(),
+                dtype.clone(),
+                row_count,
+                segment_ids,
+                children.to_arc(),
+                data,
+            ))
+            .into_layout());
+        }
+
+        let metadata_bytes = metadata;
         let metadata = <V::Metadata as DeserializeMetadata>::deserialize(metadata)?;
-        Ok(V::build(
+        let layout = V::build(
             self,
             dtype,
             row_count,
@@ -105,8 +127,17 @@ impl<V: VTable> LayoutVTablePlugin for V {
             segment_ids,
             children,
             build_ctx,
-        )?
-        .into_layout())
+        )?;
+        if let Some(cache) = cache {
+            cache.insert(
+                VTable::id(self),
+                metadata_bytes,
+                dtype,
+                row_count,
+                layout.data(),
+            );
+        }
+        Ok(layout.into_layout())
     }
 
     fn is_indivisible(&self) -> bool {

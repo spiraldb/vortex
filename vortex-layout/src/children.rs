@@ -17,6 +17,7 @@ use vortex_session::registry::ReadContext;
 
 use crate::LayoutBuildContext;
 use crate::LayoutRef;
+use crate::build_cache::LayoutBuildCache;
 use crate::flatbuffers::layout as fbl;
 use crate::layouts::foreign::new_foreign_layout;
 use crate::segments::SegmentId;
@@ -136,6 +137,8 @@ pub(crate) struct ViewedLayoutChildren {
     indivisible: Arc<[bool]>,
     /// The segment map in effect for the children, see [`resolve_segments`].
     segment_map: Option<Arc<[u32]>>,
+    /// Layout data shared by identical nodes across the whole layout tree.
+    build_cache: Option<Arc<LayoutBuildCache>>,
 }
 
 /// Resolve a layout node's segment ids, and the segment map in effect for its children.
@@ -190,6 +193,7 @@ impl ViewedLayoutChildren {
         allow_unknown: bool,
         session: VortexSession,
         segment_map: Option<Arc<[u32]>>,
+        build_cache: Option<Arc<LayoutBuildCache>>,
     ) -> Self {
         // SAFETY: guaranteed by caller
         let fb_children = unsafe { fbl::Layout::follow(flatbuffer.as_ref(), flatbuffer_loc) }
@@ -220,6 +224,7 @@ impl ViewedLayoutChildren {
             cache,
             indivisible,
             segment_map,
+            build_cache,
         }
     }
 
@@ -290,6 +295,7 @@ impl LayoutChildren for ViewedLayoutChildren {
                     self.allow_unknown,
                     self.session.clone(),
                     segment_map,
+                    self.build_cache.clone(),
                 )
             };
 
@@ -313,6 +319,7 @@ impl LayoutChildren for ViewedLayoutChildren {
             let build_ctx = LayoutBuildContext {
                 session: &self.session,
                 array_read_ctx: &self.array_read_ctx,
+                cache: self.build_cache.as_deref(),
             };
             encoding.build(
                 dtype,

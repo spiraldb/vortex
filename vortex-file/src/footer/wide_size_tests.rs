@@ -277,3 +277,108 @@ async fn wide_open_timing() -> VortexResult<()> {
     }
     Ok(())
 }
+
+/// Walk every layout node, forcing the lazy flatbuffer children to be built.
+fn walk_layout(layout: &vortex_layout::LayoutRef) -> VortexResult<usize> {
+    let mut n = 1;
+    for child in layout.children()? {
+        n += walk_layout(&child)?;
+    }
+    Ok(n)
+}
+
+pub(super) async fn time_phases(
+    bytes: &ByteBuffer,
+    iters: u32,
+) -> VortexResult<Vec<(&'static str, std::time::Duration)>> {
+    use std::time::Duration;
+    use std::time::Instant;
+
+    use vortex_array::dtype::DType;
+    use vortex_array::flatbuffers::FlatBuffer;
+
+    let eof = &bytes[bytes.len() - EOF_SIZE..];
+    let ps_len = u16::from_le_bytes([eof[2], eof[3]]) as usize;
+    let ps_end = bytes.len() - EOF_SIZE;
+    let ps = Postscript::read_flatbuffer_bytes(&bytes[ps_end - ps_len..ps_end])?;
+    let slice = |s: &crate::footer::postscript::PostscriptSegment| {
+        &bytes[s.offset as usize..s.offset as usize + s.length as usize]
+    };
+    let dtype_bytes = slice(ps.dtype.as_ref().unwrap());
+    let stats_bytes = slice(ps.statistics.as_ref().unwrap());
+    let layout_bytes = slice(&ps.layout);
+    let footer_bytes = slice(&ps.footer);
+
+    let mut t = [Duration::ZERO; 6];
+    for _ in 0..iters {
+        let s = Instant::now();
+        let dtype = DType::from_flatbuffer(FlatBuffer::copy_from(dtype_bytes), &SESSION)?;
+        t[0] += s.elapsed();
+
+        let s = Instant::now();
+        let fb = flatbuffers::root::<crate::flatbuffers::footer::FileStatistics>(stats_bytes)?;
+        let stats = crate::FileStatistics::from_flatbuffer(&fb, &dtype, &SESSION)?;
+        t[1] += s.elapsed();
+
+        let s = Instant::now();
+        flatbuffers::root::<vortex_layout::flatbuffers::layout::Layout>(layout_bytes)?;
+        t[2] += s.elapsed();
+
+        let s = Instant::now();
+        let footer = crate::Footer::from_flatbuffer(
+            footer_bytes,
+            FlatBuffer::copy_from(layout_bytes),
+            dtype,
+            Some(stats),
+            Default::default(),
+            &SESSION,
+        )?;
+        t[3] += s.elapsed();
+
+        let s = Instant::now();
+        walk_layout(footer.layout())?;
+        t[4] += s.elapsed();
+
+        let s = Instant::now();
+        let file = SESSION.open_options().open_buffer(bytes.clone())?;
+        file.scan()?.into_array_stream()?.read_all().await?;
+        t[5] += s.elapsed();
+    }
+    Ok(vec![
+        ("dtype parse", t[0] / iters),
+        ("file stats parse", t[1] / iters),
+        ("layout verify only", t[2] / iters),
+        ("footer build (verify + root + segment specs)", t[3] / iters),
+        ("materialize all layout nodes", t[4] / iters),
+        ("open + full scan", t[5] / iters),
+    ])
+}
+
+#[tokio::test]
+#[ignore = "timing report, run manually"]
+async fn wide_phase_timing() -> VortexResult<()> {
+    for kind in [ColumnKind::SmallI64, ColumnKind::Mixed] {
+        let array = wide_table(kind, 10000, 1000)?;
+        for dedup in [false, true] {
+            let bytes = write(&array, dedup).await?;
+            for (phase, d) in time_phases(&bytes, 5).await? {
+                println!("{kind:?} dedup={dedup} {phase}: {d:?}");
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "profiling target, run manually"]
+async fn wide_materialize_profile() -> VortexResult<()> {
+    let dedup = std::env::var("WIDE_DEDUP").is_ok_and(|v| v == "1");
+    let bytes = write(&wide_table(ColumnKind::Mixed, 10000, 1000)?, dedup).await?;
+    let start = std::time::Instant::now();
+    for _ in 0..40 {
+        let file = SESSION.open_options().open_buffer(bytes.clone())?;
+        walk_layout(file.footer().layout())?;
+    }
+    println!("open + materialize: {:?} per iter", start.elapsed() / 40);
+    Ok(())
+}

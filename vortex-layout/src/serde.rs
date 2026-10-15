@@ -26,6 +26,8 @@ use crate::DynLayout;
 use crate::LayoutBuildContext;
 use crate::LayoutContext;
 use crate::LayoutRef;
+use crate::build_cache::LayoutBuildCache;
+use crate::build_cache::LayoutBuildCacheMode;
 use crate::children::ViewedLayoutChildren;
 use crate::children::resolve_segments;
 use crate::flatbuffers::layout;
@@ -84,6 +86,7 @@ pub fn layout_from_flatbuffer_with_options(
         encoding.ok_or_else(|| vortex_err!("Invalid encoding ID: {}", fb_layout.encoding()))?;
 
     let (segments, segment_map) = resolve_segments(fb_layout, None)?;
+    let build_cache = LayoutBuildCache::new(LayoutBuildCacheMode::from_env());
 
     // SAFETY: we validate the flatbuffer above in the `root` call, and extract a loc.
     let viewed_children = unsafe {
@@ -96,12 +99,14 @@ pub fn layout_from_flatbuffer_with_options(
             allow_unknown,
             session.clone(),
             segment_map,
+            build_cache.clone(),
         )
     };
 
     let build_ctx = LayoutBuildContext {
         session,
         array_read_ctx: ctx,
+        cache: build_cache.as_deref(),
     };
     let layout = encoding.build(
         dtype,
@@ -420,8 +425,6 @@ impl WriteFlatBuffer for DedupLayoutFlatBufferWriter<'_> {
 #[cfg(test)]
 mod tests {
     use flatbuffers::FlatBufferBuilder;
-    use flatbuffers::ForwardsUOffset;
-    use flatbuffers::Vector;
     use vortex_array::array_session;
     use vortex_array::dtype::DType;
     use vortex_array::dtype::Nullability;
