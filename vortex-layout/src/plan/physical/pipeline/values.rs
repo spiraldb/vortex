@@ -47,6 +47,10 @@ impl ValueCache {
     /// last cache using its plan is dropped, rather than until every split finishes.
     pub(crate) fn for_plans<'a>(&self, plans: impl Iterator<Item = &'a PlanRef>) -> Self {
         let mut entries = self.0.lock();
+        #[allow(
+            clippy::mutable_key_type,
+            reason = "PlanByPtr hashes and compares only the stable Arc address"
+        )]
         let scoped = plans
             .map(|plan| {
                 let key = PlanByPtr(plan.clone());

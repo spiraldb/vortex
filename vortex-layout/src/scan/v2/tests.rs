@@ -346,7 +346,7 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
         inner: segments,
         reads: AtomicUsize::new(0),
     });
-    let segments: Arc<dyn SegmentSource> = counted.clone();
+    let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
     let Executor::V2(scan) = select_supported(builder(&session, &segments, &layout)?)? else {
         panic!("the scan should run on the planner-driven executor");
     };
