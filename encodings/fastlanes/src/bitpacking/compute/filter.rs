@@ -21,7 +21,6 @@ use vortex_error::VortexResult;
 use vortex_mask::Mask;
 use vortex_mask::MaskValuesRef;
 
-use super::chunked_indices;
 use super::take::UNPACK_CHUNK_THRESHOLD;
 use crate::BitPacked;
 use crate::BitPackedArrayExt;
@@ -127,56 +126,84 @@ fn filter_primitive_without_patches<U: UnsignedPType + BitPacking>(
 fn filter_with_indices<T: NativePType + BitPacking>(
     array: &BitPackedData,
     bit_width: u8,
-    indices: &[usize],
+    mut indices: &[usize],
 ) -> BufferMut<T> {
     let offset = array.offset() as usize;
     let bit_width = bit_width as usize;
     let mut values = BufferMut::with_capacity(indices.len());
 
-    // Some re-usable memory to store per-chunk indices.
+    // Reuse scratch space when a selected block is cheaper to unpack whole.
     let mut unpacked = [const { MaybeUninit::<T>::uninit() }; 1024];
     let packed_bytes = array.packed_slice::<T>();
 
     // Group the indices by the FastLanes chunk they belong to.
     let chunk_size = 128 * bit_width / size_of::<T>();
 
-    chunked_indices(
-        indices.iter().copied(),
-        offset,
-        |chunk_idx, indices_within_chunk| {
-            let packed = &packed_bytes[chunk_idx * chunk_size..][..chunk_size];
-
-            if indices_within_chunk.len() == 1024 {
-                // Unpack the entire chunk.
-                unsafe {
-                    let values_len = values.len();
-                    values.set_len(values_len + 1024);
-                    BitPacking::unchecked_unpack(
-                        bit_width,
-                        packed,
-                        &mut values.as_mut_slice()[values_len..],
-                    );
-                }
-            } else if indices_within_chunk.len() > UNPACK_CHUNK_THRESHOLD {
-                // Unpack into a temporary chunk and then copy the values.
-                unsafe {
-                    let dst: &mut [MaybeUninit<T>] = &mut unpacked;
-                    let dst: &mut [T] = std::mem::transmute(dst);
-                    BitPacking::unchecked_unpack(bit_width, packed, dst);
-                }
-                values.extend_trusted(
-                    indices_within_chunk
-                        .iter()
-                        .map(|&idx| unsafe { unpacked.get_unchecked(idx).assume_init() }),
-                );
+    // Mask indices are sorted and unique, so borrow each chunk's indices instead of copying
+    // and rebasing every selected row into a temporary vector.
+    while let Some(&first_idx) = indices.first() {
+        let chunk_idx = (first_idx + offset) / 1024;
+        let prefix = indices
+            .iter()
+            .take(UNPACK_CHUNK_THRESHOLD + 1)
+            .take_while(|&&idx| (idx + offset) / 1024 == chunk_idx)
+            .count();
+        let count = if prefix > UNPACK_CHUNK_THRESHOLD {
+            // Small groups are common in sparse 16-bit masks. Scan nearby boundaries instead
+            // of paying for a binary search across many later blocks.
+            let linear_end = indices.len().min(64);
+            if (indices[linear_end - 1] + offset) / 1024 == chunk_idx {
+                // A block contains at most 1024 unique mask indices.
+                linear_end
+                    + indices[linear_end..indices.len().min(1024)]
+                        .partition_point(|&idx| (idx + offset) / 1024 == chunk_idx)
             } else {
-                // Otherwise, unpack each element individually.
-                values.extend_trusted(indices_within_chunk.iter().map(|&idx| unsafe {
-                    BitPacking::unchecked_unpack_single(bit_width, packed, idx)
-                }));
+                prefix
+                    + indices[prefix..linear_end]
+                        .iter()
+                        .take_while(|&&idx| (idx + offset) / 1024 == chunk_idx)
+                        .count()
             }
-        },
-    );
+        } else {
+            prefix
+        };
+        let (indices_within_chunk, rest) = indices.split_at(count);
+        indices = rest;
+        let packed = &packed_bytes[chunk_idx * chunk_size..][..chunk_size];
+
+        if indices_within_chunk.len() == 1024 {
+            // Unpack the entire chunk.
+            // SAFETY: Sorted, unique indices fill this whole block, and the output buffer has
+            // capacity for every selected value. Unpacking initializes all 1024 new values.
+            unsafe {
+                let values_len = values.len();
+                values.set_len(values_len + 1024);
+                BitPacking::unchecked_unpack(
+                    bit_width,
+                    packed,
+                    &mut values.as_mut_slice()[values_len..],
+                );
+            }
+        } else if indices_within_chunk.len() > UNPACK_CHUNK_THRESHOLD {
+            // Unpack into a temporary chunk and then copy the values.
+            // SAFETY: The packed block is complete and scratch space holds all 1024 values.
+            unsafe {
+                let dst: &mut [MaybeUninit<T>] = &mut unpacked;
+                let dst: &mut [T] = std::mem::transmute(dst);
+                BitPacking::unchecked_unpack(bit_width, packed, dst);
+            }
+            values.extend_trusted(indices_within_chunk.iter().map(|&idx| unsafe {
+                // SAFETY: The whole block was initialized, and the remainder is below 1024.
+                unpacked.get_unchecked((idx + offset) % 1024).assume_init()
+            }));
+        } else {
+            // Otherwise, unpack each element individually.
+            values.extend_trusted(indices_within_chunk.iter().map(|&idx| unsafe {
+                // SAFETY: Every index belongs to this complete packed block.
+                BitPacking::unchecked_unpack_single(bit_width, packed, (idx + offset) % 1024)
+            }));
+        }
+    }
 
     values
 }
@@ -185,6 +212,7 @@ fn filter_with_indices<T: NativePType + BitPacking>(
 mod tests {
     use std::sync::LazyLock;
 
+    use rstest::rstest;
     use vortex_array::IntoArray as _;
     use vortex_array::VortexSessionExecute;
     use vortex_array::arrays::PrimitiveArray;
@@ -193,6 +221,7 @@ mod tests {
     use vortex_array::validity::Validity;
     use vortex_buffer::Buffer;
     use vortex_buffer::buffer;
+    use vortex_error::VortexResult;
     use vortex_mask::Mask;
     use vortex_session::VortexSession;
 
@@ -204,6 +233,38 @@ mod tests {
         crate::initialize(&session);
         session
     });
+
+    #[rstest]
+    fn filter_disjoint_chunks_with_sliced_nullable_patches(
+        #[values(0, 127)] offset: usize,
+        #[values(1, 8, 9, 31, 32, 33, 63, 64, 65, 1024)] selected_per_chunk: usize,
+    ) -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let len = 64 * 1024;
+        let values = PrimitiveArray::from_option_iter((0..len + offset).map(|row| {
+            (row % 127 != 0).then_some(if row % 97 == 0 {
+                1 << 20
+            } else {
+                (row % 32768) as i64
+            })
+        }));
+        let packed = BitPackedData::encode(&values.clone().into_array(), 15, &mut ctx)?;
+        let indices = [0, 17, 33].into_iter().flat_map(|chunk| {
+            (0..selected_per_chunk)
+                .map(move |index| chunk * 1024 + index * 1024 / selected_per_chunk)
+        });
+        let mask = Mask::from_indices(len, indices);
+        let actual = packed
+            .slice(offset..offset + len)?
+            .filter(mask.clone())?
+            .execute::<PrimitiveArray>(&mut ctx)?;
+        let expected = values
+            .into_array()
+            .slice(offset..offset + len)?
+            .filter(mask)?;
+        assert_arrays_eq!(actual, expected, &mut ctx);
+        Ok(())
+    }
 
     #[test]
     fn take_indices() {
