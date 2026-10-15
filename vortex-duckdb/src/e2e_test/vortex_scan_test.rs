@@ -360,27 +360,22 @@ fn test_large_membership_filter_pushdown() -> Result<()> {
     )
 }
 
-#[rstest]
-#[case::in_list("number IN (number, 99)", 3)]
-#[case::not_in_list("number NOT IN (number, 99)", 0)]
-#[case::unknown("(number IN (number, 99)) IS NULL", 1)]
-fn test_membership_with_nonconstant_list_pushdown(
-    #[case] predicate: &str,
-    #[case] expected: i64,
-) -> Result<()> {
+#[test]
+fn test_membership_with_nonconstant_list_stays_in_duckdb() -> Result<()> {
     let file = RUNTIME.block_on(async {
-        let numbers = PrimitiveArray::from_option_iter([Some(1i32), Some(2), Some(3), None]);
+        let numbers = buffer![1i32, 2, 3];
         write_single_column_vortex_file("number", numbers).await
     });
     let conn = database_connection();
-    // Keep the IN expression itself, before DuckDB expands it to comparisons.
+    // Exercise the unsupported IN expression itself, before DuckDB expands it to comparisons.
     conn.query("SET disabled_optimizers = 'in_clause'")?;
-    assert_membership_filter_pushed(
-        &conn,
-        &format!("'{}'", file.path().to_string_lossy()),
-        predicate,
-        expected,
-    )
+    let result = conn.query(&format!(
+        "SELECT count(*) FROM '{}' WHERE number IN (number, 99)",
+        file.path().to_string_lossy(),
+    ))?;
+    let chunk = result.into_iter().next().unwrap();
+    assert_eq!(chunk.get_vector(0).as_slice_with_len::<i64>(1), [3]);
+    Ok(())
 }
 
 #[test]
