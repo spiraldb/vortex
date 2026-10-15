@@ -2,7 +2,9 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use onpair::search;
-use onpair::search::ContainsScan;
+use onpair::search::Finder;
+use onpair::search::PrefilterAnalysis;
+use onpair::search::Verify;
 use vortex_array::ArrayRef;
 use vortex_array::ArrayView;
 use vortex_array::ExecutionCtx;
@@ -17,7 +19,6 @@ use vortex_array::scalar_fn::fns::like::LikeOptions;
 use vortex_array::validity::Validity;
 use vortex_buffer::BitBuffer;
 use vortex_error::VortexResult;
-use vortex_error::vortex_err;
 
 use crate::OnPair;
 use crate::array::dict_view;
@@ -25,10 +26,13 @@ use crate::decode::CodesWindow;
 use crate::decode::collect_codes_window;
 use crate::index::token_frequency_index;
 
+mod sequence;
+
 enum SearchPattern {
     Exact(Vec<u8>),
     Prefix(Vec<u8>),
     Contains(Vec<u8>),
+    ContainsSequence(Vec<Vec<u8>>),
 }
 
 /// Rows matched by a pattern before negation and validity are applied.
@@ -43,6 +47,14 @@ enum Matches {
 }
 
 impl Matches {
+    fn from_indices(len: usize, rows: Vec<usize>) -> Self {
+        match rows.len() {
+            0 => Self::None,
+            n if n == len => Self::All,
+            _ => Self::Rows(BitBuffer::from_indices(len, rows)),
+        }
+    }
+
     fn from_rows(rows: BitBuffer) -> Self {
         match rows.true_count() {
             0 => Self::None,
@@ -108,6 +120,9 @@ impl LikeKernel for OnPair {
                 }))
             }
             SearchPattern::Contains(needle) => contains(array, dict, &needle, ctx)?,
+            SearchPattern::ContainsSequence(fragments) => {
+                sequence::contains_sequence(array, dict, &fragments, ctx)?
+            }
         };
         let Some(matches) = matches else {
             return Ok(None);
@@ -166,38 +181,28 @@ fn contains(
         return Ok(Some(Matches::All));
     }
 
-    if needle.len() > ContainsScan::MAX_PATTERN_LEN {
+    if needle.len() > search::MAX_PATTERN_LEN {
         return Ok(None);
     }
 
     let Some(frequencies) = token_frequency_index(array, ctx)? else {
         return Ok(None);
     };
-    let scan = ContainsScan::new(needle, dict, frequencies)
-        .map_err(|error| vortex_err!("OnPair substring scan preparation failed: {error}"))?;
+    let scan = search::analyze_prefilter(needle, dict, frequencies, array.len());
     let window = collect_codes_window(array, ctx)?;
     let rows = match &window {
         CodesWindow::U32(window) => scan_contains(window.as_column_view(dict), &scan),
         CodesWindow::U64(window) => scan_contains(window.as_column_view(dict), &scan),
     };
-    if rows.is_empty() {
-        return Ok(Some(Matches::None));
-    }
-    if rows.len() == array.len() {
-        return Ok(Some(Matches::All));
-    }
-    Ok(Some(Matches::Rows(BitBuffer::from_indices(
-        array.len(),
-        rows,
-    ))))
+    Ok(Some(Matches::from_indices(array.len(), rows)))
 }
 
 fn scan_contains<O: onpair::Offset>(
     view: onpair::ColumnView<'_, O>,
-    scan: &ContainsScan,
+    scan: &PrefilterAnalysis,
 ) -> Vec<usize> {
     let mut rows = Vec::new();
-    scan.scan(view.codes, view.row_offsets, view.dict, &mut rows);
+    Finder::new().find(view, scan, Verify::Walk, None, &mut rows);
     rows
 }
 
@@ -225,7 +230,18 @@ fn classify_like_pattern(pattern: &[u8]) -> Option<SearchPattern> {
     match wildcards.as_slice() {
         [] => Some(SearchPattern::Exact(literal)),
         [end] if *end == literal.len() => Some(SearchPattern::Prefix(literal)),
-        [0, end] if *end == literal.len() => Some(SearchPattern::Contains(literal)),
+        [0, .., end] if *end == literal.len() => {
+            let mut fragments: Vec<Vec<u8>> = wildcards
+                .windows(2)
+                .filter(|range| range[0] != range[1])
+                .map(|range| literal[range[0]..range[1]].to_vec())
+                .collect();
+            match fragments.len() {
+                0 => Some(SearchPattern::Contains(Vec::new())),
+                1 => Some(SearchPattern::Contains(fragments.remove(0))),
+                _ => Some(SearchPattern::ContainsSequence(fragments)),
+            }
+        }
         _ => None,
     }
 }

@@ -7684,7 +7684,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 [[package]]
 name = "onpair"
 version = "0.2.1"
-source = "git+https://github.com/spiraldb/onpair.git?rev=c27d39782e63cb521ec4f62ad42016fc7c77dfb4#c27d39782e63cb521ec4f62ad42016fc7c77dfb4"
+source = "git+https://github.com/gropaul/onpair.git?rev=df8eb1051adaf330ed273ce57b16cc363d852233#df8eb1051adaf330ed273ce57b16cc363d852233"
 dependencies = [
  "hashbrown 0.16.1",
  "memchr",
@@ -12210,6 +12210,7 @@ name = "vortex-onpair"
 version = "0.1.0"
 dependencies = [
  "codspeed-divan-compat",
+ "memchr",
  "mimalloc",
  "num-traits",
  "onpair",

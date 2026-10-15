@@ -3,7 +3,7 @@
 
 use std::sync::LazyLock;
 
-use onpair::search::ContainsScan;
+use onpair::search::MAX_PATTERN_LEN;
 use rstest::rstest;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
@@ -217,6 +217,70 @@ fn indexed_contains_returns_exact_matches(
 }
 
 #[rstest]
+#[case("%a%b%")]
+#[case("%ab%ab%")]
+#[case("%a%%b%%%c%")]
+#[case("%é%猫%")]
+#[case("%a\\%b%c%")]
+#[case("%a\\_b%c%")]
+#[case("%a\\\\b%c%")]
+#[case("%Downey%Robert%")]
+fn indexed_sequence_matches_canonical_like(
+    #[case] pattern: &str,
+    #[values(false, true)] negated: bool,
+    #[values(false, true)] sliced: bool,
+) -> VortexResult<()> {
+    let values = [
+        Some("outside ab"),
+        Some("ab"),
+        Some("ba"),
+        Some("a middle b"),
+        Some("abab"),
+        Some("aba"),
+        Some("abc"),
+        Some("a%b then c"),
+        Some("a_b then c"),
+        Some("a\\b then c"),
+        Some("é then 猫"),
+        Some("猫 then é"),
+        Some("Downey, Robert Jr."),
+        Some("Robert Downey"),
+        None,
+        Some(""),
+        Some("outside ab"),
+    ];
+    let mut encoded = encode(&values, true)?.into_array();
+    let mut canonical = VarBinArray::from_iter(values, DType::Utf8(Nullability::Nullable))
+        .into_array();
+    if sliced {
+        encoded = encoded.slice(1..values.len() - 1)?;
+        canonical = canonical.slice(1..values.len() - 1)?;
+    }
+    let encoded = encoded
+        .try_downcast::<OnPair>()
+        .map_err(|array| vortex_err!("expected OnPair, got {}", array.encoding_id()))?;
+    let options = LikeOptions {
+        negated,
+        case_insensitive: false,
+    };
+    let result = execute_kernel(&encoded, pattern, options)?
+        .ok_or_else(|| vortex_err!("OnPair should handle the sequence {pattern}"))?;
+    let pattern = ConstantArray::new(pattern, canonical.len()).into_array();
+    let expected = Like::try_new(canonical, pattern, options)?
+        .into_array()
+        .execute::<BoolArray>(&mut SESSION.create_execution_ctx())?;
+    assert_arrays_eq!(result, expected, &mut SESSION.create_execution_ctx());
+    Ok(())
+}
+
+#[test]
+fn unindexed_sequence_falls_back() -> VortexResult<()> {
+    let array = encode(&[Some("ab"), Some("ba"), None], false)?;
+    assert!(execute_kernel(&array, "%a%b%", LikeOptions::default())?.is_none());
+    Ok(())
+}
+
+#[rstest]
 fn empty_contains_preserves_nulls(
     #[values(false, true)] indexed: bool,
     #[values(false, true)] negated: bool,
@@ -321,7 +385,7 @@ fn no_match_preserves_nulls(
 #[cfg_attr(miri, ignore)]
 #[test]
 fn overlong_contains_falls_back() -> VortexResult<()> {
-    let needle = "x".repeat(ContainsScan::MAX_PATTERN_LEN + 1);
+    let needle = "x".repeat(MAX_PATTERN_LEN + 1);
     let pattern = format!("%{needle}%");
     let array = encode(&[Some(&needle), Some("no match"), None], true)?;
     assert!(execute_kernel(&array, &pattern, LikeOptions::default())?.is_none());
