@@ -423,7 +423,7 @@ logical_opt [
                                                                                                 "children": [],
                                                                                                 "extra_info": {
                                                                                                     "Filters": [
-                                                                                                        "vortex.list.contains([1999i64, 2000i64, 2001i64], $.d_year)",
+                                                                                                        "vortex.list.contains([1999i64, 2000i64, 2001i64], $.d_year, opts=sql_null_semantics)",
                                                                                                         "($.d_dow = 1i64)",
                                                                                                         "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                                                     ],

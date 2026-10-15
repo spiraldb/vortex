@@ -202,7 +202,7 @@ logical_opt [
                                         "children": [],
                                         "extra_info": {
                                             "Filters": [
-                                                "vortex.list.contains([-1i16, 6i16], $.TraficSourceID)",
+                                                "vortex.list.contains([-1i16, 6i16], $.TraficSourceID, opts=sql_null_semantics)",
                                                 "($.CounterID = 62i32)",
                                                 "(2013-07-01T00:00:00Z <= $.EventDate <= 2013-07-31T00:00:00Z)",
                                                 "($.IsRefresh = 0i16)",
