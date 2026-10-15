@@ -20,7 +20,7 @@ PRESETS = {
     "pr-compact": "Pull-request SQL benchmarks for Vortex Compact plus Parquet controls.",
     "pr-all": "The union of the pr, pr-compact and pr-full matrices (action/bench-all).",
     "pr-full": "Every regular SQL benchmark at full PR target coverage (action/bench-sql-extended).",
-    "nightly": "Large-scale SF=100 TPC-H on NVMe and S3 at default targets.",
+    "nightly": "Large-scale SF=100 TPC-H on NVMe and S3, and SF=10/100 TPC-DS on NVMe, at default targets.",
 }
 
 # Reusable target coverage
@@ -185,6 +185,22 @@ BENCHMARKS = (
             "pr-full": STANDARD_WITH_DUCKDB,
             "develop": STANDARD_WITH_DUCKDB,
         },
+    ),
+    BenchmarkCase(
+        id="tpcds-nvme-10",
+        benchmark=Benchmark.TPCDS,
+        name="TPC-DS SF=10 on NVME",
+        scale_factor=10.0,
+        runs={"nightly": DEFAULT},
+    ),
+    BenchmarkCase(
+        id="tpcds-nvme-100",
+        benchmark=Benchmark.TPCDS,
+        name="TPC-DS SF=100 on NVME",
+        scale_factor=100.0,
+        # 99 queries across four targets: fewer passes keep the job inside its timeout.
+        iterations=3,
+        runs={"nightly": DEFAULT},
     ),
     BenchmarkCase(
         id="statpopgen",
