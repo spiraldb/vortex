@@ -17,9 +17,9 @@ use vortex::expr::Expression;
 use vortex::expr::and_collect;
 use vortex::expr::cast;
 use vortex::expr::get_item;
+use vortex::expr::in_list;
 use vortex::expr::is_not_null;
 use vortex::expr::is_null;
-use vortex::expr::list_contains;
 use vortex::expr::lit;
 use vortex::expr::or_collect;
 use vortex::scalar::Scalar;
@@ -98,8 +98,6 @@ pub fn try_from_table_filter(
             }
         }
         TableFilterClass::InFilter(values) => {
-            // TODO(ngates): I'm pretty sure we actually need this as ScalarValue with the
-            //  scope dtype
             let mut scalars: Vec<_> = values.iter().map(Scalar::try_from).try_collect()?;
             assert!(
                 !scalars.is_empty(),
@@ -110,8 +108,10 @@ pub fn try_from_table_filter(
                 scalars = scalars.into_iter().map(normalize_double_zero).collect();
             }
             let input = exact_double_filter_input(col, &dtype, scope_dtype)?;
-            let list_scalar = Scalar::list(Arc::new(dtype), scalars, Nullability::Nullable);
-            list_contains(lit(list_scalar), input)
+            // The IN list itself is never null. Null values are elements, and in_list handles
+            // them.
+            let list_scalar = Scalar::list(Arc::new(dtype), scalars, Nullability::NonNullable);
+            in_list(input, lit(list_scalar))
         }
         TableFilterClass::Dynamic(dynamic) => {
             let op = match dynamic.operator {

@@ -515,8 +515,8 @@ logical_opt [
                                                                                                         "children": [],
                                                                                                         "extra_info": {
                                                                                                             "Filters": [
-                                                                                                                "vortex.list.contains([6i64, 0i64], $.d_dow)",
-                                                                                                                "vortex.list.contains([1999i64, 2000i64, 2001i64], $.d_year)",
+                                                                                                                "vortex.list.contains([6i64, 0i64], $.d_dow, opts=sql_null_semantics)",
+                                                                                                                "vortex.list.contains([1999i64, 2000i64, 2001i64], $.d_year, opts=sql_null_semantics)",
                                                                                                                 "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                                                             ],
                                                                                                             "Function": "Vortex Scan",
@@ -543,7 +543,7 @@ logical_opt [
                                                                                                 "name": "READ_VORTEX",
                                                                                                 "children": [],
                                                                                                 "extra_info": {
-                                                                                                    "Filters": "vortex.list.contains([\"Fairview\", \"Midway\"], $.s_city)",
+                                                                                                    "Filters": "vortex.list.contains([\"Fairview\", \"Midway\"], $.s_city, opts=sql_null_semantics)",
                                                                                                     "Function": "Vortex Scan",
                                                                                                     "Estimated Cardinality": "1"
                                                                                                 }
@@ -813,8 +813,8 @@ physical_plan [
                                                                                                         "extra_info": {
                                                                                                             "Function": "Vortex Scan",
                                                                                                             "Filters": [
-                                                                                                                "vortex.list.contains([6i64, 0i64], $.d_dow)",
-                                                                                                                "vortex.list.contains([1999i64, 2000i64, 2001i64], $.d_year)",
+                                                                                                                "vortex.list.contains([6i64, 0i64], $.d_dow, opts=sql_null_semantics)",
+                                                                                                                "vortex.list.contains([1999i64, 2000i64, 2001i64], $.d_year, opts=sql_null_semantics)",
                                                                                                                 "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                                                             ],
                                                                                                             "Projections": "d_date_sk",
@@ -833,7 +833,7 @@ physical_plan [
                                                                                                 "children": [],
                                                                                                 "extra_info": {
                                                                                                     "Function": "Vortex Scan",
-                                                                                                    "Filters": "vortex.list.contains([\"Fairview\", \"Midway\"], $.s_city)",
+                                                                                                    "Filters": "vortex.list.contains([\"Fairview\", \"Midway\"], $.s_city, opts=sql_null_semantics)",
                                                                                                     "Projections": "s_store_sk",
                                                                                                     "Estimated Cardinality": "1"
                                                                                                 }

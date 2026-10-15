@@ -2,6 +2,13 @@
 
 User documentation is on the [docs website](https://docs.vortex.dev/user-guide/duckdb).
 
+## Reading local files
+
+Local scans use memory maps to share compressed segments with the OS page cache. Vortex input
+files must remain immutable: use new file paths when replacing data. Modifying or truncating a
+mapped file can crash the process. Set `VORTEX_DUCKDB_MEMORY_MAP=0` before starting DuckDB to use
+positional reads instead.
+
 ## Build
 
 Install `ninja`, `cmake`, and a C++20 compiler.

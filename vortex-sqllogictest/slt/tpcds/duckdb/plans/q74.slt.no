@@ -616,7 +616,7 @@ logical_opt [
                                                                                                 "children": [],
                                                                                                 "extra_info": {
                                                                                                     "Filters": [
-                                                                                                        "vortex.list.contains([2001i64, 2002i64], $.d_year)",
+                                                                                                        "vortex.list.contains([2001i64, 2002i64], $.d_year, opts=sql_null_semantics)",
                                                                                                         "(($.d_year = 2001i64) or ($.d_year = 2002i64))",
                                                                                                         "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                                                     ],
@@ -776,7 +776,7 @@ logical_opt [
                                                                                                 "children": [],
                                                                                                 "extra_info": {
                                                                                                     "Filters": [
-                                                                                                        "vortex.list.contains([2001i64, 2002i64], $.d_year)",
+                                                                                                        "vortex.list.contains([2001i64, 2002i64], $.d_year, opts=sql_null_semantics)",
                                                                                                         "(($.d_year = 2001i64) or ($.d_year = 2002i64))",
                                                                                                         "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                                                     ],
@@ -1107,7 +1107,7 @@ physical_plan [
                                                                                         "extra_info": {
                                                                                             "Function": "Vortex Scan",
                                                                                             "Filters": [
-                                                                                                "vortex.list.contains([2001i64, 2002i64], $.d_year)",
+                                                                                                "vortex.list.contains([2001i64, 2002i64], $.d_year, opts=sql_null_semantics)",
                                                                                                 "(($.d_year = 2001i64) or ($.d_year = 2002i64))",
                                                                                                 "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                                             ],
@@ -1256,7 +1256,7 @@ physical_plan [
                                                                                         "extra_info": {
                                                                                             "Function": "Vortex Scan",
                                                                                             "Filters": [
-                                                                                                "vortex.list.contains([2001i64, 2002i64], $.d_year)",
+                                                                                                "vortex.list.contains([2001i64, 2002i64], $.d_year, opts=sql_null_semantics)",
                                                                                                 "(($.d_year = 2001i64) or ($.d_year = 2002i64))",
                                                                                                 "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                                             ],

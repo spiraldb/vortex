@@ -6,13 +6,16 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
 use futures::FutureExt;
+use memmap2::Mmap;
 use object_store::registry::ObjectStoreRegistry;
 use url::Url;
 use vortex::array::VortexSessionExecute as _;
 use vortex::array::arrays::struct_::StructArrayExt as _;
+use vortex::buffer::ByteBuffer;
 use vortex::dtype::DType;
 use vortex::error::VortexExpect;
 use vortex::error::VortexResult;
+use vortex::error::vortex_err;
 use vortex::error::vortex_panic;
 use vortex::file::Footer;
 use vortex::file::VortexFile;
@@ -128,9 +131,16 @@ impl OpenFileReader {
     }
 
     async fn open(path: String) -> VortexResult<Self> {
-        let (fs, fs_path) = resolve_filesystem(&parse_uri_or_path(&path)?)?;
-        let source = fs.open_read(&fs_path).await?;
-        let file = open_cached(&SESSION, Some(&path), source, None, &|options| options).await?;
+        let url = parse_uri_or_path(&path)?;
+        let file = if url.scheme() == "file"
+            && std::env::var_os("VORTEX_DUCKDB_MEMORY_MAP").is_none_or(|value| value != "0")
+        {
+            open_memory_mapped(&url, &path).await?
+        } else {
+            let (fs, fs_path) = resolve_filesystem(&url)?;
+            let source = fs.open_read(&fs_path).await?;
+            open_cached(&SESSION, Some(&path), source, None, &|options| options).await?
+        };
         Ok(OpenFileReader {
             scan_state: Some(Arc::new(FileScanState {
                 reader: file.layout_reader()?,
@@ -163,6 +173,25 @@ impl OpenFileReader {
             None => Ok(false),
         }
     }
+}
+
+async fn open_memory_mapped(url: &Url, key: &str) -> VortexResult<VortexFile> {
+    let path = url
+        .to_file_path()
+        .map_err(|()| vortex_err!("Invalid local file URL: {url}"))?;
+    let file = std::fs::File::open(path)?;
+    // SAFETY: Vortex files are immutable once written. The buffer owns the mapping, so every
+    // segment slice keeps it alive even after DuckDB releases its file-local scan state.
+    let buffer = ByteBuffer::from(unsafe { Mmap::map(&file)? });
+    let size = buffer.len() as u64;
+    open_cached(
+        &SESSION,
+        Some(key),
+        Arc::new(buffer),
+        Some(size),
+        &|options| options,
+    )
+    .await
 }
 
 /// Called once per file while initializing the scan under file-local lock.
@@ -416,5 +445,74 @@ pub fn footer_get_statistics(footer: &Footer, index: usize) -> Option<ColumnStat
     match ColumnStatistics::try_from(stats, dtype) {
         Ok(stats) => Some(stats),
         Err(e) => vortex_panic!(e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use url::Url;
+    use vortex::array::IntoArray;
+    use vortex::array::VortexSessionExecute;
+    use vortex::array::arrays::PrimitiveArray;
+    use vortex::array::assert_arrays_eq;
+    use vortex::array::stream::ArrayStreamExt;
+    use vortex::error::VortexResult;
+    use vortex::error::vortex_err;
+    use vortex::file::WriteOptionsSessionExt;
+    use vortex::io::runtime::BlockingRuntime;
+
+    use super::open_memory_mapped;
+    use crate::RUNTIME;
+    use crate::SESSION;
+    use crate::duckdb::Database;
+
+    #[test]
+    fn mapped_arrays_outlive_the_file_reader() -> VortexResult<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("space % 日本語.vortex");
+        let expected = PrimitiveArray::from_iter(0i64..10_000).into_array();
+        let url = Url::from_file_path(&path)
+            .map_err(|()| vortex_err!("temporary path is not absolute"))?;
+        let actual = RUNTIME.block_on(async {
+            let mut writer = async_fs::File::create(&path).await?;
+            SESSION
+                .write_options()
+                .write(&mut writer, expected.clone().to_array_stream())
+                .await?;
+            let mapped = open_memory_mapped(&url, url.as_str()).await?;
+            let array = mapped.scan()?.into_array_stream()?.read_all().await?;
+            drop(mapped);
+            VortexResult::Ok(array)
+        })?;
+        assert_arrays_eq!(actual, expected, &mut SESSION.create_execution_ctx());
+        Ok(())
+    }
+
+    #[test]
+    fn local_scans_reopen_paths_with_reserved_characters() -> VortexResult<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("space % 日本語.vortex");
+        let db = Database::open_in_memory()?;
+        crate::initialize(&db)?;
+        let connection = db.connect()?;
+        connection.query(&format!(
+            "COPY (SELECT i FROM range(10000) t(i)) TO '{}' (FORMAT vortex)",
+            path.display()
+        ))?;
+        let path = path.to_string_lossy();
+        for _ in 0..3 {
+            let result = connection.query(&format!(
+                "SELECT sum(i)::BIGINT FROM read_vortex('{path}') WHERE i % 2 = 0"
+            ))?;
+            let chunk = result
+                .into_iter()
+                .next()
+                .ok_or_else(|| vortex_err!("missing sum result"))?;
+            assert_eq!(
+                chunk.get_vector(0).as_slice_with_len::<i64>(1),
+                &[24_995_000]
+            );
+        }
+        Ok(())
     }
 }
