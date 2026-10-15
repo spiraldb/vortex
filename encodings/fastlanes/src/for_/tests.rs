@@ -356,6 +356,12 @@ where
                 .min_size(num_blocks)
                 .max_size(num_blocks),
         );
+        // The encoder rejects all-native widths; mixed native and packed blocks are valid.
+        tc.assume(
+            bit_widths
+                .iter()
+                .any(|&width| usize::from(width) < T::PTYPE.bit_width()),
+        );
         BitPackedData::encode_blocked(&encoded_array.into_array(), &bit_widths, &mut ctx)?
     } else {
         BitPacked::encode(&encoded_array.into_array(), bit_width, &mut ctx)?

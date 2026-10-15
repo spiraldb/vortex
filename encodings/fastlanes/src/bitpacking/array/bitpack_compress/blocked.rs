@@ -562,6 +562,7 @@ mod tests {
     #[case::too_few(vec![3])]
     #[case::too_many(vec![3, 3, 3])]
     #[case::wider_than_type(vec![3, 33])]
+    #[case::all_native_width(vec![32, 32])]
     fn encode_blocked_rejects_invalid_bit_widths(#[case] bit_widths: Vec<u8>) {
         let array = PrimitiveArray::from_iter((0..2048u32).map(|i| i % 8));
         let err = BitPackedData::encode_blocked(
