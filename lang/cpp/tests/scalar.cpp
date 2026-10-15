@@ -20,14 +20,14 @@ TEST_CASE("Boolean scalar", "[scalar]") {
 }
 
 TEST_CASE("Integer scalars", "[scalar]") {
-    REQUIRE(scalar::of<uint8_t>(42).dtype().primitive_type() == U8);
-    REQUIRE(scalar::of<uint16_t>(42).dtype().primitive_type() == U16);
-    REQUIRE(scalar::of<uint32_t>(42).dtype().primitive_type() == U32);
-    REQUIRE(scalar::of<uint64_t>(42).dtype().primitive_type() == U64);
-    REQUIRE(scalar::of<int8_t>(-1).dtype().primitive_type() == I8);
-    REQUIRE(scalar::of<int16_t>(-1).dtype().primitive_type() == I16);
-    REQUIRE(scalar::of<int32_t>(-1).dtype().primitive_type() == I32);
-    REQUIRE(scalar::of<int64_t>(-1).dtype().primitive_type() == I64);
+    REQUIRE(scalar::of<uint8_t>(42).get<uint8_t>() == 42);
+    REQUIRE(scalar::of<uint16_t>(42).get<uint16_t>() == 42);
+    REQUIRE(scalar::of<uint32_t>(42).get<uint32_t>() == 42);
+    REQUIRE(scalar::of<uint64_t>(42).get<uint64_t>() == 42);
+    REQUIRE(scalar::of<int8_t>(-1).get<int8_t>() == -1);
+    REQUIRE(scalar::of<int16_t>(-1).get<int16_t>() == -1);
+    REQUIRE(scalar::of<int32_t>(-1).get<int32_t>() == -1);
+    REQUIRE(scalar::of<int64_t>(-1).get<int64_t>() == -1);
 }
 
 TEST_CASE("Float scalars", "[scalar]") {

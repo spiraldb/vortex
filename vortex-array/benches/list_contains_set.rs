@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! `list_contains(lit([...]), column)`, the `IN` shape: a constant set probed by a column of
-//! needles, so that the cost of preparing the set shows next to the cost of probing it.
+//! `list_contains(lit([...]), column)`, the `IN` shape: a constant set looked up by a column of
+//! needles, so that the cost of preparing the set shows next to the cost of looking up in it.
 //!
-//! Each element type exercises one probe: integers, UTF-8 strings, and nested lists that compare
-//! whole rows. Integer needles are also split into chunks, which share one prepared set.
+//! Each element type exercises one haystack: integers, UTF-8 strings, and nested lists that
+//! compare whole rows. Integer needles are also split into chunks, which share one prepared set.
 
 #![expect(clippy::unwrap_used)]
 
 use std::sync::Arc;
 
 use divan::Bencher;
+use mimalloc::MiMalloc;
 use rand::RngExt;
 use rand::SeedableRng;
 use rand::prelude::StdRng;
@@ -31,6 +32,9 @@ use vortex_array::expr::lit;
 use vortex_array::expr::root;
 use vortex_array::scalar::Scalar;
 
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
+
 fn main() {
     divan::main();
 }
@@ -39,7 +43,7 @@ fn main() {
 const ROWS: usize = 1_024;
 const CHUNKS: usize = 4;
 const SET_LENS: &[usize] = &[256];
-/// A nested set compares whole rows to sort its elements and to probe them, so it stays smaller.
+/// A nested set compares whole rows to sort its elements and to look them up, so it stays smaller.
 const NESTED_SET_LENS: &[usize] = &[32];
 
 /// A random set of `len` values, and needles of which about half are members.

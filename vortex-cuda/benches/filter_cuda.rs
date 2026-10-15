@@ -24,6 +24,7 @@ use cudarc::driver::DeviceRepr;
 use cudarc::driver::ValidAsZeroBits;
 use cudarc::driver::sys::CUevent_flags;
 use futures::executor::block_on;
+use mimalloc::MiMalloc;
 use vortex::error::VortexExpect;
 use vortex::error::VortexResult;
 use vortex::error::vortex_err;
@@ -36,6 +37,9 @@ use vortex_cuda_macros::cuda_available;
 use vortex_cuda_macros::cuda_not_available;
 
 use crate::bench_config::BENCH_SIZES;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 const SELECTIVITIES: &[(f64, &str)] = &[(0.1, "10%"), (0.5, "50%"), (0.9, "90%")];
 
 /// Creates input data of the given length.

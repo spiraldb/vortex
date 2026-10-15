@@ -158,6 +158,8 @@ def _polars_to_vortex(expr: dict[str, Any]) -> ve.Expr:
                 return ve.fill_null(_inputs[0], _inputs[1])
             return ve.zip_(ve.is_null(_inputs[0]), _inputs[1], _inputs[0])
         fn = expr["function"]
+        if isinstance(fn, dict) and "FieldByName" in fn.get("StructExpr", {}):
+            return ve.get_item(fn["StructExpr"]["FieldByName"], _inputs[0])
         if isinstance(fn, dict) and "ReplaceTimeZone" in fn.get("TemporalExpr", {}):
             time_zone, non_existent = fn["TemporalExpr"]["ReplaceTimeZone"]
             if isinstance(time_zone, dict):
