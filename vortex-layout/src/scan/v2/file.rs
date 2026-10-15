@@ -13,21 +13,18 @@ use vortex_error::VortexResult;
 use crate::LayoutReader;
 use crate::plan::physical::PlanRef;
 use crate::scan::v2::ScanFile;
-use crate::scan::v2::io::SegmentRanges;
-use crate::scan::v2::io::segment_ranges;
 use crate::scan::v2::lower::lower;
 use crate::scan::v2::lower::lower_with_zones;
 
 /// Layout-derived state with the same lifetime as an explicitly cached layout reader.
 ///
-/// Holds only the lowered plans and segment ranges. Decoded values, such as dictionary values,
+/// Holds only the lowered plans. Decoded values, such as dictionary values,
 /// live no longer than the split that read them, and zone statistics no longer than the query
 /// that proves over them.
 #[derive(Default)]
 pub struct FilePlans {
     root: OnceCell<PlanRef>,
     zones: OnceCell<PlanRef>,
-    ranges: OnceCell<SegmentRanges>,
 }
 
 /// Lowered plans shared by active scans over one layout reader.
@@ -49,14 +46,6 @@ impl SharedFile {
             .zones
             .get_or_try_init(|| lower_with_zones(&self.file.layout))
             .cloned()
-    }
-
-    pub(super) fn segment_ranges(&self) -> SegmentRanges {
-        Arc::clone(
-            self.plans
-                .ranges
-                .get_or_init(|| segment_ranges(&self.file.locations)),
-        )
     }
 }
 

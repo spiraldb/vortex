@@ -477,11 +477,12 @@ impl FileOpener for VortexOpener {
                     )?;
                     Ok(RecordBatch::from(arrow.as_struct().clone()))
                 });
-            let scan_file = planning::scan_file(&vxf);
-            let batches = if scan::v2::enabled() && scan::v2::supports_scan(&scan_builder, &scan_file) {
-                scan::v2::into_stream(scan_builder, scan_file).map(|s| s.boxed())
-            } else {
-                scan_builder.into_stream().map(|s| s.boxed())
+            let scan_file = planning::scan_file(&vxf).filter(|scan_file| {
+                scan::v2::enabled() && scan::v2::supports_scan(&scan_builder, scan_file)
+            });
+            let batches = match scan_file {
+                Some(scan_file) => scan::v2::into_stream(scan_builder, scan_file).map(|s| s.boxed()),
+                None => scan_builder.into_stream().map(|s| s.boxed()),
             };
             let stream = batches
                 .map_err(|e| exec_datafusion_err!("Failed to create Vortex stream: {e}"))?

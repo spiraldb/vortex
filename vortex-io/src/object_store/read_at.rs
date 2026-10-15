@@ -44,11 +44,11 @@ use crate::CoalesceConfig;
 use crate::ReadAtRequest;
 use crate::ReadAtStream;
 use crate::VortexReadAt;
-#[cfg(not(target_arch = "wasm32"))]
-use crate::request::trace::timestamp_ns;
 use crate::runtime::Handle;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::std_file::read_exact_at;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::trace::timestamp_ns;
 
 /// Default number of concurrent requests to allow.
 pub const DEFAULT_CONCURRENCY: usize = 192;

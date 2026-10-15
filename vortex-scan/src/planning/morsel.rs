@@ -7,9 +7,10 @@ use std::any::type_name;
 use std::fmt;
 
 use vortex_array::ArrayRef;
+use vortex_array::buffer::BufferHandle;
 use vortex_error::VortexResult;
-use vortex_io::request::IoBatch;
-use vortex_io::request::IoConsumer;
+use vortex_io::segments::SegmentKey;
+use vortex_io::segments::SegmentRequest;
 
 pub use crate::planning::planner::State;
 
@@ -17,15 +18,15 @@ pub use crate::planning::planner::State;
 ///
 /// A `Batch` is never empty; a morsel that finds no rows returns `Done`. Returning `NeedsIO`
 /// registers the batch immediately, and each request in it exactly once; the next `state()`
-/// determines whether the morsel waits. Optional requests need no delivery. After `Done` the
-/// morsel is dropped without further calls.
+/// determines whether the morsel waits. Only fetches are delivered. After `Done` the morsel is
+/// dropped without further calls.
 pub enum MorselOutput {
     /// The morsel has finished.
     Done,
     /// A CPU-only checkpoint; the driver requeues the morsel.
     Continue,
     /// Requests the morsel publishes: fetches it needs, and optional hints.
-    NeedsIO(IoBatch),
+    NeedsIO(Vec<SegmentRequest>),
     /// One non-empty array of selected rows, in input-row order.
     Batch(ArrayRef),
 }
@@ -35,7 +36,7 @@ pub enum MorselOutput {
 /// `state()` is called before every `compute()`, and `compute()` only when `state()` is
 /// `NeedsCompute`. Batches preserve selected input-row order within and across calls. A morsel
 /// moves between threads with the run that owns it.
-pub trait Morsel: IoConsumer + Send {
+pub trait Morsel: Send {
     /// Identifies the stage in diagnostic traces without inspecting its inputs.
     fn trace_name(&self) -> &'static str {
         type_name::<Self>()
@@ -46,6 +47,10 @@ pub trait Morsel: IoConsumer + Send {
 
     /// Advances CPU work. Only called when [`state`](Self::state) is `NeedsCompute`.
     fn compute(&mut self) -> VortexResult<MorselOutput>;
+
+    /// The bytes of a segment the morsel fetched, once per fetch. A morsel never has two
+    /// fetches of one segment outstanding.
+    fn deliver(&mut self, key: SegmentKey, bytes: BufferHandle);
 }
 
 impl fmt::Debug for MorselOutput {

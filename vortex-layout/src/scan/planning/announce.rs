@@ -4,15 +4,13 @@
 use std::ops::Range;
 use std::sync::LazyLock;
 
+use vortex_array::buffer::BufferHandle;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
-use vortex_io::request::IoBatch;
-use vortex_io::request::IoConsumer;
-use vortex_io::request::IoIntent;
-use vortex_io::request::IoRequest;
-use vortex_io::request::IoRequestId;
-use vortex_io::request::IoResult;
+use vortex_io::segments::IoIntent;
+use vortex_io::segments::SegmentKey;
+use vortex_io::segments::SegmentRequest;
 use vortex_scan::planning::next::Next;
 use vortex_scan::planning::planner::Planner;
 use vortex_scan::planning::planner::PlannerOutput;
@@ -100,7 +98,7 @@ impl AnnouncePlanner {
         &self,
         selected: &SelectedRows,
         project_before_filter: bool,
-    ) -> VortexResult<(IoBatch, Option<Range<u64>>)> {
+    ) -> VortexResult<(Vec<SegmentRequest>, Option<Range<u64>>)> {
         let plans = self
             .plans
             .as_ref()
@@ -137,25 +135,10 @@ impl AnnouncePlanner {
         }
         let batch = ids
             .into_iter()
-            .enumerate()
-            .map(|(index, id)| {
-                let location = plans
-                    .locations
-                    .get(*id as usize)
-                    .ok_or_else(|| vortex_err!("segment {id} has no known location"))?;
-                Ok(IoRequest {
-                    intent: IoIntent::Announce,
-                    request: IoRequestId(u32::try_from(index)?),
-                    target: location.target(),
-                })
-            })
-            .collect::<VortexResult<IoBatch>>()?;
+            .map(|id| SegmentRequest::new(SegmentKey::new(plans.source, id), IoIntent::Announce))
+            .collect();
         Ok((batch, projection_rows))
     }
-}
-
-impl IoConsumer for AnnouncePlanner {
-    fn set_io_result(&mut self, _request: IoRequestId, _result: IoResult) {}
 }
 
 impl Planner for AnnouncePlanner {
@@ -223,6 +206,9 @@ impl Planner for AnnouncePlanner {
         };
         Ok(PlannerOutput::Planner(scope, next))
     }
+
+    /// Announcements are never delivered.
+    fn deliver(&mut self, _key: SegmentKey, _bytes: BufferHandle) {}
 }
 
 #[cfg(test)]
@@ -239,6 +225,7 @@ mod tests {
     use vortex_array::dtype::Nullability::NonNullable;
     use vortex_array::dtype::PType;
     use vortex_buffer::Alignment;
+    use vortex_io::segments::SourceId;
     use vortex_mask::Mask;
     use vortex_scan::planning::planner::WorkScope;
     use vortex_session::registry::ReadContext;
@@ -294,6 +281,7 @@ mod tests {
         };
         let plans = ScanPlans {
             session: new_session(),
+            source: SourceId(0),
             locations: Arc::clone(&locations),
             projection: ConcatPlan::try_new(dtype, chunks)?.into_plan(),
             projection_starts: Arc::from([0, 1000, 2000]),
@@ -313,11 +301,11 @@ mod tests {
                 .iter()
                 .all(|request| request.intent == IoIntent::Announce)
         );
-        let targets: Vec<_> = requests.iter().map(|request| request.target).collect();
-        let mut expected: Vec<_> = indices
+        let targets: Vec<_> = requests.iter().map(|request| request.key.segment).collect();
+        let mut expected = indices
             .iter()
-            .map(|row| locations[row / 1000].target())
-            .collect();
+            .map(|row| SegmentId::try_from(row / 1000))
+            .collect::<VortexResult<Vec<_>>>()?;
         expected.dedup();
         assert_eq!(targets, expected);
         if let Some(morsel_rows) = morsel_rows {
@@ -382,6 +370,7 @@ mod tests {
         let planner = AnnouncePlanner::for_split(
             ScanPlans {
                 session: new_session(),
+                source: SourceId(0),
                 locations: Arc::clone(&locations),
                 projection: ConcatPlan::try_new(dtype, chunks)?.into_plan(),
                 projection_starts: Arc::from([0, 1000]),
@@ -393,11 +382,11 @@ mod tests {
             selected,
         );
         let (batch, _) = planner.announce(planner.selected.as_ref().unwrap(), early_projection)?;
-        let actual: Vec<_> = batch.iter().map(|request| request.target).collect();
-        let expected: Vec<_> = expected
+        let actual: Vec<_> = batch.iter().map(|request| request.key.segment).collect();
+        let expected = expected
             .iter()
-            .map(|&index| locations[index].target())
-            .collect();
+            .map(|&index| SegmentId::try_from(index))
+            .collect::<VortexResult<Vec<_>>>()?;
         assert_eq!(actual, expected);
         assert!(
             batch

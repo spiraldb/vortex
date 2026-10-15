@@ -83,6 +83,7 @@ use crate::scan::v2::file::shared_file;
 use crate::segments::SegmentFuture;
 use crate::segments::SegmentId;
 use crate::segments::SegmentSource;
+use crate::segments::TestSegmentIo;
 use crate::segments::TestSegments;
 use crate::sequence::SequenceId;
 use crate::sequence::SequentialStreamAdapter;
@@ -236,8 +237,7 @@ fn scan_file(segments: &Arc<dyn SegmentSource>, layout: &LayoutRef) -> VortexRes
     Ok(ScanFile {
         layout: Arc::clone(layout),
         locations,
-        segments: Arc::clone(segments),
-        io: None,
+        io: TestSegmentIo::register(Arc::clone(segments)),
         plans: None,
     })
 }
@@ -725,7 +725,7 @@ async fn zone_pruning_reads_only_zones_that_can_match() -> VortexResult<()> {
         reads: Arc::default(),
     });
     let mut file = scan_file(&segments, &layout)?;
-    file.segments = Arc::clone(&recording) as _;
+    file.io = TestSegmentIo::register(Arc::clone(&recording) as _);
     let actual = v2::into_stream(builder(&session, &segments, &layout, &case)?, file)?
         .try_collect::<Vec<_>>()
         .await?;
@@ -1078,7 +1078,7 @@ async fn zone_pruning_follows_dynamic_comparisons() -> VortexResult<()> {
         reads: Arc::default(),
     });
     let mut file = scan_file(&segments, &layout)?;
-    file.segments = Arc::clone(&recording) as _;
+    file.io = TestSegmentIo::register(Arc::clone(&recording) as _);
     let reader = layout.new_reader(
         "".into(),
         Arc::clone(&segments),
@@ -1287,7 +1287,7 @@ async fn file_pruning_precedes_data_split_creation(
         reads: Arc::default(),
     });
     let mut file = scan_file(&segments, &layout)?;
-    file.segments = Arc::clone(&recording) as _;
+    file.io = TestSegmentIo::register(Arc::clone(&recording) as _);
     let reader = layout.new_reader(
         "".into(),
         Arc::clone(&segments),

@@ -116,7 +116,7 @@ use crate::VortexFile;
 use crate::WriteOptionsSessionExt;
 use crate::flatbuffers::footer as fb;
 use crate::footer::SegmentSpec;
-static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
+pub(crate) static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     let session = array_session()
         .with::<LayoutSession>()
         .with::<RuntimeSession>();

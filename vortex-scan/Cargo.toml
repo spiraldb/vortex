@@ -24,7 +24,7 @@ vortex-session = { workspace = true }
 vortex-utils = { workspace = true }
 
 async-trait = { workspace = true }
-futures = { workspace = true }
+futures = { workspace = true, features = ["executor"] }
 roaring = { workspace = true }
 tracing = { workspace = true }
 

@@ -13,6 +13,7 @@ use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::StructArray;
+use vortex_array::buffer::BufferHandle;
 use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::scalar_fn::fns::dynamic::DynamicExprUpdates;
 use vortex_array::validity::Validity;
@@ -20,10 +21,8 @@ use vortex_buffer::BitBufferMut;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
-use vortex_io::request::IoConsumer;
-use vortex_io::request::IoRequestId;
-use vortex_io::request::IoResult;
-use vortex_io::request::IoService;
+use vortex_io::segments::SegmentIoService;
+use vortex_io::segments::SegmentKey;
 use vortex_mask::Mask;
 use vortex_scan::planning::driver::Progress;
 use vortex_scan::planning::driver::Run;
@@ -86,7 +85,7 @@ impl PrunedFile {
 pub(super) async fn prune_file(
     plans: &ScanPlans,
     proof: PlanRef,
-    io: &Arc<dyn IoService>,
+    io: &Arc<dyn SegmentIoService>,
 ) -> VortexResult<PrunedFile> {
     if proof.row_count() == 0 {
         return Ok(PrunedFile {
@@ -115,7 +114,7 @@ pub(super) async fn prune_file(
     };
     let (sender, receiver) = oneshot::channel();
     let planner = FilePruningPlanner {
-        graph: ProtocolGraph::new(graph, Arc::clone(&plans.locations), 0),
+        graph: ProtocolGraph::new(graph, plans.source, Arc::clone(&plans.locations)),
         proof,
         plans: plans.clone(),
         boundaries,
@@ -144,12 +143,6 @@ struct FilePruningPlanner {
     plans: ScanPlans,
     boundaries: Vec<u64>,
     result: Option<oneshot::Sender<Vec<Range<u64>>>>,
-}
-
-impl IoConsumer for FilePruningPlanner {
-    fn set_io_result(&mut self, request: IoRequestId, result: IoResult) {
-        self.graph.set_io_result(request, result);
-    }
 }
 
 impl Planner for FilePruningPlanner {
@@ -196,6 +189,10 @@ impl Planner for FilePruningPlanner {
             drop(result.send(ranges));
         }
         Ok(PlannerOutput::Done)
+    }
+
+    fn deliver(&mut self, key: SegmentKey, bytes: BufferHandle) {
+        self.graph.deliver(key, bytes);
     }
 }
 

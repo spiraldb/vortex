@@ -28,7 +28,7 @@ pub use projection::ProjectionMorsel;
 pub use projection::ProjectionPlanner;
 use vortex_buffer::Alignment;
 use vortex_error::VortexResult;
-use vortex_io::request::IoTarget;
+use vortex_io::segments::SourceId;
 use vortex_mask::Mask;
 use vortex_scan::planning::next::Next;
 use vortex_scan::planning::next::next_fn;
@@ -50,22 +50,13 @@ pub struct SegmentLocation {
     pub alignment: Alignment,
 }
 
-impl SegmentLocation {
-    /// The byte range a read of the segment asks for.
-    pub fn target(&self) -> IoTarget {
-        IoTarget::Range {
-            offset: self.offset,
-            len: self.length as usize,
-            alignment: self.alignment,
-        }
-    }
-}
-
 /// What every split of a scan shares: the projection plan and where its segments live.
 #[derive(Clone)]
 pub struct ScanPlans {
     /// The session used for decoding and expression evaluation.
     pub session: VortexSession,
+    /// The source every segment is read from.
+    pub source: SourceId,
     /// The location of every segment, indexed by segment id.
     pub locations: Arc<[SegmentLocation]>,
     /// The optimized projection plan, over the scan's root row domain.

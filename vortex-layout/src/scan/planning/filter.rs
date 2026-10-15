@@ -12,6 +12,7 @@ use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::ConstantArray;
+use vortex_array::buffer::BufferHandle;
 use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::expr::BoundExpression;
 use vortex_array::scalar::Scalar;
@@ -24,12 +25,9 @@ use vortex_array::scalar_fn::fns::operators::Operator;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
-use vortex_io::request::IoBatch;
-use vortex_io::request::IoConsumer;
-use vortex_io::request::IoIntent;
-use vortex_io::request::IoRequest;
-use vortex_io::request::IoRequestId;
-use vortex_io::request::IoResult;
+use vortex_io::segments::IoIntent;
+use vortex_io::segments::SegmentKey;
+use vortex_io::segments::SegmentRequest;
 use vortex_mask::Mask;
 use vortex_scan::planning::next::Next;
 use vortex_scan::planning::planner::Planner;
@@ -204,8 +202,6 @@ pub struct FilterPlanner {
     /// The plan being evaluated, the number of rows selected when it started, and its graph.
     running: Option<(usize, usize, ProtocolGraph)>,
     pieces: Vec<Piece>,
-    /// The protocol id the next plan's first request gets; ids never repeat within the planner.
-    next_io_id: u32,
     /// Whether the conjuncts after the first have been prefetched.
     prefetched: bool,
     done: bool,
@@ -267,7 +263,6 @@ impl FilterPlanner {
             remaining,
             running: None,
             pieces: Vec::new(),
-            next_io_id: 0,
             prefetched: false,
             done: false,
             evaluate_all: false,
@@ -277,9 +272,12 @@ impl FilterPlanner {
     }
 
     /// Prefetches remaining filter segments and, within `projection_budget`, projection segments
-    /// over the selected rows. Their ids count down from the top, clear of the ids the plans'
-    /// graphs count up from.
-    fn prefetch_others(&self, running: usize, projection_budget: usize) -> VortexResult<IoBatch> {
+    /// over the selected rows.
+    fn prefetch_others(
+        &self,
+        running: usize,
+        projection_budget: usize,
+    ) -> VortexResult<Vec<SegmentRequest>> {
         let mut ids = Vec::new();
         for range in selected_ranges(&self.scope.rows, &self.mask) {
             for (index, plan) in self.filters.plans.iter().enumerate() {
@@ -324,21 +322,12 @@ impl FilterPlanner {
             }
             ids.extend(selected);
         }
-        ids.into_iter()
-            .enumerate()
-            .map(|(index, id)| {
-                let location = self
-                    .plans
-                    .locations
-                    .get(*id as usize)
-                    .ok_or_else(|| vortex_err!("segment {id} has no known location"))?;
-                Ok(IoRequest {
-                    intent: IoIntent::Prefetch,
-                    request: IoRequestId(u32::MAX - u32::try_from(index)?),
-                    target: location.target(),
-                })
+        Ok(ids
+            .into_iter()
+            .map(|id| {
+                SegmentRequest::new(SegmentKey::new(self.plans.source, id), IoIntent::Prefetch)
             })
-            .collect()
+            .collect())
     }
 
     /// Starts the next plan over the rows still selected, or finishes: without a child when no
@@ -390,7 +379,7 @@ impl FilterPlanner {
         self.running = Some((
             index,
             self.mask.true_count(),
-            ProtocolGraph::new(graph, Arc::clone(&self.plans.locations), self.next_io_id),
+            ProtocolGraph::new(graph, self.plans.source, Arc::clone(&self.plans.locations)),
         ));
         Ok(PlannerOutput::Continue)
     }
@@ -422,14 +411,6 @@ impl FilterPlanner {
             self.mask.intersect_by_rank(&keep)
         };
         Ok(())
-    }
-}
-
-impl IoConsumer for FilterPlanner {
-    fn set_io_result(&mut self, request: IoRequestId, result: IoResult) {
-        if let Some((_, _, graph)) = self.running.as_mut() {
-            graph.set_io_result(request, result);
-        }
     }
 }
 
@@ -465,7 +446,6 @@ impl Planner for FilterPlanner {
         };
         if graph.state() == State::Done {
             let (index, input) = (*index, *input);
-            self.next_io_id = graph.next_id();
             self.running = None;
             self.narrow(index)?;
             self.remaining.set(index, false);
@@ -478,6 +458,7 @@ impl Planner for FilterPlanner {
             GraphStep::Yield => PlannerOutput::Continue,
             GraphStep::NeedsIO(mut batch) => {
                 // The running conjunct's fetches come first, then the other conjuncts' prefetches.
+                // A segment the running conjunct fetches needs no prefetch.
                 if !self.prefetched {
                     static PROJECTION_BUDGET: LazyLock<usize> = LazyLock::new(|| {
                         env::var("VORTEX_SCAN_PROJECTION_PREFETCH_BYTES")
@@ -486,7 +467,12 @@ impl Planner for FilterPlanner {
                             .unwrap_or(0)
                     });
                     self.prefetched = true;
-                    batch.extend(self.prefetch_others(running, *PROJECTION_BUDGET)?);
+                    let fetched: Vec<_> = batch.iter().map(|request| request.key).collect();
+                    batch.extend(
+                        self.prefetch_others(running, *PROJECTION_BUDGET)?
+                            .into_iter()
+                            .filter(|request| !fetched.contains(&request.key)),
+                    );
                 }
                 PlannerOutput::NeedsIO(batch)
             }
@@ -504,6 +490,12 @@ impl Planner for FilterPlanner {
                 PlannerOutput::Continue
             }
         })
+    }
+
+    fn deliver(&mut self, key: SegmentKey, bytes: BufferHandle) {
+        if let Some((_, _, graph)) = self.running.as_mut() {
+            graph.deliver(key, bytes);
+        }
     }
 }
 

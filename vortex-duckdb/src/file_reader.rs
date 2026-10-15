@@ -198,13 +198,15 @@ pub(crate) async fn prepare_reader(
         .with_projection(projection.clone())
         .with_some_filter(filter.filter.clone())
         .with_selection(filter.row_selection.clone());
-    let scan_file = planning::scan_file(&file.file);
-    let mut splits = if scan::v2::enabled() && scan::v2::supports_scan(&builder, &scan_file) {
-        scan::v2::prepare(builder, scan_file)?
-            .execute_pruned(filter.row_range.clone())
-            .await?
-    } else {
-        builder.prepare()?.execute(filter.row_range.clone())?
+    let scan_file = planning::scan_file(&file.file)
+        .filter(|scan_file| scan::v2::enabled() && scan::v2::supports_scan(&builder, scan_file));
+    let mut splits = match scan_file {
+        Some(scan_file) => {
+            scan::v2::prepare(builder, scan_file)?
+                .execute_pruned(filter.row_range.clone())
+                .await?
+        }
+        None => builder.prepare()?.execute(filter.row_range.clone())?,
     };
 
     // threads take last element of file.splits so we need to reverse

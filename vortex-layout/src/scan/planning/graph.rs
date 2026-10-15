@@ -10,11 +10,10 @@ use vortex_array::buffer::BufferHandle;
 use vortex_error::VortexError;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
-use vortex_error::vortex_panic;
-use vortex_io::request;
-use vortex_io::request::IoBatch;
-use vortex_io::request::IoIntent;
-use vortex_io::request::IoResult;
+use vortex_io::segments::IoIntent;
+use vortex_io::segments::SegmentKey;
+use vortex_io::segments::SegmentRequest;
+use vortex_io::segments::SourceId;
 use vortex_mask::Mask;
 use vortex_scan::planning::planner::State;
 use vortex_session::VortexSession;
@@ -123,46 +122,40 @@ pub(crate) enum GraphStep {
     /// Control returns to the owner with CPU work still ready.
     Yield,
     /// Requests to publish, each returned once.
-    NeedsIO(IoBatch),
+    NeedsIO(Vec<SegmentRequest>),
     /// Rows the plan produced.
     Piece(Piece),
 }
 
 /// A [`ScanGraph`] whose segment reads are published as protocol requests.
 ///
-/// The scan names segments by id; the protocol names byte ranges. Each scan read becomes a
-/// `Fetch` of the segment's range at the segment's alignment, and each delivery is handed back to
-/// the scan under its own id.
+/// Each scan read becomes a `Fetch` of its segment in `source`, and each delivery is handed back to
+/// the scan under the ids of every read of that segment. A segment the scan reads twice while the
+/// first read is outstanding is fetched once.
 pub(crate) struct ProtocolGraph {
     graph: ScanGraph,
+    source: SourceId,
     locations: Arc<[SegmentLocation]>,
-    /// Published and undelivered requests, with the scan read and segment each one answers.
-    outstanding: FxHashMap<u32, (ReadId, SegmentId)>,
+    /// Fetched and undelivered segments, with the scan reads each one answers.
+    outstanding: FxHashMap<SegmentId, Vec<ReadId>>,
     /// A delivery the scan could not take, reported by the next compute.
     failed: Option<VortexError>,
-    /// The protocol id the next published request gets.
-    next_id: u32,
 }
 
 impl ProtocolGraph {
-    /// Wraps `graph`, numbering its requests from `first_id`.
-    ///
-    /// Request ids must be unique over an owner's lifetime, so an owner that runs several graphs
-    /// starts each where the previous one's [`next_id`](Self::next_id) left off.
-    pub(crate) fn new(graph: ScanGraph, locations: Arc<[SegmentLocation]>, first_id: u32) -> Self {
+    /// Wraps `graph`, fetching its segments from `source`.
+    pub(crate) fn new(
+        graph: ScanGraph,
+        source: SourceId,
+        locations: Arc<[SegmentLocation]>,
+    ) -> Self {
         Self {
             graph,
+            source,
             locations,
             outstanding: FxHashMap::default(),
             failed: None,
-            next_id: first_id,
         }
-    }
-
-    /// The protocol id the next request would get: the first id a following graph of the same
-    /// owner may use.
-    pub(crate) fn next_id(&self) -> u32 {
-        self.next_id
     }
 
     /// The owner's protocol state while the graph is running.
@@ -185,11 +178,12 @@ impl ProtocolGraph {
             Turn::Waiting | Turn::Done => GraphStep::Yield,
             Turn::Output(_, array) => GraphStep::Piece(self.graph.piece(array)),
             Turn::Read(read) => {
-                // Publish every read the scan has ready together, so the owner can coalesce them.
-                let mut batch = vec![self.request(read.id, read.segment_id)?];
+                // Publish every read the scan has ready together, so the service can coalesce them.
+                let mut batch = Vec::new();
+                self.request(read.id, read.segment_id, &mut batch);
                 loop {
                     match self.graph.step()? {
-                        Turn::Read(read) => batch.push(self.request(read.id, read.segment_id)?),
+                        Turn::Read(read) => self.request(read.id, read.segment_id, &mut batch),
                         turn => {
                             if !matches!(turn, Turn::Waiting) {
                                 self.graph.pending = Some(turn);
@@ -199,53 +193,48 @@ impl ProtocolGraph {
                         }
                     }
                 }
-                GraphStep::NeedsIO(batch)
+                if batch.is_empty() {
+                    GraphStep::Yield
+                } else {
+                    GraphStep::NeedsIO(batch)
+                }
             }
         })
     }
 
-    fn request(&mut self, read: ReadId, segment_id: SegmentId) -> VortexResult<request::IoRequest> {
-        let location = self.location(segment_id)?;
-        let id = self.next_id;
-        self.next_id = self
-            .next_id
-            .checked_add(1)
-            .ok_or_else(|| vortex_err!("ProtocolGraph ran out of request ids"))?;
-        self.outstanding.insert(id, (read, segment_id));
-        Ok(request::IoRequest {
-            intent: IoIntent::Fetch,
-            request: request::IoRequestId(id),
-            target: location.target(),
-        })
+    fn request(&mut self, read: ReadId, segment: SegmentId, batch: &mut Vec<SegmentRequest>) {
+        let reads = self.outstanding.entry(segment).or_default();
+        if reads.is_empty() {
+            batch.push(SegmentRequest::new(
+                SegmentKey::new(self.source, segment),
+                IoIntent::Fetch,
+            ));
+        }
+        reads.push(read);
     }
 
-    /// Hands a delivered read to the scan. The driver only delivers requests this graph
-    /// published, so anything else is a driver bug. Bytes the scan cannot take fail the owner's
-    /// next compute.
-    pub(crate) fn set_io_result(&mut self, id: request::IoRequestId, result: IoResult) {
-        let Some((read, segment_id)) = self.outstanding.remove(&id.0) else {
-            vortex_panic!("ProtocolGraph: delivery of {id:?}, which is not outstanding");
-        };
-        let IoResult::Bytes(bytes) = result else {
-            vortex_panic!("ProtocolGraph: segment {segment_id} answered with a size");
-        };
-        if let Err(error) = self.deliver(read, segment_id, bytes)
+    /// Hands a fetched segment to every scan read of it. The driver only delivers segments this
+    /// graph fetched. Bytes the scan cannot take fail the owner's next compute.
+    pub(crate) fn deliver(&mut self, key: SegmentKey, bytes: BufferHandle) {
+        let result = self.deliver_segment(key.segment, bytes);
+        if let Err(error) = result
             && self.failed.is_none()
         {
-            self.failed = Some(error.with_context(format!("delivering segment {segment_id}")));
+            self.failed = Some(error.with_context(format!("delivering segment {}", key.segment)));
         }
     }
 
-    fn deliver(
-        &mut self,
-        read: ReadId,
-        segment_id: SegmentId,
-        bytes: BufferHandle,
-    ) -> VortexResult<()> {
-        // A source that honours the target's alignment makes this a check, not a copy.
-        let alignment = self.location(segment_id)?.alignment;
+    fn deliver_segment(&mut self, segment: SegmentId, bytes: BufferHandle) -> VortexResult<()> {
+        let reads = self.outstanding.remove(&segment).ok_or_else(|| {
+            vortex_err!("delivery of segment {segment}, which is not outstanding")
+        })?;
+        // A source that honours the segment's alignment makes this a check, not a copy.
+        let alignment = self.location(segment)?.alignment;
         let bytes = BufferHandle::new_host(bytes.try_into_host_sync()?.aligned(alignment));
-        self.graph.deliver(read, bytes)
+        for read in reads {
+            self.graph.deliver(read, bytes.clone())?;
+        }
+        Ok(())
     }
 
     fn location(&self, id: SegmentId) -> VortexResult<SegmentLocation> {

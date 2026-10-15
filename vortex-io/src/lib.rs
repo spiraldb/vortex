@@ -23,11 +23,12 @@ mod limit;
 #[cfg(feature = "object_store")]
 pub mod object_store;
 mod read_at;
-pub mod request;
 pub mod runtime;
+pub mod segments;
 pub mod session;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod std_file;
 #[cfg(feature = "tokio")]
 mod tokio;
+pub mod trace;
 mod write;

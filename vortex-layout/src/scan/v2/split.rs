@@ -10,10 +10,9 @@ use vortex_array::ArrayRef;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure;
-use vortex_io::request::IoIntent;
-use vortex_io::request::IoOwnerId;
-use vortex_io::request::IoService;
-use vortex_io::request::IoSource;
+use vortex_io::segments::IoIntent;
+use vortex_io::segments::IoOwnerId;
+use vortex_io::segments::SegmentIoService;
 use vortex_scan::planning::driver::Progress;
 use vortex_scan::planning::driver::Run;
 use vortex_scan::planning::planner::Planner;
@@ -39,19 +38,20 @@ impl SplitPlan {
     /// its reads between steps. Nothing is handed to another thread.
     pub(super) fn run(
         mut self,
-        io: Arc<dyn IoService>,
+        io: Arc<dyn SegmentIoService>,
     ) -> impl Future<Output = VortexResult<Vec<ArrayRef>>> + Send + 'static {
         static EARLY_ANNOUNCE: LazyLock<bool> = LazyLock::new(|| {
             !env::var("VORTEX_SCAN_EARLY_ANNOUNCE").is_ok_and(|value| value == "0")
         });
-        // Register neighboring ranges before any split starts fetching, so the driver can
-        // coalesce them. Keep the session alive for fetches and cancellation. Setting
+        // Register neighboring segments before any split starts fetching, so the service can
+        // coalesce them. The run holds the announcements' handles once the split starts. Setting
         // VORTEX_SCAN_EARLY_ANNOUNCE=0 restores late announcements for comparisons.
-        let prepared: VortexResult<Option<Arc<dyn IoSource>>> = (|| {
+        let prepared = (|| {
             if !*EARLY_ANNOUNCE {
                 return Ok(None);
             }
-            let source = io.session();
+            let session = io.session();
+            let mut announced = Vec::new();
             match self.root.compute()? {
                 PlannerOutput::NeedsIO(batch) => {
                     vortex_ensure!(
@@ -60,7 +60,8 @@ impl SplitPlan {
                             .all(|request| request.intent == IoIntent::Announce),
                         "early announcement encountered an active read"
                     );
-                    source.submit(IoOwnerId(0), batch)?;
+                    let handles = session.submit(IoOwnerId(u64::MAX), &batch)?;
+                    announced.extend(batch.iter().map(|request| request.key).zip(handles));
                 }
                 PlannerOutput::Planner(scope, root) => {
                     self.scope = scope;
@@ -68,12 +69,13 @@ impl SplitPlan {
                 }
                 output => vortex_bail!("unexpected initial announcement output: {output:?}"),
             }
-            Ok(Some(source))
+            VortexResult::Ok(Some((session, announced)))
         })();
         async move {
-            let source = prepared?.unwrap_or_else(|| io.session());
+            let (session, announced) = prepared?.unwrap_or_else(|| (io.session(), Vec::new()));
             let mut run = Run::new();
-            run.admit(self.root, self.scope, source);
+            let root = run.admit(self.root, self.scope, session);
+            run.hold(root, announced);
             let mut batches = Vec::new();
             loop {
                 match run.advance()? {

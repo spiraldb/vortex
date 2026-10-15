@@ -16,6 +16,7 @@ use vortex_array::expr::root;
 use vortex_buffer::Alignment;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
+use vortex_io::segments::SourceId;
 use vortex_mask::Mask;
 use vortex_scan::planning::next::Next;
 use vortex_scan::planning::planner::Planner;
@@ -86,6 +87,7 @@ fn projection_prefetch_budget(
     let planner = FilterPlanner::with_keep(
         ScanPlans {
             session: new_session(),
+            source: SourceId(0),
             locations: Arc::clone(&locations),
             projection: ConcatPlan::try_new(dtype, chunks)?.into_plan(),
             projection_starts: Arc::from([0, 1000, 2000]),
@@ -107,9 +109,12 @@ fn projection_prefetch_budget(
     let actual: Vec<_> = planner
         .prefetch_others(0, budget)?
         .iter()
-        .map(|request| request.target)
+        .map(|request| request.key.segment)
         .collect();
-    let expected: Vec<_> = expected.iter().map(|&id| locations[id].target()).collect();
+    let expected = expected
+        .iter()
+        .map(|&id| SegmentId::try_from(id))
+        .collect::<VortexResult<Vec<_>>>()?;
     assert_eq!(actual, expected);
     Ok(())
 }
@@ -154,6 +159,7 @@ fn predicate_selection(
     let mut planner = FilterPlanner::new(
         ScanPlans {
             session: new_session(),
+            source: SourceId(0),
             locations: Arc::from([]),
             projection: source,
             projection_starts: Arc::from([]),

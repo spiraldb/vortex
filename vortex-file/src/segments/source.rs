@@ -35,10 +35,10 @@ use vortex_error::vortex_panic;
 use vortex_io::ReadAtRequest;
 use vortex_io::ReadAtStream;
 use vortex_io::VortexReadAt;
-use vortex_io::request::trace::next_id as next_trace_id;
-use vortex_io::request::trace::timestamp_ns;
 use vortex_io::runtime::Handle;
 use vortex_io::runtime::JoinOutcome;
+use vortex_io::trace::next_id as next_trace_id;
+use vortex_io::trace::timestamp_ns;
 use vortex_layout::segments::SegmentFuture;
 use vortex_layout::segments::SegmentId;
 use vortex_layout::segments::SegmentSource;
@@ -53,7 +53,7 @@ use crate::read::IoRequest;
 use crate::read::IoRequestStream;
 use crate::read::ReadRequest;
 use crate::read::RequestId;
-use crate::segments::FileScanIo;
+use crate::segments::segment_io::DriverIo;
 
 #[derive(Debug)]
 /// Events sent from segment futures to the coalescing read driver.
@@ -352,8 +352,6 @@ fn trace_read_end(trace_source: u64, req: &IoRequest, success: bool) {
 }
 
 pub struct FileSegmentSource {
-    trace_source: u64,
-    uri: Option<Arc<str>>,
     segments: Arc<[SegmentSpec]>,
     /// A queue for sending read request events to the I/O stream.
     events: mpsc::UnboundedSender<ReadEvent>,
@@ -430,7 +428,6 @@ impl FileSegmentSource {
             metrics.clone(),
         );
 
-        let uri = reader.uri().cloned();
         let next_id = Arc::new(AtomicUsize::new(0));
         let trace_source = next_trace_id();
         let span = tracing::debug_span!(target: "vortex_file::read_lifecycle", "file_reads", uri = ?reader.uri());
@@ -458,8 +455,6 @@ impl FileSegmentSource {
         };
 
         Self {
-            uri,
-            trace_source,
             segments,
             events: send,
             driver,
@@ -517,16 +512,14 @@ impl SegmentSource for FileSegmentSource {
 }
 
 impl FileSegmentSource {
-    /// A service that serves a scan's protocol requests through this source's read driver, so
-    /// they coalesce with each other and with this source's own reads.
-    pub fn scan_io(&self) -> FileScanIo {
-        FileScanIo::new(
-            self.events.clone(),
-            self.driver.clone(),
-            Arc::clone(&self.next_id),
-            self.uri.clone(),
-            self.trace_source,
-        )
+    /// The read driver this source reads through, for the file's segment IO service, so its
+    /// reads coalesce with each other and with this source's own reads.
+    pub(crate) fn driver_io(&self) -> DriverIo {
+        DriverIo {
+            events: self.events.clone(),
+            _driver: self.driver.clone(),
+            next_id: Arc::clone(&self.next_id),
+        }
     }
 }
 

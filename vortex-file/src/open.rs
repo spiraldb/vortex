@@ -14,7 +14,6 @@ use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_io::VortexReadAt;
-use vortex_io::request::IoService;
 use vortex_io::session::RuntimeSessionExt;
 use vortex_layout::segments::InstrumentedSegmentCache;
 use vortex_layout::segments::NoOpSegmentCache;
@@ -36,10 +35,12 @@ use crate::MAX_POSTSCRIPT_SIZE;
 use crate::VortexFile;
 use crate::footer::Footer;
 use crate::segments::BufferSegmentSource;
-use crate::segments::FileIoService;
+use crate::segments::FileSegmentIo;
 use crate::segments::FileSegmentSource;
 use crate::segments::InitialReadSegmentCache;
 use crate::segments::RequestMetrics;
+use crate::segments::segment_io::Backend;
+use crate::segments::segment_io::FileIo;
 
 const INITIAL_READ_SIZE: usize = MAX_POSTSCRIPT_SIZE as usize + EOF_SIZE;
 
@@ -262,6 +263,11 @@ impl VortexOpenOptions {
         };
         footer.validate_file_size(buffer.len() as u64)?;
 
+        let segment_io = FileSegmentIo::of(&opts.session).register(FileIo::new(
+            footer.segment_specs_with_metadata(),
+            Arc::new(NoOpSegmentCache),
+            Backend::Buffer(buffer.clone()),
+        ));
         let segment_source: Arc<dyn SegmentSource> = Arc::new(BufferSegmentSource::new(
             buffer,
             footer.segment_specs_with_metadata(),
@@ -271,7 +277,9 @@ impl VortexOpenOptions {
         } else {
             Arc::new(HashMap::new())
         };
-        let file = VortexFile::new(footer, segment_source, opts.session).with_metadata(metadata);
+        let file = VortexFile::new(footer, segment_source, opts.session)
+            .with_metadata(metadata)
+            .with_segment_io(segment_io);
         Ok(if cache_layout_reader {
             file.with_caching()
         } else {
@@ -283,7 +291,6 @@ impl VortexOpenOptions {
     ///
     /// This is the common path for files, object stores, and custom random-access sources.
     pub async fn open_read<R: VortexReadAt + Clone>(self, reader: R) -> VortexResult<VortexFile> {
-        let has_segment_cache = self.segment_cache.is_some();
         let segment_cache = self
             .segment_cache
             .clone()
@@ -330,17 +337,6 @@ impl VortexOpenOptions {
 
         let metrics = RequestMetrics::new(metrics_registry.as_ref(), self.labels);
 
-        // Scans that drive the planning protocol read through their own service when it is
-        // selected, and through the segment source's read driver otherwise.
-        let batch_io = FileIoService::enabled().then(|| {
-            Arc::new(FileIoService::open(
-                footer.segment_specs_with_metadata(),
-                reader.clone(),
-                self.session.handle(),
-                metrics.clone(),
-            )) as Arc<dyn IoService>
-        });
-
         // Create a segment source backed by the VortexRead implementation.
         let file_source = FileSegmentSource::open(
             footer.segment_specs_with_metadata(),
@@ -348,7 +344,13 @@ impl VortexOpenOptions {
             self.session.handle(),
             metrics,
         );
-        let scan_io = batch_io.unwrap_or_else(|| Arc::new(file_source.scan_io()));
+        // V2 scans read through the session's segment IO service, which shares this source's
+        // read driver and segment cache.
+        let segment_io = FileSegmentIo::of(&self.session).register(FileIo::new(
+            footer.segment_specs_with_metadata(),
+            Arc::clone(&segment_cache) as _,
+            Backend::Driver(file_source.driver_io()),
+        ));
         let segment_source = Arc::new(SharedSegmentSource::new(file_source));
 
         // Wrap up the segment source to first resolve segments from the initial read cache.
@@ -362,15 +364,9 @@ impl VortexOpenOptions {
         } else {
             Arc::new(HashMap::new())
         };
-        let file =
-            VortexFile::new(footer, segment_source, self.session.clone()).with_metadata(metadata);
-        // The direct range service bypasses SegmentSource and its cache. Let V2 use the
-        // segment adapter when a caller explicitly configured a cache.
-        let file = if has_segment_cache {
-            file
-        } else {
-            file.with_scan_io(scan_io)
-        };
+        let file = VortexFile::new(footer, segment_source, self.session.clone())
+            .with_metadata(metadata)
+            .with_segment_io(segment_io);
         Ok(if self.cache_layout_reader {
             file.with_caching()
         } else {
@@ -604,10 +600,8 @@ mod tests {
                 .with_segment_cache(Arc::clone(&cache))
                 .open_read(reader.clone())
                 .await?;
-            assert!(file.scan_io().is_none());
-            let chunks: Vec<ArrayRef> = v2::into_stream(file.scan()?, scan_file(&file))?
-                .try_collect()
-                .await?;
+            let scan = scan_file(&file).ok_or_else(|| vortex_err!("file has no segment IO"))?;
+            let chunks: Vec<ArrayRef> = v2::into_stream(file.scan()?, scan)?.try_collect().await?;
             assert_arrays_eq!(
                 ChunkedArray::try_new(chunks, expected.dtype().clone())?,
                 expected,

@@ -23,7 +23,7 @@ use vortex_array::validity::Validity;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
-use vortex_io::request::IoService;
+use vortex_io::segments::SegmentIoService;
 use vortex_mask::Mask;
 use vortex_scan::planning::planner::WorkScope;
 use vortex_scan::selection::Selection;
@@ -51,7 +51,6 @@ use crate::scan::v2::conjuncts::filter_after_eval;
 use crate::scan::v2::conjuncts::group_conjuncts;
 use crate::scan::v2::file::SharedFile;
 use crate::scan::v2::file::shared_file;
-use crate::scan::v2::io::SegmentScanIo;
 use crate::scan::v2::pruning::PrunedFile;
 use crate::scan::v2::pruning::file_pruning_enabled;
 use crate::scan::v2::pruning::prune_file;
@@ -101,6 +100,7 @@ pub(super) fn prepare_scan<A: 'static + Send>(
     )?;
     let plans = ScanPlans {
         session: builder.session,
+        source: shared.file.io.id(),
         locations: Arc::clone(&shared.file.locations),
         projection: prepared.projection.clone(),
         projection_starts: Arc::clone(&prepared.projection_starts),
@@ -151,12 +151,7 @@ pub(super) fn prepare_scan<A: 'static + Send>(
         pruning: prepared.pruning.clone(),
         plans,
         filter: prepared.filter,
-        io: shared.file.io.clone().unwrap_or_else(|| {
-            Arc::new(SegmentScanIo::new(
-                Arc::clone(&shared.file.segments),
-                shared.segment_ranges(),
-            ))
-        }),
+        io: Arc::clone(shared.file.io.service()),
         shared,
         sparse_projection,
         row_range: builder.row_range,
@@ -299,7 +294,7 @@ pub struct RepeatedScanV2<A: 'static + Send> {
     plans: ScanPlans,
     filter: Option<FilterPlans>,
     /// Serves the splits' reads.
-    io: Arc<dyn IoService>,
+    io: Arc<dyn SegmentIoService>,
     row_range: Option<Range<u64>>,
     selection: Selection,
     splits: Splits,
@@ -315,7 +310,7 @@ impl<A: 'static + Send> RepeatedScanV2<A> {
     }
 
     /// The service the scan's splits read through: one session per planning run root.
-    pub fn io(&self) -> &Arc<dyn IoService> {
+    pub fn io(&self) -> &Arc<dyn SegmentIoService> {
         &self.io
     }
 

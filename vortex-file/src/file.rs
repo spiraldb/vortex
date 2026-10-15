@@ -17,7 +17,7 @@ use vortex_array::dtype::FieldMask;
 use vortex_array::expr::Expression;
 use vortex_buffer::ByteBuffer;
 use vortex_error::VortexResult;
-use vortex_io::request::IoService;
+use vortex_io::segments::RegisteredSource;
 use vortex_layout::LayoutReader;
 use vortex_layout::scan::layout::LayoutReaderDataSource;
 use vortex_layout::scan::scan_builder::ScanBuilder;
@@ -52,8 +52,8 @@ pub struct VortexFile {
     layout_reader_cache: Option<OnceLock<Arc<dyn LayoutReader>>>,
     /// The V2 equivalent of the cached reader tree, enabled by the same option.
     pub(crate) scan_file_cache: Option<OnceLock<ScanFile>>,
-    /// Serves the planning protocol's reads, when the file was opened over a reader.
-    scan_io: Option<Arc<dyn IoService>>,
+    /// The file's registration with its session's segment IO service, which serves V2 scans.
+    segment_io: Option<RegisteredSource>,
 }
 
 fn layout_reader(
@@ -91,22 +91,22 @@ impl VortexFile {
             metadata: Arc::new(HashMap::new()),
             layout_reader_cache: None,
             scan_file_cache: None,
-            scan_io: None,
+            segment_io: None,
         }
     }
 
-    pub(crate) fn with_scan_io(mut self, scan_io: Arc<dyn IoService>) -> Self {
-        self.scan_io = Some(scan_io);
+    pub(crate) fn with_segment_io(mut self, segment_io: RegisteredSource) -> Self {
+        self.segment_io = Some(segment_io);
         if let Some(cache) = &mut self.scan_file_cache {
             cache.take();
         }
         self
     }
 
-    /// The service that serves the planning protocol's reads of this file, when the file was
-    /// opened over a reader.
-    pub fn scan_io(&self) -> Option<&Arc<dyn IoService>> {
-        self.scan_io.as_ref()
+    /// The file's registration with its session's segment IO service, which serves V2 scans.
+    /// Files whose segment source was replaced have none.
+    pub fn segment_io(&self) -> Option<&RegisteredSource> {
+        self.segment_io.as_ref()
     }
 
     pub(crate) fn with_metadata(mut self, metadata: Arc<HashMap<String, ByteBuffer>>) -> Self {
@@ -127,7 +127,7 @@ impl VortexFile {
             metadata: self.metadata,
             layout_reader_cache: Some(OnceLock::new()),
             scan_file_cache: Some(OnceLock::new()),
-            scan_io: self.scan_io,
+            segment_io: self.segment_io,
         }
     }
 
@@ -183,8 +183,8 @@ impl VortexFile {
     /// replacement source.
     pub fn with_segment_source(mut self, segment_source: Arc<dyn SegmentSource>) -> Self {
         self.segment_source = segment_source;
-        // Reads now go to the replacement, which the old read driver knows nothing of.
-        self.scan_io = None;
+        // Reads now go to the replacement, which the file's segment IO knows nothing of.
+        self.segment_io = None;
         if self.layout_reader_cache.is_some() {
             self.layout_reader_cache = Some(OnceLock::new());
         }

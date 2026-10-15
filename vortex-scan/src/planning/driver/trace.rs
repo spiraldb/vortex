@@ -2,10 +2,9 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use tracing::debug;
-use vortex_io::request::IoRequest;
-use vortex_io::request::IoTarget;
-use vortex_io::request::trace::next_id;
-use vortex_io::request::trace::timestamp_ns;
+use vortex_io::segments::SegmentRequest;
+use vortex_io::trace::next_id;
+use vortex_io::trace::timestamp_ns;
 
 use super::Item;
 use super::Output;
@@ -40,7 +39,7 @@ impl Trace {
         debug!(target: "vortex_scan::driver", run = self.id, ts_ns = timestamp_ns(), event,
             owner = work.id.0, root = work.root.0, file = work.scope.file_ordinal,
             row_start = work.scope.rows.start, row_end = work.scope.rows.end, kind, stage,
-            outstanding = work.outstanding.len(), state = ?work.state(), "scan driver");
+            pending = work.pending.len(), state = ?work.state(), "scan driver");
     }
 
     pub(super) fn compute(&self, work: &Work, start_ns: u64, output: &Output) {
@@ -62,14 +61,10 @@ impl Trace {
             state = ?work.state(), "scan driver");
     }
 
-    pub(super) fn request(&self, work: &Work, request: &IoRequest) {
-        let (target, offset, length) = match request.target {
-            IoTarget::Range { offset, len, .. } => ("range", offset, len),
-            IoTarget::Size => ("size", 0, 0),
-        };
+    pub(super) fn request(&self, work: &Work, request: &SegmentRequest) {
         debug!(target: "vortex_scan::driver", run = self.id, ts_ns = timestamp_ns(),
             event = "request", owner = work.id.0, root = work.root.0,
-            request = request.request.0, intent = ?request.intent, target, offset, length,
-            "scan driver");
+            source = request.key.source.0, segment = *request.key.segment,
+            intent = ?request.intent, "scan driver");
     }
 }
