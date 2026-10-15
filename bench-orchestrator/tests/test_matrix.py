@@ -55,7 +55,14 @@ EXPECTED_IDS = {
     "pr-compact": COMPACT_IDS,
     "pr-all": PR_FULL_IDS,
     "pr-full": PR_FULL_IDS,
-    "nightly": ("tpch-nvme", "tpch-s3", "tpcds-nvme-10", "tpcds-nvme-100"),
+    "nightly": (
+        "tpch-nvme",
+        "tpch-s3",
+        "tpcds-nvme-10",
+        "tpcds-nvme-100",
+        "tpcds-s3-10",
+        "tpcds-s3-100",
+    ),
 }
 
 
