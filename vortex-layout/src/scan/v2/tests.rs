@@ -336,3 +336,21 @@ async fn primitive_column() -> VortexResult<()> {
     );
     Ok(())
 }
+
+/// Every chunk of the default zoned table is its own split, so the scan runs them in parallel.
+#[rstest]
+#[tokio::test]
+async fn splits_at_chunk_starts(
+    #[values(Strategy::Flat, Strategy::Table, Strategy::ZonedTable)] strategy: Strategy,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, strategy.get().as_ref()).await?;
+    let Executor::V2(scan) = select_supported(builder(&session, &segments, &layout)?)? else {
+        panic!("the scan should run on the planner-driven executor");
+    };
+    let expected = (0..CHUNKS as u64)
+        .map(|chunk| chunk * CHUNK_ROWS as u64..(chunk + 1) * CHUNK_ROWS as u64)
+        .collect::<Vec<_>>();
+    assert_eq!(scan.splits, expected);
+    Ok(())
+}

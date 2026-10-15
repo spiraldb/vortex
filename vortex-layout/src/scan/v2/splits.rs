@@ -15,15 +15,17 @@ use vortex_error::VortexResult;
 use crate::plan::physical::Concat;
 use crate::plan::physical::Eval;
 use crate::plan::physical::Filter;
+use crate::plan::physical::LegacyStats;
 use crate::plan::physical::Pack;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::Take;
+use crate::plan::physical::Zoned;
 
 /// The row positions where the chunks of `plans` start, over their shared row domain, sorted and
 /// without duplicates.
 ///
 /// This follows plans whose children cover the same rows, or known parts of them, and stops at any
-/// other plan: a take's values cover other rows.
+/// other plan: a take's values cover other rows, and zone statistics cover zones.
 pub(super) fn chunk_starts<'a>(
     plans: impl IntoIterator<Item = &'a PlanRef>,
 ) -> VortexResult<Vec<u64>> {
@@ -42,6 +44,12 @@ fn collect_starts(plan: &PlanRef, offset: u64, starts: &mut Vec<u64>) -> VortexR
             starts.push(offset + child_offset);
             collect_starts(&plan.child_required(index)?, offset + child_offset, starts)?;
         }
+    } else if let Some(zoned) = plan.as_opt::<Zoned>() {
+        if let Some(data) = zoned.data_plan()? {
+            collect_starts(&data, offset, starts)?;
+        }
+    } else if let Some(stats) = plan.as_opt::<LegacyStats>() {
+        collect_starts(&stats.data_plan()?, offset, starts)?;
     } else if plan.is::<Take>() {
         collect_starts(&plan.child_required(0)?, offset, starts)?;
     } else if plan.is::<Pack>() || plan.is::<Filter>() || plan.is::<Eval>() {
