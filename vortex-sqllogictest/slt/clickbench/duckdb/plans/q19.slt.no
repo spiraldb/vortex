@@ -158,19 +158,19 @@ logical_opt [
                         "extra_info": {
                             "Filters": "($.UserID = 435090932899640449i64)",
                             "Function": "Vortex Scan",
-                            "Estimated Cardinality": "40000"
+                            "Estimated Cardinality": "200000"
                         }
                     }
                 ],
                 "extra_info": {
                     "Expressions": "UserID",
-                    "Estimated Cardinality": "40000"
+                    "Estimated Cardinality": "200000"
                 }
             }
         ],
         "extra_info": {
             "Expressions": "UserID",
-            "Estimated Cardinality": "40000"
+            "Estimated Cardinality": "200000"
         }
     }
 ]
@@ -182,7 +182,7 @@ physical_plan [
             "Function": "Vortex Scan",
             "Filters": "UserID=435090932899640449",
             "Projections": "UserID",
-            "Estimated Cardinality": "40000"
+            "Estimated Cardinality": "200000"
         }
     }
 ]

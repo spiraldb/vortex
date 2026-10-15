@@ -431,6 +431,14 @@ lto = false
 [profile.bench.package."*"]
 debug = false
 
+# Maturin builds with `cargo rustc`, which treats `--profile bench` as a request for a libtest
+# benchmark executable. This profile has the same settings and builds a normal library.
+[profile.bench_python]
+inherits = "bench"
+
+[profile.bench_python.package."*"]
+debug = false
+
 [profile.samply]
 inherits = "release"
 codegen-units = 1
