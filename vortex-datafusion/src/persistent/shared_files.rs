@@ -187,7 +187,10 @@ mod tests {
         let split = meta("split.vortex", 100);
         let whole = meta("whole.vortex", 100);
         let groups = vec![
-            FileGroup::new(vec![ranged(&split, 0, 50), PartitionedFile::from(whole.clone())]),
+            FileGroup::new(vec![
+                ranged(&split, 0, 50),
+                PartitionedFile::from(whole.clone()),
+            ]),
             FileGroup::new(vec![ranged(&split, 50, 100), ranged(&whole, 0, 100)]),
         ];
 
