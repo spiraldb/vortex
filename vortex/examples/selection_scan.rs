@@ -10,6 +10,8 @@
 //! `decode` consumes the selected rows in all columns as Arrow record batches; `decode-metrics`
 //! measures allocations while doing the same work.
 //! Build with `VORTEX_SELECTION_METRICS=1` for the separate allocation-instrumented executable.
+//! Use `indices:16,32` in place of the pattern to select exact, strictly increasing row indices;
+//! ROWS must match the number supplied. This supports targeted large-row and null-row checks.
 
 use std::alloc::GlobalAlloc;
 use std::alloc::Layout;
@@ -201,6 +203,29 @@ async fn decode(
 }
 
 fn indices(rows: u64, count: usize, pattern: &str, seed: u64) -> Result<Buffer<u64>> {
+    if let Some(indices) = pattern.strip_prefix("indices:") {
+        let selected = if indices.is_empty() {
+            Vec::new()
+        } else {
+            indices
+                .split(',')
+                .map(str::parse::<u64>)
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        ensure!(
+            selected.len() == count,
+            "ROWS must match the explicit selection length"
+        );
+        ensure!(
+            selected.iter().all(|&index| index < rows),
+            "Selected row is outside the file"
+        );
+        ensure!(
+            selected.windows(2).all(|pair| pair[0] < pair[1]),
+            "Indices must be strictly increasing"
+        );
+        return Ok(Buffer::from(selected));
+    }
     let mut rng = StdRng::seed_from_u64(seed);
     let mut result = Vec::with_capacity(count);
     ensure!(count as u64 <= rows, "Selection exceeds the file row count");
