@@ -418,11 +418,16 @@ where
         // Each block draws its own width, from zero to the native width, so values wider than
         // their block's width become patches.
         let num_blocks = len.div_ceil(FL_CHUNK_SIZE);
-        let bit_widths: Vec<u8> = tc.draw(
-            gs::vecs(gs::integers().max_value(T::PTYPE.bit_width() as u8))
+        let native = T::PTYPE.bit_width() as u8;
+        let mut bit_widths: Vec<u8> = tc.draw(
+            gs::vecs(gs::integers().max_value(native))
                 .min_size(num_blocks)
                 .max_size(num_blocks),
         );
+        // `encode_blocked` rejects all blocks at the native width; keep one block packed.
+        if bit_widths.iter().all(|&w| w == native) {
+            bit_widths[0] = native - 1;
+        }
         BitPackedData::encode_blocked(&encoded_array.into_array(), &bit_widths, &mut ctx)?
     } else {
         BitPacked::encode(&encoded_array.into_array(), bit_width, &mut ctx)?
