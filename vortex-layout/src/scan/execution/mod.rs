@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Layout-level planners and morsels for the planning protocol.
+//! Scan execution over physical plans through the planner I/O and compute protocol.
 //!
-//! A split is evaluated over physical plans: a `ProjectionPlanner` emits a `ProjectionMorsel`
-//! per projection split, which runs the projection plan over the split's selected rows through
+//! A `ProjectionPlanner` emits one `ProjectionMorsel` for each fixed-size work chunk. The morsel
+//! runs the physical projection plan over the chunk's selected rows through
 //! the pipeline [`Scan`](crate::plan::physical::pipeline::Scan). Every segment read is published
-//! as a protocol request, so the planning driver decides when IO happens.
+//! through a `ScanAdaptor`, so the planning driver can advance other work while reads wait.
 
-mod graph;
+mod adaptor;
 mod projection;
 
 use std::sync::Arc;
@@ -55,10 +55,6 @@ pub(super) struct ScanPlans {
     pub(super) locations: Arc<[SegmentLocation]>,
     /// The optimized projection plan, over the scan's root row domain.
     pub(super) projection: PlanRef,
-    /// Where the chunks the projection reads start, over the root row domain, sorted. A split's
-    /// projection is cut at each of these, so every projection split reads at most one chunk of
-    /// every column.
-    pub(super) projection_starts: Arc<[u64]>,
     /// The global row index of the root row domain's first row.
     pub(super) row_offset: u64,
     /// Whole values, such as dictionary values, shared by the splits of this scan. Their plans

@@ -29,7 +29,7 @@ use vortex_io::request::IoSource;
 use vortex_io::request::IoTarget;
 use vortex_utils::aliases::hash_map::HashMap;
 
-use crate::scan::planning::SegmentLocation;
+use crate::scan::execution::SegmentLocation;
 use crate::segments::SegmentFuture;
 use crate::segments::SegmentId;
 use crate::segments::SegmentSource;
@@ -248,7 +248,7 @@ mod tests {
 
     use super::SegmentIoSource;
     use super::segment_ranges;
-    use crate::scan::planning::SegmentLocation;
+    use crate::scan::execution::SegmentLocation;
     use crate::segments::SegmentFuture;
     use crate::segments::SegmentId;
     use crate::segments::SegmentSource;

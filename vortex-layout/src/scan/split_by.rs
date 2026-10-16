@@ -57,28 +57,17 @@ impl SplitBy {
         row_range: &Range<u64>,
         field_mask: &[FieldMask],
     ) -> VortexResult<Vec<u64>> {
-        let boundaries = if matches!(self, Self::RowCount(_)) {
-            Vec::new()
-        } else {
-            layout_boundaries(layout_reader, row_range, field_mask)?
-        };
-        self.split_boundaries(boundaries, row_range)
-    }
-
-    /// Applies this split policy to natural boundaries from a layout or physical plan.
-    pub(super) fn split_boundaries(
-        &self,
-        boundaries: Vec<u64>,
-        row_range: &Range<u64>,
-    ) -> VortexResult<Vec<u64>> {
         Ok(match *self {
-            SplitBy::Layout => boundaries,
+            SplitBy::Layout => layout_boundaries(layout_reader, row_range, field_mask)?,
             SplitBy::LayoutSubSplitting { max_rows } => {
                 vortex_ensure!(
                     max_rows > 0,
                     "SplitBy::LayoutSubSplitting requires a non-zero max_rows"
                 );
-                subdivide_large_spans(boundaries, max_rows)
+                subdivide_large_spans(
+                    layout_boundaries(layout_reader, row_range, field_mask)?,
+                    max_rows,
+                )
             }
             SplitBy::RowCount(n) => row_range
                 .clone()

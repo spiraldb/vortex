@@ -2,11 +2,11 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 pub mod arrow;
+mod execution;
 mod filter;
 pub mod layout;
 mod limit;
 pub mod multi;
-mod planning;
 pub mod repeated_scan;
 pub mod scan_builder;
 pub mod split_by;
