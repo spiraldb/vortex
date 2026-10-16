@@ -5,6 +5,8 @@ use vortex_error::VortexResult;
 
 use crate::expr::BoundExpression;
 use crate::scalar_fn::ExpressionReduceNode;
+use crate::scalar_fn::ScalarFnVTableExt;
+use crate::scalar_fn::fns::cast::Cast;
 
 impl BoundExpression {
     /// Optimize the root expression node only, iterating to convergence.
@@ -77,6 +79,21 @@ impl BoundExpression {
             }
         }
 
+        // Rules may narrow the nullability of the declared dtype (e.g. `mask(x, true)` to a
+        // non-nullable `x`); cast back so that optimization never changes the dtype.
+        if let Some(optimized) = current.take() {
+            current = Some(
+                if optimized.dtype() != self.dtype()
+                    && optimized.dtype().eq_ignore_nullability(self.dtype())
+                    && self.dtype().is_nullable()
+                {
+                    Cast.try_new_bound_expr(self.dtype().clone(), [optimized])?
+                } else {
+                    optimized
+                },
+            );
+        }
+
         Ok(current)
     }
 
@@ -123,9 +140,12 @@ impl BoundExpression {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
+    use vortex_buffer::buffer;
     use vortex_error::VortexResult;
     use vortex_error::vortex_err;
 
+    use crate::IntoArray;
+    use crate::arrays::StructArray;
     use crate::dtype::DType;
     use crate::dtype::FieldName;
     use crate::dtype::Nullability;
@@ -138,6 +158,7 @@ mod tests {
     use crate::expr::get_item;
     use crate::expr::lit;
     use crate::expr::lt_eq;
+    use crate::expr::mask;
     use crate::expr::merge;
     use crate::expr::or;
     use crate::expr::pack;
@@ -224,6 +245,25 @@ mod tests {
         let original = expr.bind(&scope)?;
         let optimized = expr.bind(&scope)?.optimize_recursive()?;
         assert_eq!(optimized.dtype(), original.dtype());
+
+        Ok(())
+    }
+
+    /// `mask(x, true)` simplifies to `x`, but `mask` always returns a nullable dtype, so the
+    /// optimized expression must cast a non-nullable `x` back to keep the declared dtype.
+    #[test]
+    fn optimize_mask_true_preserves_nullable_dtype() -> VortexResult<()> {
+        let array =
+            StructArray::from_fields(&[("c0", buffer![1i32, 2, 3].into_array())])?.into_array();
+        let bound = mask(get_item("c0", root()), lit(true)).bind(array.dtype())?;
+        assert_eq!(
+            bound.dtype(),
+            &DType::Primitive(PType::I32, Nullability::Nullable)
+        );
+
+        let optimized = bound.optimize_recursive()?;
+        assert_eq!(optimized.dtype(), bound.dtype(), "got {optimized}");
+        assert_eq!(array.apply_bound(&optimized)?.dtype(), bound.dtype());
 
         Ok(())
     }

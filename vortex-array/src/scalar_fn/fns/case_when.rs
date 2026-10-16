@@ -502,6 +502,7 @@ mod tests {
     use crate::scalar::Scalar;
     use crate::scalar_fn::ScalarFnVTableExt;
     use crate::scalar_fn::VecExecutionArgs;
+    use crate::scalar_fn::fns::cast::Cast;
     use crate::scalar_fn::fns::operators::Operator;
     use crate::validity::Validity;
 
@@ -1605,6 +1606,12 @@ mod tests {
         )
     }
 
+    /// The COALESCE rewrite yields a non-nullable `fill_null`, which the optimizer casts back to
+    /// CASE WHEN's nullable result dtype.
+    fn is_nullable_fill_null(expr: &BoundExpression) -> bool {
+        expr.dtype().is_nullable() && expr.is::<Cast>() && expr.child(0).is::<FillNull>()
+    }
+
     #[test]
     fn test_simplify_coalesce_is_null_rewrites_to_fill_null() -> VortexResult<()> {
         // CASE WHEN is_null(x) THEN 0 ELSE x END  ==>  fill_null(x, 0)
@@ -1612,10 +1619,7 @@ mod tests {
         let optimized = expr
             .bind(&nullable_i64_scope(&["x"]))?
             .optimize_recursive()?;
-        assert!(
-            optimized.to_string().starts_with("vortex.fill_null"),
-            "expected fill_null, got {optimized}"
-        );
+        assert!(is_nullable_fill_null(&optimized), "got {optimized}");
         Ok(())
     }
 
@@ -1626,10 +1630,7 @@ mod tests {
         let optimized = expr
             .bind(&nullable_i64_scope(&["x"]))?
             .optimize_recursive()?;
-        assert!(
-            optimized.to_string().starts_with("vortex.fill_null"),
-            "expected fill_null, got {optimized}"
-        );
+        assert!(is_nullable_fill_null(&optimized), "got {optimized}");
         Ok(())
     }
 
@@ -1754,23 +1755,13 @@ mod tests {
 
         let original = case_when(is_null(root()), lit(0i64), root());
         let optimized = original.bind(&scope)?.optimize_recursive()?;
-        assert!(
-            optimized.to_string().starts_with("vortex.fill_null"),
-            "expected fill_null, got {optimized}"
-        );
+        assert!(is_nullable_fill_null(&optimized), "got {optimized}");
 
-        // Original keeps CASE WHEN's nullable result dtype; the rewrite tightens it to
-        // NonNullable because a non-null fill cannot leave any nulls behind. Values match.
-        assert_arrays_eq!(
-            evaluate_expr(&original, &array),
-            PrimitiveArray::from_option_iter([Some(1i64), Some(0), Some(3)]).into_array(),
-            &mut ctx
-        );
-        assert_arrays_eq!(
-            evaluate_bound_expr(&optimized, &array),
-            buffer![1i64, 0, 3].into_array(),
-            &mut ctx
-        );
+        // Both keep CASE WHEN's nullable result dtype and produce the same values.
+        let expected =
+            PrimitiveArray::from_option_iter([Some(1i64), Some(0), Some(3)]).into_array();
+        assert_arrays_eq!(evaluate_expr(&original, &array), expected, &mut ctx);
+        assert_arrays_eq!(evaluate_bound_expr(&optimized, &array), expected, &mut ctx);
         Ok(())
     }
 
@@ -1784,7 +1775,7 @@ mod tests {
             case_when(is_not_null(root()), root(), lit("fallback")),
         ] {
             let optimized = expr.bind(input.dtype())?.optimize_recursive()?;
-            assert!(optimized.is::<FillNull>(), "{optimized}");
+            assert!(is_nullable_fill_null(&optimized), "{optimized}");
             let result = input
                 .clone()
                 .apply_bound(&optimized)?
@@ -1792,7 +1783,7 @@ mod tests {
                 .into_array();
             assert_arrays_eq!(
                 result,
-                VarBinViewArray::from_iter_str(["a", "fallback"]),
+                VarBinViewArray::from_iter_nullable_str([Some("a"), Some("fallback")]),
                 &mut ctx
             );
         }

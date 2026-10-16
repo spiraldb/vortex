@@ -218,10 +218,12 @@ mod test {
             .bind(&DType::Null)
             .and_then(|expr| expr.optimize())
             .vortex_expect("Simplification");
-        assert_eq!(
-            &simplified_true,
-            &input_expr.bind(&DType::Null).vortex_expect("bind")
+        // `mask` is always nullable, so the unmasked input is cast back to that dtype.
+        let expected_true_expr = bound::cast(
+            input_expr.bind(&DType::Null).vortex_expect("bind"),
+            DType::Primitive(PType::U32, Nullable),
         );
+        assert_eq!(&simplified_true, &expected_true_expr);
 
         let mask_false_expr = mask(input_expr, false_mask_expr);
         let simplified_false = mask_false_expr
