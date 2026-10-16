@@ -4,28 +4,36 @@
 //! Splits a scan from its plans rather than from the layout reader.
 //!
 //! Full scans use the projected columns' chunk boundaries. Sparse scans group selected rows
-//! within a projected column's chunks, leaving other columns' chunk plans lazy.
+//! using a projected column's chunks, leaving the chunk plans lazy.
 
 use std::borrow::Cow;
 use std::iter;
 use std::ops::Range;
 
 use itertools::Itertools;
+use vortex_array::dtype::DType;
 use vortex_error::VortexResult;
 use vortex_error::vortex_ensure;
 use vortex_scan::selection::Selection;
 
 use crate::plan::physical::Concat;
+use crate::plan::physical::ConcatPlan;
 use crate::plan::physical::Eval;
 use crate::plan::physical::Filter;
 use crate::plan::physical::LegacyStats;
+use crate::plan::physical::ListPack;
 use crate::plan::physical::Pack;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::Take;
 use crate::plan::physical::Zoned;
 
-/// Groups sparse selections within one projected column's chunks. Choose the partition whose
-/// selected chunks come closest to four tasks per worker, without visiting the chunk children.
+struct Partition {
+    plan: PlanRef,
+    list_elements: bool,
+}
+
+/// Groups sparse selections using projected chunk boundaries. Choose the partition closest to
+/// four tasks per worker, without visiting the chunk children.
 pub(super) fn selection_splits(
     selection: &Selection,
     rows: &Range<u64>,
@@ -48,12 +56,20 @@ pub(super) fn selection_splits(
         return Ok(Some(vec![*index..index + 1]));
     }
     let mut partitions = Vec::new();
-    collect_partitions(projection, &mut partitions)?;
+    collect_partitions(projection, false, &mut partitions)?;
     let target = parallelism.max(1).saturating_mul(4);
     let mut best = None;
     for partition in partitions {
-        let concat = partition.as_::<Concat>();
-        let ranges = selected_chunks(&indices, concat.row_offsets());
+        let plan = &partition.plan;
+        if plan.row_count() == 0 || (partition.list_elements && parallelism <= 1) {
+            continue;
+        }
+        let concat = plan.as_::<Concat>();
+        let ranges = if partition.list_elements {
+            selected_list_chunks(&indices, concat, projection.row_count())
+        } else {
+            selected_chunks(&indices, concat.row_offsets())
+        };
         let score = ranges.len().abs_diff(target);
         if best.as_ref().is_none_or(|(previous, _)| score < *previous) {
             best = Some((score, ranges));
@@ -93,20 +109,29 @@ pub(super) fn sparse_indices<'a>(
 }
 
 /// Stops at the first concatenation of each projected column. Its children can remain lazy.
-fn collect_partitions(plan: &PlanRef, partitions: &mut Vec<PlanRef>) -> VortexResult<()> {
+fn collect_partitions(
+    plan: &PlanRef,
+    list_elements: bool,
+    partitions: &mut Vec<Partition>,
+) -> VortexResult<()> {
     if plan.is::<Concat>() {
-        partitions.push(plan.clone());
+        partitions.push(Partition {
+            plan: plan.clone(),
+            list_elements,
+        });
     } else if let Some(zoned) = plan.as_opt::<Zoned>() {
         if let Some(data) = zoned.data_plan()? {
-            collect_partitions(&data, partitions)?;
+            collect_partitions(&data, list_elements, partitions)?;
         }
     } else if let Some(legacy) = plan.as_opt::<LegacyStats>() {
-        collect_partitions(&legacy.data_plan()?, partitions)?;
+        collect_partitions(&legacy.data_plan()?, list_elements, partitions)?;
     } else if let Some(take) = plan.as_opt::<Take>() {
-        collect_partitions(&take.codes()?, partitions)?;
+        collect_partitions(&take.codes()?, list_elements, partitions)?;
+    } else if let Some(list) = plan.as_opt::<ListPack>() {
+        collect_partitions(&list.elements()?, true, partitions)?;
     } else if plan.is::<Pack>() || plan.is::<Filter>() || plan.is::<Eval>() {
         for child in plan.children().iter_refs() {
-            collect_partitions(child?, partitions)?;
+            collect_partitions(child?, list_elements, partitions)?;
         }
     }
     Ok(())
@@ -127,6 +152,46 @@ fn selected_chunks(indices: &[u64], offsets: &[u64]) -> Vec<Range<u64>> {
             ranges.push(index..index + 1);
             previous = Some(chunk);
         }
+    }
+    ranges
+}
+
+/// Uses relative element positions as task-sizing hints; execution resolves exact list offsets.
+fn selected_list_chunks(indices: &[u64], elements: &ConcatPlan, row_count: u64) -> Vec<Range<u64>> {
+    // Tiny element chunks do not amortize a separate root task and offsets read.
+    // Group selected primitive chunks into roughly 2 MiB of uncompressed work.
+    let min_rows = match elements.dtype() {
+        DType::Primitive(ptype, _) => (2 * 1024 * 1024 / ptype.byte_width()) as u64,
+        _ => 0,
+    };
+    let offsets = elements.row_offsets();
+    let mut ranges: Vec<Range<u64>> = Vec::new();
+    let mut previous = None;
+    let mut element_rows = 0_u64;
+    for &index in indices {
+        // floor(boundary * row_count / element_count) <= index, inverted so only
+        // selected rows need mapping rather than every element chunk boundary.
+        let element_index = ((u128::from(index) + 1) * u128::from(elements.row_count()) - 1)
+            / u128::from(row_count);
+        let chunk = offsets
+            .partition_point(|&offset| u128::from(offset) <= element_index)
+            .saturating_sub(1);
+        if (previous == Some(chunk) || element_rows < min_rows)
+            && let Some(last) = ranges.last_mut()
+        {
+            last.end = index + 1;
+        } else {
+            ranges.push(index..index + 1);
+            element_rows = 0;
+        }
+        if previous != Some(chunk) {
+            let end = offsets
+                .get(chunk + 1)
+                .copied()
+                .unwrap_or(elements.row_count());
+            element_rows = element_rows.saturating_add(end - offsets[chunk]);
+        }
+        previous = Some(chunk);
     }
     ranges
 }
@@ -240,6 +305,7 @@ mod tests {
 
     use super::*;
     use crate::plan::physical::ConcatPlan;
+    use crate::plan::physical::ListPackPlan;
     use crate::plan::physical::SegmentScanPlan;
     use crate::plan::physical::TakePlan;
     use crate::segments::SegmentId;
@@ -302,12 +368,18 @@ mod tests {
     fn groups_for_available_workers(
         #[case] workers: usize,
         #[case] expected_chunks: usize,
+        #[values(0, 1, 2)] list_depth: u32,
     ) -> VortexResult<()> {
         let selected = Selection::IncludeByIndex(StrictSortedBuffer::try_new(Buffer::from_iter(
-            (0..10).map(|i| i * 10_000 + 10),
+            (0..10).map(|i| i * 1_000_000 + 10),
         ))?);
-        let coarse = partition(&[50_000; 2])?;
-        let fine = partition(&[10_000; 10])?;
+        let coarse = partition(&[5_000_000; 2])?;
+        let mut row_count = 10_000_000 * 4_u64.pow(list_depth);
+        let mut fine = partition(&[row_count / 10; 10])?;
+        for _ in 0..list_depth {
+            row_count /= 4;
+            fine = list_partition(fine, row_count)?;
+        }
         let fields = vortex_array::dtype::StructFields::from_iter([
             ("coarse", coarse.dtype().clone()),
             ("fine", fine.dtype().clone()),
@@ -315,12 +387,12 @@ mod tests {
         let plan = crate::plan::physical::PackPlan::try_new(
             fields,
             false.into(),
-            100_000,
+            10_000_000,
             vec![coarse, fine],
             None,
         )?
         .into_plan();
-        let splits = selection_splits(&selected, &(0..100_000), &plan, workers)?
+        let splits = selection_splits(&selected, &(0..10_000_000), &plan, workers)?
             .ok_or_else(|| vortex_error::vortex_err!("expected sparse splits"))?;
         assert_eq!(splits.len(), expected_chunks);
         assert_eq!(
@@ -329,6 +401,71 @@ mod tests {
                 .map(|range| selected.row_count_in_range(range))
                 .sum::<u64>(),
             10
+        );
+        Ok(())
+    }
+
+    fn list_partition(elements: PlanRef, row_count: u64) -> VortexResult<PlanRef> {
+        Ok(ListPackPlan::try_new(
+            false.into(),
+            row_count,
+            elements,
+            partition(&[row_count + 1])?,
+            None,
+        )?
+        .into_plan())
+    }
+
+    #[rstest]
+    fn small_list_chunks_keep_the_coarser_projection_partition(
+        #[values(1, 30)] workers: usize,
+    ) -> VortexResult<()> {
+        let selected = Selection::IncludeByIndex(StrictSortedBuffer::try_new(Buffer::from_iter(
+            (0..100).map(|i| i * 10_000),
+        ))?);
+        let ids = partition(&[125_000; 8])?;
+        let lists = list_partition(partition(&[16_384; 640])?, 1_000_000)?;
+        let fields = vortex_array::dtype::StructFields::from_iter([
+            ("id", ids.dtype().clone()),
+            ("list", lists.dtype().clone()),
+        ]);
+        let expected = selection_splits(&selected, &(0..1_000_000), &ids, workers)?;
+        let plan = crate::plan::physical::PackPlan::try_new(
+            fields,
+            false.into(),
+            1_000_000,
+            vec![ids, lists],
+            None,
+        )?
+        .into_plan();
+        assert_eq!(
+            selection_splits(&selected, &(0..1_000_000), &plan, workers)?,
+            expected
+        );
+        Ok(())
+    }
+
+    #[rstest]
+    #[case::empty_elements(vec![0, 0], 1000, vec![10, 500], vec![10..501])]
+    #[case::coincident_boundaries(vec![1, 1, 998], 100, vec![0, 50], vec![0..51])]
+    #[case::large_coordinates(
+        vec![u64::MAX / 2, u64::MAX - u64::MAX / 2],
+        u64::MAX - 1,
+        vec![1, u64::MAX / 2],
+        vec![1..2, u64::MAX / 2..u64::MAX / 2 + 1],
+    )]
+    fn list_partitions_cover_selected_rows(
+        #[case] chunks: Vec<u64>,
+        #[case] row_count: u64,
+        #[case] indices: Vec<u64>,
+        #[case] expected: Vec<Range<u64>>,
+    ) -> VortexResult<()> {
+        let plan = list_partition(partition(&chunks)?, row_count)?;
+        let selection =
+            Selection::IncludeByIndex(StrictSortedBuffer::try_new(Buffer::from(indices))?);
+        assert_eq!(
+            selection_splits(&selection, &(0..row_count), &plan, 30)?,
+            Some(expected)
         );
         Ok(())
     }
