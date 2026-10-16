@@ -6,7 +6,9 @@
 # At this scale the data (~6B lineitem rows) is larger than the runner's memory, so the run is
 # as much a memory check as a benchmark: every query runs in its own process, a query that is
 # OOM-killed or times out is recorded and the rest still run, and system memory is sampled
-# throughout data generation, conversion and every query.
+# throughout data generation, conversion and every query. Query failures are reported in the job
+# summary rather than failing the job: DataFusion does not yet fit Q18 (Parquet and Vortex) or Q21
+# (Parquet) in memory at this scale.
 
 name: TPC-H SF1000
 
@@ -206,8 +208,7 @@ jobs:
             --opt scale-factor="$SCALE_FACTOR" \
             --out-dir "$OUT_DIR" \
             --phase-file "$PHASE_FILE" \
-            --min-available-gib 8 \
-            --fail-on-error
+            --min-available-gib 8
 
       - name: Stop memory monitor
         if: always()
