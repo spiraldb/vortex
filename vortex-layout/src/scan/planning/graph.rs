@@ -30,17 +30,17 @@ use crate::segments::SegmentId;
 
 /// Rows a running plan produced, in row order.
 #[derive(Clone)]
-pub(crate) struct Piece {
+pub(super) struct Piece {
     /// Orders the piece among the pieces of one graph.
-    pub(crate) rows: Range<u64>,
+    pub(super) rows: Range<u64>,
     /// The selected rows the piece holds.
-    pub(crate) array: ArrayRef,
+    pub(super) array: ArrayRef,
 }
 
 /// A plan running over one row range on the pipeline [`Scan`].
 ///
 /// The scan produces the selected rows in row order and leaves its reads to its owner.
-pub(crate) struct ScanGraph {
+pub(super) struct ScanGraph {
     scan: Scan,
     /// A step the scan already took that the owner has not seen.
     pending: Option<Turn>,
@@ -60,7 +60,7 @@ impl ScanGraph {
     /// Compiles nothing yet: the scan compiles `plan` over `rows`, restricted to `mask`, on its
     /// first step. `row_offset` is the global row index of the plan's first row, and `values` the
     /// whole values shared with the split's other scans.
-    pub(crate) fn try_new(
+    pub(super) fn try_new(
         session: VortexSession,
         plan: &PlanRef,
         rows: Range<u64>,
@@ -119,7 +119,7 @@ impl ScanGraph {
 }
 
 /// What one [`ProtocolGraph::compute`] produced.
-pub(crate) enum GraphStep {
+pub(super) enum GraphStep {
     /// Control returns to the owner with CPU work still ready.
     Yield,
     /// Requests to publish, each returned once.
@@ -133,7 +133,7 @@ pub(crate) enum GraphStep {
 /// The scan names segments by id; the protocol names byte ranges. Each scan read becomes a
 /// `Fetch` of the segment's range at the segment's alignment, and each delivery is handed back to
 /// the scan under its own id.
-pub(crate) struct ProtocolGraph {
+pub(super) struct ProtocolGraph {
     graph: ScanGraph,
     locations: Arc<[SegmentLocation]>,
     /// Published and undelivered requests, with the scan read and segment each one answers.
@@ -147,7 +147,7 @@ pub(crate) struct ProtocolGraph {
 impl ProtocolGraph {
     /// Wraps `graph`, numbering its requests from `first_id`. Request ids must be unique over an
     /// owner's lifetime.
-    pub(crate) fn new(graph: ScanGraph, locations: Arc<[SegmentLocation]>, first_id: u32) -> Self {
+    pub(super) fn new(graph: ScanGraph, locations: Arc<[SegmentLocation]>, first_id: u32) -> Self {
         Self {
             graph,
             locations,
@@ -158,7 +158,7 @@ impl ProtocolGraph {
     }
 
     /// The owner's protocol state while the graph is running.
-    pub(crate) fn state(&self) -> State {
+    pub(super) fn state(&self) -> State {
         if self.failed.is_some() {
             return State::NeedsCompute;
         }
@@ -169,7 +169,7 @@ impl ProtocolGraph {
         }
     }
 
-    pub(crate) fn compute(&mut self) -> VortexResult<GraphStep> {
+    pub(super) fn compute(&mut self) -> VortexResult<GraphStep> {
         if let Some(error) = self.failed.take() {
             return Err(error);
         }
@@ -214,7 +214,7 @@ impl ProtocolGraph {
     /// Hands a delivered read to the scan. The driver only delivers requests this graph
     /// published, so anything else is a driver bug. Bytes the scan cannot take fail the owner's
     /// next compute.
-    pub(crate) fn set_io_result(&mut self, id: request::IoRequestId, result: IoResult) {
+    pub(super) fn set_io_result(&mut self, id: request::IoRequestId, result: IoResult) {
         let Some((read, segment_id)) = self.outstanding.remove(&id.0) else {
             vortex_panic!("ProtocolGraph: delivery of {id:?}, which is not outstanding");
         };

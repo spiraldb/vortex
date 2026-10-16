@@ -42,9 +42,6 @@ use crate::scan::repeated_scan::RepeatedScan;
 use crate::scan::split_by::SplitBy;
 use crate::scan::splits::Splits;
 use crate::scan::splits::attempt_split_ranges;
-use crate::scan::v2;
-use crate::scan::v2::Executor;
-use crate::scan::v2::ScanFile;
 
 /// Builder for scanning a [`LayoutReader`] into arrays, streams, iterators, or mapped outputs.
 ///
@@ -57,36 +54,32 @@ use crate::scan::v2::ScanFile;
 /// Projection and filter expressions must be bound against the reader dtype. Work is divided by
 /// the configured [`SplitBy`] strategy or by explicit selection ranges.
 pub struct ScanBuilder<A> {
-    pub(super) session: VortexSession,
+    session: VortexSession,
     layout_reader: LayoutReaderRef,
-    pub(super) projection: BoundExpression,
-    pub(super) filter: Option<BoundExpression>,
+    projection: BoundExpression,
+    filter: Option<BoundExpression>,
     /// Whether the scan needs to return splits in the order they appear in the file.
-    pub(super) ordered: bool,
+    ordered: bool,
     /// Optionally read a subset of the rows in the file.
-    pub(super) row_range: Option<Range<u64>>,
+    row_range: Option<Range<u64>>,
     /// The selection mask to apply to the selected row range.
     // TODO(joe): replace this is usage of row_id selection, see
-    pub(super) selection: Selection,
+    selection: Selection,
     /// How to split the file for concurrent processing.
-    pub(super) split_by: SplitBy,
+    split_by: SplitBy,
     /// Precomputed full-file natural split boundaries; when set, [`prepare`](Self::prepare)
     /// uses them instead of walking the layout.
-    pub(super) natural_splits: Option<Arc<[u64]>>,
+    natural_splits: Option<Arc<[u64]>>,
     /// The number of splits to make progress on concurrently **per-thread**.
-    pub(super) concurrency: usize,
+    concurrency: usize,
     /// Function to apply to each [`ArrayRef`] within the spawned split tasks.
-    pub(super) map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
+    map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
     metrics_registry: Option<Arc<dyn MetricsRegistry>>,
     /// Maximal number of rows to read after filtering.
-    pub(super) limit: Option<ScanLimit>,
+    limit: Option<ScanLimit>,
     /// The row-offset assigned to the first row of the file. Used by the `row_idx` expression,
     /// but not by the scan [`Selection`] which remains relative.
-    pub(super) row_offset: u64,
-    /// Where the scanned file's segments live, which lets the planner-driven executor read it.
-    pub(super) scan_file: Option<ScanFile>,
-    /// Overrides [`v2::enabled`] for this scan when set.
-    pub(super) scan_v2: Option<bool>,
+    row_offset: u64,
 }
 
 impl ScanBuilder<ArrayRef> {
@@ -110,8 +103,6 @@ impl ScanBuilder<ArrayRef> {
             metrics_registry: None,
             limit: None,
             row_offset: 0,
-            scan_file: None,
-            scan_v2: None,
         }
     }
 
@@ -275,21 +266,6 @@ impl<A: 'static + Send> ScanBuilder<A> {
         self
     }
 
-    /// Attach the segment map of the file the layout reader was opened over.
-    ///
-    /// Scans with a segment map may run on the planner-driven executor, see [`v2`].
-    pub fn with_scan_file(mut self, file: ScanFile) -> Self {
-        self.scan_file = Some(file);
-        self
-    }
-
-    /// Whether a supported scan runs on the planner-driven executor, overriding
-    /// [`v2::ENV_VAR`] for this scan.
-    pub fn with_scan_v2(mut self, enabled: bool) -> Self {
-        self.scan_v2 = Some(enabled);
-        self
-    }
-
     /// The [`DType`] returned by the scan, after applying the projection.
     pub fn dtype(&self) -> VortexResult<DType> {
         Ok(self.projection.dtype().clone())
@@ -320,8 +296,6 @@ impl<A: 'static + Send> ScanBuilder<A> {
             metrics_registry: self.metrics_registry,
             limit: self.limit,
             row_offset: self.row_offset,
-            scan_file: self.scan_file,
-            scan_v2: self.scan_v2,
             map_fn: Arc::new(move |a| old_map_fn(a).and_then(&map_fn)),
         }
     }
@@ -389,16 +363,6 @@ impl<A: 'static + Send> ScanBuilder<A> {
         ))
     }
 
-    /// Prepares the scan and builds its stream on the executor [`v2::select`] picks.
-    ///
-    /// This is the only place a streaming scan chooses between executors.
-    fn prepare_stream(self) -> VortexResult<BoxStream<'static, VortexResult<A>>> {
-        match v2::select(self)? {
-            Executor::V1(builder) => builder.prepare()?.execute_stream(None),
-            Executor::V2(scan) => scan.execute_stream(),
-        }
-    }
-
     /// Constructs a task per row split of the scan, returned as a vector of futures.
     ///
     /// Scans with row limits must use [`Self::into_stream`] or [`Self::into_iter`] so the scan
@@ -462,7 +426,7 @@ impl<A: 'static + Send> Stream for LazyScanStream<A> {
                     // task: poll_next must only wait for and poll an already-constructed stream.
                     // This also keeps construction errors on the Preparing -> Error path rather
                     // than running construction on the caller's executor.
-                    let task = handle.spawn_cpu(move || builder.prepare_stream());
+                    let task = handle.spawn_cpu(move || builder.prepare()?.execute_stream(None));
                     self.state = LazyScanState::Preparing(task);
                 }
                 LazyScanState::Preparing(task) => match ready!(Pin::new(task).poll(cx)) {

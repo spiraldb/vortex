@@ -28,9 +28,9 @@ use crate::scan::v2::splits::projection_splits;
 /// Turns a split's selected rows into the morsels that project them.
 ///
 /// The rows are cut into projection splits where the projection's chunks start, and each split
-/// with a selected row becomes one [`ProjectionMorsel`], so a morsel reads at most one chunk of
+/// with a selected row becomes one `ProjectionMorsel`, so a morsel reads at most one chunk of
 /// every column. The planner finishes once it has handed out every morsel.
-pub struct ProjectionPlanner {
+pub(super) struct ProjectionPlanner {
     plans: Option<ScanPlans>,
     /// The split's selected rows, until the first compute cuts them.
     selected: Option<SelectedRows>,
@@ -40,7 +40,7 @@ pub struct ProjectionPlanner {
 
 impl ProjectionPlanner {
     /// Creates a planner for `selected`.
-    pub fn new(plans: ScanPlans, selected: SelectedRows) -> Self {
+    pub(super) fn new(plans: ScanPlans, selected: SelectedRows) -> Self {
         Self {
             plans: Some(plans),
             selected: Some(selected),
@@ -113,7 +113,7 @@ impl Planner for ProjectionPlanner {
 
 /// Runs the projection plan over a split's selected rows and returns them as one batch, in row
 /// order. A selection that projects to no rows finishes without a batch.
-pub struct ProjectionMorsel {
+struct ProjectionMorsel {
     plans: Option<ScanPlans>,
     dtype: DType,
     selected: SelectedRows,
@@ -124,7 +124,7 @@ pub struct ProjectionMorsel {
 
 impl ProjectionMorsel {
     /// Creates a morsel projecting `selected`.
-    pub fn new(plans: ScanPlans, selected: SelectedRows) -> Self {
+    fn new(plans: ScanPlans, selected: SelectedRows) -> Self {
         Self {
             dtype: plans.projection.dtype().clone(),
             plans: Some(plans),

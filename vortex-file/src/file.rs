@@ -217,14 +217,16 @@ impl VortexFile {
     /// Initiate a scan of the file, returning a builder for projection, filtering, selection, and
     /// execution options.
     pub fn scan(&self) -> VortexResult<ScanBuilder<ArrayRef>> {
-        Ok(
-            ScanBuilder::new(self.session.clone(), self.layout_reader()?)
-                .with_scan_file(self.scan_file()),
-        )
+        Ok(ScanBuilder::new(
+            self.session.clone(),
+            self.layout_reader()?,
+        ))
     }
 
     /// The parts of this file the planner-driven scan executor reads through: its root layout,
     /// where each of its segments lives, and its segment source.
+    ///
+    /// Pass this to [`vortex_layout::scan::v2::ScanBuilder::new`] to build a V2 scan explicitly.
     pub fn scan_file(&self) -> ScanFile {
         let locations = self
             .footer
