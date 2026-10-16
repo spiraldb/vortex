@@ -72,23 +72,18 @@ async fn main() -> Result<()> {
         matches!(args[2].as_str(), "flat" | "list" | "list-elements"),
         "Unknown layout"
     );
-    ensure!(
-        std::env::var("VORTEX_EXPERIMENTAL_LIST_LAYOUT").as_deref() != Ok("1"),
-        "Unset VORTEX_EXPERIMENTAL_LIST_LAYOUT so the flat control stays flat"
-    );
     let target_bytes = args.get(3).map(|value| value.parse::<u64>()).transpose()?;
     ensure!(target_bytes != Some(0), "TARGET_BYTES must be positive");
     let session = VortexSession::default().with_tokio();
     session.register_edition(&EXPERIMENT_EDITION)?;
-    session.enable_edition(EXPERIMENT_EDITION.edition.id)?;
+    if args[2] != "flat" {
+        session.enable_edition(EXPERIMENT_EDITION.edition.id)?;
+    }
     let input = session
         .open_options()
         .open_path(Path::new(&args[0]))
         .await?;
     let mut strategy = WriteStrategyBuilder::from_session(&session);
-    if args[2] == "list" {
-        strategy = strategy.with_list_layout();
-    }
     if let Some(target_bytes) = target_bytes {
         strategy = strategy.with_data_block_target_bytes(Some(target_bytes));
     }
