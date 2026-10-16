@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
+use futures::FutureExt;
 use futures::TryStreamExt;
 use futures::stream;
 use rstest::rstest;
@@ -14,13 +15,16 @@ use vortex_array::ArrayContext;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
+use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinArray;
 use vortex_array::assert_arrays_eq;
+use vortex_array::buffer::BufferHandle;
 use vortex_array::dtype::DType;
+use vortex_array::dtype::FieldNames;
 use vortex_array::expr::get_item;
 use vortex_array::expr::gt;
 use vortex_array::expr::lit;
@@ -29,24 +33,32 @@ use vortex_array::expr::root;
 use vortex_array::validity::Validity;
 use vortex_buffer::Alignment;
 use vortex_buffer::Buffer;
+use vortex_buffer::BufferMut;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_io::session::RuntimeSessionExt;
+use vortex_scan::selection::Selection;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
 
 use super::Executor;
 use super::ScanFile;
 use super::select_supported;
+use crate::LayoutId;
 use crate::LayoutRef;
 use crate::LayoutStrategy;
+use crate::layouts::chunked::Chunked;
 use crate::layouts::chunked::writer::ChunkedLayoutStrategy;
 use crate::layouts::dict::DictLayout;
 use crate::layouts::flat::writer::FlatLayoutStrategy;
+use crate::layouts::foreign::new_foreign_layout;
+use crate::layouts::list::writer::ListLayoutStrategy;
 use crate::layouts::row_idx::row_idx;
+use crate::layouts::struct_::StructLayout;
 use crate::layouts::table::TableStrategy;
 use crate::layouts::zoned::writer::ZonedLayoutOptions;
 use crate::layouts::zoned::writer::ZonedStrategy;
+use crate::plan::physical::PlanRef;
 use crate::scan::planning::SegmentLocation;
 use crate::scan::scan_builder::ScanBuilder;
 use crate::scan::split_by::SplitBy;
@@ -150,11 +162,11 @@ fn scan_file(segments: &Arc<dyn SegmentSource>, layout: &LayoutRef) -> VortexRes
             alignment: Alignment::none(),
         })
         .collect();
-    Ok(ScanFile {
-        layout: Arc::clone(layout),
+    Ok(ScanFile::new(
+        Arc::clone(layout),
         locations,
-        segments: Arc::clone(segments),
-    })
+        Arc::clone(segments),
+    ))
 }
 
 fn builder(
@@ -240,9 +252,294 @@ async fn matches_v1(
 }
 
 #[rstest]
+#[case::empty(&[])]
+#[case::first(&[0])]
+#[case::last(&[3999])]
+#[case::boundaries(&[0, 999, 1000, 1999, 2000, 3999])]
+#[case::scattered(&[1, 17, 1002, 2301, 3333])]
+#[tokio::test]
+async fn selection_matches_full_scan_take(
+    #[values(Strategy::Flat, Strategy::Table, Strategy::ZonedTable)] strategy: Strategy,
+    #[values(false, true)] roaring: bool,
+    #[values(false, true)] exclude: bool,
+    #[case] rows: &[u64],
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, strategy.get().as_ref()).await?;
+    let indices = Buffer::copy_from(rows);
+    let selection = match (roaring, exclude) {
+        (true, false) => Selection::IncludeRoaring(rows.iter().copied().collect()),
+        (true, true) => Selection::ExcludeRoaring(rows.iter().copied().collect()),
+        (false, false) => Selection::IncludeByIndex(StrictSortedBuffer::try_new(indices.clone())?),
+        (false, true) => Selection::ExcludeByIndex(StrictSortedBuffer::try_new(indices.clone())?),
+    };
+    let dtype = layout.dtype().clone();
+    let full = collect(
+        dtype.clone(),
+        builder(&session, &segments, &layout)?
+            .prepare()?
+            .execute_stream(None)?,
+    )
+    .await?;
+    let expected_indices = if exclude {
+        Buffer::from_iter((0..full.len() as u64).filter(|row| rows.binary_search(row).is_err()))
+    } else {
+        indices
+    };
+    let expected = full.take(expected_indices.into_array())?;
+    let Executor::V2(scan) =
+        select_supported(builder(&session, &segments, &layout)?.with_selection(selection))?
+    else {
+        panic!("selected rows must use the planner-driven executor");
+    };
+    let actual = collect(dtype, scan.execute_stream()?).await?;
+    assert_arrays_eq!(actual, expected, &mut session.create_execution_ctx());
+    Ok(())
+}
+
+#[rstest]
+#[case::empty(&[])]
+#[case::one(&[2301])]
+#[case::boundaries(&[0, 999, 1000, 1999, 2000, 3999])]
+#[case::scattered(&[1, 17, 1002, 2301, 3333])]
+#[tokio::test]
+async fn shredded_list_selection_matches_v1(#[case] rows: &[u64]) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let lists = ListLayoutStrategy::default()
+        .with_elements(chunked_flat())
+        .with_offsets(chunked_flat())
+        .with_validity(chunked_flat())
+        .with_fallback(chunked_flat());
+    let strategy = TableStrategy::new(chunked_flat(), Arc::new(lists));
+    let (segments, layout) = write(&session, &strategy).await?;
+    assert_same_as_v1(&session, || {
+        Ok(builder(&session, &segments, &layout)?
+            .with_row_indices(StrictSortedBuffer::try_new(Buffer::copy_from(rows))?))
+    })
+    .await
+}
+
+#[tokio::test]
+async fn cached_preparation_keeps_selections_independent() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, table().as_ref()).await?;
+    let file = scan_file(&segments, &layout)?.with_caching();
+    assert!(PlanRef::ptr_eq(&file.lower()?, &file.clone().lower()?));
+    for rows in [vec![0, 1001, 3999], vec![17, 2500], vec![]] {
+        let selection = StrictSortedBuffer::try_new(Buffer::from(rows))?;
+        assert_same_as_v1(&session, || {
+            Ok(builder(&session, &segments, &layout)?
+                .with_scan_file(file.clone())
+                .with_row_indices(selection.clone()))
+        })
+        .await?;
+    }
+    let mut replaced = file.clone();
+    replaced.layout = layout.slot(1)?.ok_or_else(|| vortex_err!("missing ints"))?;
+    assert_eq!(replaced.lower()?.dtype(), replaced.layout.dtype());
+    assert!(!PlanRef::ptr_eq(&file.lower()?, &replaced.lower()?));
+    let original_ranges = file.ranges();
+    replaced.locations = Arc::from([SegmentLocation {
+        offset: 123456,
+        length: 7,
+        alignment: Alignment::none(),
+    }]);
+    assert_eq!(
+        replaced.ranges().get(&(123456, 7)),
+        Some(SegmentId::from(0))
+    );
+    assert!(original_ranges.get(&(123456, 7)).is_none());
+    Ok(())
+}
+
+#[rstest]
+#[case::unchanged(None)]
+#[case::layout(Some("layout"))]
+#[case::locations(Some("locations"))]
+#[case::segments(Some("segments"))]
+#[tokio::test]
+async fn dictionary_cache_reuses_values_and_checks_file_identity(
+    #[case] replacement: Option<&str>,
+    #[values(false, true)] caching: bool,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, table().as_ref()).await?;
+    let ints = layout.slot(1)?.ok_or_else(|| vortex_err!("missing ints"))?;
+    let layout = DictLayout::new(Arc::clone(&ints), Arc::clone(&ints)).into_layout();
+    let counted = Arc::new(CountingSegments {
+        inner: Arc::clone(&segments),
+        reads: AtomicUsize::new(0),
+    });
+    let replaced = Arc::new(CountingSegments {
+        inner: segments,
+        reads: AtomicUsize::new(0),
+    });
+    let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
+    let mut file = scan_file(&segments, &layout)?;
+    if caching {
+        file = file.with_caching();
+    }
+    let reads = || counted.reads.load(Ordering::Relaxed) + replaced.reads.load(Ordering::Relaxed);
+    for index in 0..3 {
+        if index == 2 {
+            match replacement {
+                Some("layout") => {
+                    file.layout =
+                        DictLayout::new(Arc::clone(&ints), Arc::clone(&ints)).into_layout();
+                }
+                Some("locations") => file.locations = file.locations.to_vec().into(),
+                Some("segments") => file.segments = Arc::clone(&replaced) as _,
+                _ => {}
+            }
+        }
+        let row = u64::try_from(index * CHUNK_ROWS)?;
+        let before = reads();
+        let Executor::V2(scan) = select_supported(
+            builder(&session, &file.segments, &file.layout)?
+                .with_scan_file(file.clone())
+                .with_row_range(row..row + 1),
+        )?
+        else {
+            panic!("dictionary projection should run on v2");
+        };
+        let actual = collect(layout.dtype().clone(), scan.execute_stream()?).await?;
+        let expected = Buffer::from(vec![i32::try_from(row)?]).into_array();
+        assert_arrays_eq!(actual, expected, &mut session.create_execution_ctx());
+        let reused = caching && index > 0 && (index < 2 || replacement.is_none());
+        assert_eq!(reads() - before, if reused { 1 } else { CHUNKS });
+    }
+    Ok(())
+}
+
+#[rstest]
+#[tokio::test]
+async fn support_checks_only_selected_chunks_without_caching_partial_answers(
+    #[values(false, true)] full_first: bool,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, chunked_flat().as_ref()).await?;
+    let mut children = layout.children()?;
+    children[1] = new_foreign_layout(
+        LayoutId::new("test.unsupported"),
+        layout.dtype().clone(),
+        CHUNK_ROWS as u64,
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    let layout = layout
+        .as_opt::<Chunked>()
+        .ok_or_else(|| vortex_err!("expected chunks"))?
+        .with_children(children)
+        .into_layout();
+    let file = scan_file(&segments, &layout)?.with_caching();
+    if full_first {
+        assert!(!file.supports_scan(true, &Selection::All, None)?);
+    }
+    for (rows, supported) in [
+        (vec![], true),
+        (vec![0], true),
+        (vec![1000], false),
+        (vec![3999], true),
+    ] {
+        let selection = Selection::IncludeByIndex(StrictSortedBuffer::try_new(Buffer::from(rows))?);
+        assert_eq!(file.supports_scan(true, &selection, None)?, supported);
+    }
+    assert!(!file.supports_scan(true, &Selection::All, None)?);
+    Ok(())
+}
+
+#[rstest]
+#[case::empty(vec![])]
+#[case::null_only(vec![3, 6, 9])]
+#[case::mixed(vec![0, 1, 2, 3, 8, 31, 63])]
+#[case::all((0..64).collect())]
+#[tokio::test]
+async fn selected_list_values_match_input(
+    #[case] rows: Vec<u64>,
+    #[values(false, true)] nested: bool,
+    #[values(false, true)] nullable: bool,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let mut offsets = vec![0_u32];
+    let mut total = 0;
+    for row in 0..64 {
+        total += row % 4;
+        offsets.push(total);
+    }
+    let inner_strategy = ListLayoutStrategy::default()
+        .with_elements(chunked_flat())
+        .with_offsets(chunked_flat())
+        .with_validity(chunked_flat());
+    let (elements, element_strategy) = if nested {
+        let elements = ListArray::try_new(
+            Buffer::from_iter(0..2 * total).into_array(),
+            Buffer::from_iter((0..=total).map(|row| 2 * row)).into_array(),
+            Validity::Array(BoolArray::from_iter((0..total).map(|row| row % 3 != 0)).into_array()),
+        )?
+        .into_array();
+        (
+            elements,
+            Arc::new(inner_strategy) as Arc<dyn LayoutStrategy>,
+        )
+    } else {
+        (Buffer::from_iter(0..total).into_array(), chunked_flat())
+    };
+    let validity = if nullable {
+        Validity::Array(BoolArray::from_iter((0..64).map(|row| row % 3 != 0)).into_array())
+    } else {
+        Validity::NonNullable
+    };
+    let input =
+        ListArray::try_new(elements, Buffer::from(offsets).into_array(), validity)?.into_array();
+    let dtype = input.dtype().clone();
+    let expected = input.take(Buffer::from(rows.clone()).into_array())?;
+    let strategy = ListLayoutStrategy::default()
+        .with_elements(element_strategy)
+        .with_offsets(chunked_flat())
+        .with_validity(chunked_flat());
+    let segments = Arc::new(TestSegments::default());
+    let (mut id, eof) = SequenceId::root().split();
+    let layout = strategy
+        .write_stream(
+            ArrayContext::empty().into(),
+            segments.clone(),
+            SequentialStreamAdapter::new(dtype.clone(), stream::iter([Ok((id.advance(), input))]))
+                .sendable(),
+            eof,
+            &session,
+        )
+        .await?;
+    let counted = Arc::new(CountingSegments {
+        inner: segments,
+        reads: AtomicUsize::new(0),
+    });
+    let segments: Arc<dyn SegmentSource> = counted.clone();
+    let empty = rows.is_empty();
+    let null_only = nullable && !empty && rows.iter().all(|row| row % 3 == 0);
+    let Executor::V2(scan) = select_supported(
+        builder(&session, &segments, &layout)?
+            .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(rows))?),
+    )?
+    else {
+        panic!("list selections must use the planner-driven executor");
+    };
+    let actual = collect(dtype, scan.execute_stream()?).await?;
+    assert_arrays_eq!(actual, expected, &mut session.create_execution_ctx());
+    if empty {
+        assert_eq!(counted.reads.load(Ordering::Relaxed), 0);
+    } else if null_only {
+        // Only offsets and validity are needed, even when null lists store nonempty elements.
+        assert_eq!(counted.reads.load(Ordering::Relaxed), 2);
+    }
+    Ok(())
+}
+
+#[rstest]
 #[tokio::test]
 async fn projection_matches_v1(
     #[values(Strategy::Flat, Strategy::Table, Strategy::ZonedTable)] strategy: Strategy,
+    #[values(false, true)] selected: bool,
 ) -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, strategy.get().as_ref()).await?;
@@ -256,9 +553,18 @@ async fn projection_matches_v1(
             ],
             false.into(),
         );
-        Ok(builder(&session, &segments, &layout)?
+        let builder = builder(&session, &segments, &layout)?
             .with_projection(projection.bind(&dtype)?)
-            .with_row_offset(100))
+            .with_row_offset(100);
+        Ok(if selected {
+            builder
+                .with_row_range(900..2600)
+                .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(vec![
+                    0, 999, 1000, 2500, 3999,
+                ]))?)
+        } else {
+            builder
+        })
     })
     .await
 }
@@ -328,11 +634,263 @@ struct CountingSegments {
     reads: AtomicUsize,
 }
 
+struct UnalignedSegments {
+    inner: Arc<dyn SegmentSource>,
+}
+
+impl SegmentSource for UnalignedSegments {
+    fn request(&self, id: SegmentId) -> SegmentFuture {
+        let request = self.inner.request(id);
+        async move {
+            let bytes = request.await?.try_into_host_sync()?;
+            let mut unaligned =
+                BufferMut::with_capacity_aligned(bytes.len() + 1, Alignment::of::<u64>());
+            unaligned.push(0);
+            unaligned.extend_from_slice(&bytes);
+            let unaligned = unaligned.freeze().aligned(Alignment::none()).slice(1..);
+            assert!(!Alignment::of::<u64>().is_ptr_aligned(unaligned.as_ptr()));
+            Ok(BufferHandle::new_host(unaligned))
+        }
+        .boxed()
+    }
+}
+
+#[rstest]
+#[tokio::test]
+async fn point_projection_preserves_struct_validity_and_shared_fields(
+    #[values(false, true)] nullable: bool,
+    #[values(false, true)] empty: bool,
+    #[values(0, 1)] row: usize,
+    #[values(false, true)] unaligned: bool,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let segments = Arc::new(TestSegments::default());
+    let values = Buffer::from_iter(0i32..20).into_array();
+    let validity = BoolArray::from_iter((0..20).map(|index| index % 2 == 0)).into_array();
+    let mut layouts = Vec::new();
+    for array in [validity.clone(), values.clone()] {
+        let (mut sequence, eof) = SequenceId::root().split();
+        let dtype = array.dtype().clone();
+        layouts.push(
+            FlatLayoutStrategy::default()
+                .write_stream(
+                    ArrayContext::empty().into(),
+                    Arc::<TestSegments>::clone(&segments),
+                    SequentialStreamAdapter::new(
+                        dtype,
+                        stream::iter([Ok((sequence.advance(), array))]),
+                    )
+                    .sendable(),
+                    eof,
+                    &session,
+                )
+                .await?,
+        );
+    }
+    let names = if empty {
+        FieldNames::default()
+    } else {
+        FieldNames::from(["left", "right"])
+    };
+    let fields = if empty {
+        vec![]
+    } else {
+        vec![values.clone(), values]
+    };
+    let expected = StructArray::try_new(
+        names,
+        fields,
+        20,
+        if nullable {
+            Validity::Array(validity)
+        } else {
+            Validity::NonNullable
+        },
+    )?
+    .into_array();
+    let mut children = Vec::new();
+    if nullable {
+        children.push(Arc::clone(&layouts[0]));
+    }
+    if !empty {
+        children.extend([Arc::clone(&layouts[1]), Arc::clone(&layouts[1])]);
+    }
+    let layout = StructLayout::new(20, expected.dtype().clone(), children).into_layout();
+    let counted = Arc::new(CountingSegments {
+        inner: segments,
+        reads: AtomicUsize::new(0),
+    });
+    let source = Arc::clone(&counted) as Arc<dyn SegmentSource>;
+    let source = if unaligned {
+        Arc::new(UnalignedSegments { inner: source }) as Arc<dyn SegmentSource>
+    } else {
+        source
+    };
+    let Executor::V2(scan) =
+        select_supported(builder(&session, &source, &layout)?.with_selection(
+            Selection::IncludeRoaring([row as u64].into_iter().collect()),
+        ))?
+    else {
+        panic!("point projection should run on v2");
+    };
+    let actual = collect(expected.dtype().clone(), scan.execute_stream()?).await?;
+    assert_arrays_eq!(
+        actual,
+        expected.slice(row..row + 1)?,
+        &mut session.create_execution_ctx()
+    );
+    assert_eq!(
+        counted.reads.load(Ordering::Relaxed),
+        usize::from(nullable) + usize::from(!empty)
+    );
+    Ok(())
+}
+
+#[rstest]
+#[tokio::test]
+async fn wide_point_projection_preserves_field_order_and_deduplicates_reads(
+    #[values(15, 16, 17, 64)] unique: usize,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let segments = Arc::new(TestSegments::default());
+    let mut fields = Vec::new();
+    let mut layouts = Vec::new();
+    for field in 0..unique {
+        let values = Buffer::from_iter((0..20u64).map(|row| field as u64 * 100 + row)).into_array();
+        let (mut sequence, eof) = SequenceId::root().split();
+        layouts.push(
+            FlatLayoutStrategy::default()
+                .write_stream(
+                    ArrayContext::empty().into(),
+                    Arc::<TestSegments>::clone(&segments),
+                    SequentialStreamAdapter::new(
+                        values.dtype().clone(),
+                        stream::iter([Ok((sequence.advance(), values.clone()))]),
+                    )
+                    .sendable(),
+                    eof,
+                    &session,
+                )
+                .await?,
+        );
+        fields.push(values);
+    }
+    fields.extend(fields.clone().into_iter().rev());
+    layouts.extend(layouts.clone().into_iter().rev());
+    let names = (0..fields.len())
+        .map(|index| format!("field_{index}"))
+        .collect::<FieldNames>();
+    let expected = StructArray::try_new(names, fields, 20, Validity::NonNullable)?.into_array();
+    let layout = StructLayout::new(20, expected.dtype().clone(), layouts).into_layout();
+    let counted = Arc::new(CountingSegments {
+        inner: segments,
+        reads: AtomicUsize::new(0),
+    });
+    let source = Arc::clone(&counted) as Arc<dyn SegmentSource>;
+    let Executor::V2(scan) = select_supported(
+        builder(&session, &source, &layout)?
+            .with_selection(Selection::IncludeRoaring([13].into_iter().collect())),
+    )?
+    else {
+        panic!("wide point projection should run on v2");
+    };
+    let actual = collect(expected.dtype().clone(), scan.execute_stream()?).await?;
+    assert_arrays_eq!(
+        actual,
+        expected.slice(13..14)?,
+        &mut session.create_execution_ctx()
+    );
+    assert_eq!(counted.reads.load(Ordering::Relaxed), unique);
+    Ok(())
+}
+
+struct FirstSegmentOnly {
+    inner: Arc<dyn SegmentSource>,
+    first: SegmentId,
+}
+
+impl SegmentSource for FirstSegmentOnly {
+    fn request(&self, id: SegmentId) -> SegmentFuture {
+        if id == self.first {
+            self.inner.request(id)
+        } else {
+            std::future::pending().boxed()
+        }
+    }
+}
+
+#[tokio::test]
+async fn maps_ready_projection_batches_before_later_reads_finish() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, chunked_flat().as_ref()).await?;
+    let first = layout
+        .slot(0)?
+        .ok_or_else(|| vortex_err!("missing first chunk"))?;
+    let first = *first
+        .segment_ids()
+        .first()
+        .ok_or_else(|| vortex_err!("missing first segment"))?;
+    let segments = Arc::new(FirstSegmentOnly {
+        inner: segments,
+        first,
+    }) as Arc<dyn SegmentSource>;
+    let Executor::V2(mut scan) =
+        select_supported(builder(&session, &segments, &layout)?.with_selection(
+            Selection::IncludeRoaring([0, CHUNK_ROWS as u64].into_iter().collect()),
+        ))?
+    else {
+        panic!("selected projection should run on v2");
+    };
+    scan.splits = vec![0..2 * CHUNK_ROWS as u64];
+    let split = scan
+        .split_plans()
+        .pop()
+        .ok_or_else(|| vortex_err!("missing split"))?;
+    let result = split
+        .run(Arc::clone(&scan.io), |array| {
+            assert_eq!(array.len(), 1);
+            Err::<ArrayRef, _>(vortex_err!("mapper received the first selected row"))
+        })
+        .now_or_never()
+        .ok_or_else(|| vortex_err!("mapper waited for later chunks"))?;
+    let error = result.expect_err("the mapper must fail before the pending read completes");
+    assert!(
+        error
+            .to_string()
+            .contains("mapper received the first selected row")
+    );
+    Ok(())
+}
+
 impl SegmentSource for CountingSegments {
     fn request(&self, id: SegmentId) -> SegmentFuture {
         self.reads.fetch_add(1, Ordering::Relaxed);
         self.inner.request(id)
     }
+}
+
+#[tokio::test]
+async fn missing_segment_location_is_rejected_before_registering_reads() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, table().as_ref()).await?;
+    let counted = Arc::new(CountingSegments {
+        inner: segments,
+        reads: AtomicUsize::new(0),
+    });
+    let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
+    let mut scan = builder(&session, &segments, &layout)?
+        .with_selection(Selection::IncludeRoaring([0].into_iter().collect()));
+    scan.scan_file
+        .as_mut()
+        .ok_or_else(|| vortex_err!("missing scan file"))?
+        .locations = Arc::from([]);
+    let error = match select_supported(scan) {
+        Err(error) => error,
+        Ok(_) => panic!("missing segment location must be rejected"),
+    };
+    assert!(error.to_string().contains("has no known location"));
+    assert_eq!(counted.reads.load(Ordering::Relaxed), 0);
+    Ok(())
 }
 
 #[tokio::test]
@@ -354,7 +912,7 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
     assert_eq!(splits.len(), CHUNKS);
     for (index, split) in splits.into_iter().enumerate() {
         let before = counted.reads.load(Ordering::Relaxed);
-        let arrays = split.run(Arc::clone(&scan.io)).await?;
+        let arrays = split.run(Arc::clone(&scan.io), Ok).await?;
         let reads = counted.reads.load(Ordering::Relaxed) - before;
         assert_eq!(reads, if index == 0 { CHUNKS } else { 1 });
         let start = i32::try_from(index * CHUNK_ROWS)?;
@@ -396,16 +954,12 @@ async fn scans_without_a_scan_file_run_on_v1() -> VortexResult<()> {
     Ok(())
 }
 
-/// List layouts are scanned by the default executor: their element ranges are only known once
-/// their offsets are read, after a pipeline would have been compiled.
 #[tokio::test]
-async fn list_layouts_run_on_v1() -> VortexResult<()> {
+async fn list_layouts_match_v1() -> VortexResult<()> {
     let session = new_session().with_tokio();
     let strategy = TableStrategy::new(chunked_flat(), chunked_flat()).with_list_layout();
     let (segments, layout) = write(&session, &strategy).await?;
-    let builder = builder(&session, &segments, &layout)?;
-    assert!(matches!(select_supported(builder)?, Executor::V1(_)));
-    Ok(())
+    assert_same_as_v1(&session, || builder(&session, &segments, &layout)).await
 }
 
 #[tokio::test]

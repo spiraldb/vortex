@@ -28,15 +28,6 @@ use crate::plan::physical::pipeline::ValueCache;
 use crate::scan::planning::SegmentLocation;
 use crate::segments::SegmentId;
 
-/// Rows a running plan produced, in row order.
-#[derive(Clone)]
-pub(crate) struct Piece {
-    /// Orders the piece among the pieces of one graph.
-    pub(crate) rows: Range<u64>,
-    /// The selected rows the piece holds.
-    pub(crate) array: ArrayRef,
-}
-
 /// A plan running over one row range on the pipeline [`Scan`].
 ///
 /// The scan produces the selected rows in row order and leaves its reads to its owner.
@@ -45,8 +36,6 @@ pub(crate) struct ScanGraph {
     /// A step the scan already took that the owner has not seen.
     pending: Option<Turn>,
     done: bool,
-    /// Orders the pieces handed out.
-    next_piece: u64,
 }
 
 /// What a graph wants from its owner.
@@ -75,7 +64,6 @@ impl ScanGraph {
             scan,
             pending: None,
             done: false,
-            next_piece: 0,
         })
     }
 
@@ -100,15 +88,6 @@ impl ScanGraph {
         Ok(turn)
     }
 
-    fn piece(&mut self, array: ArrayRef) -> Piece {
-        let start = self.next_piece;
-        self.next_piece += 1;
-        Piece {
-            rows: start..start + 1,
-            array,
-        }
-    }
-
     fn deliver(&mut self, read: ReadId, bytes: BufferHandle) -> VortexResult<()> {
         self.scan.deliver(read, bytes)?;
         if matches!(self.pending, Some(Turn::Waiting)) {
@@ -125,7 +104,7 @@ pub(crate) enum GraphStep {
     /// Requests to publish, each returned once.
     NeedsIO(IoBatch),
     /// Rows the plan produced.
-    Piece(Piece),
+    Piece(ArrayRef),
 }
 
 /// A [`ScanGraph`] whose segment reads are published as protocol requests.
@@ -175,7 +154,7 @@ impl ProtocolGraph {
         }
         Ok(match self.graph.step()? {
             Turn::Waiting | Turn::Done => GraphStep::Yield,
-            Turn::Output(_, array) => GraphStep::Piece(self.graph.piece(array)),
+            Turn::Output(_, array) => GraphStep::Piece(array),
             Turn::Read(read) => {
                 // Publish every read the scan has ready together, so the owner can coalesce them.
                 let mut batch = vec![self.request(read.id, read.segment_id)?];

@@ -8,6 +8,7 @@ use std::ops::Range;
 
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
+use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
@@ -33,6 +34,8 @@ pub struct Chain {
     pub(crate) source: Box<dyn Source>,
     pub(crate) stages: Vec<Box<dyn Operator>>,
     pub(crate) inlets: Vec<PortId>,
+    pub(crate) deferred: bool,
+    pub(crate) output_capacity: usize,
 }
 
 impl Chain {
@@ -42,6 +45,8 @@ impl Chain {
             source: Box::new(source),
             stages: Vec::new(),
             inlets: Vec::new(),
+            deferred: false,
+            output_capacity: DEFAULT_CAPACITY,
         }
     }
 
@@ -51,12 +56,20 @@ impl Chain {
             source: Box::new(ConcatSource::new(1)),
             stages: Vec::new(),
             inlets: vec![port],
+            deferred: false,
+            output_capacity: DEFAULT_CAPACITY,
         }
     }
 
     /// This chain with `stage` after its last stage.
     pub fn with(mut self, stage: impl Operator + 'static) -> Self {
         self.stages.push(Box::new(stage));
+        self
+    }
+
+    /// Bounds read-ahead unless the consumer specifies an inlet capacity of its own.
+    pub(crate) fn with_output_capacity(mut self, capacity: usize) -> Self {
+        self.output_capacity = capacity;
         self
     }
 }
@@ -94,10 +107,38 @@ impl Compiler<'_> {
         plan.compile(rows, mask, self)
     }
 
+    /// Compiles a later chunk without starting its pipelines until a consumer requests it.
+    pub(crate) fn compile_deferred(
+        &mut self,
+        plan: &PlanRef,
+        rows: Range<u64>,
+        mask: &Mask,
+    ) -> VortexResult<Option<Chain>> {
+        let previous = std::mem::replace(&mut self.core.defer, true);
+        let chain = self.compile(plan, rows, mask);
+        self.core.defer = previous;
+        Ok(chain?.map(|mut chain| {
+            chain.deferred = true;
+            chain
+        }))
+    }
+
     /// A chain reading `chains` through `source`: each chain becomes a pipeline writing a new
-    /// port, inlet `i` of `source` reading chain `i`, holding [`DEFAULT_CAPACITY`] batches.
-    pub fn join(&mut self, chains: Vec<Chain>, source: impl Source + 'static) -> Chain {
-        self.join_with(chains, |_| DEFAULT_CAPACITY, source)
+    /// port, inlet `i` of `source` reading chain `i`, with that chain's output capacity.
+    pub fn join(&mut self, mut chains: Vec<Chain>, source: impl Source + 'static) -> Chain {
+        let independent = chains
+            .iter()
+            .all(|chain| !chain.deferred && chain.inlets.is_empty() && chain.stages.is_empty());
+        // The ready queue is LIFO. Register independent leaves backwards so their reads start
+        // in field order, then restore inlet order for the source that assembles their batches.
+        if independent {
+            chains.reverse();
+        }
+        let mut chain = self.join_with_capacity(chains, |_, chain| chain.output_capacity, source);
+        if independent {
+            chain.inlets.reverse();
+        }
+        chain
     }
 
     /// [`join`](Self::join), with inlet `i` holding `capacity(i)` batches before its sink is
@@ -109,14 +150,23 @@ impl Compiler<'_> {
         capacity: impl Fn(usize) -> usize,
         source: impl Source + 'static,
     ) -> Chain {
+        self.join_with_capacity(chains, |index, _| capacity(index), source)
+    }
+
+    fn join_with_capacity(
+        &mut self,
+        chains: Vec<Chain>,
+        capacity: impl Fn(usize, &Chain) -> usize,
+        source: impl Source + 'static,
+    ) -> Chain {
         let inlets = chains
             .into_iter()
             .enumerate()
             .map(|(index, chain)| {
-                let port = self
-                    .core
-                    .arena
-                    .create(capacity(index), None, SourceEnd::Unclaimed);
+                let port =
+                    self.core
+                        .arena
+                        .create(capacity(index, &chain), None, SourceEnd::Unclaimed);
                 self.core.add_pipeline(chain, smallvec::smallvec![port]);
                 port
             })
@@ -125,6 +175,8 @@ impl Compiler<'_> {
             source: Box::new(source),
             stages: Vec::new(),
             inlets,
+            deferred: self.core.defer,
+            output_capacity: DEFAULT_CAPACITY,
         }
     }
 
@@ -139,8 +191,8 @@ impl Compiler<'_> {
     }
 
     /// Whole values kept between the scans of the split compiling.
-    pub(crate) fn values(&self) -> &ValueCache {
-        &self.core.values
+    pub(crate) fn values(&mut self) -> &ValueCache {
+        self.core.values.get_or_insert_default()
     }
 
     /// The rows `rows` of `scan`'s segment, filtered by `filter`, read by the split compiling.
@@ -296,6 +348,24 @@ impl Shares {
         })
     }
 
+    /// Records only the chunks reached by a single split's selected rows.
+    pub(crate) fn add_selected(
+        &mut self,
+        plan: &PlanRef,
+        rows: Range<u64>,
+        mask: &Mask,
+    ) -> VortexResult<()> {
+        let at = Reach::Selected {
+            offset: 0,
+            rows: rows.clone(),
+            mask: mask.clone(),
+        };
+        let reaches = &mut self.reaches;
+        plan.reach(rows, &at, &mut |segment, rows| {
+            reaches.push((segment, rows))
+        })
+    }
+
     /// Keeps only the segments more than one reader reads. The rest are read by the one
     /// pipeline that needs them.
     pub(crate) fn retain_shared(&mut self) {
@@ -350,6 +420,15 @@ pub enum Reach {
     Offset(u64),
     /// Every row is read for these scanned rows, as a dictionary's values are for its codes.
     Fixed(Range<u64>),
+    /// A linear row mapping restricted to selected rows in the scan's root domain.
+    Selected {
+        /// Root row index of this plan's row zero.
+        offset: u64,
+        /// The root row range the mask covers.
+        rows: Range<u64>,
+        /// Selected positions relative to `rows.start`.
+        mask: Mask,
+    },
 }
 
 impl Reach {
@@ -357,6 +436,7 @@ impl Reach {
     pub fn root(&self, rows: &Range<u64>) -> Range<u64> {
         match self {
             Reach::Offset(offset) => rows.start + offset..rows.end + offset,
+            Reach::Selected { offset, .. } => rows.start + offset..rows.end + offset,
             Reach::Fixed(root) => root.clone(),
         }
     }
@@ -366,12 +446,32 @@ impl Reach {
         match self {
             Reach::Offset(offset) => Reach::Offset(offset + by),
             Reach::Fixed(root) => Reach::Fixed(root.clone()),
+            Reach::Selected { offset, rows, mask } => Reach::Selected {
+                offset: offset + by,
+                rows: rows.clone(),
+                mask: mask.clone(),
+            },
         }
     }
 
     /// The mapping of a child read whole for `rows` of this plan, as dictionary values are.
     pub fn fixed(&self, rows: &Range<u64>) -> Self {
         Reach::Fixed(self.root(rows))
+    }
+
+    /// Whether any selected root row needs this range of the current plan.
+    pub(crate) fn selects(&self, local: &Range<u64>) -> bool {
+        let Reach::Selected { offset, rows, mask } = self else {
+            return true;
+        };
+        let start = (local.start + offset).max(rows.start);
+        let end = (local.end + offset).min(rows.end);
+        if start >= end {
+            return false;
+        }
+        let start = usize::try_from(start - rows.start).vortex_expect("selected offset fits mask");
+        let end = usize::try_from(end - rows.start).vortex_expect("selected offset fits mask");
+        !mask.slice(start..end).all_false()
     }
 }
 
@@ -408,5 +508,78 @@ impl Shares {
             .flat_map(|ports| ports.values())
             .map(SmallVec::len)
             .sum()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::Ordering;
+
+    use rstest::rstest;
+    use vortex_array::dtype::DType;
+    use vortex_array::dtype::PType;
+    use vortex_buffer::BitBuffer;
+    use vortex_session::registry::ReadContext;
+
+    use super::*;
+    use crate::plan::physical::PlanChildren;
+
+    #[rstest]
+    #[case::indices(Mask::from_indices(10, [0, 3, 9]))]
+    #[case::slices(Mask::from_slices(10, vec![(0, 1), (3, 4), (9, 10)]))]
+    #[case::bits(Mask::from_buffer(BitBuffer::from_indices(10, [0, 3, 9])))]
+    fn selected_reach_checks_local_ranges(#[case] mask: Mask, #[values(0, 100)] offset: u64) {
+        let reach = Reach::Selected {
+            offset,
+            rows: offset + 10..offset + 20,
+            mask,
+        };
+        for (rows, expected) in [
+            (8..10, false),
+            (9..11, true),
+            (11..13, false),
+            (12..14, true),
+            (14..19, false),
+            (19..25, true),
+            (20..30, false),
+            (10..10, false),
+            (0..30, true),
+        ] {
+            assert_eq!(reach.selects(&rows), expected, "{rows:?}");
+        }
+    }
+
+    #[test]
+    fn selected_reach_keeps_unselected_chunks_lazy() -> VortexResult<()> {
+        let initialized = Arc::new(AtomicUsize::new(0));
+        let counter = initialized.clone();
+        let dtype = DType::Primitive(PType::I32, false.into());
+        let child_dtype = dtype.clone();
+        let children = PlanChildren::lazy(3, move |index| {
+            counter.fetch_add(1, Ordering::Relaxed);
+            Ok(SegmentScanPlan::new(
+                child_dtype.clone(),
+                10,
+                SegmentId::from(u32::try_from(index)?),
+                ReadContext::new([]),
+                None,
+            )
+            .into_plan())
+        });
+        // SAFETY: All three children have the declared dtype and ten rows each.
+        let plan = unsafe {
+            ConcatPlan::from_children_unchecked(dtype, 30, Arc::from([0, 10, 20]), children)
+        }
+        .into_plan();
+        let mut shares = Shares::default();
+        shares.add_selected(&plan, 5..25, &Mask::from_indices(20, [0, 19]))?;
+        assert_eq!(initialized.load(Ordering::Relaxed), 2);
+        assert_eq!(
+            shares.reaches,
+            vec![(SegmentId::from(0), 5..10), (SegmentId::from(2), 20..25)]
+        );
+        Ok(())
     }
 }

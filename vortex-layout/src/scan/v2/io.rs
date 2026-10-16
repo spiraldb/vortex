@@ -14,6 +14,7 @@ use futures::future::BoxFuture;
 use futures::future::Shared;
 use futures::stream::FuturesUnordered;
 use parking_lot::Mutex;
+use smallvec::SmallVec;
 use vortex_array::buffer::BufferHandle;
 use vortex_error::VortexError;
 use vortex_error::VortexResult;
@@ -35,14 +36,75 @@ use crate::segments::SegmentId;
 use crate::segments::SegmentSource;
 
 /// Byte ranges of a file's segments, keyed by `(offset, length)`, back to their segment ids.
-pub(super) type SegmentRanges = Arc<HashMap<(u64, usize), SegmentId>>;
+pub(super) type SegmentRanges = Arc<RangeLookup>;
 
-pub(super) fn segment_ranges(locations: &[SegmentLocation]) -> SegmentRanges {
+pub(super) enum RangeLookup {
+    Ordered(Arc<[SegmentLocation]>),
+    Unordered(HashMap<(u64, usize), SegmentId>),
+}
+
+impl RangeLookup {
+    pub(super) fn get(&self, key: &(u64, usize)) -> Option<SegmentId> {
+        match self {
+            Self::Ordered(locations) => {
+                let index = locations
+                    .partition_point(|location| (location.offset, location.length as usize) <= *key)
+                    .checked_sub(1)?;
+                let location = &locations[index];
+                ((location.offset, location.length as usize) == *key)
+                    .then(|| SegmentId::from(u32::try_from(index).unwrap_or(u32::MAX)))
+            }
+            Self::Unordered(ranges) => ranges.get(key).copied(),
+        }
+    }
+}
+
+pub(super) fn segment_ranges(locations: &Arc<[SegmentLocation]>) -> SegmentRanges {
+    // File writers normally emit segments in byte order. Reuse that index instead of allocating
+    // a table for the entire file when a scan may read only a handful of its segments.
+    if locations.is_sorted_by_key(|location| (location.offset, location.length)) {
+        return Arc::new(RangeLookup::Ordered(Arc::clone(locations)));
+    }
     let ranges = locations.iter().enumerate().map(|(id, location)| {
         let id = SegmentId::from(u32::try_from(id).unwrap_or(u32::MAX));
         ((location.offset, location.length as usize), id)
     });
-    Arc::new(ranges.collect())
+    Arc::new(RangeLookup::Unordered(ranges.collect()))
+}
+
+/// Registers known sparse-scan segments before any fetch starts the file's read driver.
+/// Neighboring tasks can then share coalesced reads instead of reading overlapping byte ranges.
+pub(super) fn register_segments(
+    source: Arc<dyn SegmentSource>,
+    mut segments: Vec<SegmentId>,
+) -> Arc<dyn SegmentSource> {
+    if segments.is_empty() {
+        return source;
+    }
+    segments.sort_unstable();
+    segments.dedup();
+    let registered = segments
+        .into_iter()
+        .map(|id| (id, source.request(id)))
+        .collect();
+    Arc::new(RegisteredSegments {
+        source,
+        registered: Mutex::new(registered),
+    })
+}
+
+struct RegisteredSegments {
+    source: Arc<dyn SegmentSource>,
+    registered: Mutex<HashMap<SegmentId, SegmentFuture>>,
+}
+
+impl SegmentSource for RegisteredSegments {
+    fn request(&self, id: SegmentId) -> SegmentFuture {
+        self.registered
+            .lock()
+            .remove(&id)
+            .unwrap_or_else(|| self.source.request(id))
+    }
 }
 
 /// Serves splits from any [`SegmentSource`], by segment id.
@@ -78,12 +140,17 @@ impl IoService for SegmentScanIo {
 pub(super) struct SegmentIoSource {
     segments: Arc<dyn SegmentSource>,
     ranges: SegmentRanges,
-    reads: Mutex<FuturesUnordered<BoxFuture<'static, Completion>>>,
-    ready: Mutex<VecDeque<Completion>>,
+    state: Mutex<SegmentIoState>,
+}
+
+#[derive(Default)]
+struct SegmentIoState {
+    reads: FuturesUnordered<BoxFuture<'static, Completion>>,
+    ready: VecDeque<Completion>,
     /// Reads started by prefetches, consumed by the next fetch of their segment.
-    prefetched: Mutex<HashMap<SegmentId, Prefetched>>,
+    prefetched: HashMap<SegmentId, Prefetched>,
     /// Announced segments, requested and never polled.
-    announced: Mutex<HashMap<SegmentId, VecDeque<SegmentFuture>>>,
+    announced: HashMap<SegmentId, VecDeque<SegmentFuture>>,
 }
 
 /// A read started ahead of the fetch that needs it.
@@ -94,19 +161,21 @@ impl SegmentIoSource {
         Self {
             segments,
             ranges,
-            reads: Mutex::new(FuturesUnordered::new()),
-            ready: Mutex::default(),
-            prefetched: Mutex::default(),
-            announced: Mutex::default(),
+            state: Mutex::default(),
         }
     }
 }
 
 impl IoSource for SegmentIoSource {
     fn submit(&self, owner: IoOwnerId, batch: IoBatch) -> VortexResult<()> {
-        let reads = self.reads.lock();
-        let mut ready = self.ready.lock();
-        let mut prefetched = self.prefetched.lock();
+        let mut state = self.state.lock();
+        let SegmentIoState {
+            reads,
+            ready,
+            prefetched,
+            announced,
+        } = &mut *state;
+        let mut fetched = SmallVec::<[_; 4]>::with_capacity(batch.len());
         for request in batch {
             let IoTarget::Range { offset, len, .. } = request.target else {
                 vortex_bail!(
@@ -114,13 +183,12 @@ impl IoSource for SegmentIoSource {
                     request.target
                 );
             };
-            let segment = *self
+            let segment = self
                 .ranges
                 .get(&(offset, len))
                 .ok_or_else(|| vortex_err!("No segment at bytes {offset}+{len}"))?;
             if request.intent == IoIntent::Announce {
-                self.announced
-                    .lock()
+                announced
                     .entry(segment)
                     .or_default()
                     .push_back(self.segments.request(segment));
@@ -128,9 +196,7 @@ impl IoSource for SegmentIoSource {
             }
             if request.intent == IoIntent::Prefetch {
                 prefetched.entry(segment).or_insert_with(|| {
-                    let read = self
-                        .announced
-                        .lock()
+                    let read = announced
                         .get_mut(&segment)
                         .and_then(VecDeque::pop_front)
                         .unwrap_or_else(|| self.segments.request(segment))
@@ -146,20 +212,22 @@ impl IoSource for SegmentIoSource {
                 });
                 continue;
             }
-            let mut bytes = match prefetched.remove(&segment) {
+            let bytes = match prefetched.remove(&segment) {
                 Some(read) => read
                     .map_err(move |err| {
                         vortex_err!("prefetched read of segment {segment} failed: {err}")
                     })
                     .boxed(),
-                None => self
-                    .announced
-                    .lock()
+                None => announced
                     .get_mut(&segment)
                     .and_then(VecDeque::pop_front)
                     .unwrap_or_else(|| self.segments.request(segment)),
             };
-            let id = request.request;
+            fetched.push((request.request, bytes));
+        }
+        // Register the whole batch before polling its fetches. A file source can coalesce
+        // registered neighbors when the first fetch starts the read driver.
+        for (id, mut bytes) in fetched {
             // In-memory and cached segments need no allocated asynchronous task. A pending
             // read is polled again by FuturesUnordered before the driver can go to sleep.
             if let Poll::Ready(result) = bytes.poll_unpin(&mut Context::from_waker(Waker::noop())) {
@@ -185,23 +253,25 @@ impl IoSource for SegmentIoSource {
     }
 
     fn poll(&self) -> VortexResult<Option<Completion>> {
-        if let Some(completion) = self.ready.lock().pop_front() {
+        let mut state = self.state.lock();
+        if let Some(completion) = state.ready.pop_front() {
             return Ok(Some(completion));
         }
         // The split's future polls again with its own waker before it waits, so a read that
         // finishes after this check is not missed.
         let mut cx = Context::from_waker(Waker::noop());
-        match self.reads.lock().poll_next_unpin(&mut cx) {
+        match state.reads.poll_next_unpin(&mut cx) {
             Poll::Ready(completion) => Ok(completion),
             Poll::Pending => Ok(None),
         }
     }
 
     fn poll_completion(&self, cx: &mut Context<'_>) -> Poll<VortexResult<Completion>> {
-        if let Some(completion) = self.ready.lock().pop_front() {
+        let mut state = self.state.lock();
+        if let Some(completion) = state.ready.pop_front() {
             return Poll::Ready(Ok(completion));
         }
-        match self.reads.lock().poll_next_unpin(cx) {
+        match state.reads.poll_next_unpin(cx) {
             Poll::Ready(Some(completion)) => Poll::Ready(Ok(completion)),
             Poll::Ready(None) => Poll::Ready(Err(vortex_err!(
                 "The split's driver is waiting with no reads in flight"
@@ -217,10 +287,11 @@ impl IoSource for SegmentIoSource {
     fn release(&self, _owner: IoOwnerId) {}
 
     fn clear(&self) {
-        self.reads.lock().clear();
-        self.ready.lock().clear();
-        self.prefetched.lock().clear();
-        self.announced.lock().clear();
+        let mut state = self.state.lock();
+        state.reads.clear();
+        state.ready.clear();
+        state.prefetched.clear();
+        state.announced.clear();
     }
 }
 
@@ -234,6 +305,7 @@ mod tests {
     use futures::channel::oneshot;
     use futures::future;
     use parking_lot::Mutex;
+    use rstest::rstest;
     use vortex_array::buffer::BufferHandle;
     use vortex_buffer::Alignment;
     use vortex_buffer::ByteBuffer;
@@ -247,11 +319,38 @@ mod tests {
     use vortex_io::request::IoTarget;
 
     use super::SegmentIoSource;
+    use super::register_segments;
     use super::segment_ranges;
     use crate::scan::planning::SegmentLocation;
     use crate::segments::SegmentFuture;
     use crate::segments::SegmentId;
     use crate::segments::SegmentSource;
+
+    #[rstest]
+    #[case::ordered(vec![0, 4, 8], [Some(0), Some(1), Some(2), None, None])]
+    #[case::unordered(vec![8, 0, 4], [Some(1), Some(2), Some(0), None, None])]
+    #[case::duplicates(vec![0, 4, 4], [Some(0), Some(2), None, None, None])]
+    #[case::empty(vec![], [None; 5])]
+    fn byte_ranges_resolve_to_segment_ids(
+        #[case] offsets: Vec<u64>,
+        #[case] expected: [Option<u32>; 5],
+    ) {
+        let locations = offsets
+            .into_iter()
+            .map(|offset| SegmentLocation {
+                offset,
+                length: 4,
+                alignment: Alignment::none(),
+            })
+            .collect();
+        let ranges = segment_ranges(&locations);
+        for (key, expected) in [(0, 4), (4, 4), (8, 4), (4, 3), (12, 4)]
+            .into_iter()
+            .zip(expected)
+        {
+            assert_eq!(ranges.get(&key).map(|id| *id), expected);
+        }
+    }
 
     /// Serves four bytes per segment and counts the reads it is asked for.
     #[derive(Default)]
@@ -265,6 +364,25 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn registered_segments_are_consumed_once() -> VortexResult<()> {
+        let source = Arc::new(CountingSegments::default());
+        let segments = register_segments(
+            Arc::clone(&source) as _,
+            vec![SegmentId::from(0), SegmentId::from(1), SegmentId::from(0)],
+        );
+        assert_eq!(source.0.load(Ordering::Relaxed), 2);
+        for (id, calls) in [(1, 2), (0, 2), (0, 3), (2, 4)] {
+            let bytes = segments.request(SegmentId::from(id)).await?;
+            assert_eq!(
+                bytes.try_into_host_sync()?.as_ref(),
+                &[u8::try_from(id)?; 4]
+            );
+            assert_eq!(source.0.load(Ordering::Relaxed), calls);
+        }
+        Ok(())
+    }
+
     fn request(intent: IoIntent, id: u32) -> IoRequest {
         IoRequest {
             intent,
@@ -274,6 +392,53 @@ mod tests {
     }
 
     struct MixedSegments(Mutex<Option<oneshot::Receiver<ByteBuffer>>>);
+
+    #[derive(Default)]
+    struct BatchSegments {
+        registered: Arc<AtomicUsize>,
+        observed: Arc<Mutex<Vec<usize>>>,
+    }
+
+    impl SegmentSource for BatchSegments {
+        fn request(&self, _id: SegmentId) -> SegmentFuture {
+            self.registered.fetch_add(1, Ordering::Relaxed);
+            let registered = Arc::clone(&self.registered);
+            let observed = Arc::clone(&self.observed);
+            async move {
+                observed.lock().push(registered.load(Ordering::Relaxed));
+                Ok(BufferHandle::new_host(ByteBuffer::from(vec![0; 4])))
+            }
+            .boxed()
+        }
+    }
+
+    #[test]
+    fn registers_fetch_batch_before_polling() -> VortexResult<()> {
+        let segments = Arc::new(BatchSegments::default());
+        let locations = [0, 4, 8].map(|offset| SegmentLocation {
+            offset,
+            length: 4,
+            alignment: Alignment::none(),
+        });
+        let io = SegmentIoSource::new(
+            Arc::clone(&segments) as _,
+            segment_ranges(&locations.into()),
+        );
+        let batch = (0..3)
+            .map(|id| IoRequest {
+                intent: IoIntent::Fetch,
+                request: IoRequestId(id),
+                target: IoTarget::range(u64::from(id) * 4, 4),
+            })
+            .collect();
+        io.submit(IoOwnerId(0), batch)?;
+        assert_eq!(*segments.observed.lock(), vec![3, 3, 3]);
+        for id in 0..3 {
+            assert_eq!(io.poll()?.expect("ready fetch").request, IoRequestId(id));
+        }
+        assert!(io.poll()?.is_none());
+        Ok(())
+    }
 
     impl SegmentSource for MixedSegments {
         fn request(&self, id: SegmentId) -> SegmentFuture {
@@ -301,7 +466,7 @@ mod tests {
             length: 4,
             alignment: Alignment::none(),
         });
-        let io = SegmentIoSource::new(segments, segment_ranges(&locations));
+        let io = SegmentIoSource::new(segments, segment_ranges(&locations.into()));
         let mut pending = request(IoIntent::Fetch, 1);
         pending.target = IoTarget::range(4, 4);
         io.submit(IoOwnerId(0), vec![pending, request(IoIntent::Fetch, 0)])?;
@@ -334,7 +499,10 @@ mod tests {
             length: 4,
             alignment: Alignment::none(),
         };
-        let io = SegmentIoSource::new(Arc::clone(&segments) as _, segment_ranges(&[location]));
+        let io = SegmentIoSource::new(
+            Arc::clone(&segments) as _,
+            segment_ranges(&Arc::from([location])),
+        );
 
         io.submit(IoOwnerId(0), vec![request(IoIntent::Prefetch, 0)])?;
         assert_eq!(segments.0.load(Ordering::Relaxed), 1);
@@ -362,7 +530,10 @@ mod tests {
             length: 4,
             alignment: Alignment::none(),
         };
-        let io = SegmentIoSource::new(Arc::clone(&segments) as _, segment_ranges(&[location]));
+        let io = SegmentIoSource::new(
+            Arc::clone(&segments) as _,
+            segment_ranges(&Arc::from([location])),
+        );
         io.submit(
             IoOwnerId(0),
             vec![

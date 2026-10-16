@@ -553,6 +553,41 @@ fn roots_finish_independently() -> VortexResult<()> {
     Ok(())
 }
 
+#[rstest]
+fn ready_roots_preserve_admission_order(
+    #[values(1, 4, 5, 12)] count: u64,
+    #[values(false, true)] cancel: bool,
+) -> VortexResult<()> {
+    let log = Log::default();
+    let mut run = Run::new().with_step_limit(1_000);
+    for index in 0..count {
+        let rows = index..index + 1;
+        run.admit(
+            ready_root("root", &log, rows.clone()),
+            scope(rows),
+            source(),
+        );
+    }
+    if cancel {
+        run.cancel(RootId(0));
+        run.cancel(RootId(count - 1));
+    }
+    let mut actual = Vec::new();
+    loop {
+        match run.advance()? {
+            Progress::Batch(batch) => actual.push(batch.scope.rows.start),
+            Progress::RootDone(_) => {}
+            Progress::Idle => break,
+            Progress::Waiting => vortex_bail!("ready roots should not wait"),
+        }
+    }
+    let expected = (0..count)
+        .filter(|&index| !cancel || (index != 0 && index != count - 1))
+        .collect::<Vec<_>>();
+    assert_eq!(actual, expected);
+    Ok(())
+}
+
 #[test]
 fn poll_completion_delivers_from_every_waiting_root() -> VortexResult<()> {
     let log = Log::default();
@@ -658,21 +693,28 @@ fn a_waiting_item_is_not_revisited_per_delivery() -> VortexResult<()> {
     Ok(())
 }
 
-#[test]
-fn waking_subtree_precedes_an_already_discovered_sibling() -> VortexResult<()> {
+#[rstest]
+#[case::shallow(0)]
+#[case::nested(3)]
+#[case::deep(8)]
+fn waking_subtree_precedes_an_already_discovered_sibling(#[case] depth: usize) -> VortexResult<()> {
     let log = Log::default();
     let io = source();
+    let mut subtree = vec![
+        PlannerStep::Io(vec![request(0, 0)]),
+        one_batch_morsel(scope(0..1), 1),
+        PlannerStep::Done,
+    ];
+    for _ in 0..depth {
+        subtree = vec![
+            PlannerStep::Planner(scope(0..1), subtree),
+            PlannerStep::Done,
+        ];
+    }
     let root = ScriptedPlanner::boxed(
         "root",
         vec![
-            PlannerStep::Planner(
-                scope(0..1),
-                vec![
-                    PlannerStep::Io(vec![request(0, 0)]),
-                    one_batch_morsel(scope(0..1), 1),
-                    PlannerStep::Done,
-                ],
-            ),
+            PlannerStep::Planner(scope(0..1), subtree),
             PlannerStep::Morsel(
                 scope(1..2),
                 vec![

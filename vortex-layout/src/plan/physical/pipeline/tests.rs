@@ -17,6 +17,7 @@ use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinViewArray;
+use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::assert_arrays_eq;
 use vortex_array::buffer::BufferHandle;
 use vortex_array::dtype::StructFields;
@@ -25,6 +26,7 @@ use vortex_array::expr::gt;
 use vortex_array::expr::lit;
 use vortex_array::expr::root;
 use vortex_array::serde::SerializeOptions;
+use vortex_array::validity::Validity;
 use vortex_buffer::Alignment;
 use vortex_buffer::Buffer;
 use vortex_buffer::ByteBufferMut;
@@ -380,6 +382,8 @@ fn assert_view(
 #[case::crosses_every_boundary(3..17, Sel::All)]
 #[case::every_other(5..15, Sel::EveryOther)]
 #[case::sparse(0..20, Sel::Rows(&[0, 6, 7, 19]))]
+#[case::cluster_inside_view(3..17, Sel::Rows(&[5, 6, 7]))]
+#[case::scattered_inside_view(3..17, Sel::Rows(&[2, 8]))]
 #[case::one_row(8..9, Sel::All)]
 #[case::inside_one_chunk_per_column(13..16, Sel::All)]
 #[case::nothing_selected(2..18, Sel::None)]
@@ -433,23 +437,95 @@ fn splits_of_one_scan_read_each_segment_once(
 }
 
 #[test]
-fn every_read_is_issued_before_any_is_delivered() -> VortexResult<()> {
+fn columns_read_in_parallel_without_starting_later_chunks() -> VortexResult<()> {
     let mut store = Store::default();
-    let (plan, _) = fixture(&mut store)?;
+    let (plan, expected) = two_columns(&mut store)?;
+    let mask = Mask::new_true(ROWS as usize);
 
     let run = run(
         &store,
         &plan,
         0..ROWS,
-        Mask::new_true(ROWS as usize),
+        mask.clone(),
         delivery(Delivery::Fifo),
     )?;
     let Some(Event::Io(first)) = run.events.first() else {
         return Err(vortex_err!("first event must be a read batch"));
     };
-    assert_eq!(first.len(), store.segments.len());
+    let mut first = first.clone();
+    first.sort_unstable();
+    // The first chunk of a and the flat b column start together. a's later chunks wait.
+    assert_eq!(first, [0, 3]);
     assert_eq!(reads(&run.events), store.segments.len());
-    Ok(())
+    assert_view(&expected, &(0..ROWS), &mask, run.arrays)
+}
+
+#[rstest]
+fn emits_current_batch_before_reading_later_chunks(
+    #[values(Delivery::Fifo, Delivery::Lifo)] order: Delivery,
+) -> VortexResult<()> {
+    let mut store = Store::default();
+    let (plan, expected) = two_columns(&mut store)?;
+    let mask = Mask::new_true(ROWS as usize);
+    let run = run(&store, &plan, 0..ROWS, mask.clone(), delivery(order))?;
+    let first_output = run
+        .events
+        .iter()
+        .position(|event| matches!(event, Event::Piece(_)))
+        .ok_or_else(|| vortex_err!("Missing first output"))?;
+    let next_read = run
+        .events
+        .iter()
+        .position(|event| matches!(event, Event::Io(segments) if segments.contains(&1)))
+        .ok_or_else(|| vortex_err!("Missing second chunk read"))?;
+    assert!(first_output < next_read, "{:?}", run.events);
+    assert_view(&expected, &(0..ROWS), &mask, run.arrays)
+}
+
+#[rstest]
+fn later_chunks_defer_their_nested_inputs(
+    #[values(Delivery::Fifo, Delivery::Lifo)] order: Delivery,
+) -> VortexResult<()> {
+    let mut store = Store::default();
+    let a = PrimitiveArray::from_iter(0..ROWS as i32).into_array();
+    let b = PrimitiveArray::from_iter((0..ROWS as i64).map(|v| v * 10)).into_array();
+    let expected = StructArray::from_fields(&[("a", a.clone()), ("b", b.clone())])?.into_array();
+    let mut chunks = Vec::new();
+    for rows in [0..10, 10..20] {
+        chunks.push(
+            StructLayout::new(
+                10,
+                expected.dtype().clone(),
+                vec![
+                    store.flat(&a.slice(rows.clone())?)?,
+                    store.flat(&b.slice(rows)?)?,
+                ],
+            )
+            .into_layout(),
+        );
+    }
+    let layout = ChunkedLayout::new(
+        ROWS,
+        expected.dtype().clone(),
+        OwnedLayoutChildren::layout_children(chunks),
+    )
+    .into_layout();
+    let mask = Mask::new_true(ROWS as usize);
+    let run = run(
+        &store,
+        &lower(&layout)?,
+        0..ROWS,
+        mask.clone(),
+        delivery(order),
+    )?;
+    let Some(Event::Io(first)) = run.events.first() else {
+        return Err(vortex_err!("first event must be a read batch"));
+    };
+    let mut first = first.clone();
+    first.sort_unstable();
+    assert_eq!(first, [0, 1]);
+    assert_eq!(reads(&run.events), 4);
+    assert_view(&expected, &(0..ROWS), &mask, run.arrays)
 }
 
 #[test]
@@ -482,6 +558,94 @@ fn nothing_selected_issues_no_io_and_emits_nothing() -> VortexResult<()> {
     Ok(())
 }
 
+#[rstest]
+fn nullable_struct_without_fields_keeps_its_rows(
+    #[values(Sel::All, Sel::EveryOther)] selection: Sel,
+) -> VortexResult<()> {
+    let mut store = Store::default();
+    let validity = BoolArray::from_iter((0..ROWS).map(|row| row % 3 != 0)).into_array();
+    let expected = StructArray::try_new_with_dtype(
+        Vec::new(),
+        StructFields::empty(),
+        ROWS as usize,
+        Validity::Array(validity.clone()),
+    )?
+    .into_array();
+    let layout = StructLayout::new(ROWS, expected.dtype().clone(), vec![store.flat(&validity)?])
+        .into_layout();
+    let mask = selection.mask(ROWS as usize);
+    let run = run(
+        &store,
+        &lower(&layout)?,
+        0..ROWS,
+        mask.clone(),
+        delivery(Delivery::Fifo),
+    )?;
+    assert_view(&expected, &(0..ROWS), &mask, run.arrays)
+}
+
+#[rstest]
+fn flat_fields_preserve_selection_and_field_order(
+    #[values(Delivery::Fifo, Delivery::Lifo)] order: Delivery,
+    #[values(Sel::All, Sel::EveryOther, Sel::Rows(&[1]))] selection: Sel,
+    #[values(false, true)] nullable: bool,
+    #[values(false, true)] shared: bool,
+) -> VortexResult<()> {
+    let mut store = Store::default();
+    let a = PrimitiveArray::from_iter(0..ROWS as i32).into_array();
+    let b = if shared {
+        a.clone()
+    } else {
+        PrimitiveArray::from_iter((0..ROWS as i32).map(|row| row * 10)).into_array()
+    };
+    let validity = BoolArray::from_iter((0..ROWS).map(|row| row % 3 != 0)).into_array();
+    let fields = StructArray::from_fields(&[("a", a.clone()), ("b", b.clone())])?;
+    let expected = StructArray::try_new_with_dtype(
+        vec![a.clone(), b.clone()],
+        fields.struct_fields().clone(),
+        ROWS as usize,
+        if nullable {
+            Validity::Array(validity.clone())
+        } else {
+            Validity::NonNullable
+        },
+    )?
+    .into_array();
+    // Physical segment order differs from field order.
+    let b_layout = store.flat(&b)?;
+    let a_layout = if shared {
+        b_layout.clone()
+    } else {
+        store.flat(&a)?
+    };
+    let mut children = vec![a_layout, b_layout];
+    if nullable {
+        children.insert(0, store.flat(&validity)?);
+    }
+    let layout = StructLayout::new(ROWS, expected.dtype().clone(), children).into_layout();
+    let rows = 3..17;
+    let mask = selection.mask((rows.end - rows.start) as usize);
+    let run = run(
+        &store,
+        &lower(&layout)?,
+        rows.clone(),
+        mask.clone(),
+        delivery(order),
+    )?;
+    assert_eq!(reads(&run.events), store.segments.len());
+    let Some(Event::Io(first)) = run.events.first() else {
+        return Err(vortex_err!(
+            "First event must request all independent fields"
+        ));
+    };
+    assert_eq!(first.len(), store.segments.len());
+    if !shared {
+        let expected_reads = if nullable { vec![1, 0, 2] } else { vec![1, 0] };
+        assert_eq!(first, &expected_reads);
+    }
+    assert_view(&expected, &rows, &mask, run.arrays)
+}
+
 /// `{a, b}` with `a` chunked `[0,7) [7,12) [12,20)` and `b` flat.
 fn two_columns(store: &mut Store) -> VortexResult<(PlanRef, ArrayRef)> {
     let a = PrimitiveArray::from_iter(0..ROWS as i32).into_array();
@@ -501,9 +665,8 @@ fn two_columns(store: &mut Store) -> VortexResult<(PlanRef, ArrayRef)> {
 ///
 /// Segments: a0=0, a1=1, a2=2, b=3.
 #[rstest]
-#[case::b_last(&[1, 0, 2, 3])]
-#[case::a_chunk_last(&[3, 0, 2, 1])]
-#[case::in_order(&[3, 0, 1, 2])]
+#[case::a_first(&[0, 3, 1, 2])]
+#[case::b_first(&[3, 0, 1, 2])]
 fn pack_splits_misaligned_fields(#[case] order: &[u32]) -> VortexResult<()> {
     let mut store = Store::default();
     let (plan, expected) = two_columns(&mut store)?;

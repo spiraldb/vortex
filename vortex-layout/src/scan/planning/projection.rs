@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-use vortex_array::IntoArray;
-use vortex_array::arrays::ChunkedArray;
-use vortex_array::dtype::DType;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
@@ -20,16 +17,16 @@ use vortex_scan::planning::planner::WorkScope;
 use crate::scan::planning::ScanPlans;
 use crate::scan::planning::SelectedRows;
 use crate::scan::planning::graph::GraphStep;
-use crate::scan::planning::graph::Piece;
 use crate::scan::planning::graph::ProtocolGraph;
 use crate::scan::planning::graph::ScanGraph;
+use crate::scan::planning::point::PointProjectionMorsel;
 use crate::scan::v2::splits::projection_splits;
 
 /// Turns a split's selected rows into the morsels that project them.
 ///
-/// The rows are cut into projection splits where the projection's chunks start, and each split
-/// with a selected row becomes one [`ProjectionMorsel`], so a morsel reads at most one chunk of
-/// every column. The planner finishes once it has handed out every morsel.
+/// Known projection boundaries cut the rows into morsels. Sparse selections can already be
+/// grouped by a projected column's chunks, in which case the pipeline discovers the other
+/// columns' selected chunks lazily. The planner finishes after handing out every morsel.
 pub struct ProjectionPlanner {
     plans: Option<ScanPlans>,
     /// The split's selected rows, until the first compute cuts them.
@@ -86,11 +83,23 @@ impl Planner for ProjectionPlanner {
     }
 
     fn compute(&mut self) -> VortexResult<PlannerOutput> {
-        if let Some(selected) = self.selected.take() {
-            self.pending = self.cut(selected);
-        }
+        let selected = match self.selected.take() {
+            Some(selected)
+                if self
+                    .plans
+                    .as_ref()
+                    .is_some_and(|plans| plans.projection_starts.is_empty()) =>
+            {
+                Some(selected)
+            }
+            Some(selected) => {
+                self.pending = self.cut(selected);
+                self.pending.pop()
+            }
+            None => self.pending.pop(),
+        };
         // No projection split has a selected row.
-        let Some(selected) = self.pending.pop() else {
+        let Some(selected) = selected.filter(|selected| !selected.mask.all_false()) else {
             return Ok(PlannerOutput::Done);
         };
         let scope = selected.scope.clone();
@@ -104,6 +113,13 @@ impl Planner for ProjectionPlanner {
                 .vortex_expect("planner has plans")
                 .clone()
         };
+        if scope.rows.end.checked_sub(scope.rows.start) == Some(1)
+            && selected.mask.len() == 1
+            && selected.mask.all_true()
+            && let Some(morsel) = PointProjectionMorsel::try_new(&plans, scope.rows.start)?
+        {
+            return Ok(PlannerOutput::Morsel(scope, Box::new(morsel)));
+        }
         Ok(PlannerOutput::Morsel(
             scope,
             Box::new(ProjectionMorsel::new(plans, selected)),
@@ -111,14 +127,12 @@ impl Planner for ProjectionPlanner {
     }
 }
 
-/// Runs the projection plan over a split's selected rows and returns them as one batch, in row
-/// order. A selection that projects to no rows finishes without a batch.
+/// Runs the projection plan over a split's selected rows, yielding batches in row order.
+/// A selection that projects to no rows finishes without a batch.
 pub struct ProjectionMorsel {
     plans: Option<ScanPlans>,
-    dtype: DType,
     selected: SelectedRows,
     graph: Option<ProtocolGraph>,
-    pieces: Vec<Piece>,
     done: bool,
 }
 
@@ -126,29 +140,11 @@ impl ProjectionMorsel {
     /// Creates a morsel projecting `selected`.
     pub fn new(plans: ScanPlans, selected: SelectedRows) -> Self {
         Self {
-            dtype: plans.projection.dtype().clone(),
             plans: Some(plans),
             selected,
             graph: None,
-            pieces: Vec::new(),
             done: false,
         }
-    }
-
-    fn finish(&mut self) -> VortexResult<MorselOutput> {
-        self.done = true;
-        self.pieces.sort_by_key(|piece| piece.rows.start);
-        let mut arrays: Vec<_> = std::mem::take(&mut self.pieces)
-            .into_iter()
-            .map(|piece| piece.array)
-            .filter(|array| !array.is_empty())
-            .collect();
-        let array = match arrays.len() {
-            0 => return Ok(MorselOutput::Done),
-            1 => arrays.remove(0),
-            _ => ChunkedArray::try_new(arrays, self.dtype.clone())?.into_array(),
-        };
-        Ok(MorselOutput::Batch(array))
     }
 }
 
@@ -193,15 +189,14 @@ impl Morsel for ProjectionMorsel {
             return Ok(MorselOutput::Continue);
         };
         if graph.state() == State::Done {
-            return self.finish();
+            self.done = true;
+            return Ok(MorselOutput::Done);
         }
         Ok(match graph.compute()? {
             GraphStep::Yield => MorselOutput::Continue,
             GraphStep::NeedsIO(batch) => MorselOutput::NeedsIO(batch),
-            GraphStep::Piece(piece) => {
-                self.pieces.push(piece);
-                MorselOutput::Continue
-            }
+            GraphStep::Piece(array) if array.is_empty() => MorselOutput::Continue,
+            GraphStep::Piece(array) => MorselOutput::Batch(array),
         })
     }
 }

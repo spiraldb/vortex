@@ -96,6 +96,11 @@ impl VTable for Chunked {
 }
 
 impl Layout<Chunked> {
+    /// The start of every chunk, followed by the total row count.
+    pub(crate) fn chunk_offsets(&self) -> &[u64] {
+        &self.chunk_offsets
+    }
+
     /// Construct a chunked layout.
     pub fn new(row_count: u64, dtype: DType, children: Arc<dyn LayoutChildren>) -> Self {
         let offsets = chunk_offsets(children.as_ref()).vortex_expect("chunk row counts overflow");

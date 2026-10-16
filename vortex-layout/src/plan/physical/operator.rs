@@ -55,6 +55,10 @@ pub trait Source: Operator {
     /// Returning [`SourceReady::Ready`] guarantees that call can proceed without blocking.
     /// Any input or choice made here can be retained by the source for that call.
     ///
+    /// Accessing an inlet through [`Cx::inlet`] starts its producer, as does returning
+    /// `SourceReady::Blocked(SourceBlocked::Inlet(index))`. Access independent inputs in the
+    /// same readiness check to let them read in parallel.
+    ///
     /// Queue reads with [`Cx::request_read`] and return
     /// `SourceReady::Blocked(SourceBlocked::Io)`. The driver issues newly queued reads
     /// before waiting. Readiness is checked again when bytes are available, including bytes
@@ -180,7 +184,7 @@ impl Cx<'_> {
         !self.bytes.is_empty()
     }
 
-    /// The reading side of inlet `index` of this pipeline's source.
+    /// The reading side of inlet `index`, requesting its producer to start if it has not run.
     pub fn inlet(&mut self, index: usize) -> Inlet<'_> {
         self.touched.insert(index);
         self.arena.inlet(self.inlets[index])

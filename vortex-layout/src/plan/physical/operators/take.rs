@@ -57,11 +57,15 @@ impl TakeSource {
 
 impl Source for TakeSource {
     fn ready(&mut self, cx: &mut Cx<'_>) -> VortexResult<SourceReady> {
+        // Codes and whole values can read in parallel, even while the values are not ready.
+        let codes_ready = {
+            let codes = cx.inlet(CODES);
+            !codes.is_empty() || codes.closed()
+        };
         if self.values.is_none() && !cx.inlet(VALUES).closed() {
             return Ok(SourceReady::Blocked(SourceBlocked::Inlet(VALUES)));
         }
-        let codes = cx.inlet(CODES);
-        Ok(if codes.is_empty() && !codes.closed() {
+        Ok(if !codes_ready {
             SourceReady::Blocked(SourceBlocked::Inlet(CODES))
         } else {
             SourceReady::Ready

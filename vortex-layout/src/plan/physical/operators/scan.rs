@@ -24,7 +24,7 @@ use crate::plan::physical::operator::Step;
 use crate::segments::SegmentId;
 
 /// Decodes the whole of a scan's segment.
-fn decode(
+pub(crate) fn decode_segment(
     plan: &SegmentScanPlan,
     segment: BufferHandle,
     session: &VortexSession,
@@ -107,7 +107,7 @@ impl Operator for ScanSource {
             .take_segment()
             .ok_or_else(|| vortex_err!("Segment scan ran without its bytes"))?;
         self.done = true;
-        let array = decode(&self.plan, bytes, cx.session())?;
+        let array = decode_segment(&self.plan, bytes, cx.session())?;
         Ok(Step::Final(select(
             array,
             self.slice.as_ref(),

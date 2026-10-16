@@ -50,6 +50,8 @@ pub struct VortexFile {
     metadata: Arc<HashMap<String, ByteBuffer>>,
     /// None id LayoutReader caching is turned off
     layout_reader_cache: Option<OnceLock<Arc<dyn LayoutReader>>>,
+    /// Immutable planner metadata, enabled alongside layout reader caching.
+    scan_file_cache: Option<OnceLock<ScanFile>>,
 }
 
 fn layout_reader(
@@ -86,6 +88,7 @@ impl VortexFile {
             session,
             metadata: Arc::new(HashMap::new()),
             layout_reader_cache: None,
+            scan_file_cache: None,
         }
     }
 
@@ -97,7 +100,9 @@ impl VortexFile {
     /// Enable layout reader caching.
     ///
     /// Repeated calls to [`layout_reader`](Self::layout_reader), [`scan`](Self::scan), and
-    /// [`data_source`](Self::data_source) will share the same reader tree.
+    /// [`data_source`](Self::data_source) will share the same reader tree. Planner-driven scans
+    /// also share immutable layout plans, segment locations, and whole dictionary values used
+    /// by identity projections. Selections and expression results remain local to each scan.
     pub fn with_caching(self) -> Self {
         Self {
             footer: self.footer,
@@ -105,6 +110,7 @@ impl VortexFile {
             session: self.session,
             metadata: self.metadata,
             layout_reader_cache: Some(OnceLock::new()),
+            scan_file_cache: Some(OnceLock::new()),
         }
     }
 
@@ -162,6 +168,7 @@ impl VortexFile {
         self.segment_source = segment_source;
         if self.layout_reader_cache.is_some() {
             self.layout_reader_cache = Some(OnceLock::new());
+            self.scan_file_cache = Some(OnceLock::new());
         }
         self
     }
@@ -226,6 +233,15 @@ impl VortexFile {
     /// The parts of this file the planner-driven scan executor reads through: its root layout,
     /// where each of its segments lives, and its segment source.
     pub fn scan_file(&self) -> ScanFile {
+        match &self.scan_file_cache {
+            Some(cache) => cache
+                .get_or_init(|| self.new_scan_file().with_caching())
+                .clone(),
+            None => self.new_scan_file(),
+        }
+    }
+
+    fn new_scan_file(&self) -> ScanFile {
         let locations = self
             .footer
             .segment_specs_with_metadata()
@@ -236,11 +252,11 @@ impl VortexFile {
                 alignment: spec.alignment,
             })
             .collect();
-        ScanFile {
-            layout: Arc::clone(self.footer.layout()),
+        ScanFile::new(
+            Arc::clone(self.footer.layout()),
             locations,
-            segments: Arc::clone(&self.segment_source),
-        }
+            Arc::clone(&self.segment_source),
+        )
     }
 
     /// Returns `true` if file-level statistics prove the expression cannot
@@ -277,5 +293,41 @@ impl VortexFile {
             .tuple_windows()
             .map(|(start, end)| start..end)
             .collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use vortex_array::dtype::PType;
+    use vortex_layout::layouts::flat::FlatLayout;
+    use vortex_layout::segments::SegmentId;
+    use vortex_layout::segments::TestSegments;
+    use vortex_session::registry::ReadContext;
+
+    use super::*;
+
+    #[test]
+    fn replacing_source_invalidates_cached_scan_file() -> VortexResult<()> {
+        let layout = FlatLayout::new(
+            0,
+            DType::Primitive(PType::I32, false.into()),
+            SegmentId::from(0),
+            ReadContext::new([]),
+        )
+        .into_layout();
+        let footer = Footer::new(layout, Arc::from([]), None, ReadContext::new([]));
+        let original: Arc<dyn SegmentSource> = Arc::new(TestSegments::default());
+        let file =
+            VortexFile::new(footer, original.clone(), vortex_array::array_session()).with_caching();
+        let before = file.scan_file();
+        assert!(Arc::ptr_eq(&before.locations, &file.scan_file().locations));
+        assert!(Arc::ptr_eq(&before.segments, &original));
+        let reader = file.layout_reader()?;
+        let replacement: Arc<dyn SegmentSource> = Arc::new(TestSegments::default());
+        let replaced = file.clone().with_segment_source(replacement.clone());
+        assert!(Arc::ptr_eq(&replaced.scan_file().segments, &replacement));
+        assert!(Arc::ptr_eq(&file.scan_file().segments, &original));
+        assert!(!Arc::ptr_eq(&reader, &replaced.layout_reader()?));
+        Ok(())
     }
 }

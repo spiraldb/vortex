@@ -21,7 +21,6 @@ use vortex_error::vortex_err;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
 
-use super::DEFAULT_CAPACITY;
 use super::compile::Chain;
 use super::compile::Shares;
 use super::port::Arena;
@@ -93,6 +92,8 @@ pub enum Turn {
 /// Whether a pipeline can run, and if not, what it waits for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum State {
+    /// No consumer has requested this pipeline's output yet.
+    Dormant,
     Runnable,
     /// What its source said it waits for.
     Blocked(SourceBlocked),
@@ -290,7 +291,9 @@ pub(crate) struct Core {
     /// split is, as while the pipeline a share decodes with is built: it reads for no split.
     pub(crate) split: usize,
     /// Whole values kept for later scans of the same split.
-    pub(crate) values: ValueCache,
+    pub(crate) values: Option<ValueCache>,
+    /// Pipelines compiled under a later chunk wait for their consumer's demand.
+    pub(crate) defer: bool,
 }
 
 impl Core {
@@ -310,11 +313,12 @@ impl Core {
             dirty_flags: Vec::new(),
             shares: Shares::new(splits),
             split: usize::MAX,
-            values: ValueCache::default(),
+            values: None,
+            defer: false,
         }
     }
 
-    /// Makes `chain` a pipeline writing `outlets`, and queues it to run.
+    /// Makes `chain` a pipeline writing `outlets`. Deferred chains wait for their consumer.
     pub(crate) fn add_pipeline(
         &mut self,
         chain: Chain,
@@ -322,6 +326,7 @@ impl Core {
     ) -> PipelineId {
         let touched = InletSet::new(chain.inlets.len());
         let changed = InletSet::all(chain.inlets.len());
+        let deferred = self.defer || chain.deferred;
         let pipeline = Pipeline {
             continuing: Vec::new(),
             source_more: false,
@@ -334,8 +339,12 @@ impl Core {
             finishing: None,
             touched,
             changed,
-            state: State::Runnable,
-            queued: true,
+            state: if deferred {
+                State::Dormant
+            } else {
+                State::Runnable
+            },
+            queued: !deferred,
         };
         let id = match self.free_pipelines.pop() {
             Some(id) => id,
@@ -348,7 +357,9 @@ impl Core {
             self.arena.get_mut(outlet).sink = Some(id);
         }
         self.pipelines[id] = Some(pipeline);
-        self.ready.push(id);
+        if !deferred {
+            self.ready.push(id);
+        }
         id
     }
 
@@ -370,8 +381,9 @@ impl Core {
         };
         let port = self
             .arena
-            .create(DEFAULT_CAPACITY, None, SourceEnd::Scan(slot));
-        self.add_pipeline(chain, smallvec::smallvec![port]);
+            .create(chain.output_capacity, None, SourceEnd::Scan(slot));
+        let pipeline = self.add_pipeline(chain, smallvec::smallvec![port]);
+        self.make_runnable(pipeline);
         #[cfg(debug_assertions)]
         self.validate();
         Ok(Some(port))
@@ -422,6 +434,11 @@ impl Core {
             Progress::Blocked(SourceBlocked::Io) if !self.pipeline(id).bytes.is_empty() => {
                 self.make_runnable(id);
             }
+            Progress::Blocked(SourceBlocked::Inlet(index)) => {
+                let pipe = self.pipeline_mut(id);
+                pipe.state = State::Blocked(SourceBlocked::Inlet(*index));
+                pipe.touched.insert(*index);
+            }
             // Nothing changes a port while its source's pipeline runs, so the condition the run reported
             // holds until a neighbour wakes it.
             Progress::Blocked(blocked) => self.pipeline_mut(id).state = State::Blocked(*blocked),
@@ -462,8 +479,8 @@ impl Core {
                 SourceEnd::Unclaimed => {}
             }
         }
-        // Only an inlet the run read can have gained room, so a source with many inlets, as a
-        // concatenation of many chunks, pays for the inlets it read, not for all of them.
+        // Only touched inlets can need their producer started or have gained room. A source
+        // with many inlets, such as a concatenation, pays only for the inputs it requested.
         let mut touched = std::mem::take(&mut self.pipeline_mut(id).touched);
         for &index in touched.indices() {
             if let Some(sink) = self.arena.get(self.pipeline(id).inlets[index]).sink
@@ -485,10 +502,10 @@ impl Core {
         }
     }
 
-    /// Whether pipeline `sink` is blocked on its outlets and every one of them has room now.
+    /// Whether a consumer can start `sink`, or resume it after freeing room in its outlets.
     fn sink_has_room(&self, sink: PipelineId) -> bool {
         let pipe = self.pipeline(sink);
-        pipe.state == State::Outlet
+        matches!(pipe.state, State::Dormant | State::Outlet)
             && pipe
                 .outlets
                 .iter()
@@ -679,7 +696,16 @@ impl Scan {
             .unwrap_or(0);
         let end = splits.iter().map(|split| split.rows.end).max().unwrap_or(0);
         match &root {
-            Root::Plan(plan) => core.shares.add(plan, start..end)?,
+            Root::Plan(plan) => {
+                if let [split] = splits.as_slice()
+                    && !split.mask.all_true()
+                {
+                    core.shares
+                        .add_selected(plan, split.rows.clone(), &split.mask)?;
+                } else {
+                    core.shares.add(plan, start..end)?;
+                }
+            }
         }
         core.shares.retain_shared();
         core.dirty_flags = vec![false; 1];
@@ -710,7 +736,7 @@ impl Scan {
 
     /// Shares whole values, such as dictionary values, with the other scans given `values`.
     pub fn with_value_cache(mut self, values: ValueCache) -> Self {
-        self.core.values = values;
+        self.core.values = Some(values);
         self
     }
 

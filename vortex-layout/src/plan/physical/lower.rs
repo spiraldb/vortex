@@ -52,7 +52,7 @@ pub fn lower(layout: &LayoutRef) -> VortexResult<PlanRef> {
         return Ok(FilterPlan::new(lower_flat(layout).into_plan()).into_plan());
     }
     if let Some(layout) = layout.as_opt::<Chunked>() {
-        return Ok(lower_chunked(layout)?.into_plan());
+        return Ok(lower_chunked(layout).into_plan());
     }
     if let Some(layout) = layout.as_opt::<Struct>() {
         return Ok(lower_struct(layout)?.into_plan());
@@ -82,25 +82,19 @@ fn lower_flat(layout: &FlatLayout) -> SegmentScanPlan {
     )
 }
 
-fn lower_chunked(layout: &ChunkedLayout) -> VortexResult<ConcatPlan> {
-    let mut row_offsets = Vec::with_capacity(layout.nchildren());
-    let mut row_count = 0u64;
-    for index in 0..layout.nchildren() {
-        row_offsets.push(row_count);
-        row_count = row_count
-            .checked_add(layout.child_row_count(index))
-            .ok_or_else(|| vortex_err!("Chunked row count overflow"))?;
-    }
+fn lower_chunked(layout: &ChunkedLayout) -> ConcatPlan {
+    let source = layout.to_layout();
+    let children = PlanChildren::lazy(layout.nchildren(), move |index| lower_slot(&source, index));
     // SAFETY: Chunked layout construction validates that every child has the parent dtype and
-    // that their row counts sum to the parent; offsets were computed with checked addition above.
-    Ok(unsafe {
+    // that their row counts sum to the parent; reuse those checked offsets without the sentinel.
+    unsafe {
         ConcatPlan::from_children_unchecked(
             layout.dtype().clone(),
             layout.row_count(),
-            row_offsets.into(),
-            lazy_children(layout.to_layout(), (0..layout.nchildren()).collect()),
+            layout.chunk_offsets()[..layout.nchildren()].into(),
+            children,
         )
-    })
+    }
 }
 
 fn lower_struct(layout: &StructLayout) -> VortexResult<PackPlan> {
@@ -159,11 +153,15 @@ fn lazy_children(layout: LayoutRef, slots: Vec<usize>) -> PlanChildren {
             .get(index)
             .copied()
             .ok_or_else(|| vortex_err!("Missing plan child slot {index}"))?;
-        let child = layout
-            .slot(slot)?
-            .ok_or_else(|| vortex_err!("Layout child slot {slot} is absent"))?;
-        lower(&child)
+        lower_slot(&layout, slot)
     })
+}
+
+fn lower_slot(layout: &LayoutRef, slot: usize) -> VortexResult<PlanRef> {
+    let child = layout
+        .slot(slot)?
+        .ok_or_else(|| vortex_err!("Layout child slot {slot} is absent"))?;
+    lower(&child)
 }
 
 fn lower_zoned(layout: &LayoutRef) -> VortexResult<PlanRef> {

@@ -18,6 +18,7 @@
 
 use std::collections::BTreeMap;
 use std::collections::VecDeque;
+use std::iter;
 use std::sync::Arc;
 use std::task::Context;
 use std::task::Poll;
@@ -146,26 +147,77 @@ impl Work {
 /// Keeps scheduling order separate from lookup for deliveries to runnable work.
 #[derive(Default)]
 struct ReadyQueue {
+    // A selection, its projection, and their morsel usually fit here. Keeping a few ready
+    // items inline avoids allocating a tree node and priority path on every compute step.
+    small: [Option<Box<Work>>; 4],
     priorities: BTreeMap<Vec<u64>, IoOwnerId>,
     work: HashMap<IoOwnerId, Box<Work>>,
 }
 
 impl ReadyQueue {
     fn insert(&mut self, work: Box<Work>) {
+        if self.work.is_empty() {
+            if let Some(slot) = self.small.iter_mut().find(|slot| slot.is_none()) {
+                *slot = Some(work);
+                return;
+            }
+            for work in self.small.iter_mut().filter_map(Option::take) {
+                self.priorities.insert(work.priority(), work.id);
+                self.work.insert(work.id, work);
+            }
+        }
         self.priorities.insert(work.priority(), work.id);
         self.work.insert(work.id, work);
     }
 
     fn pop(&mut self) -> Option<Box<Work>> {
+        if self.work.is_empty() {
+            let index = self
+                .small
+                .iter()
+                .enumerate()
+                .filter_map(|(index, work)| work.as_ref().map(|work| (index, work)))
+                .min_by(|(_, left), (_, right)| {
+                    left.path
+                        .iter()
+                        .chain(iter::once(&left.next_child))
+                        .cmp(right.path.iter().chain(iter::once(&right.next_child)))
+                })?
+                .0;
+            return self.small[index].take();
+        }
         let (_, owner) = self.priorities.pop_first()?;
-        self.work.remove(&owner)
+        let work = self.work.remove(&owner);
+        if self.work.len() <= self.small.len() {
+            for (slot, (_, work)) in self.small.iter_mut().zip(self.work.drain()) {
+                *slot = Some(work);
+            }
+            self.priorities.clear();
+        }
+        work
+    }
+
+    fn get_mut(&mut self, owner: IoOwnerId) -> Option<&mut Work> {
+        if self.work.is_empty() {
+            self.small
+                .iter_mut()
+                .filter_map(Option::as_deref_mut)
+                .find(|work| work.id == owner)
+        } else {
+            self.work.get_mut(&owner).map(Box::as_mut)
+        }
     }
 
     fn is_empty(&self) -> bool {
-        self.priorities.is_empty()
+        self.work.is_empty() && self.small.iter().all(Option::is_none)
     }
 
     fn cancel(&mut self, root: RootId) {
+        for slot in &mut self.small {
+            if slot.as_ref().is_some_and(|work| work.root == root) {
+                *slot = None;
+            }
+        }
         self.work.retain(|_, work| work.root != root);
         self.priorities
             .retain(|_, owner| self.work.contains_key(owner));
@@ -309,7 +361,7 @@ impl Run {
             return Ok(());
         }
         // An item that published fetches and had CPU work left is still in the run queue.
-        let Some(work) = self.queue.work.get_mut(&owner) else {
+        let Some(work) = self.queue.get_mut(owner) else {
             vortex_bail!("completion for unknown work {owner:?}");
         };
         work.deliver(request, result)
@@ -320,6 +372,16 @@ impl Run {
     ///
     /// Call it after [`advance`](Self::advance) returned [`Progress::Waiting`].
     pub fn poll_completion(&mut self, cx: &mut Context<'_>) -> Poll<VortexResult<()>> {
+        if self.roots.len() == 1 {
+            let Some(root) = self.roots.values().next() else {
+                return Poll::Ready(Err(vortex_err!("the run has no live root")));
+            };
+            return match root.io.poll_completion(cx) {
+                Poll::Ready(Ok(completion)) => Poll::Ready(self.complete(completion)),
+                Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
+                Poll::Pending => Poll::Pending,
+            };
+        }
         let sources: Vec<_> = self
             .roots
             .values()

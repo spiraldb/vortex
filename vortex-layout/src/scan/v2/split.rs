@@ -14,8 +14,8 @@ use vortex_scan::planning::planner::WorkScope;
 
 /// One split of a scan, ready to be admitted to a planning run.
 ///
-/// The split's planner projects the rows of `scope`, and its morsels emit one batch per
-/// projection split with selected rows, in whatever order their reads arrive.
+/// The split's planner projects the rows of `scope`. Each morsel emits its selected batches
+/// in row order, and morsels run in whatever order their reads arrive.
 pub(super) struct SplitPlan {
     /// The rows of the scan's root row domain the split covers.
     pub(super) scope: WorkScope,
@@ -25,23 +25,30 @@ pub(super) struct SplitPlan {
 
 impl SplitPlan {
     /// Runs the split on a planning run of its own, reading through a session of `io`, and
-    /// returns its batches in row order.
+    /// maps each batch as it arrives before returning the results in row order. Mapping here
+    /// lets a decoder release the batch's compressed buffers while later batches still read.
     ///
     /// The run advances inside this future, on whichever thread polls it, and the future awaits
     /// its reads between steps. Nothing is handed to another thread.
-    pub(super) async fn run(self, io: Arc<dyn IoService>) -> VortexResult<Vec<ArrayRef>> {
+    pub(super) async fn run<A>(
+        self,
+        io: Arc<dyn IoService>,
+        map: impl Fn(ArrayRef) -> VortexResult<A>,
+    ) -> VortexResult<Vec<A>> {
         let mut run = Run::new();
         run.admit(self.root, self.scope, io.session());
         let mut batches = Vec::new();
         loop {
             match run.advance()? {
-                Progress::Batch(batch) => batches.push(batch),
+                Progress::Batch(batch) => {
+                    batches.push((batch.scope.rows.start, map(batch.array)?));
+                }
                 Progress::RootDone(_) | Progress::Idle => break,
                 Progress::Waiting => future::poll_fn(|cx| run.poll_completion(cx)).await?,
             }
         }
         // Morsels finish in whatever order their reads arrive.
-        batches.sort_by_key(|batch| batch.scope.rows.start);
-        Ok(batches.into_iter().map(|batch| batch.array).collect())
+        batches.sort_by_key(|(start, _)| *start);
+        Ok(batches.into_iter().map(|(_, batch)| batch).collect())
     }
 }

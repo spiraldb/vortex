@@ -168,9 +168,13 @@ impl PlanVTable for Concat {
                 continue;
             }
             let chunk = plan.child_required(index)?;
-            if let Some(chain) =
-                compiler.compile(&chunk, local.start - start..local.end - start, &local_mask)?
-            {
+            let chunk_rows = local.start - start..local.end - start;
+            let chain = if chains.is_empty() {
+                compiler.compile(&chunk, chunk_rows, &local_mask)?
+            } else {
+                compiler.compile_deferred(&chunk, chunk_rows, &local_mask)?
+            };
+            if let Some(chain) = chain {
                 chains.push(chain);
             }
         }
@@ -178,7 +182,11 @@ impl PlanVTable for Concat {
             0 => None,
             // Rows inside one chunk are that chunk's rows: no concatenation is built.
             1 => chains.pop(),
-            count => Some(compiler.join(chains, ConcatSource::new(count))),
+            count => Some(
+                compiler
+                    .join(chains, ConcatSource::new(count))
+                    .with_output_capacity(1),
+            ),
         })
     }
 
@@ -189,6 +197,9 @@ impl PlanVTable for Concat {
         visit: &mut dyn FnMut(SegmentId, Range<u64>),
     ) -> VortexResult<()> {
         for (index, start, local) in overlapping(plan, &rows) {
+            if !at.selects(&local) {
+                continue;
+            }
             plan.child_required(index)?.reach(
                 local.start - start..local.end - start,
                 &at.shift(start),

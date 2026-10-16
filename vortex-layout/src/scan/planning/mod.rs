@@ -3,12 +3,13 @@
 
 //! Layout-level planners and morsels for the planning protocol.
 //!
-//! A split is evaluated over physical plans: a [`ProjectionPlanner`] emits a [`ProjectionMorsel`]
-//! per projection split, which runs the projection plan over the split's selected rows through
+//! A [`ProjectionPlanner`] turns each split's selected rows into projection morsels. Single-row
+//! projections over flat leaves read and assemble those leaves directly; other projections use
 //! the pipeline [`Scan`](crate::plan::physical::pipeline::Scan). Every segment read is published
 //! as a protocol request, so the planning driver decides when IO happens.
 
 pub(crate) mod graph;
+mod point;
 mod projection;
 
 use std::sync::Arc;
@@ -16,9 +17,7 @@ use std::sync::Arc;
 pub use projection::ProjectionPlanner;
 use vortex_buffer::Alignment;
 use vortex_io::request::IoTarget;
-use vortex_mask::Mask;
-use vortex_scan::planning::planner::Planner;
-use vortex_scan::planning::planner::WorkScope;
+pub use vortex_scan::planning::selection::SelectedRows;
 use vortex_session::VortexSession;
 
 use crate::plan::physical::PlanRef;
@@ -55,26 +54,12 @@ pub struct ScanPlans {
     pub locations: Arc<[SegmentLocation]>,
     /// The optimized projection plan, over the scan's root row domain.
     pub projection: PlanRef,
-    /// Where the chunks the projection reads start, over the root row domain, sorted. A split's
-    /// projection is cut at each of these, so every projection split reads at most one chunk of
-    /// every column.
+    /// Sorted projection boundaries in the root row domain. Empty when sparse selection has
+    /// already grouped the work and unselected chunk plans should remain lazy.
     pub projection_starts: Arc<[u64]>,
     /// The global row index of the root row domain's first row.
     pub row_offset: u64,
     /// Whole values, such as dictionary values, shared by the splits of this scan. Their plans
     /// always read the same complete row domain, independently of a split's selection.
     pub values: ValueCache,
-}
-
-/// The rows of a split selected for projection.
-pub struct SelectedRows {
-    /// The split the rows belong to.
-    pub scope: WorkScope,
-    /// Which rows of `scope.rows` are selected.
-    pub mask: Mask,
-}
-
-/// The work for one split: project the rows of `scope` selected by `mask`.
-pub fn plan_projection(plans: ScanPlans, scope: WorkScope, mask: Mask) -> Box<dyn Planner> {
-    Box::new(ProjectionPlanner::new(plans, SelectedRows { scope, mask }))
 }
