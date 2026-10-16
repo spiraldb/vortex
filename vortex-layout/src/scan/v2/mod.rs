@@ -21,6 +21,7 @@ pub(crate) mod splits;
 mod tests;
 
 use std::env;
+use std::future;
 use std::iter;
 use std::ops::Range;
 use std::sync::Arc;
@@ -552,6 +553,33 @@ impl<A: 'static + Send> PreparedScan<A> {
         let mut split_plans = self.split_plans();
         let io = self.io;
         let map_fn = self.map_fn;
+        if self.plans.projection_starts.is_empty()
+            && split_plans
+                .iter()
+                .any(|split| split.scope.rows.end - split.scope.rows.start > 1)
+        {
+            if parallelism > 1 && split_plans.len() == 1 {
+                let split = split_plans
+                    .pop()
+                    .ok_or_else(|| vortex_err!("Missing single split"))?;
+                return Ok(split.stream(io, move |array| map_fn(array)));
+            }
+            let handle = self.session.handle();
+            let streams = stream::iter(split_plans).map(move |split| {
+                let io = Arc::clone(&io);
+                let map_fn = Arc::clone(&map_fn);
+                split.spawn_stream(io, move |array| map_fn(array), &handle)
+            });
+            return Ok(if self.ordered {
+                streams
+                    .map(|stream| future::ready(VortexResult::Ok(stream)))
+                    .buffered(concurrency)
+                    .try_flatten()
+                    .boxed()
+            } else {
+                streams.flatten_unordered(concurrency).boxed()
+            });
+        }
         if parallelism > 1 && split_plans.len() == 1 {
             let split = split_plans
                 .pop()
