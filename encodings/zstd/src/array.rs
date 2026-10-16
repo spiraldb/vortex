@@ -380,8 +380,11 @@ fn append_to_varbinview(
     let mask = slice.validity.execute_mask(slice.n_rows, ctx)?;
 
     // No values were stored, so there is nothing to reference and the frames can be dropped.
+    // An empty slice is vacuously all-null but must not append nulls to a non-nullable builder.
     if mask.all_false() {
-        builder.append_nulls(slice.n_rows);
+        if slice.n_rows > 0 {
+            builder.append_nulls(slice.n_rows);
+        }
         return Ok(());
     }
 
@@ -1129,10 +1132,11 @@ impl ZstdData {
         // We compress only the valid elements.
         let values = collect_valid_primitive(parray, ctx)?;
         let n_values = values.len();
+        // A single frame holds every value; an input with no valid values has no frames.
         let values_per_frame = if values_per_frame > 0 {
             values_per_frame
         } else {
-            n_values
+            n_values.max(1)
         };
 
         let value_bytes = values.buffer_handle().try_to_host_sync()?;
@@ -1219,10 +1223,11 @@ impl ZstdData {
         // We compress only the valid elements.
         let (value_bytes, value_byte_indices) = collect_valid_vbv(vbv, ctx)?;
         let n_values = value_byte_indices.len();
+        // A single frame holds every value; an input with no valid values has no frames.
         let values_per_frame = if values_per_frame > 0 {
             values_per_frame
         } else {
-            n_values
+            n_values.max(1)
         };
 
         let frame_byte_starts = (0..n_values)

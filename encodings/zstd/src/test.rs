@@ -318,6 +318,59 @@ fn test_zstd_append_to_view_builder_keeps_only_the_sliced_bytes() -> VortexResul
     Ok(())
 }
 
+/// `values_per_frame = 0` asks for a single frame, which must also work with no valid values.
+#[rstest]
+#[case::empty(PrimitiveArray::from_iter(Vec::<i32>::new()))]
+#[case::all_null(PrimitiveArray::from_option_iter([None::<i32>, None, None]))]
+fn test_zstd_single_frame_primitive_without_valid_values(
+    #[case] array: PrimitiveArray,
+) -> VortexResult<()> {
+    let mut ctx = array_session().create_execution_ctx();
+    let compressed = Zstd::from_primitive(&array, 3, 0, &mut ctx)?;
+    assert_arrays_eq!(compressed, array, &mut ctx);
+    Ok(())
+}
+
+/// `values_per_frame = 0` asks for a single frame, which must also work with no valid values.
+#[rstest]
+#[case::empty(VarBinViewArray::from_iter(
+    Vec::<Option<&str>>::new(),
+    DType::Utf8(Nullability::Nullable)
+))]
+#[case::all_null(VarBinViewArray::from_iter(
+    [None::<&str>, None, None],
+    DType::Utf8(Nullability::Nullable)
+))]
+fn test_zstd_single_frame_var_bin_view_without_valid_values(
+    #[case] array: VarBinViewArray,
+) -> VortexResult<()> {
+    let mut ctx = array_session().create_execution_ctx();
+    let compressed = Zstd::from_var_bin_view(&array, 3, 0, &mut ctx)?;
+    assert_arrays_eq!(compressed, array, &mut ctx);
+    Ok(())
+}
+
+/// An empty array is vacuously all-null, but appending it to a non-nullable builder must not
+/// append nulls.
+#[rstest]
+fn test_zstd_append_empty_to_non_nullable_view_builder(
+    #[values(
+        DType::Utf8(Nullability::NonNullable),
+        DType::Binary(Nullability::NonNullable)
+    )]
+    dtype: DType,
+) -> VortexResult<()> {
+    let mut ctx = array_session().create_execution_ctx();
+    let array = VarBinViewArray::from_iter(Vec::<Option<&[u8]>>::new(), dtype.clone());
+    let compressed = Zstd::from_var_bin_view(&array, 0, 2, &mut ctx)?;
+
+    let mut builder =
+        VarBinViewBuilder::with_capacity_in(dtype, 0, BufferAllocatorRef::statically_allocated());
+    compressed.append_to_builder(&mut builder, &mut ctx)?;
+    assert_arrays_eq!(builder.finish_into_varbinview(), array, &mut ctx);
+    Ok(())
+}
+
 #[test]
 fn test_zstd_decompress_var_bin_view() {
     let mut ctx = array_session().create_execution_ctx();
