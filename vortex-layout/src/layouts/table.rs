@@ -12,9 +12,7 @@
 //! The dispatcher also owns field-path overrides, letting callers force a specific leaf field —
 //! at any depth — onto a custom strategy.
 
-use std::env;
 use std::sync::Arc;
-use std::sync::LazyLock;
 
 use async_trait::async_trait;
 use vortex_array::dtype::Field;
@@ -33,17 +31,6 @@ use crate::layouts::struct_::StructStrategy;
 use crate::segments::SegmentSinkRef;
 use crate::sequence::SendableSequentialStream;
 use crate::sequence::SequencePointer;
-
-/// Whether [`TableStrategy`] writes list fields using a [`ListLayoutStrategy`] by
-/// default. Disabled unless the environment variable `VORTEX_EXPERIMENTAL_LIST_LAYOUT`
-/// is set to `1`.
-///
-/// [`ListLayoutStrategy`]: ListLayoutStrategy
-pub fn use_experimental_list_layout() -> bool {
-    static USE_EXPERIMENTAL_LIST_LAYOUT: LazyLock<bool> =
-        LazyLock::new(|| env::var("VORTEX_EXPERIMENTAL_LIST_LAYOUT").is_ok_and(|v| v == "1"));
-    *USE_EXPERIMENTAL_LIST_LAYOUT
-}
 
 type ListLayoutFactory = Arc<dyn Fn(ListLayoutStrategy) -> Arc<dyn LayoutStrategy> + Send + Sync>;
 

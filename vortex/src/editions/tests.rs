@@ -7,6 +7,7 @@ use vortex_array::IntoArray;
 use vortex_array::array_session;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::ExtensionArray;
+use vortex_array::arrays::ListArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::dtype::DType;
@@ -15,8 +16,10 @@ use vortex_array::dtype::PType;
 use vortex_array::extension::datetime::Date;
 use vortex_array::extension::datetime::TimeUnit;
 use vortex_array::session::ArraySessionExt;
+use vortex_array::validity::Validity;
 use vortex_btrblocks::BtrBlocksCompressorBuilder;
 use vortex_buffer::ByteBufferMut;
+use vortex_buffer::buffer;
 use vortex_edition::ComponentKind;
 use vortex_edition::Edition;
 use vortex_edition::EditionDeclaration;
@@ -538,6 +541,38 @@ async fn writer_restricts_layouts_to_the_enabled_editions() -> VortexResult<()> 
         error.to_string().contains("not permitted by ctx"),
         "unexpected error: {error}"
     );
+    Ok(())
+}
+
+/// The writer emits the list layout exactly when the enabled editions include it.
+#[tokio::test]
+async fn list_layout_follows_enabled_editions() -> VortexResult<()> {
+    use crate::VortexSessionDefault;
+
+    let list = ListArray::try_new(
+        buffer![1i32, 2, 3, 4, 5].into_array(),
+        buffer![0u32, 2, 5].into_array(),
+        Validity::NonNullable,
+    )?;
+    let array = StructArray::from_fields(&[("l", list.into_array())])?.into_array();
+    let list_layout = Id::from("vortex.list");
+
+    // The default core edition does not include the list layout, so lists stay flat.
+    let session = VortexSession::default();
+    let written = written_layout_ids(&session, write_with(&session, array.clone()).await?)?;
+    assert!(!written.contains(&list_layout), "{written:?}");
+
+    let session = VortexSession::default();
+    session.editions().declare_inclusion(EditionInclusion::new(
+        ComponentKind::Layout,
+        "vortex.list",
+        DEFAULT_PREVIEW_EDITION,
+    ))?;
+    session.enable_edition(DEFAULT_PREVIEW_EDITION)?;
+
+    // Permitted: the default writer emits it.
+    let written = written_layout_ids(&session, write_with(&session, array).await?)?;
+    assert!(written.contains(&list_layout), "{written:?}");
     Ok(())
 }
 
