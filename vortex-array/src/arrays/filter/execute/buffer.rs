@@ -66,9 +66,7 @@ fn filter_slice<T: Copy>(
         return slice::filter_slice_by_slices(values, slices, mask.true_count(), allocator);
     }
 
-    if mask.density() <= CACHED_INDICES_MAX_DENSITY
-        && let Some(indices) = mask.cached_indices()
-    {
+    if let Some(indices) = useful_cached_indices(mask) {
         return slice::filter_slice_by_indices(values, indices, allocator);
     }
 
@@ -88,9 +86,7 @@ fn filter_slice_in_place<T: Copy>(values: &mut [T], mask: &MaskValues) -> usize 
         return slice::filter_slice_mut_by_slices(values, slices);
     }
 
-    if mask.density() <= CACHED_INDICES_MAX_DENSITY
-        && let Some(indices) = mask.cached_indices()
-    {
+    if let Some(indices) = useful_cached_indices(mask) {
         return slice::filter_slice_mut_by_indices(values, indices);
     }
 
@@ -101,13 +97,21 @@ fn filter_slice_in_place<T: Copy>(values: &mut [T], mask: &MaskValues) -> usize 
     slice::filter_slice_mut_by_bitmap(values, mask)
 }
 
-fn useful_cached_slices(mask: &MaskValues) -> Option<&[(usize, usize)]> {
+pub(super) fn useful_cached_indices(mask: &MaskValues) -> Option<&[usize]> {
+    if mask.density() <= CACHED_INDICES_MAX_DENSITY {
+        mask.cached_indices()
+    } else {
+        None
+    }
+}
+
+pub(super) fn useful_cached_slices(mask: &MaskValues) -> Option<&[(usize, usize)]> {
     mask.cached_slices().filter(|slices| {
         slices.len() == 1 || mask.true_count() / slices.len() >= MIN_SLICES_AVERAGE_RUN_LENGTH
     })
 }
 
-fn byte_compress_density_threshold<T>() -> f64 {
+pub(super) fn byte_compress_density_threshold<T>() -> f64 {
     let width = size_of::<T>();
 
     // A density at or above the table entry selects byte compress after the higher-priority

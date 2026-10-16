@@ -50,6 +50,25 @@ SELECT count(x), sum(x), min(x), max(x), avg(x) FROM '${WORK_DIR}/f-nan.vortex';
 ----
 3 NaN 1 NaN NaN
 
+query R
+SELECT max(x) FROM '${WORK_DIR}/f-nan.vortex';
+----
+NaN
+
+query I
+SELECT count(*) FROM '${WORK_DIR}/f-nan.vortex' WHERE x = 'NaN'::DOUBLE;
+----
+1
+
+statement ok
+COPY (SELECT -x AS x FROM (VALUES ('NaN'::DOUBLE),(-1.0),(-2.0)) AS t(x)) TO '${WORK_DIR}/f-negnan.vortex';
+
+onlyif datafusion
+query I
+SELECT count(*) FROM '${WORK_DIR}/f-negnan.vortex' WHERE x < 0.5;
+----
+1
+
 # all NaN
 query IRRRR
 SELECT count(x), sum(x), min(x), max(x), avg(x) FROM '${WORK_DIR}/f-allnan.vortex';

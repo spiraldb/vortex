@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use vortex::array::match_each_float_ptype;
 use vortex::array::stats::StatsSet;
 use vortex::dtype::DType;
+use vortex::dtype::PType;
 use vortex::error::VortexExpect as _;
 use vortex::error::VortexResult;
 use vortex::expr::stats::Precision;
@@ -31,7 +33,16 @@ impl ColumnStatistics {
                 .ok()
         };
         let min = stats.min.and_then(to_value);
-        let max = stats.max.and_then(to_value);
+        // Vortex's max skips NaN, while DuckDB orders NaN above every other value.
+        let max = if !dtype.is_float() || stats.nan_count == Some(0) {
+            stats.max.and_then(to_value)
+        } else if stats.nan_count.is_some() {
+            to_value(match_each_float_ptype!(dtype.as_ptype(), |F| {
+                ScalarValue::from(F::NAN)
+            }))
+        } else {
+            None
+        };
 
         let max_string_length = stats
             .max_string_length
@@ -59,6 +70,7 @@ pub struct ColumnStatisticsAggregate {
     pub max_string_length: Option<u32>,
     /// May be true if null count stat isn't present
     pub has_null: bool,
+    pub nan_count: Option<u64>,
 }
 
 impl ColumnStatisticsAggregate {
@@ -86,11 +98,16 @@ impl ColumnStatisticsAggregate {
             _ => true,
         };
 
+        let nan_count = stats
+            .get_as::<u64>(Stat::NaNCount, &PType::U64.into())
+            .as_exact();
+
         Self {
             min,
             max,
             max_string_length,
             has_null,
+            nan_count,
         }
     }
 }
