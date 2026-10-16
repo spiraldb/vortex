@@ -68,6 +68,7 @@ use crate::scan::v2::io::SegmentScanIo;
 use crate::scan::v2::io::register_segments;
 use crate::scan::v2::io::segment_ranges;
 use crate::scan::v2::split::SplitPlan;
+use crate::scan::v2::splits::LIST_WORK_BYTES;
 use crate::scan::v2::splits::chunk_starts;
 use crate::scan::v2::splits::projection_splits;
 use crate::scan::v2::splits::selection_splits;
@@ -397,6 +398,8 @@ pub(crate) struct PreparedScan<A: 'static + Send> {
     map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
     ordered: bool,
     concurrency: usize,
+    /// Conservative task count derived from the largest estimated list-element working set.
+    list_concurrency: Option<usize>,
 }
 
 impl<A: 'static + Send> PreparedScan<A> {
@@ -419,6 +422,10 @@ impl<A: 'static + Send> PreparedScan<A> {
         let rows = builder.row_range.unwrap_or(0..row_count);
         let parallelism = get_available_parallelism().unwrap_or(1);
         let sparse = selection_splits(&builder.selection, &rows, &projection, parallelism)?;
+        let list_concurrency = sparse
+            .as_ref()
+            .filter(|splits| splits.max_list_bytes != 0)
+            .map(|splits| (LIST_WORK_BYTES / splits.max_list_bytes).max(1) as usize);
         let sparse_selection = sparse.is_some();
         // Small segments spread across tasks can cause overlapping coalesced reads. Large
         // leaves already amortize read setup without an additional planning pass.
@@ -441,7 +448,7 @@ impl<A: 'static + Send> PreparedScan<A> {
                 .any(|(used, _)| used.start > rows.start || used.end < rows.end)
         });
         let splits = if let Some(sparse) = sparse {
-            sparse
+            sparse.ranges
         } else if let Some(boundaries) = builder.natural_splits {
             projection_splits(&boundaries, rows)
         } else {
@@ -515,6 +522,7 @@ impl<A: 'static + Send> PreparedScan<A> {
             map_fn: builder.map_fn,
             ordered: builder.ordered,
             concurrency: builder.concurrency,
+            list_concurrency,
         })
     }
 
@@ -569,6 +577,11 @@ impl<A: 'static + Send> PreparedScan<A> {
     pub(crate) fn execute_stream(self) -> VortexResult<BoxStream<'static, VortexResult<A>>> {
         let parallelism = get_available_parallelism().unwrap_or(1);
         let concurrency = self.concurrency * parallelism;
+        // Retain admission slots until their output is consumed, so buffered ordered results
+        // count against the same estimate. A split larger than the budget runs alone.
+        let concurrency = self
+            .list_concurrency
+            .map_or(concurrency, |limit| concurrency.min(limit));
         let mut split_plans = self.split_plans();
         let io = self.io;
         let map_fn = self.map_fn;

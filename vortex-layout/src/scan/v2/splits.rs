@@ -17,7 +17,6 @@ use vortex_error::vortex_ensure;
 use vortex_scan::selection::Selection;
 
 use crate::plan::physical::Concat;
-use crate::plan::physical::ConcatPlan;
 use crate::plan::physical::Eval;
 use crate::plan::physical::Filter;
 use crate::plan::physical::LegacyStats;
@@ -32,6 +31,16 @@ struct Partition {
     list_elements: bool,
 }
 
+/// Sparse outer-row splits and the largest estimated list-element working set of a split.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct SparseSplits {
+    pub(super) ranges: Vec<Range<u64>>,
+    pub(super) max_list_bytes: u64,
+}
+
+/// Maximum estimated element work admitted concurrently by one scan.
+pub(super) const LIST_WORK_BYTES: u64 = 32 * 1024 * 1024;
+
 /// Groups sparse selections using projected chunk boundaries. Choose the partition closest to
 /// four tasks per worker, without visiting the chunk children.
 pub(super) fn selection_splits(
@@ -39,12 +48,15 @@ pub(super) fn selection_splits(
     rows: &Range<u64>,
     projection: &PlanRef,
     parallelism: usize,
-) -> VortexResult<Option<Vec<Range<u64>>>> {
+) -> VortexResult<Option<SparseSplits>> {
     let Some(indices) = sparse_indices(selection, rows) else {
         return Ok(None);
     };
     if indices.is_empty() {
-        return Ok(Some(Vec::new()));
+        return Ok(Some(SparseSplits {
+            ranges: Vec::new(),
+            max_list_bytes: 0,
+        }));
     }
     vortex_ensure!(
         indices
@@ -53,32 +65,58 @@ pub(super) fn selection_splits(
         "Selected row exceeds the projection row count"
     );
     if let [index] = indices.as_ref() {
-        return Ok(Some(vec![*index..index + 1]));
+        return Ok(Some(SparseSplits {
+            ranges: vec![*index..index + 1],
+            max_list_bytes: 0,
+        }));
     }
     let mut partitions = Vec::new();
     collect_partitions(projection, false, &mut partitions)?;
     let target = parallelism.max(1).saturating_mul(4);
     let mut best = None;
-    for partition in partitions {
+    for partition in &partitions {
         let plan = &partition.plan;
         if plan.row_count() == 0 || (partition.list_elements && parallelism <= 1) {
             continue;
         }
-        let concat = plan.as_::<Concat>();
         let ranges = if partition.list_elements {
-            selected_list_chunks(&indices, concat, projection.row_count())
+            selected_list_chunks(&indices, plan, projection.row_count())
         } else {
-            selected_chunks(&indices, concat.row_offsets())
+            selected_chunks(&indices, plan.as_::<Concat>().row_offsets())
         };
         let score = ranges.len().abs_diff(target);
         if best.as_ref().is_none_or(|(previous, _)| score < *previous) {
             best = Some((score, ranges));
         }
     }
-    Ok(Some(best.map_or_else(
-        || selected_chunks(&indices, &[0]),
-        |(_, ranges)| ranges,
-    )))
+    let ranges = best.map_or_else(|| selected_chunks(&indices, &[0]), |(_, ranges)| ranges);
+    let max_list_bytes = if partitions.iter().any(|partition| partition.list_elements) {
+        ranges
+            .iter()
+            .map(|range| {
+                let start = indices.partition_point(|&index| index < range.start);
+                let end = indices.partition_point(|&index| index < range.end);
+                partitions
+                    .iter()
+                    .filter(|partition| partition.list_elements)
+                    .map(|partition| {
+                        estimate_list_bytes(
+                            &indices[start..end],
+                            &partition.plan,
+                            projection.row_count(),
+                        )
+                    })
+                    .fold(0_u64, u64::saturating_add)
+            })
+            .max()
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    Ok(Some(SparseSplits {
+        ranges,
+        max_list_bytes,
+    }))
 }
 
 /// Sparse included indices inside the scan's row range, borrowing the sorted buffer when possible.
@@ -133,6 +171,11 @@ fn collect_partitions(
         for child in plan.children().iter_refs() {
             collect_partitions(child?, list_elements, partitions)?;
         }
+    } else if list_elements {
+        partitions.push(Partition {
+            plan: plan.clone(),
+            list_elements,
+        });
     }
     Ok(())
 }
@@ -157,14 +200,16 @@ fn selected_chunks(indices: &[u64], offsets: &[u64]) -> Vec<Range<u64>> {
 }
 
 /// Uses relative element positions as task-sizing hints; execution resolves exact list offsets.
-fn selected_list_chunks(indices: &[u64], elements: &ConcatPlan, row_count: u64) -> Vec<Range<u64>> {
+fn selected_list_chunks(indices: &[u64], elements: &PlanRef, row_count: u64) -> Vec<Range<u64>> {
     // Tiny element chunks do not amortize a separate root task and offsets read.
     // Group selected primitive chunks into roughly 2 MiB of uncompressed work.
     let min_rows = match elements.dtype() {
         DType::Primitive(ptype, _) => (2 * 1024 * 1024 / ptype.byte_width()) as u64,
         _ => 0,
     };
-    let offsets = elements.row_offsets();
+    let offsets = elements
+        .as_opt::<Concat>()
+        .map_or(&[0][..], |concat| concat.row_offsets());
     let mut ranges: Vec<Range<u64>> = Vec::new();
     let mut previous = None;
     let mut element_rows = 0_u64;
@@ -194,6 +239,40 @@ fn selected_list_chunks(indices: &[u64], elements: &ConcatPlan, row_count: u64) 
         previous = Some(chunk);
     }
     ranges
+}
+
+fn estimate_list_bytes(indices: &[u64], elements: &PlanRef, row_count: u64) -> u64 {
+    if indices.is_empty() || elements.row_count() == 0 {
+        return 0;
+    }
+    let width = match elements.dtype() {
+        DType::Primitive(ptype, _) => ptype.byte_width() as u64,
+        DType::Bool(_) => 1,
+        DType::Null => return 0,
+        // Without a fixed-width estimate, admit only one such task at a time.
+        _ => return LIST_WORK_BYTES,
+    };
+    let offsets = elements
+        .as_opt::<Concat>()
+        .map_or(&[0][..], |concat| concat.row_offsets());
+    let mut previous = None;
+    let mut bytes = 0_u64;
+    for &index in indices {
+        let element_index = ((u128::from(index) + 1) * u128::from(elements.row_count()) - 1)
+            / u128::from(row_count);
+        let chunk = offsets
+            .partition_point(|&offset| u128::from(offset) <= element_index)
+            .saturating_sub(1);
+        if previous != Some(chunk) {
+            let end = offsets
+                .get(chunk + 1)
+                .copied()
+                .unwrap_or(elements.row_count());
+            bytes = bytes.saturating_add((end - offsets[chunk]).saturating_mul(width));
+            previous = Some(chunk);
+        }
+    }
+    bytes
 }
 
 /// The row positions where the chunks of `plans` start, over their shared row domain, sorted and
@@ -328,7 +407,8 @@ mod tests {
             Selection::IncludeByIndex(StrictSortedBuffer::try_new(Buffer::from(indices))?)
         };
         assert_eq!(
-            selection_splits(&selection, &rows, &partition(&[4000, u64::MAX - 4000])?, 32)?,
+            selection_splits(&selection, &rows, &partition(&[4000, u64::MAX - 4000])?, 32)?
+                .map(|splits| splits.ranges),
             expected
         );
         Ok(())
@@ -394,9 +474,10 @@ mod tests {
         .into_plan();
         let splits = selection_splits(&selected, &(0..10_000_000), &plan, workers)?
             .ok_or_else(|| vortex_error::vortex_err!("expected sparse splits"))?;
-        assert_eq!(splits.len(), expected_chunks);
+        assert_eq!(splits.ranges.len(), expected_chunks);
         assert_eq!(
             splits
+                .ranges
                 .iter()
                 .map(|range| selected.row_count_in_range(range))
                 .sum::<u64>(),
@@ -429,7 +510,8 @@ mod tests {
             ("id", ids.dtype().clone()),
             ("list", lists.dtype().clone()),
         ]);
-        let expected = selection_splits(&selected, &(0..1_000_000), &ids, workers)?;
+        let expected = selection_splits(&selected, &(0..1_000_000), &ids, workers)?
+            .map(|splits| splits.ranges);
         let plan = crate::plan::physical::PackPlan::try_new(
             fields,
             false.into(),
@@ -439,7 +521,8 @@ mod tests {
         )?
         .into_plan();
         assert_eq!(
-            selection_splits(&selected, &(0..1_000_000), &plan, workers)?,
+            selection_splits(&selected, &(0..1_000_000), &plan, workers)?
+                .map(|splits| splits.ranges),
             expected
         );
         Ok(())
@@ -464,9 +547,46 @@ mod tests {
         let selection =
             Selection::IncludeByIndex(StrictSortedBuffer::try_new(Buffer::from(indices))?);
         assert_eq!(
-            selection_splits(&selection, &(0..row_count), &plan, 30)?,
+            selection_splits(&selection, &(0..row_count), &plan, 30)?.map(|splits| splits.ranges),
             Some(expected)
         );
+        Ok(())
+    }
+
+    #[test]
+    fn list_work_counts_unique_chunks_across_projected_lists() -> VortexResult<()> {
+        let elements = partition(&[1_000_000; 2])?;
+        let list = list_partition(elements, 1000)?;
+        let fields = vortex_array::dtype::StructFields::from_iter([
+            ("a", list.dtype().clone()),
+            ("b", list.dtype().clone()),
+        ]);
+        let plan = crate::plan::physical::PackPlan::try_new(
+            fields,
+            false.into(),
+            1000,
+            vec![list.clone(), list],
+            None,
+        )?
+        .into_plan();
+        let selection = Selection::IncludeRoaring([10, 20, 510].into_iter().collect());
+        let splits = selection_splits(&selection, &(0..1000), &plan, 30)?
+            .ok_or_else(|| vortex_error::vortex_err!("expected sparse splits"))?;
+        assert_eq!(splits.ranges, vec![10..21, 510..511]);
+        // Two I32 columns each touch one 4 MB chunk per split, even for two selected rows.
+        assert_eq!(splits.max_list_bytes, 8_000_000);
+        Ok(())
+    }
+
+    #[test]
+    fn unchunked_list_elements_have_a_work_estimate() -> VortexResult<()> {
+        let elements = partition(&[10_000_000])?.child_required(0)?;
+        let list = list_partition(elements, 1000)?;
+        let selection = Selection::IncludeRoaring([10, 510].into_iter().collect());
+        let splits = selection_splits(&selection, &(0..1000), &list, 30)?
+            .ok_or_else(|| vortex_error::vortex_err!("expected sparse splits"))?;
+        assert_eq!(splits.ranges, vec![10..511]);
+        assert_eq!(splits.max_list_bytes, 40_000_000);
         Ok(())
     }
 
