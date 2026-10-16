@@ -8,7 +8,8 @@
 # OOM-killed or times out is recorded and the rest still run, and system memory is sampled
 # throughout data generation, conversion and every query. Query failures are reported in the job
 # summary rather than failing the job: DataFusion does not yet fit Q18 (Parquet and Vortex) or Q21
-# (Parquet) in memory at this scale.
+# (Parquet) in memory at this scale with hash joins, so it also runs a second pass with sort-merge
+# joins and spilling.
 
 name: TPC-H SF1000
 
@@ -125,12 +126,12 @@ jobs:
 
       - name: Check free disk
         shell: bash
-        # Parquet and Vortex are each about 0.25 GB per scale factor unit, and DuckDB spills
-        # large joins to disk next to its database.
+        # Parquet and Vortex are each about 0.25 GB per scale factor unit, DuckDB spills large
+        # joins next to its database, and DataFusion's spill pass may write up to 500 GiB.
         run: |
           set -Eeuo pipefail
           mkdir -p "$DATA_DIR"
-          need_gb=$(python3 -c "print(int(float('$SCALE_FACTOR') * 0.8))")
+          need_gb=$(python3 -c "print(int(float('$SCALE_FACTOR') * 0.6) + 550)")
           avail_gb=$(( $(df -B1 --output=avail "$DATA_DIR" | tail -1) / 1024 / 1024 / 1024 ))
           echo "Need ~${need_gb} GB free under $DATA_DIR, have ${avail_gb} GB"
           if (( avail_gb < need_gb )); then
@@ -194,7 +195,6 @@ jobs:
           QUERY_TIMEOUT_MINUTES: ${{ inputs.query_timeout_minutes || '45' }}
         run: |
           set -Eeuo pipefail
-          # Leave the job time for the summary and uploads once the queries have used 9 hours.
           # Word splitting of $QUERIES is intended.
           # shellcheck disable=SC2086
           python3 scripts/bench-memory.py run-queries \
@@ -204,11 +204,49 @@ jobs:
             ${QUERIES:+--queries $QUERIES} \
             --iterations "$ITERATIONS" \
             --timeout "$(( QUERY_TIMEOUT_MINUTES * 60 ))" \
-            --budget "$(( 9 * 3600 ))" \
+            --budget "$(( 3 * 3600 ))" \
             --opt scale-factor="$SCALE_FACTOR" \
             --out-dir "$OUT_DIR" \
             --phase-file "$PHASE_FILE" \
             --min-available-gib 8
+
+      # DataFusion's hash join keeps its whole build side in memory and cannot spill, so at
+      # SF1000 the largest joins run out of memory. This second pass uses sort-merge joins, which
+      # spill, under a memory limit, with spill files on the local NVMe. The limit leaves headroom
+      # for scan buffers the pool does not track, and DataFusion's default 100 GB spill cap is
+      # too small for these joins.
+      - name: Run datafusion queries with spilling
+        if: ${{ !cancelled() && matrix.engine == 'datafusion' }}
+        shell: bash
+        env:
+          RUST_BACKTRACE: "1"
+          QUERIES: ${{ inputs.queries }}
+          ITERATIONS: ${{ inputs.iterations || '1' }}
+          QUERY_TIMEOUT_MINUTES: ${{ inputs.query_timeout_minutes || '45' }}
+          DATAFUSION_OPTIMIZER_PREFER_HASH_JOIN: "false"
+          DATAFUSION_BENCH_MEMORY_LIMIT_GIB: "80"
+          DATAFUSION_BENCH_MAX_SPILL_GIB: "500"
+          DATAFUSION_BENCH_SPILL_DIR: ${{ github.workspace }}/df-spill
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "$DATAFUSION_BENCH_SPILL_DIR"
+          # Word splitting of $QUERIES is intended.
+          # shellcheck disable=SC2086
+          python3 scripts/bench-memory.py run-queries \
+            --binary target/release_debug/datafusion-bench \
+            --engine datafusion \
+            --variant spill \
+            --formats parquet vortex \
+            ${QUERIES:+--queries $QUERIES} \
+            --iterations "$ITERATIONS" \
+            --timeout "$(( QUERY_TIMEOUT_MINUTES * 60 ))" \
+            --budget "$(( 5 * 3600 ))" \
+            --opt scale-factor="$SCALE_FACTOR" \
+            --out-dir "$OUT_DIR" \
+            --phase-file "$PHASE_FILE" \
+            --min-available-gib 8
+          du -sh "$DATAFUSION_BENCH_SPILL_DIR" || true
+          rm -rf "$DATAFUSION_BENCH_SPILL_DIR"
 
       - name: Stop memory monitor
         if: always()

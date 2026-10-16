@@ -150,6 +150,8 @@ def classify(returncode: int, reason: str | None, pid: int, stderr_tail: str) ->
         return "oom-killed"
     if returncode == 0:
         return "ok"
+    if "Resources exhausted" in stderr_tail:
+        return "resources-exhausted"
     if "memory allocation of" in stderr_tail or "Out of Memory Error" in stderr_tail:
         return "alloc-failed"
     if returncode == -signal.SIGKILL and kernel_oom_killed(pid):
@@ -216,13 +218,15 @@ def cmd_run_queries(args: argparse.Namespace) -> int:
     queries = args.queries or list_queries(args.binary, args.benchmark, options)
     records_path = args.out_dir / "queries.jsonl"
     deadline = time.monotonic() + args.budget if args.budget else None
+    # The variant keeps records and memory phases of differently configured runs of one engine apart.
+    engine = f"{args.engine}-{args.variant}" if args.variant else args.engine
     failures = 0
 
     for fmt in args.formats:
         for query in queries:
-            label = f"{args.engine}:{fmt}:q{query:02d}"
+            label = f"{engine}:{fmt}:q{query:02d}"
             args.phase_file.write_text(label)
-            stem = args.out_dir / f"{args.engine}-{fmt}-q{query:02d}"
+            stem = args.out_dir / f"{engine}-{fmt}-q{query:02d}"
             cmd = [
                 args.binary,
                 args.benchmark,
@@ -247,9 +251,7 @@ def cmd_run_queries(args: argparse.Namespace) -> int:
                 failures += 1
                 print(f"::warning title={label} skipped::time budget of {args.budget}s exhausted", flush=True)
                 with open(records_path, "a") as f:
-                    f.write(
-                        json.dumps({"engine": args.engine, "format": fmt, "query": query, "status": "skipped"}) + "\n"
-                    )
+                    f.write(json.dumps({"engine": engine, "format": fmt, "query": query, "status": "skipped"}) + "\n")
                 continue
 
             subprocess.run(["sync"], check=False)
@@ -267,13 +269,13 @@ def cmd_run_queries(args: argparse.Namespace) -> int:
                 int(args.min_available_gib * GIB),
             )
             elapsed = time.monotonic() - start
-            stderr_tail = tail(stem.with_suffix(".log"))
-            status = classify(returncode, reason, pid, stderr_tail)
-            print(stderr_tail)
+            # Classify on a long tail: a backtrace can push the error message far from the end.
+            status = classify(returncode, reason, pid, tail(stem.with_suffix(".log"), 400))
+            print(tail(stem.with_suffix(".log")))
             print("::endgroup::", flush=True)
 
             record = {
-                "engine": args.engine,
+                "engine": engine,
                 "format": fmt,
                 "query": query,
                 "status": status,
@@ -373,6 +375,7 @@ def main() -> int:
     run = sub.add_parser("run-queries", help="Run each query in its own process and record its memory")
     run.add_argument("--binary", required=True)
     run.add_argument("--engine", required=True, choices=["datafusion", "duckdb"])
+    run.add_argument("--variant", help="Label for this configuration, e.g. spill")
     run.add_argument("--benchmark", default="tpch")
     run.add_argument("--formats", nargs="+", required=True)
     run.add_argument("--queries", type=int, nargs="*")
