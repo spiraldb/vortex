@@ -75,7 +75,7 @@ impl Dataset for WidePrimitiveTable {
 
     async fn to_vortex_array(&self, _ctx: &mut ExecutionCtx) -> Result<ArrayRef> {
         let names: FieldNames = self.column_names().collect();
-        let fields = self
+        let fields: Vec<ArrayRef> = self
             .columns()
             .map(|values| PrimitiveArray::from_iter(values).into_array())
             .collect();
