@@ -29,7 +29,15 @@ val scalaVersion =
         "4.0" to "2.13" -> libs.findVersion("scala213Spark40").get().requiredVersion
         else -> throw GradleException("Unsupported Spark/Scala variant: $sparkLine/$scalaBinaryVersion")
     }
-val spark41Version = libs.findVersion("spark41").get().requiredVersion
+// Later Spark 4 releases run the Spark 4.0 module's tests against its jar to catch binary breaks.
+val sparkCompatVersions =
+    if (sparkLine == "4.0") {
+        listOf("4.1" to "spark41", "4.2" to "spark42").map { (line, alias) ->
+            line to libs.findVersion(alias).get().requiredVersion
+        }
+    } else {
+        emptyList()
+    }
 
 layout.buildDirectory = layout.projectDirectory.dir("build/${project.name}")
 
@@ -139,8 +147,8 @@ testing {
             targets.all { testTask.configure { enabled = false } }
         }
 
-        if (sparkLine == "4.0") {
-            register<JvmTestSuite>("spark41CompatTest") {
+        sparkCompatVersions.forEach { (line, version) ->
+            register<JvmTestSuite>("spark${line.replace(".", "")}CompatTest") {
                 useJUnitJupiter()
                 sources {
                     java.setSrcDirs(
@@ -159,8 +167,8 @@ testing {
                 dependencies {
                     implementation(project())
                     implementation(libs.findLibrary("junit-jupiter").get())
-                    implementation("org.apache.spark:spark-core_2.13:$spark41Version")
-                    implementation("org.apache.spark:spark-sql_2.13:$spark41Version")
+                    implementation("org.apache.spark:spark-core_2.13:$version")
+                    implementation("org.apache.spark:spark-sql_2.13:$version")
                     implementation(libs.findLibrary("s3mock-testcontainers").get())
                     implementation(libs.findLibrary("testcontainers-juputer").get())
                     runtimeOnly(libs.findLibrary("slf4j-simple").get())
@@ -170,9 +178,9 @@ testing {
     }
 }
 
-if (sparkLine == "4.0") {
-    tasks.named("check") {
-        dependsOn("spark41CompatTest")
+tasks.named("check") {
+    sparkCompatVersions.forEach { (line, _) ->
+        dependsOn("spark${line.replace(".", "")}CompatTest")
     }
 }
 

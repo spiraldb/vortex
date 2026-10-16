@@ -20,6 +20,7 @@ scala213Spark41 = "2.13.17"
 spark35 = "3.5.9"
 spark40 = "4.0.4"
 spark41 = "4.1.2"
+spark42 = "4.2.0"
 s3mock = "5.0.0"
 testcontainers-jupiter = "1.21.4"
 

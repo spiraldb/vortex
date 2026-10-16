@@ -265,11 +265,10 @@ public final class SparkFilterToVortexExpression {
         if (dataType instanceof LongType) {
             return numericLiteral(value, Expression.DType.I64, number -> Expression.literal(number.longValue()));
         }
-        if (dataType instanceof FloatType) {
-            return numericLiteral(value, Expression.DType.F32, number -> Expression.literal(number.floatValue()));
-        }
-        if (dataType instanceof DoubleType) {
-            return numericLiteral(value, Expression.DType.F64, number -> Expression.literal(number.doubleValue()));
+        if (dataType instanceof FloatType || dataType instanceof DoubleType) {
+            // Vortex compares floats in total order, so -0.0 and 0.0 differ, while Spark treats them as equal.
+            // Spark cannot restore rows that Vortex drops, so keep these comparisons in Spark (see #10064).
+            return Optional.empty();
         }
         if (dataType instanceof StringType) {
             if (value == null) {

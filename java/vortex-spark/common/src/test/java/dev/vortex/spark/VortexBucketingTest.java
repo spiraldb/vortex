@@ -82,8 +82,7 @@ public final class VortexBucketingTest {
         assertFalse(buckets.isEmpty(), "bucketed table should hold bucket files");
         assertTrue(buckets.stream().allMatch(id -> id >= 0 && id < 4), "bucket ids: " + buckets);
 
-        Dataset<Row> joined = spark.sql(
-                "SELECT l.id FROM bucketed_left l JOIN bucketed_right r ON l.id = r.id");
+        Dataset<Row> joined = spark.sql("SELECT l.id FROM bucketed_left l JOIN bucketed_right r ON l.id = r.id");
         String plan = joined.queryExecution().executedPlan().toString();
         assertFalse(plan.contains("Exchange"), "a bucketed join should not shuffle:\n" + plan);
         assertEquals(50, joined.count());
@@ -95,7 +94,8 @@ public final class VortexBucketingTest {
         spark.sql("CREATE TABLE bucketed_sql (id INT, name STRING) USING vortex PARTITIONED BY (bucket(4, id))");
         spark.sql("INSERT INTO bucketed_sql SELECT CAST(id AS INT), CAST(id AS STRING) FROM range(40)");
 
-        List<Row> rows = spark.sql("SELECT count(*), count(DISTINCT id) FROM bucketed_sql").collectAsList();
+        List<Row> rows = spark.sql("SELECT count(*), count(DISTINCT id) FROM bucketed_sql")
+                .collectAsList();
         assertEquals(40L, rows.get(0).getLong(0));
         assertEquals(40L, rows.get(0).getLong(1));
 

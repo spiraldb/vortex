@@ -27,8 +27,8 @@ import org.junit.jupiter.params.provider.CsvSource;
  * Only files that end with {@code .vortex} belong to a Vortex dataset.
  *
  * <p>Spark's file index keeps {@code _metadata} and {@code _common_metadata}, and it keeps every extension it does not
- * recognise, so the connector is the only thing that can decide what belongs to the dataset. It skips every other
- * file, as the connector before the file-source rewrite did. These tests hold the paths that see the listing — schema
+ * recognise, so the connector is the only thing that can decide what belongs to the dataset. It skips every other file,
+ * as the connector before the file-source rewrite did. These tests hold the paths that see the listing — schema
  * inference, scan statistics, {@code COUNT(*)} pushdown, and the V1 and V2 scans — to the same answer.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)

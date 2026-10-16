@@ -107,7 +107,8 @@ final class VortexScan(
     }
   }
 
-  /** The listed files that belong to the dataset. The readers skip the others. */
+  /** The listed files that belong to the dataset. The readers skip the others.
+    */
   private def vortexFiles =
     partitions
       .flatMap(_.files)

@@ -27,6 +27,8 @@ import org.junit.jupiter.api.Test;
 final class SparkFilterToVortexExpressionTest {
     private static final StructType SCHEMA = new StructType()
             .add("id", DataTypes.IntegerType)
+            .add("float", DataTypes.FloatType)
+            .add("double", DataTypes.DoubleType)
             .add("date", DataTypes.DateType)
             .add("timestamp", DataTypes.TimestampType)
             .add("decimal", DataTypes.createDecimalType(10, 2))
@@ -71,6 +73,15 @@ final class SparkFilterToVortexExpressionTest {
         // The column keeps two decimal places, so a third would be lost in the conversion.
         assertFalse(SparkFilterToVortexExpression.isPushable(new EqualTo("decimal", new BigDecimal("1.005")), SCHEMA));
         assertPushable(new EqualTo("decimal", new BigDecimal("1.00")));
+    }
+
+    @Test
+    void rejectsFloatingPointComparisons() {
+        // Vortex orders -0.0 below 0.0, but Spark treats them as equal.
+        assertFalse(SparkFilterToVortexExpression.isPushable(new EqualTo("float", 0.0f), SCHEMA));
+        assertFalse(SparkFilterToVortexExpression.isPushable(new GreaterThan("double", 0.0), SCHEMA));
+        assertFalse(SparkFilterToVortexExpression.isPushable(new In("double", new Object[] {0.0, 1.0}), SCHEMA));
+        assertPushable(new IsNull("double"));
     }
 
     @Test
