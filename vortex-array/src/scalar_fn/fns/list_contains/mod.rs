@@ -27,6 +27,7 @@ use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
 
 use crate::ArrayRef;
+use crate::Canonical;
 use crate::Columnar;
 use crate::ExecutionCtx;
 use crate::IntoArray;
@@ -344,6 +345,12 @@ fn compute_list_contains(
         );
     }
 
+    let nullability = options.result_nullability(array.dtype(), value.dtype());
+    // `all_invalid` holds vacuously for empty input, so answer it here with the declared dtype.
+    if array.is_empty() {
+        return Ok(Canonical::empty(&DType::Bool(nullability)).into_array());
+    }
+
     // A null needle is null against every list only when the function is strict: otherwise an
     // empty list still answers `false`, which the paths below work out per list.
     if array.all_invalid(ctx)? || (options.sql_null_semantics && value.all_invalid(ctx)?) {
@@ -359,7 +366,6 @@ fn compute_list_contains(
         return set.contains(value, options, ctx);
     }
 
-    let nullability = options.result_nullability(array.dtype(), value.dtype());
     if let Some(value_scalar) = value.as_constant() {
         return list_contains_scalar(array, &value_scalar, nullability, options, ctx);
     }
@@ -1318,6 +1324,44 @@ mod tests {
 
         let expected = BoolArray::from_iter([false, false, false, false]);
         assert_arrays_eq!(result, expected, &mut ctx);
+    }
+
+    fn empty_prepared_set() -> ArrayRef {
+        let list = Scalar::list(
+            DType::Bool(Nullability::NonNullable),
+            vec![Scalar::bool(true, Nullability::NonNullable)],
+            Nullability::NonNullable,
+        );
+        PreparedSet::try_new_array(list, 0).unwrap()
+    }
+
+    fn empty_list_view() -> ArrayRef {
+        ListViewArray::new(
+            BoolArray::from_iter(Vec::<bool>::new()).into_array(),
+            Buffer::<u32>::empty().into_array(),
+            Buffer::<u32>::empty().into_array(),
+            Validity::NonNullable,
+        )
+        .into_array()
+    }
+
+    /// Empty input is vacuously all-invalid, but must still give the declared non-nullable result.
+    #[rstest]
+    #[case::prepared_set(empty_prepared_set())]
+    #[case::list_view(empty_list_view())]
+    fn test_list_contains_empty_non_nullable(
+        #[case] list: ArrayRef,
+        #[values(false, true)] sql_null_semantics: bool,
+    ) -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let needles = BoolArray::from_iter(Vec::<bool>::new()).into_array();
+
+        let result =
+            ListContains::try_new_opts(list, needles, ListContainsOptions { sql_null_semantics })?
+                .into_array();
+        assert_eq!(result.dtype(), &DType::Bool(Nullability::NonNullable));
+        assert_arrays_eq!(result, BoolArray::from_iter(Vec::<bool>::new()), &mut ctx);
+        Ok(())
     }
 
     #[test]
