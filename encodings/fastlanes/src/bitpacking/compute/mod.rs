@@ -48,7 +48,6 @@ fn unpack_indices_into<T: NativePType + BitPacking>(
     }
 }
 
-// TODO(connor): This is duplicated in `encodings/fastlanes/src/bitpacking/kernels/mod.rs`.
 /// Groups consecutive indices by 1024-element chunk without allocating.
 ///
 /// Repeated indices can select more than 1024 positions from one chunk, in which case
