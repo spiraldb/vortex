@@ -503,6 +503,68 @@ fn chunk_in_gap_between_splits_stays_lazy(#[values(1, 2)] active: usize) -> Vort
     Ok(())
 }
 
+#[rstest]
+fn chunk_excluded_by_mask_stays_lazy(
+    #[values(false, true)] nested: bool,
+    #[values(false, true)] empty: bool,
+    #[values(false, true)] cached_indices: bool,
+) -> VortexResult<()> {
+    static UNKNOWN_ID: CachedId = CachedId::new("test.masked-gap");
+    let mut store = Store::default();
+    let values = PrimitiveArray::from_iter(0..ROWS as i32).into_array();
+    let known = store.flat(&values)?;
+    let unknown = new_foreign_layout(
+        *UNKNOWN_ID,
+        values.dtype().clone(),
+        ROWS,
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    let mut layout = ChunkedLayout::new(
+        3 * ROWS,
+        values.dtype().clone(),
+        OwnedLayoutChildren::layout_children(vec![Arc::clone(&known), unknown, Arc::clone(&known)]),
+    )
+    .into_layout();
+    let offset = if nested { ROWS } else { 0 };
+    if nested {
+        layout = ChunkedLayout::new(
+            4 * ROWS,
+            values.dtype().clone(),
+            OwnedLayoutChildren::layout_children(vec![known, layout]),
+        )
+        .into_layout();
+    }
+    let rows = offset + 5..offset + 3 * ROWS - 5;
+    let len = usize::try_from(rows.end - rows.start)?;
+    let mut mask = if empty {
+        Mask::new_false(len)
+    } else {
+        Mask::from_indices(len, [0, len - 1])
+    };
+    if !cached_indices {
+        mask = Mask::from_buffer(mask.to_bit_buffer());
+    }
+    let scan = Scan::try_new(SESSION.clone(), lower(&layout)?, vec![Split { rows, mask }])?;
+    let run = drive(&store, scan, delivery(Delivery::Lifo))?;
+    assert_eq!(run.leftover, (0, 0));
+    if empty {
+        assert!(segments_read(&run.events).is_empty());
+        assert!(run.splits.iter().all(Vec::is_empty));
+    } else {
+        assert_eq!(segments_read(&run.events), vec![0]);
+        let expected = PrimitiveArray::from_iter([5, ROWS as i32 - 6]).into_array();
+        assert_view(
+            &expected,
+            &(0..2),
+            &Mask::new_true(2),
+            run.splits[0].clone(),
+        )?;
+    }
+    Ok(())
+}
+
 #[test]
 fn every_read_is_issued_before_any_is_delivered() -> VortexResult<()> {
     let mut store = Store::default();

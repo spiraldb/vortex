@@ -673,7 +673,10 @@ impl Scan {
         );
         match &root {
             Root::Plan(plan) => {
-                if splits
+                if let [split] = splits.as_slice() {
+                    core.shares
+                        .add_selected(plan, split.rows.clone(), &split.mask)?;
+                } else if splits
                     .windows(2)
                     .all(|pair| pair[0].rows.end <= pair[1].rows.start)
                 {
