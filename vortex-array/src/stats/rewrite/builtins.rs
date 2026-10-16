@@ -796,7 +796,8 @@ fn literal_stat(expr: &BoundExpression, stat: Stat) -> Option<BoundExpression> {
 
 fn cast_stat(expr: &BoundExpression, dtype: &DType, stat: Stat) -> Option<BoundExpression> {
     match stat {
-        Stat::Min | Stat::Max => stat_expr(expr, stat).map(|stat| cast(stat, dtype.clone())),
+        // Stats may be missing, so the cast keeps them nullable whatever the target is.
+        Stat::Min | Stat::Max => stat_expr(expr, stat).map(|stat| cast(stat, dtype.as_nullable())),
         Stat::NaNCount | Stat::Sum | Stat::UncompressedSizeInBytes => stat_expr(expr, stat),
         Stat::NullCount | Stat::IsConstant | Stat::IsSorted | Stat::IsStrictSorted => None,
     }
@@ -1265,7 +1266,10 @@ mod tests {
             falsify(&expr)?,
             Some(nan_guarded(
                 col("f"),
-                lt_eq(cast(stat(col("f"), Stat::Max), dtype), lit(5i32)),
+                lt_eq(
+                    cast(stat(col("f"), Stat::Max), dtype.as_nullable()),
+                    lit(5i32)
+                ),
             ))
         );
         Ok(())
@@ -1292,8 +1296,14 @@ mod tests {
         assert_rewrite_eq!(
             falsify(&expr)?,
             Some(or(
-                gt(cast(stat(col("a"), Stat::Min), dtype.clone()), lit(42i64)),
-                gt(lit(42i64), cast(stat(col("a"), Stat::Max), dtype)),
+                gt(
+                    cast(stat(col("a"), Stat::Min), dtype.as_nullable()),
+                    lit(42i64)
+                ),
+                gt(
+                    lit(42i64),
+                    cast(stat(col("a"), Stat::Max), dtype.as_nullable())
+                ),
             ))
         );
         Ok(())

@@ -50,12 +50,14 @@ use vortex_array::expr::and;
 use vortex_array::expr::cast;
 use vortex_array::expr::col;
 use vortex_array::expr::eq;
+use vortex_array::expr::fill_null;
 use vortex_array::expr::get_item;
 use vortex_array::expr::gt;
 use vortex_array::expr::gt_eq;
 use vortex_array::expr::lit;
 use vortex_array::expr::lt;
 use vortex_array::expr::lt_eq;
+use vortex_array::expr::not_eq;
 use vortex_array::expr::or;
 use vortex_array::expr::root;
 use vortex_array::expr::select;
@@ -696,6 +698,50 @@ async fn issue_5385_filter_casted_column() {
         StructArray::try_from_iter([("x", buffer![1u8])]).unwrap(),
         &mut SESSION.create_execution_ctx()
     );
+}
+
+/// Pruning rewrites `min/max(cast(x as T))` to `cast(min/max(x) as T)`. A missing statistic
+/// is a null literal, so the cast must target a nullable `T` even when `T` is non-nullable.
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn filter_non_nullable_cast_of_nullable_column() -> VortexResult<()> {
+    let c1 = PrimitiveArray::from_option_iter((0..100u16).map(|i| (i % 7 == 0).then_some(i)));
+    let c3 = PrimitiveArray::from_iter(0..100i32);
+    let array = StructArray::from_fields(&[("c1", c1.into_array()), ("c3", c3.into_array())])?;
+
+    let mut buf = ByteBufferMut::empty();
+    SESSION
+        .write_options()
+        .write(&mut buf, array.into_array().to_array_stream())
+        .await?;
+
+    let file = SESSION.open_options().open_buffer(buf)?;
+    let result = file
+        .scan()?
+        .with_filter(bind_scan_expr(
+            &file,
+            not_eq(
+                cast(
+                    fill_null(get_item("c1", root()), lit(0u16)),
+                    DType::Primitive(I32, Nullability::NonNullable),
+                ),
+                get_item("c3", root()),
+            ),
+        ))
+        .into_array_stream()?
+        .read_all()
+        .await?;
+
+    let rows = (0..100i32).filter(|i| i % 7 != 0);
+    let expected = StructArray::from_fields(&[
+        (
+            "c1",
+            PrimitiveArray::from_option_iter(rows.clone().map(|_| None::<u16>)).into_array(),
+        ),
+        ("c3", PrimitiveArray::from_iter(rows).into_array()),
+    ])?;
+    assert_arrays_eq!(result, expected, &mut SESSION.create_execution_ctx());
+    Ok(())
 }
 
 #[tokio::test]
