@@ -44,11 +44,15 @@ use super::ScanBuilder;
 use super::ScanFile;
 use super::row_chunks;
 use super::rows_per_chunk;
+use crate::LayoutId;
 use crate::LayoutRef;
 use crate::LayoutStrategy;
+use crate::children::OwnedLayoutChildren;
+use crate::layouts::chunked::ChunkedLayout;
 use crate::layouts::chunked::writer::ChunkedLayoutStrategy;
 use crate::layouts::dict::DictLayout;
 use crate::layouts::flat::writer::FlatLayoutStrategy;
+use crate::layouts::foreign::new_foreign_layout;
 use crate::layouts::list::writer::ListLayoutStrategy;
 use crate::layouts::row_idx::row_idx;
 use crate::layouts::table::TableStrategy;
@@ -556,5 +560,74 @@ async fn work_chunks_ignore_layout_boundaries(
     let arrays: Vec<_> = scan.execute_stream()?.try_collect().await?;
     assert_eq!(arrays.len(), 1);
     assert_eq!(arrays[0].len(), CHUNKS * CHUNK_ROWS);
+    Ok(())
+}
+
+#[tokio::test]
+async fn unknown_layout_returns_an_error() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, known) = write(&session, chunked_flat().as_ref()).await?;
+    let layout = new_foreign_layout(
+        LayoutId::new("test.unsupported"),
+        known.dtype().clone(),
+        known.row_count(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    let error = builder(&session, &segments, &layout)?
+        .into_stream()?
+        .try_next()
+        .await
+        .expect_err("V2 must reject an unsupported layout");
+    assert!(
+        error
+            .to_string()
+            .contains("No physical plan implementation for layout 'test.unsupported'")
+    );
+    Ok(())
+}
+
+#[rstest]
+#[tokio::test]
+async fn unsupported_chunk_is_checked_when_reached(
+    #[values(false, true)] selected: bool,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, known) = write(&session, chunked_flat().as_ref()).await?;
+    let rows = known.row_count();
+    let unknown = new_foreign_layout(
+        LayoutId::new("test.unsupported"),
+        known.dtype().clone(),
+        rows,
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    let layout = ChunkedLayout::new(
+        2 * rows,
+        known.dtype().clone(),
+        OwnedLayoutChildren::layout_children(vec![known.clone(), unknown]),
+    )
+    .into_layout();
+    let range = if selected { rows..2 * rows } else { 0..rows };
+    let result = collect(
+        known.dtype().clone(),
+        builder(&session, &segments, &layout)?
+            .with_row_range(range)
+            .into_stream()?,
+    )
+    .await;
+    if selected {
+        let error = result.expect_err("a reached unsupported chunk must fail");
+        assert!(error.to_string().contains("test.unsupported"));
+    } else {
+        let expected = collect(
+            known.dtype().clone(),
+            builder(&session, &segments, &known)?.into_stream()?,
+        )
+        .await?;
+        assert_arrays_eq!(result?, expected, &mut session.create_execution_ctx());
+    }
     Ok(())
 }

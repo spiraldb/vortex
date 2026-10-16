@@ -36,7 +36,6 @@ use vortex_array::VortexSessionExecute;
 use vortex_array::dtype::DType;
 use vortex_array::expr::BoundExpression;
 use vortex_error::VortexResult;
-use vortex_error::vortex_ensure;
 use vortex_io::request::IoService;
 use vortex_io::session::RuntimeSessionExt;
 use vortex_scan::planning::planner::WorkScope;
@@ -46,13 +45,6 @@ use vortex_session::VortexSession;
 use vortex_utils::parallelism::get_available_parallelism;
 
 use crate::LayoutRef;
-use crate::layouts::chunked::Chunked;
-use crate::layouts::dict::Dict;
-use crate::layouts::flat::Flat;
-use crate::layouts::list::List;
-use crate::layouts::struct_::Struct;
-use crate::layouts::zoned::LegacyStats;
-use crate::layouts::zoned::Zoned;
 use crate::plan::physical::lower;
 use crate::plan::physical::optimize;
 use crate::plan::physical::plan_row_idx_expression;
@@ -110,8 +102,10 @@ pub struct ScanFile {
 
 /// Builds a projection scan on the planner-driven V2 executor.
 ///
-/// This builder reads the file's layout and segments directly. Unsupported layouts return an
-/// error when the stream is polled. Filters and row limits are not supported.
+/// This builder reads the file's layout and segments directly. Layouts are checked as their
+/// plans are lowered, so unsupported layouts outside the requested range can remain unread.
+/// Unsupported plans return an error when the stream is polled. Filters and row limits are
+/// not supported.
 pub struct ScanBuilder<A = ArrayRef> {
     session: VortexSession,
     file: ScanFile,
@@ -238,33 +232,6 @@ impl<A: 'static + Send> ScanBuilder<A> {
     }
 }
 
-/// Whether every required layout lowers to plans with a pipeline implementation.
-fn supports_layout(layout: &LayoutRef, identity: bool) -> VortexResult<bool> {
-    if !(layout.is::<Flat>()
-        || layout.is::<Chunked>()
-        || layout.is::<Struct>()
-        || layout.is::<List>()
-        || layout.is::<Dict>()
-        || layout.is::<Zoned>()
-        || layout.is::<LegacyStats>())
-    {
-        return Ok(false);
-    }
-    // An identity projection cannot use zone statistics. Leave their layouts uninitialized.
-    if identity && (layout.is::<Zoned>() || layout.is::<LegacyStats>()) {
-        return match layout.slot(0)? {
-            Some(data) => supports_layout(&data, identity),
-            None => Ok(false),
-        };
-    }
-    for child in layout.children()? {
-        if !supports_layout(&child, identity)? {
-            return Ok(false);
-        }
-    }
-    Ok(true)
-}
-
 /// A scan planned over its file, ready to run its splits.
 struct PreparedScan<A: 'static + Send> {
     session: VortexSession,
@@ -284,10 +251,6 @@ impl<A: 'static + Send> PreparedScan<A> {
     /// fixed-size row chunks.
     fn try_new(builder: ScanBuilder<A>) -> VortexResult<Self> {
         let file = builder.file;
-        vortex_ensure!(
-            supports_layout(&file.layout, builder.projection.is_root())?,
-            "V2 scans do not support this file's layout"
-        );
         let root = lower(&file.layout)?;
         let row_count = root.row_count();
         // An identity projection needs no rewrites. Keep the lowered children lazy, including
