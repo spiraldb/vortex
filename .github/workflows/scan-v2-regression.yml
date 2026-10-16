@@ -23,8 +23,8 @@ jobs:
     runs-on: >-
       runs-on=${{ github.run_id }}/runner=bench-dedicated/family=c8gd.8xlarge/image=ubuntu24-full-arm64-pre-v2/extras=s3-cache/tag=scan-v2-regression
     env:
-      # Direct parent of the validated-offset candidate; this run isolates that change.
-      BASELINE_COMMIT: "5231b70910a8f796a0154ab79bfd01655e527a99"
+      # Previous random-access branch, before rebasing onto PR #10540.
+      BASELINE_COMMIT: "ad83fcbfc05d1885c08b7ae5cc57302e412638f3"
       CARGO_BUILD_JOBS: "8"
       CARGO_TARGET_DIR: ${{ github.workspace }}/target
       RUSTFLAGS: "-C target-cpu=native -C force-frame-pointers=yes"
@@ -64,11 +64,8 @@ jobs:
             cd "$RUNNER_TEMP/scan-v2-baseline"
             env -u VORTEX_SELECTION_METRICS cargo build --locked --profile release_debug \
               -p vortex --example selection_scan
-            env -u VORTEX_SELECTION_METRICS cargo build --locked --profile release_debug \
-              -p random-access-bench
           )
           cp target/release_debug/examples/selection_scan scan-v2-binaries/baseline
-          cp target/release_debug/random-access-bench scan-v2-binaries/baseline-standard
           sha256sum scan-v2-binaries/* > scan-v2-results/binaries.sha256
 
       - name: Prepare shared datasets and verify ListLayout rewrites
@@ -100,7 +97,6 @@ jobs:
             --baseline scan-v2-binaries/baseline \
             --candidate scan-v2-binaries/current \
             --standard-benchmark scan-v2-binaries/standard \
-            --baseline-standard-benchmark scan-v2-binaries/baseline-standard \
             --baseline-commit "$BASELINE_COMMIT" \
             --candidate-commit "$CANDIDATE_COMMIT" \
             | tee scan-v2-results/run.log

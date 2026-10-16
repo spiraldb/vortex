@@ -15,6 +15,7 @@ use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ChunkedArray;
+use vortex_array::arrays::ListArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinViewArray;
@@ -36,6 +37,7 @@ use vortex_error::vortex_err;
 use vortex_mask::Mask;
 use vortex_session::registry::CachedId;
 use vortex_session::registry::ReadContext;
+use vortex_utils::parallelism::get_available_parallelism;
 
 use super::port::SourceEnd;
 use super::synthetic::row_dtype;
@@ -49,6 +51,7 @@ use crate::layouts::foreign::new_foreign_layout;
 use crate::layouts::struct_::StructLayout;
 use crate::plan::physical::EvalPlan;
 use crate::plan::physical::Filter;
+use crate::plan::physical::ListPackPlan;
 use crate::plan::physical::PackPlan;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::SegmentScan;
@@ -290,6 +293,55 @@ fn delivery(order: Delivery) -> impl FnMut(&[ReadRequest]) -> usize {
         Delivery::Fifo => 0,
         Delivery::Lifo => inflight.len() - 1,
     }
+}
+
+#[rstest]
+fn grouped_list_ranges_preserve_order_and_shared_reads(
+    #[values(Delivery::Fifo, Delivery::Lifo)] order: Delivery,
+    #[values(false, true)] shared: bool,
+) -> VortexResult<()> {
+    let mut store = Store::default();
+    let elements = Buffer::from_iter(0_i64..20).into_array();
+    let offsets = Buffer::from_iter((0_u64..=10).map(|row| row * 2)).into_array();
+    let input =
+        ListArray::try_new(elements.clone(), offsets.clone(), Validity::NonNullable)?.into_array();
+    let layout = if shared {
+        store.flat(&elements)?
+    } else {
+        store.chunked(&elements, &[5, 5, 5, 5])?
+    };
+    let plan = ListPackPlan::try_new(
+        false.into(),
+        10,
+        lower(&layout)?,
+        lower(&store.flat(&offsets)?)?,
+        None,
+    )?
+    .into_plan();
+    let rows = [0_u64, 1, 7, 8];
+    let mask = Mask::from_iter((0..10).map(|row| rows.contains(&row)));
+    let result = run(&store, &plan, 0..10, mask, delivery(order))?;
+    let actual = ChunkedArray::try_new(result.arrays, input.dtype().clone())?.into_array();
+    let expected = input.take(Buffer::from_iter(rows).into_array())?;
+    assert_arrays_eq!(actual, expected, &mut SESSION.create_execution_ctx());
+    if get_available_parallelism().unwrap_or(1) > 1 {
+        if shared {
+            let reads = result
+                .events
+                .iter()
+                .filter(|event| **event == Event::Delivered(0));
+            assert_eq!(reads.count(), 1);
+        } else {
+            assert!(
+                result.events.iter().any(|event| {
+                    matches!(event, Event::Io(ids) if ids.contains(&0) && ids.contains(&2))
+                }),
+                "{:?}",
+                result.events
+            );
+        }
+    }
+    Ok(())
 }
 
 /// Delivers segments in the given order.

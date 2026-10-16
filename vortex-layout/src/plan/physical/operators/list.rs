@@ -14,6 +14,8 @@ use vortex_array::arrays::PrimitiveArray;
 use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::PType;
+use vortex_array::expr::stats::Precision;
+use vortex_array::expr::stats::Stat;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
@@ -21,6 +23,7 @@ use vortex_error::vortex_ensure;
 use vortex_error::vortex_err;
 use vortex_mask::AllOr;
 use vortex_mask::Mask;
+use vortex_utils::parallelism::get_available_parallelism;
 
 use super::join;
 use super::join_inlet;
@@ -38,6 +41,8 @@ use crate::plan::physical::pipeline::Split;
 use crate::plan::physical::pipeline::Turn;
 use crate::plan::physical::pipeline::ValueCache;
 use crate::segments::SegmentId;
+
+mod work;
 
 /// A list's offsets and validity arrive before its selected element ranges can be planned.
 pub(crate) struct ListSource {
@@ -95,15 +100,33 @@ impl ListSource {
             )?,
             AllOr::None => (Buffer::from(vec![0_u64]), Vec::new()),
         };
-        self.offsets = Some(offsets.into_array());
+        let last_offset = offsets.last().copied().unwrap_or(0);
+        let offsets = offsets.into_array();
+        // These offsets start at zero and are checked sums of nonnegative lengths. Retain
+        // those facts so ListArray validation need not compute aggregates over them again.
+        let stats = offsets.statistics();
+        stats.set(Stat::IsSorted, Precision::Exact(true.into()));
+        stats.set(Stat::Min, Precision::Exact(0_u64.into()));
+        stats.set(Stat::Max, Precision::Exact(last_offset.into()));
+        self.offsets = Some(offsets);
         self.validity = Some(validity);
+        let overlap = work::can_overlap(
+            &elements,
+            &ranges,
+            self.mask.true_count(),
+            get_available_parallelism().unwrap_or(1),
+        )?;
         let scan = Scan::try_new(
             cx.session().clone(),
             elements,
             ranges.into_iter().map(Split::all).collect(),
         )?
         .with_value_cache(self.values.clone());
-        self.elements = Some(scan);
+        self.elements = Some(if overlap {
+            scan.with_max_active(2)
+        } else {
+            scan
+        });
         self.initialized = true;
         Ok(())
     }
