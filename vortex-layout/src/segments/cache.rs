@@ -2,9 +2,11 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use std::sync::Arc;
+use std::task::Poll;
 
 use async_trait::async_trait;
 use futures::FutureExt;
+use futures::future::poll_fn;
 use moka::future::Cache;
 use moka::future::CacheBuilder;
 use moka::policy::EvictionPolicy;
@@ -266,42 +268,42 @@ impl SegmentSource for SegmentCacheSourceAdapter {
     fn request(&self, id: SegmentId) -> SegmentFuture {
         let cache = Arc::clone(&self.cache);
         let source = Arc::clone(&self.source);
-        let lookup_cache = Arc::clone(&cache);
-        let mut lookup = async move { lookup_cache.get(id).await }.boxed();
-
-        // Resolve ready lookups while requests are being constructed, so cold reads remain
-        // eligible for coalescing before their futures are polled.
-        match lookup.as_mut().now_or_never() {
-            Some(result) => request_after_lookup(id, cache, source, result),
-            None => {
-                async move { request_after_lookup(id, cache, source, lookup.await).await }.boxed()
+        let mut request = async move {
+            if let Ok(Some(segment)) = cache.get(id).await {
+                tracing::debug!("Resolved segment {} from cache", id);
+                return Ok(BufferHandle::new_host(segment));
             }
+            let delegate = source.request(id);
+            // The eager poll may register a miss for coalescing, but only the caller may
+            // demand the read. Pending lookups reaching this point later must wake that caller.
+            let mut defer = true;
+            poll_fn(move |cx| {
+                if std::mem::take(&mut defer) {
+                    cx.waker().wake_by_ref();
+                    Poll::Pending
+                } else {
+                    Poll::Ready(())
+                }
+            })
+            .await;
+            let result = delegate.await?;
+            // Cache only CPU buffers; device buffers are not cached.
+            if let Some(buffer) = result.as_host_opt()
+                && let Err(e) = cache.put(id, buffer.clone()).await
+            {
+                tracing::warn!("Failed to store segment {} in cache: {}", id, e);
+            }
+            Ok(result)
         }
-    }
-}
+        .boxed();
 
-fn request_after_lookup(
-    id: SegmentId,
-    cache: Arc<dyn SegmentCache>,
-    source: Arc<dyn SegmentSource>,
-    lookup: VortexResult<Option<ByteBuffer>>,
-) -> SegmentFuture {
-    if let Ok(Some(segment)) = lookup {
-        tracing::debug!("Resolved segment {} from cache", id);
-        return async move { Ok(BufferHandle::new_host(segment)) }.boxed();
-    }
-    let delegate = source.request(id);
-    async move {
-        let result = delegate.await?;
-        // Cache only CPU buffers; device buffers are not cached.
-        if let Some(buffer) = result.as_host_opt()
-            && let Err(e) = cache.put(id, buffer.clone()).await
-        {
-            tracing::warn!("Failed to store segment {} in cache: {}", id, e);
+        // Resolve ready lookups while requests are constructed, retaining eager registration
+        // of cold misses without allocating a separate future to own the cache lookup.
+        match request.as_mut().now_or_never() {
+            Some(result) => async move { result }.boxed(),
+            None => request,
         }
-        Ok(result)
     }
-    .boxed()
 }
 
 #[cfg(test)]
@@ -364,33 +366,40 @@ mod tests {
         Ok(())
     }
 
-    struct CountingSource(AtomicUsize);
+    #[derive(Default)]
+    struct CountingSource(AtomicUsize, Arc<AtomicUsize>);
 
     impl SegmentSource for CountingSource {
         fn request(&self, _id: SegmentId) -> SegmentFuture {
             self.0.fetch_add(1, Ordering::SeqCst);
-            async { Ok(BufferHandle::new_host(ByteBuffer::copy_from(b"source"))) }.boxed()
+            let demanded = Arc::clone(&self.1);
+            async move {
+                demanded.fetch_add(1, Ordering::SeqCst);
+                Ok(BufferHandle::new_host(ByteBuffer::copy_from(b"source")))
+            }
+            .boxed()
         }
     }
 
     #[tokio::test]
-    async fn cache_hits_do_not_register_source_reads() -> VortexResult<()> {
+    async fn cache_lookup_preserves_registration_and_demand_order() -> VortexResult<()> {
         let cache = MokaSegmentCache::new(1024, SegmentEviction::Lru).for_file("file");
         let hit = SegmentId::from(0);
         cache.put(hit, ByteBuffer::copy_from(b"cached")).await?;
-        let source = Arc::new(CountingSource(AtomicUsize::new(0)));
-        let cached = SegmentCacheSourceAdapter::new(Arc::new(cache), source.clone());
+        let source = Arc::new(CountingSource::default());
+        let cached =
+            SegmentCacheSourceAdapter::new(Arc::new(cache), Arc::<CountingSource>::clone(&source));
 
         assert_eq!(
             cached.request(hit).await?.unwrap_host(),
             ByteBuffer::copy_from(b"cached")
         );
         assert_eq!(source.0.load(Ordering::SeqCst), 0);
-        assert_eq!(
-            cached.request(SegmentId::from(1)).await?.unwrap_host(),
-            ByteBuffer::copy_from(b"source")
-        );
+        let miss = cached.request(SegmentId::from(1));
         assert_eq!(source.0.load(Ordering::SeqCst), 1);
+        assert_eq!(source.1.load(Ordering::SeqCst), 0);
+        assert_eq!(miss.await?.unwrap_host(), ByteBuffer::copy_from(b"source"));
+        assert_eq!(source.1.load(Ordering::SeqCst), 1);
         Ok(())
     }
 
@@ -421,8 +430,8 @@ mod tests {
     ) -> VortexResult<()> {
         let (sender, receiver) = oneshot::channel();
         let cache = Arc::new(DelayedCache(Mutex::new(Some(receiver))));
-        let source = Arc::new(CountingSource(AtomicUsize::new(0)));
-        let cached = SegmentCacheSourceAdapter::new(cache, source.clone());
+        let source = Arc::new(CountingSource::default());
+        let cached = SegmentCacheSourceAdapter::new(cache, Arc::<CountingSource>::clone(&source));
         let mut request = cached.request(SegmentId::from(0));
         assert_eq!(source.0.load(Ordering::SeqCst), 0);
         assert!(futures::poll!(request.as_mut()).is_pending());

@@ -232,8 +232,12 @@ async fn benchmark_cache_lookup_coalescing() -> VortexResult<()> {
                     elapsed.sort_by(f64::total_cmp);
                     counts.sort_unstable();
                     bytes.sort_unstable();
+                    let demand_name = match demand {
+                        Demand::Concurrent => "concurrent",
+                        Demand::Ordered => "ordered",
+                    };
                     println!(
-                        "adapter={} latency_us={} repetitions={repetitions} cached_suffix={cached_suffix} demand={demand:?} physical_reads={}..{} bytes={}..{} median_ms={:.6}",
+                        "adapter={} latency_us={} repetitions={repetitions} cached_suffix={cached_suffix} demand={demand_name} physical_reads={}..{} bytes={}..{} median_ms={:.6}",
                         if control { "before" } else { "after" },
                         latency.as_micros(),
                         counts[0],
