@@ -26,6 +26,11 @@ Parquet operation runs as a task on it, so neither format uses threads outside t
 main thread does none of the timed work. `--threads 1` compares single-worker decoders;
 the default compares them at full width.
 
+CI runs the timed benchmark on a fixed budget of 16 cores: `scripts/compress-split.py --cpus 16`
+(the default) pins the process to 16 CPUs through `scripts/bench-taskset.sh` and passes
+`--threads 16`, so the result does not depend on how many cores the benchmark machine has.
+Pass `--cpus 0` to use every benchmark CPU instead.
+
 Vortex schedules its own compression and scan work as tasks on the runtime. The Parquet
 compressor splits its work into tasks on the same runtime:
 
