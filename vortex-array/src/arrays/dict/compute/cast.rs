@@ -16,9 +16,19 @@ use crate::scalar_fn::fns::cast::CastReduce;
 
 impl CastReduce for Dict {
     fn cast(array: ArrayView<'_, Dict>, dtype: &DType) -> VortexResult<Option<ArrayRef>> {
-        // Can have un-reference null values making the cast of values fail without a possible mask.
+        // Casting the values also casts the ones no code references, which can fail (out of
+        // range, or null when casting to non-nullable) although the dictionary's own values cast
+        // fine. Only push the cast down when every value is referenced.
         // TODO(joe): optimize this, could look at accessible values and fill_null not those?
-        if !dtype.is_nullable() && !array.values().validity()?.definitely_no_nulls() {
+        if !array.has_all_values_referenced() {
+            return Ok(None);
+        }
+        // Null codes must make a cast to non-nullable fail, which a lazily cast codes child does
+        // not guarantee (it is never executed when the values are constant).
+        if !dtype.is_nullable()
+            && (!array.values().validity()?.definitely_no_nulls()
+                || !array.codes().validity()?.definitely_no_nulls())
+        {
             return Ok(None);
         }
         // Cast the dictionary values to the target type
@@ -51,11 +61,14 @@ mod tests {
     use rstest::rstest;
     use vortex_buffer::BitBuffer;
     use vortex_buffer::buffer;
+    use vortex_error::VortexResult;
     use vortex_session::VortexSession;
 
     use crate::ArrayRef;
+    use crate::Canonical;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
+    use crate::arrays::ConstantArray;
     use crate::arrays::Dict;
     use crate::arrays::DictArray;
     use crate::arrays::PrimitiveArray;
@@ -67,6 +80,7 @@ mod tests {
     use crate::dtype::DType;
     use crate::dtype::Nullability;
     use crate::dtype::PType;
+    use crate::scalar::Scalar;
     use crate::validity::Validity;
 
     static SESSION: LazyLock<VortexSession> = LazyLock::new(crate::array_session);
@@ -221,5 +235,44 @@ mod tests {
             &DType::Primitive(PType::F64, Nullability::NonNullable)
         );
         assert_arrays_eq!(casted, PrimitiveArray::from_iter([1.0f64, 3.0, 1.0]), ctx);
+    }
+
+    #[test]
+    fn test_cast_dict_with_unreferenced_out_of_range_values() -> VortexResult<()> {
+        let ctx = &mut SESSION.create_execution_ctx();
+        // Values -5, -2, 1, ..., 52, of which only 25 and 37 are referenced. The unreferenced
+        // negative values do not fit in u8, but the dictionary's own values do.
+        let values = PrimitiveArray::from_iter((0..20).map(|i| -5i32 + 3 * i)).into_array();
+        let codes = PrimitiveArray::from_option_iter([None, Some(10u32), Some(14)]).into_array();
+        let dict = DictArray::try_new(codes, values)?;
+
+        let casted = dict
+            .into_array()
+            .cast(DType::Primitive(PType::U8, Nullability::Nullable))?;
+        assert_arrays_eq!(
+            casted,
+            PrimitiveArray::from_option_iter([None, Some(25u8), Some(37)]),
+            ctx
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_cast_dict_with_null_codes_over_constant_values_to_nonnullable() -> VortexResult<()> {
+        let ctx = &mut SESSION.create_execution_ctx();
+        let values =
+            ConstantArray::new(Scalar::binary(buffer![1u8, 2], Nullability::NonNullable), 1)
+                .into_array();
+        let codes = PrimitiveArray::from_option_iter([None, Some(0u32), Some(0)]).into_array();
+        // SAFETY: the only value is referenced by the valid codes.
+        let dict = unsafe { DictArray::try_new(codes, values)?.set_all_values_referenced(true) };
+
+        // The null code must make the cast fail rather than be dropped.
+        let result = dict
+            .into_array()
+            .cast(DType::Binary(Nullability::NonNullable))
+            .and_then(|casted| casted.execute::<Canonical>(ctx));
+        assert!(result.is_err());
+        Ok(())
     }
 }

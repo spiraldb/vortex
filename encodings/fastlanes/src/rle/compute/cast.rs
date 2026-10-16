@@ -7,6 +7,7 @@ use vortex_array::IntoArray;
 use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability;
+use vortex_array::dtype::PType;
 use vortex_array::scalar_fn::fns::cast::CastReduce;
 use vortex_error::VortexResult;
 
@@ -14,8 +15,34 @@ use crate::rle::RLE;
 use crate::rle::RLEArrayExt;
 use crate::rle::RLEArraySlotsExt;
 
+/// Whether every `from` value fits in `to`.
+fn widens(from: PType, to: PType) -> bool {
+    from == to
+        || (from.is_float() && to.is_float() && to.byte_width() >= from.byte_width())
+        || (from.is_int()
+            && to.is_int()
+            && if from.is_unsigned_int() == to.is_unsigned_int() {
+                to.byte_width() >= from.byte_width()
+            } else {
+                from.is_unsigned_int() && to.byte_width() > from.byte_width()
+            })
+}
+
 impl CastReduce for RLE {
     fn cast(array: ArrayView<'_, Self>, dtype: &DType) -> VortexResult<Option<ArrayRef>> {
+        // The values and indices hold entries outside this array's `offset..offset + len` range
+        // (other rows of the chunk, and padding), so pushing the cast into them is only sound when
+        // it cannot fail on any entry.
+        let DType::Primitive(target, _) = dtype else {
+            return Ok(None);
+        };
+        if !widens(array.values().dtype().as_ptype(), *target) {
+            return Ok(None);
+        }
+        if !dtype.is_nullable() && !array.indices().validity()?.definitely_no_nulls() {
+            return Ok(None);
+        }
+
         // Cast RLE values.
         let casted_values = array
             .values()
@@ -60,6 +87,7 @@ mod tests {
     use vortex_array::dtype::PType;
     use vortex_array::validity::Validity;
     use vortex_buffer::Buffer;
+    use vortex_error::VortexResult;
     use vortex_session::VortexSession;
 
     use crate::RLEData;
@@ -164,5 +192,27 @@ mod tests {
         let mut ctx = SESSION.create_execution_ctx();
         let rle_array = rle(&primitive, &mut ctx);
         test_cast_conformance(&rle_array.into_array(), &mut ctx);
+    }
+
+    /// The cast applies to the sliced rows only: the null and the values out of the target's
+    /// range outside the slice must not make it fail.
+    #[rstest]
+    #[case::to_non_nullable(DType::Primitive(PType::U32, Nullability::NonNullable))]
+    #[case::narrowing(DType::Primitive(PType::I8, Nullability::Nullable))]
+    fn test_cast_sliced_rle_ignores_rows_outside_the_slice(
+        #[case] dtype: DType,
+    ) -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        // 30, 33, ..., 147 with a null at 16: rows 3..14 hold 39..=69 and no null.
+        let primitive = PrimitiveArray::new(
+            Buffer::from_iter((0..40u8).map(|i| 30 + 3 * i)),
+            Validity::from_iter((0..40).map(|i| i != 16)),
+        );
+        let sliced = rle(&primitive, &mut ctx).into_array().slice(3..14)?;
+
+        let casted = sliced.cast(dtype.clone())?;
+        let expected = primitive.into_array().slice(3..14)?.cast(dtype)?;
+        assert_arrays_eq!(casted, expected, &mut ctx);
+        Ok(())
     }
 }
