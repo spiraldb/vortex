@@ -71,12 +71,6 @@ pub struct WriteStrategyBuilder {
 impl WriteStrategyBuilder {
     /// Create a new builder that compresses with the schemes registered on `session`. It can be
     /// further configured, and then finally built yielding the [`LayoutStrategy`].
-    ///
-    /// List fields are written with [`ListLayoutStrategy`] when the session's enabled editions
-    /// include the `vortex.list` layout.
-    ///
-    /// **Note**: the list layout is unstable and experimental and is expected to change. Using it
-    /// may lead to unreadable files in the future.
     pub fn from_session(session: &VortexSession) -> Self {
         Self {
             compressor: CompressorConfig::BtrBlocks(BtrBlocksCompressorBuilder::from_session(
