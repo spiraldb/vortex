@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::future;
 use std::num::NonZeroUsize;
 use std::ops::Range;
 use std::sync::Arc;
@@ -33,15 +34,19 @@ use vortex_arrow::ArrowSessionExt;
 use vortex_buffer::Alignment;
 use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
+use vortex_io::request::IoService;
 use vortex_io::session::RuntimeSessionExt;
+use vortex_scan::planning::driver::Progress;
+use vortex_scan::planning::driver::Run;
+use vortex_scan::planning::planner::Planner;
+use vortex_scan::planning::planner::PlannerOutput;
+use vortex_scan::planning::planner::State;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
 
 use super::PreparedScan;
-use super::ROWS_PER_CHUNK;
 use super::ScanBuilder;
 use super::ScanFile;
-use super::row_chunks;
 use crate::LayoutRef;
 use crate::LayoutStrategy;
 use crate::layouts::chunked::writer::ChunkedLayoutStrategy;
@@ -303,13 +308,62 @@ async fn arrow_stream_projects_across_chunks() -> VortexResult<()> {
 }
 
 #[rstest]
-#[case::whole(0..150_000, vec![0..65_536, 65_536..131_072, 131_072..150_000])]
-#[case::unaligned(10..140_000, vec![10..65_536, 65_536..131_072, 131_072..140_000])]
-#[case::boundary(65_536..131_072, vec![65_536..131_072])]
-#[case::empty(5..5, vec![])]
-#[case::near_max(u64::MAX - 3..u64::MAX, vec![u64::MAX - 3..u64::MAX])]
-fn fixed_row_chunks(#[case] rows: Range<u64>, #[case] expected: Vec<Range<u64>>) {
-    assert_eq!(row_chunks(rows), expected);
+#[case::whole(0..150_000)]
+#[case::unaligned(10..140_000)]
+#[case::boundary(65_536..131_072)]
+#[case::empty(5..5)]
+#[case::near_max(u64::MAX - 3..u64::MAX)]
+#[tokio::test]
+async fn file_planner_emits_child_ranges(#[case] rows: Range<u64>) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, table().as_ref()).await?;
+    // Inspect range planning without executing the synthetic ranges against the small fixture.
+    let scan = PreparedScan::try_new(
+        builder(&session, &segments, &layout)?.with_row_range(rows.clone()),
+    )?;
+    let mut planner = scan.planner;
+    let mut next_row = rows.start;
+    while planner.state() != State::Done {
+        let PlannerOutput::Planner(scope, child) = planner.compute()? else {
+            panic!("expected a child planner");
+        };
+        assert_eq!(scope.rows.start, next_row);
+        assert!(scope.rows.end > scope.rows.start);
+        assert!(scope.rows.end - scope.rows.start <= 65_536);
+        assert!(scope.rows.end <= rows.end);
+        if scope.rows.end != rows.end {
+            assert_eq!(scope.rows.end % 8192, 0);
+        }
+        next_row = scope.rows.end;
+        assert_eq!(child.state(), State::NeedsCompute);
+    }
+    assert_eq!(next_row, rows.end);
+    Ok(())
+}
+
+#[tokio::test]
+async fn file_planner_skips_unselected_ranges() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, table().as_ref()).await?;
+    let scan = PreparedScan::try_new(
+        builder(&session, &segments, &layout)?
+            .with_row_range(0..150_000)
+            .with_row_indices(StrictSortedBuffer::try_new(Buffer::from_iter([70_000]))?),
+    )?;
+    let mut planner = scan.planner;
+    let mut children = 0;
+    while planner.state() != State::Done {
+        match planner.compute()? {
+            PlannerOutput::Continue => {}
+            PlannerOutput::Planner(scope, _) => {
+                assert!(scope.rows.contains(&70_000));
+                children += 1;
+            }
+            _ => panic!("expected a child planner or a skipped range"),
+        }
+    }
+    assert_eq!(children, 1);
+    Ok(())
 }
 
 struct CountingSegments {
@@ -325,7 +379,7 @@ impl SegmentSource for CountingSegments {
 }
 
 #[tokio::test]
-async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
+async fn dictionary_values_are_reused_between_child_planners() -> VortexResult<()> {
     let session = new_session().with_tokio();
     const STORED_CHUNK_ROWS: usize = 70_000;
     const STORED_CHUNKS: usize = 3;
@@ -360,21 +414,30 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
     });
     let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
     let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?)?;
-    let splits = scan.split_plans();
-    assert_eq!(
-        splits.len(),
-        (STORED_CHUNKS * STORED_CHUNK_ROWS).div_ceil(ROWS_PER_CHUNK)
-    );
-    for (index, split) in splits.into_iter().enumerate() {
-        let rows = split.scope.rows.clone();
+    let mut planner = scan.planner;
+    let mut children = 0;
+    while planner.state() != State::Done {
+        let PlannerOutput::Planner(scope, child) = planner.compute()? else {
+            panic!("expected a child planner");
+        };
+        let rows = scope.rows.clone();
         let before = counted.reads.load(Ordering::Relaxed);
-        let arrays = split.run(Arc::clone(&scan.io)).await?;
+        let mut run = Run::new();
+        run.admit(child, scope, scan.io.session());
+        let mut arrays = Vec::new();
+        loop {
+            match run.advance()? {
+                Progress::Batch(batch) => arrays.push(batch.array),
+                Progress::RootDone(_) | Progress::Idle => break,
+                Progress::Waiting => future::poll_fn(|cx| run.poll_completion(cx)).await?,
+            }
+        }
         let reads = counted.reads.load(Ordering::Relaxed) - before;
         let code_chunks =
             (rows.end - 1) / STORED_CHUNK_ROWS as u64 - rows.start / STORED_CHUNK_ROWS as u64 + 1;
         assert_eq!(
             reads,
-            if index == 0 {
+            if children == 0 {
                 STORED_CHUNKS
             } else {
                 usize::try_from(code_chunks)?
@@ -387,7 +450,9 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
             expected,
             &mut session.create_execution_ctx()
         );
+        children += 1;
     }
+    assert!(children > 1);
     Ok(())
 }
 
@@ -450,7 +515,6 @@ async fn work_chunks_ignore_layout_boundaries(
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, strategy.get().as_ref()).await?;
     let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?)?;
-    assert_eq!(scan.splits, vec![0..(CHUNKS * CHUNK_ROWS) as u64]);
     let arrays: Vec<_> = scan.execute_stream()?.try_collect().await?;
     assert_eq!(arrays.len(), 1);
     assert_eq!(arrays[0].len(), CHUNKS * CHUNK_ROWS);

@@ -45,7 +45,7 @@ pub(super) fn segment_ranges(locations: &[SegmentLocation]) -> SegmentRanges {
     Arc::new(ranges.collect())
 }
 
-/// Serves splits from any [`SegmentSource`], by segment id.
+/// Serves scan work from any [`SegmentSource`], by segment id.
 pub(super) struct SegmentScanIo {
     segments: Arc<dyn SegmentSource>,
     ranges: SegmentRanges,

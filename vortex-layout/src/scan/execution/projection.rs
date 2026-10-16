@@ -65,7 +65,7 @@ impl Planner for ProjectionPlanner {
     }
 }
 
-/// Runs the projection plan over a split's selected rows and returns them as one batch, in row
+/// Runs the projection plan over a work range's selected rows and returns them as one batch, in row
 /// order. A selection that projects to no rows finishes without a batch.
 struct ProjectionMorsel {
     plans: Option<ScanPlans>,
