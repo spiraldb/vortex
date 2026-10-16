@@ -58,6 +58,7 @@ pub use plans::Share;
 pub use plans::ShareData;
 pub use plans::SharePlan;
 pub use plans::Take;
+pub use plans::TakeData;
 pub use plans::TakePlan;
 pub use plans::Zoned;
 pub use plans::ZonedData;

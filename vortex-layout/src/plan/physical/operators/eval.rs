@@ -3,9 +3,9 @@
 
 //! Applying an expression to each batch.
 
-use vortex_array::expr::BoundExpression;
 use vortex_error::VortexResult;
 
+use crate::plan::physical::EvalPlan;
 use crate::plan::physical::operator::Cx;
 use crate::plan::physical::operator::Input;
 use crate::plan::physical::operator::Operator;
@@ -13,20 +13,20 @@ use crate::plan::physical::operator::Step;
 
 /// Applies an expression to each batch.
 pub(crate) struct EvalStage {
-    expression: BoundExpression,
+    plan: EvalPlan,
 }
 
 impl EvalStage {
-    pub(crate) fn new(expression: BoundExpression) -> Self {
-        Self { expression }
+    pub(crate) fn new(plan: EvalPlan) -> Self {
+        Self { plan }
     }
 }
 
 impl Operator for EvalStage {
-    fn compute(&mut self, input: Input, _cx: &mut Cx<'_>) -> VortexResult<Step> {
+    fn compute(&mut self, input: Input, cx: &mut Cx<'_>) -> VortexResult<Step> {
         let Input::Batch(batch) = input else {
             return Ok(Step::End);
         };
-        Ok(Step::Final(batch.apply_bound(&self.expression)?))
+        Ok(Step::Final(self.plan.apply(batch, cx.session())?))
     }
 }

@@ -14,6 +14,7 @@ use vortex_array::expr::ExactBoundExpr;
 use vortex_array::expr::label_bound_tree;
 use vortex_array::scalar_fn::fns::dynamic::DynamicComparison;
 use vortex_array::scalar_fn::is_negative_cost;
+use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_mask::Mask;
 use vortex_session::registry::CachedId;
@@ -46,6 +47,32 @@ pub struct Take;
 /// A plan that indexes one child by another.
 pub type TakePlan = Plan<Take>;
 
+/// Operator-specific data for a [`TakePlan`].
+#[derive(Clone, Debug)]
+pub struct TakeData {
+    /// Whether the values may be shared between the scans of a split. Values evaluated with a
+    /// dynamic comparison change as the engine updates it, so each scan evaluates them again.
+    cacheable: bool,
+}
+
+impl Default for TakeData {
+    fn default() -> Self {
+        Self { cacheable: true }
+    }
+}
+
+impl TakeData {
+    fn for_values(values: &PlanRef) -> VortexResult<Self> {
+        let dynamic = match values.as_opt::<Eval>() {
+            Some(eval) => eval.expression().contains::<DynamicComparison>()?,
+            None => false,
+        };
+        Ok(Self {
+            cacheable: !dynamic,
+        })
+    }
+}
+
 impl TakePlan {
     /// Creates a take from potentially unresolved children without validation.
     ///
@@ -63,7 +90,7 @@ impl TakePlan {
             dtype,
             row_count,
             children,
-            data: (),
+            data: TakeData::default(),
         }
         .into_typed()
     }
@@ -76,12 +103,13 @@ impl TakePlan {
             .dtype()
             .union_nullability(codes.dtype().nullability());
         let row_count = codes.row_count();
+        let data = TakeData::for_values(&values).vortex_expect("expression traversal cannot fail");
         PlanParts {
             vtable: Take,
             dtype,
             row_count,
             children: vec![codes, values].into(),
-            data: (),
+            data,
         }
         .into_typed()
     }
@@ -95,10 +123,15 @@ impl TakePlan {
     pub fn values(&self) -> VortexResult<PlanRef> {
         self.child_required(VALUES)
     }
+
+    /// Whether the values may be shared between the scans of a split.
+    pub(crate) fn cacheable(&self) -> bool {
+        self.data().cacheable
+    }
 }
 
 impl PlanVTable for Take {
-    type PlanData = ();
+    type PlanData = TakeData;
     type Metadata = EmptyMetadata;
 
     fn id(&self) -> PlanId {
@@ -113,7 +146,7 @@ impl PlanVTable for Take {
     fn with_children(
         plan: &Plan<Self>,
         children: &PlanChildren,
-        _data: &mut Self::PlanData,
+        data: &mut Self::PlanData,
     ) -> VortexResult<()> {
         check_child_count("Take", children, 2)?;
         let codes = children
@@ -122,6 +155,8 @@ impl PlanVTable for Take {
         let values = children
             .get(VALUES)?
             .ok_or_else(|| vortex_error::vortex_err!("Take values child is absent"))?;
+        // New children may produce different values.
+        *data = TakeData::for_values(&values)?;
         let dtype = values
             .dtype()
             .union_nullability(codes.dtype().nullability());
@@ -150,9 +185,9 @@ impl PlanVTable for Take {
         let Some(codes) = compiler.compile(&plan.codes()?, rows, mask)? else {
             return Ok(None);
         };
-        let cache = compiler.values().clone();
+        let cache = plan.cacheable().then(|| compiler.values().clone());
         let values_plan = plan.values()?;
-        if let Some(values) = cache.get(&values_plan) {
+        if let Some(values) = cache.as_ref().and_then(|cache| cache.get(&values_plan)) {
             let source = TakeSource::new(plan.clone(), Some(values), None);
             return Ok(Some(compiler.join(vec![codes], source)));
         }
@@ -165,7 +200,7 @@ impl PlanVTable for Take {
                 Canonical::empty(values.dtype()).into_array(),
             )),
         };
-        let source = TakeSource::new(plan.clone(), None, Some(cache));
+        let source = TakeSource::new(plan.clone(), None, cache);
         Ok(Some(compiler.join_with(
             vec![codes, values],
             TakeSource::capacity,

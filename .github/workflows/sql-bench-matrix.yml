@@ -101,6 +101,7 @@ jobs:
     timeout-minutes: 120
     env:
       FLAT_LAYOUT_INLINE_ARRAY_NODE: "1"
+      VORTEX_SCAN_V2: "1"
       # Makes python output nicer
       COLUMNS: 120
     strategy:
@@ -193,6 +194,10 @@ jobs:
         if: matrix.remote_key == null || github.event.pull_request.head.repo.fork == true
         shell: bash
         env:
+          # Exercise the measured immutable local-file IO policy on this PR.
+          VORTEX_LOCAL_FILE_HANDLE_REUSE: ${{ inputs.mode == 'pr' && '1' || '0' }}
+          VORTEX_LOCAL_READ_CONCURRENCY: ${{ inputs.mode == 'pr' && '32' || '0' }}
+          VORTEX_SCAN_IO_COALESCE_OPTIONAL: ${{ inputs.mode == 'pr' && '0' || '1' }}
           OTEL_SERVICE_NAME: "vortex-bench"
           OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
           OTEL_EXPORTER_OTLP_ENDPOINT: "${{ (inputs.mode != 'pr' || github.event.pull_request.head.repo.fork == false) && secrets.OTEL_EXPORTER_OTLP_ENDPOINT || '' }}"

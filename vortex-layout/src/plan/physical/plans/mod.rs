@@ -49,6 +49,7 @@ pub use share::ShareData;
 pub use share::SharePlan;
 pub(crate) use take::ExpressionTakeRule;
 pub use take::Take;
+pub use take::TakeData;
 pub use take::TakePlan;
 pub(crate) use zoned::ExpressionZonedRule;
 pub use zoned::Zoned;

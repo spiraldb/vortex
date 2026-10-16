@@ -14,10 +14,13 @@ use vortex::dtype::DType;
 use vortex::error::VortexExpect;
 use vortex::error::VortexResult;
 use vortex::error::vortex_panic;
+use vortex::expr::BoundExpression;
 use vortex::file::Footer;
+use vortex::file::VortexFile;
 use vortex::file::multi::MultiFileSession;
 use vortex::file::multi::open_cached;
 use vortex::file::multi::parse_uri_or_path;
+use vortex::file::planning;
 use vortex::file::v2::FileStatsLayoutReader;
 use vortex::io::compat::Compat;
 use vortex::io::filesystem::FileSystemRef;
@@ -25,6 +28,7 @@ use vortex::io::object_store::ObjectStoreFileSystem;
 use vortex::io::runtime::BlockingRuntime as _;
 use vortex::io::std_file::StdFileSystem;
 use vortex::layout::LayoutReaderRef;
+use vortex::layout::scan;
 use vortex::layout::scan::scan_builder::ScanBuilder;
 use vortex::mask::Mask;
 use vortex::session::SessionExt as _;
@@ -109,16 +113,18 @@ pub struct OpenFileReader {
     /// File splits stored in inverse order
     pub splits: Vec<Split>,
     total_splits: usize,
+    prepared_skip: Option<bool>,
 }
 
 /// The state of an open file that the threads scanning it share.
 pub struct FileScanState {
     reader: LayoutReaderRef,
     cache: ConversionCache,
+    file: VortexFile,
 }
 
 impl OpenFileReader {
-    async fn open(path: String) -> VortexResult<Self> {
+    pub(crate) async fn open(path: String) -> VortexResult<Self> {
         let (fs, fs_path) = resolve_filesystem(&parse_uri_or_path(&path)?)?;
         let source = fs.open_read(&fs_path).await?;
         let file = open_cached(&SESSION, Some(&path), source, None, &|options| options).await?;
@@ -126,9 +132,11 @@ impl OpenFileReader {
             scan_state: Some(Arc::new(FileScanState {
                 reader: file.layout_reader()?,
                 cache: ConversionCache::default(),
+                file,
             })),
             splits: vec![],
             total_splits: 0,
+            prepared_skip: None,
         })
     }
 
@@ -185,31 +193,52 @@ pub fn reader_bind(file: &OpenFileReader, result: &mut BindResultRef) -> VortexR
 }
 
 /// Called once per file by one thread under file-local lock. Determines
-/// whether the opened file should be skipped. If this function returns false,
+/// whether the opened file should be skipped. If this function returns true,
 /// duckdb closes the file and doesn't call reader_try_initialize_scan on it.
 pub fn reader_initialize(file: &mut OpenFileReader, global: &GlobalState) -> VortexResult<bool> {
-    if file.can_skip(&global.filter)? {
-        // DuckDB releases a skipped file under the global lock. Here only the
-        // file-local lock is held, so drop the scan state now.
+    if let Some(skip) = file.prepared_skip {
+        return Ok(skip);
+    }
+    RUNTIME.block_on(prepare_reader(file, &global.projection, &global.filter))
+}
+
+pub(crate) async fn prepare_reader(
+    file: &mut OpenFileReader,
+    projection: &BoundExpression,
+    filter: &Filter,
+) -> VortexResult<bool> {
+    if file.can_skip(filter)? {
+        file.prepared_skip = Some(true);
+        // Release skipped state outside DuckDB's global lock.
         file.scan_state = None;
         return Ok(true);
     }
 
     // Getting splits is non-trivial work so we prefer doing it here under file
     // lock and not in reader_try_initialize_scan under global lock.
-    let reader = Arc::clone(file.reader());
-    let filter = &global.filter;
+    let state = file
+        .scan_state
+        .as_ref()
+        .vortex_expect("file prepared after its scan state was released");
+    let reader = Arc::clone(&state.reader);
     let builder = ScanBuilder::new(SESSION.clone(), reader)
-        .with_projection(global.projection.clone())
+        .with_projection(projection.clone())
         .with_some_filter(filter.filter.clone())
         .with_selection(filter.row_selection.clone());
-    let scan = builder.prepare()?;
-    let mut splits = scan.execute(filter.row_range.clone())?;
+    let scan_file = planning::scan_file(&state.file);
+    let mut splits = if scan::v2::enabled() && scan::v2::supports_scan(&builder, &scan_file) {
+        scan::v2::prepare(builder, scan_file)?
+            .execute_pruned(filter.row_range.clone())
+            .await?
+    } else {
+        builder.prepare()?.execute(filter.row_range.clone())?
+    };
 
     // threads take last element of file.splits so we need to reverse
     splits.reverse();
     file.total_splits = splits.len();
     file.splits = splits;
+    file.prepared_skip = Some(false);
     Ok(false)
 }
 

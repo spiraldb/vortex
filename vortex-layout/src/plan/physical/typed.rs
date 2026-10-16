@@ -63,6 +63,11 @@ impl PlanRef {
         Arc::ptr_eq(&lhs.0, &rhs.0)
     }
 
+    /// The address of the plan, identifying it as [`ptr_eq`](Self::ptr_eq) does.
+    pub(crate) fn addr(&self) -> usize {
+        Arc::as_ptr(&self.0).cast::<()>() as usize
+    }
+
     /// Returns the operator ID.
     pub fn id(&self) -> PlanId {
         self.0.id
@@ -96,6 +101,14 @@ impl PlanRef {
     /// Returns the child at `index`, or an error when the index is out of bounds.
     pub fn child_required(&self, index: usize) -> VortexResult<PlanRef> {
         self.child(index)?
+            .ok_or_else(|| vortex_err!("Missing plan child {index}"))
+    }
+
+    /// Borrows the child at `index`, or returns an error if it is out of bounds.
+    pub(crate) fn child_ref_required(&self, index: usize) -> VortexResult<&PlanRef> {
+        self.0
+            .children
+            .get_ref(index)?
             .ok_or_else(|| vortex_err!("Missing plan child {index}"))
     }
 
