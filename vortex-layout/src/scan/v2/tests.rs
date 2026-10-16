@@ -318,9 +318,8 @@ async fn file_planner_emits_child_ranges(#[case] rows: Range<u64>) -> VortexResu
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, table().as_ref()).await?;
     // Inspect range planning without executing the synthetic ranges against the small fixture.
-    let scan = PreparedScan::try_new(
-        builder(&session, &segments, &layout)?.with_row_range(rows.clone()),
-    )?;
+    let scan =
+        PreparedScan::try_new(builder(&session, &segments, &layout)?.with_row_range(rows.clone()))?;
     let mut planner = scan.planner;
     let mut next_row = rows.start;
     while planner.state() != State::Done {
