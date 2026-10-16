@@ -13,6 +13,7 @@ mod splits;
 mod tasks;
 #[cfg(test)]
 mod test;
+pub mod threading;
 
 /// A heuristic for an ideal split size.
 ///
