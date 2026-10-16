@@ -52,6 +52,13 @@ pub fn get_session_context() -> SessionContext {
     if let Ok(spill_dir) = std::env::var("DATAFUSION_BENCH_SPILL_DIR") {
         rt_builder = rt_builder.with_temp_file_path(spill_dir);
     }
+    // DataFusion caps spill files at 100 GB by default, which sort-merge joins exceed at SF1000.
+    if let Some(max_spill_gib) = std::env::var("DATAFUSION_BENCH_MAX_SPILL_GIB")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+    {
+        rt_builder = rt_builder.with_max_temp_directory_size(max_spill_gib << 30);
+    }
 
     let rt = rt_builder
         .build_arc()

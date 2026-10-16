@@ -3,15 +3,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-# DO NOT MERGE: checks whether DataFusion runs TPC-H SF1000 with the Vortex scan concurrency fix
-# (one split per core per stream by default), with and without a memory limit and spilling.
+# DO NOT MERGE: checks whether DataFusion runs all of TPC-H SF1000 with sort-merge joins
+# (prefer_hash_join=false), a memory limit, and a 500 GiB spill cap. Hash join builds cannot
+# spill, and the default 100 GB spill cap stopped the first sort-merge join attempt. Vortex runs
+# include the scan concurrency fix.
 
 set -Eeuo pipefail
 
 BIN=${BIN:-target/release_debug/datafusion-bench}
 ALL_QUERIES=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22)
 SPILL_DIR="${GITHUB_WORKSPACE:-$PWD}/df-spill"
-RUNNER="ec2_${RUNS_ON_INSTANCE_TYPE:-unknown}"
 export RUST_BACKTRACE=0
 
 run_variant() {
@@ -32,16 +33,14 @@ run_variant() {
     rm -rf "$SPILL_DIR"
 }
 
-run_variant vortex-fix vortex "${ALL_QUERIES[*]}"
-run_variant vortex-fix-spill vortex "${ALL_QUERIES[*]}" \
-    DATAFUSION_BENCH_MEMORY_LIMIT_GIB=100 DATAFUSION_BENCH_SPILL_DIR="$SPILL_DIR"
-run_variant parquet-spill parquet "${ALL_QUERIES[*]}" \
-    DATAFUSION_BENCH_MEMORY_LIMIT_GIB=100 DATAFUSION_BENCH_SPILL_DIR="$SPILL_DIR"
-
-# Q2 and Q16 still used more memory on Vortex than on Parquet with the old scan settings, and
-# only responded to the partition count; compare their plans.
-"$BIN" tpch --explain --formats parquet,vortex --queries 2,16 --runner "$RUNNER" \
-    --opt scale-factor="$SCALE_FACTOR" > "$OUT_DIR/explain-q2-q16.txt" 2>&1 || true
+SMJ_ENV=(
+    DATAFUSION_OPTIMIZER_PREFER_HASH_JOIN=false
+    DATAFUSION_BENCH_MEMORY_LIMIT_GIB=80
+    DATAFUSION_BENCH_MAX_SPILL_GIB=500
+    DATAFUSION_BENCH_SPILL_DIR="$SPILL_DIR"
+)
+run_variant parquet-smj-spill500 parquet "${ALL_QUERIES[*]}" "${SMJ_ENV[@]}"
+run_variant vortex-fix-smj-spill500 vortex "${ALL_QUERIES[*]}" "${SMJ_ENV[@]}"
 
 for dir in "$OUT_DIR"/*/; do
     [[ -f "$dir/queries.jsonl" ]] || continue
