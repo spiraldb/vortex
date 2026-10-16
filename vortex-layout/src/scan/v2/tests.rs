@@ -550,6 +550,8 @@ async fn support_checks_flat_tags_without_materializing_chunks(
 #[rstest]
 #[case::empty(vec![])]
 #[case::null_only(vec![3, 6, 9])]
+#[case::contiguous(vec![1, 2])]
+#[case::contiguous_with_empty(vec![7, 8])]
 #[case::mixed(vec![0, 1, 2, 3, 8, 31, 63])]
 #[case::all((0..64).collect())]
 #[tokio::test]

@@ -14,6 +14,7 @@ use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ChunkedArray;
+use vortex_array::arrays::ListArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinViewArray;
@@ -35,6 +36,7 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
 use vortex_session::registry::ReadContext;
+use vortex_utils::parallelism::get_available_parallelism;
 
 use super::port::SourceEnd;
 use super::synthetic::row_dtype;
@@ -44,6 +46,7 @@ use crate::OwnedLayoutChildren;
 use crate::layouts::chunked::ChunkedLayout;
 use crate::layouts::dict::DictLayout;
 use crate::layouts::flat::FlatLayout;
+use crate::layouts::list::ListLayout;
 use crate::layouts::struct_::StructLayout;
 use crate::plan::physical::EvalPlan;
 use crate::plan::physical::Filter;
@@ -460,6 +463,46 @@ fn sparse_splits_share_segments_without_losing_rows(
             run.splits.get(index).cloned().unwrap_or_default(),
         )?;
     }
+    Ok(())
+}
+
+#[rstest]
+fn list_element_reads_overlap_and_keep_row_order(
+    #[values(Delivery::Fifo, Delivery::Lifo)] order: Delivery,
+    #[values(false, true)] clustered: bool,
+) -> VortexResult<()> {
+    let mut store = Store::default();
+    let elements = Buffer::from_iter(0..60_i32).into_array();
+    let offsets = Buffer::from_iter((0..=20_u32).map(|row| 3 * row)).into_array();
+    let expected =
+        ListArray::try_new(elements.clone(), offsets.clone(), Validity::NonNullable)?.into_array();
+    let layout = ListLayout::new(
+        expected.dtype().clone(),
+        store.chunked(&elements, &[10; 6])?,
+        store.flat(&offsets)?,
+        None,
+    )
+    .into_layout();
+    let mask = Mask::from_indices(
+        20,
+        (0..20).filter(|row| if clustered { row % 4 < 2 } else { row % 2 == 0 }),
+    );
+    let run = run(
+        &store,
+        &lower(&layout)?,
+        0..20,
+        mask.clone(),
+        delivery(order),
+    )?;
+    assert_eq!(
+        run.events
+            .iter()
+            .any(|event| matches!(event, Event::Io(batch) if batch.len() > 1)),
+        clustered && get_available_parallelism().unwrap_or(1) > 1,
+    );
+    let segments = segments_read(&run.events);
+    assert!(segments.windows(2).all(|pair| pair[0] != pair[1]));
+    assert_view(&expected, &(0..20), &mask, run.arrays)?;
     Ok(())
 }
 

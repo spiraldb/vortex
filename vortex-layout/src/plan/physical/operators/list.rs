@@ -21,6 +21,7 @@ use vortex_error::vortex_ensure;
 use vortex_error::vortex_err;
 use vortex_mask::AllOr;
 use vortex_mask::Mask;
+use vortex_utils::parallelism::get_available_parallelism;
 
 use super::join;
 use super::join_inlet;
@@ -49,7 +50,7 @@ pub(crate) struct ListSource {
     validity: Option<Validity>,
     elements: Option<Scan>,
     reads: FxHashMap<SegmentId, VecDeque<ReadId>>,
-    chunks: Vec<ArrayRef>,
+    chunks: Vec<(usize, ArrayRef)>,
     output: Option<ArrayRef>,
     done: bool,
 }
@@ -97,22 +98,36 @@ impl ListSource {
         };
         self.offsets = Some(offsets.into_array());
         self.validity = Some(validity);
-        self.elements = Some(
-            Scan::try_new(
-                cx.session().clone(),
-                elements,
-                ranges.into_iter().map(Split::all).collect(),
-            )?
-            .with_value_cache(self.values.clone()),
-        );
+        // Read one range ahead for grouped list rows. Overlapping isolated list rows can
+        // retain much larger I/O buffers, and single-core scans benefit from sequential reads.
+        let overlap = ranges.len() > 1
+            && self.mask.true_count() / ranges.len() >= 2
+            && get_available_parallelism().unwrap_or(1) > 1;
+        let scan = Scan::try_new(
+            cx.session().clone(),
+            elements,
+            ranges.into_iter().map(Split::all).collect(),
+        )?
+        .with_value_cache(self.values.clone());
+        self.elements = Some(if overlap {
+            scan.with_max_active(2)
+        } else {
+            scan
+        });
         self.initialized = true;
         Ok(())
     }
 
     fn finish(&mut self) -> VortexResult<()> {
+        // Independent element ranges may finish out of order. Preserve batch order within
+        // each range while putting the ranges back in list order.
+        self.chunks.sort_by_key(|(split, _)| *split);
         let elements = join(
             self.plan.elements()?.dtype(),
-            std::mem::take(&mut self.chunks),
+            std::mem::take(&mut self.chunks)
+                .into_iter()
+                .map(|(_, array)| array)
+                .collect(),
         )?;
         let offsets = self
             .offsets
@@ -162,7 +177,7 @@ impl Source for ListSource {
                         .push_back(read.id);
                     cx.request_read(read.segment_id);
                 }
-                Turn::Output(_, array) => self.chunks.push(array),
+                Turn::Output(split, array) => self.chunks.push((split, array)),
                 Turn::Waiting => return Ok(SourceReady::Blocked(SourceBlocked::Io)),
                 Turn::Done => {
                     self.finish()?;
