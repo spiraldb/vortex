@@ -5,6 +5,7 @@
 //! more than once are decoded once.
 
 use std::ops::Range;
+use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
@@ -342,8 +343,31 @@ impl Shares {
     /// split overlapping them. Call once per plan a split stage runs, before the scan starts,
     /// then [`retain_shared`](Self::retain_shared).
     pub(crate) fn add(&mut self, plan: &PlanRef, rows: Range<u64>) -> VortexResult<()> {
+        let at = if self.splits.len() > 1 {
+            let mut selected = self.splits.clone();
+            selected.sort_unstable_by_key(|range| range.start);
+            let mut merged: Vec<Range<u64>> = Vec::with_capacity(selected.len());
+            for range in selected.into_iter().filter(|range| !range.is_empty()) {
+                match merged.last_mut() {
+                    Some(previous) if range.start <= previous.end => {
+                        previous.end = previous.end.max(range.end);
+                    }
+                    _ => merged.push(range),
+                }
+            }
+            if merged.len() > 1 {
+                Reach::Ranges {
+                    offset: 0,
+                    rows: merged.into(),
+                }
+            } else {
+                Reach::Offset(0)
+            }
+        } else {
+            Reach::Offset(0)
+        };
         let reaches = &mut self.reaches;
-        plan.reach(rows, &Reach::Offset(0), &mut |segment, rows| {
+        plan.reach(rows, &at, &mut |segment, rows| {
             reaches.push((segment, rows))
         })
     }
@@ -429,6 +453,14 @@ pub enum Reach {
         /// Selected positions relative to `rows.start`.
         mask: Mask,
     },
+    /// A linear row mapping restricted to sorted, disjoint root row ranges. Unlike a mask,
+    /// storage does not scale with the gaps between selected lists' element ranges.
+    Ranges {
+        /// Root row index of this plan's row zero.
+        offset: u64,
+        /// The selected ranges in the scan's root domain.
+        rows: Arc<[Range<u64>]>,
+    },
 }
 
 impl Reach {
@@ -437,6 +469,7 @@ impl Reach {
         match self {
             Reach::Offset(offset) => rows.start + offset..rows.end + offset,
             Reach::Selected { offset, .. } => rows.start + offset..rows.end + offset,
+            Reach::Ranges { offset, .. } => rows.start + offset..rows.end + offset,
             Reach::Fixed(root) => root.clone(),
         }
     }
@@ -451,6 +484,10 @@ impl Reach {
                 rows: rows.clone(),
                 mask: mask.clone(),
             },
+            Reach::Ranges { offset, rows } => Reach::Ranges {
+                offset: offset + by,
+                rows: Arc::clone(rows),
+            },
         }
     }
 
@@ -461,6 +498,12 @@ impl Reach {
 
     /// Whether any selected root row needs this range of the current plan.
     pub(crate) fn selects(&self, local: &Range<u64>) -> bool {
+        if let Reach::Ranges { offset, rows } = self {
+            let start = local.start + offset;
+            let end = local.end + offset;
+            let first = rows.partition_point(|range| range.end <= start);
+            return start < end && rows.get(first).is_some_and(|range| range.start < end);
+        }
         let Reach::Selected { offset, rows, mask } = self else {
             return true;
         };
@@ -579,6 +622,55 @@ mod tests {
         assert_eq!(
             shares.reaches,
             vec![(SegmentId::from(0), 5..10), (SegmentId::from(2), 20..25)]
+        );
+        Ok(())
+    }
+
+    #[rstest]
+    fn split_ranges_keep_gaps_lazy(
+        #[values(10, 1_u64 << 40)] chunk_rows: u64,
+        #[values(false, true)] overlapping: bool,
+    ) -> VortexResult<()> {
+        let initialized = Arc::new(AtomicUsize::new(0));
+        let counter = Arc::clone(&initialized);
+        let dtype = DType::Primitive(PType::I32, false.into());
+        let child_dtype = dtype.clone();
+        let children = PlanChildren::lazy(3, move |index| {
+            counter.fetch_add(1, Ordering::Relaxed);
+            Ok(SegmentScanPlan::new(
+                child_dtype.clone(),
+                chunk_rows,
+                SegmentId::from(u32::try_from(index)?),
+                ReadContext::new([]),
+                None,
+            )
+            .into_plan())
+        });
+        // SAFETY: Each child has the declared dtype and chunk_rows rows.
+        let plan = unsafe {
+            ConcatPlan::from_children_unchecked(
+                dtype,
+                3 * chunk_rows,
+                Arc::from([0, chunk_rows, 2 * chunk_rows]),
+                children,
+            )
+        }
+        .into_plan();
+        let end = 2 * chunk_rows + 5;
+        let splits = if overlapping {
+            vec![end - 1..end, 5..8, 6..9]
+        } else {
+            vec![5..6, end - 1..end]
+        };
+        let mut shares = Shares::new(splits);
+        shares.add(&plan, 5..end)?;
+        assert_eq!(initialized.load(Ordering::Relaxed), 2);
+        assert_eq!(
+            shares.reaches,
+            vec![
+                (SegmentId::from(0), 5..chunk_rows),
+                (SegmentId::from(2), 2 * chunk_rows..end),
+            ]
         );
         Ok(())
     }

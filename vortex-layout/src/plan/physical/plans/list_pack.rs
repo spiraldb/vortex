@@ -184,6 +184,20 @@ impl PlanVTable for ListPack {
                     mask: offset_mask(&mask),
                 }
             }
+            Reach::Ranges { offset, rows } => {
+                let boundaries = rows
+                    .iter()
+                    .filter_map(|range| {
+                        let start = range.start.max(root_rows.start);
+                        let end = range.end.min(root_rows.end);
+                        (start < end).then_some(start..end + 1)
+                    })
+                    .collect();
+                Reach::Ranges {
+                    offset: *offset,
+                    rows: boundaries,
+                }
+            }
             _ => at.fixed(&rows),
         };
         plan.offsets()?
@@ -296,6 +310,7 @@ mod tests {
         #[case] indices: &[usize],
         #[case] expected: &[u32],
         #[values(0, 100)] root_offset: u64,
+        #[values(false, true)] ranges: bool,
     ) -> VortexResult<()> {
         let dtype = DType::Primitive(PType::U64, false.into());
         let segment = |id, rows| {
@@ -317,10 +332,20 @@ mod tests {
         .into_plan();
         let plan = ListPackPlan::try_new(false.into(), 20, segment(5, 20), offsets, None)?;
         let root_rows = root_offset..root_offset + 20;
-        let at = Reach::Selected {
-            offset: root_offset,
-            rows: root_rows.clone(),
-            mask: Mask::from_indices(20, indices.iter().copied()),
+        let at = if ranges {
+            Reach::Ranges {
+                offset: root_offset,
+                rows: indices
+                    .iter()
+                    .map(|&index| root_offset + index as u64..root_offset + index as u64 + 1)
+                    .collect(),
+            }
+        } else {
+            Reach::Selected {
+                offset: root_offset,
+                rows: root_rows.clone(),
+                mask: Mask::from_indices(20, indices.iter().copied()),
+            }
         };
         let mut actual = Vec::new();
         plan.into_plan().reach(0..20, &at, &mut |id, rows| {

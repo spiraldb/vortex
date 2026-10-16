@@ -436,6 +436,33 @@ fn splits_of_one_scan_read_each_segment_once(
     Ok(())
 }
 
+#[rstest]
+#[case::disjoint(vec![0..1, 3..4, 19..20])]
+#[case::overlapping_unordered(vec![19..20, 0..4, 2..5])]
+fn sparse_splits_share_segments_without_losing_rows(
+    #[case] rows: Vec<Range<u64>>,
+    #[values(1, 3)] active: usize,
+    #[values(Delivery::Fifo, Delivery::Lifo)] order: Delivery,
+) -> VortexResult<()> {
+    let mut store = Store::default();
+    let (plan, expected) = fixture(&mut store)?;
+    let splits = rows.into_iter().map(Split::all).collect::<Vec<_>>();
+    let scan = Scan::try_new(SESSION.clone(), plan, splits.clone())?.with_max_active(active);
+    let run = drive(&store, scan, delivery(order))?;
+    assert_eq!(run.leftover, (0, 0));
+    let segments = segments_read(&run.events);
+    assert!(segments.windows(2).all(|pair| pair[0] != pair[1]));
+    for (index, split) in splits.iter().enumerate() {
+        assert_view(
+            &expected,
+            &split.rows,
+            &split.mask,
+            run.splits.get(index).cloned().unwrap_or_default(),
+        )?;
+    }
+    Ok(())
+}
+
 #[test]
 fn columns_read_in_parallel_without_starting_later_chunks() -> VortexResult<()> {
     let mut store = Store::default();
