@@ -308,35 +308,28 @@ async fn arrow_stream_projects_across_chunks() -> VortexResult<()> {
 }
 
 #[rstest]
-#[case::whole(0..150_000)]
-#[case::unaligned(10..140_000)]
-#[case::boundary(65_536..131_072)]
-#[case::empty(5..5)]
-#[case::near_max(u64::MAX - 3..u64::MAX)]
+#[case::whole(0..4000, vec![0..1000, 1000..2000, 2000..3000, 3000..4000])]
+#[case::unaligned(250..3100, vec![250..1000, 1000..2000, 2000..3000, 3000..3100])]
+#[case::boundary(1000..2000, vec![1000..2000])]
+#[case::empty(5..5, vec![])]
 #[tokio::test]
-async fn file_planner_emits_child_ranges(#[case] rows: Range<u64>) -> VortexResult<()> {
+async fn file_planner_emits_child_ranges(
+    #[case] rows: Range<u64>,
+    #[case] expected: Vec<Range<u64>>,
+) -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, table().as_ref()).await?;
-    // Inspect range planning without executing the synthetic ranges against the small fixture.
-    let scan =
-        PreparedScan::try_new(builder(&session, &segments, &layout)?.with_row_range(rows.clone()))?;
+    let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?.with_row_range(rows))?;
     let mut planner = scan.planner;
-    let mut next_row = rows.start;
-    while planner.state() != State::Done {
+    for rows in expected {
+        assert_eq!(planner.state(), State::NeedsCompute);
         let PlannerOutput::Planner(scope, child) = planner.compute()? else {
             panic!("expected a child planner");
         };
-        assert_eq!(scope.rows.start, next_row);
-        assert!(scope.rows.end > scope.rows.start);
-        assert!(scope.rows.end - scope.rows.start <= 65_536);
-        assert!(scope.rows.end <= rows.end);
-        if scope.rows.end != rows.end {
-            assert_eq!(scope.rows.end % 8192, 0);
-        }
-        next_row = scope.rows.end;
+        assert_eq!(scope.rows, rows);
         assert_eq!(child.state(), State::NeedsCompute);
     }
-    assert_eq!(next_row, rows.end);
+    assert_eq!(planner.state(), State::Done);
     Ok(())
 }
 
@@ -346,8 +339,8 @@ async fn file_planner_skips_unselected_ranges() -> VortexResult<()> {
     let (segments, layout) = write(&session, table().as_ref()).await?;
     let scan = PreparedScan::try_new(
         builder(&session, &segments, &layout)?
-            .with_row_range(0..150_000)
-            .with_row_indices(StrictSortedBuffer::try_new(Buffer::from_iter([70_000]))?),
+            .with_row_range(0..4000)
+            .with_row_indices(StrictSortedBuffer::try_new(Buffer::from_iter([1250]))?),
     )?;
     let mut planner = scan.planner;
     let mut children = 0;
@@ -355,7 +348,7 @@ async fn file_planner_skips_unselected_ranges() -> VortexResult<()> {
         match planner.compute()? {
             PlannerOutput::Continue => {}
             PlannerOutput::Planner(scope, _) => {
-                assert!(scope.rows.contains(&70_000));
+                assert_eq!(scope.rows, 1000..2000);
                 children += 1;
             }
             _ => panic!("expected a child planner or a skipped range"),
@@ -405,7 +398,7 @@ async fn dictionary_values_are_reused_between_child_planners() -> VortexResult<(
             &session,
         )
         .await?;
-    // Codes index the same values across fixed work chunks and stored chunk boundaries.
+    // Each codes chunk indexes the same whole dictionary across child planners.
     let layout = DictLayout::new(Arc::clone(&ints), ints).into_layout();
     let counted = Arc::new(CountingSegments {
         inner: segments,
@@ -505,17 +498,17 @@ async fn primitive_column() -> VortexResult<()> {
     Ok(())
 }
 
-/// Stored chunk boundaries do not subdivide a fixed work chunk.
+/// Each stored chunk becomes a child planner and produces one batch.
 #[rstest]
 #[tokio::test]
-async fn work_chunks_ignore_layout_boundaries(
+async fn work_follows_layout_boundaries(
     #[values(Strategy::Flat, Strategy::Table, Strategy::ZonedTable)] strategy: Strategy,
 ) -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, strategy.get().as_ref()).await?;
     let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?)?;
     let arrays: Vec<_> = scan.execute_stream()?.try_collect().await?;
-    assert_eq!(arrays.len(), 1);
-    assert_eq!(arrays[0].len(), CHUNKS * CHUNK_ROWS);
+    assert_eq!(arrays.len(), CHUNKS);
+    assert!(arrays.iter().all(|array| array.len() == CHUNK_ROWS));
     Ok(())
 }

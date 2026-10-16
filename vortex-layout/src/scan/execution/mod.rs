@@ -9,6 +9,7 @@
 //! through a `ScanAdaptor`, so the planning driver can advance other work while reads wait.
 
 mod adaptor;
+mod boundaries;
 mod file;
 mod projection;
 mod stream;

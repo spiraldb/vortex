@@ -10,9 +10,8 @@
 //!
 //! Import this module's [`ScanBuilder`] to select V2 explicitly. It accepts a [`ScanFile`]
 //! directly and supports projection, row ranges, and selections. Unsupported layouts return an
-//! error; filters and limits are not part of this builder's API. Work is partitioned into fixed
-//! chunks of 8,192 to 65,536 rows, sized for the scan's row count and available CPUs. Boundaries
-//! are multiples of the default writer's 8,192-row block size, independently of stored chunks.
+//! error; filters and limits are not part of this builder's API. The file planner partitions work
+//! at the projected columns' stored chunk boundaries, subdividing spans larger than 100,000 rows.
 
 mod io;
 #[cfg(test)]
@@ -40,7 +39,6 @@ use vortex_io::session::RuntimeSessionExt;
 use vortex_scan::selection::Selection;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
-use vortex_utils::parallelism::get_available_parallelism;
 
 use crate::LayoutRef;
 use crate::layouts::chunked::Chunked;
@@ -274,7 +272,6 @@ impl<A: 'static + Send> PreparedScan<A> {
                 },
                 builder.row_range.unwrap_or(0..row_count),
                 builder.selection,
-                get_available_parallelism().unwrap_or(1),
             ),
             io,
             map_fn: builder.map_fn,

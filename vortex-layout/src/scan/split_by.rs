@@ -107,7 +107,7 @@ fn layout_boundaries(
 /// point `m` (with `lo < m < hi`) yields exactly `[lo, m) + [m, hi)`, so the union of ranges is
 /// unchanged: the rows are still partitioned contiguously, with no gaps and no overlaps, covering
 /// every row exactly once. The output remains sorted and deduplicated.
-fn subdivide_large_spans(boundaries: Vec<u64>, max_span: u64) -> Vec<u64> {
+pub(super) fn subdivide_large_spans(boundaries: Vec<u64>, max_span: u64) -> Vec<u64> {
     debug_assert!(boundaries.is_sorted(), "boundaries must be sorted");
     debug_assert!(max_span > 0, "max_span must be non-zero");
 

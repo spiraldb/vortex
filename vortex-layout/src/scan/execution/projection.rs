@@ -24,7 +24,7 @@ use crate::scan::execution::adaptor::AdaptorStep;
 use crate::scan::execution::adaptor::Piece;
 use crate::scan::execution::adaptor::ScanAdaptor;
 
-/// Hands one fixed-size work chunk to a projection morsel.
+/// Hands one work range to a projection morsel.
 pub(super) struct ProjectionPlanner {
     work: Option<(ScanPlans, SelectedRows)>,
 }
