@@ -43,7 +43,8 @@ impl DynAggregateKernel for BitPackedIsConstantKernel {
         let Some(array) = batch.as_opt::<BitPacked>() else {
             return Ok(None);
         };
-        if !array.bit_widths().is_global() {
+        // The packed values ignore validity, so leave arrays with nulls to the generic path.
+        if !array.bit_widths().is_global() || !batch.all_valid(ctx)? {
             return Ok(None);
         }
 
@@ -191,20 +192,51 @@ fn apply_patches_idx_typed<T: BitPackedUnpack, I: IntegerPType>(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
+    use vortex_array::aggregate_fn::Accumulator;
+    use vortex_array::aggregate_fn::DynAccumulator;
+    use vortex_array::aggregate_fn::EmptyOptions;
+    use vortex_array::aggregate_fn::fns::is_constant::IsConstant;
     use vortex_array::aggregate_fn::fns::is_constant::is_constant;
     use vortex_array::array_session;
+    use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::scalar::Scalar;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
+    use vortex_session::VortexSession;
 
     use crate::BitPackedData;
+
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
+        let session = array_session();
+        crate::initialize(&session);
+        session
+    });
 
     #[test]
     fn is_constant_with_patches() -> VortexResult<()> {
         let mut ctx = array_session().create_execution_ctx();
         let array = BitPackedData::encode(&buffer![4; 1025].into_array(), 2, &mut ctx)?;
         assert!(is_constant(&array.into_array(), &mut ctx)?);
+        Ok(())
+    }
+
+    /// The packed values of null rows are zero like the valid ones, but the nulls still make the
+    /// array non-constant.
+    #[test]
+    fn is_constant_with_nulls() -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let values = PrimitiveArray::from_option_iter([Some(0u8), Some(0), None, Some(0)]);
+        let array = BitPackedData::encode(&values.into_array(), 4, &mut ctx)?.into_array();
+
+        // `is_constant` answers mixed validity up front, so accumulate to reach the kernel.
+        let mut acc = Accumulator::try_new(IsConstant, EmptyOptions, array.dtype().clone())?;
+        acc.accumulate(&array, &mut ctx)?;
+        assert_eq!(acc.finish()?, Scalar::from(false));
+        assert!(!is_constant(&array, &mut ctx)?);
         Ok(())
     }
 }
