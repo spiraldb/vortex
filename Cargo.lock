@@ -10986,6 +10986,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8df9b6e13f2d32c91b9bd719c00d1958837bc7dec474d94952798cc8e69eeec3"
 
 [[package]]
+name = "tpcdsgen"
+version = "0.1.0-alpha.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07cae4643a0296068b425716c22e16e5b639ef8c7f7717a513436b20b0a7924a"
+
+[[package]]
+name = "tpcdsgen-arrow"
+version = "0.1.0-alpha.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "153b9330d250e11eefbd79e6eed198ee8693e25019fd9299d0570bfd89201b29"
+dependencies = [
+ "arrow 59.3.0",
+ "tpcdsgen",
+]
+
+[[package]]
 name = "tpchgen"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11458,6 +11474,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arrow-array 59.3.0",
+ "arrow-cast 59.3.0",
  "arrow-ipc 59.3.0",
  "arrow-schema 59.3.0",
  "arrow-select 59.3.0",
@@ -11498,6 +11515,8 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-util",
+ "tpcdsgen",
+ "tpcdsgen-arrow",
  "tpchgen",
  "tpchgen-arrow",
  "tracing",

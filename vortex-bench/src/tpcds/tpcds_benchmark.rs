@@ -14,8 +14,8 @@ use crate::BenchmarkDataset;
 use crate::Format;
 use crate::IdempotentPath;
 use crate::TableSpec;
-use crate::tpcds::duckdb::generate_tpcds;
 use crate::tpcds::tpcds_queries;
+use crate::tpcds::tpcdsgen::generate_tpcds;
 
 /// TPC-DS benchmark implementation
 pub struct TpcDsBenchmark {
@@ -76,7 +76,7 @@ impl Benchmark for TpcDsBenchmark {
             Format::Parquet
         );
 
-        generate_tpcds(base_data_dir, self.scale_factor.clone())?;
+        generate_tpcds(base_data_dir, self.scale_factor.clone()).await?;
 
         Ok(())
     }

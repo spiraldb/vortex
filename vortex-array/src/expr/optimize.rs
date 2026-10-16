@@ -4,7 +4,6 @@
 use vortex_error::VortexResult;
 
 use crate::expr::BoundExpression;
-use crate::expr::transform::match_between::find_between;
 use crate::scalar_fn::ExpressionReduceNode;
 
 impl BoundExpression {
@@ -92,15 +91,6 @@ impl BoundExpression {
 
     /// Try to optimize the entire expression tree recursively.
     pub fn try_optimize_recursive(&self) -> VortexResult<Option<BoundExpression>> {
-        let result = self.try_optimize_recursive_inner()?;
-
-        // Apply the between optimization once at the top level only.
-        // TODO(ngates): remove the "between" optimization, or rewrite it to not always convert
-        //  to CNF?
-        Ok(Some(find_between(result.unwrap_or_else(|| self.clone()))))
-    }
-
-    fn try_optimize_recursive_inner(&self) -> VortexResult<Option<BoundExpression>> {
         // First optimize the root
         let mut current = self.try_optimize()?;
 
@@ -110,7 +100,7 @@ impl BoundExpression {
         let children = expr.children();
         let mut new_children: Option<Vec<BoundExpression>> = None;
         for (idx, child) in children.iter().enumerate() {
-            if let Some(optimized) = child.try_optimize_recursive_inner()? {
+            if let Some(optimized) = child.try_optimize_recursive()? {
                 new_children
                     .get_or_insert_with(|| children[..idx].to_vec())
                     .push(optimized);

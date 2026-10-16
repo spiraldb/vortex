@@ -47,7 +47,6 @@ use object_store::ObjectStore;
 use vortex::VortexSessionDefault;
 use vortex::array::memory::MemorySessionExt;
 use vortex::dtype::DType;
-use vortex::dtype::Nullability;
 use vortex::dtype::PType;
 use vortex::error::VortexExpect;
 use vortex::error::VortexResult;
@@ -71,7 +70,7 @@ use super::source::VortexSource;
 use crate::PrecisionExt as _;
 use crate::convert::ExpressionConverter;
 use crate::convert::TryToDataFusion;
-use crate::convert::stats::is_constant_to_distinct_count;
+use crate::convert::stats::constant_distinct_count;
 
 const DEFAULT_FOOTER_INITIAL_READ_SIZE_BYTES: usize = MAX_POSTSCRIPT_SIZE as usize + EOF_SIZE;
 
@@ -686,19 +685,18 @@ impl FileFormat for VortexFormat {
                     field.data_type(),
                 );
 
-                let null_count = stats_set.get_as::<usize>(Stat::NullCount, &PType::U64.into());
+                let null_count = stats_set
+                    .get_as::<usize>(Stat::NullCount, &PType::U64.into())
+                    .to_df();
+                let distinct_count =
+                    constant_distinct_count(stats_set, stats_dtype, &null_count, &min, &max);
 
                 column_statistics.push(ColumnStatistics {
-                    null_count: null_count.to_df(),
+                    null_count,
                     min_value: min,
                     max_value: max,
                     sum_value: DFPrecision::Absent,
-                    distinct_count: is_constant_to_distinct_count(
-                        stats_set.get_as::<bool>(
-                            Stat::IsConstant,
-                            &DType::Bool(Nullability::NonNullable),
-                        ),
-                    ),
+                    distinct_count,
                     byte_size: column_size.to_df(),
                 })
             }
@@ -807,13 +805,41 @@ mod tests {
     use datafusion_physical_expr::projection::ProjectionExprs;
     use datafusion_physical_plan::filter_pushdown::PushedDown;
     use rstest::rstest;
+    use vortex::array::stats::StatsSet;
+    use vortex::dtype::Nullability;
     use vortex::expr::Expression;
+    use vortex::extension::datetime::TimeUnit as VortexTimeUnit;
+    use vortex::extension::datetime::Timestamp;
 
     use super::*;
     use crate::common_tests::TestSessionContext;
     use crate::convert::DefaultExpressionConverter;
     use crate::convert::ProcessedProjection;
     use crate::convert::scalar_from_df;
+
+    #[test]
+    fn lossy_bound_cast_does_not_prove_constant() -> VortexResult<()> {
+        let dtype = DType::Extension(
+            Timestamp::new(VortexTimeUnit::Nanoseconds, Nullability::Nullable).erased(),
+        );
+        let mut stats = StatsSet::of(Stat::Min, Precision::exact(1_001i64));
+        stats.set(Stat::Max, Precision::exact(1_999i64));
+        stats.set(Stat::NullCount, Precision::exact(0u64));
+        let target_dtype = DataType::Timestamp(TimeUnit::Microsecond, None);
+        let min = scalar_stat_to_df(Stat::Min, stats.get(Stat::Min), &dtype, &target_dtype);
+        let max = scalar_stat_to_df(Stat::Max, stats.get(Stat::Max), &dtype, &target_dtype);
+
+        assert_eq!(
+            min,
+            DFPrecision::Exact(ScalarValue::TimestampMicrosecond(Some(1), None))
+        );
+        assert_eq!(min, max);
+        assert_eq!(
+            constant_distinct_count(&stats, &dtype, &DFPrecision::Exact(0), &min, &max),
+            DFPrecision::Absent
+        );
+        Ok(())
+    }
 
     #[rstest]
     #[case::timestamp_upscale(
