@@ -27,6 +27,7 @@ use vortex_array::expr::label_bound_tree;
 use vortex_array::expr::root;
 use vortex_array::expr::transform::partition_bound_annotations;
 use vortex_array::optimizer::ArrayOptimizer;
+use vortex_array::scalar_fn::fns::get_item::GetItem;
 use vortex_array::scalar_fn::is_negative_cost;
 use vortex_error::VortexError;
 use vortex_error::VortexExpect;
@@ -212,10 +213,30 @@ fn split_expression_for_pushdown(
     let partition = partition_bound_annotations(expr.clone(), annotations)?;
     if partition.partitions.is_empty() {
         Ok((partition.root, None))
+    } else if reads_values_directly(&partition.root) {
+        // The outer part also reads the dictionary values outside the pushed down partition,
+        // but the values are replaced by the partition's results, so push nothing down.
+        Ok((expr.clone(), None))
     } else {
         debug_assert_eq!(1, partition.partitions.len());
         Ok((partition.root, Some(partition.partitions[0].clone())))
     }
+}
+
+/// Whether the outer part of a split expression reads its root other than through the pushed
+/// down partition.
+fn reads_values_directly(outer: &BoundExpression) -> bool {
+    if outer.is_root() {
+        return true;
+    }
+    if outer
+        .as_opt::<GetItem>()
+        .is_some_and(|field| field.as_ref() == PUSHDOWN_ANNOTATION)
+        && outer.child(0).is_root()
+    {
+        return false;
+    }
+    outer.children().iter().any(reads_values_directly)
 }
 
 impl LayoutReader for DictReader {
@@ -384,9 +405,12 @@ mod tests {
     use vortex_array::expr::get_item;
     use vortex_array::expr::is_not_null;
     use vortex_array::expr::like;
+    use vortex_array::expr::list_contains;
     use vortex_array::expr::lit;
+    use vortex_array::expr::or;
     use vortex_array::expr::pack;
     use vortex_array::expr::root;
+    use vortex_array::scalar::Scalar;
     use vortex_array::validity::Validity;
     use vortex_btrblocks::BtrBlocksCompressorBuilder;
     use vortex_error::VortexExpect;
@@ -600,10 +624,7 @@ mod tests {
 
             let filter = eq(
                 root(),
-                lit(vortex_array::scalar::Scalar::utf8(
-                    filter_value,
-                    Nullability::Nullable,
-                )),
+                lit(Scalar::utf8(filter_value, Nullability::Nullable)),
             );
             let reader = layout
                 .new_reader("".into(), segments, &session, &Default::default())
@@ -749,6 +770,77 @@ mod tests {
         })
     }
 
+    fn utf8_list(values: &[&str]) -> Expression {
+        lit(Scalar::list(
+            Arc::new(DType::Utf8(Nullability::Nullable)),
+            values
+                .iter()
+                .map(|value| Scalar::utf8(*value, Nullability::Nullable))
+                .collect(),
+            Nullability::NonNullable,
+        ))
+    }
+
+    fn byte_length_list(values: &[u64]) -> Expression {
+        lit(Scalar::list(
+            Arc::new(DType::Primitive(PType::U64, Nullability::Nullable)),
+            values
+                .iter()
+                .map(|value| Scalar::primitive(*value, Nullability::Nullable))
+                .collect(),
+            Nullability::NonNullable,
+        ))
+    }
+
+    /// Expressions that read the dictionary values both inside and outside a pushdown-eligible
+    /// subexpression must not push it down, or the outer part reads the pushed results instead
+    /// of the values.
+    #[rstest]
+    #[case::pack(pack(
+        [("a", root()), ("b", byte_length(root()))],
+        Nullability::NonNullable,
+    ))]
+    #[case::list_contains(or(
+        list_contains(utf8_list(&["abc"]), root()),
+        list_contains(byte_length_list(&[4]), byte_length(root())),
+    ))]
+    fn reading_root_with_pushdown_candidate_works(#[case] expr: Expression) -> VortexResult<()> {
+        let array = VarBinArray::from_iter(
+            [
+                Some("abc"),
+                Some("defg"),
+                None,
+                Some("abc"),
+                Some("defg"),
+                None,
+                Some("abc"),
+                Some("defg"),
+                None,
+            ],
+            DType::Utf8(Nullability::Nullable),
+        )
+        .into_array();
+        let expected = array.clone().apply(&expr)?;
+
+        block_on(|handle| async move {
+            let session = session_with_handle(handle);
+            let mut ctx = session.create_execution_ctx();
+            let (layout, segments) = write_dict_layout(array, &session).await;
+            assert_eq!(layout.encoding_id().as_str(), "vortex.dict");
+            let reader = layout.new_reader("".into(), segments, &session, &Default::default())?;
+            let expression = expr.bind(reader.dtype())?;
+            let actual = reader
+                .projection_evaluation(
+                    &(0..layout.row_count()),
+                    &expression,
+                    MaskFuture::new_true(usize::try_from(layout.row_count())?),
+                )?
+                .await?;
+            assert_arrays_eq!(actual, expected, &mut ctx);
+            Ok(())
+        })
+    }
+
     fn pushed_inner(exprs: impl IntoIterator<Item = Expression>) -> Expression {
         pack(
             exprs
@@ -845,5 +937,19 @@ mod tests {
         let (outer, inner) = split_bound(expr.clone(), &dtype).unwrap();
         assert_eq!(outer, expr.bind(&dtype).unwrap());
         assert_eq!(inner, None);
+    }
+
+    #[test]
+    fn split_expr_root_outside_pushdown() -> VortexResult<()> {
+        // byte_length is eligible, but the outer pack also reads the values directly
+        let expr = pack(
+            [("a", root()), ("b", byte_length(root()))],
+            Nullability::NonNullable,
+        );
+        let dtype = DType::Utf8(true.into());
+        let (outer, inner) = split_bound(expr.clone(), &dtype)?;
+        assert_eq!(outer, expr.bind(&dtype)?);
+        assert_eq!(inner, None);
+        Ok(())
     }
 }
