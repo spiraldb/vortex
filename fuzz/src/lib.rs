@@ -34,6 +34,8 @@ pub use gpu::FuzzCompressGpu;
 #[cfg(feature = "cuda")]
 pub use gpu::run_compress_gpu;
 pub use reference::FuzzArrayReference;
+pub use reference::exprs::FuzzExprReference;
+pub use reference::exprs::run_expr_reference;
 pub use reference::run_array_reference;
 pub use row::FuzzRowEncode;
 pub use row::run_row_encode;

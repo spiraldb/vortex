@@ -310,7 +310,7 @@ impl EncodingKind {
         })
     }
 
-    fn pick_dtype(self, u: &mut Unstructured<'_>) -> arbitrary::Result<DType> {
+    pub(crate) fn pick_dtype(self, u: &mut Unstructured<'_>) -> arbitrary::Result<DType> {
         use EncodingKind::*;
         let n: Nullability = u.arbitrary()?;
         let ints = [

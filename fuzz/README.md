@@ -35,6 +35,19 @@ array's canonical form). `every_registered_aggregate_fn_has_a_reference` and
 `REFERENCE_SMOKE_SEEDS=<n> cargo test --release -p vortex-fuzz --lib reference::tests::smoke`
 replays `n` deterministic inputs without libFuzzer, which is a quick way to look for mismatches.
 
+The `expr_reference` target fuzzes whole expression trees with the same oracle.
+`src/reference/exprs.rs` synthesizes well-typed trees over a scope (usually a table of columns in
+random encodings) from the `ScalarOpKind` registry: a tree grows by applying a random kind to a
+subtree, and the kind's operands are synthesized backwards from the dtypes it asks for, as a
+column or literal of that dtype or a subtree that returns it. Vortex type checks every node as it
+is built. The reference evaluates the tree bottom-up over plain values, and Vortex evaluates it in
+memory, after expression optimization, and through a file scan with the tree pushed down as the
+projection and as the filter (optionally with a cached `LayoutReader`). When the reference expects
+an error the result is not compared, since Vortex may legitimately skip the failing subtree, but a
+Vortex error where the reference has values is a bug. `every_tree_kind_is_synthesized` fails when
+a kind allowed in trees never appears in a passing tree. `EXPR_SMOKE_SEEDS=<n>` sets the number of
+deterministic inputs that test replays.
+
 ## Reproduce crash from CI
 
 In the case of a crash in the nightly run, you can download the crash artifact and run `cargo-fuzz` with the exact same

@@ -80,6 +80,14 @@ required-features = ["native"]
 [[bin]]
 bench = false
 doc = false
+name = "expr_reference"
+path = "fuzz_targets/expr_reference.rs"
+test = false
+required-features = ["native"]
+
+[[bin]]
+bench = false
+doc = false
 name = "file_io"
 path = "fuzz_targets/file_io.rs"
 test = false

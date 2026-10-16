@@ -10,6 +10,7 @@
 
 pub mod aggregate_fns;
 pub mod encodings;
+pub mod exprs;
 pub mod generate;
 pub mod ops;
 pub mod scalar_fns;
@@ -161,7 +162,7 @@ pub fn run_array_reference(fuzz: FuzzArrayReference) -> VortexFuzzResult<bool> {
     Ok(true)
 }
 
-fn err(e: vortex_error::VortexError) -> VortexFuzzError {
+pub(crate) fn err(e: vortex_error::VortexError) -> VortexFuzzError {
     VortexFuzzError::VortexError(e, Backtrace::capture())
 }
 

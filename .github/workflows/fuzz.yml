@@ -313,6 +313,43 @@ jobs:
       gh_token: ${{ secrets.GITHUB_TOKEN }}
       incident_io_alert_token: ${{ secrets.INCIDENT_IO_ALERT_TOKEN }}
 
+  # ============================================================================
+  # Expression Reference Fuzzer
+  # ============================================================================
+  expr_reference_fuzz:
+    name: "Expression Reference Fuzz"
+    needs: build_cpu_fuzzers
+    uses: ./.github/workflows/run-fuzzer.yml
+    with:
+      fuzz_target: expr_reference
+      jobs: 4
+      fuzzer_artifact: ${{ needs.build_cpu_fuzzers.outputs.artifact_name }}
+    secrets:
+      R2_FUZZ_ACCESS_KEY_ID: ${{ secrets.R2_FUZZ_ACCESS_KEY_ID }}
+      R2_FUZZ_SECRET_ACCESS_KEY: ${{ secrets.R2_FUZZ_SECRET_ACCESS_KEY }}
+
+  report-expr-reference-fuzz-failures:
+    name: "Report Expression Reference Fuzz Failures"
+    needs: expr_reference_fuzz
+    if: always() && needs.expr_reference_fuzz.outputs.crashes_found == 'true'
+    permissions:
+      issues: write
+      contents: read
+      id-token: write
+      pull-requests: read
+    uses: ./.github/workflows/report-fuzz-crash.yml
+    with:
+      fuzz_target: expr_reference
+      crash_file: ${{ needs.expr_reference_fuzz.outputs.first_crash_name }}
+      artifact_url: ${{ needs.expr_reference_fuzz.outputs.artifact_url }}
+      artifact_name: expr_reference-crash-artifacts
+      logs_artifact_name: expr_reference-logs
+      branch: ${{ github.ref_name }}
+      commit: ${{ github.sha }}
+    secrets:
+      gh_token: ${{ secrets.GITHUB_TOKEN }}
+      incident_io_alert_token: ${{ secrets.INCIDENT_IO_ALERT_TOKEN }}
+
   attempt-fix-array-reference:
     name: "Attempt Fix for Array Reference Fuzz Crash"
     needs: report-array-reference-fuzz-failures

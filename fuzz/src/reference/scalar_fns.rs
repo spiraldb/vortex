@@ -34,6 +34,7 @@ use vortex_array::dtype::PType;
 use vortex_array::dtype::StructFields;
 use vortex_array::dtype::half::f16;
 use vortex_array::extension::datetime::Timestamp;
+use vortex_array::scalar::Scalar;
 use vortex_array::scalar_fn::EmptyOptions;
 use vortex_array::scalar_fn::ScalarFnRef;
 use vortex_array::scalar_fn::ScalarFnVTableExt;
@@ -78,6 +79,7 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 
 use super::encodings::Case;
+use super::encodings::buildable;
 use super::encodings::is_leaf;
 use super::encodings::operand;
 use super::value::Value;
@@ -151,26 +153,43 @@ impl ScalarOpKind {
 
     /// Generate an op of this kind applicable to `input`, or `IncorrectFormat` if the input's
     /// dtype does not support it.
-    #[expect(clippy::cognitive_complexity, reason = "one arm per op kind")]
     pub fn generate(
         self,
         u: &mut Unstructured<'_>,
         input: &Case,
         ctx: &mut ExecutionCtx,
     ) -> arbitrary::Result<ScalarOp> {
+        self.generate_with(
+            u,
+            &input.dtype,
+            &mut CaseOperands {
+                len: input.values.len(),
+                values: &input.values,
+                ctx,
+            },
+        )
+    }
+
+    /// Generate an op of this kind applicable to an input of `dtype`, with operands made by
+    /// `operands` (random arrays, or synthesized expression trees).
+    #[expect(clippy::cognitive_complexity, reason = "one arm per op kind")]
+    pub fn generate_with<G: OperandGen>(
+        self,
+        u: &mut Unstructured<'_>,
+        dtype: &DType,
+        operands: &mut G,
+    ) -> arbitrary::Result<ScalarOp<G::Operand>> {
         use ScalarOpKind::*;
-        let dtype = &input.dtype;
-        let len = input.values.len();
-        let same_type = |u: &mut Unstructured<'_>, ctx: &mut ExecutionCtx| {
+        let same_type = |u: &mut Unstructured<'_>, operands: &mut G| {
             let n: Nullability = u.arbitrary()?;
-            operand(u, &dtype.with_nullability(n), len, ctx)
+            operands.operand(u, &dtype.with_nullability(n))
         };
         Ok(match self {
             Compare if comparable(dtype) => {
-                ScalarOp::Compare(*u.choose(&COMPARE_OPS)?, same_type(u, ctx)?)
+                ScalarOp::Compare(*u.choose(&COMPARE_OPS)?, same_type(u, operands)?)
             }
             Arithmetic if arithmetic(dtype) => {
-                ScalarOp::Arithmetic(*u.choose(&ARITH_OPS)?, same_type(u, ctx)?)
+                ScalarOp::Arithmetic(*u.choose(&ARITH_OPS)?, same_type(u, operands)?)
             }
             Cast => ScalarOp::Cast(cast_target(u, dtype)?),
             ListSum => {
@@ -208,8 +227,8 @@ impl ScalarOpKind {
                     .collect::<arbitrary::Result<Vec<_>>>()?;
                 // Reuse some of the input's values so that matches are likely.
                 let mut elems = elems;
-                if let Ok(i) = u.choose_index(len) {
-                    elems.push(input.values[i].clone());
+                if let Some(v) = operands.sample(u)? {
+                    elems.push(v);
                 }
                 ScalarOp::PreparedSet {
                     elems,
@@ -233,11 +252,11 @@ impl ScalarOpKind {
             },
             Logical if matches!(dtype, DType::Bool(_)) => ScalarOp::Logical(
                 *u.choose(&[Operator::And, Operator::Or])?,
-                same_type(u, ctx)?,
+                same_type(u, operands)?,
             ),
             Between if comparable(dtype) => ScalarOp::Between {
-                lower: same_type(u, ctx)?,
-                upper: same_type(u, ctx)?,
+                lower: same_type(u, operands)?,
+                upper: same_type(u, operands)?,
                 lower_strict: u.arbitrary()?,
                 upper_strict: u.arbitrary()?,
             },
@@ -252,32 +271,25 @@ impl ScalarOpKind {
                     super::generate::gen_one(u, &fill_dtype, super::generate::Shape::Random, 0)?;
                 ScalarOp::FillNull(fill_dtype, fill)
             }
-            // TODO: masking needs a nullable cast, which union and variant arrays do not support.
-            Mask if !matches!(dtype, DType::Union(..) | DType::Variant(_)) => ScalarOp::Mask(
-                operand(u, &DType::Bool(Nullability::NonNullable), len, ctx)?,
-            ),
+            // TODO: masking needs a nullable cast, which union and variant arrays (also as struct
+            // fields) do not support.
+            Mask if buildable(dtype) => {
+                ScalarOp::Mask(operands.operand(u, &DType::Bool(Nullability::NonNullable))?)
+            }
             Zip if is_leaf(dtype) => ScalarOp::Zip {
-                if_false: same_type(u, ctx)?,
+                if_false: same_type(u, operands)?,
                 mask: {
                     let n: Nullability = u.arbitrary()?;
-                    operand(u, &DType::Bool(n), len, ctx)?
+                    operands.operand(u, &DType::Bool(n))?
                 },
             },
             Like if matches!(dtype, DType::Utf8(_)) => {
                 let nullability: Nullability = u.arbitrary()?;
                 let pattern = if u.arbitrary()? {
                     let text = gen_pattern(u)?;
-                    let value = Value::Bytes(text.into_bytes());
-                    let scalar = to_scalar(&DType::Utf8(nullability), &value)
-                        .map_err(|_| IncorrectFormat)?;
-                    Case {
-                        kind: super::encodings::EncodingKind::Constant,
-                        dtype: DType::Utf8(nullability),
-                        values: vec![value; len],
-                        array: ConstantArray::new(scalar, len).into_array(),
-                    }
+                    operands.constant(&DType::Utf8(nullability), Value::Bytes(text.into_bytes()))?
                 } else {
-                    operand(u, &DType::Utf8(nullability), len, ctx)?
+                    operands.operand(u, &DType::Utf8(nullability))?
                 };
                 ScalarOp::Like {
                     pattern,
@@ -300,7 +312,7 @@ impl ScalarOpKind {
                 }
                 let n: Nullability = u.arbitrary()?;
                 ScalarOp::ListContains {
-                    needle: operand(u, &elem.with_nullability(n), len, ctx)?,
+                    needle: operands.operand(u, &elem.with_nullability(n))?,
                     sql_null_semantics: u.arbitrary()?,
                 }
             }
@@ -323,7 +335,7 @@ impl ScalarOpKind {
                 }
             }
             // TODO: struct fields of union or variant type need casts those arrays lack.
-            Pack if !matches!(dtype, DType::Union(..) | DType::Variant(_)) => ScalarOp::Pack {
+            Pack if buildable(dtype) => ScalarOp::Pack {
                 copies: u.int_in_range(1..=2)?,
                 nullability: u.arbitrary()?,
             },
@@ -353,12 +365,9 @@ impl ScalarOpKind {
                         new_field,
                     ],
                 );
-                ScalarOp::Merge(operand(
-                    u,
-                    &DType::Struct(other_fields, Nullability::NonNullable),
-                    len,
-                    ctx,
-                )?)
+                ScalarOp::Merge(
+                    operands.operand(u, &DType::Struct(other_fields, Nullability::NonNullable))?,
+                )
             }
             ExtStorage if matches!(dtype, DType::Extension(_)) => ScalarOp::ExtStorage,
             Literal => {
@@ -455,13 +464,13 @@ fn gen_pattern(u: &mut Unstructured<'_>) -> arbitrary::Result<String> {
 
 /// A concrete scalar function application.
 #[derive(Debug, Clone)]
-pub enum ScalarOp {
-    Compare(Operator, Case),
-    Arithmetic(Operator, Case),
-    Logical(Operator, Case),
+pub enum ScalarOp<O = Case> {
+    Compare(Operator, O),
+    Arithmetic(Operator, O),
+    Logical(Operator, O),
     Between {
-        lower: Case,
-        upper: Case,
+        lower: O,
+        upper: O,
         lower_strict: bool,
         upper_strict: bool,
     },
@@ -470,20 +479,20 @@ pub enum ScalarOp {
     IsNotNull,
     IsNan,
     FillNull(DType, Value),
-    Mask(Case),
+    Mask(O),
     Zip {
-        if_false: Case,
-        mask: Case,
+        if_false: O,
+        mask: O,
     },
     Like {
-        pattern: Case,
+        pattern: O,
         negated: bool,
         case_insensitive: bool,
     },
     ByteLength,
     ListLength,
     ListContains {
-        needle: Case,
+        needle: O,
         sql_null_semantics: bool,
     },
     GetItem(usize),
@@ -495,7 +504,7 @@ pub enum ScalarOp {
         copies: usize,
         nullability: Nullability,
     },
-    Merge(Case),
+    Merge(O),
     ExtStorage,
     Literal(DType, Value),
     Cast(DType),
@@ -514,6 +523,107 @@ pub enum ScalarOp {
     },
 }
 
+/// An operand of a [`ScalarOp`] whose reference values are known.
+pub trait Operand {
+    fn dtype(&self) -> &DType;
+    fn values(&self) -> &[Value];
+}
+
+impl Operand for Case {
+    fn dtype(&self) -> &DType {
+        &self.dtype
+    }
+
+    fn values(&self) -> &[Value] {
+        &self.values
+    }
+}
+
+/// Makes the operands of generated [`ScalarOp`]s.
+pub trait OperandGen {
+    type Operand;
+
+    /// An operand of `dtype`.
+    fn operand(
+        &mut self,
+        u: &mut Unstructured<'_>,
+        dtype: &DType,
+    ) -> arbitrary::Result<Self::Operand>;
+
+    /// An operand holding `value` in every row.
+    fn constant(&mut self, dtype: &DType, value: Value) -> arbitrary::Result<Self::Operand>;
+
+    /// One of the input's values, if they are known, to make matches likely.
+    fn sample(&mut self, u: &mut Unstructured<'_>) -> arbitrary::Result<Option<Value>>;
+}
+
+/// Operands as arrays in random encodings, as long as the input.
+struct CaseOperands<'a> {
+    len: usize,
+    values: &'a [Value],
+    ctx: &'a mut ExecutionCtx,
+}
+
+impl OperandGen for CaseOperands<'_> {
+    type Operand = Case;
+
+    fn operand(&mut self, u: &mut Unstructured<'_>, dtype: &DType) -> arbitrary::Result<Case> {
+        operand(u, dtype, self.len, self.ctx)
+    }
+
+    fn constant(&mut self, dtype: &DType, value: Value) -> arbitrary::Result<Case> {
+        let scalar = to_scalar(dtype, &value).map_err(|_| IncorrectFormat)?;
+        Ok(Case {
+            kind: super::encodings::EncodingKind::Constant,
+            dtype: dtype.clone(),
+            values: vec![value; self.len],
+            array: ConstantArray::new(scalar, self.len).into_array(),
+        })
+    }
+
+    fn sample(&mut self, u: &mut Unstructured<'_>) -> arbitrary::Result<Option<Value>> {
+        Ok(u.choose(self.values).ok().cloned())
+    }
+}
+
+/// Builds the nodes of a scalar function application: arrays or expressions.
+pub trait NodeBuilder {
+    type Operand;
+    type Node: Clone;
+
+    fn operand(&self, operand: &Self::Operand) -> VortexResult<Self::Node>;
+    fn constant(&self, scalar: Scalar) -> VortexResult<Self::Node>;
+    /// The set side of a `list_contains` with a constant list.
+    fn prepared_set(&self, list: Scalar) -> VortexResult<Self::Node>;
+    fn apply(&self, f: ScalarFnRef, children: Vec<Self::Node>) -> VortexResult<Self::Node>;
+}
+
+/// Builds `ScalarFnArray`s over arrays of `len` rows.
+pub struct ArrayBuilder {
+    pub len: usize,
+}
+
+impl NodeBuilder for ArrayBuilder {
+    type Operand = Case;
+    type Node = ArrayRef;
+
+    fn operand(&self, operand: &Case) -> VortexResult<ArrayRef> {
+        Ok(operand.array.clone())
+    }
+
+    fn constant(&self, scalar: Scalar) -> VortexResult<ArrayRef> {
+        Ok(ConstantArray::new(scalar, self.len).into_array())
+    }
+
+    fn prepared_set(&self, list: Scalar) -> VortexResult<ArrayRef> {
+        PreparedSet::try_new_array(list, self.len)
+    }
+
+    fn apply(&self, f: ScalarFnRef, children: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
+        Ok(ScalarFnArray::try_new_with_len(f, children, self.len)?.into_array())
+    }
+}
+
 /// The reference result of a scalar op: either the expected output or an expected error.
 pub enum Expected {
     Values(Vec<Value>),
@@ -523,17 +633,25 @@ pub enum Expected {
 }
 
 impl ScalarOp {
-    /// Build the Vortex expression for this op over `input`.
+    /// Apply this op to `input` as a `ScalarFnArray`.
     pub fn vortex(&self, input: &ArrayRef, dtype: &DType) -> VortexResult<ArrayRef> {
-        let len = input.len();
-        let apply = |f: ScalarFnRef, children: Vec<ArrayRef>| -> VortexResult<ArrayRef> {
-            Ok(ScalarFnArray::try_new(f, children)?.into_array())
-        };
-        let input = input.clone();
+        self.build(input.clone(), dtype, &ArrayBuilder { len: input.len() })
+    }
+}
+
+impl<O> ScalarOp<O> {
+    /// Build this op over `input` (of `dtype`) with `b`, as an array or an expression.
+    pub fn build<B: NodeBuilder<Operand = O>>(
+        &self,
+        input: B::Node,
+        dtype: &DType,
+        b: &B,
+    ) -> VortexResult<B::Node> {
+        let apply = |f: ScalarFnRef, children: Vec<B::Node>| b.apply(f, children);
         match self {
             ScalarOp::Compare(op, rhs)
             | ScalarOp::Arithmetic(op, rhs)
-            | ScalarOp::Logical(op, rhs) => apply(Binary.bind(*op), vec![input, rhs.array.clone()]),
+            | ScalarOp::Logical(op, rhs) => apply(Binary.bind(*op), vec![input, b.operand(rhs)?]),
             ScalarOp::Between {
                 lower,
                 upper,
@@ -544,7 +662,7 @@ impl ScalarOp {
                     lower_strict: strictness(*lower_strict),
                     upper_strict: strictness(*upper_strict),
                 }),
-                vec![input, lower.array.clone(), upper.array.clone()],
+                vec![input, b.operand(lower)?, b.operand(upper)?],
             ),
             ScalarOp::Not => apply(Not.bind(EmptyOptions), vec![input]),
             ScalarOp::IsNull => apply(IsNull.bind(EmptyOptions), vec![input]),
@@ -552,15 +670,12 @@ impl ScalarOp {
             ScalarOp::IsNan => apply(IsNan.bind(EmptyOptions), vec![input]),
             ScalarOp::FillNull(fill_dtype, fill) => apply(
                 FillNull.bind(EmptyOptions),
-                vec![
-                    input,
-                    ConstantArray::new(to_scalar(fill_dtype, fill)?, len).into_array(),
-                ],
+                vec![input, b.constant(to_scalar(fill_dtype, fill)?)?],
             ),
-            ScalarOp::Mask(mask) => apply(Mask.bind(EmptyOptions), vec![input, mask.array.clone()]),
+            ScalarOp::Mask(mask) => apply(Mask.bind(EmptyOptions), vec![input, b.operand(mask)?]),
             ScalarOp::Zip { if_false, mask } => apply(
                 Zip.bind(EmptyOptions),
-                vec![input, if_false.array.clone(), mask.array.clone()],
+                vec![input, b.operand(if_false)?, b.operand(mask)?],
             ),
             ScalarOp::Like {
                 pattern,
@@ -571,7 +686,7 @@ impl ScalarOp {
                     negated: *negated,
                     case_insensitive: *case_insensitive,
                 }),
-                vec![input, pattern.array.clone()],
+                vec![input, b.operand(pattern)?],
             ),
             ScalarOp::ByteLength => apply(ByteLength.bind(EmptyOptions), vec![input]),
             ScalarOp::ListLength => apply(ListLength.bind(EmptyOptions), vec![input]),
@@ -582,7 +697,7 @@ impl ScalarOp {
                 ListContains.bind(ListContainsOptions {
                     sql_null_semantics: *sql_null_semantics,
                 }),
-                vec![input, needle.array.clone()],
+                vec![input, b.operand(needle)?],
             ),
             ScalarOp::GetItem(idx) => {
                 let DType::Struct(fields, _) = dtype else {
@@ -623,7 +738,7 @@ impl ScalarOp {
             ),
             ScalarOp::Merge(other) => apply(
                 Merge.bind(DuplicateHandling::RightMost),
-                vec![input, other.array.clone()],
+                vec![input, b.operand(other)?],
             ),
             ScalarOp::ExtStorage => apply(ExtStorage.bind(EmptyOptions), vec![input]),
             ScalarOp::Cast(target) => apply(Cast.bind(target.clone()), vec![input]),
@@ -638,7 +753,7 @@ impl ScalarOp {
                 sql_null_semantics,
             } => {
                 let elem_dtype = dtype.as_nullable();
-                let list = vortex_array::scalar::Scalar::list(
+                let list = Scalar::list(
                     Arc::new(elem_dtype.clone()),
                     elems
                         .iter()
@@ -650,7 +765,7 @@ impl ScalarOp {
                     ListContains.bind(ListContainsOptions {
                         sql_null_semantics: *sql_null_semantics,
                     }),
-                    vec![PreparedSet::try_new_array(list, len)?, input],
+                    vec![b.prepared_set(list)?, input],
                 )
             }
             ScalarOp::ReplaceTimeZone(tz) => apply(
@@ -658,7 +773,7 @@ impl ScalarOp {
                     time_zone: tz.clone(),
                     null_on_non_existent: false,
                 }),
-                vec![input, ConstantArray::new("raise", len).into_array()],
+                vec![input, b.constant("raise".into())?],
             ),
             ScalarOp::Stat(stat) => {
                 let opts = NumericalAggregateOpts { skip_nans: true };
@@ -681,31 +796,145 @@ impl ScalarOp {
                     vec![input],
                 )
             }
-            ScalarOp::Literal(dtype, v) => {
-                Ok(
-                    ScalarFnArray::try_new_with_len(Literal.bind(to_scalar(dtype, v)?), [], len)?
-                        .into_array(),
-                )
-            }
+            ScalarOp::Literal(dtype, v) => apply(Literal.bind(to_scalar(dtype, v)?), vec![]),
         }
     }
 
+    /// The kind of this op.
+    pub fn kind(&self) -> ScalarOpKind {
+        match self {
+            ScalarOp::Compare(..) => ScalarOpKind::Compare,
+            ScalarOp::Arithmetic(..) => ScalarOpKind::Arithmetic,
+            ScalarOp::Logical(..) => ScalarOpKind::Logical,
+            ScalarOp::Between { .. } => ScalarOpKind::Between,
+            ScalarOp::Not => ScalarOpKind::Not,
+            ScalarOp::IsNull => ScalarOpKind::IsNull,
+            ScalarOp::IsNotNull => ScalarOpKind::IsNotNull,
+            ScalarOp::IsNan => ScalarOpKind::IsNan,
+            ScalarOp::FillNull(..) => ScalarOpKind::FillNull,
+            ScalarOp::Mask(_) => ScalarOpKind::Mask,
+            ScalarOp::Zip { .. } => ScalarOpKind::Zip,
+            ScalarOp::Like { .. } => ScalarOpKind::Like,
+            ScalarOp::ByteLength => ScalarOpKind::ByteLength,
+            ScalarOp::ListLength => ScalarOpKind::ListLength,
+            ScalarOp::ListContains { .. } => ScalarOpKind::ListContains,
+            ScalarOp::GetItem(_) => ScalarOpKind::GetItem,
+            ScalarOp::Select { .. } => ScalarOpKind::Select,
+            ScalarOp::Pack { .. } => ScalarOpKind::Pack,
+            ScalarOp::Merge(_) => ScalarOpKind::Merge,
+            ScalarOp::ExtStorage => ScalarOpKind::ExtStorage,
+            ScalarOp::Literal(..) => ScalarOpKind::Literal,
+            ScalarOp::Cast(_) => ScalarOpKind::Cast,
+            ScalarOp::ListSum { .. } => ScalarOpKind::ListSum,
+            ScalarOp::PreparedSet { .. } => ScalarOpKind::PreparedSet,
+            ScalarOp::ReplaceTimeZone(_) => ScalarOpKind::ReplaceTimeZone,
+            ScalarOp::Stat(_) => ScalarOpKind::Stat,
+            ScalarOp::VariantGet { .. } => ScalarOpKind::VariantGet,
+        }
+    }
+
+    /// Map every operand with `f`.
+    pub fn try_map_operands<P, E>(
+        &self,
+        mut f: impl FnMut(&O) -> Result<P, E>,
+    ) -> Result<ScalarOp<P>, E> {
+        use ScalarOp::*;
+        Ok(match self {
+            Compare(op, rhs) => Compare(*op, f(rhs)?),
+            Arithmetic(op, rhs) => Arithmetic(*op, f(rhs)?),
+            Logical(op, rhs) => Logical(*op, f(rhs)?),
+            Between {
+                lower,
+                upper,
+                lower_strict,
+                upper_strict,
+            } => Between {
+                lower: f(lower)?,
+                upper: f(upper)?,
+                lower_strict: *lower_strict,
+                upper_strict: *upper_strict,
+            },
+            Not => Not,
+            IsNull => IsNull,
+            IsNotNull => IsNotNull,
+            IsNan => IsNan,
+            FillNull(dtype, value) => FillNull(dtype.clone(), value.clone()),
+            Mask(mask) => Mask(f(mask)?),
+            Zip { if_false, mask } => Zip {
+                if_false: f(if_false)?,
+                mask: f(mask)?,
+            },
+            Like {
+                pattern,
+                negated,
+                case_insensitive,
+            } => Like {
+                pattern: f(pattern)?,
+                negated: *negated,
+                case_insensitive: *case_insensitive,
+            },
+            ByteLength => ByteLength,
+            ListLength => ListLength,
+            ListContains {
+                needle,
+                sql_null_semantics,
+            } => ListContains {
+                needle: f(needle)?,
+                sql_null_semantics: *sql_null_semantics,
+            },
+            GetItem(i) => GetItem(*i),
+            Select { fields, include } => Select {
+                fields: fields.clone(),
+                include: *include,
+            },
+            Pack {
+                copies,
+                nullability,
+            } => Pack {
+                copies: *copies,
+                nullability: *nullability,
+            },
+            Merge(other) => Merge(f(other)?),
+            ExtStorage => ExtStorage,
+            Literal(dtype, value) => Literal(dtype.clone(), value.clone()),
+            Cast(dtype) => Cast(dtype.clone()),
+            ListSum { skip_nans } => ListSum {
+                skip_nans: *skip_nans,
+            },
+            PreparedSet {
+                elems,
+                sql_null_semantics,
+            } => PreparedSet {
+                elems: elems.clone(),
+                sql_null_semantics: *sql_null_semantics,
+            },
+            ReplaceTimeZone(tz) => ReplaceTimeZone(tz.clone()),
+            Stat(stat) => Stat(*stat),
+            VariantGet { field, target } => VariantGet {
+                field: *field,
+                target: *target,
+            },
+        })
+    }
+}
+
+impl<O: Operand> ScalarOp<O> {
     /// Evaluate this op with the plain Rust reference.
     pub fn reference(&self, input: &[Value], dtype: &DType) -> Expected {
         let len = input.len();
         let col = |i: usize| -> &Value { &input[i] };
         let values: Vec<Value> = match self {
             ScalarOp::Compare(op, rhs) => (0..len)
-                .map(|i| match (col(i), &rhs.values[i]) {
+                .map(|i| match (col(i), &rhs.values()[i]) {
                     (Value::Null, _) | (_, Value::Null) => Value::Null,
                     (a, b) => Value::Bool(compare(*op, a.total_cmp(b))),
                 })
                 .collect(),
             ScalarOp::Arithmetic(op, rhs) => {
-                return arithmetic_reference(*op, dtype, input, &rhs.values);
+                return arithmetic_reference(*op, dtype, input, rhs.values());
             }
             ScalarOp::Logical(op, rhs) => (0..len)
-                .map(|i| kleene(*op, col(i).as_bool(), rhs.values[i].as_bool()))
+                .map(|i| kleene(*op, col(i).as_bool(), rhs.values()[i].as_bool()))
                 .collect(),
             ScalarOp::Between {
                 lower,
@@ -714,8 +943,8 @@ impl ScalarOp {
                 upper_strict,
             } => (0..len)
                 .map(|i| {
-                    let lo = cmp_bound(&lower.values[i], col(i), *lower_strict);
-                    let hi = cmp_bound(col(i), &upper.values[i], *upper_strict);
+                    let lo = cmp_bound(&lower.values()[i], col(i), *lower_strict);
+                    let hi = cmp_bound(col(i), &upper.values()[i], *upper_strict);
                     kleene(Operator::And, lo, hi)
                 })
                 .collect(),
@@ -738,7 +967,7 @@ impl ScalarOp {
                 .collect(),
             ScalarOp::Mask(mask) => input
                 .iter()
-                .zip(&mask.values)
+                .zip(mask.values())
                 .map(|(v, m)| {
                     if m.as_bool() == Some(true) {
                         v.clone()
@@ -749,10 +978,10 @@ impl ScalarOp {
                 .collect(),
             ScalarOp::Zip { if_false, mask } => (0..len)
                 .map(|i| {
-                    if mask.values[i].as_bool() == Some(true) {
+                    if mask.values()[i].as_bool() == Some(true) {
                         col(i).clone()
                     } else {
-                        if_false.values[i].clone()
+                        if_false.values()[i].clone()
                     }
                 })
                 .collect(),
@@ -762,7 +991,7 @@ impl ScalarOp {
                 case_insensitive,
             } => (0..len)
                 .map(
-                    |i| match (col(i).as_bytes(), pattern.values[i].as_bytes()) {
+                    |i| match (col(i).as_bytes(), pattern.values()[i].as_bytes()) {
                         (Some(s), Some(p)) => {
                             let matched = like(
                                 &String::from_utf8_lossy(s),
@@ -793,7 +1022,7 @@ impl ScalarOp {
                 needle,
                 sql_null_semantics,
             } => (0..len)
-                .map(|i| list_contains(col(i), &needle.values[i], *sql_null_semantics))
+                .map(|i| list_contains(col(i), &needle.values()[i], *sql_null_semantics))
                 .collect(),
             ScalarOp::GetItem(idx) => input
                 .iter()
@@ -821,7 +1050,7 @@ impl ScalarOp {
                 let DType::Struct(fields, _) = dtype else {
                     return Expected::Error("merge on non-struct".into());
                 };
-                let DType::Struct(other_fields, _) = &other.dtype else {
+                let DType::Struct(other_fields, _) = other.dtype() else {
                     return Expected::Error("merge with non-struct".into());
                 };
                 let overridden = other_fields
@@ -831,7 +1060,7 @@ impl ScalarOp {
                     .collect::<Vec<_>>();
                 (0..len)
                     .map(|i| {
-                        let (Some(l), Some(r)) = (col(i).as_tuple(), other.values[i].as_tuple())
+                        let (Some(l), Some(r)) = (col(i).as_tuple(), other.values()[i].as_tuple())
                         else {
                             return Value::Null;
                         };
