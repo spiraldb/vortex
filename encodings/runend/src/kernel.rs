@@ -6,6 +6,7 @@ use std::ops::Range;
 use vortex_array::ArrayRef;
 use vortex_array::ArrayVTable;
 use vortex_array::ArrayView;
+use vortex_array::Canonical;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::arrays::ConstantArray;
@@ -63,6 +64,10 @@ fn slice(
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<ArrayRef> {
     let new_length = range.len();
+    // An empty range needs no run, and an empty array has no run ends to search.
+    if new_length == 0 {
+        return Ok(Canonical::empty(array.dtype()).into_array());
+    }
 
     let slice_begin = array.find_physical_index(range.start, ctx)?;
     let slice_end = array.find_slice_end_index(range.end, ctx)?;
@@ -83,4 +88,35 @@ fn slice(
         )
         .into_array()
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+    use vortex_array::Canonical;
+    use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
+    use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::arrays::SliceArray;
+    use vortex_error::VortexResult;
+
+    use crate::RunEnd;
+
+    #[rstest]
+    #[case::empty_array(PrimitiveArray::from_iter(Vec::<u32>::new()), 0..0)]
+    #[case::empty_range(PrimitiveArray::from_iter([1u32, 1, 2]), 3..3)]
+    fn slice_to_empty(
+        #[case] values: PrimitiveArray,
+        #[case] range: std::ops::Range<usize>,
+    ) -> VortexResult<()> {
+        let session = vortex_array::array_session();
+        crate::initialize(&session);
+        let mut ctx = session.create_execution_ctx();
+
+        let runend = RunEnd::encode(values.into_array(), &mut ctx)?.into_array();
+        let sliced = SliceArray::try_new(runend, range)?.into_array();
+        let canonical = sliced.execute::<Canonical>(&mut ctx)?.into_array();
+        assert!(canonical.is_empty());
+        Ok(())
+    }
 }
