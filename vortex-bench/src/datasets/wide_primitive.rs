@@ -79,7 +79,10 @@ impl Dataset for WidePrimitiveTable {
             .columns()
             .map(|values| PrimitiveArray::from_iter(values).into_array())
             .collect();
-        Ok(StructArray::try_new(names, fields, self.row_count, Validity::NonNullable)?.into_array())
+        Ok(
+            StructArray::try_new(names, fields, self.row_count, Validity::NonNullable)?
+                .into_array(),
+        )
     }
 
     async fn to_parquet_path(&self) -> Result<PathBuf> {
@@ -104,7 +107,8 @@ impl Dataset for WidePrimitiveTable {
             let properties = WriterProperties::builder()
                 .set_compression(Compression::ZSTD(ZstdLevel::try_new(3)?))
                 .build();
-            let mut writer = ArrowWriter::try_new(File::create(&temp_path)?, schema, Some(properties))?;
+            let mut writer =
+                ArrowWriter::try_new(File::create(&temp_path)?, schema, Some(properties))?;
             writer.write(&batch)?;
             writer.close()?;
 
