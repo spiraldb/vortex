@@ -38,10 +38,8 @@ use crate::BitPacked;
 use crate::BitPackedArrayExt;
 use crate::BitWidthsView;
 use crate::FL_CHUNK_SIZE;
-use crate::bitpack_decompress;
 
 const FULL_ARRAY_DECODE_RATIO: usize = 8;
-const MIN_CONTIGUOUS_RANGE_LEN: usize = 8;
 
 impl TakeExecute for BitPacked {
     fn take(
@@ -58,7 +56,9 @@ impl TakeExecute for BitPacked {
             return prim.into_array().take(indices.clone()).map(Some);
         }
 
-        if let Some(ranges) = contiguous_ranges(indices, array.len(), ctx)? {
+        if let Some(ranges) =
+            contiguous_ranges(indices, array.len(), array.dtype().as_ptype(), ctx)?
+        {
             let taken_validity = array.validity()?.take(indices)?;
             let ptype = array.dtype().as_ptype();
             let taken = match_each_unsigned_integer_ptype!(ptype.to_unsigned(), |T| {
@@ -103,18 +103,23 @@ impl TakeExecute for BitPacked {
 fn contiguous_ranges(
     indices: &ArrayRef,
     array_len: usize,
+    ptype: PType,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<Option<Vec<Range<usize>>>> {
     let Some(indices) = indices.as_opt::<PiecewiseSequence>() else {
         return Ok(None);
     };
-    // The primitive path batches short runs that share a packed chunk.
+    let sparse_threshold = match_each_unsigned_integer_ptype!(ptype.to_unsigned(), |T| {
+        unpack_chunk_threshold::<T>() as u64
+    });
+    // The primitive path batches short runs that share a packed chunk and selectively decodes
+    // isolated short runs. Reserve the range path for runs long enough to unpack a whole chunk.
     if let Some(length) = indices
         .lengths()
         .as_opt::<Constant>()
         .and_then(|length| length.scalar().as_primitive().as_::<u64>())
         && length != 0
-        && length < MIN_CONTIGUOUS_RANGE_LEN as u64
+        && length <= sparse_threshold
     {
         return Ok(None);
     }
@@ -135,7 +140,7 @@ fn contiguous_ranges(
     if lengths
         .as_slice::<u64>()
         .iter()
-        .any(|&length| length != 0 && length < MIN_CONTIGUOUS_RANGE_LEN as u64)
+        .any(|&length| length != 0 && length <= sparse_threshold)
     {
         return Ok(None);
     }
@@ -185,6 +190,8 @@ fn take_ranges<T: NativePType + BitPacking>(
     let mut output = BufferMut::<T>::with_capacity(output_len);
     let mut unpacked = [T::zero(); FL_CHUNK_SIZE];
     let mut unpacked_chunk = None;
+    // u64 has the largest sparse decode threshold.
+    let mut sparse_indices = [0usize; unpack_chunk_threshold::<u64>()];
 
     // Vector gathers select runs of components. Keep those runs intact so neither the index
     // buffer nor the chunk-grouping work scales with the number of selected components.
@@ -196,18 +203,12 @@ fn take_ranges<T: NativePType + BitPacking>(
             let within_chunk = start % FL_CHUNK_SIZE;
             let length = (end - start).min(FL_CHUNK_SIZE - within_chunk);
             let packed_chunk = &packed[chunk_idx * chunk_len..][..chunk_len];
-            if unpacked_chunk != Some(chunk_idx) && length < MIN_CONTIGUOUS_RANGE_LEN {
-                for index in within_chunk..within_chunk + length {
-                    // SAFETY: the validated range lies within this array; the packed chunk has
-                    // exactly the words required by its bit width, and index is below 1024.
-                    output.push(unsafe {
-                        bitpack_decompress::unpack_single_primitive::<T>(
-                            packed_chunk,
-                            bit_width,
-                            index,
-                        )
-                    });
+            if unpacked_chunk != Some(chunk_idx) && length <= unpack_chunk_threshold::<T>() {
+                let indices = &mut sparse_indices[..length];
+                for (index, position) in indices.iter_mut().zip(within_chunk..) {
+                    *index = position;
                 }
+                unpack_indices_into(&mut output, bit_width, packed_chunk, indices);
             } else {
                 if unpacked_chunk != Some(chunk_idx) {
                     // SAFETY: BitPacked validates its bit width and buffer size. The input holds
@@ -549,7 +550,7 @@ mod tests {
         #[case] ptype: PType,
     ) -> VortexResult<()> {
         let mut ctx = SESSION.create_execution_ctx();
-        let source_len: usize = 32755;
+        let source_len: usize = 65523;
         let values = PrimitiveArray::from_option_iter((0..source_len).map(|i| {
             if nullable && i.is_multiple_of(29) {
                 None
@@ -577,12 +578,12 @@ mod tests {
                 12000,
                 17000,
                 17,
-                (source_len - slice_offset - 27) as u64
+                (source_len - slice_offset - 257) as u64
             ]
             .into_array(),
-            buffer![0u16, 8, 9, 27, 768, 1024, 1536, 27, 27].into_array(),
+            buffer![0u16, 256, 257, 511, 768, 1024, 1536, 256, 257].into_array(),
             ConstantArray::new(1u8, 9).into_array(),
-            3426,
+            4865,
         )?
         .into_array();
         let expanded = indices
@@ -599,16 +600,19 @@ mod tests {
         let mut ctx = SESSION.create_execution_ctx();
         let values = PrimitiveArray::from_iter((0u32..32768).map(|i| i % 127)).into_array();
         let packed = BitPackedData::encode(&values, 7, &mut ctx)?;
-        for (length, multiplier, constant) in
-            [(7u8, 1u8, true), (8, 0, true), (8, 2, true), (8, 1, false)]
-        {
+        for (length, multiplier, constant) in [
+            (7u8, 1u8, true),
+            (65, 0, true),
+            (65, 2, true),
+            (65, 1, false),
+        ] {
             let multipliers = if constant {
                 ConstantArray::new(multiplier, 2).into_array()
             } else {
                 buffer![multiplier, multiplier].into_array()
             };
             for (lengths, len) in [
-                (buffer![length, 16].into_array(), usize::from(length) + 16),
+                (buffer![length, 128].into_array(), usize::from(length) + 128),
                 (
                     ConstantArray::new(length, 2).into_array(),
                     usize::from(length) * 2,
@@ -627,6 +631,43 @@ mod tests {
                     .into_array();
                 assert_arrays_eq!(packed.take(indices)?, values.take(expanded)?, &mut ctx);
             }
+        }
+        Ok(())
+    }
+
+    #[rstest]
+    #[case(PType::U8, 4, 16)]
+    #[case(PType::U16, 9, 32)]
+    #[case(PType::U32, 16, 64)]
+    #[case(PType::U64, 33, 160)]
+    fn test_take_piecewise_sparse_threshold(
+        #[case] ptype: PType,
+        #[case] bit_width: u8,
+        #[case] threshold: usize,
+    ) -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let values = PrimitiveArray::from_iter(
+            (0u64..8192).map(|i| i.wrapping_mul(0x0123_4567_89ab_cdef) & ((1u64 << bit_width) - 1)),
+        )
+        .into_array()
+        .cast(ptype.into())?
+        .execute::<PrimitiveArray>(&mut ctx)?
+        .into_array();
+        let packed = BitPackedData::encode(&values, bit_width, &mut ctx)?;
+        for length in [threshold, threshold + 1, 2 * threshold + 1] {
+            // A run split across two chunks can require sparse extraction on both sides.
+            let indices = PiecewiseSequenceArray::try_new(
+                buffer![0u64, (1024 - threshold / 2) as u64, 4096].into_array(),
+                ConstantArray::new(length as u64, 3).into_array(),
+                ConstantArray::new(1u64, 3).into_array(),
+                length * 3,
+            )?
+            .into_array();
+            let expanded = indices
+                .clone()
+                .execute::<PrimitiveArray>(&mut ctx)?
+                .into_array();
+            assert_arrays_eq!(packed.take(indices)?, values.take(expanded)?, &mut ctx);
         }
         Ok(())
     }
@@ -663,9 +704,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case(32760, 16, 16)]
-    #[case(1, 16, 15)]
-    #[case(u64::MAX, 8, 8)]
+    #[case(32700, 128, 128)]
+    #[case(1, 128, 127)]
+    #[case(u64::MAX, 128, 128)]
     fn test_take_piecewise_invalid_range(
         #[case] start: u64,
         #[case] length: u64,

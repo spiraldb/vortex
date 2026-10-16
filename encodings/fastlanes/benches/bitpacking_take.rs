@@ -22,6 +22,7 @@ use vortex_array::arrays::PiecewiseSequenceArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::assert_arrays_eq;
 use vortex_array::builtins::ArrayBuiltins;
+use vortex_array::dtype::NativePType;
 use vortex_array::dtype::PType;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
@@ -504,6 +505,52 @@ fn fragmented_runs(bencher: Bencher, run_length: usize) {
 fn fragmented_runs_expanded_baseline(bencher: Bencher, run_length: usize) {
     let (packed, indices) = fragmented_runs_fixture(run_length);
     bench_piecewise_take(bencher, packed, indices, true);
+}
+
+// Isolated runs cannot amortize a whole-chunk decode across neighboring runs. Offsets near
+// a chunk boundary also exercise sparse fragments of runs above the full-decode threshold.
+#[divan::bench(
+    types = [u8, u16, u32, u64],
+    args = [
+        (8, 0), (16, 0), (32, 0), (64, 0), (128, 0), (160, 0), (161, 0),
+        (256, 0), (512, 0), (161, 944), (256, 1020), (256, 896),
+    ],
+)]
+fn isolated_runs<T: NativePType>(bencher: Bencher, (run_length, offset): (usize, usize)) {
+    let bit_width = match T::PTYPE {
+        PType::U8 => 4,
+        PType::U16 => 9,
+        PType::U32 => 16,
+        PType::U64 => 33,
+        _ => unreachable!(),
+    };
+    let mut ctx = SESSION.create_execution_ctx();
+    let mut rng = StdRng::seed_from_u64(42);
+    let values = PrimitiveArray::from_iter(
+        (0..128 * CHUNK_SIZE).map(|_| rng.random_range(0..(1u64 << bit_width))),
+    )
+    .into_array()
+    .cast(T::PTYPE.into())
+    .unwrap()
+    .execute::<PrimitiveArray>(&mut ctx)
+    .unwrap()
+    .into_array();
+    let packed = BitPackedData::encode(&values, bit_width, &mut ctx)
+        .unwrap()
+        .into_array();
+    let num_runs = 16;
+    let starts =
+        PrimitiveArray::from_iter((0..num_runs).map(|run| (run * 4 * CHUNK_SIZE + offset) as u64))
+            .into_array();
+    let indices = PiecewiseSequenceArray::try_new(
+        starts,
+        ConstantArray::new(run_length as u64, num_runs).into_array(),
+        ConstantArray::new(1u64, num_runs).into_array(),
+        num_runs * run_length,
+    )
+    .unwrap()
+    .into_array();
+    bench_piecewise_take(bencher, packed, indices, false);
 }
 
 fn bench_piecewise_take(
