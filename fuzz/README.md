@@ -25,6 +25,13 @@ per registered scalar function, each with a plain Rust reference implementation,
 operands are generated with random encodings. `every_registered_scalar_fn_has_a_reference` and
 `every_scalar_op_kind_is_exercised` guarantee that every registered function is fuzzed.
 
+Aggregate functions follow the same pattern in `src/reference/aggregate_fns.rs`, with an
+`AggregateKind` per registered aggregate. Each aggregate runs through the generic accumulator,
+either over the whole array, over two batches, or over two accumulators whose partial states are
+merged, and is checked against its reference (or, for `uncompressed_size_in_bytes`, against the
+array's canonical form). `every_registered_aggregate_fn_has_a_reference` and
+`every_aggregate_kind_is_exercised` guarantee coverage.
+
 `REFERENCE_SMOKE_SEEDS=<n> cargo test --release -p vortex-fuzz --lib reference::tests::smoke`
 replays `n` deterministic inputs without libFuzzer, which is a quick way to look for mismatches.
 

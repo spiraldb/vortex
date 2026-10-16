@@ -8,6 +8,7 @@
 //! session is generated. Each generator returns the encoded array along with plain Rust
 //! [`Value`]s, and every operation is applied to both and compared.
 
+pub mod aggregate_fns;
 pub mod encodings;
 pub mod generate;
 pub mod ops;
@@ -98,6 +99,19 @@ pub fn run_array_reference(fuzz: FuzzArrayReference) -> VortexFuzzResult<bool> {
     for (step, action) in actions.into_iter().enumerate() {
         debug!(step, ?action);
         let label = format!("step {step}: {action:?}");
+        if let RefAction::Aggregate(op) = &action {
+            let actual = op
+                .vortex(&array, &mut ctx)
+                .map_err(|e| err(vortex_err!("{label}: {e}")))?;
+            op.check(&values, array.dtype(), &actual, &array, &mut ctx)
+                .map_err(|e| {
+                    err(vortex_err!(
+                        "{label}: {e}\narray:\n{}",
+                        array.display_tree()
+                    ))
+                })?;
+            continue;
+        }
         let expected = action.reference(&values, array.dtype());
         let actual = action
             .vortex(&array, &mut ctx)

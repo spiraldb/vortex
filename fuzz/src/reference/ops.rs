@@ -15,6 +15,8 @@ use vortex_array::dtype::DType;
 use vortex_error::VortexResult;
 use vortex_mask::Mask;
 
+use super::aggregate_fns::AggregateKind;
+use super::aggregate_fns::AggregateOp;
 use super::encodings::Case;
 use super::scalar_fns::Expected;
 use super::scalar_fns::ScalarOp;
@@ -29,6 +31,8 @@ pub enum RefAction {
     Filter(Vec<bool>),
     ScalarAt(Vec<usize>),
     Scalar(ScalarOp),
+    /// Checked by [`AggregateOp::check`] rather than by comparing outcomes.
+    Aggregate(AggregateOp),
 }
 
 /// The outcome of an action: a new array to keep operating on, a list of scalars, or (for the
@@ -47,6 +51,14 @@ impl RefAction {
         input: &Case,
         ctx: &mut ExecutionCtx,
     ) -> arbitrary::Result<Self> {
+        if u.ratio(1, 4)? {
+            let kinds = AggregateKind::iter().collect::<Vec<_>>();
+            for _ in 0..4 {
+                if let Ok(op) = u.choose(&kinds)?.generate(u, input, ctx) {
+                    return Ok(RefAction::Aggregate(op));
+                }
+            }
+        }
         if u.arbitrary()? {
             let kinds = ScalarOpKind::iter().collect::<Vec<_>>();
             for _ in 0..4 {
@@ -99,6 +111,7 @@ impl RefAction {
     /// Apply the action with the plain Rust reference.
     pub fn reference(&self, values: &[Value], dtype: &DType) -> Outcome<Vec<Value>> {
         match self {
+            RefAction::Aggregate(_) => Outcome::Scalars(vec![]),
             RefAction::Scalar(op) => match op.reference(values, dtype) {
                 Expected::Values(v) => Outcome::Array(v),
                 Expected::AnyOf(options) => Outcome::AnyOf(options),
@@ -132,6 +145,7 @@ impl RefAction {
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<Outcome<ArrayRef>> {
         Ok(match self {
+            RefAction::Aggregate(_) => Outcome::Scalars(vec![]),
             RefAction::Scalar(op) => Outcome::Array(op.vortex(array, array.dtype())?),
             RefAction::Slice(range) => Outcome::Array(array.slice(range.clone())?),
             RefAction::Take(indices) => {
