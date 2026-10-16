@@ -367,6 +367,46 @@ impl SegmentSource for CountingSegments {
 }
 
 #[tokio::test]
+async fn tiny_selection_shares_a_stored_segment() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let input = PrimitiveArray::from_iter(0_i32..1_048_576).into_array();
+    let dtype = input.dtype().clone();
+    let segments = Arc::new(TestSegments::default());
+    let (mut sequence, eof) = SequenceId::root().split();
+    let layout = FlatLayoutStrategy::default()
+        .write_stream(
+            ArrayContext::empty().into(),
+            Arc::<TestSegments>::clone(&segments),
+            SequentialStreamAdapter::new(
+                dtype.clone(),
+                stream::iter([Ok((sequence.advance(), input))]),
+            )
+            .sendable(),
+            eof,
+            &session,
+        )
+        .await?;
+    let counted = Arc::new(CountingSegments {
+        inner: segments,
+        reads: AtomicUsize::new(0),
+    });
+    let segments: Arc<dyn SegmentSource> = Arc::<CountingSegments>::clone(&counted);
+    // These rows share one stored segment but fall across the old worker-sized task boundary,
+    // even on one core. Selection-aware sizing lets one projection share its read.
+    let scan = builder(&session, &segments, &layout)?.with_row_indices(
+        StrictSortedBuffer::try_new(Buffer::from(vec![10, 350_000]))?,
+    );
+    let actual = collect(dtype, scan.into_stream()?).await?;
+    assert_arrays_eq!(
+        actual,
+        Buffer::from(vec![10_i32, 350_000]).into_array(),
+        &mut session.create_execution_ctx()
+    );
+    assert_eq!(counted.reads.load(Ordering::Relaxed), 1);
+    Ok(())
+}
+
+#[tokio::test]
 async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
     let session = new_session().with_tokio();
     const STORED_CHUNK_ROWS: usize = 70_000;

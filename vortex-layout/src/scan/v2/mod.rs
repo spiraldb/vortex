@@ -280,8 +280,12 @@ impl<A: 'static + Send> PreparedScan<A> {
             let rows = builder.row_range.clone().unwrap_or(0..row_count);
             let selected = builder.selection.row_count_in_range(&rows);
             let span = rows.end.saturating_sub(rows.start);
-            let sparse_target = (selected <= span / 16)
-                .then(|| span / (4 * get_available_parallelism().unwrap_or(1)) as u64);
+            let sparse_target = (selected <= span / 16).then(|| {
+                // Tiny selections cannot occupy the full worker budget. Larger aligned tasks
+                // let nearby selected rows share their stored segments.
+                let tasks = (4 * get_available_parallelism().unwrap_or(1)) as u64;
+                span / tasks.min(selected).max(1)
+            });
             rows_per_chunk(row_count, &file.locations, sparse_target)
         } else {
             MAX_ROWS_PER_CHUNK
