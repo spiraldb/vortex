@@ -30,6 +30,7 @@ use vortex_array::expr::gt;
 use vortex_array::expr::lit;
 use vortex_array::expr::pack;
 use vortex_array::expr::root;
+use vortex_array::flatbuffers::WriteFlatBufferExt;
 use vortex_array::validity::Validity;
 use vortex_buffer::Alignment;
 use vortex_buffer::Buffer;
@@ -40,14 +41,20 @@ use vortex_io::session::RuntimeSessionExt;
 use vortex_scan::selection::Selection;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
+use vortex_session::registry::ReadContext;
 
 use super::Executor;
 use super::ScanFile;
 use super::select_supported;
+use crate::LayoutChildren;
+use crate::LayoutContext;
+use crate::LayoutEncodingRef;
 use crate::LayoutId;
 use crate::LayoutRef;
 use crate::LayoutStrategy;
+use crate::layout_from_flatbuffer_with_options;
 use crate::layouts::chunked::Chunked;
+use crate::layouts::chunked::ChunkedLayout;
 use crate::layouts::chunked::writer::ChunkedLayoutStrategy;
 use crate::layouts::dict::DictLayout;
 use crate::layouts::flat::writer::FlatLayoutStrategy;
@@ -446,6 +453,97 @@ async fn support_checks_only_selected_chunks_without_caching_partial_answers(
         assert_eq!(file.supports_scan(true, &selection, None)?, supported);
     }
     assert!(!file.supports_scan(true, &Selection::All, None)?);
+    Ok(())
+}
+
+#[derive(Clone, Debug)]
+struct CountedLayoutChildren {
+    inner: Arc<dyn LayoutChildren>,
+    materialized: Arc<AtomicUsize>,
+    encoding_hints: bool,
+}
+
+impl LayoutChildren for CountedLayoutChildren {
+    fn to_arc(&self) -> Arc<dyn LayoutChildren> {
+        Arc::new(self.clone())
+    }
+
+    fn child(&self, index: usize, dtype: &DType) -> VortexResult<LayoutRef> {
+        self.materialized.fetch_add(1, Ordering::Relaxed);
+        self.inner.child(index, dtype)
+    }
+
+    fn child_row_count(&self, index: usize) -> u64 {
+        self.inner.child_row_count(index)
+    }
+
+    fn nchildren(&self) -> usize {
+        self.inner.nchildren()
+    }
+
+    fn child_encoding(&self, index: usize) -> Option<LayoutEncodingRef> {
+        self.encoding_hints
+            .then(|| self.inner.child_encoding(index))
+            .flatten()
+    }
+}
+
+#[rstest]
+#[tokio::test]
+async fn support_checks_flat_tags_without_materializing_chunks(
+    #[values(false, true)] encoding_hints: bool,
+    #[values(false, true)] unsupported: bool,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (_, layout) = write(&session, chunked_flat().as_ref()).await?;
+    let mut children = layout.children()?;
+    if unsupported {
+        children[1] = new_foreign_layout(
+            LayoutId::new("test.unsupported"),
+            layout.dtype().clone(),
+            CHUNK_ROWS as u64,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+    }
+    let layout = layout
+        .as_::<Chunked>()
+        .with_children(children)
+        .into_layout();
+    let context = LayoutContext::default();
+    let bytes = layout
+        .flatbuffer_writer(&context)
+        .write_flatbuffer_bytes()?;
+    let viewed = layout_from_flatbuffer_with_options(
+        bytes,
+        layout.dtype(),
+        &ReadContext::new(context.to_ids()),
+        &ReadContext::new([]),
+        &session,
+        true,
+    )?;
+    let materialized = Arc::new(AtomicUsize::new(0));
+    let counted = ChunkedLayout::new(
+        viewed.row_count(),
+        viewed.dtype().clone(),
+        Arc::new(CountedLayoutChildren {
+            inner: Arc::clone(viewed.as_::<Chunked>().children()),
+            materialized: Arc::clone(&materialized),
+            encoding_hints,
+        }),
+    )
+    .into_layout();
+    assert_eq!(super::supports_layout(&counted, true)?, !unsupported);
+    assert_eq!(
+        materialized.load(Ordering::Relaxed),
+        match (encoding_hints, unsupported) {
+            (true, false) => 0,
+            (true, true) => 1,
+            (false, false) => CHUNKS,
+            (false, true) => 2,
+        }
+    );
     Ok(())
 }
 

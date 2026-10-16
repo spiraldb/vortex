@@ -17,6 +17,7 @@ use vortex_session::VortexSession;
 use vortex_session::registry::ReadContext;
 
 use crate::LayoutBuildContext;
+use crate::LayoutEncodingRef;
 use crate::LayoutRef;
 use crate::flatbuffers::layout as fbl;
 use crate::layouts::foreign::new_foreign_layout;
@@ -35,6 +36,14 @@ pub trait LayoutChildren: 'static + Send + Sync {
     fn child_row_count(&self, idx: usize) -> u64;
 
     fn nchildren(&self) -> usize;
+
+    /// Returns the child's registered encoding without materializing it, when available.
+    ///
+    /// This identifies the implementation, not whether its metadata is valid. Implementations
+    /// that cannot answer without materializing the child should return `None`.
+    fn child_encoding(&self, _idx: usize) -> Option<LayoutEncodingRef> {
+        None
+    }
 
     /// Returns `true` if the child at `idx` is known — without materializing it — to be
     /// indivisible: it registers no split boundaries strictly inside its row range (see
@@ -70,6 +79,10 @@ impl LayoutChildren for Arc<dyn LayoutChildren> {
 
     fn nchildren(&self) -> usize {
         self.as_ref().nchildren()
+    }
+
+    fn child_encoding(&self, idx: usize) -> Option<LayoutEncodingRef> {
+        self.as_ref().child_encoding(idx)
     }
 
     fn child_is_indivisible(&self, idx: usize) -> bool {
@@ -303,6 +316,20 @@ impl LayoutChildren for ViewedLayoutChildren {
 
     fn nchildren(&self) -> usize {
         self.cache.len()
+    }
+
+    fn child_encoding(&self, idx: usize) -> Option<LayoutEncodingRef> {
+        if idx >= self.nchildren() {
+            return None;
+        }
+        // A materialized child may predate a registry replacement. Let callers inspect that
+        // child rather than treating the current registry entry as its implementation.
+        if self.cache[idx].get().is_some() {
+            return None;
+        }
+        let child = self.flatbuffer().children()?.get(idx);
+        let encoding = self.layout_read_ctx.resolve(child.encoding())?;
+        self.layouts.get(&encoding)
     }
 
     fn child_is_indivisible(&self, idx: usize) -> bool {

@@ -293,6 +293,25 @@ fn supports_layout(layout: &LayoutRef, identity: bool) -> VortexResult<bool> {
             None => Ok(false),
         };
     }
+    if let Some(chunked) = layout.as_opt::<Chunked>() {
+        for index in 0..chunked.nchildren() {
+            // Lists and dictionaries need a support check over a different row domain. Flat
+            // chunks are supported by their registered vtable alone; keep their metadata lazy
+            // until the selection actually reaches them.
+            if chunked
+                .children()
+                .child_encoding(index)
+                .is_some_and(|encoding| encoding.is::<Flat>())
+            {
+                continue;
+            }
+            let child = chunked.children().child(index, chunked.dtype())?;
+            if !supports_layout(&child, identity)? {
+                return Ok(false);
+            }
+        }
+        return Ok(true);
+    }
     for child in layout.children()? {
         if !supports_layout(&child, identity)? {
             return Ok(false);
