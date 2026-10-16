@@ -706,6 +706,20 @@ mod tests {
         );
     }
 
+    /// Nulls sort first, so a null after a valid value makes a bool array unsorted.
+    #[rstest]
+    #[case::null_after_value([Some(true), None, Some(true)], false)]
+    #[case::nulls_first([None, Some(false), Some(true)], true)]
+    fn test_bool_is_sorted_with_nulls(
+        #[case] values: [Option<bool>; 3],
+        #[case] expected: bool,
+    ) -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let array = BoolArray::from_iter(values).into_array();
+        assert_eq!(is_sorted(&array, &mut ctx)?, expected);
+        Ok(())
+    }
+
     // Tests migrated from arrays/decimal/compute/is_sorted.rs
     #[test]
     fn test_decimal_is_sorted() -> VortexResult<()> {
