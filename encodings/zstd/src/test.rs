@@ -3,6 +3,7 @@
 #![expect(clippy::cast_possible_truncation)]
 
 use rstest::rstest;
+use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
@@ -576,4 +577,25 @@ fn test_zstd_rejects_mismatched_frame_content_size() {
     )
     .unwrap_err();
     assert!(error.to_string().contains("metadata declares"));
+}
+
+/// Zstd's dictionary trainer reads out of bounds when the samples it trains on hold fewer than
+/// 8 bytes, so tiny inputs must be compressed without a dictionary.
+#[rstest]
+#[case::primitive(PrimitiveArray::from_iter(0u8..8).into_array())]
+#[case::var_bin_view(
+    VarBinViewArray::from_iter_str(["a", "b", "c", "d", "e", "f", "g", "h"]).into_array()
+)]
+fn test_zstd_tiny_frames_skip_dictionary(#[case] array: ArrayRef) -> VortexResult<()> {
+    let mut ctx = array_session().create_execution_ctx();
+    let compressed = Zstd::try_new(
+        array.dtype().clone(),
+        ZstdData::from_array(array.clone(), 3, 1, &mut ctx)?,
+        Validity::NonNullable,
+    )?;
+    assert!(compressed.dictionary.is_none());
+
+    let decompressed = Zstd::decompress(&compressed, &mut ctx)?;
+    assert_arrays_eq!(decompressed, array, &mut ctx);
+    Ok(())
 }

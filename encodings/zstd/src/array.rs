@@ -72,6 +72,11 @@ use crate::validate_frame_content_size;
 
 // Zstd doesn't support training dictionaries on very few samples.
 const MIN_SAMPLES_FOR_DICTIONARY: usize = 8;
+// Zstd's FASTCOVER trainer only checks the total sample size, but trains on the first 3/4 of the
+// samples, and reads out of bounds when those hold fewer than 8 bytes (zstd 1.5.7). A dictionary
+// is useless for so little data anyway, so require as many training bytes as the smallest
+// dictionary.
+const MIN_TRAINING_BYTES_FOR_DICTIONARY: usize = 256;
 type ViewLen = u32;
 
 // Overall approach here:
@@ -1041,8 +1046,10 @@ impl ZstdData {
         }
         debug_assert_eq!(sample_sizes.iter().sum::<usize>(), value_bytes.len());
 
+        let training_bytes: usize = sample_sizes[..sample_sizes.len() * 3 / 4].iter().sum();
         let (dictionary, mut compressor) = if !use_dictionary
             || sample_sizes.len() < MIN_SAMPLES_FOR_DICTIONARY
+            || training_bytes < MIN_TRAINING_BYTES_FOR_DICTIONARY
         {
             // no dictionary
             (None, zstd::bulk::Compressor::new(level)?)
