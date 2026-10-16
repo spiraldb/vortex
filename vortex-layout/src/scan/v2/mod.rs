@@ -289,7 +289,7 @@ impl<A: 'static + Send> PreparedScan<A> {
         let splits = row_chunks(builder.row_range.unwrap_or(0..row_count), chunk_rows);
         let io = Arc::new(SegmentScanIo::new(
             file.segments,
-            segment_ranges(&file.locations),
+            segment_ranges(Arc::clone(&file.locations)),
         ));
         Ok(Self {
             session: builder.session.clone(),
