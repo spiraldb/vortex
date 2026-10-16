@@ -135,6 +135,20 @@ mod tests {
         )
     }
 
+    #[rstest::rstest]
+    fn empty_slice_is_canonical(
+        #[values(Nullability::NonNullable, Nullability::Nullable)] nullability: Nullability,
+    ) -> VortexResult<()> {
+        let storage = core_storage(4).cast(DType::Variant(nullability))?;
+        let empty = VariantArray::try_new(storage, None)?
+            .into_array()
+            .slice(2..2)?;
+
+        assert_eq!(empty.dtype(), &DType::Variant(nullability));
+        assert_eq!(execute_variant(empty)?.len(), 0);
+        Ok(())
+    }
+
     fn execute_variant(array: ArrayRef) -> VortexResult<VariantArray> {
         let mut ctx = array_session().create_execution_ctx();
         let Canonical::Variant(variant) = array.execute::<Canonical>(&mut ctx)? else {

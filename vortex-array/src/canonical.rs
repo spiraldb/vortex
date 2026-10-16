@@ -23,6 +23,7 @@ use crate::array::VTable;
 use crate::array::child_to_validity;
 use crate::arrays::Bool;
 use crate::arrays::BoolArray;
+use crate::arrays::ConstantArray;
 use crate::arrays::Decimal;
 use crate::arrays::DecimalArray;
 use crate::arrays::Extension;
@@ -65,6 +66,7 @@ use crate::dtype::PType;
 use crate::match_each_decimal_value_type;
 use crate::match_each_native_ptype;
 use crate::matcher::Matcher;
+use crate::scalar::Scalar;
 use crate::validity::Validity;
 
 /// An enum capturing the default uncompressed encodings for each [Vortex type](DType).
@@ -255,8 +257,16 @@ impl Canonical {
             DType::Union(variants, nullability) => {
                 Canonical::Union(UnionArray::empty(variants.clone(), *nullability))
             }
-            DType::Variant(_) => {
-                vortex_panic!(InvalidArgument: "Canonical empty is not supported for Variant")
+            DType::Variant(n) => {
+                // Any variant-typed scalar works as the storage value of an empty array.
+                let scalar = match n {
+                    Nullability::NonNullable => Scalar::variant(Scalar::null(DType::Null)),
+                    Nullability::Nullable => Scalar::null(dtype.clone()),
+                };
+                Canonical::Variant(
+                    VariantArray::try_new(ConstantArray::new(scalar, 0).into_array(), None)
+                        .vortex_expect("empty variant storage has a variant dtype"),
+                )
             }
             DType::Extension(ext_dtype) => Canonical::Extension(ExtensionArray::new(
                 ext_dtype.clone(),
