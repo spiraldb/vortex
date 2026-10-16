@@ -2010,32 +2010,14 @@ async fn test_writer_with_complex_types() -> VortexResult<()> {
     Ok(())
 }
 
-/// Write `array` with list decomposition forced on (through the full compress/zone pipeline) and
-/// read the whole thing back.
+/// Write `array` through the full compress/zone pipeline and read the whole thing back. `SESSION`
+/// enables the `vortex.list` layout, so lists are decomposed.
 async fn write_read_roundtrip(array: ArrayRef) -> VortexResult<ArrayRef> {
-    write_read_roundtrip_with_layout(array, true).await
-}
-
-async fn write_read_roundtrip_with_layout(
-    array: ArrayRef,
-    use_list_layout: bool,
-) -> VortexResult<ArrayRef> {
-    let strategy = crate::strategy::WriteStrategyBuilder::from_session(&SESSION)
-        .with_list_layout()
-        .build();
     let mut buf = ByteBufferMut::empty();
-    if use_list_layout {
-        SESSION
-            .write_options()
-            .with_strategy(strategy)
-            .write(&mut buf, array.to_array_stream())
-            .await?;
-    } else {
-        SESSION
-            .write_options()
-            .write(&mut buf, array.to_array_stream())
-            .await?;
-    }
+    SESSION
+        .write_options()
+        .write(&mut buf, array.to_array_stream())
+        .await?;
     SESSION
         .open_options()
         .open_buffer(buf)?
@@ -2110,30 +2092,28 @@ fn map_array_from_rows(rows: &[MapRowFixture<'_>], keys_sorted: bool) -> VortexR
     Ok(builder.finish_into_map().into_array())
 }
 
-/// A struct containing a Map column crosses both the default flat writer and the list layout
-/// strategy without changing map nullability, empty rows, duplicate keys, or scalar values.
+/// A struct containing a Map column crosses the list layout strategy without changing map
+/// nullability, empty rows, duplicate keys, or scalar values.
 #[tokio::test]
 #[cfg_attr(miri, ignore)]
 async fn struct_with_map_column_roundtrip() -> VortexResult<()> {
-    for use_list_layout in [false, true] {
-        let maps = map_array_from_rows(
-            &[
-                Some(vec![(1, Some("one")), (2, None)]),
-                None,
-                Some(vec![]),
-                Some(vec![(1, Some("dup-old")), (1, Some("dup-new"))]),
-            ],
-            false,
-        )?;
-        let st = StructArray::from_fields(&[
-            ("id", buffer![10i32, 20, 30, 40].into_array()),
-            ("attrs", maps),
-        ])?
-        .into_array();
+    let maps = map_array_from_rows(
+        &[
+            Some(vec![(1, Some("one")), (2, None)]),
+            None,
+            Some(vec![]),
+            Some(vec![(1, Some("dup-old")), (1, Some("dup-new"))]),
+        ],
+        false,
+    )?;
+    let st = StructArray::from_fields(&[
+        ("id", buffer![10i32, 20, 30, 40].into_array()),
+        ("attrs", maps),
+    ])?
+    .into_array();
 
-        let result = write_read_roundtrip_with_layout(st.clone(), use_list_layout).await?;
-        assert_arrays_eq!(result, st, &mut SESSION.create_execution_ctx());
-    }
+    let result = write_read_roundtrip(st.clone()).await?;
+    assert_arrays_eq!(result, st, &mut SESSION.create_execution_ctx());
 
     Ok(())
 }
