@@ -109,7 +109,8 @@ fn runend_encode_primitive<T: NativePType>(elements: &[T]) -> (Buffer<u64>, Buff
     let mut prev = elements[0];
     let mut end = 1;
     for &e in elements.iter().skip(1) {
-        if e != prev {
+        // Bitwise float equality, so that runs never merge -0.0 with 0.0.
+        if !e.is_eq(prev) {
             ends.push(end);
             values.push(prev);
         }
@@ -149,7 +150,12 @@ fn runend_encode_nullable_primitive<T: NativePType>(
         .map(|(&e, is_valid)| is_valid.then_some(e))
         .skip(1)
     {
-        if e != prev {
+        let same = match (e, prev) {
+            (Some(e), Some(prev)) => e.is_eq(prev),
+            (None, None) => true,
+            _ => false,
+        };
+        if !same {
             ends.push(end);
             match prev {
                 None => {
@@ -375,6 +381,7 @@ mod tests {
     use std::sync::LazyLock;
 
     use rstest::rstest;
+    use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::assert_arrays_eq;
@@ -392,6 +399,25 @@ mod tests {
         crate::initialize(&session);
         session
     });
+
+    #[rstest]
+    #[case::non_nullable(PrimitiveArray::from_iter([-0.0f32, 0.0, 0.0, -0.0]))]
+    #[case::nullable(PrimitiveArray::from_option_iter([Some(-0.0f32), Some(0.0), None, Some(-0.0)]))]
+    fn encode_keeps_signed_zeros(#[case] arr: PrimitiveArray) -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let encoded = crate::RunEnd::encode(arr.clone().into_array(), &mut ctx)?;
+        let decoded = encoded.into_array().execute::<PrimitiveArray>(&mut ctx)?;
+
+        // Compare bits: `-0.0 == 0.0` as floats, but the sign must round-trip.
+        let bits = |a: &PrimitiveArray| {
+            a.as_slice::<f32>()
+                .iter()
+                .map(|v| v.to_bits())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(bits(&decoded), bits(&arr));
+        Ok(())
+    }
 
     #[test]
     fn encode() -> VortexResult<()> {
