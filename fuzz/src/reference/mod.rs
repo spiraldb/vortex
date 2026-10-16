@@ -11,6 +11,7 @@
 pub mod encodings;
 pub mod generate;
 pub mod ops;
+pub mod scalar_fns;
 pub mod value;
 
 use arbitrary::Arbitrary;
@@ -49,18 +50,30 @@ impl<'a> Arbitrary<'a> for FuzzArrayReference {
         let mut ctx = SESSION.create_execution_ctx();
         let case = kind.generate(u, None, Limits::default(), &mut ctx)?;
 
-        let mut len = case.values.len();
         let n_actions = u.int_in_range(0..=4)?;
         let mut actions = Vec::with_capacity(n_actions);
+        let mut current = case.clone();
         for _ in 0..n_actions {
-            let action = RefAction::arbitrary(u, len)?;
-            len = match &action {
-                RefAction::Slice(r) => r.len(),
-                RefAction::Take(i) => i.len(),
-                RefAction::Filter(m) => m.iter().filter(|b| **b).count(),
-                RefAction::ScalarAt(_) => len,
-            };
-            actions.push(action);
+            let action = RefAction::arbitrary(u, &current, &mut ctx)?;
+            match action.reference(&current.values, &current.dtype) {
+                Outcome::Array(values) => {
+                    let Ok(Outcome::Array(array)) = action.vortex(&current.array, &mut ctx) else {
+                        // Vortex rejects the action at construction; keep it as the last step.
+                        actions.push(action);
+                        break;
+                    };
+                    current.dtype = array.dtype().clone();
+                    current.array = array;
+                    current.values = values;
+                    actions.push(action);
+                }
+                Outcome::Scalars(_) => actions.push(action),
+                Outcome::AnyOf(_) | Outcome::Error(_) => {
+                    // Nothing follows an action that is expected to fail.
+                    actions.push(action);
+                    break;
+                }
+            }
         }
         Ok(Self { case, actions })
     }
@@ -85,14 +98,47 @@ pub fn run_array_reference(fuzz: FuzzArrayReference) -> VortexFuzzResult<bool> {
     for (step, action) in actions.into_iter().enumerate() {
         debug!(step, ?action);
         let label = format!("step {step}: {action:?}");
-        let actual = action.vortex(&array, &mut ctx).map_err(err)?;
-        match (action.reference(&values), actual) {
-            (Outcome::Array(expected), Outcome::Array(actual)) => {
-                check_array(&actual, &expected, &label, &mut ctx).map_err(err)?;
-                array = actual;
+        let expected = action.reference(&values, array.dtype());
+        let actual = action
+            .vortex(&array, &mut ctx)
+            .and_then(|outcome| match outcome {
+                // Execute lazily built arrays so that execution errors surface here.
+                Outcome::Array(a) => decode(&a, &mut ctx).map(|v| (Some(a), v)),
+                Outcome::Scalars(v) => Ok((None, v)),
+                Outcome::AnyOf(_) | Outcome::Error(_) => {
+                    unreachable!("only the reference produces these outcomes")
+                }
+            });
+        match (expected, actual) {
+            (Outcome::Error(_), Err(_)) => return Ok(true),
+            (Outcome::Error(reason), Ok((actual_array, _))) => {
+                return Err(err(vortex_err!(
+                    "{label}: expected an error ({reason}) but Vortex succeeded\narray:\n{}",
+                    actual_array
+                        .map(|a| a.display_tree().to_string())
+                        .unwrap_or_default()
+                )));
+            }
+            (_, Err(e)) => return Err(err(vortex_err!("{label}: {e}"))),
+            (Outcome::Array(expected), Ok((Some(actual_array), actual))) => {
+                check_values(&actual, &expected, &label)
+                    .map_err(|e| vortex_err!("{e}\narray:\n{}", actual_array.display_tree()))
+                    .map_err(err)?;
+                array = actual_array;
                 values = expected;
             }
-            (Outcome::Scalars(expected), Outcome::Scalars(actual)) => {
+            (Outcome::AnyOf(options), Ok((_, actual))) => {
+                if !options
+                    .iter()
+                    .any(|o| check_values(&actual, o, &label).is_ok())
+                {
+                    return Err(err(vortex_err!(
+                        "{label}: result matches none of the acceptable outputs"
+                    )));
+                }
+                return Ok(true);
+            }
+            (Outcome::Scalars(expected), Ok((None, actual))) => {
                 check_values(&actual, &expected, &label).map_err(err)?;
             }
             _ => unreachable!("reference and vortex outcomes always have the same shape"),
@@ -143,6 +189,17 @@ pub fn check_values(actual: &[Value], expected: &[Value], label: &str) -> Vortex
 pub(crate) mod tests {
     use super::*;
 
+    pub(crate) fn panic_message(e: &Box<dyn std::any::Any + Send>) -> String {
+        e.downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| e.downcast_ref::<&str>().copied())
+            .unwrap_or_default()
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .to_string()
+    }
+
     /// Deterministic pseudo-random bytes so the generators can be driven without libFuzzer.
     pub(crate) fn test_bytes(seed: u64) -> Vec<u8> {
         let mut state = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
@@ -167,8 +224,19 @@ pub(crate) mod tests {
             .unwrap_or(500);
         for seed in 0..seeds {
             let data = test_bytes(seed);
-            let Ok(input) = FuzzArrayReference::arbitrary(&mut Unstructured::new(&data)) else {
-                continue;
+            let generated = std::panic::catch_unwind(|| {
+                FuzzArrayReference::arbitrary(&mut Unstructured::new(&data))
+            });
+            let input = match generated {
+                Ok(Ok(input)) => input,
+                Ok(Err(_)) => continue,
+                Err(e) => {
+                    failures.push(format!(
+                        "seed {seed}: generation panicked: {}",
+                        panic_message(&e)
+                    ));
+                    continue;
+                }
             };
             let kind = input.case.kind;
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -179,13 +247,7 @@ pub(crate) mod tests {
                 Ok(Err(e)) => failures.push(format!("seed {seed} {kind:?}: {e}")),
                 Err(e) => failures.push(format!(
                     "seed {seed} {kind:?}: panicked: {}",
-                    e.downcast_ref::<String>()
-                        .map(String::as_str)
-                        .or_else(|| e.downcast_ref::<&str>().copied())
-                        .unwrap_or_default()
-                        .lines()
-                        .next()
-                        .unwrap_or_default()
+                    panic_message(&e)
                 )),
             }
         }

@@ -20,6 +20,14 @@ encoding registered in the fuzz session has no generator, and
 disagrees with its own reference values. When adding an encoding, add a variant to
 `EncodingKind`.
 
+Scalar functions are covered the same way. `src/reference/scalar_fns.rs` has a `ScalarOpKind`
+per registered scalar function, each with a plain Rust reference implementation, and their
+operands are generated with random encodings. `every_registered_scalar_fn_has_a_reference` and
+`every_scalar_op_kind_is_exercised` guarantee that every registered function is fuzzed.
+
+`REFERENCE_SMOKE_SEEDS=<n> cargo test --release -p vortex-fuzz --lib reference::tests::smoke`
+replays `n` deterministic inputs without libFuzzer, which is a quick way to look for mismatches.
+
 ## Reproduce crash from CI
 
 In the case of a crash in the nightly run, you can download the crash artifact and run `cargo-fuzz` with the exact same

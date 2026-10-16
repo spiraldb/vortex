@@ -161,12 +161,18 @@ pub enum EncodingKind {
 }
 
 /// An encoded array together with its reference values.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Case {
     pub kind: EncodingKind,
     pub dtype: DType,
     pub values: Vec<Value>,
     pub array: ArrayRef,
+}
+
+impl std::fmt::Debug for Case {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}<{}; {}>", self.kind, self.dtype, self.values.len())
+    }
 }
 
 /// Bounds on generated arrays.
@@ -258,7 +264,7 @@ impl EncodingKind {
             Struct => matches!(dtype, DType::Struct(..)),
             Union => matches!(dtype, DType::Union(..)),
             Variant => matches!(dtype, DType::Variant(_)),
-            Extension | DateTimeParts => matches!(dtype, DType::Extension(_)),
+            Extension | DateTimeParts => *dtype == timestamp_dtype(dtype.nullability()),
             Chunked | Constant | Dict | Slice | Filter => leaf,
             // Interleave execution only implements bool and primitive values.
             Interleave => matches!(dtype, DType::Bool(_) | DType::Primitive(..)),
@@ -535,12 +541,13 @@ impl EncodingKind {
             Extension | DateTimeParts => {
                 let storage_dtype = DType::Primitive(PType::I64, dtype.nullability());
                 // Timestamps must stay within the range representable by the Timestamp type.
-                const MIN_MICROS: i128 = -377_705_023_200_000_000;
-                const MAX_MICROS: i128 = 253_402_207_199_999_999;
                 let values = gen_values(u, &storage_dtype, opts)?
                     .into_iter()
                     .map(|v| match v {
-                        Value::Int(i) => Value::Int(i.clamp(MIN_MICROS, MAX_MICROS)),
+                        Value::Int(i) => Value::Int(i.clamp(
+                            super::generate::MIN_TIMESTAMP_MICROS,
+                            super::generate::MAX_TIMESTAMP_MICROS,
+                        )),
                         v => v,
                     })
                     .collect::<Vec<_>>();
@@ -948,6 +955,53 @@ pub fn child_case(
     })
 }
 
+/// Generate an operand of exactly `len` rows: either a constant or an array in a random encoding.
+pub fn operand(
+    u: &mut Unstructured<'_>,
+    dtype: &DType,
+    len: usize,
+    ctx: &mut ExecutionCtx,
+) -> arbitrary::Result<Case> {
+    if !buildable(dtype) {
+        return Err(IncorrectFormat);
+    }
+    if u.ratio(1, 3)? {
+        let value = if dtype.is_nullable() && u.ratio(1, 8)? {
+            Value::Null
+        } else {
+            super::generate::gen_one(u, dtype, Shape::Random, 0)?
+        };
+        let scalar = to_scalar(dtype, &value).map_err(|_| IncorrectFormat)?;
+        return Ok(Case {
+            kind: EncodingKind::Constant,
+            dtype: dtype.clone(),
+            values: vec![value; len],
+            array: ConstantArray::new(scalar, len).into_array(),
+        });
+    }
+    let limits = Limits {
+        max_len: len,
+        depth: 1,
+    };
+    let mut case = child_case(u, dtype, limits, ctx)?;
+    if case.values.len() < len {
+        let mut opts = GenOptions::arbitrary(u, dtype.nullability(), 0)?;
+        opts.len = len;
+        let values = if is_leaf(dtype) {
+            gen_values(u, dtype, opts)?
+        } else {
+            gen_nested(u, dtype, len, limits, ctx)?
+        };
+        case.array = to_array(dtype, &values, ctx).map_err(|_| IncorrectFormat)?;
+        case.kind = canonical_kind(dtype);
+        case.values = values;
+    } else if case.values.len() > len {
+        case.array = case.array.slice(0..len).map_err(|_| IncorrectFormat)?;
+        case.values.truncate(len);
+    }
+    Ok(case)
+}
+
 fn canonical_kind(dtype: &DType) -> EncodingKind {
     match dtype {
         DType::Null => EncodingKind::Null,
@@ -1083,6 +1137,18 @@ fn small_limits(limits: Limits, max_len: usize) -> Limits {
     Limits {
         max_len: limits.max_len.min(max_len),
         ..limits
+    }
+}
+
+/// Whether canonical arrays of `dtype` can be built from scalars. Array builders do not support
+/// union and variant values.
+pub fn buildable(dtype: &DType) -> bool {
+    match dtype {
+        DType::Union(..) | DType::Variant(_) => false,
+        DType::List(e, _) | DType::FixedSizeList(e, ..) => buildable(e),
+        DType::Struct(fields, _) => fields.fields().all(|f| buildable(&f)),
+        DType::Map(m, _) => buildable(&m.key_dtype()) && buildable(&m.value_dtype()),
+        _ => true,
     }
 }
 

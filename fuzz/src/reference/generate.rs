@@ -14,6 +14,10 @@ use vortex_array::dtype::half::f16;
 
 use super::value::Value;
 
+/// The range of the Timestamp extension type, in microseconds.
+pub const MIN_TIMESTAMP_MICROS: i128 = -377_705_023_200_000_000;
+pub const MAX_TIMESTAMP_MICROS: i128 = 253_402_207_199_999_999;
+
 /// Maximum number of rows generated for a single reference array.
 pub const MAX_LEN: usize = 256;
 
@@ -180,7 +184,8 @@ pub fn gen_one(
         }
         DType::Primitive(p, _) => Value::Float(gen_float(u, *p, shape, idx)?),
         DType::Decimal(d, _) => {
-            let max = 10i128.pow(u32::from(d.precision())) - 1;
+            // Wider decimals (e.g. sum results) still get values that fit in an i128.
+            let max = 10i128.pow(u32::from(d.precision().min(38))) - 1;
             Value::Decimal(clamp_pick(u, -max, max)?)
         }
         DType::Utf8(_) => Value::Bytes(gen_string(u)?.into_bytes()),
@@ -192,7 +197,11 @@ pub fn gen_one(
                     .collect::<arbitrary::Result<_>>()?,
             )
         }
-        DType::Extension(ext) => gen_one(u, ext.storage_dtype(), shape, idx)?,
+        // The only generated extension type is a microsecond timestamp.
+        DType::Extension(ext) => match gen_one(u, ext.storage_dtype(), shape, idx)? {
+            Value::Int(v) => Value::Int(v.clamp(MIN_TIMESTAMP_MICROS, MAX_TIMESTAMP_MICROS)),
+            v => v,
+        },
         _ => Value::Null,
     })
 }

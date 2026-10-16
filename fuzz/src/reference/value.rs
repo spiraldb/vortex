@@ -133,11 +133,14 @@ fn discriminant(v: &Value) -> u8 {
     }
 }
 
-/// Bitwise equality: `NaN == NaN` and `-0.0 != 0.0`, since encodings must round-trip exactly.
+/// Bitwise float equality (`-0.0 != 0.0`, since encodings must round-trip exactly), except that
+/// all NaNs are equal: arithmetic does not specify which NaN payload it produces.
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Value::Float(a), Value::Float(b)) => a.to_bits() == b.to_bits(),
+            (Value::Float(a), Value::Float(b)) => {
+                a.to_bits() == b.to_bits() || (a.is_nan() && b.is_nan())
+            }
             _ => self.total_cmp(other).is_eq(),
         }
     }
@@ -441,6 +444,15 @@ fn to_scalar_value(dtype: &DType, value: &Value) -> VortexResult<Option<ScalarVa
             ScalarValue::Tuple(
                 vs.iter()
                     .map(|v| to_scalar_value(elem, v))
+                    .collect::<VortexResult<_>>()?,
+            )
+        }
+        (DType::Map(map, _), Value::Tuple(entries)) => {
+            let entry_dtype = map.entries_dtype();
+            ScalarValue::Tuple(
+                entries
+                    .iter()
+                    .map(|e| to_scalar_value(&entry_dtype, e))
                     .collect::<VortexResult<_>>()?,
             )
         }
