@@ -211,6 +211,18 @@ mod tests {
     }
 
     #[test]
+    fn last_accumulates_empty_non_nullable_batch() -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let array = PrimitiveArray::new(buffer![10i32, 20], Validity::NonNullable).into_array();
+        let mut acc = Accumulator::try_new(Last, EmptyOptions, array.dtype().clone())?;
+
+        acc.accumulate(&array.slice(0..2)?, &mut ctx)?;
+        acc.accumulate(&array.slice(2..2)?, &mut ctx)?;
+        assert_eq!(acc.finish()?, Scalar::primitive(20i32, Nullable));
+        Ok(())
+    }
+
+    #[test]
     fn last_constant() -> VortexResult<()> {
         let array = ConstantArray::new(42i32, 10).into_array();
         let mut ctx = array_session().create_execution_ctx();
