@@ -150,6 +150,8 @@ def classify(returncode: int, reason: str | None, pid: int, stderr_tail: str) ->
         return "oom-killed"
     if returncode == 0:
         return "ok"
+    if "Resources exhausted" in stderr_tail:
+        return "resources-exhausted"
     if "memory allocation of" in stderr_tail or "Out of Memory Error" in stderr_tail:
         return "alloc-failed"
     if returncode == -signal.SIGKILL and kernel_oom_killed(pid):
@@ -267,9 +269,9 @@ def cmd_run_queries(args: argparse.Namespace) -> int:
                 int(args.min_available_gib * GIB),
             )
             elapsed = time.monotonic() - start
-            stderr_tail = tail(stem.with_suffix(".log"))
-            status = classify(returncode, reason, pid, stderr_tail)
-            print(stderr_tail)
+            # Classify on a long tail: a backtrace can push the error message far from the end.
+            status = classify(returncode, reason, pid, tail(stem.with_suffix(".log"), 400))
+            print(tail(stem.with_suffix(".log")))
             print("::endgroup::", flush=True)
 
             record = {
