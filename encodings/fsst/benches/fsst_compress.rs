@@ -31,7 +31,6 @@ use vortex_array::scalar::Scalar;
 use vortex_array::scalar_fn::fns::operators::Operator;
 use vortex_array::scalar_fn::session::ScalarFnSession;
 use vortex_array::session::ArraySession;
-use vortex_array::stats::session::StatsSession;
 use vortex_fsst::fsst_compress;
 use vortex_fsst::fsst_train_compressor;
 use vortex_session::VortexSession;
@@ -51,8 +50,7 @@ static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
         .with::<DTypeSession>()
         .with::<ScalarFnSession>()
         .with::<AggregateFnSession>()
-        .with::<MemorySession>()
-        .with::<StatsSession>();
+        .with::<MemorySession>();
     vortex_fsst::initialize(&session);
     session
 });

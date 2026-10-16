@@ -28,7 +28,6 @@ use vortex_array::memory::MemorySession;
 use vortex_array::optimizer::kernels::KernelSession;
 use vortex_array::scalar_fn::session::ScalarFnSession;
 use vortex_array::session::ArraySession;
-use vortex_array::stats::session::StatsSession;
 use vortex_btrblocks::BtrBlocksCompressorBuilder;
 use vortex_buffer::Buffer;
 use vortex_buffer::ByteBufferMut;
@@ -75,7 +74,6 @@ static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
         .with::<ScalarFnSession>()
         .with::<AggregateFnSession>()
         .with::<MemorySession>()
-        .with::<StatsSession>()
         .with::<LayoutSession>()
         .with::<RuntimeSession>()
         .with_tokio();

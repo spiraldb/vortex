@@ -31,7 +31,6 @@ use vortex_array::scalar_fn::unstable::row::RowVisitor;
 use vortex_array::scalar_fn::unstable::row::Utf8Column;
 use vortex_array::scalar_fn::unstable::row::execute_rows;
 use vortex_array::session::ArraySession;
-use vortex_array::stats::session::StatsSession;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_session::VortexSession;
@@ -53,7 +52,6 @@ static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
         .with::<ScalarFnSession>()
         .with::<AggregateFnSession>()
         .with::<MemorySession>()
-        .with::<StatsSession>()
 });
 
 const ROWS: usize = 1 << 14;

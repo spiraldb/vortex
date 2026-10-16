@@ -28,7 +28,6 @@ use vortex::array::memory::MemorySession;
 use vortex::array::optimizer::kernels::KernelSession;
 use vortex::array::scalar_fn::session::ScalarFnSession;
 use vortex::array::session::ArraySession;
-use vortex::array::stats::session::StatsSession;
 use vortex::dtype::DType;
 use vortex::dtype::Nullability;
 use vortex::encodings::fsst::FSST;
@@ -65,7 +64,6 @@ fn session_with_varbin_layout(layout: VarBinExportLayout) -> VortexSession {
         .with::<ScalarFnSession>()
         .with::<AggregateFnSession>()
         .with::<MemorySession>()
-        .with::<StatsSession>()
         .with_some(
             CudaSession::try_default()
                 .vortex_expect("failed to create CUDA session")

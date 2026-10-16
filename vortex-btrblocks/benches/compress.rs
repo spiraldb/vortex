@@ -25,7 +25,6 @@ mod benchmarks {
     use vortex_array::optimizer::kernels::KernelSession;
     use vortex_array::scalar_fn::session::ScalarFnSession;
     use vortex_array::session::ArraySession;
-    use vortex_array::stats::session::StatsSession;
     use vortex_btrblocks::BtrBlocksCompressorBuilder;
     use vortex_buffer::buffer_mut;
     use vortex_session::VortexSession;
@@ -39,7 +38,6 @@ mod benchmarks {
             .with::<ScalarFnSession>()
             .with::<AggregateFnSession>()
             .with::<MemorySession>()
-            .with::<StatsSession>()
     });
 
     fn make_clickbench_window_name() -> ArrayRef {

@@ -119,7 +119,6 @@ mod arrays {
     use vortex_array::optimizer::kernels::KernelSession;
     use vortex_array::scalar_fn::session::ScalarFnSession;
     use vortex_array::session::ArraySession;
-    use vortex_array::stats::session::StatsSession;
     use vortex_array::validity::Validity;
     use vortex_buffer::buffer;
     use vortex_decimal_byte_parts::_benchmarking::assemble_decimal;
@@ -139,7 +138,6 @@ mod arrays {
             .with::<ScalarFnSession>()
             .with::<AggregateFnSession>()
             .with::<MemorySession>()
-            .with::<StatsSession>()
     });
 
     #[divan::bench(args = cases())]

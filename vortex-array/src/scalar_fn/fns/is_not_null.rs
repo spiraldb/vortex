@@ -204,7 +204,6 @@ mod tests {
     use crate::expr::Expression;
     use crate::expr::and;
     use crate::expr::col;
-    use crate::expr::eq;
     use crate::expr::get_item;
     use crate::expr::is_not_null;
     use crate::expr::is_null;
@@ -214,17 +213,8 @@ mod tests {
     use crate::expr::root;
     use crate::expr::test_harness;
     use crate::scalar::Scalar;
-    use crate::scalar_fn::EmptyOptions;
-    use crate::scalar_fn::ScalarFnVTableExt;
-    use crate::scalar_fn::internal::row_count::RowCount;
-    use crate::stats::StatsSession;
-    use crate::stats::all_null;
-    use crate::stats::null_count;
 
     static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
-
-    static STATS_SESSION: LazyLock<VortexSession> =
-        LazyLock::new(|| VortexSession::empty().with::<StatsSession>());
 
     #[test]
     fn dtype() {
@@ -387,23 +377,5 @@ mod tests {
                 .as_scalar()
                 .is_some_and(|f| f.signature().is_strict())
         );
-    }
-
-    #[test]
-    fn test_is_not_null_falsification() -> VortexResult<()> {
-        let expr = is_not_null(col("a"));
-        let dtype = test_harness::struct_dtype();
-
-        assert_eq!(
-            expr.bind(&dtype)?.falsify(&STATS_SESSION)?,
-            Some(
-                or(
-                    eq(null_count(col("a")), RowCount.new_expr(EmptyOptions, []),),
-                    all_null(col("a")),
-                )
-                .bind(&dtype)?
-            )
-        );
-        Ok(())
     }
 }

@@ -39,7 +39,6 @@ use vortex_array::optimizer::kernels::KernelSession;
 use vortex_array::scalar_fn::session::ScalarFnSession;
 use vortex_array::session::ArraySession;
 use vortex_array::session::ArraySessionExt;
-use vortex_array::stats::session::StatsSession;
 #[expect(
     deprecated,
     reason = "benchmark comparing deprecated method with new one"
@@ -68,8 +67,7 @@ static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
         .with::<DTypeSession>()
         .with::<ScalarFnSession>()
         .with::<AggregateFnSession>()
-        .with::<MemorySession>()
-        .with::<StatsSession>();
+        .with::<MemorySession>();
     vortex_fsst::initialize(&session);
     vortex_onpair::initialize(&session);
     session.arrays().register(Zstd);

@@ -3,16 +3,15 @@
 
 use std::hash::Hash;
 
+use vortex_array::expr::BoundExpression;
+use vortex_array::expr::ExactBoundExpr;
+use vortex_array::expr::traversal::NodeExt;
+use vortex_array::expr::traversal::NodeVisitor;
+use vortex_array::expr::traversal::TraversalOrder;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_utils::aliases::hash_map::HashMap;
 use vortex_utils::aliases::hash_set::HashSet;
-
-use crate::expr::BoundExpression;
-use crate::expr::ExactBoundExpr;
-use crate::expr::traversal::NodeExt;
-use crate::expr::traversal::NodeVisitor;
-use crate::expr::traversal::TraversalOrder;
 
 /// A value that can annotate an expression node.
 pub trait Annotation: Clone + Hash + Eq {}
