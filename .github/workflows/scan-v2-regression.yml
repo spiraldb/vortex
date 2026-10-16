@@ -53,6 +53,7 @@ jobs:
           cp target/release_debug/examples/rewrite_list_layout scan-v2-binaries/rewrite
           env -u VORTEX_SELECTION_METRICS cargo build --locked --profile release_debug \
             -p random-access-bench
+          cp target/release_debug/random-access-bench scan-v2-binaries/standard
 
       - name: Build previous V2 from the pinned checkpoint
         shell: bash
@@ -73,7 +74,7 @@ jobs:
           VORTEX_SCAN_V2: "0"
         run: |
           set -euo pipefail
-          target/release_debug/random-access-bench --prepare-data --formats vortex
+          scan-v2-binaries/standard --prepare-data --formats vortex
           mkdir -p scan-v2-data
           source_file=vortex-bench/data/random_access/nested_lists/nested_lists.vortex
           scan-v2-binaries/rewrite "$source_file" scan-v2-data/flat-control.vortex flat \
@@ -86,7 +87,7 @@ jobs:
       - name: Isolate benchmark CPUs
         run: sudo bash scripts/setup-benchmark.sh
 
-      - name: Compare all 48 cases and repeat borderline regressions
+      - name: Compare Arrow and standard suites and repeat borderline regressions
         shell: bash
         env:
           CANDIDATE_COMMIT: ${{ github.sha }}
@@ -95,6 +96,7 @@ jobs:
           bash scripts/bench-taskset.sh python3 scripts/scan-v2-regression.py \
             --baseline scan-v2-binaries/baseline \
             --candidate scan-v2-binaries/current \
+            --standard-benchmark scan-v2-binaries/standard \
             --baseline-commit "$BASELINE_COMMIT" \
             --candidate-commit "$CANDIDATE_COMMIT" \
             | tee scan-v2-results/run.log

@@ -140,12 +140,106 @@ def report(output: Path, metadata: dict, summary: list[dict], confirmations: lis
             target.write(text)
 
 
+def compare_standard(binary: Path, cpus: list[int], output: Path):
+    """Compare the standard suite, including its legacy six-row taxi lookup."""
+    output.mkdir(exist_ok=True)
+    binary = binary.resolve()
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("VORTEX_", "TOKIO_"))}
+    env["RUST_LOG"] = "warn"
+    metadata = dict(
+        binary=str(binary),
+        sha256=digest(binary),
+        workdir=str(Path.cwd()),
+        cpus=cpus[:30],
+        rounds=2,
+        seconds_per_target=5,
+        seed=42,
+    )
+    metadata["output"] = "standard canonical-array output; one-second cached warmup"
+    commands, summary = [], []
+    for cores in [1, 30]:
+        samples = {}
+        for repeat in range(2):
+            for version in ["v1", "v2"] if repeat == 0 else ["v2", "v1"]:
+                stem = f"{cores}-{repeat}-{version}"
+                path = output / f"{stem}.jsonl"
+                command = [
+                    "taskset",
+                    "-c",
+                    ",".join(map(str, cpus[:cores])),
+                    str(binary),
+                    "--formats",
+                    "vortex",
+                    "--open-mode",
+                    "both",
+                    "--time-limit",
+                    "5",
+                    "--display-format",
+                    "gh-json",
+                    "-o",
+                    str(path),
+                ]
+                if version == "v2":
+                    command.append("--scan-v2")
+                commands.append(command)
+                print(f"Standard suite: {stem}", flush=True)
+                with (output / f"{stem}.log").open("w") as log:
+                    subprocess.run(command, env=env, stdout=log, stderr=log, check=True, timeout=600)
+                rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+                if len(rows) != 18 or len({row["name"] for row in rows}) != 18:
+                    raise RuntimeError(f"Expected all 18 standard targets: {stem}")
+                for row in rows:
+                    if row["unit"] != "ns":
+                        raise RuntimeError(f"Unexpected standard benchmark unit: {row}")
+                    samples.setdefault(row["name"], {"v1": [], "v2": []})[version].append(row["value"] / 1e6)
+        for name, rounds in samples.items():
+            if any(len(values) != 2 for values in rounds.values()):
+                raise RuntimeError(f"Unpaired standard benchmark target: {name}")
+            times = {v: statistics.median(values) for v, values in rounds.items()}
+            row = dict(
+                cores=cores,
+                name=name,
+                v1_ms=times["v1"],
+                v2_ms=times["v2"],
+                vs_v1_pct=change(times["v2"], times["v1"]),
+                rounds=rounds,
+            )
+            summary.append(row)
+            print(json.dumps(row), flush=True)
+        (output / "results.json").write_text(
+            json.dumps(dict(metadata, commands=commands, summary=summary), indent=2) + "\n"
+        )
+    lines = [
+        "## Standard random-access suite",
+        "",
+        "V1 versus V2 from the same binary; canonical-array output, seed 42, warm local disk.",
+        "Two alternating rounds, five seconds per target; positive percentages mean slower.",
+        "",
+        f"Cases above +3% vs V1: {sum(r['vs_v1_pct'] > 3 for r in summary)}/{len(summary)}.",
+        "",
+        "| Cores | Target | V1 ms | V2 ms | Change |",
+        "|---:|---|---:|---:|---:|",
+    ]
+    lines.extend(
+        f"| {r['cores']} | {r['name']} | {r['v1_ms']:.4f} | {r['v2_ms']:.4f} | {r['vs_v1_pct']:+.1f}% |"
+        for r in summary
+    )
+    text = "\n".join(lines) + "\n"
+    (output / "summary.md").write_text(text)
+    if step_summary := os.environ.get("GITHUB_STEP_SUMMARY"):
+        with Path(step_summary).open("a") as target:
+            target.write(text)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline", type=Path, required=True)
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--baseline-commit", required=True)
     parser.add_argument("--candidate-commit", required=True)
+    parser.add_argument(
+        "--standard-benchmark", type=Path, help="Also compare V1/V2 with the standard random-access binary"
+    )
     parser.add_argument("--data-dir", type=Path, default=Path("vortex-bench/data"))
     parser.add_argument("--list-dir", type=Path, default=Path("scan-v2-data"))
     parser.add_argument("--output", type=Path, default=Path("scan-v2-results"))
@@ -210,6 +304,8 @@ def main():
         )
         save(args.output, metadata, summary, confirmations)
     report(args.output, metadata, summary, confirmations)
+    if args.standard_benchmark:
+        compare_standard(args.standard_benchmark, cpus, args.output / "standard")
 
 
 if __name__ == "__main__":
