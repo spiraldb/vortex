@@ -51,6 +51,14 @@ pub trait LaunchStrategy: Debug + Send + Sync + 'static {
     /// Returns the event flags to use for this launch.
     fn event_flags(&self) -> CUevent_flags;
 
+    /// Whether launches record events around the work for [`on_complete`](Self::on_complete).
+    ///
+    /// Strategies that ignore the events return `false`, which skips creating and recording
+    /// two events per launch.
+    fn records_events(&self) -> bool {
+        true
+    }
+
     /// Called after the kernel launch completes with the recorded events.
     fn on_complete(&self, events: &CudaKernelEvents, len: usize) -> VortexResult<()>;
 }
@@ -68,6 +76,9 @@ impl<S: ?Sized + LaunchStrategy> LaunchStrategyExt for S {
     where
         F: FnMut() -> VortexResult<()>,
     {
+        if !self.records_events() {
+            return func();
+        }
         let flags = self.event_flags();
 
         let before = stream
@@ -99,6 +110,10 @@ pub struct DefaultLaunchStrategy;
 impl LaunchStrategy for DefaultLaunchStrategy {
     fn event_flags(&self) -> CUevent_flags {
         CUevent_flags::CU_EVENT_DISABLE_TIMING
+    }
+
+    fn records_events(&self) -> bool {
+        false
     }
 
     fn on_complete(&self, _events: &CudaKernelEvents, _len: usize) -> VortexResult<()> {
@@ -140,9 +155,9 @@ impl LaunchStrategy for TracingLaunchStrategy {
 /// enable timestamps.
 pub(crate) fn launch_cuda_kernel_impl(
     launch_builder: &mut LaunchArgs,
-    event_flags: CUevent_flags,
+    event_flags: Option<CUevent_flags>,
     array_len: usize,
-) -> VortexResult<CudaKernelEvents> {
+) -> VortexResult<Option<CudaKernelEvents>> {
     // Kernel launch configuration constants.
     // Must match ELEMENTS_PER_THREAD in CUDA kernels (kernels/*.cu).
     const THREADS_PER_BLOCK: u32 = 64; // 2 warps
@@ -176,8 +191,13 @@ pub(crate) fn launch_cuda_kernel_impl(
 pub(crate) fn launch_cuda_kernel_with_config(
     launch_builder: &mut LaunchArgs,
     config: LaunchConfig,
-    event_flags: CUevent_flags,
-) -> VortexResult<CudaKernelEvents> {
+    event_flags: Option<CUevent_flags>,
+) -> VortexResult<Option<CudaKernelEvents>> {
+    let Some(event_flags) = event_flags else {
+        unsafe { launch_builder.launch(config) }
+            .map_err(|e| vortex_err!("Failed to launch kernel: {}", e))?;
+        return Ok(None);
+    };
     launch_builder.record_kernel_launch(event_flags);
 
     unsafe {
@@ -187,9 +207,11 @@ pub(crate) fn launch_cuda_kernel_with_config(
             .and_then(|events| {
                 events
                     .ok_or_else(|| vortex_err!("CUDA events not recorded"))
-                    .map(|(before_launch, after_launch)| CudaKernelEvents {
-                        before_launch,
-                        after_launch,
+                    .map(|(before_launch, after_launch)| {
+                        Some(CudaKernelEvents {
+                            before_launch,
+                            after_launch,
+                        })
                     })
             })
     }

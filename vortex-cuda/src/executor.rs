@@ -39,6 +39,7 @@ use vortex_cuda_driver::DeviceRepr;
 use vortex_cuda_driver::LaunchArgs;
 use vortex_cuda_driver::LaunchConfig;
 use vortex_cuda_driver::ValidAsZeroBits;
+use vortex_cuda_driver::sys::CUevent_flags;
 
 use crate::CudaSession;
 use crate::DictionaryExport;
@@ -188,8 +189,10 @@ impl CudaExecutionCtx {
         let mut launcher = self.launch_builder(function);
         build_args(&mut launcher);
 
-        let events = launch_cuda_kernel_impl(&mut launcher, self.strategy.event_flags(), len)?;
-        self.strategy.on_complete(&events, len)?;
+        let events = launch_cuda_kernel_impl(&mut launcher, self.event_flags(), len)?;
+        if let Some(events) = events {
+            self.strategy.on_complete(&events, len)?;
+        }
         Ok(())
     }
 
@@ -208,10 +211,18 @@ impl CudaExecutionCtx {
         let mut launcher = self.launch_builder(function);
         build_args(&mut launcher);
 
-        let events =
-            launch_cuda_kernel_with_config(&mut launcher, cfg, self.strategy.event_flags())?;
-        self.strategy.on_complete(&events, len)?;
+        let events = launch_cuda_kernel_with_config(&mut launcher, cfg, self.event_flags())?;
+        if let Some(events) = events {
+            self.strategy.on_complete(&events, len)?;
+        }
         Ok(())
+    }
+
+    /// The flags of the events bracketing each launch, if the strategy records any.
+    fn event_flags(&self) -> Option<CUevent_flags> {
+        self.strategy
+            .records_events()
+            .then(|| self.strategy.event_flags())
     }
 
     /// Loads a CUDA kernel function by module name and ptype(s).
