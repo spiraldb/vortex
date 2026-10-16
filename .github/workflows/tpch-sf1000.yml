@@ -142,6 +142,10 @@ jobs:
           if [[ -x /usr/bin/time ]]; then
             echo "TIME_CMD=/usr/bin/time -v" >> "$GITHUB_ENV"
           fi
+          # systemd-oomd kills whole cgroups under memory pressure, which takes the runner agent
+          # down with a runaway query and loses the job. Leave OOM handling to the query
+          # watchdog and the kernel, which picks the query first by its raised OOM score.
+          sudo -n systemctl stop systemd-oomd.service systemd-oomd.socket || true
           mkdir -p "$OUT_DIR"
           echo idle > "$PHASE_FILE"
           nohup python3 scripts/bench-memory.py monitor \
@@ -202,6 +206,7 @@ jobs:
             --opt scale-factor="$SCALE_FACTOR" \
             --out-dir "$OUT_DIR" \
             --phase-file "$PHASE_FILE" \
+            --min-available-gib 8 \
             --fail-on-error
 
       - name: Stop memory monitor
