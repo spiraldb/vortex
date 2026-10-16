@@ -366,7 +366,8 @@ impl AggregateOp {
                 // The size depends on the physical layout (and batches round their validity
                 // bitmaps separately), so the only reference is the array's own canonical form:
                 // encodings that answer from metadata must agree with it.
-                if !matches!(self.split, Split::Whole) {
+                // Empty arrays are skipped: an empty all-invalid validity is sized as a constant.
+                if !matches!(self.split, Split::Whole) || input.is_empty() {
                     return Ok(());
                 }
                 let canonical = input_array.clone().execute::<Canonical>(ctx)?.into_array();
