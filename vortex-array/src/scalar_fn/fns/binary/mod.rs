@@ -76,11 +76,22 @@ const KLEENE_LUT: [[[bool; 2]; 2]; 2] = [
 
 /// Kleene and/or reduction where one argument is constant non-NULL and other
 /// is non-constant.
-fn kleene_one_const<T: ReduceNode>(node: T, constant: bool, is_and: bool) -> T {
-    match (is_and, constant) {
-        (true, true) | (false, false) => node,
-        (is_and, constant) => node.new_constant((constant && !is_and).into()),
-    }
+/// Fold `node AND constant` or `node OR constant` into a result of the given nullability, or
+/// `None` when the fold would change the result's dtype.
+fn kleene_one_const<T: ReduceNode>(
+    node: T,
+    constant: bool,
+    is_and: bool,
+    nullability: Nullability,
+) -> VortexResult<Option<T>> {
+    Ok(match (is_and, constant) {
+        (true, true) | (false, false) => {
+            (node.node_dtype()?.nullability() == nullability).then_some(node)
+        }
+        (is_and, constant) => {
+            Some(node.new_constant(Scalar::bool(constant && !is_and, nullability)))
+        }
+    })
 }
 
 impl ScalarFnVTable for Binary {
@@ -293,15 +304,19 @@ impl ScalarFnVTable for Binary {
             .and_then(|s| s.value().cloned())
             .map(|v| v.as_bool());
         let is_and = *operator == Operator::And;
+        // Folding must preserve the node's dtype, including a nullability that only comes from a
+        // nullable (but non-null) constant operand.
+        let nullability = node.node_dtype()?.nullability();
 
-        Ok(Some(match (left_const, right_const) {
-            (None, None) => return Ok(None),
-            (Some(left_const), Some(right_const)) => left.new_constant(
-                KLEENE_LUT[is_and as usize][left_const as usize][right_const as usize].into(),
-            ),
-            (Some(constant), None) => kleene_one_const(right, constant, is_and),
-            (None, Some(constant)) => kleene_one_const(left, constant, is_and),
-        }))
+        match (left_const, right_const) {
+            (None, None) => Ok(None),
+            (Some(left_const), Some(right_const)) => Ok(Some(left.new_constant(Scalar::bool(
+                KLEENE_LUT[is_and as usize][left_const as usize][right_const as usize],
+                nullability,
+            )))),
+            (Some(constant), None) => kleene_one_const(right, constant, is_and, nullability),
+            (None, Some(constant)) => kleene_one_const(left, constant, is_and, nullability),
+        }
     }
 
     fn is_strict(&self, operator: &Operator) -> bool {
@@ -326,6 +341,7 @@ impl ScalarFnVTable for Binary {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
     use vortex_error::VortexExpect;
     use vortex_error::VortexResult;
 
@@ -361,6 +377,7 @@ mod tests {
     use crate::expr::test_harness;
     use crate::optimizer::ArrayOptimizer;
     use crate::scalar::Scalar;
+    use crate::scalar_fn::fns::not::Not;
 
     #[test]
     fn and_collect_balanced() {
@@ -717,10 +734,39 @@ mod tests {
             ConstantArray::new(Scalar::bool(true, Nullability::Nullable), 3).into_array();
         let right = BoolArray::from_iter([true, false, true]).into_array();
 
-        let array = Binary::try_new(nullable_true, right.clone(), Operator::And)?
+        let array = Binary::try_new(nullable_true, right, Operator::And)?
             .into_array()
             .optimize()?;
-        assert_arrays_eq!(array, right, &mut ctx);
+        // The nullable constant makes the result nullable, even though no value is null.
+        assert_eq!(array.dtype(), &DType::Bool(Nullability::Nullable));
+        assert_arrays_eq!(
+            array,
+            BoolArray::from_iter([Some(true), Some(false), Some(true)]),
+            &mut ctx
+        );
+        Ok(())
+    }
+
+    /// Folding against a nullable (but non-null) constant must keep the nullable dtype the
+    /// expression declares, which a parent such as `Not` checks its child's result against.
+    #[rstest]
+    #[case::and_true(Operator::And, true, [false, true, false])]
+    #[case::and_false(Operator::And, false, [true, true, true])]
+    #[case::or_false(Operator::Or, false, [false, true, false])]
+    #[case::or_true(Operator::Or, true, [false, false, false])]
+    fn test_kleene_fold_with_nullable_constant_keeps_dtype(
+        #[case] operator: Operator,
+        #[case] constant: bool,
+        #[case] expected: [bool; 3],
+    ) -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let values = BoolArray::from_iter([true, false, true]).into_array();
+        let constant =
+            ConstantArray::new(Scalar::bool(constant, Nullability::Nullable), 3).into_array();
+
+        let array =
+            Not::try_new(Binary::try_new(values, constant, operator)?.into_array())?.into_array();
+        assert_arrays_eq!(array, BoolArray::from_iter(expected.map(Some)), &mut ctx);
         Ok(())
     }
 
