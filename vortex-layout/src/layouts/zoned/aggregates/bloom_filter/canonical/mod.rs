@@ -16,9 +16,11 @@ use extension::accumulate_extension;
 use primitive::accumulate_primitive;
 use varbin::accumulate_varbin;
 
+use super::BloomOptions;
 use super::BloomPartial;
 
 pub(super) fn accumulate_canonical(
+    options: &BloomOptions,
     canonical: &Canonical,
     partial: &mut BloomPartial,
     ctx: &mut ExecutionCtx,
@@ -27,7 +29,7 @@ pub(super) fn accumulate_canonical(
         Canonical::Bool(array) => accumulate_bool(array, partial, ctx)?,
         Canonical::Primitive(array) => accumulate_primitive(array, partial, ctx)?,
         Canonical::VarBinView(array) => accumulate_varbin(array, partial, ctx)?,
-        Canonical::Extension(array) => accumulate_extension(array, partial, ctx)?,
+        Canonical::Extension(array) => accumulate_extension(options, array, partial, ctx)?,
         // Nulls are skipped and are not included in any Bloom filter.
         Canonical::Null(_) => {}
 

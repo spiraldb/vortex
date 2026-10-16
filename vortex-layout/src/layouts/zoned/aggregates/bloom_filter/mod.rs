@@ -368,7 +368,7 @@ impl AggregateFnVTable for BloomFilter {
 
     fn accumulate(
         &self,
-        _args: AggregateArgs<'_, Self::Options>,
+        args: AggregateArgs<'_, Self::Options>,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -376,7 +376,7 @@ impl AggregateFnVTable for BloomFilter {
         match batch {
             Columnar::Constant(constant) => constant::accumulate_constant(constant, partial)?,
             Columnar::Canonical(canonical) => {
-                canonical::accumulate_canonical(canonical, partial, ctx)?
+                canonical::accumulate_canonical(args.options, canonical, partial, ctx)?
             }
         }
         Ok(())

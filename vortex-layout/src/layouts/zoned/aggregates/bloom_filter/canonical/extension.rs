@@ -1,23 +1,42 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-use vortex_array::Canonical;
 use vortex_array::ExecutionCtx;
+use vortex_array::aggregate_fn::AggregateFnId;
+use vortex_array::aggregate_fn::ExtensionDelegate;
+use vortex_array::aggregate_fn::StorageLifter;
 use vortex_array::arrays::ExtensionArray;
-use vortex_array::arrays::extension::ExtensionArrayExt;
 use vortex_error::VortexResult;
+use vortex_session::registry::CachedId;
 
+use super::BloomOptions;
 use super::BloomPartial;
+use crate::layouts::zoned::aggregates::bloom_filter::BloomFilter;
+
+/// Lifts [`BloomFilter`] over an extension's storage, so extension values hash as their storage.
+#[derive(Clone, Debug)]
+struct BloomFilterLifter;
+
+impl StorageLifter for BloomFilterLifter {
+    type Storage = BloomFilter;
+
+    fn id(&self) -> AggregateFnId {
+        static ID: CachedId = CachedId::new("vortex.bloom_filter.sbbf.extension");
+        *ID
+    }
+
+    fn storage(&self) -> Self::Storage {
+        BloomFilter
+    }
+}
 
 pub(super) fn accumulate_extension(
+    options: &BloomOptions,
     array: &ExtensionArray,
     partial: &mut BloomPartial,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<()> {
-    let storage = array.storage_array().clone();
-    let canonical = storage.execute::<Canonical>(ctx)?;
-
-    super::accumulate_canonical(&canonical, partial, ctx)
+    ExtensionDelegate::new(BloomFilterLifter).accumulate_storage(options, partial, array, ctx)
 }
 
 #[cfg(test)]
