@@ -236,7 +236,7 @@ fn concat_scalar_arrays(
 
 /// Convert an [`ExtScalar`] to an Arrow [`Datum`].
 ///
-/// Currently only temporal extension types (timestamps, dates, and times) are supported.
+/// Currently only temporal extension types (timestamps, dates, times, and durations) are supported.
 fn extension_to_arrow(scalar: ExtScalar<'_>) -> Result<Arc<dyn Datum>, VortexError> {
     let ext_dtype = scalar.ext_dtype();
     let Some(temporal) = ext_dtype.metadata_opt::<AnyTemporal>() else {
@@ -300,6 +300,18 @@ fn extension_to_arrow(scalar: ExtScalar<'_>) -> Result<Arc<dyn Datum>, VortexErr
                 vortex_bail!("Unsupported TimeUnit {unit} for {}", ext_dtype.id())
             }
         },
+        TemporalMetadata::Duration(unit) => {
+            let value = primitive.as_::<i64>();
+            match unit {
+                TimeUnit::Nanoseconds => value_to_arrow_scalar!(value, DurationNanosecondArray),
+                TimeUnit::Microseconds => value_to_arrow_scalar!(value, DurationMicrosecondArray),
+                TimeUnit::Milliseconds => value_to_arrow_scalar!(value, DurationMillisecondArray),
+                TimeUnit::Seconds => value_to_arrow_scalar!(value, DurationSecondArray),
+                TimeUnit::Days => {
+                    vortex_bail!("Unsupported TimeUnit {unit} for {}", ext_dtype.id())
+                }
+            }
+        }
     }
 }
 
@@ -326,6 +338,7 @@ mod tests {
     use vortex_array::dtype::extension::ExtVTable;
     use vortex_array::dtype::i256;
     use vortex_array::extension::datetime::Date;
+    use vortex_array::extension::datetime::Duration;
     use vortex_array::extension::datetime::Time;
     use vortex_array::extension::datetime::TimeUnit;
     use vortex_array::extension::datetime::Timestamp;
@@ -914,6 +927,28 @@ mod tests {
 
         let result = scalar.to_arrow_datum();
         assert!(result.is_ok());
+    }
+
+    #[rstest]
+    #[case(TimeUnit::Nanoseconds, arrow_schema::TimeUnit::Nanosecond)]
+    #[case(TimeUnit::Microseconds, arrow_schema::TimeUnit::Microsecond)]
+    #[case(TimeUnit::Milliseconds, arrow_schema::TimeUnit::Millisecond)]
+    #[case(TimeUnit::Seconds, arrow_schema::TimeUnit::Second)]
+    fn test_duration_to_arrow(
+        #[case] unit: TimeUnit,
+        #[case] arrow_unit: arrow_schema::TimeUnit,
+        #[values(Some(-42i64), None)] value: Option<i64>,
+    ) -> VortexResult<()> {
+        let storage = match value {
+            Some(v) => Scalar::primitive(v, Nullability::Nullable),
+            None => Scalar::null(DType::Primitive(PType::I64, Nullability::Nullable)),
+        };
+        let datum = Scalar::extension::<Duration>(unit, storage).to_arrow_datum()?;
+        let (array, is_scalar) = datum.get();
+        assert!(is_scalar);
+        assert_eq!(array.data_type(), &DataType::Duration(arrow_unit));
+        assert_eq!(array.is_null(0), value.is_none());
+        Ok(())
     }
 
     #[test]

@@ -895,6 +895,10 @@ mod tests {
     use std::sync::Arc;
 
     use arrow_array::DictionaryArray;
+    use arrow_array::DurationMicrosecondArray;
+    use arrow_array::DurationMillisecondArray;
+    use arrow_array::DurationNanosecondArray;
+    use arrow_array::DurationSecondArray;
     use arrow_array::GenericListArray;
     use arrow_array::Int32Array;
     use arrow_array::Int64Array;
@@ -910,6 +914,7 @@ mod tests {
     use vortex_array::assert_arrays_eq;
     use vortex_array::dtype::DType;
     use vortex_array::dtype::Nullability;
+    use vortex_array::extension::datetime::Duration;
     use vortex_error::VortexResult;
 
     use super::*;
@@ -952,6 +957,22 @@ mod tests {
         assert_eq!(sliced.nbytes(), fresh.nbytes());
         let mut ctx = array_session().create_execution_ctx();
         assert_arrays_eq!(sliced, fresh, &mut ctx);
+        Ok(())
+    }
+
+    #[rstest]
+    #[case::second(Arc::new(DurationSecondArray::from(vec![Some(-5), None, Some(7)])))]
+    #[case::millisecond(Arc::new(DurationMillisecondArray::from(vec![Some(-5), None, Some(7)])))]
+    #[case::microsecond(Arc::new(DurationMicrosecondArray::from(vec![Some(-5), None, Some(7)])))]
+    #[case::nanosecond(Arc::new(DurationNanosecondArray::from(vec![Some(-5), None, Some(7)])))]
+    fn test_duration_array_roundtrip(#[case] arrow: ArrowArrayRef) -> VortexResult<()> {
+        let session = array_session();
+        let vortex = session.arrow().from_arrow_array(Arc::clone(&arrow), true)?;
+        assert!(vortex.dtype().as_extension().is::<Duration>());
+
+        let mut ctx = session.create_execution_ctx();
+        let exported = session.arrow().execute_arrow(vortex, None, &mut ctx)?;
+        assert_eq!(exported.to_data(), arrow.to_data());
         Ok(())
     }
 

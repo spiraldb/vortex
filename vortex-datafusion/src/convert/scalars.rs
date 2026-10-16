@@ -179,6 +179,15 @@ impl TryToDataFusion<ScalarValue> for Scalar {
                             unreachable!("Unsupported TimeUnit {unit} for {}", ext.id())
                         }
                     },
+                    TemporalMetadata::Duration(unit) => match unit {
+                        TimeUnit::Nanoseconds => ScalarValue::DurationNanosecond(pv.as_::<i64>()),
+                        TimeUnit::Microseconds => ScalarValue::DurationMicrosecond(pv.as_::<i64>()),
+                        TimeUnit::Milliseconds => ScalarValue::DurationMillisecond(pv.as_::<i64>()),
+                        TimeUnit::Seconds => ScalarValue::DurationSecond(pv.as_::<i64>()),
+                        TimeUnit::Days => {
+                            unreachable!("Unsupported TimeUnit {unit} for {}", ext.id())
+                        }
+                    },
                 }
             }
         })
@@ -253,7 +262,11 @@ pub fn scalar_from_df(value: &ScalarValue, session: &VortexSession) -> VortexRes
         | ScalarValue::TimestampSecond(v, _)
         | ScalarValue::TimestampMillisecond(v, _)
         | ScalarValue::TimestampMicrosecond(v, _)
-        | ScalarValue::TimestampNanosecond(v, _) => {
+        | ScalarValue::TimestampNanosecond(v, _)
+        | ScalarValue::DurationSecond(v)
+        | ScalarValue::DurationMillisecond(v)
+        | ScalarValue::DurationMicrosecond(v)
+        | ScalarValue::DurationNanosecond(v) => {
             let dtype = arrow
                 .from_arrow_datatype(&value.data_type(), Nullability::Nullable)
                 .vortex_expect("arrow data type to dtype");
@@ -409,6 +422,7 @@ mod tests {
     use vortex::dtype::UnionVariants;
     use vortex::dtype::i256;
     use vortex::extension::datetime::Date;
+    use vortex::extension::datetime::Duration;
     use vortex::extension::datetime::Time;
     use vortex::extension::datetime::Timestamp;
     use vortex::scalar::DecimalValue;
@@ -735,6 +749,11 @@ mod tests {
         Nullability::NonNullable
     ))]
     #[case::binary(Scalar::binary(ByteBuffer::from(vec![1u8, 2, 3, 4, 5]), Nullability::NonNullable))]
+    #[case::duration(Scalar::extension::<Duration>(TimeUnit::Microseconds, Scalar::from(-42i64)))]
+    #[case::duration_null(Scalar::extension::<Duration>(
+        TimeUnit::Seconds,
+        Scalar::null(DType::Primitive(PType::I64, Nullability::Nullable))
+    ))]
     fn test_round_trip_conversions(#[case] original: Scalar) {
         let df_scalar = original.try_to_df().unwrap();
         let round_trip = from_df(&df_scalar);
