@@ -143,9 +143,11 @@ def kernel_oom_killed(pid: int) -> bool:
     return any(f"Killed process {pid} " in line or f"Killed process {pid}," in line for line in log.splitlines())
 
 
-def classify(returncode: int, timed_out: bool, pid: int, stderr_tail: str) -> str:
-    if timed_out:
+def classify(returncode: int, reason: str | None, pid: int, stderr_tail: str) -> str:
+    if reason == "timeout":
         return "timeout"
+    if reason == "memory":
+        return "oom-killed"
     if returncode == 0:
         return "ok"
     if "memory allocation of" in stderr_tail or "Out of Memory Error" in stderr_tail:
@@ -168,28 +170,37 @@ def raise_oom_score() -> None:
         pass
 
 
-def run_query(cmd: list[str], stdout_path: Path, stderr_path: Path, timeout_s: int) -> tuple[int, bool, int, int]:
-    """Run one query process; return (returncode, timed_out, pid, peak RSS bytes)."""
+def run_query(
+    cmd: list[str], stdout_path: Path, stderr_path: Path, timeout_s: int, min_available: int
+) -> tuple[int, str | None, int, int]:
+    """Run one query process; return (returncode, kill reason, pid, peak RSS bytes).
+
+    The query is killed when it times out, or when system available memory drops below
+    ``min_available``: under heavy pressure systemd-oomd or the runner agent can be killed before
+    the kernel OOM killer reaches the query, which loses the whole job, so the query goes first.
+    """
     with open(stdout_path, "w") as out, open(stderr_path, "w") as err:
         proc = subprocess.Popen(cmd, stdout=out, stderr=err, start_new_session=True, preexec_fn=raise_oom_score)
-        timed_out = threading.Event()
-
-        def kill() -> None:
-            timed_out.set()
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-
-        timer = threading.Timer(timeout_s, kill)
-        timer.start()
-        try:
+        deadline = time.monotonic() + timeout_s
+        reason = None
+        while True:
             # wait4 reports this child's own peak RSS, unlike the cumulative RUSAGE_CHILDREN.
-            _, status, usage = os.wait4(proc.pid, 0)
-        finally:
-            timer.cancel()
+            pid, status, usage = os.wait4(proc.pid, os.WNOHANG)
+            if pid:
+                break
+            if reason is None:
+                if time.monotonic() > deadline:
+                    reason = "timeout"
+                elif read_meminfo()["MemAvailable"] < min_available:
+                    reason = "memory"
+                if reason is not None:
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+            time.sleep(0.1)
         proc.returncode = os.waitstatus_to_exitcode(status)
-    return proc.returncode, timed_out.is_set(), proc.pid, usage.ru_maxrss * KIB
+    return proc.returncode, reason, proc.pid, usage.ru_maxrss * KIB
 
 
 def tail(path: Path, lines: int = 20) -> str:
@@ -248,12 +259,16 @@ def cmd_run_queries(args: argparse.Namespace) -> int:
 
             print(f"::group::{label}", flush=True)
             start = time.monotonic()
-            returncode, timed_out, pid, peak_rss = run_query(
-                cmd, stem.with_suffix(".jsonl"), stem.with_suffix(".log"), args.timeout
+            returncode, reason, pid, peak_rss = run_query(
+                cmd,
+                stem.with_suffix(".jsonl"),
+                stem.with_suffix(".log"),
+                args.timeout,
+                int(args.min_available_gib * GIB),
             )
             elapsed = time.monotonic() - start
             stderr_tail = tail(stem.with_suffix(".log"))
-            status = classify(returncode, timed_out, pid, stderr_tail)
+            status = classify(returncode, reason, pid, stderr_tail)
             print(stderr_tail)
             print("::endgroup::", flush=True)
 
@@ -363,6 +378,12 @@ def main() -> int:
     run.add_argument("--queries", type=int, nargs="*")
     run.add_argument("--iterations", type=int, default=1)
     run.add_argument("--timeout", type=int, default=3600, help="Per-query timeout in seconds")
+    run.add_argument(
+        "--min-available-gib",
+        type=float,
+        default=4.0,
+        help="Kill a query when system available memory falls below this",
+    )
     run.add_argument("--budget", type=int, help="Skip the remaining queries after this many seconds")
     run.add_argument("--opt", action="append", default=[], help="Benchmark option, e.g. scale-factor=1000.0")
     run.add_argument("--out-dir", type=Path, required=True)
