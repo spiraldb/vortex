@@ -307,7 +307,7 @@ impl AggregateOp {
                     .as_ref()
                     .map(|o| o.values.clone())
                     .unwrap_or_default();
-                Value::Bool(input.iter().zip(other).all(|(a, b)| a == b))
+                Value::Bool(input.iter().zip(other).all(|(a, b)| a.bit_eq(b)))
             }
             NullCount => count(input.iter().filter(|v| v.is_null()).count()),
             NanCount => count(input.iter().filter(|v| is_nan(v)).count()),
@@ -325,7 +325,7 @@ impl AggregateOp {
                 .unwrap_or(Value::Null),
             IsConstant => Value::Bool(match input.len() {
                 0 => false,
-                _ => input.iter().all(|v| v == &input[0]),
+                _ => input.iter().all(|v| v.bit_eq(&input[0])),
             }),
             IsSorted => Value::Bool(is_sorted(input, self.strict)),
             Min | Max | MinMax | BoundedMin | BoundedMax => {

@@ -146,6 +146,19 @@ impl PartialEq for Value {
     }
 }
 
+impl Value {
+    /// Equality with bitwise float comparison, including NaN payloads.
+    pub fn bit_eq(&self, other: &Value) -> bool {
+        match (self, other) {
+            (Value::Float(a), Value::Float(b)) => a.to_bits() == b.to_bits(),
+            (Value::Tuple(a), Value::Tuple(b)) => {
+                a.len() == b.len() && a.iter().zip(b).all(|(a, b)| a.bit_eq(b))
+            }
+            (a, b) => a == b,
+        }
+    }
+}
+
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
