@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Generic adapter for aggregates over an extension dtype that are computed by running an
-//! aggregate over the extension's storage dtype.
+//! Generic adapter that defines an aggregate over one extension type by running an existing
+//! aggregate over the extension's storage.
 
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
@@ -22,195 +22,105 @@ use crate::aggregate_fn::AggregateFnVTable;
 use crate::aggregate_fn::DynAccumulator;
 use crate::arrays::ConstantArray;
 use crate::arrays::Extension;
-use crate::arrays::ExtensionArray;
 use crate::arrays::extension::ExtensionArrayExt;
 use crate::dtype::DType;
-use crate::dtype::extension::ExtDTypeRef;
+use crate::dtype::extension::ExtVTable;
 use crate::scalar::Scalar;
 
-type StorageOptions<L> = <<L as StorageLifter>::Storage as AggregateFnVTable>::Options;
-
-/// Declare an aggregate over an extension dtype in terms of an aggregate over its storage dtype.
+/// The aggregate `A` applied to extension type `E` through its storage.
 ///
-/// Wrap an implementation in [`ExtensionDelegate`] to obtain an [`AggregateFnVTable`]. Every batch
-/// is unwrapped to its storage array and accumulated by [`Self::Storage`], so storage-encoding
-/// kernels registered for the storage aggregate still fire. Partial states are the storage
-/// aggregate's partials; only the final result is lifted back with [`Self::lift_scalar`] and
-/// [`Self::lift_array`].
+/// Inputs must have an extension dtype of type `E`. Every batch is unwrapped to its storage array
+/// and accumulated by `A`, so storage-encoding kernels registered for `A` still fire. Partials and
+/// results are those of `A` over the storage dtype.
 ///
-/// The defaults return the storage result unchanged, which suits aggregates whose result does not
-/// depend on the input dtype, e.g. `is_constant` or `is_sorted`.
-pub trait StorageLifter: 'static + Send + Sync + Clone {
-    /// The aggregate computed over the storage dtype.
-    type Storage: AggregateFnVTable;
-
-    /// Stable identifier of the lifted aggregate.
-    ///
-    /// It must differ from the storage aggregate's id: the lifted partials and results have
-    /// different dtypes, so kernels and cached statistics of one cannot stand in for the other.
-    fn id(&self) -> AggregateFnId;
-
-    /// Construct the storage aggregate vtable.
-    fn storage(&self) -> Self::Storage;
-
-    /// Compute the final storage result over a whole storage array.
-    ///
-    /// Used by [`ExtensionDelegate::aggregate`]. Override it to reuse a storage entry point that
-    /// consults cached statistics, e.g. `is_constant`.
-    fn aggregate_storage(
-        &self,
-        options: &StorageOptions<Self>,
-        storage: &ArrayRef,
-        ctx: &mut ExecutionCtx,
-    ) -> VortexResult<Scalar> {
-        let mut acc = Accumulator::try_new(self.storage(), options.clone(), storage.dtype().clone())?;
-        acc.accumulate(storage, ctx)?;
-        acc.finish()
-    }
-
-    /// The return dtype of the lifted aggregate, given the storage aggregate's return dtype.
-    fn lift_return_dtype(&self, ext_dtype: &ExtDTypeRef, storage_dtype: DType) -> Option<DType> {
-        let _ = ext_dtype;
-        Some(storage_dtype)
-    }
-
-    /// Lift a storage result scalar into a result of the lifted return dtype.
-    fn lift_scalar(&self, ext_dtype: &ExtDTypeRef, storage_result: Scalar) -> VortexResult<Scalar> {
-        let _ = ext_dtype;
-        Ok(storage_result)
-    }
-
-    /// Lift an array of storage results into an array of the lifted return dtype.
-    fn lift_array(
-        &self,
-        ext_dtype: &ExtDTypeRef,
-        storage_results: ArrayRef,
-    ) -> VortexResult<ArrayRef> {
-        let _ = ext_dtype;
-        Ok(storage_results)
-    }
+/// The adapter is an aggregate of its own, with id `<A>[<E>]`, so supporting a new pair is one
+/// registration:
+///
+/// ```
+/// # use vortex_array::aggregate_fn::ExtensionAggregate;
+/// # use vortex_array::aggregate_fn::fns::sum::Sum;
+/// # use vortex_array::aggregate_fn::session::AggregateFnSessionExt;
+/// # use vortex_array::extension::datetime::Timestamp;
+/// # let session = vortex_array::array_session();
+/// session.aggregate_fns().register(ExtensionAggregate::new(Sum, Timestamp));
+/// ```
+///
+/// Only register a pair when `A` over the storage is meaningful for `E`, e.g. when `E` orders and
+/// compares like its storage.
+#[derive(Clone, Debug)]
+pub struct ExtensionAggregate<A: AggregateFnVTable, E: ExtVTable> {
+    aggregate: A,
+    ext: E,
+    id: AggregateFnId,
 }
 
-/// Adapter that exposes any [`StorageLifter`] as an [`AggregateFnVTable`] over extension dtypes.
-#[derive(Clone, Debug)]
-pub struct ExtensionDelegate<L: StorageLifter>(pub L);
-
-impl<L: StorageLifter> ExtensionDelegate<L> {
-    /// Construct a new extension delegate vtable.
-    pub fn new(lifter: L) -> Self {
-        Self(lifter)
+impl<A: AggregateFnVTable, E: ExtVTable> ExtensionAggregate<A, E> {
+    /// Define `aggregate` over extension type `ext`.
+    pub fn new(aggregate: A, ext: E) -> Self {
+        let id = AggregateFnId::new(&format!("{}[{}]", aggregate.id(), ext.id()));
+        Self { aggregate, ext, id }
     }
 
-    /// Aggregate an extension `array` into the lifted final result.
-    ///
-    /// This is the entry point for aggregates that handle extension inputs inside their own
-    /// `accumulate` by delegating to the storage array.
-    pub fn aggregate(
-        &self,
-        options: &StorageOptions<L>,
-        array: &ExtensionArray,
-        ctx: &mut ExecutionCtx,
-    ) -> VortexResult<Scalar> {
-        let storage_result = self
-            .0
-            .aggregate_storage(options, array.storage_array(), ctx)?;
-        self.0.lift_scalar(array.ext_dtype(), storage_result)
+    /// The storage dtype of `dtype`, if it is an extension dtype of type `E`.
+    fn storage_dtype<'a>(&self, dtype: &'a DType) -> Option<&'a DType> {
+        dtype
+            .as_extension_opt()
+            .filter(|ext_dtype| ext_dtype.is::<E>())
+            .map(|ext_dtype| ext_dtype.storage_dtype())
     }
 
-    /// Accumulate an extension `array` straight into a partial state of the storage aggregate.
-    ///
-    /// This suits aggregates whose partial state does not depend on the input dtype, e.g. a Bloom
-    /// filter, which can then fold extension batches into the partial they already hold.
-    pub fn accumulate_storage(
-        &self,
-        options: &StorageOptions<L>,
-        partial: &mut <L::Storage as AggregateFnVTable>::Partial,
-        array: &ExtensionArray,
-        ctx: &mut ExecutionCtx,
-    ) -> VortexResult<()> {
-        let storage = self.0.storage();
-        let dtypes =
-            AggregateDTypes::try_new(&storage, options, array.storage_array().dtype().clone())?;
-        let args = dtypes.args(options);
-        if storage.try_accumulate(args, partial, array.storage_array(), ctx)? {
-            return Ok(());
-        }
-        let columnar = array.storage_array().clone().execute::<Columnar>(ctx)?;
-        storage.accumulate(args, partial, &columnar, ctx)
-    }
-
-    /// Derive the storage aggregate's dtypes from the lifted aggregate's.
-    ///
-    /// The partial dtypes are shared, so only the storage return dtype is left to resolve.
-    fn storage_dtypes<'a>(
-        &self,
-        args: AggregateArgs<'a, StorageOptions<L>>,
-    ) -> VortexResult<(&'a ExtDTypeRef, AggregateDTypes)> {
-        let ext_dtype = ext_dtype(args.dtype)?;
-        let storage = self.0.storage();
-        let storage_dtype = ext_dtype.storage_dtype().clone();
-        let return_dtype = storage
-            .return_dtype(args.options, &storage_dtype)
-            .ok_or_else(|| {
-                vortex_err!(
-                    "Aggregate function {} cannot be applied to dtype {}",
-                    storage.id(),
-                    storage_dtype
-                )
-            })?;
-        Ok((
-            ext_dtype,
-            AggregateDTypes::new(storage_dtype, return_dtype, args.partial_dtype.clone()),
+    /// Derive the storage aggregate's dtypes from this aggregate's, which share the partial and
+    /// return dtypes.
+    fn storage_dtypes(&self, args: AggregateArgs<'_, A::Options>) -> VortexResult<AggregateDTypes> {
+        let storage_dtype = self.storage_dtype(args.dtype).ok_or_else(|| {
+            vortex_err!(
+                "Aggregate function {} expects extension type {}, got {}",
+                self.id,
+                self.ext.id(),
+                args.dtype
+            )
+        })?;
+        Ok(AggregateDTypes::new(
+            storage_dtype.clone(),
+            args.return_dtype.clone(),
+            args.partial_dtype.clone(),
         ))
     }
 }
 
-fn ext_dtype(dtype: &DType) -> VortexResult<&ExtDTypeRef> {
-    dtype
-        .as_extension_opt()
-        .ok_or_else(|| vortex_err!("Extension delegate expects an extension dtype, got {dtype}"))
-}
-
-impl<L: StorageLifter> AggregateFnVTable for ExtensionDelegate<L> {
-    type Options = StorageOptions<L>;
+impl<A: AggregateFnVTable, E: ExtVTable> AggregateFnVTable for ExtensionAggregate<A, E> {
+    type Options = A::Options;
     // The storage aggregate is held as a fully-fledged `Accumulator` so that storage batches
-    // consult the kernel registry and the cached statistics of the storage aggregate.
-    type Partial = Accumulator<L::Storage>;
+    // consult the kernel registry and the cached statistics of `A`.
+    type Partial = Accumulator<A>;
 
     fn id(&self) -> AggregateFnId {
-        self.0.id()
+        self.id
     }
 
     fn serialize(&self, options: &Self::Options) -> VortexResult<Option<Vec<u8>>> {
-        self.0.storage().serialize(options)
+        self.aggregate.serialize(options)
     }
 
     fn deserialize(&self, metadata: &[u8], session: &VortexSession) -> VortexResult<Self::Options> {
-        self.0.storage().deserialize(metadata, session)
+        self.aggregate.deserialize(metadata, session)
     }
 
     fn return_dtype(&self, options: &Self::Options, input_dtype: &DType) -> Option<DType> {
-        let ext_dtype = input_dtype.as_extension_opt()?;
-        let storage_return = self
-            .0
-            .storage()
-            .return_dtype(options, ext_dtype.storage_dtype())?;
-        self.0.lift_return_dtype(ext_dtype, storage_return)
+        self.aggregate
+            .return_dtype(options, self.storage_dtype(input_dtype)?)
     }
 
     fn partial_dtype(&self, options: &Self::Options, input_dtype: &DType) -> Option<DType> {
-        let ext_dtype = input_dtype.as_extension_opt()?;
-        self.0
-            .storage()
-            .partial_dtype(options, ext_dtype.storage_dtype())
+        self.aggregate
+            .partial_dtype(options, self.storage_dtype(input_dtype)?)
     }
 
     fn empty_partial(&self, args: AggregateArgs<'_, Self::Options>) -> VortexResult<Self::Partial> {
-        let (_, dtypes) = self.storage_dtypes(args)?;
         Ok(Accumulator::from_dtypes(
-            self.0.storage(),
+            self.aggregate.clone(),
             args.options.clone(),
-            dtypes,
+            self.storage_dtypes(args)?,
         ))
     }
 
@@ -283,7 +193,8 @@ impl<L: StorageLifter> AggregateFnVTable for ExtensionDelegate<L> {
             }
             Columnar::Canonical(_) => {
                 vortex_bail!(
-                    "Extension delegate expects an extension array, got {}",
+                    "Aggregate function {} expects an extension array, got {}",
+                    self.id,
                     batch.dtype()
                 )
             }
@@ -295,20 +206,83 @@ impl<L: StorageLifter> AggregateFnVTable for ExtensionDelegate<L> {
         args: AggregateArgs<'_, Self::Options>,
         states: ArrayRef,
     ) -> VortexResult<ArrayRef> {
-        let (ext_dtype, dtypes) = self.storage_dtypes(args)?;
-        let storage_results = self
-            .0
-            .storage()
-            .finalize(dtypes.args(args.options), states)?;
-        self.0.lift_array(ext_dtype, storage_results)
+        let dtypes = self.storage_dtypes(args)?;
+        self.aggregate.finalize(dtypes.args(args.options), states)
     }
 
     fn finalize_scalar(
         &self,
-        args: AggregateArgs<'_, Self::Options>,
+        _args: AggregateArgs<'_, Self::Options>,
         partial: &Self::Partial,
     ) -> VortexResult<Scalar> {
-        self.0
-            .lift_scalar(ext_dtype(args.dtype)?, partial.final_scalar()?)
+        partial.final_scalar()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use vortex_error::VortexResult;
+
+    use super::ExtensionAggregate;
+    use crate::IntoArray;
+    use crate::VortexSessionExecute;
+    use crate::aggregate_fn::Accumulator;
+    use crate::aggregate_fn::AggregateFnVTable;
+    use crate::aggregate_fn::DynAccumulator;
+    use crate::aggregate_fn::NumericalAggregateOpts;
+    use crate::aggregate_fn::fns::sum::Sum;
+    use crate::aggregate_fn::session::AggregateFnSessionExt;
+    use crate::arrays::ExtensionArray;
+    use crate::arrays::PrimitiveArray;
+    use crate::dtype::DType;
+    use crate::dtype::Nullability;
+    use crate::extension::datetime::Date;
+    use crate::extension::datetime::TimeUnit;
+    use crate::extension::datetime::Timestamp;
+
+    #[test]
+    fn sums_extension_through_storage() -> VortexResult<()> {
+        let session = crate::array_session();
+        let aggregate = ExtensionAggregate::new(Sum, Timestamp);
+        session.aggregate_fns().register(aggregate.clone());
+        assert!(
+            session
+                .aggregate_fns()
+                .find_plugin(&aggregate.id())
+                .is_some()
+        );
+
+        let ext_dtype = Timestamp::new(TimeUnit::Milliseconds, Nullability::Nullable).erased();
+        let storage =
+            PrimitiveArray::from_option_iter([Some(3_000i64), None, Some(1_000)]).into_array();
+        let array = ExtensionArray::new(ext_dtype.clone(), storage.clone()).into_array();
+
+        let mut ctx = session.create_execution_ctx();
+        let mut acc = Accumulator::try_new(
+            aggregate,
+            NumericalAggregateOpts::default(),
+            DType::Extension(ext_dtype),
+        )?;
+        acc.accumulate(&array, &mut ctx)?;
+
+        let mut expected = Accumulator::try_new(
+            Sum,
+            NumericalAggregateOpts::default(),
+            storage.dtype().clone(),
+        )?;
+        expected.accumulate(&storage, &mut ctx)?;
+
+        assert_eq!(acc.finish()?, expected.finish()?);
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_other_extension_types() {
+        let date = DType::Extension(Date::new(TimeUnit::Days, Nullability::Nullable).erased());
+        assert!(
+            ExtensionAggregate::new(Sum, Timestamp)
+                .return_dtype(&NumericalAggregateOpts::default(), &date)
+                .is_none()
+        );
     }
 }
