@@ -440,8 +440,8 @@ async fn write_with(session: &VortexSession, array: ArrayRef) -> VortexResult<By
     Ok(buffer)
 }
 
-/// Write `array` with `session`, opting in to the list layout.
-async fn write_list_layout(
+/// Write `array` with `session`, keeping lists flat.
+async fn write_without_list_layout(
     session: &VortexSession,
     array: ArrayRef,
 ) -> VortexResult<ByteBufferMut> {
@@ -450,7 +450,7 @@ async fn write_list_layout(
         .write_options()
         .with_strategy(
             WriteStrategyBuilder::from_session(session)
-                .with_list_layout()
+                .without_list_layout()
                 .build(),
         )
         .write(&mut buffer, array.to_array_stream())
@@ -562,10 +562,10 @@ async fn writer_restricts_layouts_to_the_enabled_editions() -> VortexResult<()> 
     Ok(())
 }
 
-/// The list layout is opt-in: the default writer never emits it, and opting in writes it only when
-/// the enabled editions permit it.
+/// The writer emits the list layout when the enabled editions include it, unless the builder
+/// turns it off.
 #[tokio::test]
-async fn list_layout_is_opt_in_and_edition_gated() -> VortexResult<()> {
+async fn list_layout_follows_enabled_editions() -> VortexResult<()> {
     use crate::VortexSessionDefault;
 
     let list = ListArray::try_new(
@@ -576,15 +576,10 @@ async fn list_layout_is_opt_in_and_edition_gated() -> VortexResult<()> {
     let array = StructArray::from_fields(&[("l", list.into_array())])?.into_array();
     let list_layout = Id::from("vortex.list");
 
-    // The default core edition does not include the list layout, so opting in fails the write.
+    // The default core edition does not include the list layout, so lists stay flat.
     let session = VortexSession::default();
-    let error = write_list_layout(&session, array.clone())
-        .await
-        .expect_err("the list layout is not in the default editions");
-    assert!(
-        error.to_string().contains("not permitted by ctx"),
-        "unexpected error: {error}"
-    );
+    let written = written_layout_ids(&session, write_with(&session, array.clone()).await?)?;
+    assert!(!written.contains(&list_layout), "{written:?}");
 
     let session = VortexSession::default();
     session.editions().declare_inclusion(EditionInclusion::new(
@@ -594,13 +589,13 @@ async fn list_layout_is_opt_in_and_edition_gated() -> VortexResult<()> {
     ))?;
     session.enable_edition(DEFAULT_PREVIEW_EDITION)?;
 
-    // Permitted but not requested: the default writer keeps lists flat.
+    // Permitted: the default writer emits it.
     let written = written_layout_ids(&session, write_with(&session, array.clone()).await?)?;
-    assert!(!written.contains(&list_layout), "{written:?}");
-
-    // Permitted and requested.
-    let written = written_layout_ids(&session, write_list_layout(&session, array).await?)?;
     assert!(written.contains(&list_layout), "{written:?}");
+
+    // Permitted but turned off.
+    let written = written_layout_ids(&session, write_without_list_layout(&session, array).await?)?;
+    assert!(!written.contains(&list_layout), "{written:?}");
     Ok(())
 }
 

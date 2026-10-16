@@ -23,6 +23,7 @@ use vortex_btrblocks::BtrBlocksCompressor;
 use vortex_buffer::ByteBuffer;
 use vortex_file::OpenOptionsSessionExt;
 use vortex_file::WriteOptionsSessionExt;
+use vortex_file::WriteStrategyBuilder;
 use vortex_io::session::RuntimeSession;
 use vortex_layout::layouts::compressed::CompressingStrategy;
 use vortex_layout::layouts::flat::writer::FlatLayoutStrategy;
@@ -147,9 +148,16 @@ async fn test_dict_listview_validity_roundtrip() {
         .expect("from_fields")
         .into_array();
 
+    // The failure was in the flat write path, which `SESSION`'s editions would otherwise replace
+    // with the list layout.
     let mut bytes = Vec::new();
     SESSION
         .write_options()
+        .with_strategy(
+            WriteStrategyBuilder::from_session(&SESSION)
+                .without_list_layout()
+                .build(),
+        )
         .write(&mut bytes, data.to_array_stream())
         .await
         .expect("write should not fail with fill_null serialization error");

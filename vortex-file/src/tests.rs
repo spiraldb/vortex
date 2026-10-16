@@ -2020,22 +2020,17 @@ async fn write_read_roundtrip_with_layout(
     array: ArrayRef,
     use_list_layout: bool,
 ) -> VortexResult<ArrayRef> {
-    let strategy = crate::strategy::WriteStrategyBuilder::from_session(&SESSION)
-        .with_list_layout()
-        .build();
-    let mut buf = ByteBufferMut::empty();
-    if use_list_layout {
-        SESSION
-            .write_options()
-            .with_strategy(strategy)
-            .write(&mut buf, array.to_array_stream())
-            .await?;
-    } else {
-        SESSION
-            .write_options()
-            .write(&mut buf, array.to_array_stream())
-            .await?;
+    // `SESSION` enables the `vortex.list` layout, so the default writer decomposes lists.
+    let mut strategy = crate::strategy::WriteStrategyBuilder::from_session(&SESSION);
+    if !use_list_layout {
+        strategy = strategy.without_list_layout();
     }
+    let mut buf = ByteBufferMut::empty();
+    SESSION
+        .write_options()
+        .with_strategy(strategy.build())
+        .write(&mut buf, array.to_array_stream())
+        .await?;
     SESSION
         .open_options()
         .open_buffer(buf)?
