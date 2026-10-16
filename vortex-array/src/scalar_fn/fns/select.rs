@@ -210,11 +210,12 @@ impl ScalarFnVTable for Select {
                 .is_nullable()
         });
 
-        // If no fields are included, we can trivially simplify to a pack expression.
+        // If no fields are included, we can trivially simplify to a pack expression, unless the
+        // struct is nullable: a fieldless pack has no nulls, so it would lose the struct's.
         // NOTE(ngates): we do this knowing that our layout expression partitioning logic has
         //  special-casing for pack, but not for select. We will fix this up when we revisit the
         //  layout APIs.
-        if included_fields.is_empty() {
+        if included_fields.is_empty() && !struct_nullability.is_nullable() {
             return Ok(Some(Pack.try_new_bound_expr(
                 PackOptions {
                     names: FieldNames::empty(),
@@ -346,6 +347,7 @@ impl Display for FieldSelection {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
 
@@ -357,6 +359,7 @@ mod tests {
     use crate::arrays::ConstantArray;
     use crate::arrays::ScalarFnArray;
     use crate::arrays::struct_::StructArrayExt;
+    use crate::assert_arrays_eq;
     use crate::dtype::DType;
     use crate::dtype::FieldName;
     use crate::dtype::FieldNames;
@@ -370,9 +373,11 @@ mod tests {
     use crate::expr::test_harness;
     use crate::scalar::Scalar;
     use crate::scalar_fn::ScalarFnVTableExt;
+    use crate::scalar_fn::fns::pack::Pack;
     use crate::scalar_fn::fns::select::FieldSelection;
     use crate::scalar_fn::fns::select::Select;
     use crate::scalar_fn::fns::select::StructArray;
+    use crate::validity::Validity;
 
     fn test_array() -> StructArray {
         StructArray::from_fields(&[
@@ -548,5 +553,40 @@ mod tests {
         assert!(result_dtype.is_nullable());
         let fields = result_dtype.as_struct_fields_opt().unwrap();
         assert_eq!(fields.names().as_ref(), &["a", "b"]);
+    }
+
+    /// Selecting no fields keeps the input struct's validity. Only a non-nullable struct may
+    /// simplify to a fieldless `pack`, which has no nulls.
+    #[rstest]
+    #[case::nullable(Validity::from_iter([true, false, true]), false)]
+    #[case::non_nullable(Validity::NonNullable, true)]
+    fn select_no_fields_keeps_validity(
+        #[case] validity: Validity,
+        #[case] simplifies_to_pack: bool,
+    ) -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let array = StructArray::try_new(
+            FieldNames::from(["a", "b"]),
+            [
+                buffer![0i32, 1, 2].into_array(),
+                buffer![3i32, 4, 5].into_array(),
+            ],
+            3,
+            validity.clone(),
+        )?
+        .into_array();
+
+        let optimized = select_exclude(["a", "b"], root())
+            .bind(array.dtype())?
+            .optimize_recursive()?;
+        assert_eq!(
+            optimized.is::<Pack>(),
+            simplifies_to_pack,
+            "got {optimized}"
+        );
+
+        let expected = StructArray::try_new(FieldNames::empty(), [], 3, validity)?;
+        assert_arrays_eq!(array.apply_bound(&optimized)?, expected, &mut ctx);
+        Ok(())
     }
 }
