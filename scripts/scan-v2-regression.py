@@ -3,6 +3,8 @@
 
 """Compare V1, previous V2, and current V2 with full Arrow materialization."""
 
+from __future__ import annotations
+
 import argparse
 import csv
 import hashlib
@@ -54,8 +56,8 @@ def measure(
                     str(binary),
                     str(files[case["dataset"]]),
                     str(iterations),
-                    "100",
-                    case["pattern"],
+                    str(case.get("rows", 100)),
+                    case.get("selector", case["pattern"]),
                     case["mode"],
                     "disk",
                     "decode",
@@ -140,10 +142,19 @@ def report(output: Path, metadata: dict, summary: list[dict], confirmations: lis
             target.write(text)
 
 
-def compare_standard(binary: Path, cpus: list[int], output: Path):
+def compare_standard(binary: Path, cpus: list[int], output: Path, baseline: Path | None = None):
     """Compare the standard suite, including its legacy six-row taxi lookup."""
     output.mkdir(exist_ok=True)
     binary = binary.resolve()
+    versions = {"v1": (binary, False), "v2": (binary, True)}
+    if baseline is not None:
+        baseline = baseline.resolve()
+        versions = {
+            "old_v1": (baseline, False),
+            "v1": (binary, False),
+            "old_v2": (baseline, True),
+            "v2": (binary, True),
+        }
     env = {k: v for k, v in os.environ.items() if not k.startswith(("VORTEX_", "TOKIO_"))}
     env["RUST_LOG"] = "warn"
     metadata = dict(
@@ -156,18 +167,21 @@ def compare_standard(binary: Path, cpus: list[int], output: Path):
         seed=42,
     )
     metadata["output"] = "standard canonical-array output; one-second cached warmup"
+    metadata["versions"] = {
+        name: {"binary": str(path), "sha256": digest(path), "scan_v2": v2} for name, (path, v2) in versions.items()
+    }
     commands, summary = [], []
     for cores in [1, 30]:
         samples = {}
         for repeat in range(2):
-            for version in ["v1", "v2"] if repeat == 0 else ["v2", "v1"]:
+            for version in list(versions) if repeat == 0 else list(reversed(versions)):
                 stem = f"{cores}-{repeat}-{version}"
                 path = output / f"{stem}.jsonl"
                 command = [
                     "taskset",
                     "-c",
                     ",".join(map(str, cpus[:cores])),
-                    str(binary),
+                    str(versions[version][0]),
                     "--formats",
                     "vortex",
                     "--open-mode",
@@ -179,7 +193,7 @@ def compare_standard(binary: Path, cpus: list[int], output: Path):
                     "-o",
                     str(path),
                 ]
-                if version == "v2":
+                if versions[version][1]:
                     command.append("--scan-v2")
                 commands.append(command)
                 print(f"Standard suite: {stem}", flush=True)
@@ -191,7 +205,7 @@ def compare_standard(binary: Path, cpus: list[int], output: Path):
                 for row in rows:
                     if row["unit"] != "ns":
                         raise RuntimeError(f"Unexpected standard benchmark unit: {row}")
-                    samples.setdefault(row["name"], {"v1": [], "v2": []})[version].append(row["value"] / 1e6)
+                    samples.setdefault(row["name"], {name: [] for name in versions})[version].append(row["value"] / 1e6)
         for name, rounds in samples.items():
             if any(len(values) != 2 for values in rounds.values()):
                 raise RuntimeError(f"Unpaired standard benchmark target: {name}")
@@ -204,6 +218,13 @@ def compare_standard(binary: Path, cpus: list[int], output: Path):
                 vs_v1_pct=change(times["v2"], times["v1"]),
                 rounds=rounds,
             )
+            if baseline is not None:
+                row.update(
+                    old_v1_ms=times["old_v1"],
+                    old_v2_ms=times["old_v2"],
+                    vs_old_v2_pct=change(times["v2"], times["old_v2"]),
+                    v1_change_pct=change(times["v1"], times["old_v1"]),
+                )
             summary.append(row)
             print(json.dumps(row), flush=True)
         (output / "results.json").write_text(
@@ -224,6 +245,25 @@ def compare_standard(binary: Path, cpus: list[int], output: Path):
         f"| {r['cores']} | {r['name']} | {r['v1_ms']:.4f} | {r['v2_ms']:.4f} | {r['vs_v1_pct']:+.1f}% |"
         for r in summary
     )
+    if baseline is not None:
+        lines.extend(
+            [
+                "",
+                "### Parent comparison",
+                "",
+                f"Cases above +3% vs parent V2: {sum(r['vs_old_v2_pct'] > 3 for r in summary)}/{len(summary)}.",
+                "",
+                "| Cores | Target | Parent V1 ms | Candidate V1 ms | Parent V2 ms | Candidate V2 ms "
+                "| V1 change | V2 change |",
+                "|---:|---|---:|---:|---:|---:|---:|---:|",
+            ]
+        )
+        lines.extend(
+            f"| {r['cores']} | {r['name']} | {r['old_v1_ms']:.4f} | {r['v1_ms']:.4f} "
+            f"| {r['old_v2_ms']:.4f} | {r['v2_ms']:.4f} "
+            f"| {r['v1_change_pct']:+.1f}% | {r['vs_old_v2_pct']:+.1f}% |"
+            for r in summary
+        )
     text = "\n".join(lines) + "\n"
     (output / "summary.md").write_text(text)
     if step_summary := os.environ.get("GITHUB_STEP_SUMMARY"):
@@ -239,6 +279,11 @@ def main():
     parser.add_argument("--candidate-commit", required=True)
     parser.add_argument(
         "--standard-benchmark", type=Path, help="Also compare V1/V2 with the standard random-access binary"
+    )
+    parser.add_argument(
+        "--baseline-standard-benchmark",
+        type=Path,
+        help="Also compare the parent standard benchmark; it must support --scan-v2",
     )
     parser.add_argument("--data-dir", type=Path, default=Path("vortex-bench/data"))
     parser.add_argument("--list-dir", type=Path, default=Path("scan-v2-data"))
@@ -305,7 +350,7 @@ def main():
         save(args.output, metadata, summary, confirmations)
     report(args.output, metadata, summary, confirmations)
     if args.standard_benchmark:
-        compare_standard(args.standard_benchmark, cpus, args.output / "standard")
+        compare_standard(args.standard_benchmark, cpus, args.output / "standard", args.baseline_standard_benchmark)
 
 
 if __name__ == "__main__":
