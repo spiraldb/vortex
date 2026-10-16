@@ -3,23 +3,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-# DO NOT MERGE: tries DataFusion with a memory limit and spilling at TPC-H SF1000.
-#
-# With DATAFUSION_BENCH_MEMORY_LIMIT_GIB set, aggregations and sorts spill to disk and hash join
-# builds that do not fit fail with a resources-exhausted error instead of growing until the
-# process is killed. prefer_hash_join=false swaps hash joins for sort-merge joins, which spill.
+# DO NOT MERGE: checks whether DataFusion runs TPC-H SF1000 with the Vortex scan concurrency fix
+# (one split per core per stream by default), with and without a memory limit and spilling.
 
 set -Eeuo pipefail
 
 BIN=${BIN:-target/release_debug/datafusion-bench}
 ALL_QUERIES=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22)
-JOIN_QUERIES=(9 18 21)
 SPILL_DIR="${GITHUB_WORKSPACE:-$PWD}/df-spill"
-
-# The memory pool does not track scan buffers or batches in flight, so leave headroom below the
-# machine's 188 GiB for them.
-export DATAFUSION_BENCH_MEMORY_LIMIT_GIB=${DATAFUSION_BENCH_MEMORY_LIMIT_GIB:-100}
-export DATAFUSION_BENCH_SPILL_DIR="$SPILL_DIR"
+RUNNER="ec2_${RUNS_ON_INSTANCE_TYPE:-unknown}"
 export RUST_BACKTRACE=0
 
 run_variant() {
@@ -40,12 +32,16 @@ run_variant() {
     rm -rf "$SPILL_DIR"
 }
 
-run_variant parquet-spill parquet "${ALL_QUERIES[*]}"
-run_variant vortex-spill vortex "${ALL_QUERIES[*]}"
-run_variant vortex-spill-scan1 vortex "${ALL_QUERIES[*]}" VORTEX_SCAN_CONCURRENCY=1
-run_variant parquet-spill-smj parquet "${JOIN_QUERIES[*]}" DATAFUSION_OPTIMIZER_PREFER_HASH_JOIN=false
-run_variant vortex-spill-scan1-smj vortex "${JOIN_QUERIES[*]}" \
-    VORTEX_SCAN_CONCURRENCY=1 DATAFUSION_OPTIMIZER_PREFER_HASH_JOIN=false
+run_variant vortex-fix vortex "${ALL_QUERIES[*]}"
+run_variant vortex-fix-spill vortex "${ALL_QUERIES[*]}" \
+    DATAFUSION_BENCH_MEMORY_LIMIT_GIB=100 DATAFUSION_BENCH_SPILL_DIR="$SPILL_DIR"
+run_variant parquet-spill parquet "${ALL_QUERIES[*]}" \
+    DATAFUSION_BENCH_MEMORY_LIMIT_GIB=100 DATAFUSION_BENCH_SPILL_DIR="$SPILL_DIR"
+
+# Q2 and Q16 still used more memory on Vortex than on Parquet with the old scan settings, and
+# only responded to the partition count; compare their plans.
+"$BIN" tpch --explain --formats parquet,vortex --queries 2,16 --runner "$RUNNER" \
+    --opt scale-factor="$SCALE_FACTOR" > "$OUT_DIR/explain-q2-q16.txt" 2>&1 || true
 
 for dir in "$OUT_DIR"/*/; do
     [[ -f "$dir/queries.jsonl" ]] || continue

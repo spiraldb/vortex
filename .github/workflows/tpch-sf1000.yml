@@ -11,7 +11,7 @@
 name: TPC-H SF1000 (OOM diagnosis)
 
 concurrency:
-  group: tpch-sf1000-oom-diag
+  group: tpch-sf1000-oom-diag-${{ github.sha }}
   cancel-in-progress: false
 
 on:
