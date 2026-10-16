@@ -104,7 +104,7 @@ fn collect_nested_values(
 }
 
 /// The projection splits of `rows`: cut at every one of `starts` inside it.
-pub(crate) fn projection_splits(starts: &[u64], rows: Range<u64>) -> Vec<Range<u64>> {
+pub(in crate::scan) fn projection_splits(starts: &[u64], rows: Range<u64>) -> Vec<Range<u64>> {
     if rows.is_empty() {
         return Vec::new();
     }

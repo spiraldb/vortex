@@ -19,6 +19,7 @@ use vortex::expr::root;
 use vortex::expr::select;
 use vortex::file::OpenOptionsSessionExt;
 use vortex::file::WriteOptionsSessionExt;
+use vortex::layout::scan::v2::ScanBuilder;
 use vortex_arrow::ArrowSessionExt;
 use vortex_bench::Format;
 use vortex_bench::SESSION;
@@ -68,13 +69,9 @@ impl Compressor for VortexCompressor {
         };
 
         let start = Instant::now();
-        // Decode on the planner-driven scan executor.
-        let mut scan = SESSION
-            .open_options()
-            .open_buffer(data.clone())?
-            .scan()?
-            .with_scan_v2(true);
-        let source_dtype = scan.dtype()?;
+        let file = SESSION.open_options().open_buffer(data.clone())?;
+        let mut scan = ScanBuilder::new(SESSION.clone(), file.scan_file());
+        let source_dtype = scan.dtype().clone();
         let root_columns = source_dtype
             .as_struct_fields_opt()
             .map_or(0, |fields| fields.nfields());
@@ -86,7 +83,7 @@ impl Compressor for VortexCompressor {
                 .optimize_recursive()?;
             scan = scan.with_projection(projection);
         }
-        let schema = Arc::new(SESSION.arrow().to_arrow_schema(&scan.dtype()?)?);
+        let schema = Arc::new(SESSION.arrow().to_arrow_schema(scan.dtype())?);
 
         let stream = scan.into_record_batch_stream(schema)?;
         pin_mut!(stream);

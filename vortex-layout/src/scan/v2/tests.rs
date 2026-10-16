@@ -7,6 +7,8 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
+use arrow_array::cast::AsArray;
+use arrow_array::types::Int32Type;
 use futures::TryStreamExt;
 use futures::stream;
 use rstest::rstest;
@@ -27,6 +29,7 @@ use vortex_array::expr::lit;
 use vortex_array::expr::pack;
 use vortex_array::expr::root;
 use vortex_array::validity::Validity;
+use vortex_arrow::ArrowSessionExt;
 use vortex_buffer::Alignment;
 use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
@@ -35,9 +38,9 @@ use vortex_io::session::RuntimeSessionExt;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
 
-use super::Executor;
+use super::PreparedScan;
+use super::ScanBuilder;
 use super::ScanFile;
-use super::select_supported;
 use crate::LayoutRef;
 use crate::LayoutStrategy;
 use crate::layouts::chunked::writer::ChunkedLayoutStrategy;
@@ -48,7 +51,7 @@ use crate::layouts::table::TableStrategy;
 use crate::layouts::zoned::writer::ZonedLayoutOptions;
 use crate::layouts::zoned::writer::ZonedStrategy;
 use crate::scan::planning::SegmentLocation;
-use crate::scan::scan_builder::ScanBuilder;
+use crate::scan::scan_builder::ScanBuilder as V1ScanBuilder;
 use crate::scan::split_by::SplitBy;
 use crate::segments::SegmentFuture;
 use crate::segments::SegmentId;
@@ -162,13 +165,10 @@ fn builder(
     segments: &Arc<dyn SegmentSource>,
     layout: &LayoutRef,
 ) -> VortexResult<ScanBuilder<ArrayRef>> {
-    let reader = layout.new_reader(
-        "".into(),
-        Arc::clone(segments),
-        session,
-        &Default::default(),
-    )?;
-    Ok(ScanBuilder::new(session.clone(), reader).with_scan_file(scan_file(segments, layout)?))
+    Ok(ScanBuilder::new(
+        session.clone(),
+        scan_file(segments, layout)?,
+    ))
 }
 
 async fn collect(
@@ -184,12 +184,29 @@ async fn assert_same_as_v1(
     session: &VortexSession,
     make: impl Fn() -> VortexResult<ScanBuilder<ArrayRef>>,
 ) -> VortexResult<()> {
-    let dtype = make()?.dtype()?;
-    let expected = collect(dtype.clone(), make()?.prepare()?.execute_stream(None)?).await?;
-    let Executor::V2(scan) = select_supported(make()?)? else {
-        panic!("the scan should run on the planner-driven executor");
-    };
-    let actual = collect(dtype, scan.execute_stream()?).await?;
+    let builder = make()?;
+    let dtype = builder.dtype().clone();
+    let reader = builder.file.layout.new_reader(
+        "".into(),
+        Arc::clone(&builder.file.segments),
+        session,
+        &Default::default(),
+    )?;
+    let mut v1 = V1ScanBuilder::new(session.clone(), reader)
+        .with_projection(builder.projection.clone())
+        .with_selection(builder.selection.clone())
+        .with_row_offset(builder.row_offset)
+        .with_ordered(builder.ordered)
+        .with_split_by(builder.split_by)
+        .with_concurrency(builder.concurrency);
+    if let Some(rows) = builder.row_range.clone() {
+        v1 = v1.with_row_range(rows);
+    }
+    if let Some(boundaries) = builder.natural_splits.clone() {
+        v1 = v1.with_natural_splits(boundaries);
+    }
+    let expected = collect(dtype.clone(), v1.into_stream()?).await?;
+    let actual = collect(dtype, builder.into_stream()?).await?;
     assert_arrays_eq!(actual, expected, &mut session.create_execution_ctx());
     Ok(())
 }
@@ -264,18 +281,41 @@ async fn projection_matches_v1(
 }
 
 #[tokio::test]
+async fn arrow_stream_projects_across_chunks() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, table().as_ref()).await?;
+    let projection =
+        pack([("value", get_item("ints", root()))], false.into()).bind(layout.dtype())?;
+    let scan = builder(&session, &segments, &layout)?
+        .with_projection(projection)
+        .with_row_range(990..1010);
+    let schema = Arc::new(session.arrow().to_arrow_schema(scan.dtype())?);
+    let batches: Vec<_> = scan.into_record_batch_stream(schema)?.try_collect().await?;
+    let values: Vec<_> = batches
+        .iter()
+        .flat_map(|batch| {
+            batch
+                .column(0)
+                .as_primitive::<Int32Type>()
+                .values()
+                .iter()
+                .copied()
+        })
+        .collect();
+    assert_eq!(values, (990_i32..1010).collect::<Vec<_>>());
+    Ok(())
+}
+
+#[tokio::test]
 async fn zoned_projection_keeps_data_splits() -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, zoned_table().as_ref()).await?;
     let projection = get_item("ints", root()).bind(layout.dtype())?;
-    let Executor::V2(scan) = select_supported(
+    let scan = PreparedScan::try_new(
         builder(&session, &segments, &layout)?
             .with_projection(projection)
             .with_row_range(250..3100),
-    )?
-    else {
-        panic!("the scan should run on the planner-driven executor");
-    };
+    )?;
     assert_eq!(
         scan.splits,
         vec![250..1000, 1000..2000, 2000..3000, 3000..3100]
@@ -297,11 +337,7 @@ async fn split_policy_is_preserved(
 ) -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, table().as_ref()).await?;
-    let Executor::V2(scan) =
-        select_supported(builder(&session, &segments, &layout)?.with_split_by(policy))?
-    else {
-        panic!("the scan should run on the planner-driven executor");
-    };
+    let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?.with_split_by(policy))?;
     assert_eq!(scan.splits, expected);
     Ok(())
 }
@@ -310,15 +346,12 @@ async fn split_policy_is_preserved(
 async fn supplied_splits_take_precedence_and_are_clamped() -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, table().as_ref()).await?;
-    let Executor::V2(scan) = select_supported(
+    let scan = PreparedScan::try_new(
         builder(&session, &segments, &layout)?
             .with_split_by(SplitBy::RowCount(1000))
             .with_natural_splits(Arc::from([0, 2500, 4000]))
             .with_row_range(500..3000),
-    )?
-    else {
-        panic!("the scan should run on the planner-driven executor");
-    };
+    )?;
     assert_eq!(scan.splits, vec![500..2500, 2500..3000]);
     Ok(())
 }
@@ -347,9 +380,7 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
         reads: AtomicUsize::new(0),
     });
     let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
-    let Executor::V2(scan) = select_supported(builder(&session, &segments, &layout)?)? else {
-        panic!("the scan should run on the planner-driven executor");
-    };
+    let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?)?;
     let splits = scan.split_plans();
     assert_eq!(splits.len(), CHUNKS);
     for (index, split) in splits.into_iter().enumerate() {
@@ -368,43 +399,19 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
     Ok(())
 }
 
+/// V2 rejects list layouts: their element ranges are only known once their offsets are read.
 #[tokio::test]
-async fn filters_and_limits_run_on_v1() -> VortexResult<()> {
-    let session = new_session().with_tokio();
-    let (segments, layout) = write(&session, table().as_ref()).await?;
-    let dtype = layout.dtype().clone();
-    let filter = gt(get_item("ints", root()), lit(10i32)).bind(&dtype)?;
-    let filtered = builder(&session, &segments, &layout)?.with_filter(filter);
-    assert!(matches!(select_supported(filtered)?, Executor::V1(_)));
-    let limited = builder(&session, &segments, &layout)?.with_limit(10);
-    assert!(matches!(select_supported(limited)?, Executor::V1(_)));
-    Ok(())
-}
-
-#[tokio::test]
-async fn scans_without_a_scan_file_run_on_v1() -> VortexResult<()> {
-    let session = new_session().with_tokio();
-    let (segments, layout) = write(&session, table().as_ref()).await?;
-    let reader = layout.new_reader(
-        "".into(),
-        Arc::clone(&segments),
-        &session,
-        &Default::default(),
-    )?;
-    let builder = ScanBuilder::new(session.clone(), reader);
-    assert!(matches!(select_supported(builder)?, Executor::V1(_)));
-    Ok(())
-}
-
-/// List layouts are scanned by the default executor: their element ranges are only known once
-/// their offsets are read, after a pipeline would have been compiled.
-#[tokio::test]
-async fn list_layouts_run_on_v1() -> VortexResult<()> {
+async fn list_layouts_return_an_error() -> VortexResult<()> {
     let session = new_session().with_tokio();
     let strategy = TableStrategy::new(chunked_flat(), chunked_flat()).with_list_layout();
     let (segments, layout) = write(&session, &strategy).await?;
     let builder = builder(&session, &segments, &layout)?;
-    assert!(matches!(select_supported(builder)?, Executor::V1(_)));
+    let error = builder
+        .into_stream()?
+        .try_next()
+        .await
+        .expect_err("V2 must reject an unsupported layout");
+    assert!(error.to_string().contains("V2 scans do not support"));
     Ok(())
 }
 
@@ -412,11 +419,7 @@ async fn list_layouts_run_on_v1() -> VortexResult<()> {
 async fn unordered_returns_every_row() -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, table().as_ref()).await?;
-    let Executor::V2(scan) =
-        select_supported(builder(&session, &segments, &layout)?.with_ordered(false))?
-    else {
-        panic!("the scan should run on the planner-driven executor");
-    };
+    let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?.with_ordered(false))?;
     let chunks: Vec<ArrayRef> = scan.execute_stream()?.try_collect().await?;
     let rows: usize = chunks.iter().map(|chunk| chunk.len()).sum();
     assert_eq!(rows, CHUNKS * CHUNK_ROWS);
@@ -428,14 +431,11 @@ async fn primitive_column() -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, table().as_ref()).await?;
     let dtype = layout.dtype().clone();
-    let Executor::V2(scan) = select_supported(
+    let scan = PreparedScan::try_new(
         builder(&session, &segments, &layout)?
             .with_projection(get_item("ints", root()).bind(&dtype)?)
             .with_row_range(990..1010),
-    )?
-    else {
-        panic!("the scan should run on the planner-driven executor");
-    };
+    )?;
     let actual = collect(
         DType::Primitive(vortex_array::dtype::PType::I32, false.into()),
         scan.execute_stream()?,
@@ -457,9 +457,7 @@ async fn splits_at_chunk_starts(
 ) -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, strategy.get().as_ref()).await?;
-    let Executor::V2(scan) = select_supported(builder(&session, &segments, &layout)?)? else {
-        panic!("the scan should run on the planner-driven executor");
-    };
+    let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?)?;
     let expected = (0..CHUNKS as u64)
         .map(|chunk| chunk * CHUNK_ROWS as u64..(chunk + 1) * CHUNK_ROWS as u64)
         .collect::<Vec<_>>();
