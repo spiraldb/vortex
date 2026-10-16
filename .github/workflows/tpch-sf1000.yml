@@ -8,16 +8,16 @@
 # OOM-killed or times out is recorded and the rest still run, and system memory is sampled
 # throughout data generation, conversion and every query.
 
-name: TPC-H SF1000
+name: TPC-H SF1000 (OOM diagnosis)
 
 concurrency:
-  group: tpch-sf1000
+  group: tpch-sf1000-oom-diag
   cancel-in-progress: false
 
 on:
   # TEMPORARY: lets the branch run the workflow before it lands; drop this commit before merging.
   push:
-    branches: [ji/tpch-sf1000-weekly]
+    branches: [ji/tpch-sf1000-oom-diag]
   schedule:
     - cron: "17 2 * * 6"  # weekly, Saturday
   workflow_dispatch:
@@ -102,7 +102,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        engine: ${{ fromJSON(inputs.engine == 'datafusion' && '["datafusion"]' || inputs.engine == 'duckdb' && '["duckdb"]' || '["datafusion", "duckdb"]') }}
+        engine: [datafusion]
     runs-on: runs-on=${{ github.run_id }}/runner=bench-dedicated/family=${{ inputs.machine_type || 'c8gd.metal-24xl' }}/image=ubuntu24-full-arm64-pre-v2/tag=tpch-sf1000-${{ matrix.engine }}
     env:
       DATA_DIR: vortex-bench/data/tpch/${{ inputs.scale_factor || '1000.0' }}
@@ -185,32 +185,11 @@ jobs:
           echo idle > "$PHASE_FILE"
           du -sh "$DATA_DIR"/vortex-file-compressed/*
 
-      - name: Run ${{ matrix.engine }} queries
-        id: queries
+      - name: Diagnose DataFusion memory
         shell: bash
         env:
           RUST_BACKTRACE: "1"
-          QUERIES: ${{ inputs.queries }}
-          ITERATIONS: ${{ inputs.iterations || '1' }}
-          QUERY_TIMEOUT_MINUTES: ${{ inputs.query_timeout_minutes || '45' }}
-        run: |
-          set -Eeuo pipefail
-          # Leave the job time for the summary and uploads once the queries have used 9 hours.
-          # Word splitting of $QUERIES is intended.
-          # shellcheck disable=SC2086
-          python3 scripts/bench-memory.py run-queries \
-            --binary "target/release_debug/${{ matrix.engine }}-bench" \
-            --engine "${{ matrix.engine }}" \
-            --formats parquet vortex \
-            ${QUERIES:+--queries $QUERIES} \
-            --iterations "$ITERATIONS" \
-            --timeout "$(( QUERY_TIMEOUT_MINUTES * 60 ))" \
-            --budget "$(( 9 * 3600 ))" \
-            --opt scale-factor="$SCALE_FACTOR" \
-            --out-dir "$OUT_DIR" \
-            --phase-file "$PHASE_FILE" \
-            --min-available-gib 8 \
-            --fail-on-error
+        run: bash scripts/tpch-oom-diag.sh
 
       - name: Stop memory monitor
         if: always()

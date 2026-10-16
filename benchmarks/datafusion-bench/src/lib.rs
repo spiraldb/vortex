@@ -116,6 +116,13 @@ fn vortex_table_options() -> VortexTableOptions {
 
     opts.predicate_pushdown = true;
     opts.projection_pushdown = true;
+    // DO NOT MERGE: diagnostic knob for the SF1000 OOM investigation.
+    if let Some(concurrency) = std::env::var("VORTEX_SCAN_CONCURRENCY")
+        .ok()
+        .and_then(|v| v.parse().ok())
+    {
+        opts.scan_concurrency = Some(concurrency);
+    }
 
     opts
 }
