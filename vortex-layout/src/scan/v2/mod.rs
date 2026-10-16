@@ -9,7 +9,8 @@
 //! file's [`SegmentSource`]. The layout reader is never asked to evaluate anything.
 //!
 //! `select` is the one place a streaming [`ScanBuilder`] picks between this executor and the
-//! default one. It picks this one when `VORTEX_SCAN_V2=1`, the builder carries a [`ScanFile`],
+//! default one. It picks this one when `VORTEX_SCAN_V2=1` (or
+//! [`ScanBuilder::with_scan_v2`] asks for it), the builder carries a [`ScanFile`],
 //! and the scan only uses what this executor implements so far: no filter, no limit, and a layout
 //! that lowers to plans with a pipeline implementation. Every other scan runs on the default
 //! executor, unchanged.
@@ -92,7 +93,7 @@ pub(crate) enum Executor<A: 'static + Send> {
 
 /// Picks the executor for `builder` and prepares the scan when it is this one.
 pub(crate) fn select<A: 'static + Send>(builder: ScanBuilder<A>) -> VortexResult<Executor<A>> {
-    if !enabled() {
+    if !builder.scan_v2.unwrap_or_else(enabled) {
         return Ok(Executor::V1(builder));
     }
     select_supported(builder)

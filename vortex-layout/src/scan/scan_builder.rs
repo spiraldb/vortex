@@ -85,6 +85,8 @@ pub struct ScanBuilder<A> {
     pub(super) row_offset: u64,
     /// Where the scanned file's segments live, which lets the planner-driven executor read it.
     pub(super) scan_file: Option<ScanFile>,
+    /// Overrides [`v2::enabled`] for this scan when set.
+    pub(super) scan_v2: Option<bool>,
 }
 
 impl ScanBuilder<ArrayRef> {
@@ -109,6 +111,7 @@ impl ScanBuilder<ArrayRef> {
             limit: None,
             row_offset: 0,
             scan_file: None,
+            scan_v2: None,
         }
     }
 
@@ -280,6 +283,13 @@ impl<A: 'static + Send> ScanBuilder<A> {
         self
     }
 
+    /// Whether a supported scan runs on the planner-driven executor, overriding
+    /// [`v2::ENV_VAR`] for this scan.
+    pub fn with_scan_v2(mut self, enabled: bool) -> Self {
+        self.scan_v2 = Some(enabled);
+        self
+    }
+
     /// The [`DType`] returned by the scan, after applying the projection.
     pub fn dtype(&self) -> VortexResult<DType> {
         Ok(self.projection.dtype().clone())
@@ -311,6 +321,7 @@ impl<A: 'static + Send> ScanBuilder<A> {
             limit: self.limit,
             row_offset: self.row_offset,
             scan_file: self.scan_file,
+            scan_v2: self.scan_v2,
             map_fn: Arc::new(move |a| old_map_fn(a).and_then(&map_fn)),
         }
     }

@@ -68,7 +68,12 @@ impl Compressor for VortexCompressor {
         };
 
         let start = Instant::now();
-        let mut scan = SESSION.open_options().open_buffer(data.clone())?.scan()?;
+        // Decode on the planner-driven scan executor.
+        let mut scan = SESSION
+            .open_options()
+            .open_buffer(data.clone())?
+            .scan()?
+            .with_scan_v2(true);
         let source_dtype = scan.dtype()?;
         let root_columns = source_dtype
             .as_struct_fields_opt()
