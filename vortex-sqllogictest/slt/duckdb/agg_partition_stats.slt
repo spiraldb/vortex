@@ -69,6 +69,34 @@ SELECT min(d), max(d) FROM '${WORK_DIR}/agg_partition_stats-date.vortex';
 ----
 2013-07-01 2013-07-30
 
+statement ok
+COPY (SELECT i::DOUBLE AS x FROM generate_series(1, 5000) t(i))
+TO '${WORK_DIR}/agg_partition_stats-double.vortex';
+
+query TT
+EXPLAIN SELECT max(x) FROM '${WORK_DIR}/agg_partition_stats-double.vortex';
+----
+<REGEX>:.*COLUMN_DATA_SCAN.*
+
+query R
+SELECT max(x) FROM '${WORK_DIR}/agg_partition_stats-double.vortex';
+----
+5000
+
+statement ok
+COPY (SELECT CASE WHEN i = 2500 THEN 'nan'::DOUBLE ELSE i::DOUBLE END AS x FROM generate_series(1, 5000) t(i))
+TO '${WORK_DIR}/agg_partition_stats-double-nan.vortex';
+
+query TT
+EXPLAIN SELECT min(x), max(x) FROM '${WORK_DIR}/agg_partition_stats-double-nan.vortex';
+----
+<REGEX>:.*COLUMN_DATA_SCAN.*
+
+query RR
+SELECT min(x), max(x) FROM '${WORK_DIR}/agg_partition_stats-double-nan.vortex';
+----
+1 NaN
+
 query TT
 EXPLAIN SELECT count(*) FROM '${WORK_DIR}/agg_partition_stats.vortex'
 WHERE i > 50000;

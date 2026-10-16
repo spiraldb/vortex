@@ -188,7 +188,6 @@ impl TryToDataFusion<ScalarValue> for Scalar {
 /// Converts a DataFusion [`ScalarValue`] to a Vortex [`Scalar`], resolving Arrow types through
 /// `session`'s [`ArrowSession`](vortex_arrow::ArrowSession).
 pub fn scalar_from_df(value: &ScalarValue, session: &VortexSession) -> VortexResult<Scalar> {
-    let arrow = session.arrow();
     Ok(match value {
         ScalarValue::Null => Scalar::null(DType::Null),
         ScalarValue::Boolean(b) => b
@@ -241,7 +240,8 @@ pub fn scalar_from_df(value: &ScalarValue, session: &VortexSession) -> VortexRes
         ScalarValue::Date32(v)
         | ScalarValue::Time32Second(v)
         | ScalarValue::Time32Millisecond(v) => {
-            let dtype = arrow
+            let dtype = session
+                .arrow()
                 .from_arrow_datatype(&value.data_type(), Nullability::Nullable)
                 .vortex_expect("arrow data type to dtype");
             Scalar::try_new(dtype, v.map(vortex::scalar::ScalarValue::from))
@@ -254,7 +254,8 @@ pub fn scalar_from_df(value: &ScalarValue, session: &VortexSession) -> VortexRes
         | ScalarValue::TimestampMillisecond(v, _)
         | ScalarValue::TimestampMicrosecond(v, _)
         | ScalarValue::TimestampNanosecond(v, _) => {
-            let dtype = arrow
+            let dtype = session
+                .arrow()
                 .from_arrow_datatype(&value.data_type(), Nullability::Nullable)
                 .vortex_expect("arrow data type to dtype");
             Scalar::try_new(dtype, v.map(vortex::scalar::ScalarValue::from))
