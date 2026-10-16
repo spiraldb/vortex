@@ -5,8 +5,11 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::Range;
 
+use itertools::Itertools;
+use num_traits::AsPrimitive;
 use num_traits::NumCast;
 use vortex_buffer::BitBuffer;
+use vortex_buffer::Buffer;
 use vortex_buffer::BufferAllocatorRef;
 use vortex_buffer::BufferMut;
 use vortex_error::VortexError;
@@ -26,8 +29,13 @@ use crate::ArraySlots;
 use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
+use crate::array::ArrayView;
+use crate::arrays::ConstantArray;
+use crate::arrays::PiecewiseSequence;
+use crate::arrays::PiecewiseSequenceArray;
 use crate::arrays::Primitive;
 use crate::arrays::PrimitiveArray;
+use crate::arrays::piecewise_sequence::execute_index_arrays;
 use crate::arrays::primitive::PrimitiveArrayExt;
 use crate::builtins::ArrayBuiltins;
 use crate::dtype::DType;
@@ -808,6 +816,11 @@ impl Patches {
             return Ok(None);
         }
 
+        // Piecewise indices are non-nullable, so there are no nulls to include.
+        if let Some(piecewise) = take_indices.as_opt::<PiecewiseSequence>() {
+            return self.take_piecewise(piecewise, ctx);
+        }
+
         let take_indices = take_indices.clone().execute::<PrimitiveArray>(ctx)?;
         if self.is_map_faster_than_search(&take_indices) {
             self.take_map(take_indices, true, ctx)
@@ -828,12 +841,63 @@ impl Patches {
             return Ok(None);
         }
 
+        if let Some(piecewise) = take_indices.as_opt::<PiecewiseSequence>() {
+            return self.take_piecewise(piecewise, ctx);
+        }
+
         let take_indices = take_indices.clone().execute::<PrimitiveArray>(ctx)?;
         if self.is_map_faster_than_search(&take_indices) {
             self.take_map(take_indices, false, ctx)
         } else {
             self.take_search(take_indices, false, ctx)
         }
+    }
+
+    /// Take the patches selected by [`PiecewiseSequence`] indices without expanding them.
+    ///
+    /// Each piece is intersected with the sorted patch indices by binary search, so the cost
+    /// depends on the number of pieces and matched patches rather than the number of indices.
+    /// The matched patch values are gathered with a `PiecewiseSequenceArray` of their own,
+    /// in which a unit-multiplier piece selects one contiguous run of values.
+    pub fn take_piecewise(
+        &self,
+        take_indices: ArrayView<'_, PiecewiseSequence>,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Option<Self>> {
+        let output_len = take_indices.as_ref().len();
+        let (starts, lengths, multipliers) = execute_index_arrays(take_indices, ctx)?;
+        let starts = unsigned_to_usize_vec(&starts);
+        let lengths = unsigned_to_usize_vec(&lengths);
+        let multipliers = unsigned_to_usize_vec(&multipliers);
+        let patch_indices = self.indices.clone().execute::<PrimitiveArray>(ctx)?;
+
+        let mut new_indices = BufferMut::<u64>::with_capacity_in(0, ctx.allocator().clone());
+        let mut value_pieces = ValuePieces::default();
+        match_each_unsigned_integer_ptype!(patch_indices.ptype(), |P| {
+            take_piecewise_search(
+                patch_indices.as_slice::<P>(),
+                self.offset,
+                self.array_len,
+                &starts,
+                &lengths,
+                &multipliers,
+                output_len,
+                &mut new_indices,
+                &mut value_pieces,
+            )?
+        });
+
+        if new_indices.is_empty() {
+            return Ok(None);
+        }
+
+        let values = value_pieces.take_from(&self.values, new_indices.len())?;
+
+        // SAFETY: there is one index and one value per matched patch. The indices are strictly
+        // increasing non-nullable `u64` positions below `output_len`.
+        Ok(Some(unsafe {
+            Self::new_unchecked(output_len, 0, new_indices.into_array(), values, None, None)
+        }))
     }
 
     #[expect(
@@ -1362,6 +1426,149 @@ fn take_indices_with_search_fn<
     Ok((values_indices, new_indices))
 }
 
+fn unsigned_to_usize_vec(array: &PrimitiveArray) -> Vec<usize> {
+    match_each_unsigned_integer_ptype!(array.ptype(), |T| {
+        array.as_slice::<T>().iter().map(|&v| v.as_()).collect()
+    })
+}
+
+/// Positions of the taken patch values, as `(start, length, multiplier)` pieces.
+#[derive(Default)]
+struct ValuePieces {
+    starts: Vec<u64>,
+    lengths: Vec<u64>,
+    multipliers: Vec<u64>,
+}
+
+impl ValuePieces {
+    /// Appends a piece, extending the previous one when both are contiguous runs that meet.
+    fn push(&mut self, start: usize, length: usize, multiplier: usize) {
+        let (start, length) = (start as u64, length as u64);
+        // A single position is a contiguous run whatever its multiplier.
+        let multiplier = if length == 1 { 1 } else { multiplier as u64 };
+        if multiplier == 1
+            && let (Some(&last_start), Some(last_length), Some(&1)) = (
+                self.starts.last(),
+                self.lengths.last_mut(),
+                self.multipliers.last(),
+            )
+            && last_start + *last_length == start
+        {
+            *last_length += length;
+            return;
+        }
+        self.starts.push(start);
+        self.lengths.push(length);
+        self.multipliers.push(multiplier);
+    }
+
+    /// Takes the pieces from `values`, slicing when they form a single contiguous run.
+    fn take_from(self, values: &ArrayRef, len: usize) -> VortexResult<ArrayRef> {
+        if let ([start], [1]) = (self.starts.as_slice(), self.multipliers.as_slice()) {
+            let start = usize::try_from(*start)?;
+            return values.slice(start..start + len);
+        }
+
+        let count = self.starts.len();
+        let starts =
+            PrimitiveArray::new(Buffer::from(self.starts), Validity::NonNullable).into_array();
+        let lengths =
+            PrimitiveArray::new(Buffer::from(self.lengths), Validity::NonNullable).into_array();
+        let multipliers = if self.multipliers.iter().all(|&m| m == 1) {
+            ConstantArray::new(1u64, count).into_array()
+        } else {
+            PrimitiveArray::new(Buffer::from(self.multipliers), Validity::NonNullable).into_array()
+        };
+        // SAFETY: starts, lengths, and multipliers are non-nullable u64 arrays of equal length,
+        // and `len` is the sum of the lengths.
+        let indices =
+            unsafe { PiecewiseSequenceArray::new_unchecked(starts, lengths, multipliers, len) };
+        values.take(indices.into_array())
+    }
+}
+
+/// Intersects each piece of a piecewise index sequence with the sorted patch indices.
+///
+/// Pushes the output position of every matched patch to `new_indices` and its value position to
+/// `value_pieces`. Pieces are visited in output order and multipliers are non-negative, so the
+/// output positions are strictly increasing.
+#[expect(clippy::too_many_arguments)]
+fn take_piecewise_search<P: UnsignedPType>(
+    patch_indices: &[P],
+    offset: usize,
+    array_len: usize,
+    starts: &[usize],
+    lengths: &[usize],
+    multipliers: &[usize],
+    output_len: usize,
+    new_indices: &mut BufferMut<u64>,
+    value_pieces: &mut ValuePieces,
+) -> VortexResult<()> {
+    let logical = |position: usize| -> usize { patch_indices[position].as_() - offset };
+    let mut output_offset = 0usize;
+
+    for ((&start, &length), &multiplier) in starts.iter().zip_eq(lengths).zip_eq(multipliers) {
+        if length == 0 {
+            continue;
+        }
+        let last = (length - 1)
+            .checked_mul(multiplier)
+            .and_then(|delta| start.checked_add(delta))
+            .ok_or_else(|| vortex_err!("PiecewiseSequenceArray range overflows usize"))?;
+        if last >= array_len {
+            vortex_bail!(OutOfBounds: last, 0, array_len);
+        }
+
+        let lo = patch_indices.partition_point(|&p| p.as_() - offset < start);
+        let hi = lo + patch_indices[lo..].partition_point(|&p| p.as_() - offset <= last);
+
+        if lo < hi {
+            if multiplier == 0 {
+                // Every index of the piece is `start`, which is the patch at `lo`.
+                new_indices.extend((output_offset..output_offset + length).map(|i| i as u64));
+                value_pieces.push(lo, length, 0);
+            } else if multiplier == 1 {
+                new_indices.extend((lo..hi).map(|p| (output_offset + logical(p) - start) as u64));
+                value_pieces.push(lo, hi - lo, 1);
+            } else if hi - lo <= length {
+                for p in lo..hi {
+                    let delta = logical(p) - start;
+                    if delta.is_multiple_of(multiplier) {
+                        new_indices.push((output_offset + delta / multiplier) as u64);
+                        value_pieces.push(p, 1, 1);
+                    }
+                }
+            } else {
+                // Fewer indices than candidate patches: search for each index instead.
+                let mut cursor = lo;
+                for i in 0..length {
+                    let index = start + i * multiplier;
+                    cursor +=
+                        patch_indices[cursor..hi].partition_point(|&p| p.as_() - offset < index);
+                    if cursor == hi {
+                        break;
+                    }
+                    if logical(cursor) == index {
+                        new_indices.push((output_offset + i) as u64);
+                        value_pieces.push(cursor, 1, 1);
+                    }
+                }
+            }
+        }
+
+        output_offset = output_offset
+            .checked_add(length)
+            .ok_or_else(|| vortex_err!("PiecewiseSequenceArray output length overflows usize"))?;
+    }
+
+    vortex_ensure_eq!(
+        output_offset,
+        output_len,
+        "PiecewiseSequenceArray expanded length does not match declared length",
+    );
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use rstest::rstest;
@@ -1373,9 +1580,11 @@ mod test {
     use vortex_error::VortexResult;
     use vortex_mask::Mask;
 
+    use crate::ArrayRef;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::array_session;
+    use crate::arrays::PiecewiseSequenceArray;
     use crate::assert_arrays_eq;
     use crate::patches::Patches;
     use crate::patches::PrimitiveArray;
@@ -2683,5 +2892,83 @@ mod test {
             patches.search_index(2048, &mut ctx).unwrap(),
             SearchResult::NotFound(1)
         );
+    }
+
+    fn piecewise(starts: &[u64], lengths: &[u64], multipliers: &[u64]) -> ArrayRef {
+        let len =
+            usize::try_from(lengths.iter().sum::<u64>()).vortex_expect("length fits in usize");
+        PiecewiseSequenceArray::try_new(
+            Buffer::copy_from(starts).into_array(),
+            Buffer::copy_from(lengths).into_array(),
+            Buffer::copy_from(multipliers).into_array(),
+            len,
+        )
+        .vortex_expect("valid piecewise indices")
+        .into_array()
+    }
+
+    #[rstest]
+    #[case::contiguous(&[0, 10, 30], &[5, 8, 10], &[1, 1, 1])]
+    #[case::adjacent_runs(&[4, 8], &[4, 4], &[1, 1])]
+    #[case::repeated_runs(&[2, 2], &[6, 6], &[1, 1])]
+    #[case::constant(&[4, 5, 9], &[3, 2, 1], &[0, 0, 0])]
+    #[case::strided(&[0, 1], &[20, 13], &[2, 3])]
+    #[case::sparse_stride(&[4], &[3], &[13])]
+    #[case::empty_pieces(&[0, 9, 39], &[0, 3, 1], &[1, 1, 1])]
+    #[case::no_matches(&[0, 21], &[2, 2], &[1, 1])]
+    fn take_piecewise_matches_materialized(
+        #[case] starts: &[u64],
+        #[case] lengths: &[u64],
+        #[case] multipliers: &[u64],
+    ) -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        // Slicing gives the patches a non-zero offset.
+        let patches = Patches::new(
+            45,
+            0,
+            buffer![3u16, 4, 6, 9, 10, 11, 12, 13, 17, 30, 33, 41, 42, 44].into_array(),
+            buffer![1i32, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].into_array(),
+            None,
+        )?
+        .slice(2..44)?
+        .vortex_expect("sliced patches are non-empty");
+
+        let indices = piecewise(starts, lengths, multipliers);
+        let materialized = indices.clone().execute::<PrimitiveArray>(&mut ctx)?;
+        let expected = patches.take_search(materialized, false, &mut ctx)?;
+        let actual = patches.take(&indices, &mut ctx)?;
+
+        match (actual, expected) {
+            (None, None) => {}
+            (Some(actual), Some(expected)) => {
+                assert_eq!(actual.array_len(), expected.array_len());
+                assert_arrays_eq!(actual.indices(), expected.indices(), &mut ctx);
+                assert_arrays_eq!(actual.values(), expected.values(), &mut ctx);
+            }
+            (actual, expected) => panic!(
+                "expected {} patches, got {}",
+                expected.map_or(0, |p| p.num_patches()),
+                actual.map_or(0, |p| p.num_patches())
+            ),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn take_piecewise_out_of_bounds() -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let patches = Patches::new(
+            10,
+            0,
+            buffer![2u32, 5].into_array(),
+            buffer![1i32, 2].into_array(),
+            None,
+        )?;
+        assert!(
+            patches
+                .take(&piecewise(&[0], &[5], &[3]), &mut ctx)
+                .is_err()
+        );
+        Ok(())
     }
 }
