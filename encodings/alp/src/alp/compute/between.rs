@@ -7,6 +7,7 @@ use num_traits::Bounded;
 use vortex_array::ArrayRef;
 use vortex_array::ArrayView;
 use vortex_array::IntoArray;
+use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::dtype::NativeDType;
@@ -17,6 +18,7 @@ use vortex_array::scalar::Scalar;
 use vortex_array::scalar_fn::fns::between::BetweenOptions;
 use vortex_array::scalar_fn::fns::between::BetweenReduce;
 use vortex_array::scalar_fn::fns::between::StrictComparison;
+use vortex_buffer::BitBuffer;
 use vortex_error::VortexResult;
 
 use crate::ALP;
@@ -78,14 +80,14 @@ where
     let Some((lower_enc, lower_strict)) =
         encode_lower_bound::<T>(lower, exponents, options.lower_strict)
     else {
-        return Ok(ConstantArray::new(Scalar::bool(false, nullability), array.len()).into_array());
+        return all_false(array, nullability);
     };
 
     // the upper value `x { < | <= } value` similarly encodes or `x < value < enc_above(value())`
     let Some((upper_enc, upper_strict)) =
         encode_upper_bound::<T>(upper, exponents, options.upper_strict)
     else {
-        return Ok(ConstantArray::new(Scalar::bool(false, nullability), array.len()).into_array());
+        return all_false(array, nullability);
     };
 
     let options = BetweenOptions {
@@ -98,6 +100,12 @@ where
         ConstantArray::new(Scalar::primitive(upper_enc, nullability), array.len()).into_array(),
         options,
     )
+}
+
+/// No value lies within the bounds: every valid row is false and null rows stay null.
+fn all_false(array: ArrayView<'_, ALP>, nullability: Nullability) -> VortexResult<ArrayRef> {
+    let validity = array.array().validity()?.union_nullability(nullability);
+    Ok(BoolArray::new(BitBuffer::new_unset(array.len()), validity).into_array())
 }
 
 fn encode_lower_bound<T: ALPFloat + NativePType>(
@@ -140,13 +148,17 @@ mod tests {
 
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
+    use vortex_array::arrays::BoolArray;
     use vortex_array::arrays::ConstantArray;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::assert_arrays_eq;
+    use vortex_array::builtins::ArrayBuiltins;
     use vortex_array::dtype::Nullability;
     use vortex_array::scalar::Scalar;
+    use vortex_array::scalar_fn::fns::between::Between;
     use vortex_array::scalar_fn::fns::between::BetweenOptions;
     use vortex_array::scalar_fn::fns::between::StrictComparison;
+    use vortex_error::VortexResult;
     use vortex_session::VortexSession;
 
     use crate::ALPArray;
@@ -262,5 +274,42 @@ mod tests {
         assert_between(&encoded, 0.0, f32::from_bits(0xffffff5e), &options, false);
         assert_between(&encoded, 0.0, f32::INFINITY, &options, true);
         assert_between(&encoded, 0.0, f32::NEG_INFINITY, &options, false);
+    }
+
+    /// A bound that rules out every value still leaves null rows null.
+    #[test]
+    fn empty_range_keeps_nulls() -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let array =
+            PrimitiveArray::from_option_iter([Some(614.2f32), Some(-727.0), None, Some(1.5)]);
+        let encoded = alp_encode(array.as_view(), None, &mut ctx)?;
+        assert!(encoded.patches().is_none());
+        let options = BetweenOptions {
+            lower_strict: StrictComparison::NonStrict,
+            upper_strict: StrictComparison::Strict,
+        };
+
+        let between = Between::try_new(
+            encoded.into_array(),
+            ConstantArray::new(Scalar::primitive(-0.0f32, Nullability::Nullable), 4).into_array(),
+            ConstantArray::new(
+                Scalar::primitive(f32::NEG_INFINITY, Nullability::Nullable),
+                4,
+            )
+            .into_array(),
+            options,
+        )?
+        .into_array();
+        assert_arrays_eq!(
+            between,
+            BoolArray::from_iter([Some(false), Some(false), None, Some(false)]),
+            &mut ctx
+        );
+        assert_arrays_eq!(
+            between.fill_null(true)?,
+            BoolArray::from_iter([false, false, true, false]),
+            &mut ctx
+        );
+        Ok(())
     }
 }
