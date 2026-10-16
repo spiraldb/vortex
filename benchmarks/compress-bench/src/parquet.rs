@@ -266,7 +266,10 @@ async fn send_leaves(
 ) -> anyhow::Result<()> {
     let mut column_txs = column_txs.iter();
     for (array, field) in batch.columns().iter().zip(schema.fields()) {
-        for (leaf, tx) in compute_leaves(field, array)?.into_iter().zip(column_txs.by_ref()) {
+        for (leaf, tx) in compute_leaves(field, array)?
+            .into_iter()
+            .zip(column_txs.by_ref())
+        {
             // A closed channel means the column task failed; joining it reports the error.
             if tx.send(leaf).await.is_err() {
                 return Ok(());
@@ -296,7 +299,10 @@ impl SharedBuffer {
         let mut buffer = self.0.lock();
         if buffer.len() > min_bytes {
             let capacity = buffer.capacity();
-            parts.push(std::mem::replace(&mut *buffer, Vec::with_capacity(capacity)));
+            parts.push(std::mem::replace(
+                &mut *buffer,
+                Vec::with_capacity(capacity),
+            ));
         }
     }
 }
@@ -463,7 +469,12 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn parallel_write_matches_arrow_writer() -> anyhow::Result<()> {
         let rows = DEFAULT_MAX_ROW_GROUP_ROW_COUNT;
-        let batches = vec![batch(0, rows / 2)?, batch(0, rows)?, batch(0, 0)?, batch(0, 7)?];
+        let batches = vec![
+            batch(0, rows / 2)?,
+            batch(0, rows)?,
+            batch(0, 0)?,
+            batch(0, 7)?,
+        ];
         let schema = batches[0].schema();
         let compression = Compression::ZSTD(ZstdLevel::default());
 
@@ -534,7 +545,11 @@ mod tests {
         let metadata = ArrowReaderMetadata::load(&Bytes::from(buf), Default::default())?;
 
         assert_eq!(
-            scan_partitions(metadata.metadata().row_groups(), file_len, target_partitions),
+            scan_partitions(
+                metadata.metadata().row_groups(),
+                file_len,
+                target_partitions
+            ),
             expected
         );
         Ok(())
