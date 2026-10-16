@@ -225,6 +225,8 @@ def cmd_run_queries(args: argparse.Namespace) -> int:
                 "gh-json",
                 "--hide-progress-bar",
                 "--track-memory",
+                "--runner",
+                args.runner,
                 *options,
             ]
             if args.engine == "duckdb":
@@ -365,6 +367,12 @@ def main() -> int:
     run.add_argument("--opt", action="append", default=[], help="Benchmark option, e.g. scale-factor=1000.0")
     run.add_argument("--out-dir", type=Path, required=True)
     run.add_argument("--phase-file", type=Path, required=True)
+    run.add_argument(
+        "--runner",
+        # Matches vx-bench: label records with the EC2 instance runs-on actually provisioned.
+        default=f"ec2_{os.environ['RUNS_ON_INSTANCE_TYPE']}" if "RUNS_ON_INSTANCE_TYPE" in os.environ else "local",
+        help="Benchmark runner ID; the bench binaries refuse the default in CI",
+    )
     run.add_argument("--fail-on-error", action="store_true")
 
     summarize = sub.add_parser("summarize", help="Render the monitor CSV and query records as Markdown")
