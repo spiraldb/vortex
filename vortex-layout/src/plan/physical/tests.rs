@@ -1654,7 +1654,7 @@ fn zoned_pruning_plan_with_new_zones_proves_them_again() -> VortexResult<()> {
     let zones = make_plan(flat(2, zones_dtype.clone(), 1))?;
     let source = ZonedPlan::new(
         make_plan(flat(5, dtype.clone(), 0))?,
-        zones.clone(),
+        zones,
         3,
         vec![max.clone()].into(),
     )

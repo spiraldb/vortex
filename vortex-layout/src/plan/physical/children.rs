@@ -24,7 +24,6 @@ pub struct PlanChildren {
 
 impl PlanChildren {
     /// Creates lazy child slots backed by `initializer`.
-    #[cfg(test)]
     pub(crate) fn lazy(
         len: usize,
         initializer: impl Fn(usize) -> VortexResult<PlanRef> + 'static + Send + Sync,
