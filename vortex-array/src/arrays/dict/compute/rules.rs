@@ -224,6 +224,12 @@ impl ArrayParentReduceRule<Dict> for DictionaryScalarFnCodesPullUpRule {
             return Ok(None);
         }
 
+        // A fallible function could fail on an unreferenced value that row-wise evaluation would
+        // never visit. The siblings share our codes, so they reference the same values.
+        if !array.has_all_values_referenced() && !parent.scalar_fn().signature().is_infallible() {
+            return Ok(None);
+        }
+
         // Check that all siblings are dictionaries, and have the same number of values as us.
         // This is a cheap first loop.
         if !parent.iter_children().enumerate().all(|(idx, c)| {
@@ -390,6 +396,47 @@ mod tests {
         let expected = BoolArray::from_iter([Some(true), Some(true), Some(true)]).into_array();
         let optimized = expr.optimize()?;
         assert_arrays_eq!(optimized, expected, &mut ctx);
+        Ok(())
+    }
+
+    /// Checked addition overflows on the unreferenced value 40000, but no row reads it, so the
+    /// codes must not be pulled up over the whole dictionary.
+    #[test]
+    fn scalar_fn_codes_pullup_skips_fallible_fn_on_unreferenced_values() -> VortexResult<()> {
+        let dict = DictArray::try_new(
+            buffer![0u64, 0].into_array(),
+            buffer![0u16, 40000].into_array(),
+        )?
+        .into_array();
+        let expr = Binary::try_new(dict.clone(), dict, Operator::Add)?
+            .into_array()
+            .optimize()?;
+
+        let mut ctx = array_session().create_execution_ctx();
+        assert_arrays_eq!(expr, PrimitiveArray::from_iter([0u16, 0]), &mut ctx);
+        Ok(())
+    }
+
+    #[test]
+    fn scalar_fn_codes_pullup_applies_when_all_values_referenced() -> VortexResult<()> {
+        let dict = unsafe {
+            DictArray::try_new(
+                buffer![0u8, 1, 1, 0].into_array(),
+                buffer![1u16, 2].into_array(),
+            )?
+            .set_all_values_referenced(true)
+        }
+        .into_array();
+        let expr = Binary::try_new(dict.clone(), dict, Operator::Add)?.into_array();
+
+        let optimized = expr.optimize()?;
+        assert!(optimized.is::<Dict>(), "got {}", optimized.encoding_id());
+        let mut ctx = array_session().create_execution_ctx();
+        assert_arrays_eq!(
+            optimized,
+            PrimitiveArray::from_iter([2u16, 4, 4, 2]),
+            &mut ctx
+        );
         Ok(())
     }
 }
