@@ -81,3 +81,35 @@ top of that bundle. The 22.95% suite reduction and four eight-round confirmation
 the frozen pre-integration executable, not this newer merged source or an untouched PR baseline.
 No new latency reduction is claimed for this integration. Changes in upstream read lifetimes
 and planning make a fresh benchmark necessary before transferring those figures to the new tip.
+
+
+## Refresh on 2026-10-16
+
+The original feature branch was rebuilt at
+`1c932c195009c5138a71b6815de7cc05b265626b` on the newer physical-plan pipelines.
+Its IO commit already contains descriptor reuse, process-wide native admission,
+demanded-extent coalescing, and the earlier IO lifetime work. This refresh starts
+from that branch head and preserves its pipeline implementation and fallback rules.
+The old executors are not restored.
+
+The remaining local changes add resumable cold comparisons, broader contention
+recognition, phase distributions, and request-count/byte queue occupancy to the
+Python tools. Presets for the rejected backend prototypes have been removed;
+historical trace fields remain readable. The discarded Rust experiments are not
+included.
+
+The local PR SQL benchmark step explicitly enables descriptor reuse, native32,
+and demanded-extent coalescing. The remote benchmark step and develop-mode defaults
+are unchanged. Standard SQL CI runs use their existing iteration policy; they are
+not evidence of fresh-process cold performance. A separate local cold rerun uses
+SSD data/executables/temp/output and verified page eviction.
+
+Validation on the refreshed branch: 224 file and 197 IO library tests pass, with
+V2 enabled and all crate features, using native test executables and temporary
+files on SSD. All 60 Python tool tests pass. Strict all-target/all-feature Clippy
+passes for the two IO crates; scoped Ruff, ty, workflow yamllint, and patch
+whitespace checks pass. No new Rust source is introduced by this refresh.
+
+The older latency reductions remain historical results for their recorded
+executables. No new speedup is claimed for this pipeline revision before its
+measurements finish.

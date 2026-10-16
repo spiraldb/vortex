@@ -435,6 +435,7 @@ def lifetime_profile(
             "unfetched_bytes",
             "announcements",
             "prefetches",
+            "deferred_prefetches",
             "fetches",
             "inline_fetches",
             "ready_fetches",
@@ -763,16 +764,21 @@ def analyze(
             phase: local[phase]
             for phase in (
                 "get_ns",
+                "cache_probe_ns",
                 "admission_ns",
                 "allocation_ns",
+                "blocking_allocation_ns",
                 "queue_ns",
                 "read_ns",
                 "resume_ns",
             )
             if phase in local
         }
+        if "cache_probe_hit" in local:
+            physical["cached_local_read"] = local["cache_probe_hit"] in (True, "true")
         submitted = local["start_ns"] + local["prepare_ns"]
-        read_start = submitted + local["queue_ns"]
+        blocking_started = submitted + local["queue_ns"]
+        read_start = blocking_started + local.get("blocking_allocation_ns", 0)
         read_end = read_start + local["read_ns"]
         physical["local_timestamps_ns"] = {
             "pread_started": read_start,
@@ -783,16 +789,22 @@ def analyze(
         if (get_ns := local.get("get_ns")) is not None:
             get_end = local["start_ns"] + get_ns
             local_intervals["get"].append((local["start_ns"], get_end))
+            probe_end = get_end + local.get("cache_probe_ns", 0)
+            if probe_end > get_end:
+                local_intervals["cache_probe"].append((get_end, probe_end))
             if (admission_ns := local.get("admission_ns")) is not None:
-                admission_end = get_end + admission_ns
-                local_intervals["admission"].append((get_end, admission_end))
-                interval("local admission", get_end, admission_end, "IO", read_lane(physical))
+                admission_end = probe_end + admission_ns
+                local_intervals["admission"].append((probe_end, admission_end))
+                interval("local admission", probe_end, admission_end, "IO", read_lane(physical))
                 if (allocation_ns := local.get("allocation_ns")) is not None:
                     local_intervals["allocation"].append((admission_end, admission_end + allocation_ns))
-        local_intervals["blocking_queue"].append((submitted, read_start))
+        local_intervals["blocking_queue"].append((submitted, blocking_started))
+        if "blocking_allocation_ns" in local:
+            local_intervals["blocking_allocation"].append((blocking_started, read_start))
+            interval("blocking allocation", blocking_started, read_start, "IO", read_lane(physical))
         local_intervals["pread"].append((read_start, read_end))
         local_intervals["resume"].append((read_end, read_end + local["resume_ns"]))
-        interval("blocking pool queue", submitted, read_start, "IO", read_lane(physical))
+        interval("blocking pool queue", submitted, blocking_started, "IO", read_lane(physical))
         interval("pread", read_start, read_end, "IO", read_lane(physical))
     for read in reads.values():
         if "end_ns" in read:
@@ -1753,7 +1765,22 @@ def analyze(
             ),
             "local_phases_ns": {
                 phase: distribution([r[phase] for r in local_reads if phase in r])
-                for phase in ("get_ns", "admission_ns", "allocation_ns", "queue_ns", "read_ns", "resume_ns")
+                for phase in (
+                    "get_ns",
+                    "cache_probe_ns",
+                    "admission_ns",
+                    "allocation_ns",
+                    "blocking_allocation_ns",
+                    "queue_ns",
+                    "read_ns",
+                    "resume_ns",
+                )
+            },
+            "local_nowait": {
+                "observed_reads": sum("cache_probe_hit" in read for read in local_reads),
+                "cached_reads": sum(read.get("cache_probe_hit") in (True, "true") for read in local_reads),
+                "fallback_probes": sum(read.get("cache_probe_ns", 0) > 0 for read in local_reads),
+                "bound_cached_reads": sum(read.get("cached_local_read", False) for read in reads.values()),
             },
             "unbound_local_reads": unbound_local_reads,
             "physical_busy_union_ns": union_ns([(r["ts_ns"], r["end_ns"]) for r in completed_reads]),

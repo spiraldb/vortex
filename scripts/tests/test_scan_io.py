@@ -25,9 +25,10 @@ def admit() -> dict[str, Any]:
 class ScanIoTests(unittest.TestCase):
     def test_lifetime_counters_distinguish_missing_fields_from_measured_zero(self):
         measured = SCAN_IO.lifetime_profile(
-            [event("scope_clear", 10, future_queues=0, ready_fetches=2)], [], {}, {}, 20
+            [event("scope_clear", 10, future_queues=0, ready_fetches=2, deferred_prefetches=7)], [], {}, {}, 20
         )
         self.assertEqual(measured["scope_totals"]["ready_fetches"], 2)
+        self.assertEqual(measured["scope_totals"]["deferred_prefetches"], 7)
         self.assertIn("future_queues", measured["scope_counters_available"])
         self.assertNotIn("inline_fetches", measured["scope_counters_available"])
         legacy = SCAN_IO.lifetime_profile([event("scope_clear", 10, interests=3)], [], {}, {}, 20)
@@ -806,6 +807,61 @@ class ScanIoTests(unittest.TestCase):
         self.assertEqual(stage["outputs"], {"io": 1, "batch": 1})
 
     def test_local_admission_and_pread_phases_join_physical_read(self):
+        for probe, hit in ((0, None), (0, True), (5, False)):
+            with self.subTest(probe_ns=probe, cached_hit=hit):
+                summary, trace = SCAN_IO.analyze(
+                    [
+                        {
+                            "event": "read_start",
+                            "ts_ns": 0,
+                            "source": 1,
+                            "physical": 2,
+                            "offset": 0,
+                            "length": 4,
+                            "uri": "/file",
+                        },
+                        {
+                            "event": "local_read",
+                            "ts_ns": 90 + probe,
+                            "start_ns": 10,
+                            "path": "/file",
+                            "offset": 0,
+                            "length": 4,
+                            "get_ns": 10,
+                            "admission_ns": 20,
+                            "allocation_ns": 0,
+                            "prepare_ns": 30 + probe,
+                            "queue_ns": 10,
+                            "read_ns": 40,
+                            "resume_ns": 0,
+                            **({"cache_probe_ns": probe} if probe else {}),
+                            **({"cache_probe_hit": "true" if hit else "false"} if hit is not None else {}),
+                        },
+                        {"event": "read_end", "ts_ns": 100 + probe, "source": 1, "physical": 2, "success": "true"},
+                    ]
+                )
+                self.assertEqual(summary["totals"]["unbound_local_reads"], 0)
+                self.assertEqual(summary["physical_reads"][0]["local_phases_ns"]["admission_ns"], 20)
+                admission = next(e for e in trace["traceEvents"] if e["name"] == "local admission")
+                self.assertAlmostEqual(admission["ts"], (20 + probe) / 1000)
+                self.assertAlmostEqual(admission["dur"], 0.02)
+                self.assertTrue(all(isinstance(e["pid"], int) for e in trace["traceEvents"]))
+                self.assertIsNone(summary["totals"]["physical_queue_ns"])
+                self.assertEqual(
+                    summary["totals"]["local_nowait"],
+                    {
+                        "observed_reads": int(hit is not None),
+                        "cached_reads": int(hit is True),
+                        "fallback_probes": int(probe > 0),
+                        "bound_cached_reads": int(hit is True),
+                    },
+                )
+                if hit is None:
+                    self.assertNotIn("cached_local_read", summary["physical_reads"][0])
+                else:
+                    self.assertEqual(summary["physical_reads"][0]["cached_local_read"], hit)
+
+    def test_blocking_allocation_precedes_pread_and_follows_queue(self):
         summary, trace = SCAN_IO.analyze(
             [
                 {
@@ -824,23 +880,26 @@ class ScanIoTests(unittest.TestCase):
                     "path": "/file",
                     "offset": 0,
                     "length": 4,
-                    "get_ns": 10,
-                    "admission_ns": 20,
+                    "prepare_ns": 10,
+                    "queue_ns": 5,
+                    "blocking_allocation_ns": 15,
                     "allocation_ns": 0,
-                    "prepare_ns": 30,
-                    "queue_ns": 10,
                     "read_ns": 40,
                     "resume_ns": 0,
                 },
                 {"event": "read_end", "ts_ns": 100, "source": 1, "physical": 2, "success": "true"},
             ]
         )
-        self.assertEqual(summary["totals"]["unbound_local_reads"], 0)
-        self.assertEqual(summary["physical_reads"][0]["local_phases_ns"]["admission_ns"], 20)
-        admission = next(e for e in trace["traceEvents"] if e["name"] == "local admission")
-        self.assertAlmostEqual(admission["dur"], 0.02)
-        self.assertTrue(all(isinstance(e["pid"], int) for e in trace["traceEvents"]))
-        self.assertIsNone(summary["totals"]["physical_queue_ns"])
+        self.assertEqual(summary["physical_reads"][0]["local_timestamps_ns"]["pread_started"], 40)
+        self.assertEqual(summary["physical_reads"][0]["local_timestamps_ns"]["pread_finished"], 80)
+        phases = {
+            event["name"]: event
+            for event in trace["traceEvents"]
+            if event["name"] in ("blocking pool queue", "blocking allocation", "pread")
+        }
+        self.assertEqual(phases["blocking pool queue"]["dur"], 0.005)
+        self.assertEqual(phases["blocking allocation"]["dur"], 0.015)
+        self.assertEqual(phases["pread"]["dur"], 0.04)
 
     def test_legacy_read_phases_do_not_invent_get_admission_or_allocation(self):
         summary, trace = SCAN_IO.analyze(

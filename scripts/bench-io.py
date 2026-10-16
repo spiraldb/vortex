@@ -3,7 +3,8 @@
 # SPDX-FileCopyrightText: Copyright the Vortex contributors
 """Compare scan I/O and warmed compressed-segment caches using query wall time.
 
-Build datafusion-bench from the current sources first. Example:
+Build datafusion-bench from the current sources first. Historical trace fields remain
+supported, while configurations for rejected backend prototypes have been removed. Example:
   python3 scripts/bench-io.py --data-root /path/to/vortex-bench/data --output /tmp/io-run
 
 Runs TPC-H Q19 SF10 and partitioned ClickBench Q23 by default. Measurements are
@@ -157,6 +158,30 @@ VARIANTS = {
         "VORTEX_LOCAL_FILE_HANDLE_REUSE": "1",
         "VORTEX_SCAN_IO_COALESCE_OPTIONAL": "0",
     },
+    **{
+        f"v2-io-file-handle-demanded-gap-{distance}": {
+            "VORTEX_SCAN_V2": "1",
+            "VORTEX_LOCAL_READ_CONCURRENCY": "32",
+            "VORTEX_SCAN_IO_READY_FETCH": "0",
+            "VORTEX_LOCAL_FILE_HANDLE_REUSE": "1",
+            "VORTEX_SCAN_IO_COALESCE_OPTIONAL": "0",
+            "VORTEX_SCAN_IO_COALESCE_DISTANCE_BYTES": str(distance),
+        }
+        for distance in (0, 4096, 65536, 262144)
+    },
+    **{
+        f"v2-io-file-handle-demanded-window-{maximum}-gap-{distance}": {
+            "VORTEX_SCAN_V2": "1",
+            "VORTEX_LOCAL_READ_CONCURRENCY": "32",
+            "VORTEX_SCAN_IO_READY_FETCH": "0",
+            "VORTEX_LOCAL_FILE_HANDLE_REUSE": "1",
+            "VORTEX_SCAN_IO_COALESCE_OPTIONAL": "0",
+            "VORTEX_SCAN_IO_COALESCE_MAX_BYTES": str(maximum),
+            "VORTEX_SCAN_IO_COALESCE_DISTANCE_BYTES": str(distance),
+        }
+        for maximum in (4 * 1024 * 1024, 16 * 1024 * 1024)
+        for distance in (64 * 1024, 1024 * 1024)
+    },
     "v2-io-file-handle-limited-demanded-coalescing": {
         "VORTEX_SCAN_V2": "1",
         "VORTEX_SCAN_IO_READY_FETCH": "0",
@@ -180,6 +205,17 @@ VARIANTS = {
             "VORTEX_SCAN_IO_COALESCE_OPTIONAL": "0",
         }
         for limit in (8, 16, 32, 64, 128)
+    },
+    **{
+        f"v2-io-file-handle-demanded-driver-{limit}": {
+            "VORTEX_SCAN_V2": "1",
+            "VORTEX_LOCAL_READ_CONCURRENCY": "32",
+            "VORTEX_SCAN_IO_READY_FETCH": "0",
+            "VORTEX_LOCAL_FILE_HANDLE_REUSE": "1",
+            "VORTEX_SCAN_IO_COALESCE_OPTIONAL": "0",
+            "VORTEX_SCAN_IO_READ_CONCURRENCY": str(limit),
+        }
+        for limit in (1, 2, 4, 8, 16, 32, 64)
     },
     "v2-io-file-handle-limited-random": {
         "VORTEX_SCAN_V2": "1",
@@ -286,8 +322,16 @@ TOGGLES = (
     "VORTEX_ONPAIR_COMPRESSED_LIKE",
     "VORTEX_SCAN_EXEC",
     "VORTEX_SCAN_BATCH_IO",
+    "VORTEX_SCAN_IO_COMPLETION_BATCH",
+    "VORTEX_SCAN_IO_PREFETCH_MAX_BYTES",
     "VORTEX_LOCAL_READ_CONCURRENCY",
     "VORTEX_LOCAL_FILE_HANDLE_REUSE",
+    "VORTEX_LOCAL_READ_RANGES_DIRECT",
+    "VORTEX_LOCAL_READ_RESERVED_SMALL",
+    "VORTEX_LOCAL_READ_SMALL_BYTES",
+    "VORTEX_LOCAL_READ_SMALL_PRIORITY",
+    "VORTEX_LOCAL_READ_NOWAIT_MAX_BYTES",
+    "VORTEX_LOCAL_READ_ALLOCATE_IN_BLOCKING",
     "VORTEX_LOCAL_READ_RANDOM",
     "VORTEX_SCAN_IO_LOOKAHEAD",
     "VORTEX_SCAN_IO_READ_CONCURRENCY",
@@ -308,6 +352,8 @@ WORKLOADS = {
 }
 DEFAULT_WORKLOADS = ["tpch-q19", "clickbench-q23"]
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
+COORDINATOR_SAMPLES: dict[int, tuple[int, float, float]] = {}
+COORDINATOR_LOCK = threading.Lock()
 
 
 def cpu_snapshot() -> list[int] | None:
@@ -483,14 +529,27 @@ def storage_locations(paths: dict[str, Path], required_device: str | None) -> di
 
 def is_competing_process(command: str, arguments: str) -> bool:
     executable = arguments.split("\0", 1)[0]
-    native_vortex = "/target/" in executable and any(name in executable for name in ("vortex", "votex"))
+    native_vortex = any(directory in executable for directory in ("/target/", "/bin/")) and any(
+        name in executable for name in ("vortex", "votex")
+    )
     benchmark_python = command.startswith("python") and any(
         word in arguments for word in ("bench", "measure", "profile", "sweep")
     )
     return (
         native_vortex
         or command.startswith(
-            ("datafusion", "duckdb", "lance-bench", "random-access", "rustc", "cargo", "rsync", "samply")
+            (
+                "datafusion",
+                "duckdb",
+                "lance-bench",
+                "random-access",
+                "compress-",
+                "rustc",
+                "cargo",
+                "rsync",
+                "samply",
+                "perf",
+            )
         )
         or command == "cp"
         or benchmark_python
@@ -508,24 +567,65 @@ def competing_processes() -> list[tuple[int, str]]:
             arguments = (proc / "cmdline").read_bytes().decode(errors="replace").lower()
             if not is_competing_process(command, arguments):
                 continue
-            parent = int((proc / "stat").read_text().rsplit(") ", 1)[1].split()[1])
+            fields = (proc / "stat").read_text().rsplit(") ", 1)[1].split()
+            parent = int(fields[1])
             if parent != os.getpid():
+                executable, _, timer = arguments.partition("\0")
+                reservation_timer = executable.endswith("-reservation") and timer.rstrip("\0").isdigit()
+                if command.startswith("python") or reservation_timer:
+                    started = int(fields[19])
+                    cpu_seconds = (int(fields[11]) + int(fields[12])) / os.sysconf("SC_CLK_TCK")
+                    with COORDINATOR_LOCK:
+                        now = time.monotonic()
+                        previous = COORDINATOR_SAMPLES.get(int(proc.name))
+                        COORDINATOR_SAMPLES[int(proc.name)] = (started, cpu_seconds, now)
+                        idle = coordinator_is_idle(fields[0], started, cpu_seconds, now, previous)
+                    if idle:
+                        continue
                 found.append((int(proc.name), command))
         except (FileNotFoundError, PermissionError, ProcessLookupError):
             pass
     return sorted(found)
 
 
+def coordinator_is_idle(
+    state: str,
+    started: int,
+    cpu_seconds: float,
+    now: float,
+    previous: tuple[int, float, float] | None,
+) -> bool:
+    """Allow idle coordinators and reservation timers, while tracking native benchmark children."""
+    if state != "S" or previous is None or previous[0] != started:
+        return False
+    elapsed = now - previous[2]
+    consumed = cpu_seconds - previous[1]
+    return elapsed > 0 and consumed >= 0 and consumed / elapsed < 0.02
+
+
 def wait_for_quiet(output: Path, cold_data: Path | None = None, quiet_seconds: float = 60):
     """Require six quiet samples spanning the requested window; retain observations."""
     steady = 0
     previous = cpu_snapshot()
+    previous_full = pressure_totals(pressure_snapshot()).get("io/full")
+    previous_time = time.monotonic()
     while steady < 6:
         time.sleep(quiet_seconds / 6)
         current = cpu_snapshot()
         usage = cpu_usage(previous, current)
         previous = current
         pressure = pressure_snapshot()
+        current_time = time.monotonic()
+        current_full = pressure_totals(pressure).get("io/full")
+        window_full = (
+            (current_full - previous_full) / ((current_time - previous_time) * 1e6)
+            if current_full is not None
+            and previous_full is not None
+            and current_full >= previous_full
+            and current_time > previous_time
+            else None
+        )
+        previous_full, previous_time = current_full, current_time
         io_full = next(
             (line for line in pressure.get("io", "").splitlines() if line.startswith("full ")), "full avg10=0"
         )
@@ -542,7 +642,7 @@ def wait_for_quiet(output: Path, cold_data: Path | None = None, quiet_seconds: f
             and usage is not None
             and usage["busy_fraction"] < 0.1
             and usage["iowait_fraction"] < 0.02
-            and io_avg < 1
+            and (window_full < 0.01 if cold_data is not None and window_full is not None else io_avg < 1)
         )
         steady = steady + 1 if quiet else 0
         observation = {
@@ -554,6 +654,8 @@ def wait_for_quiet(output: Path, cold_data: Path | None = None, quiet_seconds: f
             "storage_device_idle": device_idle,
             "host_cpu": usage,
             "io_full_avg10": io_avg,
+            "io_full_window_fraction": window_full,
+            "io_pressure_gate": "current_window" if cold_data is not None and window_full is not None else "avg10",
             "competitors": competitors,
         }
         with (output / "quiet-samples.jsonl").open("a") as samples:
@@ -565,12 +667,21 @@ def measured_round(
     args: argparse.Namespace, workload: str, configs: list[tuple[str, str]], rnd: int, attempt: int
 ) -> tuple[dict[str, dict[str, Any]], list[tuple[int, str]]]:
     observed = set()
+    if getattr(args, "per_process_quiet", False):
+        results = {}
+        individual_args = argparse.Namespace(**(vars(args) | {"per_process_quiet": False}))
+        for config in configuration_order(configs, rnd):
+            wait_for_quiet(args.output, args.data_root if args.evict_local_files else None, args.quiet_seconds)
+            samples, competitors = measured_round(individual_args, workload, [config], rnd, attempt)
+            results.update(samples)
+            observed.update(competitors)
+        return results, sorted(observed)
     done = threading.Event()
 
     def monitor():
         while not done.is_set():
             observed.update(competing_processes())
-            done.wait(0.25)
+            done.wait(0.05)
 
     watcher = threading.Thread(target=monitor, daemon=True)
     watcher.start()
@@ -609,6 +720,8 @@ def parse_iterations(log: str) -> list[dict[str, Any]]:
     for line in ANSI.sub("", log).splitlines():
         if line.startswith("IO_ITERATION_BEGIN"):
             current = {"metrics": collections.Counter(), "reads": [], "has_scan": False}
+            if begin := re.search(r"ts_ns=(\d+)", line):
+                current["begin_ns"] = int(begin[1])
         elif current is not None and line.startswith("IO_METRIC"):
             current["has_scan"] = True
             match = re.search(r"name=(\S+) value=(\d+)", line)
@@ -630,7 +743,7 @@ def parse_iterations(log: str) -> list[dict[str, Any]]:
             fields: dict[str, Any] = {
                 k: int(v)
                 for k, v in re.findall(
-                    r"(offset|length|prepare_ns|allocation_ns|get_ns|admission_ns|queue_ns|read_ns|resume_ns)=(\d+)",
+                    r"\b(offset|length|start_ns|prepare_ns|blocking_allocation_ns|allocation_ns|get_ns|cache_probe_ns|admission_ns|queue_ns|read_ns|resume_ns)=(\d+)",
                     line,
                 )
             }
@@ -638,6 +751,8 @@ def parse_iterations(log: str) -> list[dict[str, Any]]:
             if path is None:
                 raise ValueError(f"Read timing is missing its path: {line}")
             fields["path"] = path[1]
+            if probe_hit := re.search(r"cache_probe_hit=(true|false)", line):
+                fields["cache_probe_hit"] = probe_hit[1] == "true"
             if reuse := re.search(r"file_handle_reused=(true|false)", line):
                 fields["file_handle_reused"] = reuse[1] == "true"
             current["reads"].append(fields)
@@ -671,6 +786,30 @@ def diagnostics(log: str) -> dict[str, Any]:
     metadata_only = not last["has_scan"]
     if metadata_only:
         metrics.update({name: 0 for name in required})
+    phases = (
+        "get_ns",
+        "cache_probe_ns",
+        "admission_ns",
+        "allocation_ns",
+        "queue_ns",
+        "blocking_allocation_ns",
+        "read_ns",
+        "resume_ns",
+    )
+    phase_distributions = {phase: read_phase_distribution(last["reads"], phase) for phase in phases}
+    size_groups = {}
+    for name, low, high in (
+        ("up_to_4KiB", 0, 4096),
+        ("4KiB_to_64KiB", 4096, 65536),
+        ("64KiB_to_1MiB", 65536, 1048576),
+        ("above_1MiB", 1048576, float("inf")),
+    ):
+        reads = [read for read in last["reads"] if low < read["length"] <= high]
+        size_groups[name] = {
+            "reads": len(reads),
+            "bytes": sum(read["length"] for read in reads),
+            "phases_us": {phase: read_phase_distribution(reads, phase) for phase in phases},
+        }
     return {
         "iterations": len(iterations),
         "metrics": metrics,
@@ -679,6 +818,11 @@ def diagnostics(log: str) -> dict[str, Any]:
         "local_file_handle_reuse": {
             "observed_reads": sum("file_handle_reused" in read for read in last["reads"]),
             "reused_reads": sum(read.get("file_handle_reused", False) for read in last["reads"]),
+        },
+        "local_nowait": {
+            "observed_reads": sum("cache_probe_hit" in read for read in last["reads"]),
+            "cached_reads": sum(read.get("cache_probe_hit", False) for read in last["reads"]),
+            "fallback_probes": sum(read.get("cache_probe_ns", 0) > 0 for read in last["reads"]),
         },
         "requested_bytes": requested,
         "distinct_bytes": unique,
@@ -699,10 +843,10 @@ def diagnostics(log: str) -> dict[str, Any]:
             "median": statistics.median([r["length"] for r in last["reads"]] or [0]),
             "max": max((r["length"] for r in last["reads"]), default=0),
         },
-        "read_phases_median_us": {
-            phase: statistics.median([r.get(phase, 0) / 1000 for r in last["reads"]] or [0])
-            for phase in ("get_ns", "admission_ns", "queue_ns", "read_ns", "resume_ns")
-        },
+        "read_phases_median_us": {phase: values["median"] for phase, values in phase_distributions.items()},
+        "read_phases_us": phase_distributions,
+        "read_phases_by_size": size_groups,
+        "observed_native_queues": native_queue_summary(last),
         "files": {
             path: {
                 "reads": len(ranges),
@@ -711,6 +855,98 @@ def diagnostics(log: str) -> dict[str, Any]:
             }
             for path, ranges in sorted(by_file.items())
         },
+    }
+
+
+def read_phase_distribution(reads: list[dict[str, Any]], phase: str) -> dict[str, int | float | None]:
+    """Summarize measured phase values; older traces may omit individual phases."""
+    values = sorted(read[phase] / 1000 for read in reads if phase in read)
+    if not values:
+        return {"samples": 0, "min": None, "median": None, "p95": None, "p99": None, "max": None}
+    return {
+        "samples": len(values),
+        "min": values[0],
+        "median": statistics.median(values),
+        "p95": values[min(len(values) - 1, int(len(values) * 0.95))],
+        "p99": values[min(len(values) - 1, int(len(values) * 0.99))],
+        "max": values[-1],
+    }
+
+
+def native_queue_summary(iteration: dict[str, Any]) -> dict[str, Any] | None:
+    """Estimate query-window occupancy from completed read phases, excluding unknown intervals."""
+    begin, end = iteration.get("begin_ns"), iteration.get("ts_ns")
+    if begin is None or end is None or end <= begin:
+        return None
+    intervals: dict[str, list[tuple[int, int, int | None]]] = collections.defaultdict(list)
+    native_starts, native_ends = [], []
+    for read in iteration["reads"]:
+        if "start_ns" not in read:
+            continue
+        start = read["start_ns"]
+        length = read.get("length")
+        if "get_ns" in read and "admission_ns" in read:
+            admitted = start + read["get_ns"] + read.get("cache_probe_ns", 0)
+            intervals["admission"].append((admitted, admitted + read["admission_ns"], length))
+        if all(phase in read for phase in ("prepare_ns", "queue_ns", "read_ns")):
+            submitted = start + read["prepare_ns"]
+            native = submitted + read["queue_ns"]
+            allocated = native + read.get("blocking_allocation_ns", 0)
+            finished = allocated + read["read_ns"]
+            intervals["blocking_queue"].append((submitted, native, length))
+            intervals["blocking_allocation"].append((native, allocated, length))
+            intervals["native_read"].append((allocated, finished, length))
+            native_starts.append(allocated)
+            native_ends.append(finished)
+            if "resume_ns" in read:
+                intervals["async_resume"].append((finished, finished + read["resume_ns"], length))
+    occupancy = {}
+    for phase, spans in intervals.items():
+        events: collections.Counter[int] = collections.Counter()
+        byte_events: collections.Counter[int] = collections.Counter()
+        byte_observed = 0
+        covered = []
+        for start, stop, length in spans:
+            start, stop = max(start, begin), min(stop, end)
+            if start < stop:
+                events[start] += 1
+                events[stop] -= 1
+                covered.append((start, stop))
+                if length is not None:
+                    byte_events[start] += length
+                    byte_events[stop] -= length
+                    byte_observed += 1
+        depth = peak = area = 0
+        previous = begin
+        for timestamp, delta in sorted(events.items()):
+            area += depth * (timestamp - previous)
+            depth += delta
+            peak = max(peak, depth)
+            previous = timestamp
+        active_bytes = peak_bytes = byte_area = 0
+        previous = begin
+        for timestamp, delta in sorted(byte_events.items()):
+            byte_area += active_bytes * (timestamp - previous)
+            active_bytes += delta
+            peak_bytes = max(peak_bytes, active_bytes)
+            previous = timestamp
+        occupancy[phase] = {
+            "observed_intervals": len(covered),
+            "mean_depth": area / (end - begin),
+            "peak_depth": peak,
+            "busy_union_ns": union_bytes(covered),
+            "byte_observed_intervals": byte_observed,
+            "mean_observed_bytes": byte_area / (end - begin) if byte_observed else None,
+            "peak_observed_bytes": peak_bytes if byte_observed else None,
+        }
+    return {
+        "window_ns": end - begin,
+        "first_native_start_ns": min((start - begin for start in native_starts if begin <= start <= end), default=None),
+        "first_native_completion_ns": min((stop - begin for stop in native_ends if begin <= stop <= end), default=None),
+        "phases": occupancy,
+        "coverage": (
+            "Completed-read logs only: unfinished and unlogged cancelled reads are absent; depths are lower bounds."
+        ),
     }
 
 
@@ -880,6 +1116,9 @@ def main():
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
+        "--resume", action="store_true", help="Resume accepted rounds with identical binaries and arguments"
+    )
+    parser.add_argument(
         "--require-storage-device", help="Require data, binary, output and temporary files on this Linux block device"
     )
     parser.add_argument(
@@ -936,6 +1175,11 @@ def main():
         action="store_true",
         help="Retain and repeat whole rounds overlapping detected benchmarks/builds",
     )
+    parser.add_argument(
+        "--per-process-quiet",
+        action="store_true",
+        help="Require quiet before every configuration; monitor only its measurement window",
+    )
     parser.add_argument("--note", default="", help="Record conditions such as a noisy/shared machine in the summary")
     args = parser.parse_args()
     if any(variant.startswith("v2-previous") for variant in args.variants) and args.baseline_binary is None:
@@ -960,7 +1204,7 @@ def main():
         args.baseline_binary = args.baseline_binary.resolve()
     args.data_root = args.data_root.resolve()
     args.output = args.output.resolve()
-    args.output.mkdir(parents=True, exist_ok=False)
+    args.output.mkdir(parents=True, exist_ok=args.resume)
     locations = storage_locations(
         {
             "data": args.data_root,
@@ -975,7 +1219,7 @@ def main():
     configs = [(variant, mode) for mode in args.modes for variant in args.variants]
     with args.binary.open("rb") as binary:
         sha256 = hashlib.file_digest(binary, "sha256").hexdigest()
-    summary = {
+    summary: dict[str, Any] = {
         "binary": str(args.binary),
         "sha256": sha256,
         "storage_paths": locations,
@@ -992,24 +1236,50 @@ def main():
             summary["baseline_sha256"] = hashlib.file_digest(binary, "sha256").hexdigest()
         summary["baseline_binary"] = str(args.baseline_binary)
 
+    if args.resume:
+        previous = json.loads((args.output / "summary.json").read_text())
+        for key in ("sha256", "baseline_sha256"):
+            if previous.get(key) != summary.get(key):
+                raise ValueError(f"Cannot resume: {key} changed")
+        old_arguments = {key: value for key, value in previous["arguments"].items() if key != "resume"}
+        old_arguments.setdefault("per_process_quiet", False)
+        new_arguments = {key: value for key, value in summary["arguments"].items() if key != "resume"}
+        if old_arguments != new_arguments:
+            raise ValueError("Cannot resume: benchmark arguments changed")
+        summary = previous
+
     def save():
-        (args.output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+        temporary = args.output / "summary.json.tmp"
+        temporary.write_text(json.dumps(summary, indent=2) + "\n")
+        temporary.replace(args.output / "summary.json")
 
     save()
     for workload in args.workloads:
-        results: dict[str, dict[str, Any]] = {f"{v}-{m}": {"rounds": []} for v, m in configs}
-        summary["results"][workload] = results
+        results: dict[str, dict[str, Any]] = summary["results"].setdefault(
+            workload, {f"{v}-{m}": {"rounds": []} for v, m in configs}
+        )
+        completed_rounds = {len(entry["rounds"]) for entry in results.values()}
+        if len(completed_rounds) != 1 or max(completed_rounds) > args.rounds:
+            raise ValueError(f"Cannot resume: inconsistent accepted rounds for {workload}")
         for variant, mode in configs:
-            if mode != "cached":
+            if mode != "cached" or "io" in results[f"{variant}-{mode}"]:
                 continue
             result = run(args, workload, (variant, mode), "diagnostic", diagnostic=True)
             results[f"{variant}-{mode}"]["io"] = result
             save()
             if mode == "cached" and not result["compute_only"]:
                 raise ValueError(f"{workload}/{variant}: cache is not warm; inspect counters before timing")
-        if args.wait_for_quiet:
+        rnd = completed_rounds.pop()
+        attempt = max((item["attempt"] for item in summary["attempts"] if item["workload"] == workload), default=-1) + 1
+        if args.resume:
+            partial_attempts = [
+                int(match[1])
+                for path in args.output.glob(f"{workload}-*-round*-attempt*.command.json")
+                if (match := re.search(r"-attempt(\d+)\.command\.json$", path.name))
+            ]
+            attempt = max(attempt, max(partial_attempts, default=-1) + 1)
+        if args.wait_for_quiet and rnd < args.rounds:
             wait_for_quiet(args.output, args.data_root if args.evict_local_files else None, args.quiet_seconds)
-        rnd = attempt = 0
         while rnd < args.rounds:
             if args.wait_for_quiet and competing_processes():
                 wait_for_quiet(args.output, args.data_root if args.evict_local_files else None, args.quiet_seconds)
@@ -1039,7 +1309,7 @@ def main():
                 entry["round_medians_ms"] = [r["median_ms"] for r in entry["rounds"]]
                 entry["min_ms"] = min(value for r in entry["rounds"] for value in r["measured_ms"])
                 entry["max_ms"] = max(value for r in entry["rounds"] for value in r["measured_ms"])
-                save()
+            save()
             rnd += 1
         print(
             f"TIMING COMPLETE {workload}: "
@@ -1051,7 +1321,7 @@ def main():
     for workload in args.workloads:
         results = summary["results"][workload]
         for variant, mode in configs:
-            if mode == "cached":
+            if mode == "cached" or "io" in results[f"{variant}-{mode}"]:
                 continue
             if args.wait_for_quiet and competing_processes():
                 wait_for_quiet(args.output, args.data_root if args.evict_local_files else None, args.quiet_seconds)
