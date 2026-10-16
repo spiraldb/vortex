@@ -33,14 +33,15 @@ use vortex_arrow::ArrowSessionExt;
 use vortex_buffer::Alignment;
 use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
-use vortex_error::vortex_err;
 use vortex_io::session::RuntimeSessionExt;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
 
 use super::PreparedScan;
+use super::ROWS_PER_CHUNK;
 use super::ScanBuilder;
 use super::ScanFile;
+use super::row_chunks;
 use crate::LayoutRef;
 use crate::LayoutStrategy;
 use crate::layouts::chunked::writer::ChunkedLayoutStrategy;
@@ -50,9 +51,8 @@ use crate::layouts::row_idx::row_idx;
 use crate::layouts::table::TableStrategy;
 use crate::layouts::zoned::writer::ZonedLayoutOptions;
 use crate::layouts::zoned::writer::ZonedStrategy;
-use crate::scan::planning::SegmentLocation;
+use crate::scan::execution::SegmentLocation;
 use crate::scan::scan_builder::ScanBuilder as V1ScanBuilder;
-use crate::scan::split_by::SplitBy;
 use crate::segments::SegmentFuture;
 use crate::segments::SegmentId;
 use crate::segments::SegmentSource;
@@ -197,13 +197,9 @@ async fn assert_same_as_v1(
         .with_selection(builder.selection.clone())
         .with_row_offset(builder.row_offset)
         .with_ordered(builder.ordered)
-        .with_split_by(builder.split_by)
         .with_concurrency(builder.concurrency);
     if let Some(rows) = builder.row_range.clone() {
         v1 = v1.with_row_range(rows);
-    }
-    if let Some(boundaries) = builder.natural_splits.clone() {
-        v1 = v1.with_natural_splits(boundaries);
     }
     let expected = collect(dtype.clone(), v1.into_stream()?).await?;
     let actual = collect(dtype, builder.into_stream()?).await?;
@@ -306,54 +302,14 @@ async fn arrow_stream_projects_across_chunks() -> VortexResult<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn zoned_projection_keeps_data_splits() -> VortexResult<()> {
-    let session = new_session().with_tokio();
-    let (segments, layout) = write(&session, zoned_table().as_ref()).await?;
-    let projection = get_item("ints", root()).bind(layout.dtype())?;
-    let scan = PreparedScan::try_new(
-        builder(&session, &segments, &layout)?
-            .with_projection(projection)
-            .with_row_range(250..3100),
-    )?;
-    assert_eq!(
-        scan.splits,
-        vec![250..1000, 1000..2000, 2000..3000, 3000..3100]
-    );
-    Ok(())
-}
-
 #[rstest]
-#[case::layout(SplitBy::Layout, vec![0..1000, 1000..2000, 2000..3000, 3000..4000])]
-#[case::bounded(
-    SplitBy::LayoutSubSplitting { max_rows: 600 },
-    vec![0..500, 500..1000, 1000..1500, 1500..2000, 2000..2500, 2500..3000, 3000..3500, 3500..4000]
-)]
-#[case::rows(SplitBy::RowCount(1500), vec![0..1500, 1500..3000, 3000..4000])]
-#[tokio::test]
-async fn split_policy_is_preserved(
-    #[case] policy: SplitBy,
-    #[case] expected: Vec<Range<u64>>,
-) -> VortexResult<()> {
-    let session = new_session().with_tokio();
-    let (segments, layout) = write(&session, table().as_ref()).await?;
-    let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?.with_split_by(policy))?;
-    assert_eq!(scan.splits, expected);
-    Ok(())
-}
-
-#[tokio::test]
-async fn supplied_splits_take_precedence_and_are_clamped() -> VortexResult<()> {
-    let session = new_session().with_tokio();
-    let (segments, layout) = write(&session, table().as_ref()).await?;
-    let scan = PreparedScan::try_new(
-        builder(&session, &segments, &layout)?
-            .with_split_by(SplitBy::RowCount(1000))
-            .with_natural_splits(Arc::from([0, 2500, 4000]))
-            .with_row_range(500..3000),
-    )?;
-    assert_eq!(scan.splits, vec![500..2500, 2500..3000]);
-    Ok(())
+#[case::whole(0..150_000, vec![0..65_536, 65_536..131_072, 131_072..150_000])]
+#[case::unaligned(10..140_000, vec![10..65_536, 65_536..131_072, 131_072..140_000])]
+#[case::boundary(65_536..131_072, vec![65_536..131_072])]
+#[case::empty(5..5, vec![])]
+#[case::near_max(u64::MAX - 3..u64::MAX, vec![u64::MAX - 3..u64::MAX])]
+fn fixed_row_chunks(#[case] rows: Range<u64>, #[case] expected: Vec<Range<u64>>) {
+    assert_eq!(row_chunks(rows), expected);
 }
 
 struct CountingSegments {
@@ -371,9 +327,31 @@ impl SegmentSource for CountingSegments {
 #[tokio::test]
 async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
     let session = new_session().with_tokio();
-    let (segments, layout) = write(&session, table().as_ref()).await?;
-    let ints = layout.slot(1)?.ok_or_else(|| vortex_err!("missing ints"))?;
-    // The codes 0..4000 index the same values, so each split returns its own row numbers.
+    const STORED_CHUNK_ROWS: usize = 70_000;
+    const STORED_CHUNKS: usize = 3;
+    let segments = Arc::new(TestSegments::default());
+    let (mut sequence, eof) = SequenceId::root().split();
+    let arrays = (0..STORED_CHUNKS)
+        .map(|index| {
+            let start = i32::try_from(index * STORED_CHUNK_ROWS)?;
+            let end = start + i32::try_from(STORED_CHUNK_ROWS)?;
+            Ok((
+                sequence.advance(),
+                PrimitiveArray::from_iter(start..end).into_array(),
+            ))
+        })
+        .collect::<VortexResult<Vec<_>>>()?;
+    let dtype = DType::Primitive(vortex_array::dtype::PType::I32, false.into());
+    let ints = chunked_flat()
+        .write_stream(
+            ArrayContext::empty().into(),
+            Arc::<TestSegments>::clone(&segments),
+            SequentialStreamAdapter::new(dtype, stream::iter(arrays.into_iter().map(Ok))).sendable(),
+            eof,
+            &session,
+        )
+        .await?;
+    // Codes index the same values across fixed work chunks and stored chunk boundaries.
     let layout = DictLayout::new(Arc::clone(&ints), ints).into_layout();
     let counted = Arc::new(CountingSegments {
         inner: segments,
@@ -382,14 +360,27 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
     let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
     let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?)?;
     let splits = scan.split_plans();
-    assert_eq!(splits.len(), CHUNKS);
+    assert_eq!(
+        splits.len(),
+        (STORED_CHUNKS * STORED_CHUNK_ROWS).div_ceil(ROWS_PER_CHUNK)
+    );
     for (index, split) in splits.into_iter().enumerate() {
+        let rows = split.scope.rows.clone();
         let before = counted.reads.load(Ordering::Relaxed);
         let arrays = split.run(Arc::clone(&scan.io)).await?;
         let reads = counted.reads.load(Ordering::Relaxed) - before;
-        assert_eq!(reads, if index == 0 { CHUNKS } else { 1 });
-        let start = i32::try_from(index * CHUNK_ROWS)?;
-        let expected = PrimitiveArray::from_iter(start..start + i32::try_from(CHUNK_ROWS)?);
+        let code_chunks = (rows.end - 1) / STORED_CHUNK_ROWS as u64
+            - rows.start / STORED_CHUNK_ROWS as u64
+            + 1;
+        assert_eq!(
+            reads,
+            if index == 0 {
+                STORED_CHUNKS
+            } else {
+                code_chunks as usize
+            }
+        );
+        let expected = PrimitiveArray::from_iter(i32::try_from(rows.start)?..i32::try_from(rows.end)?);
         assert_arrays_eq!(
             ChunkedArray::try_new(arrays, layout.dtype().clone())?.into_array(),
             expected,
@@ -449,18 +440,18 @@ async fn primitive_column() -> VortexResult<()> {
     Ok(())
 }
 
-/// Every chunk of the default zoned table is its own split, so the scan runs them in parallel.
+/// Stored chunk boundaries do not subdivide a fixed work chunk.
 #[rstest]
 #[tokio::test]
-async fn splits_at_chunk_starts(
+async fn work_chunks_ignore_layout_boundaries(
     #[values(Strategy::Flat, Strategy::Table, Strategy::ZonedTable)] strategy: Strategy,
 ) -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, strategy.get().as_ref()).await?;
     let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?)?;
-    let expected = (0..CHUNKS as u64)
-        .map(|chunk| chunk * CHUNK_ROWS as u64..(chunk + 1) * CHUNK_ROWS as u64)
-        .collect::<Vec<_>>();
-    assert_eq!(scan.splits, expected);
+    assert_eq!(scan.splits, vec![0..(CHUNKS * CHUNK_ROWS) as u64]);
+    let arrays: Vec<_> = scan.execute_stream()?.try_collect().await?;
+    assert_eq!(arrays.len(), 1);
+    assert_eq!(arrays[0].len(), CHUNKS * CHUNK_ROWS);
     Ok(())
 }

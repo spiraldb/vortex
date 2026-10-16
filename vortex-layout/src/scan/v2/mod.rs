@@ -10,15 +10,14 @@
 //!
 //! Import this module's [`ScanBuilder`] to select V2 explicitly. It accepts a [`ScanFile`]
 //! directly and supports projection, row ranges, and selections. Unsupported layouts return an
-//! error; filters and limits are not part of this builder's API.
+//! error; filters and limits are not part of this builder's API. Work is partitioned into fixed
+//! 65,536-row chunks, independently of the stored layout's chunk boundaries.
 
 mod io;
 mod split;
-pub(super) mod splits;
 #[cfg(test)]
 mod tests;
 
-use std::iter;
 use std::ops::Range;
 use std::sync::Arc;
 
@@ -52,21 +51,34 @@ use crate::layouts::flat::Flat;
 use crate::layouts::struct_::Struct;
 use crate::layouts::zoned::LegacyStats;
 use crate::layouts::zoned::Zoned;
-use crate::plan::physical::PlanRef;
 use crate::plan::physical::lower;
 use crate::plan::physical::optimize;
 use crate::plan::physical::plan_row_idx_expression;
 use crate::scan::arrow::to_record_batch;
-use crate::scan::planning::ScanPlans;
-pub use crate::scan::planning::SegmentLocation;
-use crate::scan::planning::plan_projection;
-use crate::scan::split_by::SplitBy;
+use crate::scan::execution::ScanPlans;
+pub use crate::scan::execution::SegmentLocation;
+use crate::scan::execution::plan_projection;
 use crate::scan::v2::io::SegmentScanIo;
 use crate::scan::v2::io::segment_ranges;
 use crate::scan::v2::split::SplitPlan;
-use crate::scan::v2::splits::chunk_starts;
-use crate::scan::v2::splits::projection_splits;
 use crate::segments::SegmentSource;
+
+/// Eight of the default writer's 8,192-row blocks per scan task.
+const ROWS_PER_CHUNK: usize = 8 * 8192;
+
+/// Fixed boundaries in the file's row domain, clipped to the requested range.
+fn row_chunks(rows: Range<u64>) -> Vec<Range<u64>> {
+    if rows.is_empty() {
+        return Vec::new();
+    }
+    let first = rows.start / ROWS_PER_CHUNK as u64 * ROWS_PER_CHUNK as u64;
+    (first..rows.end)
+        .step_by(ROWS_PER_CHUNK)
+        .map(|start| {
+            start.max(rows.start)..start.saturating_add(ROWS_PER_CHUNK as u64).min(rows.end)
+        })
+        .collect()
+}
 
 /// The parts of a file the planner-driven executor reads through.
 #[derive(Clone)]
@@ -90,8 +102,6 @@ pub struct ScanBuilder<A = ArrayRef> {
     ordered: bool,
     row_range: Option<Range<u64>>,
     selection: Selection,
-    split_by: SplitBy,
-    natural_splits: Option<Arc<[u64]>>,
     concurrency: usize,
     map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
     row_offset: u64,
@@ -107,8 +117,6 @@ impl ScanBuilder<ArrayRef> {
             ordered: true,
             row_range: None,
             selection: Selection::default(),
-            split_by: SplitBy::default(),
-            natural_splits: None,
             concurrency: 4,
             map_fn: Arc::new(Ok),
             row_offset: 0,
@@ -173,23 +181,6 @@ impl<A: 'static + Send> ScanBuilder<A> {
         self
     }
 
-    /// Configures how natural scan work is split for concurrency.
-    pub fn with_split_by(mut self, split_by: SplitBy) -> Self {
-        self.split_by = split_by;
-        self
-    }
-
-    /// Supplies strictly increasing full-file boundaries, overriding the split policy.
-    /// Boundaries are clamped to the scan's row range.
-    pub fn with_natural_splits(mut self, boundaries: Arc<[u64]>) -> Self {
-        debug_assert!(
-            boundaries.windows(2).all(|w| w[0] < w[1]),
-            "natural split boundaries must be strictly increasing"
-        );
-        self.natural_splits = Some(boundaries);
-        self
-    }
-
     /// Sets the number of active splits per worker thread. Must be greater than zero.
     pub fn with_concurrency(mut self, concurrency: usize) -> Self {
         assert!(concurrency > 0);
@@ -210,8 +201,6 @@ impl<A: 'static + Send> ScanBuilder<A> {
             ordered: self.ordered,
             row_range: self.row_range,
             selection: self.selection,
-            split_by: self.split_by,
-            natural_splits: self.natural_splits,
             concurrency: self.concurrency,
             row_offset: self.row_offset,
             map_fn: Arc::new(move |array| old_map_fn(array).and_then(&map_fn)),
@@ -264,8 +253,6 @@ fn supports_layout(layout: &LayoutRef, identity: bool) -> VortexResult<bool> {
 struct PreparedScan<A: 'static + Send> {
     session: VortexSession,
     plans: ScanPlans,
-    /// Whole dictionary values and the root rows that use them, for an identity projection.
-    value_scopes: Option<Vec<(Range<u64>, PlanRef)>>,
     /// Serves the splits' reads.
     io: Arc<dyn IoService>,
     /// The scan's splits, over the root row domain, in row order.
@@ -277,8 +264,8 @@ struct PreparedScan<A: 'static + Send> {
 }
 
 impl<A: 'static + Send> PreparedScan<A> {
-    /// Lowers the file's layout, plans the projection over it, and cuts the scan's row range
-    /// where the projection's chunks start.
+    /// Lowers the file's layout, plans the projection, and partitions the selected range into
+    /// fixed-size row chunks.
     fn try_new(builder: ScanBuilder<A>) -> VortexResult<Self> {
         let file = builder.file;
         vortex_ensure!(
@@ -295,29 +282,7 @@ impl<A: 'static + Send> PreparedScan<A> {
         } else {
             optimize(plan_row_idx_expression(builder.projection, root)?)?
         };
-        let mut value_scopes = identity.then(Vec::new);
-        let projection_starts: Arc<[u64]> =
-            chunk_starts([&projection], value_scopes.as_mut())?.into();
-        let rows = builder.row_range.unwrap_or(0..row_count);
-        // Whole-column dictionaries already need the scan's full lifetime. Only dictionaries
-        // covering part of the scan need separate cache owners for their consuming splits.
-        let value_scopes = value_scopes.filter(|values| {
-            values
-                .iter()
-                .any(|(used, _)| used.start > rows.start || used.end < rows.end)
-        });
-        let splits = if let Some(boundaries) = builder.natural_splits {
-            projection_splits(&boundaries, rows)
-        } else {
-            let natural = projection_splits(&projection_starts, rows.clone());
-            let boundaries = natural
-                .iter()
-                .map(|split| split.start)
-                .chain(iter::once(rows.end))
-                .collect();
-            let boundaries = builder.split_by.split_boundaries(boundaries, &rows)?;
-            projection_splits(&boundaries, rows)
-        };
+        let splits = row_chunks(builder.row_range.unwrap_or(0..row_count));
         let io = Arc::new(SegmentScanIo::new(
             file.segments,
             segment_ranges(&file.locations),
@@ -328,11 +293,9 @@ impl<A: 'static + Send> PreparedScan<A> {
                 session: builder.session,
                 locations: file.locations,
                 projection,
-                projection_starts,
                 row_offset: builder.row_offset,
                 values: Default::default(),
             },
-            value_scopes,
             io,
             splits,
             selection: builder.selection,
@@ -355,17 +318,12 @@ impl<A: 'static + Send> PreparedScan<A> {
                     file_ordinal: 0,
                     rows: row_mask.row_range(),
                 };
-                let mut plans = self.plans.clone();
-                if let Some(values) = &self.value_scopes {
-                    plans.values = self.plans.values.for_plans(
-                        values
-                            .iter()
-                            .filter(|(used, _)| used.start < rows.end && rows.start < used.end)
-                            .map(|(_, plan)| plan),
-                    );
-                }
                 Some(SplitPlan {
-                    root: plan_projection(plans, scope.clone(), row_mask.mask().clone()),
+                    root: plan_projection(
+                        self.plans.clone(),
+                        scope.clone(),
+                        row_mask.mask().clone(),
+                    ),
                     scope,
                 })
             })
