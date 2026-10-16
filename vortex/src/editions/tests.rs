@@ -440,24 +440,6 @@ async fn write_with(session: &VortexSession, array: ArrayRef) -> VortexResult<By
     Ok(buffer)
 }
 
-/// Write `array` with `session`, keeping lists flat.
-async fn write_without_list_layout(
-    session: &VortexSession,
-    array: ArrayRef,
-) -> VortexResult<ByteBufferMut> {
-    let mut buffer = ByteBufferMut::empty();
-    session
-        .write_options()
-        .with_strategy(
-            WriteStrategyBuilder::from_session(session)
-                .without_list_layout()
-                .build(),
-        )
-        .write(&mut buffer, array.to_array_stream())
-        .await?;
-    Ok(buffer)
-}
-
 /// The layout encodings a written file actually contains, depth first.
 fn written_layout_ids(session: &VortexSession, buffer: ByteBufferMut) -> VortexResult<Vec<Id>> {
     let file = session.open_options().open_buffer(buffer)?;
@@ -562,8 +544,7 @@ async fn writer_restricts_layouts_to_the_enabled_editions() -> VortexResult<()> 
     Ok(())
 }
 
-/// The writer emits the list layout when the enabled editions include it, unless the builder
-/// turns it off.
+/// The writer emits the list layout exactly when the enabled editions include it.
 #[tokio::test]
 async fn list_layout_follows_enabled_editions() -> VortexResult<()> {
     use crate::VortexSessionDefault;
@@ -590,12 +571,8 @@ async fn list_layout_follows_enabled_editions() -> VortexResult<()> {
     session.enable_edition(DEFAULT_PREVIEW_EDITION)?;
 
     // Permitted: the default writer emits it.
-    let written = written_layout_ids(&session, write_with(&session, array.clone()).await?)?;
+    let written = written_layout_ids(&session, write_with(&session, array).await?)?;
     assert!(written.contains(&list_layout), "{written:?}");
-
-    // Permitted but turned off.
-    let written = written_layout_ids(&session, write_without_list_layout(&session, array).await?)?;
-    assert!(!written.contains(&list_layout), "{written:?}");
     Ok(())
 }
 

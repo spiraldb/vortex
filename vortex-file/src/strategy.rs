@@ -111,13 +111,6 @@ impl WriteStrategyBuilder {
         self
     }
 
-    /// Write list fields flat, even when the session's enabled editions include the
-    /// `vortex.list` layout.
-    pub fn without_list_layout(mut self) -> Self {
-        self.use_list_layout = false;
-        self
-    }
-
     /// Override the write layout for a specific field somewhere in the nested schema tree.
     ///
     /// The field path is matched after the root struct is split into columns. This is useful when a

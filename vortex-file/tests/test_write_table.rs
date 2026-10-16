@@ -21,9 +21,12 @@ use vortex_array::field_path;
 use vortex_array::validity::Validity;
 use vortex_btrblocks::BtrBlocksCompressor;
 use vortex_buffer::ByteBuffer;
+use vortex_edition::EDITION_DECLARATIONS;
+use vortex_edition::EditionSession;
+use vortex_edition::EditionSessionExt;
+use vortex_edition::declarations::core::CORE_2026_08_3;
 use vortex_file::OpenOptionsSessionExt;
 use vortex_file::WriteOptionsSessionExt;
-use vortex_file::WriteStrategyBuilder;
 use vortex_io::session::RuntimeSession;
 use vortex_layout::layouts::compressed::CompressingStrategy;
 use vortex_layout::layouts::flat::writer::FlatLayoutStrategy;
@@ -148,16 +151,25 @@ async fn test_dict_listview_validity_roundtrip() {
         .expect("from_fields")
         .into_array();
 
-    // The failure was in the flat write path, which `SESSION`'s editions would otherwise replace
-    // with the list layout.
+    // The failure was in the flat write path. `SESSION` enables the `vortex.list` layout, so write
+    // with only the core edition enabled, like the default session.
+    let write_session = vortex_array::array_session()
+        .with::<EditionSession>()
+        .with::<LayoutSession>()
+        .with::<RuntimeSession>();
+    vortex_file::register_default_encodings(&write_session);
+    for declaration in EDITION_DECLARATIONS {
+        write_session
+            .register_edition(declaration)
+            .expect("edition declarations register");
+    }
+    write_session
+        .enable_edition(CORE_2026_08_3)
+        .expect("core edition is registered");
+
     let mut bytes = Vec::new();
-    SESSION
+    write_session
         .write_options()
-        .with_strategy(
-            WriteStrategyBuilder::from_session(&SESSION)
-                .without_list_layout()
-                .build(),
-        )
         .write(&mut bytes, data.to_array_stream())
         .await
         .expect("write should not fail with fill_null serialization error");

@@ -2010,6 +2010,20 @@ async fn test_writer_with_complex_types() -> VortexResult<()> {
     Ok(())
 }
 
+/// A session with only the core edition enabled, like the default session.
+fn core_edition_session() -> VortexResult<VortexSession> {
+    let session = array_session()
+        .with::<EditionSession>()
+        .with::<LayoutSession>()
+        .with::<RuntimeSession>();
+    crate::register_default_encodings(&session);
+    for declaration in EDITION_DECLARATIONS {
+        session.register_edition(declaration)?;
+    }
+    session.enable_edition(CORE_2026_08_3)?;
+    Ok(session)
+}
+
 /// Write `array` with list decomposition forced on (through the full compress/zone pipeline) and
 /// read the whole thing back.
 async fn write_read_roundtrip(array: ArrayRef) -> VortexResult<ArrayRef> {
@@ -2020,15 +2034,15 @@ async fn write_read_roundtrip_with_layout(
     array: ArrayRef,
     use_list_layout: bool,
 ) -> VortexResult<ArrayRef> {
-    // `SESSION` enables the `vortex.list` layout, so the default writer decomposes lists.
-    let mut strategy = crate::strategy::WriteStrategyBuilder::from_session(&SESSION);
-    if !use_list_layout {
-        strategy = strategy.without_list_layout();
-    }
+    // `SESSION` enables the `vortex.list` layout; the core edition does not.
+    let session = if use_list_layout {
+        SESSION.clone()
+    } else {
+        core_edition_session()?
+    };
     let mut buf = ByteBufferMut::empty();
-    SESSION
+    session
         .write_options()
-        .with_strategy(strategy.build())
         .write(&mut buf, array.to_array_stream())
         .await?;
     SESSION
