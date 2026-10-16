@@ -25,6 +25,7 @@ use vortex_array::expr::gt;
 use vortex_array::expr::lit;
 use vortex_array::expr::root;
 use vortex_array::serde::SerializeOptions;
+use vortex_array::validity::Validity;
 use vortex_buffer::Alignment;
 use vortex_buffer::Buffer;
 use vortex_buffer::ByteBufferMut;
@@ -819,4 +820,30 @@ fn pack_readiness_tracks_changes_and_consumption(
         );
     }
     Ok(())
+}
+
+#[rstest]
+fn nullable_struct_without_fields_keeps_its_rows(
+    #[values(Sel::All, Sel::EveryOther)] selection: Sel,
+) -> VortexResult<()> {
+    let mut store = Store::default();
+    let validity = BoolArray::from_iter((0..ROWS).map(|row| row % 3 != 0)).into_array();
+    let expected = StructArray::try_new_with_dtype(
+        Vec::new(),
+        StructFields::empty(),
+        ROWS as usize,
+        Validity::Array(validity.clone()),
+    )?
+    .into_array();
+    let layout = StructLayout::new(ROWS, expected.dtype().clone(), vec![store.flat(&validity)?])
+        .into_layout();
+    let mask = selection.mask(ROWS as usize);
+    let run = run(
+        &store,
+        &lower(&layout)?,
+        0..ROWS,
+        mask.clone(),
+        delivery(Delivery::Fifo),
+    )?;
+    assert_view(&expected, &(0..ROWS), &mask, run.arrays)
 }
