@@ -37,6 +37,7 @@ use vortex_error::VortexResult;
 use vortex_io::session::RuntimeSessionExt;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
+use vortex_session::registry::CachedId;
 
 use super::MAX_ROWS_PER_CHUNK;
 use super::PreparedScan;
@@ -44,7 +45,6 @@ use super::ScanBuilder;
 use super::ScanFile;
 use super::row_chunks;
 use super::rows_per_chunk;
-use crate::LayoutId;
 use crate::LayoutRef;
 use crate::LayoutStrategy;
 use crate::children::OwnedLayoutChildren;
@@ -71,6 +71,7 @@ use crate::test::new_session;
 
 const CHUNK_ROWS: usize = 1000;
 const CHUNKS: usize = 4;
+static UNSUPPORTED_ID: CachedId = CachedId::new("test.unsupported");
 
 /// A table chunk of `CHUNK_ROWS` rows starting at row `start`: an integer, a nullable string and a
 /// list column.
@@ -496,7 +497,7 @@ async fn selected_list_values_match_input(
     let layout = strategy
         .write_stream(
             ArrayContext::empty().into(),
-            segments.clone(),
+            Arc::<TestSegments>::clone(&segments),
             SequentialStreamAdapter::new(dtype.clone(), stream::iter([Ok((id.advance(), input))]))
                 .sendable(),
             eof,
@@ -507,7 +508,7 @@ async fn selected_list_values_match_input(
         inner: segments,
         reads: AtomicUsize::new(0),
     });
-    let segments: Arc<dyn SegmentSource> = counted.clone();
+    let segments: Arc<dyn SegmentSource> = Arc::<CountingSegments>::clone(&counted);
     let empty = rows.is_empty();
     let null_only = nullable && !empty && rows.iter().all(|row| row % 3 == 0);
     let scan = builder(&session, &segments, &layout)?
@@ -578,7 +579,7 @@ async fn unknown_layout_returns_an_error() -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, known) = write(&session, chunked_flat().as_ref()).await?;
     let layout = new_foreign_layout(
-        LayoutId::new("test.unsupported"),
+        *UNSUPPORTED_ID,
         known.dtype().clone(),
         known.row_count(),
         Vec::new(),
@@ -607,7 +608,7 @@ async fn unsupported_chunk_is_checked_when_reached(
     let (segments, known) = write(&session, chunked_flat().as_ref()).await?;
     let rows = known.row_count();
     let unknown = new_foreign_layout(
-        LayoutId::new("test.unsupported"),
+        *UNSUPPORTED_ID,
         known.dtype().clone(),
         rows,
         Vec::new(),
@@ -617,7 +618,7 @@ async fn unsupported_chunk_is_checked_when_reached(
     let layout = ChunkedLayout::new(
         2 * rows,
         known.dtype().clone(),
-        OwnedLayoutChildren::layout_children(vec![known.clone(), unknown]),
+        OwnedLayoutChildren::layout_children(vec![Arc::clone(&known), unknown]),
     )
     .into_layout();
     let range = if selected { rows..2 * rows } else { 0..rows };

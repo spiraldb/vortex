@@ -37,6 +37,7 @@ use vortex_array::ArrayRef;
 use vortex_array::VortexSessionExecute;
 use vortex_array::dtype::DType;
 use vortex_array::expr::BoundExpression;
+use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_io::request::IoService;
 use vortex_io::session::RuntimeSessionExt;
@@ -84,7 +85,9 @@ fn rows_per_chunk(
         let blocks = (rows / ROW_BLOCK_SIZE as u64).min(blocks).max(8);
         1_u64 << blocks.ilog2()
     });
-    blocks.clamp(1, max_blocks) as usize * ROW_BLOCK_SIZE
+    usize::try_from(blocks.clamp(1, max_blocks))
+        .vortex_expect("the byte target bounds the block count to at most 1024")
+        * ROW_BLOCK_SIZE
 }
 
 /// Fixed boundaries in the file's row domain, clipped to the requested range.
