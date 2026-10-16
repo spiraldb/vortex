@@ -346,7 +346,8 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
         .write_stream(
             ArrayContext::empty().into(),
             Arc::<TestSegments>::clone(&segments),
-            SequentialStreamAdapter::new(dtype, stream::iter(arrays.into_iter().map(Ok))).sendable(),
+            SequentialStreamAdapter::new(dtype, stream::iter(arrays.into_iter().map(Ok)))
+                .sendable(),
             eof,
             &session,
         )
@@ -369,18 +370,18 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
         let before = counted.reads.load(Ordering::Relaxed);
         let arrays = split.run(Arc::clone(&scan.io)).await?;
         let reads = counted.reads.load(Ordering::Relaxed) - before;
-        let code_chunks = (rows.end - 1) / STORED_CHUNK_ROWS as u64
-            - rows.start / STORED_CHUNK_ROWS as u64
-            + 1;
+        let code_chunks =
+            (rows.end - 1) / STORED_CHUNK_ROWS as u64 - rows.start / STORED_CHUNK_ROWS as u64 + 1;
         assert_eq!(
             reads,
             if index == 0 {
                 STORED_CHUNKS
             } else {
-                code_chunks as usize
+                usize::try_from(code_chunks)?
             }
         );
-        let expected = PrimitiveArray::from_iter(i32::try_from(rows.start)?..i32::try_from(rows.end)?);
+        let expected =
+            PrimitiveArray::from_iter(i32::try_from(rows.start)?..i32::try_from(rows.end)?);
         assert_arrays_eq!(
             ChunkedArray::try_new(arrays, layout.dtype().clone())?.into_array(),
             expected,
