@@ -19,6 +19,7 @@ use vortex_session::registry::CachedId;
 use self::bool::accumulate_bool;
 use self::decimal::accumulate_decimal;
 use self::extension::accumulate_extension;
+use self::extension::accumulate_grouped_extension;
 use self::fixed_size_list::accumulate_fixed_size_list;
 use self::primitive::accumulate_primitive;
 use self::varbinview::accumulate_varbinview;
@@ -32,6 +33,7 @@ use crate::aggregate_fn::AggregateDTypes;
 use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnVTable;
 use crate::aggregate_fn::DynAccumulator;
+use crate::aggregate_fn::GroupedArray;
 use crate::aggregate_fn::NumericalAggregateOpts;
 use crate::dtype::DType;
 use crate::dtype::FieldNames;
@@ -440,6 +442,15 @@ impl AggregateFnVTable for MinMax {
             }
             _ => Ok(false),
         }
+    }
+
+    fn try_accumulate_grouped(
+        &self,
+        args: AggregateArgs<'_, Self::Options>,
+        groups: &GroupedArray,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Option<ArrayRef>> {
+        accumulate_grouped_extension(args, groups, ctx)
     }
 
     fn accumulate(
