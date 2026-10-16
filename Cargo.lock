@@ -12383,6 +12383,7 @@ dependencies = [
  "parking_lot",
  "roaring",
  "rstest",
+ "smallvec",
  "tracing",
  "vortex-array",
  "vortex-buffer",
