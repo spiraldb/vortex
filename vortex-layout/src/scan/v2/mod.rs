@@ -11,8 +11,10 @@
 //! Import this module's [`ScanBuilder`] to select V2 explicitly. It accepts a [`ScanFile`]
 //! directly and supports projection, row ranges, and selections. Unsupported layouts return an
 //! error; filters and limits are not part of this builder's API. Work is partitioned into fixed
-//! chunks of up to 65,536 rows, independently of the stored layout's chunk boundaries.
-//! Full-file projections use smaller 8,192-row multiples when serialized bytes per row are high.
+//! chunks independently of the stored layout's chunk boundaries. Dense scans use up to 65,536
+//! rows per chunk, in 8,192-row multiples, targeting 8 MiB of serialized data. Sparse identity
+//! projections can use larger aligned chunks within that estimate, targeting four tasks per
+//! worker to reduce repeated segment reads.
 
 mod io;
 mod split;
@@ -62,7 +64,11 @@ const MAX_ROWS_PER_CHUNK: usize = 8 * ROW_BLOCK_SIZE;
 const TARGET_BYTES_PER_CHUNK: u64 = 8 * 1024 * 1024;
 
 /// Limit estimated bytes per task without changing the writer-aligned row granularity.
-fn rows_per_chunk(row_count: u64, locations: &[SegmentLocation]) -> usize {
+fn rows_per_chunk(
+    row_count: u64,
+    locations: &[SegmentLocation],
+    sparse_target: Option<u64>,
+) -> usize {
     if row_count <= MAX_ROWS_PER_CHUNK as u64 {
         return MAX_ROWS_PER_CHUNK;
     }
@@ -72,7 +78,13 @@ fn rows_per_chunk(row_count: u64, locations: &[SegmentLocation]) -> usize {
         .sum();
     let bytes_per_row = bytes.div_ceil(row_count).max(1);
     let blocks = TARGET_BYTES_PER_CHUNK / bytes_per_row / ROW_BLOCK_SIZE as u64;
-    blocks.clamp(1, 8) as usize * ROW_BLOCK_SIZE
+    let max_blocks = sparse_target.map_or(8, |rows| {
+        // Grow sparse tasks only within the byte target, keeping power-of-two boundaries
+        // aligned with the original work chunks and enough tasks to occupy the workers.
+        let blocks = (rows / ROW_BLOCK_SIZE as u64).min(blocks).max(8);
+        1_u64 << blocks.ilog2()
+    });
+    blocks.clamp(1, max_blocks) as usize * ROW_BLOCK_SIZE
 }
 
 /// Fixed boundaries in the file's row domain, clipped to the requested range.
@@ -262,7 +274,12 @@ impl<A: 'static + Send> PreparedScan<A> {
             optimize(plan_row_idx_expression(builder.projection, root)?)?
         };
         let chunk_rows = if identity {
-            rows_per_chunk(row_count, &file.locations)
+            let rows = builder.row_range.clone().unwrap_or(0..row_count);
+            let selected = builder.selection.row_count_in_range(&rows);
+            let span = rows.end.saturating_sub(rows.start);
+            let sparse_target = (selected <= span / 16)
+                .then(|| span / (4 * get_available_parallelism().unwrap_or(1)) as u64);
+            rows_per_chunk(row_count, &file.locations, sparse_target)
         } else {
             MAX_ROWS_PER_CHUNK
         };

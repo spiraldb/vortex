@@ -320,19 +320,29 @@ fn fixed_row_chunks(#[case] rows: Range<u64>, #[case] expected: Vec<Range<u64>>)
 }
 
 #[rstest]
-#[case::empty(0, 0, 65_536)]
-#[case::single_chunk(1000, 100_000_000, 65_536)]
-#[case::no_bytes(100_000, 0, 65_536)]
-#[case::small_rows(1_000_000, 64_000_000, 65_536)]
-#[case::large_rows(1_000_000, 384_000_000, 16_384)]
-#[case::minimum(1_000_000, 2_000_000_000, 8192)]
-fn chunk_byte_budget(#[case] rows: u64, #[case] bytes: u32, #[case] expected: usize) {
+#[case::empty(0, 0, None, 65_536)]
+#[case::single_chunk(1000, 100_000_000, None, 65_536)]
+#[case::no_bytes(100_000, 0, None, 65_536)]
+#[case::small_rows(1_000_000, 64_000_000, None, 65_536)]
+#[case::large_rows(1_000_000, 384_000_000, None, 16_384)]
+#[case::minimum(1_000_000, 2_000_000_000, None, 8192)]
+#[case::sparse_small_rows(3_339_715, 49_808_116, Some(834_928), 524_288)]
+#[case::sparse_medium_rows(1_000_000, 35_640_884, Some(250_000), 131_072)]
+#[case::sparse_more_workers(3_339_715, 49_808_116, Some(27_830), 65_536)]
+#[case::sparse_lists(1_000_000, 86_983_648, Some(250_000), 65_536)]
+#[case::sparse_wide_rows(1_000_000, 3_354_532_688, Some(250_000), 8192)]
+fn chunk_byte_budget(
+    #[case] rows: u64,
+    #[case] bytes: u32,
+    #[case] sparse_target: Option<u64>,
+    #[case] expected: usize,
+) {
     let locations = [SegmentLocation {
         offset: 0,
         length: bytes,
         alignment: Alignment::none(),
     }];
-    assert_eq!(rows_per_chunk(rows, &locations), expected);
+    assert_eq!(rows_per_chunk(rows, &locations, sparse_target), expected);
 }
 
 #[test]
