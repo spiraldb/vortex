@@ -49,6 +49,7 @@ use crate::LayoutRef;
 use crate::layouts::chunked::Chunked;
 use crate::layouts::dict::Dict;
 use crate::layouts::flat::Flat;
+use crate::layouts::list::List;
 use crate::layouts::struct_::Struct;
 use crate::layouts::zoned::LegacyStats;
 use crate::layouts::zoned::Zoned;
@@ -238,12 +239,11 @@ impl<A: 'static + Send> ScanBuilder<A> {
 }
 
 /// Whether every required layout lowers to plans with a pipeline implementation.
-///
-/// List layouts lower to a list assembly, which cannot compile before its offsets are read.
 fn supports_layout(layout: &LayoutRef, identity: bool) -> VortexResult<bool> {
     if !(layout.is::<Flat>()
         || layout.is::<Chunked>()
         || layout.is::<Struct>()
+        || layout.is::<List>()
         || layout.is::<Dict>()
         || layout.is::<Zoned>()
         || layout.is::<LegacyStats>())
@@ -328,22 +328,22 @@ impl<A: 'static + Send> PreparedScan<A> {
 
     /// The splits with selected rows, each ready to be admitted to a planning run.
     fn split_plans(&self) -> Vec<SplitPlan> {
+        let selection = Arc::new(self.selection.clone());
         self.splits
             .iter()
             .filter_map(|rows| {
-                let row_mask = self.selection.row_mask(rows);
-                if row_mask.mask().all_false() {
+                if self.selection.row_count_in_range(rows) == 0 {
                     return None;
                 }
                 let scope = WorkScope {
                     file_ordinal: 0,
-                    rows: row_mask.row_range(),
+                    rows: rows.clone(),
                 };
                 Some(SplitPlan {
                     root: plan_projection(
                         self.plans.clone(),
                         scope.clone(),
-                        row_mask.mask().clone(),
+                        Arc::clone(&selection),
                     ),
                     scope,
                 })

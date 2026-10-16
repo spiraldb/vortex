@@ -16,6 +16,7 @@ use vortex_array::ArrayContext;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
+use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::PrimitiveArray;
@@ -48,6 +49,7 @@ use crate::LayoutStrategy;
 use crate::layouts::chunked::writer::ChunkedLayoutStrategy;
 use crate::layouts::dict::DictLayout;
 use crate::layouts::flat::writer::FlatLayoutStrategy;
+use crate::layouts::list::writer::ListLayoutStrategy;
 use crate::layouts::row_idx::row_idx;
 use crate::layouts::table::TableStrategy;
 use crate::layouts::zoned::writer::ZonedLayoutOptions;
@@ -416,19 +418,94 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
     Ok(())
 }
 
-/// V2 rejects list layouts: their element ranges are only known once their offsets are read.
 #[tokio::test]
-async fn list_layouts_return_an_error() -> VortexResult<()> {
+async fn list_layouts_match_v1() -> VortexResult<()> {
     let session = new_session().with_tokio();
     let strategy = TableStrategy::new(chunked_flat(), chunked_flat()).with_list_layout();
     let (segments, layout) = write(&session, &strategy).await?;
-    let builder = builder(&session, &segments, &layout)?;
-    let error = builder
-        .into_stream()?
-        .try_next()
-        .await
-        .expect_err("V2 must reject an unsupported layout");
-    assert!(error.to_string().contains("V2 scans do not support"));
+    assert_same_as_v1(&session, || builder(&session, &segments, &layout)).await
+}
+
+#[rstest]
+#[case::empty(vec![])]
+#[case::null_only(vec![3, 6, 9])]
+#[case::contiguous(vec![1, 2])]
+#[case::contiguous_with_empty(vec![7, 8])]
+#[case::mixed(vec![0, 1, 2, 3, 8, 31, 63])]
+#[case::all((0..64).collect())]
+#[tokio::test]
+async fn selected_list_values_match_input(
+    #[case] rows: Vec<u64>,
+    #[values(false, true)] nested: bool,
+    #[values(false, true)] nullable: bool,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let mut offsets = vec![0_u32];
+    let mut total = 0;
+    for row in 0..64 {
+        total += row % 4;
+        offsets.push(total);
+    }
+    let inner_strategy = ListLayoutStrategy::default()
+        .with_elements(chunked_flat())
+        .with_offsets(chunked_flat())
+        .with_validity(chunked_flat());
+    let (elements, element_strategy) = if nested {
+        let elements = ListArray::try_new(
+            Buffer::from_iter(0..2 * total).into_array(),
+            Buffer::from_iter((0..=total).map(|row| 2 * row)).into_array(),
+            Validity::Array(BoolArray::from_iter((0..total).map(|row| row % 3 != 0)).into_array()),
+        )?
+        .into_array();
+        (
+            elements,
+            Arc::new(inner_strategy) as Arc<dyn LayoutStrategy>,
+        )
+    } else {
+        (Buffer::from_iter(0..total).into_array(), chunked_flat())
+    };
+    let validity = if nullable {
+        Validity::Array(BoolArray::from_iter((0..64).map(|row| row % 3 != 0)).into_array())
+    } else {
+        Validity::NonNullable
+    };
+    let input =
+        ListArray::try_new(elements, Buffer::from(offsets).into_array(), validity)?.into_array();
+    let dtype = input.dtype().clone();
+    let expected = input.take(Buffer::from(rows.clone()).into_array())?;
+    let strategy = ListLayoutStrategy::default()
+        .with_elements(element_strategy)
+        .with_offsets(chunked_flat())
+        .with_validity(chunked_flat());
+    let segments = Arc::new(TestSegments::default());
+    let (mut id, eof) = SequenceId::root().split();
+    let layout = strategy
+        .write_stream(
+            ArrayContext::empty().into(),
+            segments.clone(),
+            SequentialStreamAdapter::new(dtype.clone(), stream::iter([Ok((id.advance(), input))]))
+                .sendable(),
+            eof,
+            &session,
+        )
+        .await?;
+    let counted = Arc::new(CountingSegments {
+        inner: segments,
+        reads: AtomicUsize::new(0),
+    });
+    let segments: Arc<dyn SegmentSource> = counted.clone();
+    let empty = rows.is_empty();
+    let null_only = nullable && !empty && rows.iter().all(|row| row % 3 == 0);
+    let scan = builder(&session, &segments, &layout)?
+        .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(rows))?);
+    let actual = collect(dtype, scan.into_stream()?).await?;
+    assert_arrays_eq!(actual, expected, &mut session.create_execution_ctx());
+    if empty {
+        assert_eq!(counted.reads.load(Ordering::Relaxed), 0);
+    } else if null_only {
+        // Only offsets and validity are needed, even when null lists store nonempty elements.
+        assert_eq!(counted.reads.load(Ordering::Relaxed), 2);
+    }
     Ok(())
 }
 
