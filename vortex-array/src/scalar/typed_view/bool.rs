@@ -12,6 +12,7 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 
 use crate::dtype::DType;
+use crate::match_each_native_ptype;
 use crate::scalar::Scalar;
 use crate::scalar::ScalarValue;
 
@@ -82,16 +83,25 @@ impl<'a> BoolScalar<'a> {
     }
 
     /// Casts this scalar to the given `dtype`.
+    ///
+    /// Booleans cast to other booleans and, as `1` or `0`, to any primitive type, matching the
+    /// boolean array cast kernel.
     pub(crate) fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
-        if !matches!(dtype, DType::Bool(..)) {
-            vortex_bail!(
-                "Cannot cast bool to {dtype}: boolean scalars can only be cast to boolean types with different nullability"
-            )
+        let value = self.value.vortex_expect("nullness handled in Scalar::cast");
+        match dtype {
+            DType::Bool(nullability) => Ok(Scalar::bool(value, *nullability)),
+            DType::Primitive(ptype, nullability) => Ok(match_each_native_ptype!(*ptype, |T| {
+                let v = if value {
+                    <T as num_traits::One>::one()
+                } else {
+                    <T as num_traits::Zero>::zero()
+                };
+                Scalar::primitive(v, *nullability)
+            })),
+            _ => vortex_bail!(
+                "Cannot cast bool to {dtype}: boolean scalars can only be cast to boolean or primitive types"
+            ),
         }
-        Ok(Scalar::bool(
-            self.value.vortex_expect("nullness handled in Scalar::cast"),
-            dtype.nullability(),
-        ))
     }
 
     /// Returns a new boolean scalar with the inverted value.
@@ -204,13 +214,24 @@ mod test {
     }
 
     #[test]
-    fn test_bool_cast_to_non_bool_fails() {
+    fn test_bool_cast_to_primitive() {
         use crate::dtype::PType;
 
-        let bool_scalar = Scalar::bool(true, NonNullable);
-        let bool = bool_scalar.as_bool();
+        // Matches the boolean array cast kernel: true is 1 and false is 0.
+        for (value, expected) in [(true, 1i32), (false, 0)] {
+            let bool_scalar = Scalar::bool(value, NonNullable);
+            let result = bool_scalar
+                .as_bool()
+                .cast(&DType::Primitive(PType::I32, Nullable))
+                .unwrap();
+            assert_eq!(result, Scalar::primitive(expected, Nullable));
+        }
+    }
 
-        let result = bool.cast(&DType::Primitive(PType::I32, NonNullable));
+    #[test]
+    fn test_bool_cast_to_utf8_fails() {
+        let bool_scalar = Scalar::bool(true, NonNullable);
+        let result = bool_scalar.as_bool().cast(&DType::Utf8(NonNullable));
         assert!(result.is_err());
     }
 
