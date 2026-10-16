@@ -10536,7 +10536,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
@@ -12067,6 +12067,7 @@ dependencies = [
  "parking_lot",
  "pin-project-lite",
  "rstest",
+ "rustix",
  "smol",
  "tempfile",
  "tokio",
@@ -12181,6 +12182,7 @@ dependencies = [
  "vortex-io",
  "vortex-mask",
  "vortex-metrics",
+ "vortex-pco",
  "vortex-runend",
  "vortex-scan",
  "vortex-sequence",
@@ -12378,7 +12380,9 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "futures",
+ "parking_lot",
  "roaring",
+ "rstest",
  "tracing",
  "vortex-array",
  "vortex-buffer",
@@ -12386,6 +12390,7 @@ dependencies = [
  "vortex-io",
  "vortex-mask",
  "vortex-session",
+ "vortex-utils",
 ]
 
 [[package]]

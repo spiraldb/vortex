@@ -7,8 +7,6 @@ use std::fmt;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
-use std::hash::Hash;
-use std::hash::Hasher;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ops::Range;
@@ -63,6 +61,11 @@ impl PlanRef {
         Arc::ptr_eq(&lhs.0, &rhs.0)
     }
 
+    /// The address of the plan, identifying it as [`ptr_eq`](Self::ptr_eq) does.
+    pub(crate) fn addr(&self) -> usize {
+        Arc::as_ptr(&self.0).cast::<()>() as usize
+    }
+
     /// Returns the operator ID.
     pub fn id(&self) -> PlanId {
         self.0.id
@@ -96,6 +99,14 @@ impl PlanRef {
     /// Returns the child at `index`, or an error when the index is out of bounds.
     pub fn child_required(&self, index: usize) -> VortexResult<PlanRef> {
         self.child(index)?
+            .ok_or_else(|| vortex_err!("Missing plan child {index}"))
+    }
+
+    /// Borrows the child at `index`, or returns an error if it is out of bounds.
+    pub(crate) fn child_ref_required(&self, index: usize) -> VortexResult<&PlanRef> {
+        self.0
+            .children
+            .get_ref(index)?
             .ok_or_else(|| vortex_err!("Missing plan child {index}"))
     }
 
@@ -230,28 +241,6 @@ impl<V: PlanVTable> PlanParts<V> {
     /// Erases these parts into a plan reference.
     pub fn into_plan(self) -> PlanRef {
         self.into_typed().into_plan()
-    }
-}
-
-/// A plan keyed by identity: two keys are equal only when they hold the same plan, as
-/// [`PlanRef::ptr_eq`] decides.
-///
-/// The key holds the plan, so its address cannot be freed and reused by another plan while the
-/// key exists.
-#[derive(Clone, Debug)]
-pub(crate) struct PlanByPtr(pub(crate) PlanRef);
-
-impl PartialEq for PlanByPtr {
-    fn eq(&self, other: &Self) -> bool {
-        PlanRef::ptr_eq(&self.0, &other.0)
-    }
-}
-
-impl Eq for PlanByPtr {}
-
-impl Hash for PlanByPtr {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        Arc::as_ptr(&self.0.0).cast::<()>().hash(state);
     }
 }
 

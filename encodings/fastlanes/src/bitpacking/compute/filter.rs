@@ -167,6 +167,38 @@ mod tests {
         session
     });
 
+    #[rstest]
+    fn filter_disjoint_chunks_with_sliced_nullable_patches(
+        #[values(0, 127)] offset: usize,
+        #[values(1, 8, 9, 31, 32, 33, 63, 64, 65, 1024)] selected_per_chunk: usize,
+    ) -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let len = 64 * 1024;
+        let values = PrimitiveArray::from_option_iter((0..len + offset).map(|row| {
+            (row % 127 != 0).then_some(if row % 97 == 0 {
+                1 << 20
+            } else {
+                (row % 32768) as i64
+            })
+        }));
+        let packed = BitPackedData::encode(&values.clone().into_array(), 15, &mut ctx)?;
+        let indices = [0, 17, 33].into_iter().flat_map(|chunk| {
+            (0..selected_per_chunk)
+                .map(move |index| chunk * 1024 + index * 1024 / selected_per_chunk)
+        });
+        let mask = Mask::from_indices(len, indices);
+        let actual = packed
+            .slice(offset..offset + len)?
+            .filter(mask.clone())?
+            .execute::<PrimitiveArray>(&mut ctx)?;
+        let expected = values
+            .into_array()
+            .slice(offset..offset + len)?
+            .filter(mask)?;
+        assert_arrays_eq!(actual, expected, &mut ctx);
+        Ok(())
+    }
+
     /// Selects `threshold` and `threshold + 1` values of a chunk, around the largest count for
     /// which the chunk unpacks only the selected values.
     #[rstest]

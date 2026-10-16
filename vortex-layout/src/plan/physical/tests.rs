@@ -5,6 +5,7 @@ use std::fmt;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
+use rstest::rstest;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::aggregate_fn::AggregateFnRef;
@@ -356,27 +357,33 @@ fn optimize_drops_identity_expressions() -> VortexResult<()> {
     Ok(())
 }
 
-#[test]
-fn optimize_rewrites_nested_children() -> VortexResult<()> {
+#[rstest]
+fn optimize_rewrites_nested_children(#[values(0, 1, 2)] rewritten: usize) -> VortexResult<()> {
     let dtype = primitive(PType::I32, Nullability::NonNullable);
     let layout = ChunkedLayout::new(
-        3,
+        6,
         dtype.clone(),
-        OwnedLayoutChildren::layout_children(vec![flat(2, dtype.clone(), 0), flat(1, dtype, 1)]),
+        OwnedLayoutChildren::layout_children(vec![
+            flat(1, dtype.clone(), 0),
+            flat(2, dtype.clone(), 1),
+            flat(3, dtype, 2),
+        ]),
     )
     .into_layout();
     let chunked = make_plan(layout)?;
 
-    // Wrap the first chunk in an identity expression, which optimization should remove without
-    // any chunked-specific rule.
-    let chunk = child_of(&chunked, 0)?;
-    let identity: PlanRef = EvalPlan::try_new(root().bind(chunk.dtype())?, chunk)?.into_plan();
-    let wrapped = chunked.with_children(vec![identity, child_of(&chunked, 1)?])?;
+    let original = chunked.children().to_vec()?;
+    let mut children = original.clone();
+    let chunk = &children[rewritten];
+    children[rewritten] =
+        EvalPlan::try_new(root().bind(chunk.dtype())?, chunk.clone())?.into_plan();
+    let wrapped = chunked.with_children(children)?;
 
     let optimized = optimize(wrapped)?;
     assert!(optimized.is::<Concat>());
-    assert!(child_of(&optimized, 0)?.is::<Filter>());
-    assert!(child_of(&optimized, 1)?.is::<Filter>());
+    for (index, child) in original.iter().enumerate() {
+        assert!(PlanRef::ptr_eq(&child_of(&optimized, index)?, child));
+    }
     Ok(())
 }
 

@@ -192,7 +192,7 @@ impl Compiler<'_> {
             }
             return port;
         }
-        let ranges = std::mem::take(shares.reaches.get_mut(*segment as usize)?);
+        let ranges = shares.reaches.remove(&segment)?;
         let mut claimants: SmallVec<[usize; 4]> = SmallVec::new();
         for rows in &ranges {
             claimants.extend(
@@ -240,10 +240,10 @@ pub(crate) struct Shares {
     ordered: bool,
     /// Splits that have finished, and so will claim nothing.
     finished: Vec<bool>,
-    /// By segment id, which a file numbers densely: for each segment more than one reader will
-    /// read and whose decoding pipeline is not built yet, the range of plan rows each of its
-    /// readers reads it for. Every split overlapping a range reads it once for that range.
-    reaches: Vec<SmallVec<[Range<u64>; 1]>>,
+    /// For each shared segment whose decoding pipeline is not built yet, the ranges its readers
+    /// read it for. A scan may touch only a few high-numbered segments of a file, so storage must
+    /// scale with the segments it touches, not the largest segment id.
+    reaches: FxHashMap<SegmentId, SmallVec<[Range<u64>; 1]>>,
     /// By split: the unclaimed ports of each shared segment the split reads.
     ports: Vec<FxHashMap<SegmentId, SmallVec<[PortId; 1]>>>,
 }
@@ -256,7 +256,7 @@ impl Shares {
             ports: (0..splits.len()).map(|_| FxHashMap::default()).collect(),
             splits,
             ordered,
-            reaches: Vec::new(),
+            reaches: FxHashMap::default(),
         }
     }
 
@@ -290,7 +290,7 @@ impl Shares {
     pub(crate) fn add(&mut self, plan: &PlanRef, rows: Range<u64>) -> VortexResult<()> {
         let reaches = &mut self.reaches;
         plan.reach(rows, &Reach::Offset(0), &mut |segment, rows| {
-            record(reaches, segment, rows)
+            reaches.entry(segment).or_default().push(rows)
         })
     }
 
@@ -298,8 +298,8 @@ impl Shares {
     /// pipeline that needs them.
     pub(crate) fn retain_shared(&mut self) {
         let mut reaches = std::mem::take(&mut self.reaches);
-        for ranges in &mut reaches {
-            let shared = match ranges.as_slice() {
+        reaches.retain(|_, ranges| {
+            match ranges.as_slice() {
                 [] => false,
                 // One reader per split overlapping the range: shared when the range crosses a
                 // split boundary.
@@ -309,11 +309,8 @@ impl Shares {
                     .nth(1)
                     .is_some(),
                 _ => true,
-            };
-            if !shared {
-                *ranges = SmallVec::new();
             }
-        }
+        });
         self.reaches = reaches;
     }
 
@@ -369,15 +366,6 @@ impl Reach {
     pub fn fixed(&self, rows: &Range<u64>) -> Self {
         Reach::Fixed(self.root(rows))
     }
-}
-
-/// Adds a reader of `segment` reading it for `rows`.
-fn record(reaches: &mut Vec<SmallVec<[Range<u64>; 1]>>, segment: SegmentId, rows: Range<u64>) {
-    let index = *segment as usize;
-    if index >= reaches.len() {
-        reaches.resize_with(index + 1, SmallVec::new);
-    }
-    reaches[index].push(rows);
 }
 
 /// The chunks of `concat` overlapping `rows`: each chunk's index, where it starts, and the rows
