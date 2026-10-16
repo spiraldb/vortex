@@ -5,6 +5,7 @@
 
 mod date;
 mod duration;
+mod interval;
 mod matcher;
 mod time;
 mod timestamp;
@@ -12,6 +13,7 @@ mod unit;
 
 pub use date::*;
 pub use duration::*;
+pub use interval::*;
 pub use matcher::*;
 pub use time::*;
 pub use timestamp::*;

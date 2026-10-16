@@ -3,15 +3,18 @@
 
 //! Canonical Vortex → Arrow conversion for the temporal extension types.
 //!
-//! `Date`, `Time`, `Timestamp`, and `Duration` are Vortex builtin extension types that map
-//! directly to native Arrow temporal types (`Date32`/`Date64`, `Time32`/`Time64`, `Timestamp`,
-//! `Duration`). These conversions live in the canonical executor rather than in the plugin layer
-//! because they aren't Arrow extensions and the mapping is fully determined by the source
-//! `ExtDType`.
+//! `Date`, `Time`, `Timestamp`, `Duration`, and `Interval` are Vortex builtin extension types that
+//! map directly to native Arrow temporal types (`Date32`/`Date64`, `Time32`/`Time64`, `Timestamp`,
+//! `Duration`, `Interval`). These conversions live in the canonical executor rather than in the
+//! plugin layer because they aren't Arrow extensions and the mapping is fully determined by the
+//! source `ExtDType`.
 
 use std::sync::Arc;
 
 use arrow_array::ArrayRef as ArrowArrayRef;
+use arrow_array::IntervalDayTimeArray;
+use arrow_array::IntervalMonthDayNanoArray;
+use arrow_array::IntervalYearMonthArray;
 use arrow_array::PrimitiveArray as ArrowPrimitiveArray;
 use arrow_array::types::ArrowTemporalType;
 use arrow_array::types::ArrowTimestampType;
@@ -29,19 +32,28 @@ use arrow_array::types::TimestampMicrosecondType;
 use arrow_array::types::TimestampMillisecondType;
 use arrow_array::types::TimestampNanosecondType;
 use arrow_array::types::TimestampSecondType;
+use arrow_buffer::IntervalDayTime;
+use arrow_buffer::IntervalMonthDayNano;
+use arrow_buffer::ScalarBuffer;
 use arrow_schema::DataType;
+use arrow_schema::IntervalUnit;
 use arrow_schema::TimeUnit as ArrowTimeUnit;
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::arrays::PrimitiveArray;
+use vortex_array::arrays::StructArray;
+use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::NativePType;
 use vortex_array::extension::datetime::AnyTemporal;
+use vortex_array::extension::datetime::Interval;
 use vortex_array::extension::datetime::TemporalMetadata;
 use vortex_array::extension::datetime::TimeUnit;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
+use vortex_error::vortex_ensure;
+use vortex_error::vortex_err;
 
 use crate::null_buffer::to_null_buffer;
 
@@ -123,6 +135,87 @@ pub(super) fn to_arrow_duration(
         )?),
         ArrowTimeUnit::Nanosecond => {
             Arc::new(to_temporal_primitive::<DurationNanosecondType>(array, ctx)?)
+        }
+    })
+}
+
+/// Export an interval array as the requested Arrow interval type.
+///
+/// `MonthDayNano` holds every Vortex interval. The narrower `YearMonth` and `DayTime` types are
+/// produced only when no valid value would lose a part or sub-millisecond precision.
+pub(super) fn to_arrow_interval(
+    array: ArrayRef,
+    target: &DataType,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<ArrowArrayRef> {
+    validate_temporal_extension(&array, target)?;
+    let DataType::Interval(unit) = target else {
+        unreachable!("to_arrow_interval called with non-Interval type {target}");
+    };
+
+    let len = array.len();
+    let storage = array
+        .cast(Interval::storage_dtype(array.dtype().nullability()))?
+        .execute::<StructArray>(ctx)?;
+    let validity = storage
+        .as_ref()
+        .validity()?
+        .execute_mask(storage.as_ref().len(), ctx)?;
+    let mut field = |idx: usize| {
+        storage
+            .unmasked_field(idx)
+            .clone()
+            .execute::<PrimitiveArray>(ctx)
+    };
+    let months = field(0)?.into_buffer::<i32>();
+    let days = field(1)?.into_buffer::<i32>();
+    let nanoseconds = field(2)?.into_buffer::<i64>();
+
+    Ok(match unit {
+        IntervalUnit::MonthDayNano => {
+            let values = months
+                .iter()
+                .zip(days.iter())
+                .zip(nanoseconds.iter())
+                .map(|((&months, &days), &nanoseconds)| {
+                    IntervalMonthDayNano::new(months, days, nanoseconds)
+                })
+                .collect::<ScalarBuffer<_>>();
+            Arc::new(IntervalMonthDayNanoArray::new(
+                values,
+                to_null_buffer(validity),
+            ))
+        }
+        IntervalUnit::YearMonth => {
+            vortex_ensure!(
+                (0..len).all(|i| !validity.value(i) || (days[i] == 0 && nanoseconds[i] == 0)),
+                "Cannot convert Interval to Arrow {target}: a value has days or nanoseconds"
+            );
+            Arc::new(IntervalYearMonthArray::new(
+                months.into_arrow_scalar_buffer(),
+                to_null_buffer(validity),
+            ))
+        }
+        IntervalUnit::DayTime => {
+            let values = (0..len)
+                .map(|i| {
+                    if !validity.value(i) {
+                        return Ok(IntervalDayTime::ZERO);
+                    }
+                    vortex_ensure!(
+                        months[i] == 0 && nanoseconds[i] % 1_000_000 == 0,
+                        "Cannot convert Interval to Arrow {target}: a value has months or \
+                         sub-millisecond nanoseconds"
+                    );
+                    let milliseconds = i32::try_from(nanoseconds[i] / 1_000_000).map_err(|_| {
+                        vortex_err!(
+                            "Cannot convert Interval to Arrow {target}: milliseconds overflow"
+                        )
+                    })?;
+                    Ok(IntervalDayTime::new(days[i], milliseconds))
+                })
+                .collect::<VortexResult<ScalarBuffer<_>>>()?;
+            Arc::new(IntervalDayTimeArray::new(values, to_null_buffer(validity)))
         }
     })
 }
@@ -209,6 +302,7 @@ fn validate_temporal_extension(array: &ArrayRef, target: &DataType) -> VortexRes
             }
             Ok(())
         }
+        (TemporalMetadata::Interval, DataType::Interval(_)) => Ok(()),
         (TemporalMetadata::Duration(unit), DataType::Duration(arrow_unit)) => {
             let src_arrow_unit = crate::dtype::to_arrow_time_unit(*unit)?;
             if src_arrow_unit != *arrow_unit {
@@ -225,6 +319,7 @@ fn validate_temporal_extension(array: &ArrayRef, target: &DataType) -> VortexRes
                 TemporalMetadata::Time(unit) => format!("Time({unit})"),
                 TemporalMetadata::Timestamp(unit, tz) => format!("Timestamp({unit}, tz={tz:?})"),
                 TemporalMetadata::Duration(unit) => format!("Duration({unit})"),
+                TemporalMetadata::Interval => "Interval".to_string(),
             }
         ),
     }

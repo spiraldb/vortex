@@ -6,22 +6,28 @@ use vortex_buffer::buffer;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 
+use crate::ArrayRef;
 use crate::EqMode;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
 use crate::array_session;
+use crate::arrays::BoolArray;
 use crate::arrays::PrimitiveArray;
+use crate::arrays::StructArray;
 use crate::arrays::datetime::TemporalData;
 use crate::assert_arrays_eq;
+use crate::builtins::ArrayBuiltins;
 use crate::expr::gt;
 use crate::expr::lit;
 use crate::expr::root;
+use crate::extension::datetime::Interval;
 use crate::extension::datetime::TemporalMetadata;
 use crate::extension::datetime::TimeUnit;
 use crate::extension::datetime::Timestamp;
 use crate::extension::datetime::TimestampOptions;
 use crate::hash::ArrayEq;
 use crate::scalar::Scalar;
+use crate::scalar_fn::fns::operators::Operator;
 use crate::validity::Validity;
 
 macro_rules! test_temporal_roundtrip {
@@ -35,7 +41,7 @@ macro_rules! test_temporal_roundtrip {
             PrimitiveArray::from_iter([100 as $prim]),
             &mut ctx
         );
-        assert_eq!(temporal.temporal_metadata().time_unit(), $unit);
+        assert_eq!(temporal.temporal_metadata().time_unit(), Some($unit));
     }};
 }
 
@@ -169,6 +175,40 @@ test_fail_case!(
     TemporalData::new_duration,
     TimeUnit::Days
 );
+
+fn intervals(values: &[(i32, i32, i64)]) -> VortexResult<ArrayRef> {
+    let storage = StructArray::try_new(
+        Interval::FIELD_NAMES.into(),
+        [
+            PrimitiveArray::from_iter(values.iter().map(|v| v.0)).into_array(),
+            PrimitiveArray::from_iter(values.iter().map(|v| v.1)).into_array(),
+            PrimitiveArray::from_iter(values.iter().map(|v| v.2)).into_array(),
+        ],
+        values.len(),
+        Validity::NonNullable,
+    )?;
+    Ok(TemporalData::new_interval(storage.into_array()).into_array())
+}
+
+#[test]
+fn test_interval_compares_field_by_field() -> VortexResult<()> {
+    let mut ctx = array_session().create_execution_ctx();
+    // 1 month against 100 days, 1 month against 30 days, and 1 day against 24 hours.
+    let lhs = intervals(&[(1, 0, 0), (1, 0, 0), (0, 1, 0)])?;
+    let rhs = intervals(&[(0, 100, 0), (0, 30, 0), (0, 0, 86_400_000_000_000)])?;
+
+    let gt = lhs.binary(rhs.clone(), Operator::Gt)?;
+    assert_arrays_eq!(gt, BoolArray::from_iter([true, true, true]), &mut ctx);
+    let eq = lhs.binary(rhs, Operator::Eq)?;
+    assert_arrays_eq!(eq, BoolArray::from_iter([false, false, false]), &mut ctx);
+    Ok(())
+}
+
+#[test]
+#[should_panic]
+fn test_interval_fails_primitive() {
+    TemporalData::new_interval(buffer![100i64].into_array());
+}
 
 // We test Timestamp explicitly to avoid the macro getting too complex.
 #[test]

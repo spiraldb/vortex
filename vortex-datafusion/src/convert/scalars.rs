@@ -9,6 +9,7 @@ use arrow_array::StructArray;
 use arrow_schema::Field;
 use arrow_schema::Fields;
 use datafusion_common::ScalarValue;
+use datafusion_common::arrow::datatypes::IntervalMonthDayNano;
 use vortex::array::VortexSessionExecute;
 use vortex::buffer::ByteBuffer;
 use vortex::dtype::DType;
@@ -24,6 +25,8 @@ use vortex::error::vortex_bail;
 use vortex::error::vortex_err;
 use vortex::error::vortex_panic;
 use vortex::extension::datetime::AnyTemporal;
+use vortex::extension::datetime::Interval;
+use vortex::extension::datetime::IntervalValue;
 use vortex::extension::datetime::TemporalMetadata;
 use vortex::extension::datetime::TimeUnit;
 use vortex::scalar::DecimalValue;
@@ -144,6 +147,18 @@ impl TryToDataFusion<ScalarValue> for Scalar {
                     return storage_scalar.try_to_df();
                 };
 
+                // Intervals are stored as a struct rather than a primitive.
+                if temporal == TemporalMetadata::Interval {
+                    let value = self
+                        .as_extension()
+                        .value()
+                        .map(IntervalValue::try_from_storage)
+                        .transpose()?;
+                    return Ok(ScalarValue::IntervalMonthDayNano(value.map(|v| {
+                        IntervalMonthDayNano::new(v.months, v.days, v.nanoseconds)
+                    })));
+                }
+
                 // Special handling: temporal extension types in Vortex correspond to Arrow's
                 // temporal physical types.
                 let pv = storage_scalar.as_primitive();
@@ -188,6 +203,7 @@ impl TryToDataFusion<ScalarValue> for Scalar {
                             unreachable!("Unsupported TimeUnit {unit} for {}", ext.id())
                         }
                     },
+                    TemporalMetadata::Interval => unreachable!("intervals are converted above"),
                 }
             }
         })
@@ -272,6 +288,15 @@ pub fn scalar_from_df(value: &ScalarValue, session: &VortexSession) -> VortexRes
                 .vortex_expect("arrow data type to dtype");
             Scalar::try_new(dtype, v.map(vortex::scalar::ScalarValue::from))
                 .vortex_expect("unable to create a time `Scalar`")
+        }
+        ScalarValue::IntervalYearMonth(v) => {
+            interval_from_df(v.map(|months| IntervalValue::new(months, 0, 0)))
+        }
+        ScalarValue::IntervalDayTime(v) => interval_from_df(
+            v.map(|v| IntervalValue::new(0, v.days, i64::from(v.milliseconds) * 1_000_000)),
+        ),
+        ScalarValue::IntervalMonthDayNano(v) => {
+            interval_from_df(v.map(|v| IntervalValue::new(v.months, v.days, v.nanoseconds)))
         }
         ScalarValue::Decimal32(decimal, precision, scale) => {
             let decimal_dtype = DecimalDType::new(*precision, *scale);
@@ -373,6 +398,15 @@ fn struct_to_df(scalar: &Scalar) -> VortexResult<ScalarValue> {
     Ok(ScalarValue::Struct(Arc::new(struct_array)))
 }
 
+fn interval_from_df(value: Option<IntervalValue>) -> Scalar {
+    match value {
+        Some(value) => value.into_scalar(Nullability::Nullable),
+        None => Scalar::null(DType::Extension(
+            Interval::new(Nullability::Nullable).erased(),
+        )),
+    }
+}
+
 /// Converts a DataFusion `ScalarValue::Struct` (a one-row struct array) to a Vortex struct scalar.
 ///
 /// The struct dtype comes from the Arrow `Fields`, so the children must be converted from those
@@ -409,6 +443,7 @@ fn struct_from_df(array: &StructArray, session: &VortexSession) -> Scalar {
 mod tests {
     use arrow_schema::DataType;
     use datafusion_common::ScalarValue;
+    use datafusion_common::arrow::datatypes::IntervalDayTime;
     use datafusion_common::arrow::datatypes::i256 as arrow_i256;
     use rstest::rstest;
     use vortex::VortexSessionDefault;
@@ -423,6 +458,8 @@ mod tests {
     use vortex::dtype::i256;
     use vortex::extension::datetime::Date;
     use vortex::extension::datetime::Duration;
+    use vortex::extension::datetime::Interval;
+    use vortex::extension::datetime::IntervalValue;
     use vortex::extension::datetime::Time;
     use vortex::extension::datetime::Timestamp;
     use vortex::scalar::DecimalValue;
@@ -736,6 +773,26 @@ mod tests {
     }
 
     #[rstest]
+    #[case(ScalarValue::IntervalYearMonth(Some(14)), IntervalValue::new(14, 0, 0))]
+    #[case(
+        ScalarValue::IntervalDayTime(Some(IntervalDayTime::new(2, 1500))),
+        IntervalValue::new(0, 2, 1_500_000_000)
+    )]
+    #[case(
+        ScalarValue::IntervalMonthDayNano(Some(IntervalMonthDayNano::new(1, -2, 3))),
+        IntervalValue::new(1, -2, 3)
+    )]
+    fn test_from_datafusion_intervals(
+        #[case] df_scalar: ScalarValue,
+        #[case] expected: IntervalValue,
+    ) {
+        assert_eq!(
+            from_df(&df_scalar),
+            expected.into_scalar(Nullability::Nullable)
+        );
+    }
+
+    #[rstest]
     #[case::u32(Scalar::from(42u32))]
     #[case::i64(Scalar::from(-123i64))]
     #[case::f64(Scalar::from(2.5f64))]
@@ -754,6 +811,10 @@ mod tests {
         TimeUnit::Seconds,
         Scalar::null(DType::Primitive(PType::I64, Nullability::Nullable))
     ))]
+    #[case::interval(IntervalValue::new(1, -2, 3).into_scalar(Nullability::NonNullable))]
+    #[case::interval_null(Scalar::null(DType::Extension(
+        Interval::new(Nullability::Nullable).erased()
+    )))]
     fn test_round_trip_conversions(#[case] original: Scalar) {
         let df_scalar = original.try_to_df().unwrap();
         let round_trip = from_df(&df_scalar);

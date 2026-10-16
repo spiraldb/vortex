@@ -32,7 +32,9 @@ pub struct TemporalParts {
 /// Splitting the components by granularity creates more small values, which enables better
 /// cascading compression.
 pub fn split_temporal(array: TemporalArray, ctx: &mut ExecutionCtx) -> VortexResult<TemporalParts> {
-    let time_unit = array.temporal_metadata().time_unit();
+    let Some(time_unit) = array.temporal_metadata().time_unit() else {
+        vortex_bail!("Cannot handle data without a time unit");
+    };
     if matches!(time_unit, TimeUnit::Days) {
         vortex_bail!("Cannot handle day-level data");
     }

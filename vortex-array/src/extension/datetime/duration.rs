@@ -134,7 +134,7 @@ mod tests {
             temporal,
             TemporalMetadata::Duration(&TimeUnit::Milliseconds)
         );
-        assert_eq!(temporal.time_unit(), TimeUnit::Milliseconds);
+        assert_eq!(temporal.time_unit(), Some(TimeUnit::Milliseconds));
         assert!(temporal.to_jiff(0).is_err());
     }
 

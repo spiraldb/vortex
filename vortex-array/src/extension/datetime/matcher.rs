@@ -12,6 +12,7 @@ use crate::dtype::extension::ExtVTable;
 use crate::dtype::extension::Matcher;
 use crate::extension::datetime::Date;
 use crate::extension::datetime::Duration;
+use crate::extension::datetime::Interval;
 use crate::extension::datetime::Time;
 use crate::extension::datetime::TimeUnit;
 use crate::extension::datetime::Timestamp;
@@ -35,6 +36,9 @@ impl Matcher for AnyTemporal {
         if let Some(opts) = item.metadata_opt::<Duration>() {
             return Some(TemporalMetadata::Duration(opts));
         }
+        if item.is::<Interval>() {
+            return Some(TemporalMetadata::Interval);
+        }
         None
     }
 }
@@ -50,18 +54,21 @@ pub enum TemporalMetadata<'a> {
     Time(&'a <Time as ExtVTable>::Metadata),
     /// Metadata for Duration dtypes
     Duration(&'a <Duration as ExtVTable>::Metadata),
+    /// Interval dtypes, which have no metadata
+    Interval,
 }
 
 // TODO(ngates): remove this logic in favor of having an ExtScalarVTable in vortex_array::scalar.
 //  Currently this is used largely to implement scalar display hacks.
 impl TemporalMetadata<'_> {
-    /// Get the time unit of the temporal dtype.
-    pub fn time_unit(&self) -> TimeUnit {
+    /// Get the time unit of the temporal dtype, or `None` for an Interval, which has none.
+    pub fn time_unit(&self) -> Option<TimeUnit> {
         match self {
-            TemporalMetadata::Time(unit) => **unit,
-            TemporalMetadata::Date(unit) => **unit,
-            TemporalMetadata::Timestamp(unit, _tz) => **unit,
-            TemporalMetadata::Duration(unit) => **unit,
+            TemporalMetadata::Time(unit) => Some(**unit),
+            TemporalMetadata::Date(unit) => Some(**unit),
+            TemporalMetadata::Timestamp(unit, _tz) => Some(**unit),
+            TemporalMetadata::Duration(unit) => Some(**unit),
+            TemporalMetadata::Interval => None,
         }
     }
 
@@ -86,6 +93,7 @@ impl TemporalMetadata<'_> {
                 )),
             },
             TemporalMetadata::Duration(_) => vortex_bail!("Duration values are not points in time"),
+            TemporalMetadata::Interval => vortex_bail!("Interval values are not points in time"),
         }
     }
 }

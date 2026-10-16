@@ -20,16 +20,17 @@ use crate::dtype::extension::ExtDTypeRef;
 use crate::extension::datetime::AnyTemporal;
 use crate::extension::datetime::Date;
 use crate::extension::datetime::Duration;
+use crate::extension::datetime::Interval;
 use crate::extension::datetime::TemporalMetadata;
 use crate::extension::datetime::Time;
 use crate::extension::datetime::TimeUnit;
 use crate::extension::datetime::Timestamp;
 
-/// An array wrapper for primitive values that have an associated temporal meaning.
+/// An array wrapper for values that have an associated temporal meaning.
 ///
 /// This is a wrapper around ExtensionArrays containing numeric types, each of which corresponds to
-/// either a timestamp or julian date (both referenced to UNIX epoch), a time since midnight, OR a
-/// duration.
+/// either a timestamp or julian date (both referenced to UNIX epoch), a time since midnight, a
+/// duration, OR an interval, which is stored as a struct of months, days, and nanoseconds.
 ///
 /// ## Arrow compatibility
 ///
@@ -40,9 +41,11 @@ use crate::extension::datetime::Timestamp;
 /// * `Date32`
 /// * `Date64`
 /// * `Duration`
+/// * `Interval`
 ///
-/// Anything that can be constructed and held in a `TemporalData` can also be zero-copy converted
-/// back to the relevant Arrow datatype.
+/// Anything that can be constructed and held in a `TemporalData` can also be converted back to the
+/// relevant Arrow datatype. This is zero-copy for everything except intervals, whose fields are
+/// interleaved into Arrow's `IntervalMonthDayNano` values.
 #[derive(Clone, Debug)]
 pub struct TemporalData {
     /// The underlying Vortex extension array holding all the numeric values.
@@ -139,6 +142,20 @@ impl TemporalData {
                 Duration::new(time_unit, array.dtype().nullability()).erased(),
                 array,
             ),
+        }
+    }
+
+    /// Create a new `TemporalData` holding calendar intervals.
+    ///
+    /// This is equivalent to the data described by the `Interval(MonthDayNano)` type from Arrow.
+    ///
+    /// # Panics
+    ///
+    /// If `array` is not a struct of non-nullable `months: i32`, `days: i32`, and
+    /// `nanoseconds: i64` fields, the function will panic.
+    pub fn new_interval(array: ArrayRef) -> Self {
+        Self {
+            ext: ExtensionArray::new(Interval::new(array.dtype().nullability()).erased(), array),
         }
     }
 }

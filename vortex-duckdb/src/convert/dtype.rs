@@ -326,6 +326,7 @@ fn temporal_to_duckdb(temporal: TemporalMetadata) -> VortexResult<LogicalType> {
             _ => vortex_bail!("Invalid TimeUnit {} for time", unit),
         },
         TemporalMetadata::Duration(_) => vortex_bail!("DuckDB has no duration type"),
+        TemporalMetadata::Interval => vortex_bail!("Vortex Interval isn't supported in DuckDB yet"),
     };
 
     Ok(LogicalType::new(duckdb_type))

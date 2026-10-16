@@ -195,6 +195,9 @@ impl ToDuckDBScalar for ExtScalar<'_> {
         let Some(temporal) = self.ext_dtype().metadata_opt::<AnyTemporal>() else {
             vortex_bail!("Cannot convert non-temporal extension scalar to duckdb value");
         };
+        if temporal == TemporalMetadata::Interval {
+            vortex_bail!("Vortex Interval isn't supported in DuckDB yet");
+        }
 
         let storage = PrimitiveScalar::try_new(self.ext_dtype().storage_dtype(), self.value())?;
         let value = || {
@@ -240,6 +243,7 @@ impl ToDuckDBScalar for ExtScalar<'_> {
                 }
             },
             TemporalMetadata::Duration(_) => vortex_bail!("DuckDB has no duration type"),
+            TemporalMetadata::Interval => unreachable!("intervals are rejected above"),
         })
     }
 }

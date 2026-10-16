@@ -59,6 +59,7 @@ use crate::executor::run_end::to_arrow_run_end;
 use crate::executor::struct_::to_arrow_struct;
 use crate::executor::temporal::to_arrow_date;
 use crate::executor::temporal::to_arrow_duration;
+use crate::executor::temporal::to_arrow_interval;
 use crate::executor::temporal::to_arrow_time;
 use crate::executor::temporal::to_arrow_timestamp;
 use crate::session::ArrowSessionExt;
@@ -202,10 +203,11 @@ pub(crate) fn execute_arrow_naive(
         dt @ (DataType::Time32(_) | DataType::Time64(_)) => to_arrow_time(array, dt, ctx),
         dt @ DataType::Timestamp(..) => to_arrow_timestamp(array, dt, ctx),
         dt @ DataType::Duration(_) => to_arrow_duration(array, dt, ctx),
+        dt @ DataType::Interval(_) => to_arrow_interval(array, dt, ctx),
         DataType::Map(entries_field, keys_sorted) => {
             to_arrow_map(array, entries_field, *keys_sorted, exporter, ctx)
         }
-        DataType::FixedSizeBinary(_) | DataType::Interval(_) | DataType::Union(..) => {
+        DataType::FixedSizeBinary(_) | DataType::Union(..) => {
             vortex_bail!("Conversion to Arrow type {resolved_type} is not supported");
         }
     }?;
@@ -292,8 +294,13 @@ pub(crate) fn infer_nearest_arrow_field(
 mod tests {
     use std::sync::Arc;
 
+    use arrow_array::Array as _;
+    use arrow_array::IntervalDayTimeArray;
+    use arrow_array::IntervalYearMonthArray;
+    use arrow_buffer::IntervalDayTime;
     use arrow_schema::DataType;
     use arrow_schema::Field;
+    use arrow_schema::IntervalUnit;
     use arrow_schema::TimeUnit;
     use rstest::rstest;
     use vortex_array::ArrayRef;
@@ -303,11 +310,16 @@ mod tests {
     use vortex_array::arrays::BoolArray;
     use vortex_array::arrays::ExtensionArray;
     use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::arrays::StructArray;
     use vortex_array::arrays::TemporalArray;
     use vortex_array::arrays::VarBinViewArray;
     use vortex_array::dtype::Nullability;
     use vortex_array::extension::datetime::Duration;
+    use vortex_array::extension::datetime::Interval;
     use vortex_array::extension::datetime::TimeUnit as VortexTimeUnit;
+    use vortex_array::validity::Validity;
+    use vortex_error::VortexExpect;
+    use vortex_error::VortexResult;
 
     use crate::ArrowSessionExt;
 
@@ -329,6 +341,23 @@ mod tests {
             PrimitiveArray::from_iter([1i64, 2]).into_array(),
         )
         .into_array()
+    }
+
+    /// An interval array; `None` rows are null and hold `(1, 1, 1)`, which no narrow type can hold.
+    fn interval(values: &[Option<(i32, i32, i64)>]) -> ArrayRef {
+        let parts = values.iter().map(|v| v.unwrap_or((1, 1, 1)));
+        let storage = StructArray::try_new(
+            Interval::FIELD_NAMES.into(),
+            [
+                PrimitiveArray::from_iter(parts.clone().map(|v| v.0)).into_array(),
+                PrimitiveArray::from_iter(parts.clone().map(|v| v.1)).into_array(),
+                PrimitiveArray::from_iter(parts.map(|v| v.2)).into_array(),
+            ],
+            values.len(),
+            Validity::from_iter(values.iter().map(Option::is_some)),
+        )
+        .vortex_expect("interval storage");
+        TemporalArray::new_interval(storage.into_array()).into()
     }
 
     fn date_days() -> ArrayRef {
@@ -365,6 +394,26 @@ mod tests {
     #[case::byte_from_bool(boolean(), DataType::Binary)]
     #[case::duration_unit_mismatch(duration_seconds(), DataType::Duration(TimeUnit::Millisecond))]
     #[case::duration_from_date(date_days(), DataType::Duration(TimeUnit::Second))]
+    #[case::interval_from_duration(
+        duration_seconds(),
+        DataType::Interval(IntervalUnit::MonthDayNano)
+    )]
+    #[case::year_month_with_days(
+        interval(&[Some((1, 2, 0))]),
+        DataType::Interval(IntervalUnit::YearMonth)
+    )]
+    #[case::day_time_with_months(
+        interval(&[Some((1, 0, 0))]),
+        DataType::Interval(IntervalUnit::DayTime)
+    )]
+    #[case::day_time_sub_millisecond(
+        interval(&[Some((0, 0, 1))]),
+        DataType::Interval(IntervalUnit::DayTime)
+    )]
+    #[case::day_time_overflow(
+        interval(&[Some((0, 0, i64::MAX / 1_000_000 * 1_000_000))]),
+        DataType::Interval(IntervalUnit::DayTime)
+    )]
     fn incompatible_target_returns_error(#[case] array: ArrayRef, #[case] target: DataType) {
         let session = array_session();
         let mut ctx = session.create_execution_ctx();
@@ -376,6 +425,35 @@ mod tests {
             result.is_err(),
             "expected an error exporting to {target:?}, got Ok"
         );
+    }
+
+    #[test]
+    fn interval_exports_to_narrower_arrow_types() -> VortexResult<()> {
+        let session = array_session();
+        let mut ctx = session.create_execution_ctx();
+
+        let target = Field::new("f", DataType::Interval(IntervalUnit::YearMonth), true);
+        let year_month = session.arrow().execute_arrow(
+            interval(&[Some((14, 0, 0)), None, Some((-3, 0, 0))]),
+            Some(&target),
+            &mut ctx,
+        )?;
+        let expected = IntervalYearMonthArray::from(vec![Some(14), None, Some(-3)]);
+        assert_eq!(year_month.to_data(), expected.to_data());
+
+        let target = Field::new("f", DataType::Interval(IntervalUnit::DayTime), true);
+        let day_time = session.arrow().execute_arrow(
+            interval(&[Some((0, 2, 1_500_000_000)), None, Some((0, -1, -1_000_000))]),
+            Some(&target),
+            &mut ctx,
+        )?;
+        let expected = IntervalDayTimeArray::from(vec![
+            Some(IntervalDayTime::new(2, 1500)),
+            None,
+            Some(IntervalDayTime::new(-1, -1)),
+        ]);
+        assert_eq!(day_time.to_data(), expected.to_data());
+        Ok(())
     }
 
     /// Cross-class conversions that are genuinely supported must keep working.

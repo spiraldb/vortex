@@ -902,6 +902,9 @@ mod tests {
     use arrow_array::GenericListArray;
     use arrow_array::Int32Array;
     use arrow_array::Int64Array;
+    use arrow_array::IntervalDayTimeArray;
+    use arrow_array::IntervalMonthDayNanoArray;
+    use arrow_array::IntervalYearMonthArray;
     use arrow_array::StringArray;
     use arrow_array::types::Int32Type;
     use arrow_buffer::OffsetBuffer;
@@ -915,6 +918,7 @@ mod tests {
     use vortex_array::dtype::DType;
     use vortex_array::dtype::Nullability;
     use vortex_array::extension::datetime::Duration;
+    use vortex_array::extension::datetime::Interval;
     use vortex_error::VortexResult;
 
     use super::*;
@@ -973,6 +977,47 @@ mod tests {
         let mut ctx = session.create_execution_ctx();
         let exported = session.arrow().execute_arrow(vortex, None, &mut ctx)?;
         assert_eq!(exported.to_data(), arrow.to_data());
+        Ok(())
+    }
+
+    fn month_day_nano(values: &[Option<(i32, i32, i64)>]) -> ArrowArrayRef {
+        Arc::new(IntervalMonthDayNanoArray::from_iter(values.iter().map(
+            |v| {
+                v.map(|(months, days, nanoseconds)| {
+                    arrow_buffer::IntervalMonthDayNano::new(months, days, nanoseconds)
+                })
+            },
+        )))
+    }
+
+    #[rstest]
+    #[case::month_day_nano(
+        month_day_nano(&[Some((1, -2, 3)), None, Some((-1, 0, i64::MAX))]),
+        month_day_nano(&[Some((1, -2, 3)), None, Some((-1, 0, i64::MAX))]),
+    )]
+    #[case::year_month(
+        Arc::new(IntervalYearMonthArray::from(vec![Some(14), None, Some(-3)])),
+        month_day_nano(&[Some((14, 0, 0)), None, Some((-3, 0, 0))]),
+    )]
+    #[case::day_time(
+        Arc::new(IntervalDayTimeArray::from(vec![
+            Some(arrow_buffer::IntervalDayTime::new(2, 1500)),
+            None,
+            Some(arrow_buffer::IntervalDayTime::new(-1, -1)),
+        ])),
+        month_day_nano(&[Some((0, 2, 1_500_000_000)), None, Some((0, -1, -1_000_000))]),
+    )]
+    fn test_interval_array_roundtrip(
+        #[case] arrow: ArrowArrayRef,
+        #[case] expected: ArrowArrayRef,
+    ) -> VortexResult<()> {
+        let session = array_session();
+        let vortex = session.arrow().from_arrow_array(arrow, true)?;
+        assert!(vortex.dtype().as_extension().is::<Interval>());
+
+        let mut ctx = session.create_execution_ctx();
+        let exported = session.arrow().execute_arrow(vortex, None, &mut ctx)?;
+        assert_eq!(exported.to_data(), expected.to_data());
         Ok(())
     }
 

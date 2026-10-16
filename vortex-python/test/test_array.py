@@ -74,7 +74,6 @@ def test_scalar_at_out_of_bounds() -> None:
 @pytest.mark.parametrize(
     "arrow_type",
     [
-        pa.month_day_nano_interval(),
         pa.binary(3),
     ],
 )
