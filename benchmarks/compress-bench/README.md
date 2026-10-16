@@ -17,10 +17,44 @@ data. This is the workload behind the `Compression` PR comment.
 See [`src/main.rs`](./src/main.rs) for the dataset list and CLI flags (`--formats`,
 `--datasets`, `--ops compress,decompress`).
 
+## CPU parallelism
+
+Vortex and Parquet get the same CPU budget, and each uses it the way its own default reader and
+writer would. The binary runs one multi-threaded Tokio runtime,
+sized by `--threads` (default: one worker per available core), and every timed Vortex and
+Parquet operation runs as a task on it, so neither format uses threads outside that pool and the
+main thread does none of the timed work. `--threads 1` compares single-worker decoders;
+the default compares them at full width.
+
+CI runs the timed benchmark on a fixed budget of 16 cores: `scripts/compress-split.py --cpus 16`
+(the default) pins the process to 16 CPUs through `scripts/bench-taskset.sh` and passes
+`--threads 16`, so the result does not depend on how many cores the benchmark machine has.
+Pass `--cpus 0` to use every benchmark CPU instead.
+
+Vortex schedules its own compression and scan work as tasks on the runtime. The Parquet
+compressor splits its work into tasks on the same runtime:
+
+- **Compress** splits the input into row groups at the writer's default
+  `max_row_group_row_count` (1,048,576 rows), the same boundaries `ArrowWriter` produces, then
+  encodes every (row group, top-level field) chunk as its own task with parquet-rs's
+  `ArrowRowGroupWriterFactory`, largest first, and appends the chunks in order into an output
+  buffer sized once from the encoded chunk sizes. This is how DataFusion's parallel Parquet
+  writer (`ParquetSink`) uses multiple cores.
+- **Decompress** scans the way DataFusion and DuckDB do: one task per row group, each decoding
+  all projected columns of its row group, so the scan uses as many workers as the file has row
+  groups. To match the Vortex reader's output, strings and binaries decode to `Utf8View` /
+  `BinaryView`, in batches of 8,192 rows (the Vortex writer's row block size).
+
+The written file has the same row groups, encodings and compression as a sequential
+`ArrowWriter` with the same settings. Arrow IPC is a serialization baseline and stays
+single-threaded.
+
 ## Running locally
 
 ```bash
 cargo run -p compress-bench --profile release_debug
+# single-worker comparison
+cargo run -p compress-bench --profile release_debug -- --threads 1
 ```
 
 ## GPU decompression

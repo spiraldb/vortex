@@ -37,6 +37,9 @@ vortex-arrow = { workspace = true }
 vortex-bench = { workspace = true }
 vortex-cuda = { workspace = true, optional = true }
 
+[dev-dependencies]
+arrow-select = { workspace = true }
+
 [features]
 cuda = ["dep:tempfile", "dep:vortex-cuda"]
 lance = ["dep:lance-bench"]
