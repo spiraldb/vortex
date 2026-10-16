@@ -12379,7 +12379,9 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "futures",
+ "parking_lot",
  "roaring",
+ "rstest",
  "tracing",
  "vortex-array",
  "vortex-buffer",
@@ -12387,6 +12389,7 @@ dependencies = [
  "vortex-io",
  "vortex-mask",
  "vortex-session",
+ "vortex-utils",
 ]
 
 [[package]]
