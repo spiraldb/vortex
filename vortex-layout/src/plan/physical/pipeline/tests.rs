@@ -6,6 +6,7 @@
 
 use std::collections::VecDeque;
 use std::ops::Range;
+use std::sync::Arc;
 
 use rstest::rstest;
 use vortex_array::ArrayContext;
@@ -33,6 +34,7 @@ use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
+use vortex_session::registry::CachedId;
 use vortex_session::registry::ReadContext;
 
 use super::port::SourceEnd;
@@ -43,6 +45,7 @@ use crate::OwnedLayoutChildren;
 use crate::layouts::chunked::ChunkedLayout;
 use crate::layouts::dict::DictLayout;
 use crate::layouts::flat::FlatLayout;
+use crate::layouts::foreign::new_foreign_layout;
 use crate::layouts::struct_::StructLayout;
 use crate::plan::physical::EvalPlan;
 use crate::plan::physical::Filter;
@@ -429,6 +432,73 @@ fn splits_of_one_scan_read_each_segment_once(
             &split.mask,
             run.splits.get(index).cloned().unwrap_or_default(),
         )?;
+    }
+    Ok(())
+}
+
+#[rstest]
+#[case::gaps(vec![0..2, 8..10, 18..20])]
+#[case::overlapping(vec![0..8, 4..12, 10..20])]
+#[case::unordered(vec![15..20, 0..4, 7..12])]
+#[case::empty(vec![0..0, 4..8, 20..20])]
+fn split_ranges_preserve_shared_reads(
+    #[case] ranges: Vec<Range<u64>>,
+    #[values(1, 3)] active: usize,
+    #[values(Delivery::Fifo, Delivery::Lifo)] order: Delivery,
+) -> VortexResult<()> {
+    let mut store = Store::default();
+    let (plan, expected) = fixture(&mut store)?;
+    let splits: Vec<_> = ranges.into_iter().map(Split::all).collect();
+    let scan = Scan::try_new(SESSION.clone(), plan, splits.clone())?.with_max_active(active);
+    let run = drive(&store, scan, delivery(order))?;
+    assert_eq!(run.leftover, (0, 0));
+    let reads = segments_read(&run.events);
+    let mut unique = reads.clone();
+    unique.dedup();
+    assert_eq!(reads, unique, "each shared segment is read once");
+    for (index, split) in splits.iter().enumerate() {
+        assert_view(
+            &expected,
+            &split.rows,
+            &split.mask,
+            run.splits.get(index).cloned().unwrap_or_default(),
+        )?;
+    }
+    Ok(())
+}
+
+#[rstest]
+fn chunk_in_gap_between_splits_stays_lazy(#[values(1, 2)] active: usize) -> VortexResult<()> {
+    static UNKNOWN_ID: CachedId = CachedId::new("test.unread-gap");
+    let mut store = Store::default();
+    let values = PrimitiveArray::from_iter(0..ROWS as i32).into_array();
+    let known = store.flat(&values)?;
+    let unknown = new_foreign_layout(
+        *UNKNOWN_ID,
+        values.dtype().clone(),
+        ROWS,
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    let layout = ChunkedLayout::new(
+        3 * ROWS,
+        values.dtype().clone(),
+        OwnedLayoutChildren::layout_children(vec![Arc::clone(&known), unknown, known]),
+    )
+    .into_layout();
+    let scan = Scan::try_new(
+        SESSION.clone(),
+        lower(&layout)?,
+        vec![Split::all(0..2), Split::all(2 * ROWS..2 * ROWS + 2)],
+    )?
+    .with_max_active(active);
+    let run = drive(&store, scan, delivery(Delivery::Lifo))?;
+    assert_eq!(segments_read(&run.events), vec![0]);
+    assert_eq!(run.leftover, (0, 0));
+    assert_eq!(run.splits.len(), 2);
+    for pieces in run.splits {
+        assert_view(&values, &(0..2), &Mask::new_true(2), pieces)?;
     }
     Ok(())
 }
