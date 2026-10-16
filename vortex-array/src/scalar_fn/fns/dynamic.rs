@@ -140,6 +140,25 @@ pub struct DynamicComparisonExpr {
 }
 
 impl DynamicComparisonExpr {
+    /// The comparison applied between the input and the dynamic value.
+    pub fn operator(&self) -> CompareOperator {
+        self.operator
+    }
+
+    /// The result used while the dynamic value is not yet known.
+    pub fn default(&self) -> bool {
+        self.default
+    }
+
+    /// A comparison against the same dynamic value with a different operator and default.
+    pub fn with_operator(&self, operator: CompareOperator, default: bool) -> Self {
+        Self {
+            operator,
+            rhs: Arc::clone(&self.rhs),
+            default,
+        }
+    }
+
     pub fn scalar(&self) -> Option<Scalar> {
         (self.rhs.value)().map(|v| {
             Scalar::try_new(self.rhs.dtype.clone(), Some(v))

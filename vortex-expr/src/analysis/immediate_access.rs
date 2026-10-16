@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use vortex_array::dtype::FieldName;
+use vortex_array::dtype::StructFields;
+use vortex_array::expr::BoundExpression;
+use vortex_array::scalar_fn::fns::get_item::GetItem;
+use vortex_array::scalar_fn::fns::select::Select;
 use vortex_error::VortexExpect;
 
-use crate::dtype::FieldName;
-use crate::dtype::StructFields;
-use crate::expr::BoundExpression;
-use crate::expr::analysis::AnnotationFn;
-use crate::scalar_fn::fns::get_item::GetItem;
-use crate::scalar_fn::fns::select::Select;
+use crate::analysis::AnnotationFn;
 
 /// Returns the "free fields" for this bound expression node.
 ///

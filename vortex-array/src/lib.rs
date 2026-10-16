@@ -100,7 +100,6 @@ use crate::memory::MemorySession;
 use crate::optimizer::kernels::KernelSession;
 use crate::scalar_fn::session::ScalarFnSession;
 use crate::session::ArraySession;
-use crate::stats::session::StatsSession;
 
 pub mod aggregate_fn;
 #[doc(hidden)]
@@ -158,7 +157,7 @@ pub fn initialize(session: &VortexSession) {
 }
 
 /// Builds a fresh [`VortexSession`] registered with all of vortex-array's built-in session
-/// variables: arrays, dtypes, scalar functions, stats, optimizer kernels, aggregate functions,
+/// variables: arrays, dtypes, scalar functions, optimizer kernels, aggregate functions,
 /// and memory.
 ///
 /// Each call returns an independent session (with its own registries), so callers may register
@@ -172,7 +171,6 @@ pub fn array_session() -> VortexSession {
         .with::<KernelSession>()
         .with::<DTypeSession>()
         .with::<ScalarFnSession>()
-        .with::<StatsSession>()
         .with::<AggregateFnSession>()
         .with::<MemorySession>()
 }

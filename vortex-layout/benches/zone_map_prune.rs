@@ -39,6 +39,7 @@ use vortex_array::expr::or;
 use vortex_array::expr::root;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
+use vortex_expr::stats::rewrite::BoundExpressionPruneExt;
 use vortex_layout::layouts::zoned::zone_map::ZoneMap;
 use vortex_layout::session::LayoutSession;
 use vortex_session::VortexSession;

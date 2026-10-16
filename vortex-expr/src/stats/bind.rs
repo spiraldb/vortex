@@ -13,16 +13,15 @@
 //! stats. This lets all callers share the same falsification rules while keeping layout-specific
 //! stat storage behind [`StatBinder`].
 
+use vortex_array::aggregate_fn::AggregateFnRef;
+use vortex_array::dtype::DType;
+use vortex_array::expr::BoundExpression;
+use vortex_array::expr::bound::lit;
+use vortex_array::expr::traversal::NodeExt;
+use vortex_array::expr::traversal::Transformed;
+use vortex_array::scalar::Scalar;
+use vortex_array::scalar_fn::fns::stat::StatFn;
 use vortex_error::VortexResult;
-
-use crate::aggregate_fn::AggregateFnRef;
-use crate::dtype::DType;
-use crate::expr::BoundExpression;
-use crate::expr::bound::lit;
-use crate::expr::traversal::NodeExt;
-use crate::expr::traversal::Transformed;
-use crate::scalar::Scalar;
-use crate::scalar_fn::fns::stat::StatFn;
 
 /// A target that can bind abstract statistics to concrete expressions.
 ///
@@ -92,20 +91,20 @@ fn null_expr(dtype: DType) -> VortexResult<BoundExpression> {
 
 #[cfg(test)]
 mod tests {
+    use vortex_array::dtype::Nullability;
+    use vortex_array::dtype::PType;
+    use vortex_array::dtype::StructFields;
+    use vortex_array::expr::and;
+    use vortex_array::expr::col;
+    use vortex_array::expr::get_item;
+    use vortex_array::expr::is_null;
+    use vortex_array::expr::lit;
+    use vortex_array::expr::or;
+    use vortex_array::expr::root;
+    use vortex_array::expr::stats::Stat;
     use vortex_error::VortexResult;
 
     use super::*;
-    use crate::dtype::Nullability;
-    use crate::dtype::PType;
-    use crate::dtype::StructFields;
-    use crate::expr::and;
-    use crate::expr::col;
-    use crate::expr::get_item;
-    use crate::expr::is_null;
-    use crate::expr::lit;
-    use crate::expr::or;
-    use crate::expr::root;
-    use crate::expr::stats::Stat;
     use crate::stats::all_non_nan;
     use crate::stats::nan_count;
 

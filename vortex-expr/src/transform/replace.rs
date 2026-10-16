@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use vortex_array::expr::Expression;
+use vortex_array::expr::traversal::NodeExt;
+use vortex_array::expr::traversal::Transformed;
+use vortex_array::expr::traversal::TraversalOrder;
 use vortex_error::VortexExpect;
-
-use crate::expr::Expression;
-use crate::expr::traversal::NodeExt;
-use crate::expr::traversal::Transformed;
-use crate::expr::traversal::TraversalOrder;
 
 /// Replaces all occurrences of `needle` in the expression `expr` with `replacement`.
 pub fn replace(expr: Expression, needle: &Expression, replacement: Expression) -> Expression {
@@ -28,11 +27,12 @@ pub fn replace(expr: Expression, needle: &Expression, replacement: Expression) -
 
 #[cfg(test)]
 mod test {
+    use vortex_array::dtype::Nullability::NonNullable;
+    use vortex_array::expr::get_item;
+    use vortex_array::expr::lit;
+    use vortex_array::expr::pack;
+
     use super::replace;
-    use crate::dtype::Nullability::NonNullable;
-    use crate::expr::get_item;
-    use crate::expr::lit;
-    use crate::expr::pack;
 
     #[test]
     fn test_replace_full_tree() {
