@@ -6,6 +6,20 @@ This crate contains general fuzzing infrastructure and tooling for all public co
 
 Currently, the only thing required to run the fuzzing targets is [`cargo-fuzz`](https://github.com/rust-fuzz/cargo-fuzz)
 
+## Reference fuzzing
+
+The `array_reference` target checks every array encoding against a plain Rust oracle. Rather
+than one fuzzer per encoding, `src/reference/encodings.rs` has a single `EncodingKind` enum with
+a generator per encoding. Each generator returns the encoded array together with its expected
+values as plain Rust `Value`s, and each operation the fuzzer applies is computed on both and
+compared. Inputs stay small (at most 256 rows, small alphabets, one level of nested encodings).
+
+The unit tests guarantee coverage: `every_registered_encoding_has_a_generator` fails when an
+encoding registered in the fuzz session has no generator, and
+`every_generator_produces_its_encoding` fails when a generator never produces its encoding or
+disagrees with its own reference values. When adding an encoding, add a variant to
+`EncodingKind`.
+
 ## Reproduce crash from CI
 
 In the case of a crash in the nightly run, you can download the crash artifact and run `cargo-fuzz` with the exact same

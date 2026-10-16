@@ -38,6 +38,7 @@ vortex-error = { workspace = true }
 vortex-fsst = { workspace = true, features = ["_test-harness"] }
 vortex-io = { workspace = true, features = ["wasm-bindgen"] }
 vortex-mask = { workspace = true }
+vortex-onpair = { workspace = true }
 vortex-row = { workspace = true }
 vortex-runend = { workspace = true, features = ["arbitrary"] }
 vortex-session = { workspace = true }
@@ -65,6 +66,14 @@ bench = false
 doc = false
 name = "array_ops"
 path = "fuzz_targets/array_ops.rs"
+test = false
+required-features = ["native"]
+
+[[bin]]
+bench = false
+doc = false
+name = "array_reference"
+path = "fuzz_targets/array_reference.rs"
 test = false
 required-features = ["native"]
 

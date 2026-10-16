@@ -7,6 +7,7 @@ mod array;
 pub mod compress;
 pub mod error;
 pub mod fsst_like;
+pub mod reference;
 mod row;
 
 // File module only available for native builds (requires vortex-file which uses tokio)
@@ -32,6 +33,8 @@ pub use fsst_like::run_fsst_like_fuzz;
 pub use gpu::FuzzCompressGpu;
 #[cfg(feature = "cuda")]
 pub use gpu::run_compress_gpu;
+pub use reference::FuzzArrayReference;
+pub use reference::run_array_reference;
 pub use row::FuzzRowEncode;
 pub use row::run_row_encode;
 

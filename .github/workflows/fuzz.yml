@@ -277,6 +277,59 @@ jobs:
     secrets: inherit
 
   # ============================================================================
+  # Array Reference Fuzzer
+  # ============================================================================
+  array_reference_fuzz:
+    name: "Array Reference Fuzz"
+    needs: build_cpu_fuzzers
+    uses: ./.github/workflows/run-fuzzer.yml
+    with:
+      fuzz_target: array_reference
+      jobs: 4
+      fuzzer_artifact: ${{ needs.build_cpu_fuzzers.outputs.artifact_name }}
+    secrets:
+      R2_FUZZ_ACCESS_KEY_ID: ${{ secrets.R2_FUZZ_ACCESS_KEY_ID }}
+      R2_FUZZ_SECRET_ACCESS_KEY: ${{ secrets.R2_FUZZ_SECRET_ACCESS_KEY }}
+
+  report-array-reference-fuzz-failures:
+    name: "Report Array Reference Fuzz Failures"
+    needs: array_reference_fuzz
+    if: always() && needs.array_reference_fuzz.outputs.crashes_found == 'true'
+    permissions:
+      issues: write
+      contents: read
+      id-token: write
+      pull-requests: read
+    uses: ./.github/workflows/report-fuzz-crash.yml
+    with:
+      fuzz_target: array_reference
+      crash_file: ${{ needs.array_reference_fuzz.outputs.first_crash_name }}
+      artifact_url: ${{ needs.array_reference_fuzz.outputs.artifact_url }}
+      artifact_name: array_reference-crash-artifacts
+      logs_artifact_name: array_reference-logs
+      branch: ${{ github.ref_name }}
+      commit: ${{ github.sha }}
+    secrets:
+      gh_token: ${{ secrets.GITHUB_TOKEN }}
+      incident_io_alert_token: ${{ secrets.INCIDENT_IO_ALERT_TOKEN }}
+
+  attempt-fix-array-reference:
+    name: "Attempt Fix for Array Reference Fuzz Crash"
+    needs: report-array-reference-fuzz-failures
+    if: needs.report-array-reference-fuzz-failures.outputs.issue_created == 'true'
+    permissions:
+      # actions: read is needed for `gh run download` of the crash artifact.
+      actions: read
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+    uses: ./.github/workflows/fuzzer-fix-automation.yml
+    with:
+      issue_number: ${{ needs.report-array-reference-fuzz-failures.outputs.issue_number }}
+    secrets: inherit
+
+  # ============================================================================
   # GPU Compress Fuzzer (CUDA)
   # ============================================================================
   gpu_compress_fuzz:
