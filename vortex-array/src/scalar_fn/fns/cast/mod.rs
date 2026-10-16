@@ -18,9 +18,11 @@ use vortex_session::registry::CachedId;
 use crate::AnyColumnar;
 use crate::ArrayRef;
 use crate::ArrayView;
+use crate::Canonical;
 use crate::CanonicalView;
 use crate::ColumnarView;
 use crate::ExecutionCtx;
+use crate::IntoArray;
 use crate::arrays::Bool;
 use crate::arrays::Constant;
 use crate::arrays::Decimal;
@@ -145,6 +147,10 @@ impl ScalarFnVTable for Cast {
                     ),
                 }
             }
+            // With no rows there is no value to cast, even if the constant's scalar cannot be.
+            ColumnarView::Constant(constant) if constant.is_empty() => {
+                Ok(Canonical::empty(target_dtype).into_array())
+            }
             ColumnarView::Constant(constant) => match cast_constant(constant, target_dtype)? {
                 Some(result) => Ok(result),
                 None => vortex_bail!(
@@ -239,14 +245,20 @@ fn cast_constant(array: ArrayView<Constant>, dtype: &DType) -> VortexResult<Opti
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
     use vortex_buffer::buffer;
     use vortex_error::VortexExpect as _;
     use vortex_error::VortexResult;
     use vortex_error::vortex_err;
 
     use super::Cast;
+    use crate::Canonical;
     use crate::IntoArray;
+    use crate::VortexSessionExecute;
+    use crate::array_session;
+    use crate::arrays::ConstantArray;
     use crate::arrays::StructArray;
+    use crate::assert_arrays_eq;
     use crate::dtype::DType;
     use crate::dtype::DecimalDType;
     use crate::dtype::Nullability;
@@ -352,6 +364,32 @@ mod tests {
 
         assert!(optimized.as_opt::<Literal>().is_none());
         assert_eq!(optimized.as_opt::<Cast>(), Some(&target));
+        Ok(())
+    }
+
+    /// An empty constant has no value to cast, so the cast succeeds even when its scalar cannot
+    /// be cast.
+    #[rstest]
+    #[case::decimal_out_of_range(
+        Scalar::decimal(
+            DecimalValue::I128(15),
+            DecimalDType::new(31, 24),
+            Nullability::Nullable,
+        ),
+        DType::Decimal(DecimalDType::new(4, 0), Nullability::Nullable)
+    )]
+    #[case::null_to_non_nullable(
+        Scalar::null(DType::Primitive(PType::I32, Nullability::Nullable)),
+        DType::Primitive(PType::I64, Nullability::NonNullable)
+    )]
+    fn test_cast_empty_constant(#[case] scalar: Scalar, #[case] target: DType) -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let array =
+            Cast::new(ConstantArray::new(scalar, 0).into_array(), target.clone()).into_array();
+
+        let result = array.execute::<Canonical>(&mut ctx)?.into_array();
+        assert_eq!(result.dtype(), &target);
+        assert_arrays_eq!(result, Canonical::empty(&target).into_array(), &mut ctx);
         Ok(())
     }
 
