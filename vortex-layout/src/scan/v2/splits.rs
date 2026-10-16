@@ -234,9 +234,13 @@ pub(super) fn sparse_filter_split_boundaries(
 /// and from `rows.end`, as every cut including `rows.start` and `rows.end`.
 fn cut_at(starts: &[u64], rows: Range<u64>, min_rows: u64) -> Vec<u64> {
     let mut cuts = vec![rows.start];
-    for &start in starts {
+    let first = starts.partition_point(|&start| start <= rows.start);
+    for &start in starts[first..]
+        .iter()
+        .take_while(|&&start| start < rows.end)
+    {
         let previous = cuts[cuts.len() - 1];
-        if rows.start < start && start < rows.end && start - previous >= min_rows {
+        if start - previous >= min_rows {
             cuts.push(start);
         }
     }
