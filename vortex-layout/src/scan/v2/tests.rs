@@ -59,6 +59,7 @@ use crate::layouts::chunked::writer::ChunkedLayoutStrategy;
 use crate::layouts::dict::DictLayout;
 use crate::layouts::flat::writer::FlatLayoutStrategy;
 use crate::layouts::foreign::new_foreign_layout;
+use crate::layouts::list::ListLayout;
 use crate::layouts::list::writer::ListLayoutStrategy;
 use crate::layouts::row_idx::row_idx;
 use crate::layouts::struct_::StructLayout;
@@ -486,6 +487,75 @@ impl LayoutChildren for CountedLayoutChildren {
             .then(|| self.inner.child_encoding(index))
             .flatten()
     }
+}
+
+#[rstest]
+#[tokio::test]
+async fn caches_whole_subtree_support_without_reusing_replaced_layouts(
+    #[values(false, true)] caching: bool,
+    #[values(false, true)] unsupported: bool,
+    #[values(false, true)] list: bool,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, table().as_ref()).await?;
+    let ints = layout.slot(1)?.ok_or_else(|| vortex_err!("missing ints"))?;
+    let mut children = ints.children()?;
+    if unsupported {
+        children[1] = new_foreign_layout(
+            LayoutId::new("test.unsupported"),
+            ints.dtype().clone(),
+            CHUNK_ROWS as u64,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+    }
+    let values = ints.as_::<Chunked>().with_children(children);
+    let visited = Arc::new(AtomicUsize::new(0));
+    let values = ChunkedLayout::new(
+        values.row_count(),
+        values.dtype().clone(),
+        Arc::new(CountedLayoutChildren {
+            inner: Arc::clone(values.children()),
+            materialized: Arc::clone(&visited),
+            encoding_hints: false,
+        }),
+    )
+    .into_layout();
+    let make_layout = |values: LayoutRef, ints: LayoutRef| {
+        if list {
+            ListLayout::new(
+                DType::List(Arc::new(values.dtype().clone()), false.into()),
+                values,
+                ints,
+                None,
+            )
+            .into_layout()
+        } else {
+            DictLayout::new(values, ints).into_layout()
+        }
+    };
+    let layout = make_layout(Arc::clone(&values), Arc::clone(&ints));
+    let mut file = scan_file(&segments, &layout)?;
+    if caching {
+        file = file.with_caching();
+    }
+    visited.store(0, Ordering::Relaxed);
+    let selection = Selection::IncludeRoaring([0, 3000].into_iter().collect());
+    assert_eq!(file.supports_scan(true, &selection, None)?, !unsupported);
+    let first = visited.load(Ordering::Relaxed);
+    assert!(first > 0);
+    assert_eq!(file.supports_scan(true, &selection, None)?, !unsupported);
+    assert_eq!(
+        visited.load(Ordering::Relaxed),
+        first * if caching { 1 } else { 2 }
+    );
+
+    let before = visited.load(Ordering::Relaxed);
+    file.layout = make_layout(values, ints);
+    assert_eq!(file.supports_scan(true, &selection, None)?, !unsupported);
+    assert_eq!(visited.load(Ordering::Relaxed), before + first);
+    Ok(())
 }
 
 #[rstest]

@@ -32,6 +32,7 @@ use futures::TryStreamExt;
 use futures::stream;
 use futures::stream::BoxStream;
 use once_cell::sync::OnceCell;
+use parking_lot::Mutex;
 use vortex_array::ArrayRef;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
@@ -43,6 +44,7 @@ use vortex_scan::planning::selection::SelectedRows;
 use vortex_scan::planning::selection::SelectionPlanner;
 use vortex_scan::selection::Selection;
 use vortex_session::VortexSession;
+use vortex_utils::aliases::hash_map::HashMap;
 use vortex_utils::parallelism::get_available_parallelism;
 
 use crate::LayoutRef;
@@ -103,10 +105,14 @@ struct FilePreparation {
     segment_bytes: u64,
     projection_supported: OnceCell<bool>,
     identity_supported: OnceCell<bool>,
+    whole_identity_support: WholeSupport,
     root: OnceCell<PlanRef>,
     ranges: OnceCell<SegmentRanges>,
     values: OnceCell<ValueCache>,
 }
+
+// Retain each keyed layout so its address cannot be reused for a different support answer.
+type WholeSupport = Mutex<HashMap<usize, (LayoutRef, bool)>>;
 
 impl ScanFile {
     /// Creates a file description without retaining preparation between scans.
@@ -123,9 +129,9 @@ impl ScanFile {
         }
     }
 
-    /// Shares immutable layout plans, segment locations, and whole dictionary values between
-    /// this file's scans. Only identity projections retain dictionary values; selections and
-    /// expression results remain owned by each scan.
+    /// Shares immutable layout support checks and plans, segment locations, and whole dictionary
+    /// values between this file's scans. Only identity projections retain dictionary values;
+    /// selections and expression results remain owned by each scan.
     pub fn with_caching(mut self) -> Self {
         self.preparation = Some(Arc::new(FilePreparation {
             layout: Arc::clone(&self.layout),
@@ -138,6 +144,7 @@ impl ScanFile {
                 .sum(),
             projection_supported: OnceCell::new(),
             identity_supported: OnceCell::new(),
+            whole_identity_support: Mutex::default(),
             root: OnceCell::new(),
             ranges: OnceCell::new(),
             values: OnceCell::new(),
@@ -182,7 +189,13 @@ impl ScanFile {
             let rows = rows.cloned().unwrap_or(0..self.layout.row_count());
             if let Some(indices) = sparse_indices(selection, &rows) {
                 // A selection-specific answer cannot be cached as support for the whole file.
-                return supports_selected_layout(&self.layout, &indices, 0);
+                return supports_selected_layout(
+                    &self.layout,
+                    &indices,
+                    0,
+                    self.layout_preparation()
+                        .map(|cache| &cache.whole_identity_support),
+                );
             }
         }
         self.supports(identity)
@@ -327,6 +340,7 @@ fn supports_selected_layout(
     layout: &LayoutRef,
     indices: &[u64],
     offset: u64,
+    whole: Option<&WholeSupport>,
 ) -> VortexResult<bool> {
     if layout.is::<Flat>() {
         return Ok(true);
@@ -346,7 +360,12 @@ fn supports_selected_layout(
             let child = layout
                 .slot(chunk)?
                 .ok_or_else(|| vortex_err!("Missing selected chunk"))?;
-            if !supports_selected_layout(&child, &indices[first..last], offset + offsets[chunk])? {
+            if !supports_selected_layout(
+                &child,
+                &indices[first..last],
+                offset + offsets[chunk],
+                whole,
+            )? {
                 return Ok(false);
             }
             first = last;
@@ -355,7 +374,7 @@ fn supports_selected_layout(
     }
     if layout.is::<Zoned>() || layout.is::<LegacyStats>() {
         return match layout.slot(0)? {
-            Some(data) => supports_selected_layout(&data, indices, offset),
+            Some(data) => supports_selected_layout(&data, indices, offset, whole),
             None => Ok(false),
         };
     }
@@ -366,22 +385,35 @@ fn supports_selected_layout(
         let codes = layout
             .slot(1)?
             .ok_or_else(|| vortex_err!("Missing dictionary codes"))?;
-        return Ok(
-            supports_layout(&values, true)? && supports_selected_layout(&codes, indices, offset)?
-        );
+        return Ok(supports_whole_identity(&values, whole)?
+            && supports_selected_layout(&codes, indices, offset, whole)?);
     }
     if layout.is::<List>() {
-        return supports_layout(layout, true);
+        return supports_whole_identity(layout, whole);
     }
     if layout.is::<Struct>() {
         for child in layout.children()? {
-            if !supports_selected_layout(&child, indices, offset)? {
+            if !supports_selected_layout(&child, indices, offset, whole)? {
                 return Ok(false);
             }
         }
         return Ok(true);
     }
     Ok(false)
+}
+
+/// Unlike a selected-chunk check, this answer is independent of the selected rows.
+fn supports_whole_identity(layout: &LayoutRef, cache: Option<&WholeSupport>) -> VortexResult<bool> {
+    let Some(cache) = cache else {
+        return supports_layout(layout, true);
+    };
+    let key = Arc::as_ptr(layout).cast::<()>() as usize;
+    if let Some((_, supported)) = cache.lock().get(&key) {
+        return Ok(*supported);
+    }
+    let supported = supports_layout(layout, true)?;
+    cache.lock().insert(key, (Arc::clone(layout), supported));
+    Ok(supported)
 }
 
 /// A scan planned over its file, ready to run its splits.
