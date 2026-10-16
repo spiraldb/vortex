@@ -238,7 +238,7 @@ fn parquet_row_groups_to_vortex_stream(
 /// Convert a single Parquet file to Vortex format using streaming.
 ///
 /// Streams data directly from Parquet to Vortex without loading the entire file into memory.
-/// Row groups are decoded in parallel; see [`parquet_row_groups_to_vortex_stream`].
+/// Row groups are decoded in parallel, within the per-stream memory budget.
 pub async fn convert_parquet_file_to_vortex(
     parquet_path: &Path,
     output_path: &Path,
