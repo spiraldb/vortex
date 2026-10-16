@@ -33,7 +33,6 @@ use vortex_io::session::RuntimeSessionExt;
 use vortex_scan::row_mask::RowMask;
 use vortex_scan::selection::Selection;
 use vortex_session::VortexSession;
-use vortex_utils::parallelism::get_available_parallelism;
 
 use crate::LayoutReaderRef;
 use crate::scan::filter::FilterExpr;
@@ -44,6 +43,7 @@ use crate::scan::tasks::SplitFuture;
 use crate::scan::tasks::TaskContext;
 use crate::scan::tasks::split_exec;
 use crate::scan::tasks::split_projection;
+use crate::scan::threading::ScanThreading;
 
 /// A projected subset (by indices, range, and filter) of rows from a Vortex data source.
 ///
@@ -61,8 +61,11 @@ pub struct RepeatedScan<A> {
     selection: Selection,
     /// The natural splits of the file.
     splits: Splits,
-    /// The number of splits to make progress on concurrently **per-thread**.
+    /// The number of splits to make progress on concurrently, per thread when
+    /// [`ScanThreading::Internal`] and per scan when [`ScanThreading::External`].
     concurrency: usize,
+    /// Whether the scan scales its concurrency by the available parallelism.
+    threading: ScanThreading,
     /// Function to apply to each [`ArrayRef`] within the spawned split tasks.
     map_fn: MapFn<A>,
     /// Maximal number of rows to read (after filtering).
@@ -137,6 +140,7 @@ impl<A: 'static + Send> RepeatedScan<A> {
         selection: Selection,
         splits: Splits,
         concurrency: usize,
+        threading: ScanThreading,
         map_fn: MapFn<A>,
         limit: Option<ScanLimit>,
         dtype: DType,
@@ -151,6 +155,7 @@ impl<A: 'static + Send> RepeatedScan<A> {
             selection,
             splits,
             concurrency,
+            threading,
             map_fn,
             limit,
             dtype,
@@ -240,7 +245,7 @@ impl<A: 'static + Send> RepeatedScan<A> {
         &self,
         row_range: Option<Range<u64>>,
     ) -> VortexResult<BoxStream<'static, VortexResult<A>>> {
-        let concurrency = self.concurrency * get_available_parallelism().unwrap_or(1);
+        let concurrency = self.threading.splits_in_flight(self.concurrency);
         let handle = self.session.handle();
         let ordered = self.ordered;
         let ctx = self.task_context();

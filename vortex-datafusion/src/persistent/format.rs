@@ -219,7 +219,8 @@ extensions_options! {
         /// Enabled by default.
         pub predicate_pushdown: bool, default = true
         /// The intra-partition scan concurrency, controlling the number of row splits to process
-        /// concurrently per-thread within each file.
+        /// concurrently within each file. DataFusion drives the parallelism across partitions,
+        /// so this is not scaled by the core count.
         ///
         /// This does not affect the overall parallelism
         /// across partitions, which is controlled by DataFusion's execution configuration.

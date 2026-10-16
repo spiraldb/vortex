@@ -42,6 +42,7 @@ use crate::scan::repeated_scan::RepeatedScan;
 use crate::scan::split_by::SplitBy;
 use crate::scan::splits::Splits;
 use crate::scan::splits::attempt_split_ranges;
+use crate::scan::threading::ScanThreading;
 
 /// Builder for scanning a [`LayoutReader`] into arrays, streams, iterators, or mapped outputs.
 ///
@@ -70,8 +71,11 @@ pub struct ScanBuilder<A> {
     /// Precomputed full-file natural split boundaries; when set, [`prepare`](Self::prepare)
     /// uses them instead of walking the layout.
     natural_splits: Option<Arc<[u64]>>,
-    /// The number of splits to make progress on concurrently **per-thread**.
+    /// The number of splits to make progress on concurrently, per thread when
+    /// [`ScanThreading::Internal`] and per scan when [`ScanThreading::External`].
     concurrency: usize,
+    /// Whether the scan scales its concurrency by the available parallelism.
+    threading: ScanThreading,
     /// Function to apply to each [`ArrayRef`] within the spawned split tasks.
     map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
     metrics_registry: Option<Arc<dyn MetricsRegistry>>,
@@ -99,6 +103,7 @@ impl ScanBuilder<ArrayRef> {
             // We default to four tasks per worker thread, which allows for some I/O lookahead
             // without too much impact on work-stealing.
             concurrency: 4,
+            threading: ScanThreading::default(),
             map_fn: Arc::new(Ok),
             metrics_registry: None,
             limit: None,
@@ -225,11 +230,27 @@ impl<A: 'static + Send> ScanBuilder<A> {
         self.concurrency
     }
 
-    /// The number of row splits to make progress on concurrently per-thread, must
-    /// be greater than 0.
+    /// The number of row splits to make progress on concurrently, must be greater than 0.
+    ///
+    /// This is per thread under [`ScanThreading::Internal`] and per scan under
+    /// [`ScanThreading::External`].
     pub fn with_concurrency(mut self, concurrency: usize) -> Self {
         assert!(concurrency > 0);
         self.concurrency = concurrency;
+        self
+    }
+
+    /// Returns who drives the parallelism of the scan.
+    pub fn threading(&self) -> ScanThreading {
+        self.threading
+    }
+
+    /// Set who drives the parallelism of the scan.
+    ///
+    /// Use [`ScanThreading::External`] when a query engine already runs one scan per worker
+    /// thread, so the per-thread concurrency is not scaled by the core count a second time.
+    pub fn with_threading(mut self, threading: ScanThreading) -> Self {
+        self.threading = threading;
         self
     }
 
@@ -293,6 +314,7 @@ impl<A: 'static + Send> ScanBuilder<A> {
             split_by: self.split_by,
             natural_splits: self.natural_splits,
             concurrency: self.concurrency,
+            threading: self.threading,
             metrics_registry: self.metrics_registry,
             limit: self.limit,
             row_offset: self.row_offset,
@@ -357,6 +379,7 @@ impl<A: 'static + Send> ScanBuilder<A> {
             self.selection,
             splits,
             self.concurrency,
+            self.threading,
             self.map_fn,
             self.limit,
             dtype,

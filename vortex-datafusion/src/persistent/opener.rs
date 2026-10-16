@@ -52,6 +52,7 @@ use vortex::file::OpenOptionsSessionExt;
 use vortex::io::InstrumentedReadAt;
 use vortex::layout::LayoutReader;
 use vortex::layout::scan::scan_builder::ScanBuilder;
+use vortex::layout::scan::threading::ScanThreading;
 use vortex::metrics::Label;
 use vortex::metrics::MetricsRegistry;
 use vortex::session::VortexSession;
@@ -395,7 +396,10 @@ impl FileOpener for VortexOpener {
                 }
             };
 
-            let mut scan_builder = ScanBuilder::new(session.clone(), Arc::clone(&layout_reader));
+            // DataFusion already runs one file stream per partition, so the scan must not
+            // scale its concurrency by the core count again.
+            let mut scan_builder = ScanBuilder::new(session.clone(), Arc::clone(&layout_reader))
+                .with_threading(ScanThreading::External);
 
             if let Some(vortex_plan) = file.extensions.get::<VortexAccessPlan>() {
                 scan_builder = vortex_plan.apply_to_builder(scan_builder);

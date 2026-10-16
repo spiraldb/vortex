@@ -26,6 +26,7 @@ use vortex::io::runtime::BlockingRuntime as _;
 use vortex::io::std_file::StdFileSystem;
 use vortex::layout::LayoutReaderRef;
 use vortex::layout::scan::scan_builder::ScanBuilder;
+use vortex::layout::scan::threading::ScanThreading;
 use vortex::mask::Mask;
 use vortex::session::SessionExt as _;
 
@@ -200,6 +201,7 @@ pub fn reader_initialize(file: &mut OpenFileReader, global: &GlobalState) -> Vor
     let reader = Arc::clone(file.reader());
     let filter = &global.filter;
     let builder = ScanBuilder::new(SESSION.clone(), reader)
+        .with_threading(ScanThreading::External)
         .with_projection(global.projection.clone())
         .with_some_filter(filter.filter.clone())
         .with_selection(filter.row_selection.clone());
