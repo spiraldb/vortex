@@ -164,7 +164,7 @@ where
             |a, b| a.is_eq(b),
             ctx,
         ),
-        _ => stream_compare_fused_per_chunk::<T, _, _>(
+        CompareOperator::NotEq => stream_compare_fused_per_chunk::<T, _, _>(
             bp,
             bit_width,
             |chunk| rhs[chunk],
@@ -172,6 +172,7 @@ where
             |a, b| !a.is_eq(b),
             ctx,
         ),
+        _ => unreachable!("only equality operators reach here"),
     };
     result.map(Some)
 }
