@@ -1,0 +1,42 @@
+--- a/src/include/duckdb/planner/filter/bloom_filter.hpp
++++ b/src/include/duckdb/planner/filter/bloom_filter.hpp
+@@ -15,6 +15,8 @@
+ #include "duckdb/planner/table_filter_state.hpp"
+ #include "duckdb/storage/buffer_manager.hpp"
+ 
++#include <atomic>
++
+ namespace duckdb {
+ 
+ class BloomFilter {
+@@ -32,6 +34,19 @@
+ 		return initialized;
+ 	}
+ 
++	// Copy a finalized filter without retaining its query's buffer allocator.
++	vector<uint64_t> CopyBits() const {
++		if (!initialized) {
++			return {};
++		}
++		vector<uint64_t> result(num_sectors);
++		for (idx_t i = 0; i < num_sectors; i++) {
++			const auto &word = *reinterpret_cast<const std::atomic<uint64_t> *>(&bf[i]);
++			result[i] = word.load(std::memory_order_relaxed);
++		}
++		return result;
++	}
++
+ private:
+ 	idx_t num_sectors;
+ 	uint64_t bitmask; // num_sectors - 1 -> used to get the sector offset
+@@ -68,6 +83,10 @@
+ 		return key_type;
+ 	}
+ 
++	const BloomFilter &GetBloomFilter() const {
++		return filter;
++	}
++
+ 	string ToString(const string &column_name) const override;
+ 
+ 	// Filters by first hashing and then probing the bloom filter. The &sel will hold

@@ -14,12 +14,19 @@ use vortex_array::scalar_fn::fns::byte_length::ByteLength;
 use vortex_array::scalar_fn::fns::byte_length::ByteLengthExecuteAdaptor;
 use vortex_array::scalar_fn::fns::cast::Cast;
 use vortex_array::scalar_fn::fns::cast::CastExecuteAdaptor;
+use vortex_array::scalar_fn::fns::list_contains::ListContains;
+use vortex_array::scalar_fn::fns::list_contains::ListContainsElementExecuteAdaptor;
 use vortex_session::VortexSession;
 
 use crate::OnPair;
 
 pub(super) fn initialize(session: &VortexSession) {
     let kernels = session.kernels();
+    kernels.register_execute_parent_kernel(
+        ListContains.id(),
+        OnPair,
+        ListContainsElementExecuteAdaptor(OnPair),
+    );
     kernels.register_execute_parent_kernel(Cast.id(), OnPair, CastExecuteAdaptor(OnPair));
     kernels.register_execute_parent_kernel(Filter.id(), OnPair, FilterExecuteAdaptor(OnPair));
     kernels.register_execute_parent_kernel(Dict.id(), OnPair, TakeExecuteAdaptor(OnPair));

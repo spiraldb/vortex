@@ -11,6 +11,7 @@
 
 unique_ptr<FunctionData> VortexBindData::Copy() const {
     auto result = make_uniq<VortexBindData>();
+    result->offset_pruned_files = offset_pruned_files;
     if (ffi_bind_data) {
         const duckdb_vx_data copy = duckdb_table_function_bind_data_clone(ffi_bind_data->DataPtr());
         result->ffi_bind_data = unique_ptr<CData>(reinterpret_cast<CData *>(copy));
@@ -50,6 +51,12 @@ VortexMultiFileReader::InitializeReader(MultiFileReaderData &reader_data,
 
     VortexBaseReader &reader = reader_data.reader->Cast<VortexBaseReader>();
     const VortexBindData &bind = bind_data.bind_data->Cast<VortexBindData>();
+    if (reader.file_list_idx.IsValid() && std::binary_search(bind.offset_pruned_files.begin(),
+                                                             bind.offset_pruned_files.end(),
+                                                             reader.file_list_idx.GetIndex())) {
+        duckdb_reader_discard(reader.ffi_file->DataPtr());
+        return ReaderInitializeType::SKIP_READING_FILE;
+    }
 
     const void *const ffi_bind = bind.ffi_bind_data->DataPtr();
 
@@ -360,7 +367,7 @@ static unique_ptr<BaseStatistics> base_stats(duckdb_column_statistics &stats, Lo
     return out.ToUnique();
 }
 
-unique_ptr<BaseStatistics> to_duckdb_statistics(duckdb_column_statistics &statistics) {
+static unique_ptr<BaseStatistics> make_duckdb_statistics(duckdb_column_statistics &statistics) {
     using enum LogicalTypeId;
     const unique_ptr<LogicalType> type(reinterpret_cast<LogicalType *>(statistics.type));
     switch (type->id()) {
@@ -407,6 +414,14 @@ unique_ptr<BaseStatistics> to_duckdb_statistics(duckdb_column_statistics &statis
     default:
         return base_stats(statistics, *type);
     }
+}
+
+unique_ptr<BaseStatistics> to_duckdb_statistics(duckdb_column_statistics &statistics) {
+    auto result = make_duckdb_statistics(statistics);
+    if (result && statistics.distinct_count) {
+        result->SetDistinctCount(statistics.distinct_count);
+    }
+    return result;
 }
 
 unique_ptr<BaseStatistics> VortexBaseReader::GetStatistics(ClientContext &, const string &name) {

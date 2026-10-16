@@ -30,14 +30,16 @@ const BUILD_MARKER: &str = ".vx-build-complete";
 const DUCKDB_CACHE_DIR: &str = "vortex-duckdb-cache";
 const EXTRACT_MARKER: &str = ".vx-extract-complete";
 
-const SOURCE_FILES: [&str; 12] = [
+const SOURCE_FILES: [&str; 14] = [
     "cpp/vortex_duckdb.cpp",
     "cpp/copy_function.cpp",
     "cpp/expr.cpp",
     "cpp/optimizer.cpp",
+    "cpp/build_side.cpp",
     "cpp/scalar_fn_pushdown.cpp",
     "cpp/spatial_overrides.cpp",
     "cpp/cast_pushdown.cpp",
+    "cpp/cast_join_filter.cpp",
     "cpp/aggregate_fn_pushdown.cpp",
     "cpp/table_filter.cpp",
     "cpp/multi_file_reader.cpp",
@@ -570,10 +572,10 @@ fn bindgen_c2rust(crate_dir: &Path, duckdb_include_dir: &Path) {
 /// Generate libvortex_duckdb.*
 fn compile_cpp(duckdb_include_dir: &Path) {
     let mut build = cc::Build::new();
-    let has_debuginfo = env::var("DEBUG")
-        .map(|v| !matches!(v.as_str(), "false" | "0" | "none" | ""))
-        .unwrap_or(false);
-    if env_true("VX_DUCKDB_DEBUG") || has_debuginfo {
+    // Profiling builds keep symbols while optimizing the wrapper. Symbols alone must not
+    // enable DuckDB's per-element assertions in those hot loops.
+    let unoptimized = env::var("OPT_LEVEL").is_ok_and(|level| level == "0");
+    if env_true("VX_DUCKDB_DEBUG") || unoptimized {
         build.define("DEBUG", None);
     } else {
         build.define("NDEBUG", None);

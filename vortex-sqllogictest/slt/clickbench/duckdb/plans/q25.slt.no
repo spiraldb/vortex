@@ -177,6 +177,7 @@ logical_opt [
                                 "extra_info": {
                                     "Filters": "($.SearchPhrase != \"\")",
                                     "Function": "Vortex Scan",
+                                    "Scan Order": "SearchPhrase ASC NULLS LAST",
                                     "Estimated Cardinality": "200000"
                                 }
                             }
@@ -208,6 +209,7 @@ physical_plan [
                 "children": [],
                 "extra_info": {
                     "Function": "Vortex Scan",
+                    "Scan Order": "SearchPhrase ASC NULLS LAST",
                     "Filters": "optional: Dynamic Filter (SearchPhrase)",
                     "Projections": "SearchPhrase",
                     "Estimated Cardinality": "200000"

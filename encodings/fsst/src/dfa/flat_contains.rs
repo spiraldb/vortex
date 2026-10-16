@@ -76,6 +76,7 @@ use vortex_error::vortex_bail;
 use super::build_fused_table;
 use super::build_symbol_transitions;
 use super::kmp_byte_transitions;
+use super::ordered_byte_transitions;
 
 /// Flat `u8` transition table DFA for contains matching.
 ///
@@ -107,12 +108,43 @@ impl FlatContainsDfa {
             );
         }
 
-        let accept_state = u8::try_from(needle.len())
+        Self::from_byte_table(
+            symbols,
+            symbol_lengths,
+            needle.len(),
+            kmp_byte_transitions(needle),
+        )
+    }
+
+    /// Builds a DFA for ordered, non-overlapping literal pieces.
+    pub(crate) fn new_ordered(
+        symbols: &[Symbol],
+        symbol_lengths: &[u8],
+        needles: &[&[u8]],
+    ) -> VortexResult<Self> {
+        let total_len = needles.iter().map(|needle| needle.len()).sum::<usize>();
+        if total_len > Self::MAX_NEEDLE_LEN {
+            vortex_bail!("ordered contains literals exceed the flat DFA state space");
+        }
+        Self::from_byte_table(
+            symbols,
+            symbol_lengths,
+            total_len,
+            ordered_byte_transitions(needles, false),
+        )
+    }
+
+    fn from_byte_table(
+        symbols: &[Symbol],
+        symbol_lengths: &[u8],
+        literal_len: usize,
+        byte_table: Vec<u8>,
+    ) -> VortexResult<Self> {
+        let accept_state = u8::try_from(literal_len)
             .vortex_expect("FlatContainsDfa: accept state must fit into u8");
         let n_states = accept_state + 1;
         let sentinel = n_states;
 
-        let byte_table = kmp_byte_transitions(needle);
         let sym_trans =
             build_symbol_transitions(symbols, symbol_lengths, &byte_table, n_states, accept_state);
         let transitions = build_fused_table(&sym_trans, symbols.len(), n_states, |_| sentinel, 0);

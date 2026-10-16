@@ -5,6 +5,7 @@ use std::ffi::CStr;
 use std::ffi::c_char;
 use std::ffi::c_void;
 use std::ptr;
+use std::sync::atomic::Ordering;
 
 use num_traits::AsPrimitive;
 use vortex::error::VortexExpect;
@@ -46,6 +47,7 @@ use crate::file_reader::reader_initialize;
 use crate::file_reader::reader_open;
 use crate::file_reader::reader_scan;
 use crate::file_reader::reader_try_initialize_scan;
+use crate::scan_order::ScanOrder;
 use crate::table_function::BindState;
 use crate::table_function::Cardinality;
 use crate::table_function::GlobalState;
@@ -114,6 +116,22 @@ pub unsafe extern "C-unwind" fn duckdb_table_function_pushdown_expression(
 }
 
 #[unsafe(no_mangle)]
+/// Reports a consumed filter when the planner estimated fewer rows than the unfiltered scan.
+///
+/// # Safety
+/// `bind` must point to a live `BindState` during planning.
+pub unsafe extern "C-unwind" fn duckdb_table_function_has_consumed_filter(
+    bind: *const c_void,
+    file_count: u64,
+    estimated_rows: u64,
+) -> bool {
+    // SAFETY: the caller supplies the scan's live Rust bind state.
+    let bind = unsafe { bind.cast::<BindState>().as_ref() }.vortex_expect("null pointer");
+    bind.has_non_optional_filter.load(Ordering::Relaxed)
+        && estimated_rows < bind.first_file_row_count.saturating_mul(file_count)
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn duckdb_table_function_cardinality(
     bind: *const c_void,
     file_count: u64,
@@ -134,6 +152,29 @@ pub unsafe extern "C-unwind" fn duckdb_table_function_cardinality(
             stats.estimated_cardinality = c as _;
         }
     }
+}
+
+#[unsafe(no_mangle)]
+/// Records DuckDB's preferred order for scanning a physical column's zones.
+///
+/// # Safety
+/// `bind` must point to a live, exclusively borrowed `BindState` during planning.
+pub unsafe extern "C-unwind" fn duckdb_table_function_set_scan_order(
+    bind: *mut c_void,
+    column_index: u64,
+    descending: bool,
+    nulls_first: bool,
+) {
+    let bind = unsafe { bind.cast::<BindState>().as_mut() }.vortex_expect("null pointer");
+    bind.scan_order = usize::try_from(column_index)
+        .ok()
+        .and_then(|index| bind.columns.get(index))
+        .filter(|column| column.projection_expr.is_none())
+        .map(|column| ScanOrder {
+            column: column.name.clone(),
+            descending,
+            nulls_first,
+        });
 }
 
 #[unsafe(no_mangle)]
@@ -218,6 +259,7 @@ pub unsafe extern "C-unwind" fn duckdb_reader_get_statistics(
     stats_out.min = stats.min.map_or(ptr::null_mut(), |v| v.into_ptr());
     stats_out.max = stats.max.map_or(ptr::null_mut(), |v| v.into_ptr());
     stats_out.max_string_length = stats.max_string_length;
+    stats_out.distinct_count = stats.distinct_count.unwrap_or(0);
     stats_out.has_null = stats.has_null;
     stats_out.type_ = stats.logical_type.into_ptr();
     true
@@ -267,9 +309,20 @@ pub unsafe extern "C-unwind" fn duckdb_footer_get_statistics(
     stats_out.min = stats.min.map_or(ptr::null_mut(), |v| v.into_ptr());
     stats_out.max = stats.max.map_or(ptr::null_mut(), |v| v.into_ptr());
     stats_out.max_string_length = stats.max_string_length;
+    stats_out.distinct_count = stats.distinct_count.unwrap_or(0);
     stats_out.has_null = stats.has_null;
     stats_out.type_ = stats.logical_type.into_ptr();
     true
+}
+
+#[unsafe(no_mangle)]
+/// Releases a file pruned by DuckDB's offset optimizer.
+///
+/// # Safety
+/// `file` must point to a live, exclusively borrowed `OpenFileReader` under its file-local lock.
+pub unsafe extern "C-unwind" fn duckdb_reader_discard(file: *mut c_void) {
+    let file = unsafe { file.cast::<OpenFileReader>().as_mut() }.vortex_expect("null pointer");
+    file.discard();
 }
 
 #[unsafe(no_mangle)]

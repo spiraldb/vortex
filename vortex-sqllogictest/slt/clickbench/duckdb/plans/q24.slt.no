@@ -190,7 +190,8 @@ logical_opt [
                                         "children": [],
                                         "extra_info": {
                                             "Filters": "",
-                                            "Function": "Vortex Scan"
+                                            "Function": "Vortex Scan",
+                                            "Scan Order": "EventTime ASC NULLS LAST"
                                         }
                                     },
                                     {
@@ -208,6 +209,7 @@ logical_opt [
                                                                 "extra_info": {
                                                                     "Filters": "($.SearchPhrase != \"\")",
                                                                     "Function": "Vortex Scan",
+                                                                    "Scan Order": "EventTime ASC NULLS LAST",
                                                                     "Estimated Cardinality": "200000"
                                                                 }
                                                             }
@@ -281,6 +283,7 @@ physical_plan [
                                 "children": [],
                                 "extra_info": {
                                     "Function": "Vortex Scan",
+                                    "Scan Order": "EventTime ASC NULLS LAST",
                                     "Projections": [
                                         "EventTime",
                                         "SearchPhrase"
@@ -296,6 +299,7 @@ physical_plan [
                                         "children": [],
                                         "extra_info": {
                                             "Function": "Vortex Scan",
+                                            "Scan Order": "EventTime ASC NULLS LAST",
                                             "Filters": "optional: Dynamic Filter (EventTime)",
                                             "Projections": "EventTime",
                                             "Estimated Cardinality": "200000"

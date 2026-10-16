@@ -52,6 +52,78 @@ fn escaped(bytes: &[u8]) -> Vec<u8> {
     codes
 }
 
+#[rstest]
+#[case::overlap(b"%ab%bc%", b"abc", false)]
+#[case::adjacent(b"%ab%bc%", b"abbc", true)]
+#[case::wrong_order(b"%Tony%Stark%", b"Stark then Tony", false)]
+#[case::separated(b"%Tony%Stark%", b"Tony then Stark", true)]
+#[case::partial_fallback(b"%aba%aba%", b"ababa", false)]
+#[case::repeated_parts(b"%aba%aba%", b"abaaba", true)]
+#[case::anchored(b"Japan:%2007%", b"Japan: 2007", true)]
+#[case::wrong_start(b"Japan:%2007%", b"xJapan: 2007", false)]
+#[case::prefix_overlap(b"ab%bc%", b"abc", false)]
+#[case::prefix_adjacent(b"ab%bc%", b"abbc", true)]
+#[case::escaped_prefix(br"a\%b%c\_d%", b"a%b then c_d", true)]
+#[case::prefix_repeated_wildcards(b"ab%%%bc%%", b"abbc", true)]
+fn ordered_contains_with_escaped_codes(
+    #[case] pattern: &[u8],
+    #[case] input: &[u8],
+    #[case] expected: bool,
+) -> VortexResult<()> {
+    let matcher = FsstMatcher::try_new(&[], &[], pattern)?
+        .ok_or_else(|| vortex_error::vortex_err!("ordered pattern declined"))?;
+    assert_eq!(matcher.matches(&escaped(input)), expected);
+    Ok(())
+}
+
+#[rstest]
+fn ordered_contains_crosses_literal_and_symbol_boundaries(
+    #[values(false, true)] anchored: bool,
+) -> VortexResult<()> {
+    let symbols = [
+        sym(b"TonySta"),
+        sym(b"rk"),
+        sym(b"xx"),
+        sym(b"StarkTo"),
+        sym(b"ny"),
+    ];
+    let pattern = if anchored {
+        b"Tony%Stark%".as_slice()
+    } else {
+        b"%Tony%Stark%".as_slice()
+    };
+    let matcher = FsstMatcher::try_new(&symbols, &[7, 2, 2, 7, 2], pattern)?
+        .ok_or_else(|| vortex_error::vortex_err!("ordered pattern declined"))?;
+    assert!(matcher.matches(&[0, 1]));
+    assert_eq!(matcher.matches(&[2, 0, 1, 2]), !anchored);
+    assert!(!matcher.matches(&[3, 4]));
+    let mut mixed = Vec::new();
+    mixed.extend(escaped(b"TonySta"));
+    mixed.push(1);
+    assert!(matcher.matches(&mixed));
+    Ok(())
+}
+
+#[rstest]
+fn ordered_contains_respects_total_literal_state_limit(
+    #[values(false, true)] anchored: bool,
+) -> VortexResult<()> {
+    let first = "a".repeat(127);
+    let second = "b".repeat(if anchored { 126 } else { 127 });
+    let leading = if anchored { "" } else { "%" };
+    let matcher = FsstMatcher::try_new(&[], &[], format!("{leading}{first}%{second}%").as_bytes())?
+        .ok_or_else(|| vortex_error::vortex_err!("literal bytes should fit"))?;
+    assert!(matcher.matches(&escaped(format!("{first}{second}").as_bytes())));
+    assert!(!matcher.matches(&escaped(
+        format!("{first}{}", "b".repeat(second.len() - 1)).as_bytes()
+    )));
+    assert!(
+        FsstMatcher::try_new(&[], &[], format!("{leading}{first}%{second}b%").as_bytes())?
+            .is_none()
+    );
+    Ok(())
+}
+
 fn assert_borrowed_prefix(pattern: &[u8], expected: &[u8]) {
     let Some(LikeKind::Prefix(actual)) = LikeKind::parse(pattern) else {
         panic!("expected borrowed prefix pattern");

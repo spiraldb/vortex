@@ -6,6 +6,7 @@ mod cast;
 mod compare;
 mod filter;
 mod like;
+mod list_contains;
 
 use vortex_array::ArrayRef;
 use vortex_array::ArrayView;

@@ -80,6 +80,7 @@ impl LikeKernel for FSST {
 mod tests {
     use std::sync::LazyLock;
 
+    use rstest::rstest;
     use vortex_array::Canonical;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
@@ -93,6 +94,7 @@ mod tests {
     use vortex_array::scalar_fn::fns::like::LikeKernel;
     use vortex_array::scalar_fn::fns::like::LikeOptions;
     use vortex_error::VortexResult;
+    use vortex_error::vortex_err;
     use vortex_session::VortexSession;
 
     use crate::FSST;
@@ -126,6 +128,65 @@ mod tests {
 
     fn like(array: FSSTArray, pattern: &str) -> VortexResult<BoolArray> {
         run_like(array, pattern, LikeOptions::default())
+    }
+
+    #[rstest]
+    #[case::ordered("%Tony%Stark%")]
+    #[case::iron_man("%Iron%Man%")]
+    #[case::non_overlapping("%ab%bc%")]
+    #[case::repeated_wildcards("%%Tony%%%Stark%%")]
+    #[case::escaped(r"%a\%b%c\_d%")]
+    #[case::unicode("%💥%英雄%")]
+    #[case::prefix_year("Japan:%2007%")]
+    #[case::prefix_usa("USA:%2008%")]
+    #[case::prefix_overlap("ab%bc%")]
+    #[case::prefix_escaped(r"a\%b%c\_d%")]
+    #[case::prefix_unicode("💥%英雄%")]
+    fn ordered_contains_kernel_preserves_like_results(
+        #[case] pattern: &str,
+        #[values(false, true)] negated: bool,
+    ) -> VortexResult<()> {
+        let fsst = make_fsst(
+            &[
+                Some("Tony Stark"),
+                Some("Stark then Tony"),
+                Some("Tony"),
+                Some("Iron Man"),
+                Some("Man Iron"),
+                Some("abc"),
+                Some("abbc"),
+                Some("a%b then c_d"),
+                Some("💥 x 英雄"),
+                Some("Japan: 2007"),
+                Some("xJapan: 2007"),
+                Some("USA: 2008"),
+                Some("Japan: 2008"),
+                Some("Japan: no date"),
+                Some("xxabbc"),
+                Some(""),
+                None,
+            ],
+            Nullability::Nullable,
+        );
+        let pattern = ConstantArray::new(pattern, fsst.len()).into_array();
+        let options = LikeOptions {
+            negated,
+            ..LikeOptions::default()
+        };
+        let mut ctx = SESSION.create_execution_ctx();
+        let expected = Like::try_new(
+            fsst.clone()
+                .into_array()
+                .execute::<Canonical>(&mut ctx)?
+                .into_array(),
+            pattern.clone(),
+            options,
+        )?
+        .into_array();
+        let output = <FSST as LikeKernel>::like(fsst.as_view(), &pattern, options, &mut ctx)?
+            .ok_or_else(|| vortex_err!("ordered LIKE should execute without decompression"))?;
+        assert_arrays_eq!(output, expected, &mut ctx);
+        Ok(())
     }
 
     #[test]

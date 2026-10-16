@@ -3,6 +3,7 @@
 
 mod dtype;
 mod expr;
+mod join_filter;
 mod scalar;
 mod table_filter;
 mod vector;
@@ -13,6 +14,7 @@ pub use expr::can_push_expression;
 pub use expr::try_from_bound_expression;
 pub use expr::try_from_projection_aggregate;
 pub use expr::try_from_projection_expression;
+pub(crate) use join_filter::initialize_join_filters;
 pub use scalar::*;
 pub use table_filter::try_from_table_filter;
 pub use table_filter::try_from_virtual_column_filter;

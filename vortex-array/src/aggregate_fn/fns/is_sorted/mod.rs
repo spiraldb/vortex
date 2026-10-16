@@ -508,6 +508,7 @@ impl AggregateFnVTable for IsSorted {
 
                 // Check within-batch sortedness.
                 let batch_is_sorted = match c {
+                    _ if array_ref.len() == 1 => true,
                     Canonical::Primitive(p) => check_primitive_sorted(p, args.options.strict, ctx)?,
                     Canonical::Bool(b) => check_bool_sorted(b, args.options.strict, ctx)?,
                     Canonical::VarBinView(v) => {
@@ -768,6 +769,28 @@ mod tests {
         acc.accumulate(&array, &mut ctx)?;
 
         assert!(acc.partial_scalar()?.is_null());
+        Ok(())
+    }
+
+    #[rstest]
+    fn singleton_null_is_sorted(
+        #[values(false, true)] strict: bool,
+        #[values(false, true)] append_values: bool,
+    ) -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let array = PrimitiveArray::from_option_iter([None::<i32>]).into_array();
+        let mut acc =
+            Accumulator::try_new(IsSorted, IsSortedOptions { strict }, array.dtype().clone())?;
+
+        acc.accumulate(&array, &mut ctx)?;
+        if append_values {
+            acc.accumulate(
+                &PrimitiveArray::from_option_iter([Some(1i32), Some(2)]).into_array(),
+                &mut ctx,
+            )?;
+        }
+
+        assert_eq!(acc.finish()?, Scalar::bool(true, Nullability::NonNullable));
         Ok(())
     }
 

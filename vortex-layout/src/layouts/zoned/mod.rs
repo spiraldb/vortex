@@ -29,10 +29,14 @@ pub use schema::MAX_IS_TRUNCATED;
 pub use schema::MIN_IS_TRUNCATED;
 pub(crate) use schema::legacy_stats_to_aggregates;
 use vortex_array::DeserializeMetadata;
+use vortex_array::MaskFuture;
 use vortex_array::SerializeMetadata;
+use vortex_array::VortexSessionExecute;
 use vortex_array::aggregate_fn::AggregateFnRef;
+use vortex_array::arrays::StructArray;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::TryFromBytes;
+use vortex_array::expr::root;
 use vortex_array::expr::stats::Stat;
 use vortex_array::stats::as_stat_bitset_bytes;
 use vortex_array::stats::stats_from_bitset_bytes;
@@ -61,6 +65,7 @@ use crate::layouts::zoned::schema::aggregate_specs_from_fns;
 use crate::layouts::zoned::schema::aggregate_stats_table_dtype;
 use crate::layouts::zoned::schema::legacy_stats_table_dtype;
 use crate::layouts::zoned::schema::try_aggregate_fns_from_specs;
+use crate::layouts::zoned::zone_map::ZoneMap;
 use crate::segments::SegmentSource;
 
 /// Zoned layout vtable.
@@ -316,10 +321,6 @@ impl ZonedLayout {
         .into_typed())
     }
 
-    pub fn zone_len(&self) -> usize {
-        self.zone_len
-    }
-
     /// Returns display names for the zone-map aggregates stored by this layout.
     pub fn present_aggregates(&self) -> Arc<[String]> {
         present_aggregates(&self.zone_map_schema)
@@ -356,6 +357,62 @@ impl ZonedLayout {
     pub fn nzones(&self) -> usize {
         usize::try_from(self.children().child_row_count(1))
             .vortex_expect("Invalid number of zones, cannot handle more than usize zones")
+    }
+}
+
+impl<V: VTable<LayoutData = ZonedData>> Layout<V> {
+    /// Returns the logical number of rows in each zone, except the possibly shorter final zone.
+    pub fn zone_len(&self) -> usize {
+        self.zone_len
+    }
+
+    /// Reads the per-zone statistics without reading the data child.
+    ///
+    /// Returns `None` when the layout has no usable zone map.
+    pub async fn read_zone_map(
+        &self,
+        segment_source: Arc<dyn SegmentSource>,
+        session: &VortexSession,
+    ) -> VortexResult<Option<ZoneMap>> {
+        if self.zone_len == 0 {
+            return Ok(None);
+        }
+        let zones = self
+            .slot(1)?
+            .vortex_expect("zoned layout has a zones child");
+        let reader = zones.new_reader(
+            "scan-order zones".into(),
+            segment_source,
+            session,
+            &Default::default(),
+        )?;
+        let expr = root().bind(reader.dtype())?;
+        let mut ctx = session.create_execution_ctx();
+        let array = reader
+            .projection_evaluation(
+                &(0..reader.row_count()),
+                &expr,
+                MaskFuture::new_true(usize::try_from(zones.row_count())?),
+            )?
+            .await?
+            .execute::<StructArray>(&mut ctx)?;
+        match &self.zone_map_schema {
+            ZoneMapSchema::AggregateFns(aggregate_fns) => ZoneMap::try_new(
+                self.dtype().clone(),
+                array,
+                Arc::clone(aggregate_fns),
+                self.zone_len as u64,
+                self.row_count(),
+            ),
+            ZoneMapSchema::LegacyStats(stats) => ZoneMap::try_new_legacy(
+                self.dtype().clone(),
+                array,
+                Arc::clone(stats),
+                self.zone_len as u64,
+                self.row_count(),
+            ),
+        }
+        .map(Some)
     }
 }
 

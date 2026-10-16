@@ -6,15 +6,19 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
 use futures::FutureExt;
+use memmap2::Mmap;
 use object_store::registry::ObjectStoreRegistry;
 use url::Url;
 use vortex::array::VortexSessionExecute as _;
 use vortex::array::arrays::struct_::StructArrayExt as _;
+use vortex::buffer::ByteBuffer;
 use vortex::dtype::DType;
 use vortex::error::VortexExpect;
 use vortex::error::VortexResult;
+use vortex::error::vortex_err;
 use vortex::error::vortex_panic;
 use vortex::file::Footer;
+use vortex::file::VortexFile;
 use vortex::file::multi::MultiFileSession;
 use vortex::file::multi::open_cached;
 use vortex::file::multi::parse_uri_or_path;
@@ -40,6 +44,7 @@ use crate::exporter::ArrayExporter;
 use crate::exporter::ConversionCache;
 use crate::projection::Filter;
 use crate::projection::extract_schema_from_dtype;
+use crate::scan_order::order_splits;
 use crate::table_function::BindState;
 use crate::table_function::GlobalState;
 use crate::table_function::LocalState;
@@ -114,17 +119,32 @@ pub struct OpenFileReader {
 /// The state of an open file that the threads scanning it share.
 pub struct FileScanState {
     reader: LayoutReaderRef,
+    file: VortexFile,
     cache: ConversionCache,
 }
 
 impl OpenFileReader {
+    /// Releases a skipped file's scan state while only its file-local lock is held.
+    pub(crate) fn discard(&mut self) {
+        self.scan_state = None;
+        self.splits.clear();
+    }
+
     async fn open(path: String) -> VortexResult<Self> {
-        let (fs, fs_path) = resolve_filesystem(&parse_uri_or_path(&path)?)?;
-        let source = fs.open_read(&fs_path).await?;
-        let file = open_cached(&SESSION, Some(&path), source, None, &|options| options).await?;
+        let url = parse_uri_or_path(&path)?;
+        let file = if url.scheme() == "file"
+            && std::env::var_os("VORTEX_DUCKDB_MEMORY_MAP").is_none_or(|value| value != "0")
+        {
+            open_memory_mapped(&url, &path).await?
+        } else {
+            let (fs, fs_path) = resolve_filesystem(&url)?;
+            let source = fs.open_read(&fs_path).await?;
+            open_cached(&SESSION, Some(&path), source, None, &|options| options).await?
+        };
         Ok(OpenFileReader {
             scan_state: Some(Arc::new(FileScanState {
                 reader: file.layout_reader()?,
+                file,
                 cache: ConversionCache::default(),
             })),
             splits: vec![],
@@ -155,6 +175,25 @@ impl OpenFileReader {
     }
 }
 
+async fn open_memory_mapped(url: &Url, key: &str) -> VortexResult<VortexFile> {
+    let path = url
+        .to_file_path()
+        .map_err(|()| vortex_err!("Invalid local file URL: {url}"))?;
+    let file = std::fs::File::open(path)?;
+    // SAFETY: Vortex files are immutable once written. The buffer owns the mapping, so every
+    // segment slice keeps it alive even after DuckDB releases its file-local scan state.
+    let buffer = ByteBuffer::from(unsafe { Mmap::map(&file)? });
+    let size = buffer.len() as u64;
+    open_cached(
+        &SESSION,
+        Some(key),
+        Arc::new(buffer),
+        Some(size),
+        &|options| options,
+    )
+    .await
+}
+
 /// Called once per file while initializing the scan under file-local lock.
 /// Files are opened lazily.
 pub fn reader_open(file_path: &str) -> VortexResult<OpenFileReader> {
@@ -181,6 +220,7 @@ pub fn reader_bind(file: &OpenFileReader, result: &mut BindResultRef) -> VortexR
         has_non_optional_filter: AtomicBool::new(false),
         aggregates: vec![],
         no_footer_caches: false,
+        scan_order: None,
     })
 }
 
@@ -205,6 +245,18 @@ pub fn reader_initialize(file: &mut OpenFileReader, global: &GlobalState) -> Vor
         .with_selection(filter.row_selection.clone());
     let scan = builder.prepare()?;
     let mut splits = scan.execute(filter.row_range.clone())?;
+    if let Some(order) = &global.scan_order {
+        let file_state = file
+            .scan_state
+            .as_ref()
+            .vortex_expect("open file has scan state");
+        RUNTIME.block_on(order_splits(
+            &file_state.file,
+            order,
+            scan.split_ranges(filter.row_range.clone()),
+            &mut splits,
+        ))?;
+    }
 
     // threads take last element of file.splits so we need to reverse
     splits.reverse();
@@ -331,7 +383,15 @@ pub fn reader_get_statistics(
 
     let dtype = fields.field_by_index(index)?;
 
-    let stats = ColumnStatisticsAggregate::new(stats_sets.get(index)?);
+    let mut stats =
+        ColumnStatisticsAggregate::new(stats_sets.get(index)?, &dtype, file.reader().row_count());
+    if bind
+        .columns
+        .get(index)
+        .is_some_and(|column| column.projection_expr.is_some())
+    {
+        stats.distinct_count = None;
+    }
     match ColumnStatistics::try_from(stats, dtype) {
         Ok(stats) => Some(stats),
         Err(e) => vortex_panic!(e),
@@ -357,6 +417,7 @@ pub fn can_get_partition_stats(bind: &BindState) -> bool {
     // Even if we could do this fast, we report some filters here as not pushed
     // (see table_function.rs) and stats would be incorrect.
         && bind.filters.is_empty()
+        && bind.columns.iter().all(|column| column.projection_expr.is_none())
 }
 
 /// Called by one thread for every file. When we open files, we cache footers
@@ -380,9 +441,78 @@ pub fn footer_get_statistics(footer: &Footer, index: usize) -> Option<ColumnStat
     let stats = footer.statistics()?;
     let dtype = fields.field_by_index(index)?;
     let stats = stats.stats_sets().get(index)?;
-    let stats = ColumnStatisticsAggregate::new(stats);
+    let stats = ColumnStatisticsAggregate::new(stats, &dtype, footer.row_count());
     match ColumnStatistics::try_from(stats, dtype) {
         Ok(stats) => Some(stats),
         Err(e) => vortex_panic!(e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use url::Url;
+    use vortex::array::IntoArray;
+    use vortex::array::VortexSessionExecute;
+    use vortex::array::arrays::PrimitiveArray;
+    use vortex::array::assert_arrays_eq;
+    use vortex::array::stream::ArrayStreamExt;
+    use vortex::error::VortexResult;
+    use vortex::error::vortex_err;
+    use vortex::file::WriteOptionsSessionExt;
+    use vortex::io::runtime::BlockingRuntime;
+
+    use super::open_memory_mapped;
+    use crate::RUNTIME;
+    use crate::SESSION;
+    use crate::duckdb::Database;
+
+    #[test]
+    fn mapped_arrays_outlive_the_file_reader() -> VortexResult<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("space % 日本語.vortex");
+        let expected = PrimitiveArray::from_iter(0i64..10_000).into_array();
+        let url = Url::from_file_path(&path)
+            .map_err(|()| vortex_err!("temporary path is not absolute"))?;
+        let actual = RUNTIME.block_on(async {
+            let mut writer = async_fs::File::create(&path).await?;
+            SESSION
+                .write_options()
+                .write(&mut writer, expected.clone().to_array_stream())
+                .await?;
+            let mapped = open_memory_mapped(&url, url.as_str()).await?;
+            let array = mapped.scan()?.into_array_stream()?.read_all().await?;
+            drop(mapped);
+            VortexResult::Ok(array)
+        })?;
+        assert_arrays_eq!(actual, expected, &mut SESSION.create_execution_ctx());
+        Ok(())
+    }
+
+    #[test]
+    fn local_scans_reopen_paths_with_reserved_characters() -> VortexResult<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("space % 日本語.vortex");
+        let db = Database::open_in_memory()?;
+        crate::initialize(&db)?;
+        let connection = db.connect()?;
+        connection.query(&format!(
+            "COPY (SELECT i FROM range(10000) t(i)) TO '{}' (FORMAT vortex)",
+            path.display()
+        ))?;
+        let path = path.to_string_lossy();
+        for _ in 0..3 {
+            let result = connection.query(&format!(
+                "SELECT sum(i)::BIGINT FROM read_vortex('{path}') WHERE i % 2 = 0"
+            ))?;
+            let chunk = result
+                .into_iter()
+                .next()
+                .ok_or_else(|| vortex_err!("missing sum result"))?;
+            assert_eq!(
+                chunk.get_vector(0).as_slice_with_len::<i64>(1),
+                &[24_995_000]
+            );
+        }
+        Ok(())
     }
 }
