@@ -37,7 +37,6 @@ use crate::plan::physical::operator::SourceReady;
 use crate::plan::physical::operator::Step;
 use crate::plan::physical::pipeline::ReadId;
 use crate::plan::physical::pipeline::Scan;
-use crate::plan::physical::pipeline::Split;
 use crate::plan::physical::pipeline::Turn;
 use crate::plan::physical::pipeline::ValueCache;
 use crate::segments::SegmentId;
@@ -116,12 +115,9 @@ impl ListSource {
             self.mask.true_count(),
             get_available_parallelism().unwrap_or(1),
         )?;
-        let scan = Scan::try_new(
-            cx.session().clone(),
-            elements,
-            ranges.into_iter().map(Split::all).collect(),
-        )?
-        .with_value_cache(self.values.clone());
+        let splits = work::element_splits(elements.dtype(), ranges)?;
+        let scan = Scan::try_new(cx.session().clone(), elements, splits)?
+            .with_value_cache(self.values.clone());
         self.elements = Some(if overlap {
             scan.with_max_active(2)
         } else {

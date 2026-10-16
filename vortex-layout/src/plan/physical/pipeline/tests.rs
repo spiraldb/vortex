@@ -344,6 +344,43 @@ fn grouped_list_ranges_preserve_order_and_shared_reads(
     Ok(())
 }
 
+#[rstest]
+fn dense_nullable_list_ranges_share_one_scan(
+    #[values(Delivery::Fifo, Delivery::Lifo)] order: Delivery,
+) -> VortexResult<()> {
+    let mut store = Store::default();
+    let elements = Buffer::from_iter(0_i64..20).into_array();
+    let offsets = Buffer::from_iter((0_u64..=10).map(|row| row * 2)).into_array();
+    let valid = BoolArray::from_iter((0..10).map(|row| row != 2 && row != 7)).into_array();
+    let input = ListArray::try_new(
+        elements.clone(),
+        offsets.clone(),
+        Validity::Array(valid.clone()),
+    )?
+    .into_array();
+    let plan = ListPackPlan::try_new(
+        true.into(),
+        10,
+        lower(&store.chunked(&elements, &[5, 5, 5, 5])?)?,
+        lower(&store.flat(&offsets)?)?,
+        Some(lower(&store.flat(&valid)?)?),
+    )?
+    .into_plan();
+    let result = run(&store, &plan, 0..10, Mask::new_true(10), delivery(order))?;
+    let actual = ChunkedArray::try_new(result.arrays, input.dtype().clone())?.into_array();
+    assert_arrays_eq!(actual, input, &mut SESSION.create_execution_ctx());
+    assert!(
+        result
+            .events
+            .iter()
+            .any(|event| { matches!(event, Event::Io(ids) if (0..4).all(|id| ids.contains(&id))) }),
+        "{:?}",
+        result.events
+    );
+    assert_eq!(segments_read(&result.events), vec![0, 1, 2, 3, 4, 5]);
+    Ok(())
+}
+
 /// Delivers segments in the given order.
 fn scripted(order: &[u32]) -> impl FnMut(&[ReadRequest]) -> usize + '_ {
     let mut next = order.iter();
