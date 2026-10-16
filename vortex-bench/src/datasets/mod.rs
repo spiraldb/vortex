@@ -20,6 +20,7 @@ pub mod nested_structs;
 pub mod struct_list_of_ints;
 pub mod taxi_data;
 pub mod tpch_l_comment;
+pub mod wide_primitive;
 
 use std::path::PathBuf;
 
