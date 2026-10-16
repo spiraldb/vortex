@@ -32,10 +32,12 @@ use object_store::ObjectStore;
 use object_store::path::Path;
 use vortex::file::VORTEX_FILE_EXTENSION;
 use vortex::layout::LayoutReader;
+use vortex::layout::scan::scan_builder::DEFAULT_SCAN_CONCURRENCY;
 use vortex::metrics::DefaultMetricsRegistry;
 use vortex::metrics::MetricsRegistry;
 use vortex::session::VortexSession;
 use vortex_utils::aliases::dash_map::DashMap;
+use vortex_utils::parallelism::get_available_parallelism;
 
 use super::opener::NaturalSplits;
 use super::opener::VortexOpener;
@@ -306,9 +308,10 @@ impl VortexSource {
         self
     }
 
-    /// Sets the per-file Vortex scan concurrency.
+    /// Sets the number of row splits each file scan keeps in flight.
     ///
-    /// This is separate from DataFusion's partition-level parallelism.
+    /// This is separate from DataFusion's partition-level parallelism. When unset, the default
+    /// budget of a machine-wide scan is split evenly across the scan's partitions.
     pub fn with_scan_concurrency(mut self, scan_concurrency: usize) -> Self {
         self.options.scan_concurrency = Some(scan_concurrency);
         self
@@ -365,11 +368,28 @@ impl VortexSource {
             expression_converter: Arc::clone(&self.expression_converter),
             file_metadata_cache: self.file_metadata_cache.clone(),
             projection_pushdown: self.options.projection_pushdown,
-            scan_concurrency: self.options.scan_concurrency,
+            scan_concurrency: Some(self.options.scan_concurrency.unwrap_or_else(|| {
+                partition_scan_concurrency(
+                    base_config.file_groups.len(),
+                    get_available_parallelism().unwrap_or(1),
+                )
+            })),
         };
 
         Ok(opener)
     }
+}
+
+/// The default number of splits each partition's scan keeps in flight.
+///
+/// DataFusion runs one file stream per partition, and each stream scans with
+/// [`ScanThreading::External`](vortex::layout::scan::threading::ScanThreading::External). Splitting
+/// the budget of a single machine-wide scan across the partitions keeps the total number of splits
+/// in flight the same however many partitions DataFusion plans.
+fn partition_scan_concurrency(partitions: usize, cores: usize) -> usize {
+    (DEFAULT_SCAN_CONCURRENCY * cores)
+        .div_ceil(partitions.max(1))
+        .max(1)
 }
 
 impl FileSource for VortexSource {
@@ -570,10 +590,25 @@ mod tests {
     use datafusion_physical_expr::expressions as df_expr;
     use datafusion_physical_expr::expressions::Column;
     use object_store::memory::InMemory;
+    use rstest::rstest;
     use vortex::VortexSessionDefault;
 
     use super::*;
     use crate::convert::exprs::ProcessedProjection;
+
+    #[rstest]
+    #[case::one_partition_per_core(96, 96, 4)]
+    #[case::single_partition(1, 96, 384)]
+    #[case::fewer_partitions_than_cores(16, 96, 24)]
+    #[case::more_partitions_than_cores(200, 96, 2)]
+    #[case::no_partitions(0, 8, 32)]
+    fn partition_scan_concurrency_splits_machine_budget(
+        #[case] partitions: usize,
+        #[case] cores: usize,
+        #[case] expected: usize,
+    ) {
+        assert_eq!(partition_scan_concurrency(partitions, cores), expected);
+    }
 
     struct TrackingExpressionConverter {
         inner: DefaultExpressionConverter,

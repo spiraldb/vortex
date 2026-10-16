@@ -225,7 +225,8 @@ extensions_options! {
         /// This does not affect the overall parallelism
         /// across partitions, which is controlled by DataFusion's execution configuration.
         ///
-        /// Leave as `None` to use Vortex's scan default. Override per session
+        /// Leave as `None` to split the default budget of a machine-wide Vortex scan evenly
+        /// across the scan's partitions. Override per session
         /// with `SET vortex.scan_concurrency = <n>`, or per table with
         /// `OPTIONS(scan_concurrency '<n>')`.
         pub scan_concurrency: Option<usize>, default = None

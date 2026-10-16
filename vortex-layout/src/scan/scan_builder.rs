@@ -44,6 +44,11 @@ use crate::scan::splits::Splits;
 use crate::scan::splits::attempt_split_ranges;
 use crate::scan::threading::ScanThreading;
 
+/// The default number of splits a scan keeps in flight per worker thread.
+///
+/// Four allows for some I/O lookahead without too much impact on work-stealing.
+pub const DEFAULT_SCAN_CONCURRENCY: usize = 4;
+
 /// Builder for scanning a [`LayoutReader`] into arrays, streams, iterators, or mapped outputs.
 ///
 /// A scan has three independent row restriction mechanisms:
@@ -100,9 +105,7 @@ impl ScanBuilder<ArrayRef> {
             selection: Default::default(),
             split_by: SplitBy::default(),
             natural_splits: None,
-            // We default to four tasks per worker thread, which allows for some I/O lookahead
-            // without too much impact on work-stealing.
-            concurrency: 4,
+            concurrency: DEFAULT_SCAN_CONCURRENCY,
             threading: ScanThreading::default(),
             map_fn: Arc::new(Ok),
             metrics_registry: None,
