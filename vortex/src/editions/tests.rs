@@ -7,6 +7,7 @@ use vortex_array::IntoArray;
 use vortex_array::array_session;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::ExtensionArray;
+use vortex_array::arrays::ListArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::dtype::DType;
@@ -15,8 +16,10 @@ use vortex_array::dtype::PType;
 use vortex_array::extension::datetime::Date;
 use vortex_array::extension::datetime::TimeUnit;
 use vortex_array::session::ArraySessionExt;
+use vortex_array::validity::Validity;
 use vortex_btrblocks::BtrBlocksCompressorBuilder;
 use vortex_buffer::ByteBufferMut;
+use vortex_buffer::buffer;
 use vortex_edition::ComponentKind;
 use vortex_edition::Edition;
 use vortex_edition::EditionDeclaration;
@@ -437,6 +440,24 @@ async fn write_with(session: &VortexSession, array: ArrayRef) -> VortexResult<By
     Ok(buffer)
 }
 
+/// Write `array` with `session`, opting in to the list layout.
+async fn write_list_layout(
+    session: &VortexSession,
+    array: ArrayRef,
+) -> VortexResult<ByteBufferMut> {
+    let mut buffer = ByteBufferMut::empty();
+    session
+        .write_options()
+        .with_strategy(
+            WriteStrategyBuilder::from_session(session)
+                .with_list_layout()
+                .build(),
+        )
+        .write(&mut buffer, array.to_array_stream())
+        .await?;
+    Ok(buffer)
+}
+
 /// The layout encodings a written file actually contains, depth first.
 fn written_layout_ids(session: &VortexSession, buffer: ByteBufferMut) -> VortexResult<Vec<Id>> {
     let file = session.open_options().open_buffer(buffer)?;
@@ -538,6 +559,48 @@ async fn writer_restricts_layouts_to_the_enabled_editions() -> VortexResult<()> 
         error.to_string().contains("not permitted by ctx"),
         "unexpected error: {error}"
     );
+    Ok(())
+}
+
+/// The list layout is opt-in: the default writer never emits it, and opting in writes it only when
+/// the enabled editions permit it.
+#[tokio::test]
+async fn list_layout_is_opt_in_and_edition_gated() -> VortexResult<()> {
+    use crate::VortexSessionDefault;
+
+    let list = ListArray::try_new(
+        buffer![1i32, 2, 3, 4, 5].into_array(),
+        buffer![0u32, 2, 5].into_array(),
+        Validity::NonNullable,
+    )?;
+    let array = StructArray::from_fields(&[("l", list.into_array())])?.into_array();
+    let list_layout = Id::from("vortex.list");
+
+    // The default core edition does not include the list layout, so opting in fails the write.
+    let session = VortexSession::default();
+    let error = write_list_layout(&session, array.clone())
+        .await
+        .expect_err("the list layout is not in the default editions");
+    assert!(
+        error.to_string().contains("not permitted by ctx"),
+        "unexpected error: {error}"
+    );
+
+    let session = VortexSession::default();
+    session.editions().declare_inclusion(EditionInclusion::new(
+        ComponentKind::Layout,
+        "vortex.list",
+        DEFAULT_PREVIEW_EDITION,
+    ))?;
+    session.enable_edition(DEFAULT_PREVIEW_EDITION)?;
+
+    // Permitted but not requested: the default writer keeps lists flat.
+    let written = written_layout_ids(&session, write_with(&session, array.clone()).await?)?;
+    assert!(!written.contains(&list_layout), "{written:?}");
+
+    // Permitted and requested.
+    let written = written_layout_ids(&session, write_list_layout(&session, array).await?)?;
+    assert!(written.contains(&list_layout), "{written:?}");
     Ok(())
 }
 
