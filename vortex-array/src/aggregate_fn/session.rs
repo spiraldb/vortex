@@ -77,7 +77,7 @@ type AggregateKernelKey = (ArrayId, Option<AggregateFnId>);
 type GroupedEncodingKernelKey = (ArrayId, AggregateFnId);
 
 /// Registry of aggregate function plugins, keyed by aggregate function id.
-type AggregateFnRegistry = ArcSwapMap<AggregateFnId, AggregateFnPluginRef>;
+pub type AggregateFnRegistry = ArcSwapMap<AggregateFnId, AggregateFnPluginRef>;
 /// Registry of aggregate kernels, keyed by encoding and optional aggregate function.
 type AggregateKernelRegistry = ArcSwapMap<AggregateKernelKey, &'static dyn DynAggregateKernel>;
 /// Registry of encoding-agnostic grouped aggregate kernels, keyed by aggregate function id.
@@ -140,6 +140,11 @@ impl Default for AggregateFnSession {
 }
 
 impl AggregateFnSession {
+    /// Returns the aggregate function registry.
+    pub fn registry(&self) -> &AggregateFnRegistry {
+        &self.registry
+    }
+
     /// Returns the aggregate function plugin registered for `id`, if any.
     pub fn find_plugin(&self, id: &AggregateFnId) -> Option<AggregateFnPluginRef> {
         self.registry.get(id)
