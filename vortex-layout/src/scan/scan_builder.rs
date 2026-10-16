@@ -274,7 +274,7 @@ impl<A: 'static + Send> ScanBuilder<A> {
 
     /// Attach the segment map of the file the layout reader was opened over.
     ///
-    /// Scans with a segment map may run on the planner-driven executor, see [`v2`](crate::scan::v2).
+    /// Scans with a segment map may run on the planner-driven executor, see [`v2`].
     pub fn with_scan_file(mut self, file: ScanFile) -> Self {
         self.scan_file = Some(file);
         self
