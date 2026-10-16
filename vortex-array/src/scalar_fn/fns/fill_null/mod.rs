@@ -213,12 +213,15 @@ mod tests {
 
     use vortex_buffer::buffer;
     use vortex_error::VortexExpect;
+    use vortex_error::VortexResult;
 
     use super::*;
     use crate::Canonical;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::array_session;
+    use crate::arrays::BoolArray;
+    use crate::arrays::ChunkedArray;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::StructArray;
     use crate::assert_arrays_eq;
@@ -236,6 +239,7 @@ mod tests {
     use crate::expr::root;
     use crate::extension::datetime::Date;
     use crate::extension::datetime::TimeUnit;
+    use crate::optimizer::ArrayOptimizer;
     use crate::scalar::Scalar;
 
     #[test]
@@ -347,6 +351,25 @@ mod tests {
                 assert!(filled.is_err(), "{dtype} executes but is not supported");
             }
         }
+        Ok(())
+    }
+
+    /// The reduce rules leave a non-constant fill value to execution, which rejects it, rather
+    /// than panicking.
+    #[test]
+    fn test_fill_null_reduce_skips_non_constant_fill_value() -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let chunked = ChunkedArray::try_new(
+            vec![BoolArray::from_iter([Some(true), None]).into_array()],
+            DType::Bool(Nullability::Nullable),
+        )?
+        .into_array();
+        let fill_value = BoolArray::from_iter([false, true]).into_array();
+
+        let optimized = FillNull::try_new(chunked, fill_value)?
+            .into_array()
+            .optimize()?;
+        assert!(optimized.execute::<Canonical>(&mut ctx).is_err());
         Ok(())
     }
 
