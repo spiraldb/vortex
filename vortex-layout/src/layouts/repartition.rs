@@ -295,7 +295,6 @@ mod tests {
     use vortex_array::arrays::ConstantArray;
     use vortex_array::arrays::FixedSizeListArray;
     use vortex_array::arrays::PrimitiveArray;
-    use vortex_array::arrays::SharedArray;
     use vortex_array::arrays::VarBinViewArray;
     use vortex_array::arrays::varbinview::BinaryView;
     use vortex_array::dtype::DType;
@@ -310,6 +309,7 @@ mod tests {
 
     use super::*;
     use crate::LayoutStrategy;
+    use crate::arrays::shared::Shared;
     use crate::layouts::chunked::writer::ChunkedLayoutStrategy;
     use crate::layouts::flat::writer::FlatLayoutStrategy;
     use crate::segments::TestSegments;
@@ -598,7 +598,7 @@ mod tests {
         let block_len = 10_000usize;
 
         let constant = ConstantArray::new(42i64, n);
-        let shared = SharedArray::new(constant.into_array());
+        let shared = Shared::new(constant.into_array());
         let shared_handle = shared.clone();
         let arr = shared.into_array();
 
@@ -612,7 +612,7 @@ mod tests {
         let _output = buf.pop_front().unwrap();
 
         // Transition SharedState from Source to Cached for ALL slices sharing this Arc.
-        use vortex_array::arrays::shared::SharedArrayExt;
+        use crate::arrays::shared::SharedArrayExt;
         let _canonical =
             shared_handle.get_or_compute(|source| source.clone().execute::<Canonical>(&mut ctx))?;
 

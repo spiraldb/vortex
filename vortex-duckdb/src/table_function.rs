@@ -4,6 +4,7 @@
 use std::cmp::max;
 use std::fmt::Formatter;
 use std::fmt::{self};
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
@@ -52,6 +53,7 @@ use crate::duckdb::TableInitInput;
 use crate::duckdb::Value;
 use crate::exporter::ArrayExporter;
 use crate::file_prefetch::FilePrefetch;
+use crate::file_reader::FileScanState;
 use crate::projection::DuckdbField;
 use crate::projection::Filter;
 use crate::projection::Projection;
@@ -167,6 +169,11 @@ pub type Partials = Vec<(usize, Box<dyn DynAccumulator>)>;
 pub struct LocalState {
     pub exporter: Option<ArrayExporter>,
     pub split: Option<Split>,
+    /// The scan state of the file that this thread scans.
+    pub(crate) file: Option<Arc<FileScanState>>,
+    /// Scan states that this thread no longer uses. They are dropped outside
+    /// DuckDB's global multi-file lock; see `OpenFileReader`.
+    pub(crate) retired_files: Vec<Arc<FileScanState>>,
 
     /// Empty for non-aggregate scan
     pub partials: Partials,
@@ -366,6 +373,8 @@ pub fn init_local(bind_data: &BindState, global: &GlobalState) -> LocalState {
         exporter: None,
         partials,
         split: None,
+        file: None,
+        retired_files: Vec::new(),
         finished: false,
     }
 }

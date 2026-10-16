@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Test support for constructing physical plans from stored layout trees.
-//!
-//! This module is only used to build physical-plan fixtures for tests. It is not a production
-//! planning API.
+//! Lowering stored layout trees into physical plans.
 
 use std::sync::Arc;
 
@@ -30,6 +27,7 @@ use crate::layouts::zoned::LegacyStats;
 use crate::layouts::zoned::Zoned;
 use crate::plan::physical::ConcatPlan;
 use crate::plan::physical::FilterPlan;
+use crate::plan::physical::LegacyStatsPlan;
 use crate::plan::physical::ListPackPlan;
 use crate::plan::physical::PackPlan;
 use crate::plan::physical::PlanChildren;
@@ -38,7 +36,11 @@ use crate::plan::physical::SegmentScanPlan;
 use crate::plan::physical::TakePlan;
 use crate::plan::physical::ZonedPlan;
 
-/// Constructs a physical-plan fixture from `layout` for tests.
+/// Lowers `layout` into a physical plan.
+///
+/// Zoned and legacy stats layouts keep their zone statistics: unoptimized they read only their
+/// data, and the optimizer rewrites a statistics predicate over them into a pruning plan. Those
+/// with no zones or no statistics lower to their data.
 ///
 /// The root operator is built immediately. Its child container owns a hidden clone of the source
 /// layout and lowers each child independently on first access.
@@ -62,7 +64,7 @@ pub fn lower(layout: &LayoutRef) -> VortexResult<PlanRef> {
         return Ok(lower_list(layout)?.into_plan());
     }
     if layout.is::<Zoned>() || layout.is::<LegacyStats>() {
-        return Ok(lower_zoned(layout)?.into_plan());
+        return lower_zoned(layout);
     }
     vortex_bail!(
         "No physical plan implementation for layout '{}'",
@@ -164,7 +166,7 @@ fn lazy_children(layout: LayoutRef, slots: Vec<usize>) -> PlanChildren {
     })
 }
 
-fn lower_zoned(layout: &LayoutRef) -> VortexResult<ZonedPlan> {
+fn lower_zoned(layout: &LayoutRef) -> VortexResult<PlanRef> {
     // Zoned and legacy stats layouts share a child shape: transparent data, auxiliary zones.
     let metadata = if let Some(layout) = layout.as_opt::<Zoned>() {
         layout.data()
@@ -173,12 +175,36 @@ fn lower_zoned(layout: &LayoutRef) -> VortexResult<ZonedPlan> {
     } else {
         vortex_bail!("Zoned plan requires a zoned layout")
     };
-    Ok(ZonedPlan::from_children(
-        layout.dtype().clone(),
-        layout.row_count(),
-        lazy_children(Arc::clone(layout), vec![0, 1]),
-        u64::try_from(metadata.zone_len())?,
-        metadata.aggregate_fns(),
-        metadata.legacy_stats(),
-    ))
+    // Without zones, or with a zone table holding no statistics, nothing can be pruned.
+    let no_stats = metadata
+        .stats_table_dtype()
+        .as_struct_fields_opt()
+        .is_none_or(|fields| fields.nfields() == 0);
+    if metadata.zone_len() == 0 || no_stats {
+        let data = layout
+            .slot(0)?
+            .ok_or_else(|| vortex_err!("Zoned layout has no data child"))?;
+        return lower(&data);
+    }
+    let children = lazy_children(Arc::clone(layout), vec![0, 1]);
+    let zone_len = u64::try_from(metadata.zone_len())?;
+    // A legacy table is converted to the aggregate schema when the plan is optimized.
+    Ok(match metadata.legacy_stats() {
+        Some(stats) => LegacyStatsPlan::from_children(
+            layout.dtype().clone(),
+            layout.row_count(),
+            children,
+            zone_len,
+            Arc::clone(stats),
+        )
+        .into_plan(),
+        None => ZonedPlan::from_children(
+            layout.dtype().clone(),
+            layout.row_count(),
+            children,
+            zone_len,
+            metadata.aggregate_fns(),
+        )
+        .into_plan(),
+    })
 }

@@ -221,19 +221,35 @@ pub fn list_to_vector_ext(input: ArrayRef) -> VortexResult<ArrayRef> {
 mod tests {
     use vortex::array::Array;
     use vortex::array::ArrayRef;
+    use vortex::array::EmptyMetadata;
     use vortex::array::IntoArray;
+    use vortex::array::VortexSessionExecute;
     use vortex::array::arrays::BoolArray;
     use vortex::array::arrays::ChunkedArray;
-    use vortex::array::arrays::Extension;
+    use vortex::array::arrays::ExtensionArray;
+    use vortex::array::arrays::FixedSizeListArray;
     use vortex::array::arrays::List;
     use vortex::array::arrays::ListViewArray;
     use vortex::array::arrays::PrimitiveArray;
-    use vortex::array::arrays::extension::ExtensionArrayExt;
     use vortex::array::validity::Validity;
     use vortex::buffer::BufferMut;
-    use vortex::dtype::DType;
+    use vortex::dtype::extension::ExtDType;
+    use vortex_array::assert_arrays_eq;
+    use vortex_tensor::vector::Vector;
 
     use super::list_to_vector_ext;
+    use crate::SESSION;
+
+    fn expected_vector(values: &[f32]) -> ArrayRef {
+        let elements = PrimitiveArray::from_iter(values.iter().copied()).into_array();
+        let storage =
+            FixedSizeListArray::try_new(elements, 3, Validity::NonNullable, values.len() / 3)
+                .unwrap();
+        let dtype = ExtDType::<Vector>::try_new(EmptyMetadata, storage.dtype().clone())
+            .unwrap()
+            .erased();
+        ExtensionArray::new(dtype, storage.into_array()).into_array()
+    }
 
     /// Build a `List<f32>` whose elements carry the given [`Validity`]. Passing
     /// `Validity::NonNullable` produces a `List<f32>`; any other variant produces
@@ -286,12 +302,11 @@ mod tests {
     fn uniform_list_becomes_vector_extension() {
         let list = list_f32(&[&[1.0, 2.0, 3.0], &[4.0, 5.0, 6.0], &[7.0, 8.0, 9.0]]);
         let wrapped = list_to_vector_ext(list).unwrap();
-        assert_eq!(wrapped.len(), 3);
-        let ext = wrapped.as_opt::<Extension>().expect("returns Extension");
-        assert!(matches!(
-            ext.storage_array().dtype(),
-            DType::FixedSizeList(_, 3, _)
-        ));
+        assert_arrays_eq!(
+            wrapped,
+            expected_vector(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]),
+            &mut SESSION.create_execution_ctx()
+        );
     }
 
     #[test]
@@ -374,12 +389,11 @@ mod tests {
         // `List` form.
         let list_view = list_view_f32(3, &[&[1.0, 2.0, 3.0], &[4.0, 5.0, 6.0]]);
         let wrapped = list_to_vector_ext(list_view).unwrap();
-        assert_eq!(wrapped.len(), 2);
-        let ext = wrapped.as_opt::<Extension>().expect("returns Extension");
-        assert!(matches!(
-            ext.storage_array().dtype(),
-            DType::FixedSizeList(_, 3, _)
-        ));
+        assert_arrays_eq!(
+            wrapped,
+            expected_vector(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),
+            &mut SESSION.create_execution_ctx()
+        );
     }
 
     #[test]
@@ -465,12 +479,11 @@ mod tests {
             list_f32_with_element_validity(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 3, Validity::AllValid);
 
         let wrapped = list_to_vector_ext(list).unwrap();
-        assert_eq!(wrapped.len(), 2);
-        let ext = wrapped.as_opt::<Extension>().expect("returns Extension");
-        assert!(matches!(
-            ext.storage_array().dtype(),
-            DType::FixedSizeList(_, 3, _)
-        ));
+        assert_arrays_eq!(
+            wrapped,
+            expected_vector(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),
+            &mut SESSION.create_execution_ctx()
+        );
     }
 
     #[test]

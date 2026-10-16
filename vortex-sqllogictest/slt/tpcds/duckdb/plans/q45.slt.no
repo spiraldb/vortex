@@ -580,7 +580,7 @@ logical_opt [
                                                                         "name": "READ_VORTEX",
                                                                         "children": [],
                                                                         "extra_info": {
-                                                                            "Filters": "vortex.list.contains([2i64, 3i64, 5i64, 7i64, 11i64, 13i64, 17i64, 19i64, 23i64, 29i64], $.i_item_sk)",
+                                                                            "Filters": "vortex.list.contains([2i64, 3i64, 5i64, 7i64, 11i64, 13i64, 17i64, 19i64, 23i64, 29i64], $.i_item_sk, opts=sql_null_semantics)",
                                                                             "Function": "Vortex Scan",
                                                                             "Estimated Cardinality": "360"
                                                                         }
@@ -783,7 +783,7 @@ physical_plan [
                                                                 "children": [],
                                                                 "extra_info": {
                                                                     "Function": "Vortex Scan",
-                                                                    "Filters": "vortex.list.contains([2i64, 3i64, 5i64, 7i64, 11i64, 13i64, 17i64, 19i64, 23i64, 29i64], $.i_item_sk)",
+                                                                    "Filters": "vortex.list.contains([2i64, 3i64, 5i64, 7i64, 11i64, 13i64, 17i64, 19i64, 23i64, 29i64], $.i_item_sk, opts=sql_null_semantics)",
                                                                     "Projections": "i_item_id",
                                                                     "Estimated Cardinality": "360"
                                                                 }

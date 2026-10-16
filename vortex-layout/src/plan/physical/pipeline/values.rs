@@ -9,6 +9,7 @@ use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 use vortex_array::ArrayRef;
 
+use crate::plan::physical::PlanByPtr;
 use crate::plan::physical::PlanRef;
 
 /// Values a plan produces over its whole domain whatever rows it is compiled for, kept for the
@@ -18,25 +19,20 @@ use crate::plan::physical::PlanRef;
 /// projection of one split decode them once. The cache lives as long as the split that owns it
 /// and holds only the values that split read: nothing is kept for the rest of a scan.
 #[derive(Clone, Default)]
-pub struct ValueCache(Arc<Mutex<FxHashMap<usize, (PlanRef, ArrayRef)>>>);
+pub struct ValueCache(Arc<Mutex<FxHashMap<PlanByPtr, ArrayRef>>>);
 
 impl ValueCache {
     /// The values `plan` produced earlier.
     pub(crate) fn get(&self, plan: &PlanRef) -> Option<ArrayRef> {
-        self.0
-            .lock()
-            .get(&plan.addr())
-            .map(|(_, values)| values.clone())
+        self.0.lock().get(&PlanByPtr(plan.clone())).cloned()
     }
 
     /// Records the values of `plan`, keeping the first when two race.
     pub(crate) fn insert(&self, plan: &PlanRef, values: ArrayRef) -> ArrayRef {
-        // The entry keeps the plan alive, so its address names no other plan while cached.
         self.0
             .lock()
-            .entry(plan.addr())
-            .or_insert_with(|| (plan.clone(), values))
-            .1
+            .entry(PlanByPtr(plan.clone()))
+            .or_insert(values)
             .clone()
     }
 }

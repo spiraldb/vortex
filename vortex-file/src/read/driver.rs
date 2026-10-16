@@ -406,13 +406,15 @@ mod tests {
         let event_stream = stream::iter(events);
         let metrics_registry = DefaultMetricsRegistry::default();
         let metrics = RequestMetrics::new(&metrics_registry, vec![]);
-        let io_stream = IoRequestStream::new(
+        let mut io_stream = IoRequestStream::new(
             event_stream,
             coalesce_window,
             coalesced_buffer_alignment,
             1024,
             metrics,
         );
+        // These cases exercise optional expansion independently of the process IO preset.
+        io_stream.state.coalesce_optional = true;
         io_stream.concat().await
     }
 
@@ -778,6 +780,7 @@ mod tests {
     fn coalescing_expands_in_multiple_passes_and_removes_cancelled_neighbors() -> VortexResult<()> {
         let registry = DefaultMetricsRegistry::default();
         let mut state = State::new(RequestMetrics::new(&registry, vec![]), Alignment::none());
+        state.coalesce_optional = true;
         let mut receivers = Vec::new();
         for (id, offset) in (0..=100).step_by(10).enumerate() {
             let (request, receiver) = create_request(id, offset, 1);

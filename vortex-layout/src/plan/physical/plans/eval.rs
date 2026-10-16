@@ -12,7 +12,6 @@ use vortex_array::IntoArray;
 use vortex_array::arrays::Dict;
 use vortex_array::arrays::DictArray;
 use vortex_array::arrays::ScalarFn;
-use vortex_array::arrays::SharedArray;
 use vortex_array::arrays::Slice;
 use vortex_array::arrays::dict::DictArraySlotsExt;
 use vortex_array::arrays::scalar_fn::ScalarFnArrayExt;
@@ -32,6 +31,7 @@ use vortex_runend::RunEndArraySlotsExt;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
 
+use crate::arrays::shared::Shared;
 use crate::plan::physical::Plan;
 use crate::plan::physical::PlanChildren;
 use crate::plan::physical::PlanId;
@@ -118,7 +118,7 @@ impl EvalPlan {
         if let Some(runend) = array.as_opt::<RunEnd>() {
             // Each comparison otherwise decompresses the values and expands its own boolean
             // runs. Share the values across the compound predicate and expand only its result.
-            let values = SharedArray::new(runend.values().clone())
+            let values = Shared::new(runend.values().clone())
                 .into_array()
                 .apply_bound(self.expression())?;
             return Ok(RunEnd::try_new_offset_length(
@@ -132,7 +132,7 @@ impl EvalPlan {
         }
         if array.is::<Pco>() {
             // PCO has no comparison kernel; each branch would decompress the same values.
-            array = SharedArray::new(array).into_array();
+            array = Shared::new(array).into_array();
         }
         let result = array.apply_bound(self.expression())?;
         fuse_dictionary_predicate(result, &mut ctx)

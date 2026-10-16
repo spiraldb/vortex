@@ -17,7 +17,6 @@ use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::dtype::DType;
 use vortex_array::expr::BoundExpression;
-use vortex_array::expr::stats::Stat;
 use vortex_array::expr::traversal::NodeExt;
 use vortex_array::expr::traversal::Transformed;
 use vortex_array::expr::traversal::TraversalOrder;
@@ -146,16 +145,15 @@ pub struct ZonedData {
     zone_len: u64,
     /// The aggregate functions whose results the zone table stores, in field order.
     aggregate_fns: Arc<[AggregateFnRef]>,
-    // Legacy fields have stat names and separate truncation flags, rather than aggregate names.
-    legacy_stats: Option<Arc<[Stat]>>,
     pruning: Option<ZonedPruningState>,
 }
 
 /// Reads data alongside the zone statistics summarising it.
 ///
-/// This operator covers both `vortex.zoned` layouts and legacy `vortex.stats` layouts, which have
-/// the same physical child shape. An expression containing abstract statistic functions can
-/// rewrite it into a pruning plan that retains only the zone-statistics child.
+/// Its zone table has the aggregate schema of `vortex.zoned` layouts; legacy `vortex.stats`
+/// layouts reach it through [`LegacyStats`](crate::plan::physical::LegacyStats), which converts
+/// their tables. An expression containing abstract statistic functions can rewrite it into a
+/// pruning plan that retains only the zone-statistics child.
 #[derive(Clone, Debug)]
 pub struct Zoned;
 
@@ -163,17 +161,12 @@ pub struct Zoned;
 pub type ZonedPlan = Plan<Zoned>;
 
 impl ZonedPlan {
-    pub(crate) fn legacy_stats(&self) -> Option<&Arc<[Stat]>> {
-        self.data().legacy_stats.as_ref()
-    }
-
     pub(crate) fn from_children(
         dtype: DType,
         row_count: u64,
         children: PlanChildren,
         zone_len: u64,
         aggregate_fns: Arc<[AggregateFnRef]>,
-        legacy_stats: Option<Arc<[Stat]>>,
     ) -> Self {
         PlanParts {
             vtable: Zoned,
@@ -183,7 +176,6 @@ impl ZonedPlan {
             data: ZonedData {
                 zone_len,
                 aggregate_fns,
-                legacy_stats,
                 pruning: None,
             },
         }
@@ -206,7 +198,6 @@ impl ZonedPlan {
             vec![data, zones].into(),
             zone_len,
             aggregate_fns,
-            None,
         )
     }
 
@@ -306,10 +297,15 @@ impl PlanVTable for Zoned {
     fn with_children(
         plan: &Plan<Self>,
         children: &PlanChildren,
-        _data: &mut Self::PlanData,
+        data: &mut Self::PlanData,
     ) -> VortexResult<()> {
         if plan.is_pruning() {
-            return check_child_count("Zoned pruning", children, 1);
+            check_child_count("Zoned pruning", children, 1)?;
+            // New zones may prove different zones, so the proof of the old ones is not kept.
+            if let Some(state) = &mut data.pruning {
+                state.pruned_zones = Arc::new(PrunedZones::new(&state.expression));
+            }
+            return Ok(());
         }
 
         check_child_count("Zoned", children, 2)?;
@@ -410,22 +406,13 @@ fn prune_zones(plan: &ZonedPlan, session: &VortexSession, table: ArrayRef) -> Vo
     else {
         vortex_bail!("Zone pruning needs a pruning plan");
     };
-    let zone_map = match plan.legacy_stats() {
-        Some(stats) => ZoneMap::try_new_legacy(
-            column_dtype.clone(),
-            table,
-            Arc::clone(stats),
-            plan.zone_len(),
-            plan.row_count(),
-        )?,
-        None => ZoneMap::try_new(
-            column_dtype.clone(),
-            table,
-            Arc::clone(plan.aggregate_fns()),
-            plan.zone_len(),
-            plan.row_count(),
-        )?,
-    };
+    let zone_map = ZoneMap::try_new(
+        column_dtype.clone(),
+        table,
+        Arc::clone(plan.aggregate_fns()),
+        plan.zone_len(),
+        plan.row_count(),
+    )?;
     pruned_zones(plan)?.init(zone_map, expression, session)
 }
 

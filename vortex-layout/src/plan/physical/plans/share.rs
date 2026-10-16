@@ -7,13 +7,13 @@ use std::ops::Range;
 use vortex_array::ArrayRef;
 use vortex_array::EmptyMetadata;
 use vortex_array::IntoArray;
-use vortex_array::arrays::SharedArray;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
 use vortex_session::registry::CachedId;
 
+use crate::arrays::shared::Shared;
 use crate::plan::physical::Plan;
 use crate::plan::physical::PlanChildren;
 use crate::plan::physical::PlanId;
@@ -30,7 +30,7 @@ use crate::plan::physical::pipeline::Reach;
 use crate::segments::SegmentId;
 
 /// Produces its child's whole value once per split, as a
-/// [`SharedArray`] that the split's later scans reuse.
+/// [`SharedArray`](crate::arrays::shared::SharedArray) that the split's later scans reuse.
 ///
 /// Dictionary values sit under a share. An expression the optimizer pushes onto the values stays
 /// above it, so the expression runs over values canonicalized once, and the projection reading the
@@ -128,7 +128,7 @@ impl PlanVTable for Share {
         };
         let mask = mask.clone();
         let source = WholeSource::new(plan.dtype().clone(), move |whole, _cx| {
-            let value = cache.insert(&shared, SharedArray::new(whole).into_array());
+            let value = cache.insert(&shared, Shared::new(whole).into_array());
             selected_rows(&value, &rows, &mask)
         });
         Ok(Some(compiler.join_with(vec![chain], |_| UNBOUNDED, source)))

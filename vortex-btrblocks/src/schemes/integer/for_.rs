@@ -22,10 +22,11 @@ use vortex_error::VortexResult;
 use vortex_fastlanes::FoR;
 use vortex_fastlanes::FoRArrayExt;
 use vortex_fastlanes::FoRArraySlotsExt;
+use vortex_fastlanes::FoRReferences;
 use vortex_fastlanes::for_v1_id;
 use vortex_fastlanes::for_v2_id;
 
-use super::BitPackingScheme;
+use super::BITPACKING_V1;
 use crate::ArrayAndStats;
 use crate::CascadingCompressor;
 use crate::CompressorContext;
@@ -216,19 +217,14 @@ impl Scheme for FoRScheme {
         let leaf_ctx = compress_ctx.clone().as_leaf();
         let biased_data =
             ArrayAndStats::new(biased.into_array(), compress_ctx.merged_stats_options());
-        let compressed = BitPackingScheme.compress(compressor, &biased_data, leaf_ctx, exec_ctx)?;
+        let compressed = BITPACKING_V1.compress(compressor, &biased_data, leaf_ctx, exec_ctx)?;
 
         // TODO(connor): This should really be `new_unchecked`.
-        let for_compressed = match for_array.constant_reference() {
-            Some(reference) => FoR::try_new(compressed, reference)?,
-            None => {
-                let references = compressor.compress_child(
-                    for_array.references(),
-                    &compress_ctx,
-                    self.id(),
-                    0,
-                    exec_ctx,
-                )?;
+        let for_compressed = match for_array.references() {
+            FoRReferences::Global(reference) => FoR::try_new(compressed, reference.clone())?,
+            FoRReferences::Blocked(references) => {
+                let references =
+                    compressor.compress_child(references, &compress_ctx, self.id(), 0, exec_ctx)?;
                 FoR::try_new_chunked(compressed, references, for_array.offset())?
             }
         };

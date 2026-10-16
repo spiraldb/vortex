@@ -50,12 +50,28 @@ pub fn bitpack_blocked_to_best_bit_widths(
     array: &PrimitiveArray,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<BitPackedArray> {
+    let (bit_widths, num_exceptions) = find_best_bit_widths(array, ctx)?;
+    bitpack_encode_blocked(array, &bit_widths, Some(num_exceptions), ctx)
+}
+
+/// Choose the width minimizing each 1024-value block's packed size plus the cost of its
+/// exceptions, and return the widths and total number of exceptions.
+///
+/// Widths may equal the array's native bit width when packing would not help. An empty array
+/// produces no widths and no exceptions.
+///
+/// # Errors
+///
+/// Returns an error if `array` is not an integer array or contains negative values.
+pub fn find_best_bit_widths(
+    array: &PrimitiveArray,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<(Vec<u8>, usize)> {
     ensure_non_negative_integers(array, ctx)?;
     let validity_mask = array.validity()?.execute_mask(array.len(), ctx)?;
-    let (bit_widths, num_exceptions) = match_each_integer_ptype!(array.ptype(), |T| {
-        block_bit_widths(array.as_slice::<T>(), &validity_mask)?
-    });
-    bitpack_encode_blocked(array, &bit_widths, Some(num_exceptions), ctx)
+    match_each_integer_ptype!(array.ptype(), |T| {
+        block_bit_widths(array.as_slice::<T>(), &validity_mask)
+    })
 }
 
 /// Bit-pack each 1024-value block of `array` at its width in `bit_widths`.

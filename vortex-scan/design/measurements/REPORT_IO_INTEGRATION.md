@@ -113,3 +113,34 @@ whitespace checks pass. No new Rust source is introduced by this refresh.
 The older latency reductions remain historical results for their recorded
 executables. No new speedup is claimed for this pipeline revision before its
 measurements finish.
+
+
+### Merge with current develop
+
+PR workflows could not start because the original feature branch conflicted with
+`develop`. The refresh therefore also merges
+`c59037cdec66e367749ff625374a795fe4dbd883` locally before publication.
+
+Conflict resolution keeps the upstream legacy-zone conversion and pruning-proof
+invalidation, pointer-keyed value cache, and relocated shared-array encoding. V2
+lowering is adapted to the new legacy-statistics plan. The feature branch retains
+its dynamic-value cache safeguards and V2 builder. DuckDB's V2 preparation and
+optional file-prefetch path retain upstream's deferred scan-state destruction
+outside its global lock; the opened Vortex file belongs to that shared state.
+
+The merged source passes 1,112 Rust library tests: 224 file, 197 IO, 631 layout,
+and 60 scan. The file and IO suites also pass with the measured reuse/native32/
+demanded policy enabled. Strict all-target/all-feature Clippy passes for the four
+libraries, DuckDB, and the DataFusion benchmark. The layout golden fixture was
+copied unchanged into the SSD test working directory before its successful run.
+Whitespace checks cover the resolved files; trailing blank lines in incoming JOB
+SQL files are unchanged from develop.
+
+
+DuckDB validation also passes: 244 library/end-to-end tests, with two existing
+ignored cases. The total is 1,356 passing library tests across five crates, plus
+421 further IO/file test executions with descriptor reuse, native32, and demanded
+coalescing enabled. Four legacy coalescer cases now set their intended optional
+expansion policy explicitly; their expected results are unchanged, and the
+parameterized cases continue to cover both policies. The 60 Python tests and
+strict affected-crate Clippy checks pass after reconciliation.

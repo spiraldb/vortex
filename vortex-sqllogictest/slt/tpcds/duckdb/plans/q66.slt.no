@@ -1148,7 +1148,7 @@ logical_opt [
                                                                                                                         "name": "READ_VORTEX",
                                                                                                                         "children": [],
                                                                                                                         "extra_info": {
-                                                                                                                            "Filters": "vortex.list.contains([\"DHL\", \"BARIAN\"], $.sm_carrier)",
+                                                                                                                            "Filters": "vortex.list.contains([\"DHL\", \"BARIAN\"], $.sm_carrier, opts=sql_null_semantics)",
                                                                                                                             "Function": "Vortex Scan",
                                                                                                                             "Estimated Cardinality": "4"
                                                                                                                         }
@@ -1494,7 +1494,7 @@ logical_opt [
                                                                                                                         "name": "READ_VORTEX",
                                                                                                                         "children": [],
                                                                                                                         "extra_info": {
-                                                                                                                            "Filters": "vortex.list.contains([\"DHL\", \"BARIAN\"], $.sm_carrier)",
+                                                                                                                            "Filters": "vortex.list.contains([\"DHL\", \"BARIAN\"], $.sm_carrier, opts=sql_null_semantics)",
                                                                                                                             "Function": "Vortex Scan",
                                                                                                                             "Estimated Cardinality": "4"
                                                                                                                         }
@@ -2074,7 +2074,7 @@ physical_plan [
                                                                                                                         "children": [],
                                                                                                                         "extra_info": {
                                                                                                                             "Function": "Vortex Scan",
-                                                                                                                            "Filters": "vortex.list.contains([\"DHL\", \"BARIAN\"], $.sm_carrier)",
+                                                                                                                            "Filters": "vortex.list.contains([\"DHL\", \"BARIAN\"], $.sm_carrier, opts=sql_null_semantics)",
                                                                                                                             "Projections": "sm_ship_mode_sk",
                                                                                                                             "Estimated Cardinality": "4"
                                                                                                                         }
@@ -2416,7 +2416,7 @@ physical_plan [
                                                                                                                         "children": [],
                                                                                                                         "extra_info": {
                                                                                                                             "Function": "Vortex Scan",
-                                                                                                                            "Filters": "vortex.list.contains([\"DHL\", \"BARIAN\"], $.sm_carrier)",
+                                                                                                                            "Filters": "vortex.list.contains([\"DHL\", \"BARIAN\"], $.sm_carrier, opts=sql_null_semantics)",
                                                                                                                             "Projections": "sm_ship_mode_sk",
                                                                                                                             "Estimated Cardinality": "4"
                                                                                                                         }
