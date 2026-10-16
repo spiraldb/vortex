@@ -456,15 +456,20 @@ impl ValidityVTable<Sequence> for Sequence {
 pub struct Sequence;
 
 impl Sequence {
-    fn stats(multiplier: PValue) -> StatsSet {
+    fn stats(multiplier: PValue, length: usize) -> StatsSet {
         // A sequence A[i] = base + i * multiplier is sorted iff multiplier >= 0,
-        // and strictly sorted iff multiplier > 0.
+        // and strictly sorted iff multiplier > 0. With at most one element it is both.
         let (is_sorted, is_strict_sorted) = match_each_pvalue!(
             multiplier,
             uint: |v| { (true, v > 0) },
             int: |v| { (v >= 0, v > 0) },
             float: |_v| { unreachable!("float multiplier not supported") }
         );
+        let (is_sorted, is_strict_sorted) = if length <= 1 {
+            (true, true)
+        } else {
+            (is_sorted, is_strict_sorted)
+        };
 
         // SAFETY: we don't have duplicate stats.
         unsafe {
@@ -495,7 +500,7 @@ impl Sequence {
         let dtype = DType::Primitive(ptype, nullability);
         let (base, multiplier) = SequenceData::normalize(base, multiplier, ptype)
             .vortex_expect("SequenceArray parts must be representable in the output ptype");
-        let stats = Self::stats(multiplier);
+        let stats = Self::stats(multiplier, length);
         let data = unsafe { SequenceData::new_unchecked(base, multiplier) };
         unsafe {
             Array::from_parts_unchecked(ArrayParts::new(
@@ -519,7 +524,7 @@ impl Sequence {
     ) -> VortexResult<SequenceArray> {
         let dtype = DType::Primitive(ptype, nullability);
         let data = SequenceData::try_new(base, multiplier, ptype, nullability, length)?;
-        let stats = Self::stats(data.multiplier());
+        let stats = Self::stats(data.multiplier(), length);
         Ok(unsafe {
             Array::from_parts_unchecked(ArrayParts::new(
                 Sequence,
@@ -542,7 +547,7 @@ impl Sequence {
         let ptype = T::PTYPE;
         let dtype = DType::Primitive(ptype, nullability);
         let data = SequenceData::try_new_typed(base, multiplier, nullability, length)?;
-        let stats = Self::stats(data.multiplier());
+        let stats = Self::stats(data.multiplier(), length);
         Ok(unsafe {
             Array::from_parts_unchecked(ArrayParts::new(
                 Sequence,

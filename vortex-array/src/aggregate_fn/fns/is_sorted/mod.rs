@@ -520,7 +520,9 @@ impl AggregateFnVTable for IsSorted {
                     _ => unreachable!(),
                 };
 
-                if !batch_is_sorted {
+                // A single value (even a null) is strict sorted, which the kernels' all-null
+                // shortcut would otherwise deny.
+                if !batch_is_sorted && array_ref.len() > 1 {
                     partial.is_sorted = false;
                 }
 
@@ -831,6 +833,21 @@ mod tests {
             IsSorted.finalize_scalar(args, &parsed)?,
             Scalar::bool(false, Nullability::NonNullable)
         );
+        Ok(())
+    }
+
+    /// A single null is strict sorted, also when it is accumulated as its own batch.
+    #[test]
+    fn strict_accumulates_single_null_batch() -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let array = PrimitiveArray::from_option_iter::<u32, _>([None]).into_array();
+        let options = IsSortedOptions { strict: true };
+        let mut acc = Accumulator::try_new(IsSorted, options, array.dtype().clone())?;
+
+        acc.accumulate(&array.slice(0..1)?, &mut ctx)?;
+        acc.accumulate(&array.slice(1..1)?, &mut ctx)?;
+        assert_eq!(acc.finish()?, Scalar::bool(true, Nullability::NonNullable));
+        assert!(is_strict_sorted(&array, &mut ctx)?);
         Ok(())
     }
 }
