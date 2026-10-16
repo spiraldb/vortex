@@ -13,8 +13,9 @@
 //! is stored as 16 bytes in big-endian (network) byte order, matching [RFC 4122] and Arrow's
 //! [canonical UUID extension].
 //!
-//! [`initialize`] registers the extension dtype and the Arrow import/export plugins that map it
-//! to Arrow's `arrow.uuid` extension type over `FixedSizeBinary[16]` storage.
+//! [`initialize`] registers the extension dtype, min/max over its storage bytes, and the Arrow
+//! import/export plugins that map it to Arrow's `arrow.uuid` extension type over
+//! `FixedSizeBinary[16]` storage.
 //!
 //! [RFC 4122]: https://www.rfc-editor.org/rfc/rfc4122
 //! [canonical UUID extension]: https://arrow.apache.org/docs/format/CanonicalExtensions.html#uuid
@@ -26,6 +27,9 @@ mod vtable;
 use std::sync::Arc;
 
 pub use metadata::UuidMetadata;
+use vortex_array::aggregate_fn::ExtensionAggregate;
+use vortex_array::aggregate_fn::fns::min_max::MinMax;
+use vortex_array::aggregate_fn::session::AggregateFnSessionExt;
 use vortex_array::dtype::session::DTypeSessionExt;
 use vortex_arrow::ArrowSessionExt;
 use vortex_session::VortexSession;
@@ -36,10 +40,14 @@ pub struct Uuid;
 
 /// Register UUID extension support with a session.
 ///
-/// This registers the `vortex.uuid` extension dtype along with the Arrow exporter and importer
-/// for Arrow's canonical `arrow.uuid` extension type.
+/// This registers the `vortex.uuid` extension dtype, min/max over its storage bytes (big-endian, so
+/// byte order is UUID order), and the Arrow exporter and importer for Arrow's canonical
+/// `arrow.uuid` extension type.
 pub fn initialize(session: &VortexSession) {
     session.dtypes().register(Uuid);
+    session
+        .aggregate_fns()
+        .register(ExtensionAggregate::new(MinMax, Uuid));
     session.arrow().register_exporter(Arc::new(Uuid));
     session.arrow().register_importer(Arc::new(Uuid));
 }
@@ -91,7 +99,9 @@ mod tests {
                 .erased();
         let array = ExtensionArray::new(ext_dtype, storage.into_array()).into_array();
 
-        let mut ctx = array_session().create_execution_ctx();
+        let session = array_session();
+        crate::initialize(&session);
+        let mut ctx = session.create_execution_ctx();
         let row_of = |uuid: Option<&uuid::Uuid>| {
             uuids
                 .iter()

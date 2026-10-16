@@ -302,10 +302,10 @@ fn minmax_supported_dtype(input_dtype: &DType) -> bool {
 /// This is intentionally narrower than [`minmax_supported_dtype`]. List extrema have a defined
 /// output dtype for aggregate expression lowering, but the accumulator does not yet compute them.
 /// Fixed-size lists are computed only over fixed-width scalar elements. Extension types are
-/// computed on their storage, so only those whose storage order is their own order
-/// ([`ExtVTable::orders_by_storage`]) are computed.
+/// computed over their storage, and only those with an [`ExtensionAggregate`] of [`MinMax`]
+/// registered in the session, which [`MinMax`] checks as it accumulates them.
 ///
-/// [`ExtVTable::orders_by_storage`]: crate::dtype::extension::ExtVTable::orders_by_storage
+/// [`ExtensionAggregate`]: crate::aggregate_fn::ExtensionAggregate
 fn minmax_compute_supported_dtype(input_dtype: &DType) -> bool {
     match input_dtype {
         DType::Bool(_)
@@ -313,11 +313,11 @@ fn minmax_compute_supported_dtype(input_dtype: &DType) -> bool {
         | DType::Decimal(..)
         | DType::Utf8(..)
         | DType::Binary(..) => true,
-        DType::Extension(ext_dtype) => ext_dtype.orders_by_storage(),
         DType::FixedSizeList(element_dtype, ..) => matches!(
             element_dtype.as_ref(),
             DType::Bool(_) | DType::Primitive(..) | DType::Decimal(..)
         ),
+        DType::Extension(ext_dtype) => minmax_compute_supported_dtype(ext_dtype.storage_dtype()),
         _ => false,
     }
 }
@@ -449,13 +449,14 @@ impl AggregateFnVTable for MinMax {
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<()> {
-        // Fixed-size lists and extension types that `min_max` does not compute, such as lists of
-        // strings or types whose storage order is not their own, have no extrema in any encoding.
+        // Dtypes that `min_max` does not compute, such as lists of strings, have no extrema in
+        // any encoding.
         let dtype = batch.dtype();
-        if (dtype.is_fixed_size_list() || dtype.is_extension())
-            && !minmax_compute_supported_dtype(dtype)
-        {
+        if !minmax_compute_supported_dtype(dtype) {
             return Ok(());
+        }
+        if let DType::Extension(ext_dtype) = dtype {
+            return accumulate_extension(args, partial, ext_dtype, batch, ctx);
         }
 
         match batch {
@@ -491,18 +492,9 @@ impl AggregateFnVTable for MinMax {
                 Canonical::Bool(b) => accumulate_bool(args, partial, b, ctx),
                 Canonical::VarBinView(v) => accumulate_varbinview(args, partial, v, ctx),
                 Canonical::Decimal(d) => accumulate_decimal(args, partial, d, ctx),
-                Canonical::Extension(e) => accumulate_extension(args, partial, e, ctx),
                 Canonical::FixedSizeList(l) => accumulate_fixed_size_list(args, partial, l, ctx),
-                Canonical::Null(_) => Ok(()),
-                Canonical::Union(_) => {
-                    vortex_bail!("TODO(connor)[Union]: implement min_max for Union arrays")
-                }
-                Canonical::Struct(_)
-                | Canonical::List(_)
-                | Canonical::Map(_)
-                | Canonical::Variant(_) => {
-                    vortex_bail!("Unsupported canonical type for min_max: {}", batch.dtype())
-                }
+                // Unsupported dtypes and extensions returned above.
+                _ => vortex_bail!("Unsupported canonical type for min_max: {}", batch.dtype()),
             },
         }
     }
