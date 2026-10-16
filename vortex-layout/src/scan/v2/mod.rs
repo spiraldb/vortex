@@ -11,7 +11,8 @@
 //! Import this module's [`ScanBuilder`] to select V2 explicitly. It accepts a [`ScanFile`]
 //! directly and supports projection, row ranges, and selections. Unsupported layouts return an
 //! error; filters and limits are not part of this builder's API. Work is partitioned into fixed
-//! 65,536-row chunks, independently of the stored layout's chunk boundaries.
+//! chunks of up to 65,536 rows, independently of the stored layout's chunk boundaries.
+//! Full-file projections use smaller 8,192-row multiples when serialized bytes per row are high.
 
 mod io;
 mod split;
@@ -63,19 +64,34 @@ use crate::scan::v2::io::segment_ranges;
 use crate::scan::v2::split::SplitPlan;
 use crate::segments::SegmentSource;
 
-/// Eight of the default writer's 8,192-row blocks per scan task.
-const ROWS_PER_CHUNK: usize = 8 * 8192;
+const ROW_BLOCK_SIZE: usize = 8192;
+const MAX_ROWS_PER_CHUNK: usize = 8 * ROW_BLOCK_SIZE;
+const TARGET_BYTES_PER_CHUNK: u64 = 8 * 1024 * 1024;
+
+/// Limit estimated bytes per task without changing the writer-aligned row granularity.
+fn rows_per_chunk(row_count: u64, locations: &[SegmentLocation]) -> usize {
+    if row_count <= MAX_ROWS_PER_CHUNK as u64 {
+        return MAX_ROWS_PER_CHUNK;
+    }
+    let bytes: u64 = locations
+        .iter()
+        .map(|location| u64::from(location.length))
+        .sum();
+    let bytes_per_row = bytes.div_ceil(row_count).max(1);
+    let blocks = TARGET_BYTES_PER_CHUNK / bytes_per_row / ROW_BLOCK_SIZE as u64;
+    blocks.clamp(1, 8) as usize * ROW_BLOCK_SIZE
+}
 
 /// Fixed boundaries in the file's row domain, clipped to the requested range.
-fn row_chunks(rows: Range<u64>) -> Vec<Range<u64>> {
+fn row_chunks(rows: Range<u64>, rows_per_chunk: usize) -> Vec<Range<u64>> {
     if rows.is_empty() {
         return Vec::new();
     }
-    let first = rows.start / ROWS_PER_CHUNK as u64 * ROWS_PER_CHUNK as u64;
+    let first = rows.start / rows_per_chunk as u64 * rows_per_chunk as u64;
     (first..rows.end)
-        .step_by(ROWS_PER_CHUNK)
+        .step_by(rows_per_chunk)
         .map(|start| {
-            start.max(rows.start)..start.saturating_add(ROWS_PER_CHUNK as u64).min(rows.end)
+            start.max(rows.start)..start.saturating_add(rows_per_chunk as u64).min(rows.end)
         })
         .collect()
 }
@@ -282,7 +298,12 @@ impl<A: 'static + Send> PreparedScan<A> {
         } else {
             optimize(plan_row_idx_expression(builder.projection, root)?)?
         };
-        let splits = row_chunks(builder.row_range.unwrap_or(0..row_count));
+        let chunk_rows = if identity {
+            rows_per_chunk(row_count, &file.locations)
+        } else {
+            MAX_ROWS_PER_CHUNK
+        };
+        let splits = row_chunks(builder.row_range.unwrap_or(0..row_count), chunk_rows);
         let io = Arc::new(SegmentScanIo::new(
             file.segments,
             segment_ranges(&file.locations),

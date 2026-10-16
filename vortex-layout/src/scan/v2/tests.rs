@@ -38,10 +38,11 @@ use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
 
 use super::PreparedScan;
-use super::ROWS_PER_CHUNK;
+use super::MAX_ROWS_PER_CHUNK;
 use super::ScanBuilder;
 use super::ScanFile;
 use super::row_chunks;
+use super::rows_per_chunk;
 use crate::LayoutRef;
 use crate::LayoutStrategy;
 use crate::layouts::chunked::writer::ChunkedLayoutStrategy;
@@ -309,7 +310,31 @@ async fn arrow_stream_projects_across_chunks() -> VortexResult<()> {
 #[case::empty(5..5, vec![])]
 #[case::near_max(u64::MAX - 3..u64::MAX, vec![u64::MAX - 3..u64::MAX])]
 fn fixed_row_chunks(#[case] rows: Range<u64>, #[case] expected: Vec<Range<u64>>) {
-    assert_eq!(row_chunks(rows), expected);
+    assert_eq!(row_chunks(rows, 65_536), expected);
+}
+
+#[rstest]
+#[case::empty(0, 0, 65_536)]
+#[case::single_chunk(1000, 100_000_000, 65_536)]
+#[case::no_bytes(100_000, 0, 65_536)]
+#[case::small_rows(1_000_000, 64_000_000, 65_536)]
+#[case::large_rows(1_000_000, 384_000_000, 16_384)]
+#[case::minimum(1_000_000, 2_000_000_000, 8192)]
+fn chunk_byte_budget(#[case] rows: u64, #[case] bytes: u32, #[case] expected: usize) {
+    let locations = [SegmentLocation {
+        offset: 0,
+        length: bytes,
+        alignment: Alignment::none(),
+    }];
+    assert_eq!(rows_per_chunk(rows, &locations), expected);
+}
+
+#[test]
+fn smaller_chunks_keep_file_alignment() {
+    assert_eq!(
+        row_chunks(7500..33_000, 16_384),
+        [7500..16_384, 16_384..32_768, 32_768..33_000]
+    );
 }
 
 struct CountingSegments {
@@ -362,7 +387,7 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
     let splits = scan.split_plans();
     assert_eq!(
         splits.len(),
-        (STORED_CHUNKS * STORED_CHUNK_ROWS).div_ceil(ROWS_PER_CHUNK)
+        (STORED_CHUNKS * STORED_CHUNK_ROWS).div_ceil(MAX_ROWS_PER_CHUNK)
     );
     for (index, split) in splits.into_iter().enumerate() {
         let rows = split.scope.rows.clone();
