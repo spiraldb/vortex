@@ -4,8 +4,8 @@
 //! Checking a stored layout against the universe it claims.
 //!
 //! Every stored number is recomputed from `(span, n)` alone and a layout that disagrees is refused,
-//! which is what lets the sample tables carry no seam and every sampled search skip its bounds
-//! checks.
+//! which is what lets every sampled search skip its bounds checks. A window of the sequence is
+//! checked against the same geometry: its bytes and samples must lie inside the whole array's.
 //!
 //! The upper array's contents are *not* checked: that costs a pass over the whole bit array, and a
 //! reader raises rather than underflowing on a position it cannot invert.
@@ -14,18 +14,19 @@ use super::LOG_SAMPLING0;
 use super::LOG_SAMPLING1;
 use super::Malformed;
 use super::Table;
+use super::Window;
 use super::lower_width;
 use super::num_samples0;
 use super::num_samples1;
 use super::num_zeros;
-use super::read_sample;
 use super::upper_len;
 
-/// Check that a stored layout describes the universe it claims.
+/// Check that a stored window describes the universe it claims.
 ///
-/// `upper` must hold exactly `stored_upper_len` bits rounded up to whole bytes. `samples` is the
-/// shared table, zero-samples first; the seam between the two is derived here rather than stored,
-/// so a buffer too short to reach it fails as a count mismatch.
+/// A window with `upper_base` 0 must hold the whole array: `upper_len` bits rounded up to whole
+/// bytes and both tables complete. A later window must fit inside that array and hold the
+/// one-samples its ranks need. Zero-sample coverage needs a select to check, so it is left to the
+/// readers, which raise on a missing sample.
 ///
 /// An empty sequence is accepted unconditionally, having no geometry to check.
 pub fn validate_layout(
@@ -33,9 +34,15 @@ pub fn validate_layout(
     n: usize,
     stored_lower_width: u8,
     stored_upper_len: u64,
-    upper: &[u8],
-    samples: &[u8],
+    window: &Window<'_>,
 ) -> Result<(), Malformed> {
+    let (base, first_rank, len) = (window.upper_base, window.first_rank, window.len);
+    if first_rank
+        .checked_add(len as u64)
+        .is_none_or(|end| end > n as u64)
+    {
+        return Err(Malformed::RankRange { first_rank, len, n });
+    }
     if n == 0 {
         return Ok(());
     }
@@ -56,59 +63,99 @@ pub fn validate_layout(
         });
     }
 
-    // Readers wrap the whole array in a `Bits`, which asserts that the bytes hold it.
-    let expected_bytes = expected_upper_len.div_ceil(8);
-    if upper.len() as u64 != expected_bytes {
-        return Err(Malformed::UpperBytes {
-            expected: expected_bytes,
-            found: upper.len() as u64,
+    // The bits before a window are its first rank's ones and some of the zeros. This also makes a
+    // window at bit 0 start at rank 0.
+    let zeros = num_zeros(expected_upper_len, n);
+    if first_rank > base || base - first_rank > zeros {
+        return Err(Malformed::UpperBase {
+            upper_base: base,
+            first_rank,
         });
     }
 
-    // Both tables sample from rank 1 upward, so their sizes follow from the layout and a reader
-    // never has to bounds-check a lookup.
-    let expected_samples0 = num_samples0(span, expected_width);
-    debug_assert_eq!(
-        expected_samples0,
-        (num_zeros(expected_upper_len, n) - 1) >> LOG_SAMPLING0,
-        "the two derivations of the zero-sample count must agree"
-    );
-    let expected_samples1 = num_samples1(n);
-    let expected = expected_samples0 + expected_samples1;
-    let found = (samples.len() / size_of::<u64>()) as u64;
-    if found != expected {
-        return Err(Malformed::SampleCount { expected, found });
+    // Readers wrap the window in a `Bits`, which asserts that the bytes hold it.
+    let expected_bytes = expected_upper_len.div_ceil(8);
+    let bytes = window.upper.len() as u64;
+    let held = bytes
+        .saturating_mul(8)
+        .saturating_sub(base % 8)
+        .min(expected_upper_len - base);
+    if base == 0 {
+        if bytes != expected_bytes {
+            return Err(Malformed::UpperBytes {
+                expected: expected_bytes,
+                found: bytes,
+            });
+        }
+    } else if base / 8 + bytes > expected_bytes || held < len as u64 {
+        return Err(Malformed::UpperWindow {
+            upper_base: base,
+            bytes,
+            upper_len: expected_upper_len,
+        });
     }
 
-    // The zero table comes first. The count check above already proves the buffer reaches the seam.
-    let seam = usize::try_from(expected_samples0)
-        .map_err(|_| Malformed::SampleCount { expected, found })?
-        * size_of::<u64>();
-    let (samples0, samples1) = samples.split_at(seam);
+    let full0 = num_samples0(span, expected_width);
+    debug_assert_eq!(
+        full0,
+        (zeros - 1) >> LOG_SAMPLING0,
+        "the two derivations of the zero-sample count must agree"
+    );
+    let full1 = num_samples1(n);
+    let needed1 = len
+        .checked_sub(1)
+        .map_or(0, |last| (first_rank + last as u64) >> LOG_SAMPLING1);
 
-    // A sample is fed straight to `select_range` as a window start, which asserts rather than
-    // raises past the end, so every one is checked — there are only `n / 256 + zeros / 512`. Each
-    // is pinned above by the upper array's length and below by the rank it stands for, which gives
-    // the strict increase a sampled search relies on.
-    for (table, name, log_sampling, floor) in [
-        (samples0, Table::Zero, LOG_SAMPLING0, 0),
-        (samples1, Table::One, LOG_SAMPLING1, 1),
+    // Every sample is checked, as there are only `n / 256 + zeros / 512`: each lies in the window,
+    // no lower than the rank it stands for, and each table strictly increases, which lets
+    // `slice_bounds` check only the ends of the samples it keeps.
+    for (samples, table, log_sampling, floor, full, needed) in [
+        (window.samples0(), Table::Zero, LOG_SAMPLING0, 0, full0, 0),
+        (
+            window.samples1(),
+            Table::One,
+            LOG_SAMPLING1,
+            1,
+            full1,
+            needed1,
+        ),
     ] {
+        let first = samples.first();
+        let count = samples.len() as u64;
+        if base == 0 {
+            if count != full {
+                return Err(Malformed::SampleCount {
+                    table,
+                    expected: full,
+                    found: count,
+                });
+            }
+        } else if first + count > full || first + count < needed {
+            return Err(Malformed::SampleWindow {
+                table,
+                end: first + count,
+                min: needed.max(first),
+                max: full,
+            });
+        }
+
         let mut previous = None;
-        for index in 0..table.len() / size_of::<u64>() {
-            let sample = read_sample(table, index);
-            let minimum = (((index + 1) as u64) << log_sampling) + floor;
-            if !(minimum..expected_upper_len).contains(&sample) {
+        for local in 0..samples.len() {
+            let index = first + local as u64;
+            let sample = samples.get(local).unwrap_or(u64::MAX);
+            let min = base.max(((index + 1) << log_sampling) + floor);
+            let max = base + held;
+            if !(min..max).contains(&sample) {
                 return Err(Malformed::SampleOutOfRange {
-                    table: name,
+                    table,
                     index,
                     sample,
-                    min: minimum,
-                    max: expected_upper_len,
+                    min,
+                    max,
                 });
             }
             if previous.is_some_and(|previous| previous >= sample) {
-                return Err(Malformed::SamplesNotIncreasing { table: name, index });
+                return Err(Malformed::SamplesNotIncreasing { table, index });
             }
             previous = Some(sample);
         }

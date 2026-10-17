@@ -7,9 +7,11 @@
 //! Reading element `i` is one sampled `select1` for its high part and one read of its low part.
 
 use super::Bits;
+use super::LOG_SAMPLING0;
 use super::LOG_SAMPLING1;
 use super::Malformed;
 use super::ReadError;
+use super::Samples;
 use super::element_of;
 use super::high_of;
 use super::lower_mask;
@@ -29,15 +31,67 @@ pub trait LowBits {
     fn get(&mut self, rank: u64) -> Result<u64, Self::Error>;
 }
 
+/// The part of an encoded sequence a stored array holds: its upper bytes, both sample tables, and
+/// where it starts.
+///
+/// A whole sequence has `upper_base` and `first_rank` at 0. A slice keeps the bits from its first
+/// element's set bit on, so `upper_base` is that bit and `first_rank` the set bits before it.
+#[derive(Clone, Copy, Debug)]
+pub struct Window<'a> {
+    /// The upper array's bytes, from byte `upper_base / 8` of the whole array.
+    pub upper: &'a [u8],
+    /// The absolute position of the window's first bit.
+    pub upper_base: u64,
+    /// The rank of the window's first element: the number of set bits before `upper_base`.
+    pub first_rank: u64,
+    /// The number of elements in the window.
+    pub len: usize,
+    /// The zero-samples the window holds, as little-endian `u64`s.
+    pub samples0: &'a [u8],
+    /// The one-samples the window holds, as little-endian `u64`s.
+    pub samples1: &'a [u8],
+}
+
+impl<'a> Window<'a> {
+    /// The number of unset bits before the window.
+    #[inline]
+    pub fn zeros_before(&self) -> u64 {
+        self.upper_base.saturating_sub(self.first_rank)
+    }
+
+    /// The window's bits in absolute positions, cut off at `upper_len`.
+    pub fn bits(&self, upper_len: u64) -> Bits<'a> {
+        let Ok(base) = usize::try_from(self.upper_base) else {
+            return Bits::new(&[], 0, 0);
+        };
+        let available = self.upper.len().saturating_mul(8);
+        let offset = (base % 8).min(available);
+        let rest = usize::try_from(upper_len.saturating_sub(self.upper_base)).unwrap_or(usize::MAX);
+        let len = (available - offset).min(rest).min(usize::MAX - base);
+        Bits::with_base(self.upper, offset, base, len)
+    }
+
+    /// The zero-sample table, from absolute index `zeros_before >> LOG_SAMPLING0`.
+    #[inline]
+    pub fn samples0(&self) -> Samples<'a> {
+        Samples::windowed(self.samples0, self.zeros_before(), LOG_SAMPLING0)
+    }
+
+    /// The one-sample table, from absolute index `first_rank >> LOG_SAMPLING1`.
+    #[inline]
+    pub fn samples1(&self) -> Samples<'a> {
+        Samples::windowed(self.samples1, self.first_rank, LOG_SAMPLING1)
+    }
+}
+
 /// The borrowed parts of an encoded sequence a read needs.
 ///
 /// Every field is a slice the caller already holds, so describing a layout copies nothing.
-/// `first_rank` and `len` narrow it to one window of a longer encoded sequence, the buffers
-/// unchanged.
+/// `first_rank` and `len` narrow it to one window of a longer encoded sequence.
 #[derive(Clone, Copy, Debug)]
 pub struct Layout<'a> {
     upper: Bits<'a>,
-    samples1: &'a [u8],
+    samples1: Samples<'a>,
     lower_width: u8,
     first_rank: u64,
     len: usize,
@@ -46,13 +100,13 @@ pub struct Layout<'a> {
 impl<'a> Layout<'a> {
     /// Describe a window of an encoded sequence.
     ///
-    /// `upper` is the whole upper array, not the window's part of it: the sample table holds
-    /// absolute positions. `first_rank` is where this window starts within the encoded sequence and
-    /// `len` how many elements it covers. `lower_width` must be at most 63, as
+    /// `upper` and `samples1` may cover only part of the encoded sequence, in absolute positions.
+    /// `first_rank` is where this window starts within the encoded sequence and `len` how many
+    /// elements it covers. `lower_width` must be at most 63, as
     /// [`validate_layout`](super::validate_layout) guarantees for a stored layout.
     pub fn new(
         upper: Bits<'a>,
-        samples1: &'a [u8],
+        samples1: Samples<'a>,
         lower_width: u8,
         first_rank: u64,
         len: usize,
@@ -118,9 +172,12 @@ impl<'a> Layout<'a> {
 /// A corrupt sample table can pass [`validate_layout`](super::validate_layout) yet return
 /// positions out of rank order, so check a window's bounds before
 /// [`window_words`](super::window_words), which panics on a reversed one.
-pub fn position_of_rank(upper: Bits<'_>, samples1: &[u8], rank: u64) -> Result<usize, Malformed> {
-    let end = upper.len();
-    sampled_select(upper, samples1, LOG_SAMPLING1, rank, end, false)
+pub fn position_of_rank(
+    upper: Bits<'_>,
+    samples1: Samples<'_>,
+    rank: u64,
+) -> Result<usize, Malformed> {
+    sampled_select(upper, samples1, LOG_SAMPLING1, rank, false)
         .ok_or(Malformed::NoElementOfRank { rank })
 }
 

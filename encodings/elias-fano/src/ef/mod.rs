@@ -5,7 +5,9 @@
 //!
 //! [`encode()`] builds the layout from a non-decreasing sequence of elements, [`element_at`] reads
 //! one back, [`Decoder`] turns a whole window back into elements, and [`validate_layout`] checks
-//! that stored geometry describes the universe it claims.
+//! that stored geometry describes the universe it claims. A [`Window`] is the part of a sequence an
+//! array holds; [`slice_bounds`] finds what a slice of one keeps, in absolute positions, so nothing
+//! is rewritten.
 //!
 //! Each element splits into an `l`-bit low part and a high part `element >> l`, set as one bit at
 //! position `high + rank + 1` of a bit array. The `+ rank` keeps positions distinct when elements
@@ -35,6 +37,7 @@ mod encode;
 mod params;
 mod read;
 mod select;
+mod slice;
 mod upper;
 mod validate;
 
@@ -46,33 +49,38 @@ pub use encode::Encoded;
 pub use encode::encode;
 pub(crate) use params::LOG_SAMPLING0;
 pub(crate) use params::LOG_SAMPLING1;
+pub use params::MAX_LOWER_WIDTH;
 pub(crate) use params::lower_mask;
 pub(crate) use params::lower_width;
-pub use params::num_samples0;
+pub(crate) use params::num_samples0;
 pub(crate) use params::num_samples1;
 pub(crate) use params::num_zeros;
 pub(crate) use params::upper_len;
 pub use read::Layout;
 pub use read::LowBits;
+pub use read::Window;
 pub use read::element_at;
 pub use read::position_of_rank;
 pub use select::Bits;
 pub(crate) use select::select_range;
 pub(crate) use select::select_zero_range;
 pub use select::window_words;
+pub use slice::SliceBounds;
+pub use slice::slice_bounds;
 pub(crate) use upper::Ones;
+pub use upper::Samples;
 pub(crate) use upper::UpperBuilder;
 pub(crate) use upper::element_of;
 pub(crate) use upper::high_of;
 pub(crate) use upper::position_of;
-pub(crate) use upper::read_sample;
 pub(crate) use upper::sampled_select;
 pub use validate::validate_layout;
 
 /// Bad arguments to the encoder: a sequence it cannot encode or whose layout it cannot represent.
 ///
-/// The two layout variants need a universe of nearly `2^64`, which only untrusted metadata can
-/// claim.
+/// The two layout variants need an upper array longer than `u64` or `usize` can count: roughly
+/// `2^62` elements, or `2^30` on a 32-bit target. In practice only untrusted metadata claims that
+/// many.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
@@ -208,8 +216,10 @@ pub enum Malformed {
         /// How many are stored.
         found: u64,
     },
-    /// The samples buffer holds a different number of entries than the layout calls for.
+    /// A whole array's sample table holds a different number of entries than the layout calls for.
     SampleCount {
+        /// Which table.
+        table: Table,
         /// How many the layout calls for.
         expected: u64,
         /// How many are stored.
@@ -219,8 +229,8 @@ pub enum Malformed {
     SampleOutOfRange {
         /// Which table it is in.
         table: Table,
-        /// Its index within that table.
-        index: usize,
+        /// Its absolute index within that table.
+        index: u64,
         /// The position it points to.
         sample: u64,
         /// The lowest position its rank permits.
@@ -232,8 +242,51 @@ pub enum Malformed {
     SamplesNotIncreasing {
         /// Which table.
         table: Table,
-        /// The index at which the order breaks.
-        index: usize,
+        /// The absolute index at which the order breaks.
+        index: u64,
+    },
+    /// A window's ranks run past the encoded sequence.
+    RankRange {
+        /// The window's first rank.
+        first_rank: u64,
+        /// Its element count.
+        len: usize,
+        /// The encoded element count.
+        n: usize,
+    },
+    /// A window's first bit cannot have its first rank's set bits before it.
+    UpperBase {
+        /// The window's first bit.
+        upper_base: u64,
+        /// The window's first rank.
+        first_rank: u64,
+    },
+    /// A window's upper bytes run past the whole array, or hold fewer bits than its elements.
+    UpperWindow {
+        /// The window's first bit.
+        upper_base: u64,
+        /// The bytes it holds.
+        bytes: u64,
+        /// The whole array's length in bits.
+        upper_len: u64,
+    },
+    /// A window's sample table ends past the whole table, or before the samples its ranks need.
+    SampleWindow {
+        /// Which table.
+        table: Table,
+        /// The absolute index one past the window's last sample.
+        end: u64,
+        /// The lowest end its ranks allow.
+        min: u64,
+        /// The highest end the whole table allows.
+        max: u64,
+    },
+    /// The set bits of two ranks are closer together than the ranks between them.
+    PositionsOutOfOrder {
+        /// The lower rank.
+        first: u64,
+        /// The higher rank.
+        last: u64,
     },
 }
 
@@ -265,9 +318,11 @@ impl Display for Malformed {
             Self::UpperBytes { expected, found } => {
                 write!(f, "upper array is {found} bytes, expected {expected}")
             }
-            Self::SampleCount { expected, found } => {
-                write!(f, "holds {found} samples, expected {expected}")
-            }
+            Self::SampleCount {
+                table,
+                expected,
+                found,
+            } => write!(f, "holds {found} {table}-samples, expected {expected}"),
             Self::SampleOutOfRange {
                 table,
                 index,
@@ -285,6 +340,39 @@ impl Display for Malformed {
                     "{table}-samples are not strictly increasing at index {index}"
                 )
             }
+            Self::RankRange { first_rank, len, n } => write!(
+                f,
+                "a window of {len} elements from rank {first_rank} runs past the {n} encoded"
+            ),
+            Self::UpperBase {
+                upper_base,
+                first_rank,
+            } => write!(
+                f,
+                "a window at bit {upper_base} cannot start at rank {first_rank}"
+            ),
+            Self::UpperWindow {
+                upper_base,
+                bytes,
+                upper_len,
+            } => write!(
+                f,
+                "{bytes} upper bytes at bit {upper_base} do not fit the {upper_len}-bit array or \
+                 hold the window"
+            ),
+            Self::SampleWindow {
+                table,
+                end,
+                min,
+                max,
+            } => write!(
+                f,
+                "{table}-samples end at index {end}, outside the {min}..={max} the window allows"
+            ),
+            Self::PositionsOutOfOrder { first, last } => write!(
+                f,
+                "upper array is malformed: ranks {first} and {last} sit too close together"
+            ),
         }
     }
 }

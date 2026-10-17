@@ -16,7 +16,7 @@
 
 #![expect(clippy::unwrap_used)]
 
-use std::convert::Infallible;
+use std::num::TryFromIntError;
 
 use divan::Bencher;
 use mimalloc::MiMalloc;
@@ -85,10 +85,8 @@ fn probes<T>(mut draw: impl FnMut(&mut StdRng) -> T) -> Vec<T> {
 /// An encoded sequence and everything a reader borrows from it.
 struct Fixture {
     upper: Vec<u8>,
-    /// Both sample tables as little-endian bytes, zeros first.
-    samples: Vec<u8>,
-    /// Byte offset of the one-sample table within `samples`.
-    seam: usize,
+    /// The one-sample table as little-endian bytes.
+    samples1: Vec<u8>,
     lower: Vec<u64>,
     lower_width: u8,
     upper_len: usize,
@@ -100,17 +98,14 @@ impl Fixture {
         let elements = sequence(shape);
         let span = elements[elements.len() - 1];
         let encoded = ef::encode(elements.iter().copied(), span).unwrap();
-        let samples = encoded
-            .samples
+        let samples1 = encoded
+            .samples1
             .iter()
             .flat_map(|sample| sample.to_le_bytes())
             .collect();
-        let seam = usize::try_from(ef::num_samples0(span, encoded.lower_width)).unwrap()
-            * size_of::<u64>();
         Self {
             upper: encoded.upper,
-            samples,
-            seam,
+            samples1,
             lower: encoded.lower,
             lower_width: encoded.lower_width,
             upper_len: usize::try_from(encoded.upper_len).unwrap(),
@@ -122,8 +117,8 @@ impl Fixture {
         ef::Bits::new(&self.upper, 0, self.upper_len)
     }
 
-    fn samples1(&self) -> &[u8] {
-        &self.samples[self.seam..]
+    fn samples1(&self) -> ef::Samples<'_> {
+        ef::Samples::new(&self.samples1)
     }
 }
 
@@ -131,11 +126,10 @@ impl Fixture {
 struct SliceLows<'a>(&'a [u64]);
 
 impl ef::LowBits for SliceLows<'_> {
-    type Error = Infallible;
+    type Error = TryFromIntError;
 
-    #[expect(clippy::cast_possible_truncation)]
-    fn get(&mut self, rank: u64) -> Result<u64, Infallible> {
-        Ok(self.0[rank as usize])
+    fn get(&mut self, rank: u64) -> Result<u64, TryFromIntError> {
+        Ok(self.0[usize::try_from(rank)?])
     }
 }
 

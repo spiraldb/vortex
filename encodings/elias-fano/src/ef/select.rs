@@ -12,28 +12,49 @@
 //! [`LOG_SAMPLING0`]: super::LOG_SAMPLING0
 //! [`LOG_SAMPLING1`]: super::LOG_SAMPLING1
 
-/// A window of bits: the backing bytes, the bit offset of bit zero within them, and a length.
+/// A window of bits: the backing bytes, the bit offset of the window's first bit within them, the
+/// absolute position of that bit, and a length.
+///
+/// Positions passed to and returned by the functions below are absolute, so a window cut from a
+/// longer array keeps that array's coordinates.
 #[derive(Clone, Copy, Debug)]
 pub struct Bits<'a> {
     bytes: &'a [u8],
     offset: usize,
+    base: usize,
     len: usize,
 }
 
 impl<'a> Bits<'a> {
-    /// A window of `len` bits beginning `offset` bits into `bytes`.
+    /// A window of `len` bits beginning `offset` bits into `bytes`, at absolute position 0.
     ///
     /// # Panics
     ///
     /// Panics if `bytes` is too short to hold `offset + len` bits.
     #[inline]
     pub fn new(bytes: &'a [u8], offset: usize, len: usize) -> Self {
+        Self::with_base(bytes, offset, 0, len)
+    }
+
+    /// A window of `len` bits beginning `offset` bits into `bytes`, at absolute position `base`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `bytes` is too short to hold `offset + len` bits, or if `base + len` overflows.
+    #[inline]
+    pub fn with_base(bytes: &'a [u8], offset: usize, base: usize, len: usize) -> Self {
         assert!(
             offset.saturating_add(len) <= bytes.len().saturating_mul(8),
             "{} bytes cannot hold {len} bits at offset {offset}",
             bytes.len()
         );
-        Self { bytes, offset, len }
+        assert!(base.checked_add(len).is_some(), "window end overflows");
+        Self {
+            bytes,
+            offset,
+            base,
+            len,
+        }
     }
 
     /// The number of bits in the window.
@@ -47,6 +68,24 @@ impl<'a> Bits<'a> {
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
+
+    /// The absolute position of the window's first bit.
+    #[inline]
+    pub fn base(&self) -> usize {
+        self.base
+    }
+
+    /// One past the absolute position of the window's last bit.
+    #[inline]
+    pub fn end(&self) -> usize {
+        self.base + self.len
+    }
+
+    /// The bit offset of absolute position `pos` within the backing bytes.
+    #[inline]
+    fn physical(&self, pos: usize) -> usize {
+        self.offset + (pos - self.base)
+    }
 }
 
 /// Returns the position of the `nth` set bit within `[start, end)` of `bits`, relative to `start`,
@@ -54,7 +93,7 @@ impl<'a> Bits<'a> {
 ///
 /// # Panics
 ///
-/// Panics if `start > end` or `end > bits.len()`.
+/// Panics if `start < bits.base()`, `start > end` or `end > bits.end()`.
 #[inline]
 pub fn select_range(bits: Bits<'_>, start: usize, end: usize, nth: usize) -> Option<usize> {
     select_in_range(bits, start, end, nth, false)
@@ -68,7 +107,7 @@ pub fn select_range(bits: Bits<'_>, start: usize, end: usize, nth: usize) -> Opt
 ///
 /// # Panics
 ///
-/// Panics if `start > end` or `end > bits.len()`.
+/// Panics if `start < bits.base()`, `start > end` or `end > bits.end()`.
 #[inline]
 pub fn select_zero_range(bits: Bits<'_>, start: usize, end: usize, nth: usize) -> Option<usize> {
     select_in_range(bits, start, end, nth, true)
@@ -78,18 +117,17 @@ pub fn select_zero_range(bits: Bits<'_>, start: usize, end: usize, nth: usize) -
 /// once here rather than per word.
 ///
 /// The last word is zero-padded above the window's end, so counting set bits across the result
-/// counts exactly the window's. At roughly two bits per element the allocation is `n / 32` words —
-/// a few KB per million rows.
+/// counts exactly the window's. At two to three bits per element the allocation is `n / 32` to
+/// `3n / 64` words, 250 to 375 KB per million rows.
 ///
 /// # Panics
 ///
-/// Panics if `start > end` or `end > bits.len()`.
+/// Panics if `start < bits.base()`, `start > end` or `end > bits.end()`.
 pub fn window_words(bits: Bits<'_>, start: usize, end: usize) -> Vec<u64> {
-    assert!(start <= end, "start {start} exceeds end {end}");
-    assert!(end <= bits.len, "end {end} exceeds len {}", bits.len);
+    check_range(bits, start, end);
 
     let total = end - start;
-    let base = bits.offset + start;
+    let base = bits.physical(start);
     let mut words = Vec::with_capacity(total.div_ceil(u64::BITS as usize));
     let mut pos = 0usize;
     while pos < total {
@@ -110,12 +148,10 @@ fn select_in_range(
     nth: usize,
     zeros: bool,
 ) -> Option<usize> {
-    assert!(start <= end, "start {start} exceeds end {end}");
-    assert!(end <= bits.len, "end {end} exceeds len {}", bits.len);
+    check_range(bits, start, end);
 
-    // The window begins `offset + start` bits into the backing bytes.
     let bytes = bits.bytes;
-    let base = bits.offset + start;
+    let base = bits.physical(start);
     let total = end - start;
 
     let mut remaining = nth;
@@ -137,37 +173,43 @@ fn select_in_range(
     None
 }
 
-/// Reads `width` bits starting at absolute bit `at`, returned in the low bits with the rest zero.
-///
-/// An unaligned 64 bits straddles nine bytes: the common path takes the first eight as one
-/// little-endian word and folds the ninth in across the shift. Within nine bytes of the end the
-/// slower path assembles whatever is there, since the bytes it cannot read land above `width`.
 #[inline]
-#[expect(clippy::cast_possible_truncation)]
+fn check_range(bits: Bits<'_>, start: usize, end: usize) {
+    assert!(
+        start >= bits.base,
+        "start {start} precedes base {}",
+        bits.base
+    );
+    assert!(start <= end, "start {start} exceeds end {end}");
+    assert!(end <= bits.end(), "end {end} exceeds {}", bits.end());
+}
+
+/// Reads `width` bits starting at bit `at` of `bytes`, returned in the low bits with the rest zero.
+///
+/// An unaligned 64 bits straddles nine bytes: the first eight are read as one little-endian word
+/// and the ninth is folded in across the shift. Bytes past the end read as zero, which is safe
+/// because they land above `width`.
+#[inline]
 fn load_bits(bytes: &[u8], at: usize, width: usize) -> u64 {
     debug_assert!(width > 0 && width <= 64, "width {width} out of range");
 
-    let first = at / 8;
+    let tail = bytes.get(at / 8..).unwrap_or_default();
     let shift = at % 8;
 
-    let head = bytes.get(first..).and_then(<[u8]>::first_chunk::<8>);
-    let word = match (head, bytes.get(first + 8)) {
-        (Some(chunk), Some(&straddle)) => {
-            let lo = u64::from_le_bytes(*chunk);
-            // Shifting a `u64` by 64 is undefined, so the aligned case needs its own arm.
-            if shift == 0 {
-                lo
-            } else {
-                (lo >> shift) | (u64::from(straddle) << (64 - shift))
-            }
+    let lo = match tail.first_chunk::<8>() {
+        Some(chunk) => u64::from_le_bytes(*chunk),
+        None => {
+            let mut padded = [0u8; 8];
+            padded[..tail.len()].copy_from_slice(tail);
+            u64::from_le_bytes(padded)
         }
-        _ => {
-            let mut raw = 0u128;
-            for (i, &byte) in bytes.iter().skip(first).take(9).enumerate() {
-                raw |= u128::from(byte) << (8 * i);
-            }
-            (raw >> shift) as u64
-        }
+    };
+    // Shifting a `u64` by 64 is undefined, so the aligned case needs its own arm.
+    let word = if shift == 0 {
+        lo
+    } else {
+        let straddle = tail.get(8).copied().unwrap_or(0);
+        (lo >> shift) | (u64::from(straddle) << (64 - shift))
     };
     mask_to(word, width)
 }

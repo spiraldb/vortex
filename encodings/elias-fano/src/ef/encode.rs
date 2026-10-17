@@ -17,9 +17,10 @@ use super::upper_len;
 pub struct Encoded {
     /// The upper bit array, LSB-first, padded to whole bytes.
     pub upper: Vec<u8>,
-    /// Zero-samples followed by one-samples, sharing one table. The seam is not recorded: a reader
-    /// recovers it from the universe with [`num_samples0`](super::num_samples0).
-    pub samples: Vec<u64>,
+    /// The zero-samples: the position of every `1 << LOG_SAMPLING0`-th unset bit.
+    pub samples0: Vec<u64>,
+    /// The one-samples: the position of every `1 << LOG_SAMPLING1`-th set bit.
+    pub samples1: Vec<u64>,
     /// The low [`lower_width`](Self::lower_width) bits of every element, in element order. Empty of
     /// meaning at width zero, where every entry is `0`.
     pub lower: Vec<u64>,
@@ -80,10 +81,11 @@ pub fn encode(elements: impl ExactSizeIterator<Item = u64>, span: u64) -> Result
 
     debug_assert_eq!(lower.len(), n, "ExactSizeIterator yielded the wrong count");
 
-    let (upper, samples) = upper.finish(n as u64, upper_len);
+    let (upper, samples0, samples1) = upper.finish(n as u64, upper_len);
     Ok(Encoded {
         upper,
-        samples,
+        samples0,
+        samples1,
         lower,
         lower_width,
         upper_len,

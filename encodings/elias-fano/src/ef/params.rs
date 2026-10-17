@@ -11,9 +11,9 @@ use super::Error;
 
 /// One zero-sample is stored per `1 << LOG_SAMPLING0` unset bits of the upper array.
 ///
-/// The upper array is roughly 50% dense, so 512 zeros span about 1,024 bits — sixteen words, a
-/// window short enough for [`select_zero_range`](super::select_zero_range) to walk without
-/// vectorising.
+/// On evenly spread data a third to a half of the upper array's bits are set, so 512 zeros span
+/// 768 to 1,024 bits: twelve to sixteen words, a window short enough for
+/// [`select_zero_range`](super::select_zero_range) to walk without vectorising.
 /// [`LOG_SAMPLING1`] is sized the same way.
 pub const LOG_SAMPLING0: usize = 9;
 
@@ -78,8 +78,7 @@ pub fn num_zeros(upper_len: u64, n: usize) -> u64 {
 /// The number of zero-samples the layout calls for.
 ///
 /// The unset bits are the sentinel, one terminator per bucket, and the guard zero, so the universe
-/// alone fixes this count whatever `n` is. A reader therefore splits the shared samples buffer into
-/// its two tables without the seam being stored.
+/// alone fixes this count whatever `n` is.
 #[inline]
 pub fn num_samples0(span: u64, lower_width: u8) -> u64 {
     // Checked because `lower_width` arrives from metadata: a corrupt width of 64 or more, or a

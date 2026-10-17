@@ -34,52 +34,112 @@ pub fn element_of(high: u64, low: u64, lower_width: u8) -> u64 {
     (high << lower_width) | low
 }
 
-/// One entry of a sample table, stored as a raw little-endian `u64`.
+/// A window of one sample table, stored as raw little-endian `u64`s.
 ///
-/// Deserialized buffers carry no alignment guarantee, hence byte-at-a-time rather than a cast.
-///
-/// # Panics
-///
-/// Panics if `table` holds fewer than `index + 1` entries.
-#[inline]
-pub fn read_sample(table: &[u8], index: usize) -> u64 {
-    let mut bytes = [0u8; 8];
-    bytes.copy_from_slice(&table[index * 8..][..8]);
-    u64::from_le_bytes(bytes)
+/// Holds the entries from absolute index `first` on, for a window of the upper array with
+/// `base_rank` bits of the counted kind before it. A whole table has both at 0. Deserialized
+/// buffers carry no alignment guarantee, hence byte-at-a-time reads rather than a cast.
+#[derive(Clone, Copy, Debug)]
+pub struct Samples<'a> {
+    bytes: &'a [u8],
+    first: u64,
+    base_rank: u64,
+}
+
+impl<'a> Samples<'a> {
+    /// A whole table, as the encoder writes it.
+    #[inline]
+    pub fn new(bytes: &'a [u8]) -> Self {
+        Self {
+            bytes,
+            first: 0,
+            base_rank: 0,
+        }
+    }
+
+    /// The entries a window holds when `base_rank` bits of the counted kind precede it, sampled
+    /// once per `1 << log_sampling`.
+    #[inline]
+    pub fn windowed(bytes: &'a [u8], base_rank: u64, log_sampling: usize) -> Self {
+        Self {
+            bytes,
+            first: base_rank >> log_sampling,
+            base_rank,
+        }
+    }
+
+    /// The number of entries held.
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.bytes.len() / size_of::<u64>()
+    }
+
+    /// Whether no entry is held.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// The absolute index of the first entry held.
+    #[inline]
+    pub fn first(&self) -> u64 {
+        self.first
+    }
+
+    /// The bits of the counted kind before the window.
+    #[inline]
+    pub fn base_rank(&self) -> u64 {
+        self.base_rank
+    }
+
+    /// The entry at `local` index, or `None` past the last one.
+    #[inline]
+    pub fn get(&self, local: usize) -> Option<u64> {
+        let at = local.checked_mul(size_of::<u64>())?;
+        let chunk = self.bytes.get(at..)?.first_chunk::<8>()?;
+        Some(u64::from_le_bytes(*chunk))
+    }
 }
 
 /// The bit position of the `target`-th set bit of `bits`, or of its `target`-th unset bit when
 /// `zeros`, found through the sample table that brackets it.
 ///
-/// `table` holds one position per `1 << log_sampling` bits of the kind being counted, from rank 1
-/// upward; rank 0 is never stored, since the search starts at bit zero anyway. The sample bounds
-/// the scan to fewer than `1 << log_sampling` bits of the kind being counted, but not the other
-/// kind in between: a gap in the values makes a long run of unset bits, duplicates of set bits.
+/// `samples` holds one position per `1 << log_sampling` bits of the kind being counted, from rank
+/// 1 upward; rank 0 is never stored, since the search starts at the window's first bit anyway. The
+/// sample bounds the scan to fewer than `1 << log_sampling` bits of the kind being counted, but not
+/// the other kind in between: a gap in the values makes a long run of unset bits, duplicates of set
+/// bits.
 ///
-/// Returns the absolute position, not one relative to the window. `inline(always)` because both
-/// callers pass `log_sampling` and `zeros` as constants, which measurably do not fold otherwise.
+/// Returns the absolute position, or `None` if `target` lies outside the window. `inline(always)`
+/// because both callers pass `log_sampling` and `zeros` as constants, which measurably do not fold
+/// otherwise.
 #[inline(always)]
 #[allow(clippy::inline_always)]
 pub fn sampled_select(
     bits: Bits<'_>,
-    table: &[u8],
+    samples: Samples<'_>,
     log_sampling: usize,
     target: u64,
-    end: usize,
     zeros: bool,
 ) -> Option<usize> {
-    let sample = usize::try_from(target >> log_sampling).ok()?;
-    let start = match sample.checked_sub(1) {
-        None => 0,
-        // Past the last sample is past the last bit of this kind, so there is nothing to find.
-        Some(index) if index >= table.len() / size_of::<u64>() => return None,
-        Some(index) => usize::try_from(read_sample(table, index)).ok()?,
+    let sample = target >> log_sampling;
+    let (start, skipped) = match sample.checked_sub(samples.first + 1) {
+        Some(local) => (
+            samples.get(usize::try_from(local).ok()?)?,
+            sample << log_sampling,
+        ),
+        // The block's sample lies before the window, so scan from the window's start.
+        None => (bits.base() as u64, samples.base_rank),
     };
-    let nth = usize::try_from(target - ((sample as u64) << log_sampling)).ok()?;
+    let nth = usize::try_from(target.checked_sub(skipped)?).ok()?;
+    let start = usize::try_from(start).ok()?;
+    if start < bits.base() || start > bits.end() {
+        return None;
+    }
     let offset = if zeros {
-        select_zero_range(bits, start, end, nth)
+        select_zero_range(bits, start, bits.end(), nth)
     } else {
-        select_range(bits, start, end, nth)
+        select_range(bits, start, bits.end(), nth)
     }?;
     Some(start + offset)
 }
@@ -175,15 +235,12 @@ impl UpperBuilder {
         }
     }
 
-    /// Close the array, returning the upper bytes and both sample tables in one buffer, zeros
-    /// first. The seam is not returned: a reader recomputes it from the universe with
-    /// [`num_samples0`](super::num_samples0).
-    pub fn finish(mut self, n: u64, upper_len: u64) -> (Vec<u8>, Vec<u64>) {
+    /// Close the array, returning the upper bytes, the zero-samples and the one-samples.
+    pub fn finish(mut self, n: u64, upper_len: u64) -> (Vec<u8>, Vec<u64>, Vec<u64>) {
         // The trailing unset bits past the last element, which `push` never reached: the bucket
         // boundaries above the maximum element's high part, plus the guard zero.
         self.sample_zeros_below(upper_len, n);
 
-        self.samples0.extend_from_slice(&self.samples1);
-        (self.bits, self.samples0)
+        (self.bits, self.samples0, self.samples1)
     }
 }
