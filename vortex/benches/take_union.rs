@@ -99,6 +99,7 @@ fn string_child(len: usize) -> ArrayRef {
 /// The lengths vary on purpose. Equal-length lists are what `FixedSizeList` is for, and they would
 /// not exercise the offsets and sizes that a `ListView` gather has to rebuild.
 fn list_child(len: usize, rng: &mut StdRng) -> ArrayRef {
+    let mut ctx = SESSION.create_execution_ctx();
     let sizes: Buffer<i32> = (0..len).map(|_| rng.random_range(0..16)).collect();
     let offsets: Buffer<i32> = sizes
         .iter()
@@ -120,6 +121,7 @@ fn list_child(len: usize, rng: &mut StdRng) -> ArrayRef {
         offsets.into_array(),
         sizes.into_array(),
         Validity::NonNullable,
+        &mut ctx,
     )
     .into_array()
 }
@@ -167,6 +169,7 @@ fn dense_children_union(rng: &mut StdRng) -> ArrayRef {
 /// The dominant integer child stays canonical. At 98% density a sparse child would store a patch
 /// index for nearly every row and buy nothing.
 fn compressed_children_union(rng: &mut StdRng) -> ArrayRef {
+    let mut ctx = SESSION.create_execution_ctx();
     union_array(
         (0..VARIANT_NAMES.len())
             .map(|variant| {
@@ -178,7 +181,7 @@ fn compressed_children_union(rng: &mut StdRng) -> ArrayRef {
                 let values = variant_child(variant, indices.len(), rng);
                 let fill = Scalar::default_value(values.dtype());
 
-                Sparse::try_new(indices.into_array(), values, ARRAY_SIZE, fill)
+                Sparse::try_new(indices.into_array(), values, ARRAY_SIZE, fill, &mut ctx)
                     .unwrap()
                     .into_array()
             })

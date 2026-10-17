@@ -372,6 +372,7 @@ mod tests {
         let masked_indices = MaskedArray::try_new(
             ConstantArray::new(1u16, indices_prim.len()).into_array(),
             indices_prim.validity()?,
+            ctx,
         )?
         .into_array();
         RLE::try_new(

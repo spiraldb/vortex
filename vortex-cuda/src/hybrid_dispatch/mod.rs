@@ -211,7 +211,7 @@ mod tests {
             .into_array()
             .execute_cuda(&mut ctx)
             .await?
-            .into_host()
+            .into_host(ctx.execution_ctx())
             .await?
             .into_array();
         assert_arrays_eq!(arr, gpu, &mut cpu_ctx);
@@ -248,7 +248,7 @@ mod tests {
             .into_array()
             .execute_cuda(&mut ctx)
             .await?
-            .into_host()
+            .into_host(ctx.execution_ctx())
             .await?
             .into_array();
         assert_arrays_eq!(alp, gpu, &mut cpu_ctx);
@@ -278,6 +278,7 @@ mod tests {
             PrimitiveArray::new(buffer![0u32, 1024u32], NN).into_array(),
             PrimitiveArray::new(buffer![99.9f32, 88.8f32], NN).into_array(),
             None,
+            ctx.execution_ctx(),
         )
         .unwrap();
         let arr = ALP::try_new(encoded, Exponents { e: 0, f: 2 }, Some(patches))?;
@@ -287,7 +288,7 @@ mod tests {
             .into_array()
             .execute_cuda(&mut ctx)
             .await?
-            .into_host()
+            .into_host(ctx.execution_ctx())
             .await?
             .into_array();
         assert_arrays_eq!(arr, gpu, &mut cpu_ctx);
@@ -353,7 +354,7 @@ mod tests {
             .into_array()
             .execute_cuda(&mut ctx)
             .await?
-            .into_host()
+            .into_host(ctx.execution_ctx())
             .await?
             .into_array();
         assert_arrays_eq!(cpu, gpu, &mut cpu_ctx);
@@ -386,7 +387,7 @@ mod tests {
         let gpu = filtered
             .execute_cuda(&mut ctx)
             .await?
-            .into_host()
+            .into_host(ctx.execution_ctx())
             .await?
             .into_array();
         assert_arrays_eq!(cpu, gpu, &mut cpu_ctx);
@@ -423,7 +424,7 @@ mod tests {
         );
         assert!(!storage.is_host(), "storage was not decoded on the device");
 
-        let actual = actual.into_host().await?.into_array();
+        let actual = actual.into_host(ctx.execution_ctx()).await?.into_array();
         assert_arrays_eq!(expected, actual, &mut cpu_ctx);
         Ok(())
     }
@@ -446,7 +447,7 @@ mod tests {
             .into_array()
             .execute_cuda(&mut ctx)
             .await?
-            .into_host()
+            .into_host(ctx.execution_ctx())
             .await?
             .into_array();
         assert_arrays_eq!(ext.into_array(), actual, &mut cpu_ctx);

@@ -301,7 +301,7 @@ mod tests {
             let arr = builder.finish_into_varbin();
             let mask = arr.validity()?.execute_mask(arr.len(), &mut ctx)?;
             let actual = (0..arr.len())
-                .map(|i| mask.value(i).then(|| arr.bytes_at(i).to_vec()))
+                .map(|i| mask.value(i).then(|| arr.bytes_at(i, &mut ctx).to_vec()))
                 .collect::<Vec<_>>();
             assert_eq!(data, actual);
         }
@@ -358,13 +358,13 @@ mod tests {
             encoded.codes_bytes().clone(),
             DType::Binary(Nullability::NonNullable),
             Validity::NonNullable,
+            &mut ctx,
         );
         let sliced = FSST::try_new_with_symbol_table(
             encoded.dtype().clone(),
             encoded.symbol_table(),
             codes,
             encoded.uncompressed_lengths().slice(1..3)?,
-            &mut ctx,
         )?;
         let mut builder =
             VarBinViewBuilder::with_capacity_in(input.dtype().clone(), 2, ctx.allocator().clone());
@@ -389,7 +389,6 @@ mod tests {
             encoded.symbol_table(),
             encoded.codes(),
             PrimitiveArray::from_iter([4i32]).into_array(),
-            &mut ctx,
         )?;
 
         assert!(fsst_decode_bytes(invalid.as_view(), &mut ctx).is_err());
@@ -413,7 +412,6 @@ mod tests {
                 encoded.symbol_table(),
                 encoded.codes(),
                 lengths,
-                &mut ctx,
             )?;
             assert!(fsst_decode_bytes(invalid.as_view(), &mut ctx).is_err());
         }

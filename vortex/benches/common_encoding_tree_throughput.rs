@@ -310,6 +310,7 @@ mod setup {
             codes
                 .validity()
                 .vortex_expect("FSST code validity should be derivable"),
+            &mut ctx,
         )
         .unwrap();
 
@@ -326,7 +327,6 @@ mod setup {
             ),
             compressed_codes,
             fsst.uncompressed_lengths().clone(),
-            &mut ctx,
         )
         .unwrap();
 

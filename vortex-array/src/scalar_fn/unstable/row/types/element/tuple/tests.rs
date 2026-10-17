@@ -144,9 +144,10 @@ fn test_batch_constant_uses_constant_decoder() -> VortexResult<()> {
 
 #[test]
 fn test_batch_const_unwraps_filtered_masked_constant() -> VortexResult<()> {
+    let mut ctx = array_session().create_execution_ctx();
     let child = ConstantArray::new(7_i64, 3).into_array();
-    let masked =
-        MaskedArray::try_new(child, Validity::from_iter([true, false, true]))?.into_array();
+    let masked = MaskedArray::try_new(child, Validity::from_iter([true, false, true]), &mut ctx)?
+        .into_array();
     let filtered = masked.filter(Mask::from_iter([true, true, false]))?;
 
     let Some(const_array) = batch_const(&filtered) else {

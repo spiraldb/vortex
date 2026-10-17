@@ -21,7 +21,7 @@ pub use tree_display::TreeDisplay;
 
 use crate::ArrayRef;
 use crate::VortexSessionExecute;
-use crate::legacy_session;
+use crate::array_session;
 
 /// Describe how to convert an array to a string.
 ///
@@ -522,7 +522,6 @@ impl ArrayRef {
         DisplayArrayAs(self, DisplayOptions::TableDisplay)
     }
 
-    #[allow(clippy::disallowed_methods)]
     fn fmt_as(&self, f: &mut std::fmt::Formatter, options: &DisplayOptions) -> std::fmt::Result {
         match options {
             DisplayOptions::MetadataOnly => EncodingSummaryExtractor::write(self, f),
@@ -537,17 +536,25 @@ impl ArrayRef {
                 let limit = self.len().min(f.precision().unwrap_or(DISPLAY_LIMIT));
                 let is_truncated = self.len() > limit;
 
-                let fmt_scalar = |i| {
-                    self.execute_scalar(i, &mut legacy_session().create_execution_ctx())
+                // Formatting cannot take an execution context, so the values are read with a
+                // default array session.
+                let mut ctx = array_session().create_execution_ctx();
+                let mut fmt_scalar = |i| {
+                    self.execute_scalar(i, &mut ctx)
                         .map_or_else(|e| format!("<error: {e}>"), |s| s.to_string())
                 };
+                let head = (0..limit.saturating_sub(3))
+                    .map(&mut fmt_scalar)
+                    .collect::<Vec<_>>();
+                let tail = (self.len().saturating_sub(3)..self.len())
+                    .map(&mut fmt_scalar)
+                    .collect::<Vec<_>>();
                 write!(
                     f,
                     "{opening_brace}{}{closing_brace}",
-                    (0..limit.saturating_sub(3))
-                        .map(fmt_scalar)
+                    head.into_iter()
                         .chain(repeat_n("...".to_string(), is_truncated as usize))
-                        .chain((self.len().saturating_sub(3)..self.len()).map(fmt_scalar))
+                        .chain(tail)
                         .format(sep)
                 )
             }
@@ -585,8 +592,9 @@ impl ArrayRef {
                 use crate::dtype::DType;
 
                 let mut builder = tabled::builder::Builder::default();
-                // Reuse a single execution context across all per-row accesses below.
-                let mut ctx = legacy_session().create_execution_ctx();
+                // Formatting cannot take an execution context, so the rows are read with a default
+                // array session. Reuse a single execution context across all per-row accesses.
+                let mut ctx = array_session().create_execution_ctx();
 
                 // Special logic for struct arrays.
                 let DType::Struct(sf, _) = self.dtype() else {
@@ -662,6 +670,8 @@ mod test {
     use vortex_buffer::buffer;
 
     use crate::IntoArray as _;
+    use crate::VortexSessionExecute;
+    use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::arrays::ListArray;
     use crate::arrays::PrimitiveArray;
@@ -718,10 +728,12 @@ mod test {
 
     #[test]
     fn test_list() {
+        let mut ctx = array_session().create_execution_ctx();
         let x = ListArray::try_new(
             buffer![1, 2, 3, 4].into_array(),
             buffer![0, 0, 1, 1, 2, 4].into_array(),
             Validity::Array(BoolArray::from_iter([true, true, false, true, true]).into_array()),
+            &mut ctx,
         )
         .unwrap()
         .into_array();
