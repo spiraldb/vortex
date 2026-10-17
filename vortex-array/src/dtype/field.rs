@@ -269,19 +269,17 @@ impl FieldPathSet {
 
 /// Reduces field paths to their minimal covering set: any path that has another path in the set as
 /// a prefix is redundant and dropped.
-fn minimal_covering_set(paths: impl IntoIterator<Item = FieldPath>) -> Vec<FieldPath> {
-    let mut covering: Vec<FieldPath> = Vec::new();
-    for path in paths {
-        if covering
-            .iter()
-            .any(|existing| path.parts().starts_with(existing.parts()))
-        {
-            continue;
-        }
-        covering.retain(|existing| !existing.parts().starts_with(path.parts()));
-        covering.push(path);
-    }
-    covering
+fn minimal_covering_set(paths: HashSet<FieldPath>) -> Vec<FieldPath> {
+    // A path is redundant exactly when one of its proper prefixes is in the set. Looking those up,
+    // rather than comparing every pair of paths, keeps a projection of many columns linear.
+    paths
+        .iter()
+        .filter(|path| {
+            let parts = path.parts();
+            !(0..parts.len()).any(|len| paths.contains(&FieldPath::from(parts[..len].to_vec())))
+        })
+        .cloned()
+        .collect()
 }
 
 impl Extend<FieldPath> for FieldPathSet {
@@ -476,6 +474,23 @@ mod tests {
         assert_eq!(
             paths.into_iter().collect::<HashSet<_>>(),
             HashSet::from_iter([field_path!(a), field_path!(x)])
+        );
+    }
+
+    #[test]
+    fn iteration_drops_paths_under_any_covering_prefix() {
+        let paths =
+            FieldPathSet::from_iter([field_path!(a.b.c), field_path!(a.b), field_path!(x.y)]);
+        assert_eq!(
+            paths.into_iter().collect::<HashSet<_>>(),
+            HashSet::from_iter([field_path!(a.b), field_path!(x.y)])
+        );
+
+        // The root covers every path.
+        let paths = FieldPathSet::from_iter([field_path!(a.b), FieldPath::root()]);
+        assert_eq!(
+            paths.into_iter().collect::<Vec<_>>(),
+            vec![FieldPath::root()]
         );
     }
 }

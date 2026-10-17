@@ -33,10 +33,13 @@ impl AggregateStatsAccumulator {
             .iter()
             .filter_map(|aggregate_fn| {
                 aggregate_state_dtype(dtype, aggregate_fn).map(|partial_dtype| {
+                    // Builders grow as zones are pushed. A wide table has one accumulator per
+                    // column, often with a single zone, so reserving room up front would cost far
+                    // more memory than the zones themselves.
                     AggregateStatsArrayBuilder::new(
                         aggregate_fn.clone(),
                         &partial_dtype.as_nullable(),
-                        1024,
+                        0,
                     )
                 })
             })

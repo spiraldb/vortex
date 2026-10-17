@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 
+use parking_lot::RwLock;
 use vortex_array::aggregate_fn::AggregateFnId;
 use vortex_array::aggregate_fn::AggregateFnRef;
 use vortex_array::aggregate_fn::session::AggregateFnSessionExt;
@@ -21,11 +22,14 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
 use vortex_session::VortexSession;
+use vortex_utils::aliases::hash_map::HashMap;
+
+use crate::LayoutBuildMemo;
 
 pub const MAX_IS_TRUNCATED: &str = "max_is_truncated";
 pub const MIN_IS_TRUNCATED: &str = "min_is_truncated";
 
-#[derive(Clone, PartialEq, Eq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub(crate) struct AggregateSpecProto {
     #[prost(string, tag = "1")]
     id: String,
@@ -149,6 +153,45 @@ pub(crate) fn aggregate_specs_from_fns(
         .map(AggregateSpecProto::try_from_aggregate_fn)
         .collect::<VortexResult<Vec<_>>>()
         .map(Into::into)
+}
+
+/// The aggregate functions and stats table dtype resolved for a column dtype and aggregate specs.
+type ZoneMapSchemaKey = (DType, Arc<[AggregateSpecProto]>);
+type ResolvedZoneMapSchema = (Arc<[AggregateFnRef]>, DType);
+
+/// Zone map schemas resolved while deserializing one layout tree.
+///
+/// Every zoned column of a wide file stores the same aggregate specs for its dtype, and resolving
+/// them again for each column dominated deserializing such a file's layout. The cache lives in the
+/// tree's [`LayoutBuildMemo`], so it is never shared between files or reads.
+#[derive(Debug, Default)]
+struct ZoneMapSchemaCache(RwLock<HashMap<ZoneMapSchemaKey, ResolvedZoneMapSchema>>);
+
+/// Resolves the aggregate functions of a zoned column's specs and its stats table dtype, as
+/// [`try_aggregate_fns_from_specs`] and [`aggregate_stats_table_dtype`] do, reusing what an
+/// earlier layout of the same tree resolved for the same dtype and specs.
+///
+/// Returns `Ok(None)` when an aggregate is unknown but unknown plugins are allowed.
+pub(crate) fn resolve_zone_map_schema(
+    column_dtype: &DType,
+    aggregate_specs: &Arc<[AggregateSpecProto]>,
+    session: &VortexSession,
+    memo: &LayoutBuildMemo,
+) -> VortexResult<Option<ResolvedZoneMapSchema>> {
+    let cache = memo.get_or_default::<ZoneMapSchemaCache>();
+    let key = (column_dtype.clone(), Arc::clone(aggregate_specs));
+    if let Some(schema) = cache.0.read().get(&key) {
+        return Ok(Some(schema.clone()));
+    }
+
+    let Some(aggregate_fns) = try_aggregate_fns_from_specs(aggregate_specs, session)? else {
+        return Ok(None);
+    };
+    aggregate_specs_from_fns(&aggregate_fns)?;
+    let stats_table_dtype = aggregate_stats_table_dtype(column_dtype, &aggregate_fns);
+    let schema = (aggregate_fns, stats_table_dtype);
+    cache.0.write().insert(key, schema.clone());
+    Ok(Some(schema))
 }
 
 /// Resolves each [`AggregateSpecProto`] into a live [`AggregateFnRef`], tolerating aggregates this

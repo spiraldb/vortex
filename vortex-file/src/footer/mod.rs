@@ -22,12 +22,12 @@ mod deserializer;
 pub use deserializer::*;
 pub use field_sizes::CompressedFieldSizes;
 pub use file_statistics::FileStatistics;
-use flatbuffers::root;
 use itertools::Itertools;
 pub use segment::*;
 use vortex_array::ArrayId;
 use vortex_array::dtype::DType;
 use vortex_array::flatbuffers::FlatBuffer;
+use vortex_array::flatbuffers::root_verified;
 use vortex_buffer::ByteBuffer;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
@@ -114,7 +114,7 @@ impl Footer {
             .map(|(key, _segment)| key.len() + size_of::<SegmentSpec>())
             .sum();
         let approx_byte_size = footer_bytes.len() + layout_bytes.len() + metadata_bytes;
-        let fb_footer = root::<fb::Footer>(footer_bytes)?;
+        let fb_footer = root_verified::<fb::Footer>(footer_bytes)?;
 
         // Create a LayoutContext from the registry.
         let layout_specs = fb_footer.layout_specs();

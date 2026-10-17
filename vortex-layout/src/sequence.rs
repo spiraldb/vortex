@@ -104,6 +104,24 @@ impl SequenceId {
         SequencePointer(SequenceId::new(id, Arc::clone(&self.universe)))
     }
 
+    /// Moves this sequence into a universe of its own, nested at this sequence's position.
+    ///
+    /// The returned sequence has the same ID, and every sequence later derived from it is ordered
+    /// exactly as it would be in this universe. Creating and dropping those sequences only locks
+    /// the nested universe, so independent subtrees written concurrently, such as the columns of a
+    /// wide struct, do not contend on one lock.
+    ///
+    /// This sequence stays active in its own universe, on behalf of the nested one, until every
+    /// sequence in the nested universe has been dropped.
+    pub fn nest(self) -> SequenceId {
+        let id = self.id.clone();
+        let nested = SequenceUniverse {
+            parent: Some(self),
+            ..Default::default()
+        };
+        SequenceId::new(id, Arc::new(Mutex::new(nested)))
+    }
+
     /// Waits until all SequenceIds with IDs lexicographically smaller than this one are dropped.
     ///
     /// This async method provides ordering guarantees by ensuring all "prior" sequences
@@ -146,10 +164,13 @@ impl SequenceId {
 
 impl Drop for SequenceId {
     fn drop(&mut self) {
-        let waker = self.universe.lock().remove(self);
+        let (waker, parent) = self.universe.lock().remove(self);
         if let Some(w) = waker {
             w.wake();
         }
+        // Releasing a nested universe's position in its parent may in turn wake the parent's
+        // next sequence. This happens after the nested universe's lock is released.
+        drop(parent);
     }
 }
 
@@ -172,6 +193,12 @@ impl SequencePointer {
     pub fn split_off(&mut self) -> SequencePointer {
         // Advance ourselves to the next sibling, and return a new pointer to the previous one.
         self.advance().descend()
+    }
+
+    /// Like [`SequencePointer::split_off`], but the returned pointer creates its sequences in a
+    /// nested universe. See [`SequenceId::nest`].
+    pub fn split_off_nested(&mut self) -> SequencePointer {
+        self.advance().nest().descend()
     }
 
     /// Advances to the next sibling sequence and returns the current one.
@@ -205,6 +232,9 @@ impl SequencePointer {
 struct SequenceUniverse {
     active: BTreeSet<Vec<usize>>,
     wakers: HashMap<Vec<usize>, Waker>,
+    /// For a nested universe, the sequence in the parent universe that holds this universe's
+    /// position for as long as any sequence in this universe is active. See [`SequenceId::nest`].
+    parent: Option<SequenceId>,
 }
 
 impl SequenceUniverse {
@@ -212,14 +242,25 @@ impl SequenceUniverse {
         self.active.insert(sequence_id.id.clone());
     }
 
-    fn remove(&mut self, sequence_id: &SequenceId) -> Option<Waker> {
+    /// Removes a sequence, returning the waker of a sequence it unblocked and, once the universe
+    /// is empty, the parent sequence to drop.
+    fn remove(&mut self, sequence_id: &SequenceId) -> (Option<Waker>, Option<SequenceId>) {
+        let was_first = self.active.first() == Some(&sequence_id.id);
         self.active.remove(&sequence_id.id);
+        // A waker registered under this sequence belongs to a nested universe waiting for this
+        // sequence to come first, and that universe is now empty.
+        self.wakers.remove(&sequence_id.id);
         let Some(first) = self.active.first() else {
             // last sequence finished, we must have no pending futures
             assert!(self.wakers.is_empty(), "all wakers must have been removed");
-            return None;
+            return (None, self.parent.take());
         };
-        self.wakers.remove(first)
+        // A waiting sequence comes first only once the sequence before it is removed, so
+        // removing any other sequence cannot unblock a waiter.
+        if !was_first {
+            return (None, None);
+        }
+        (self.wakers.remove(first), None)
     }
 }
 
@@ -229,19 +270,31 @@ impl Future for WaitSequenceFuture<'_> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut guard = self.0.universe.lock();
-        let current_first = guard
-            .active
-            .first()
-            .cloned()
-            .vortex_expect("if we have a future, we must have at least one active sequence");
-        if self.0.id == current_first {
-            guard.wakers.remove(&self.0.id);
-            return Poll::Ready(());
+        // A sequence is first overall when it is first in its universe and, for a nested
+        // universe, the parent sequence holding the universe's position is first overall. Once a
+        // sequence is first in its universe it stays first until it is dropped, so each level can
+        // be checked under its own lock. A level that is not yet first registers the waker there,
+        // and the removal that makes it first wakes it.
+        let mut universe = Arc::clone(&self.0.universe);
+        let mut id = self.0.id.clone();
+        loop {
+            let parent = {
+                let mut guard = universe.lock();
+                let current_first = guard.active.first().vortex_expect(
+                    "if we have a future, we must have at least one active sequence",
+                );
+                if *current_first != id {
+                    guard.wakers.insert(id, cx.waker().clone());
+                    return Poll::Pending;
+                }
+                guard.wakers.remove(&id);
+                match &guard.parent {
+                    None => return Poll::Ready(()),
+                    Some(parent) => (Arc::clone(&parent.universe), parent.id.clone()),
+                }
+            };
+            (universe, id) = parent;
         }
-
-        guard.wakers.insert(self.0.id.clone(), cx.waker().clone());
-        Poll::Pending
     }
 }
 
@@ -342,3 +395,141 @@ pub trait SequentialArrayStreamExt: ArrayStream {
 }
 
 impl<S: ArrayStream> SequentialArrayStreamExt for S {}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::AtomicBool;
+    use std::sync::atomic::Ordering;
+
+    use futures::task::ArcWake;
+
+    use super::*;
+
+    /// A waker that records whether it was woken.
+    #[derive(Default)]
+    struct Flag(AtomicBool);
+
+    impl ArcWake for Flag {
+        fn wake_by_ref(arc_self: &Arc<Self>) {
+            arc_self.0.store(true, Ordering::SeqCst);
+        }
+    }
+
+    impl Flag {
+        fn take(&self) -> bool {
+            self.0.swap(false, Ordering::SeqCst)
+        }
+    }
+
+    /// Polls a held `collapse` future once with the given flag as its waker.
+    fn poll(collapse: &mut Pin<Box<impl Future<Output = ()>>>, flag: &Arc<Flag>) -> Poll<()> {
+        let waker = futures::task::waker(Arc::clone(flag));
+        collapse.as_mut().poll(&mut Context::from_waker(&waker))
+    }
+
+    #[test]
+    fn nested_sequence_waits_for_earlier_nested_universe() {
+        let (mut ptr, _eof) = SequenceId::root().split();
+        let mut first = ptr.split_off_nested();
+        let mut second = ptr.split_off_nested();
+        let first_id = first.advance();
+        let mut second_id = second.advance();
+
+        let flag = Arc::new(Flag::default());
+        let mut collapse = Box::pin(second_id.collapse());
+        assert!(poll(&mut collapse, &flag).is_pending());
+
+        drop(first_id);
+        assert!(!flag.take(), "the earlier universe still holds a pointer");
+        drop(first);
+        assert!(
+            flag.take(),
+            "emptying the earlier universe must wake the waiter"
+        );
+        assert!(poll(&mut collapse, &flag).is_ready());
+    }
+
+    #[test]
+    fn nested_sequence_does_not_wait_for_later_sequences() {
+        let (mut ptr, _eof) = SequenceId::root().split();
+        let mut first = ptr.split_off_nested();
+        let _second = ptr.split_off_nested();
+        let _later = ptr.advance();
+        let mut first_id = first.advance();
+
+        let flag = Arc::new(Flag::default());
+        let mut collapse = Box::pin(first_id.collapse());
+        assert!(poll(&mut collapse, &flag).is_ready());
+    }
+
+    #[test]
+    fn nested_sequence_waits_for_earlier_sequence_in_parent() {
+        let (mut ptr, _eof) = SequenceId::root().split();
+        let earlier = ptr.advance();
+        let mut nested = ptr.split_off_nested();
+        let mut nested_id = nested.advance();
+
+        let flag = Arc::new(Flag::default());
+        let mut collapse = Box::pin(nested_id.collapse());
+        assert!(poll(&mut collapse, &flag).is_pending());
+
+        drop(earlier);
+        assert!(flag.take());
+        assert!(poll(&mut collapse, &flag).is_ready());
+    }
+
+    #[test]
+    fn parent_sequence_waits_for_earlier_nested_universe() {
+        let (mut ptr, _eof) = SequenceId::root().split();
+        let nested = ptr.split_off_nested();
+        let mut later = ptr.advance();
+
+        let flag = Arc::new(Flag::default());
+        let mut collapse = Box::pin(later.collapse());
+        assert!(poll(&mut collapse, &flag).is_pending());
+
+        drop(nested);
+        assert!(flag.take());
+        assert!(poll(&mut collapse, &flag).is_ready());
+    }
+
+    #[test]
+    fn sequence_waits_for_universe_nested_in_earlier_universe() {
+        let (mut ptr, _eof) = SequenceId::root().split();
+        let mut outer = ptr.split_off_nested();
+        let inner = outer.split_off_nested();
+        drop(outer);
+        let mut second = ptr.split_off_nested();
+        let mut second_id = second.advance();
+
+        let flag = Arc::new(Flag::default());
+        let mut collapse = Box::pin(second_id.collapse());
+        assert!(poll(&mut collapse, &flag).is_pending());
+
+        drop(inner);
+        assert!(
+            flag.take(),
+            "emptying the inner universe must release the outer one too"
+        );
+        assert!(poll(&mut collapse, &flag).is_ready());
+    }
+
+    #[test]
+    fn dropped_collapse_does_not_leave_a_waker_behind() {
+        let (mut ptr, eof) = SequenceId::root().split();
+        let first = ptr.split_off_nested();
+        let mut second = ptr.split_off_nested();
+        let mut second_id = second.advance();
+
+        let flag = Arc::new(Flag::default());
+        let mut collapse = Box::pin(second_id.collapse());
+        assert!(poll(&mut collapse, &flag).is_pending());
+        drop(collapse);
+
+        // The waiting universe empties before it ever came first, so the waker it registered for
+        // its position in the parent must go with it, or the parent trips its check that no waker
+        // is left registered once it empties.
+        drop((second_id, second));
+        drop((first, ptr, eof));
+    }
+}

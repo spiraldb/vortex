@@ -12,6 +12,7 @@ use vortex_session::VortexSession;
 use crate::DynLayout;
 use crate::Layout;
 use crate::LayoutBuildContext;
+use crate::LayoutBuildMemo;
 use crate::LayoutChildType;
 use crate::LayoutChildren;
 use crate::LayoutDeserializeArgs;
@@ -41,6 +42,19 @@ pub trait VTable: 'static + Clone + Send + Sync + Debug {
     /// Returns the serializable metadata for a layout.
     fn metadata(layout: &Layout<Self>) -> Self::Metadata;
 
+    /// Decodes a layout's serialized metadata.
+    ///
+    /// The default decodes it with [`vortex_array::DeserializeMetadata`]. An encoding whose
+    /// layouts repeat the same metadata, one per column of a wide file, can override this to share
+    /// one decoded value between the layouts of a tree through `memo`.
+    fn deserialize_metadata(
+        metadata: &[u8],
+        memo: &LayoutBuildMemo,
+    ) -> VortexResult<<Self::Metadata as vortex_array::DeserializeMetadata>::Output> {
+        let _ = memo;
+        <Self::Metadata as vortex_array::DeserializeMetadata>::deserialize(metadata)
+    }
+
     /// Deserialize and validate layout-specific data.
     fn deserialize(
         &self,
@@ -65,6 +79,7 @@ pub trait VTable: 'static + Clone + Send + Sync + Debug {
             row_count,
             segment_ids,
             children,
+            memo: build_ctx.memo,
         };
         let data = vtable.deserialize(&args, metadata)?;
         Ok(LayoutParts::new(

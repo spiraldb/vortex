@@ -437,7 +437,7 @@ fn expand_struct_root(
             }
 
             if let Some(selection) = scalar_fn.as_opt::<Select>() {
-                let names = selection.normalize_to_included_fields(fields.names())?;
+                let names = selection.included_fields_of(fields)?;
                 let children: Vec<_> = names
                     .iter()
                     .map(|name| {

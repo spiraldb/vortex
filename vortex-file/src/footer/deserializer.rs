@@ -3,7 +3,6 @@
 
 use std::sync::Arc;
 
-use flatbuffers::root;
 use vortex_array::dtype::DType;
 use vortex_array::flatbuffers::FlatBuffer;
 use vortex_array::flatbuffers::ReadFlatBuffer;
@@ -288,7 +287,7 @@ impl FooterDeserializer {
         DType::from_flatbuffer(sliced_buffer, &self.session)
     }
 
-    /// Parse the [`FileStatistics`] from the initial read buffer.
+    /// Read the serialized [`FileStatistics`] from the initial read buffer, parsed on first use.
     fn parse_file_statistics(
         &self,
         initial_offset: u64,
@@ -299,8 +298,11 @@ impl FooterDeserializer {
     ) -> VortexResult<FileStatistics> {
         let sliced_buffer = checked_segment_slice(initial_read, initial_offset, segment)?;
 
-        let fb = root::<crate::flatbuffers::footer::FileStatistics>(sliced_buffer)?;
-        FileStatistics::from_flatbuffer(&fb, dtype, session)
+        Ok(FileStatistics::from_serialized(
+            FlatBuffer::copy_from(sliced_buffer),
+            dtype.clone(),
+            session.clone(),
+        ))
     }
 
     /// Parse the rest of the footer from the initial read.

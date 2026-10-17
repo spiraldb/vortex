@@ -47,7 +47,7 @@ pub fn make_bound_free_field_annotator(
         if let Some(selection) = scalar_fn.as_opt::<Select>() {
             if expr.children()[0].is_root() {
                 return selection
-                    .normalize_to_included_fields(scope.names())
+                    .included_fields_of(scope)
                     .vortex_expect("Select fields must be valid for scope")
                     .into_iter()
                     .collect();

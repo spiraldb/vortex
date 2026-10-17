@@ -30,6 +30,8 @@ use vortex_error::vortex_ensure;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
 use vortex_session::registry::CachedId;
+use vortex_utils::aliases::hash_map::HashMap;
+use vortex_utils::aliases::hash_set::HashSet;
 
 use crate::plan::physical::Eval;
 use crate::plan::physical::EvalPlan;
@@ -351,13 +353,15 @@ impl PlanParentReduceRule<Pack> for ExpressionPackRule {
 
         let expression = parent.expression();
         let fields = child.fields();
+        if let Some((field_indices, reads)) = distinct_field_reads(expression, fields)? {
+            return prune_to_field_reads(child, expression, fields, field_indices, reads);
+        }
         let referenced_fields =
             descendent_bound_annotations(expression, make_bound_free_field_annotator(fields))
                 .get(&ExactBoundExpr(expression.clone()))
                 .vortex_expect("Bound expression missing free-field annotations")
                 .clone();
-        let expanded_root = expanded_struct_root(child.dtype(), fields)?;
-        let expanded = expand_struct_root(expression.clone(), &expanded_root, fields)?;
+        let expanded = expand_struct_root(expression.clone(), child.dtype(), fields)?;
         let partitioned =
             partition_bound(expanded.clone(), make_bound_free_field_annotator(fields))?;
 
@@ -471,15 +475,18 @@ pub(super) fn rewrite_partition_root(
     root_dtype: DType,
     collapsed: &[(FieldName, FieldName)],
 ) -> VortexResult<BoundExpression> {
+    // Every field access is looked up, so a projection of many fields must not scan the list.
+    let collapsed: HashSet<(&FieldName, &FieldName)> = collapsed
+        .iter()
+        .map(|(partition, value)| (partition, value))
+        .collect();
     Ok(expression
         .transform_down(|node| {
             if let Some(value_name) = node.as_opt::<GetItem>() {
                 let partition_access = &node.children()[0];
                 if let Some(partition_name) = partition_access.as_opt::<GetItem>()
                     && partition_access.children()[0].is_root()
-                    && collapsed.iter().any(|(partition, value)| {
-                        partition == partition_name && value == value_name
-                    })
+                    && collapsed.contains(&(partition_name, value_name))
                 {
                     return Ok(Transformed {
                         value: BoundExpression::try_new(
@@ -505,6 +512,102 @@ pub(super) fn rewrite_partition_root(
         .into_inner())
 }
 
+/// How an expression of [`distinct_field_reads`] reads its fields.
+enum FieldReads {
+    /// A selection of these root fields, in order.
+    Select(FieldNames),
+    /// A pack of field accesses on the root.
+    Pack,
+}
+
+/// The fields read by an expression that only packs or selects two or more distinct root fields.
+///
+/// Partitioning such an expression leaves one bare field read per partition, so every field plan
+/// is unchanged and the plan only prunes the struct to those fields. Recognising the shape skips
+/// partitioning, which otherwise dominates planning a projection of many columns.
+fn distinct_field_reads(
+    expression: &BoundExpression,
+    fields: &StructFields,
+) -> VortexResult<Option<(Vec<usize>, FieldReads)>> {
+    let Some(scalar_fn) = expression.as_scalar() else {
+        return Ok(None);
+    };
+    let (indices, reads) = if let Some(selection) = scalar_fn.as_opt::<Select>() {
+        if !expression.children()[0].is_root() {
+            return Ok(None);
+        }
+        let names = selection.included_fields_of(fields)?;
+        let indices = names
+            .iter()
+            .map(|name| {
+                fields
+                    .find(name)
+                    .ok_or_else(|| vortex_err!("Selected field {name} is not in the struct"))
+            })
+            .collect::<VortexResult<Vec<_>>>()?;
+        (indices, FieldReads::Select(names))
+    } else if scalar_fn.is::<PackFn>() {
+        let mut indices = Vec::with_capacity(expression.children().len());
+        for child in expression.children() {
+            let Some(name) = child.as_opt::<GetItem>() else {
+                return Ok(None);
+            };
+            let Some(index) = fields.find(name).filter(|_| child.children()[0].is_root()) else {
+                return Ok(None);
+            };
+            indices.push(index);
+        }
+        (indices, FieldReads::Pack)
+    } else {
+        return Ok(None);
+    };
+
+    // A field read more than once is packed into its own partition and pushed down, and a
+    // single field is lowered into that field's plan.
+    let distinct = indices.iter().collect::<HashSet<_>>().len() == indices.len();
+    Ok((distinct && indices.len() > 1).then_some((indices, reads)))
+}
+
+/// Prunes the struct to the fields of [`distinct_field_reads`] and binds the expression, with a
+/// selection expanded to a pack of field accesses, to the pruned struct, giving the plan
+/// partitioning would.
+fn prune_to_field_reads(
+    child: &Plan<Pack>,
+    expression: &BoundExpression,
+    fields: &StructFields,
+    mut field_indices: Vec<usize>,
+    reads: FieldReads,
+) -> VortexResult<Option<PlanRef>> {
+    field_indices.sort_unstable();
+    let fields_changed = field_indices.len() != fields.nfields();
+    let rewritten = if fields_changed {
+        let pruned_fields = field_indices
+            .into_iter()
+            .map(|index| Ok((field_name(fields, index)?, field_plan(child, index)?)))
+            .collect::<VortexResult<Vec<_>>>()?;
+        child.with_pruned_fields(pruned_fields)?.into_plan()
+    } else {
+        child.to_plan()
+    };
+    let residual = match reads {
+        FieldReads::Select(names) => {
+            let root = BoundExpression::new_root(rewritten.dtype().clone());
+            let children = names
+                .iter()
+                .map(|name| BoundExpression::try_new(GetItem.bind(name.clone()), [root.clone()]))
+                .collect::<VortexResult<Vec<_>>>()?;
+            bound_pack(names, children)?
+        }
+        FieldReads::Pack => {
+            rewrite_partition_root(expression.clone(), rewritten.dtype().clone(), &[])?
+        }
+    };
+    if !fields_changed && residual == *expression {
+        return Ok(None);
+    }
+    Ok(Some(EvalPlan::try_new(residual, rewritten)?.into_plan()))
+}
+
 fn field_name(fields: &StructFields, index: usize) -> VortexResult<FieldName> {
     Ok(fields
         .field_name(index)
@@ -517,17 +620,50 @@ fn field_plan(plan: &Plan<Pack>, index: usize) -> VortexResult<PlanRef> {
         .ok_or_else(|| vortex_err!("Struct field {index} has no plan"))
 }
 
-fn expanded_struct_root(
-    root_dtype: &DType,
-    fields: &StructFields,
-) -> VortexResult<BoundExpression> {
-    let root = BoundExpression::new_root(root_dtype.clone());
-    let children = fields
-        .names()
-        .iter()
-        .map(|name| BoundExpression::try_new(GetItem.bind(name.clone()), [root.clone()]))
-        .collect::<VortexResult<Vec<_>>>()?;
-    bound_pack(fields.names().clone(), children)
+/// The fields of a struct root as bound `GetItem` expressions, each built the first time it is
+/// read, so an expression over a few fields of a wide struct does not build one for every field.
+struct ExpandedRoot<'a> {
+    root: BoundExpression,
+    fields: &'a StructFields,
+    items: HashMap<usize, BoundExpression>,
+    all: Option<BoundExpression>,
+}
+
+impl<'a> ExpandedRoot<'a> {
+    fn new(root_dtype: &DType, fields: &'a StructFields) -> Self {
+        Self {
+            root: BoundExpression::new_root(root_dtype.clone()),
+            fields,
+            items: HashMap::default(),
+            all: None,
+        }
+    }
+
+    /// The access to field `index`, shared by every read of that field.
+    fn field(&mut self, index: usize) -> VortexResult<BoundExpression> {
+        if let Some(item) = self.items.get(&index) {
+            return Ok(item.clone());
+        }
+        let item = BoundExpression::try_new(
+            GetItem.bind(field_name(self.fields, index)?),
+            [self.root.clone()],
+        )?;
+        self.items.insert(index, item.clone());
+        Ok(item)
+    }
+
+    /// The whole root, packed from an access to every field.
+    fn all(&mut self) -> VortexResult<BoundExpression> {
+        if let Some(all) = &self.all {
+            return Ok(all.clone());
+        }
+        let children = (0..self.fields.nfields())
+            .map(|index| self.field(index))
+            .collect::<VortexResult<Vec<_>>>()?;
+        let all = bound_pack(self.fields.names().clone(), children)?;
+        self.all = Some(all.clone());
+        Ok(all)
+    }
 }
 
 fn is_identity_expression(expression: &BoundExpression, input_dtype: &DType) -> VortexResult<bool> {
@@ -540,19 +676,20 @@ fn is_identity_expression(expression: &BoundExpression, input_dtype: &DType) -> 
     let Some(fields) = input_dtype.as_struct_fields_opt() else {
         return Ok(false);
     };
-    Ok(expression == &expanded_struct_root(input_dtype, fields)?)
+    Ok(expression == &ExpandedRoot::new(input_dtype, fields).all()?)
 }
 
 fn expand_struct_root(
     expression: BoundExpression,
-    expanded_root: &BoundExpression,
+    root_dtype: &DType,
     fields: &StructFields,
 ) -> VortexResult<BoundExpression> {
+    let mut expanded_root = ExpandedRoot::new(root_dtype, fields);
     Ok(expression
         .transform_down(|node| {
             if node.is_root() {
                 return Ok(Transformed {
-                    value: expanded_root.clone(),
+                    value: expanded_root.all()?,
                     changed: true,
                     order: TraversalOrder::Skip,
                 });
@@ -574,23 +711,23 @@ fn expand_struct_root(
                     vortex_err!("Field {field_name} not found while expanding struct root")
                 })?;
                 return Ok(Transformed {
-                    value: expanded_root.children()[index].clone(),
+                    value: expanded_root.field(index)?,
                     changed: true,
                     order: TraversalOrder::Skip,
                 });
             }
 
             if let Some(selection) = scalar_fn.as_opt::<Select>() {
-                let names = selection.normalize_to_included_fields(fields.names())?;
+                let names = selection.included_fields_of(fields)?;
                 let children = names
                     .iter()
                     .map(|name| {
                         let index = fields
                             .find(name)
                             .vortex_expect("normalized selection fields must exist in the root");
-                        expanded_root.children()[index].clone()
+                        expanded_root.field(index)
                     })
-                    .collect();
+                    .collect::<VortexResult<Vec<_>>>()?;
                 return Ok(Transformed {
                     value: bound_pack(names, children)?,
                     changed: true,

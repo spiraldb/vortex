@@ -35,6 +35,10 @@ use vortex_array::ArrayRef;
 use vortex_array::VortexSessionExecute;
 use vortex_array::dtype::DType;
 use vortex_array::expr::BoundExpression;
+use vortex_array::expr::analysis::referenced_field_paths;
+use vortex_array::scalar_fn::fns::get_item::GetItem;
+use vortex_array::scalar_fn::fns::pack::Pack;
+use vortex_array::scalar_fn::fns::select::Select;
 use vortex_error::VortexResult;
 use vortex_error::vortex_ensure;
 use vortex_io::request::IoService;
@@ -237,9 +241,61 @@ impl<A: 'static + Send> ScanBuilder<A> {
     }
 }
 
+/// Whether every layout the projection reads lowers to plans with a pipeline implementation.
+///
+/// A struct field the projection does not reference is never lowered, so its layout is not
+/// checked: a projection of a few columns of a wide file does not deserialize every column.
+fn supports_projection(layout: &LayoutRef, projection: &BoundExpression) -> VortexResult<bool> {
+    let identity = projection.is_root();
+    // A projection that only reads whole fields, like the identity, cannot use zone statistics.
+    let reads_fields = identity || reads_only_root_fields(projection);
+    let Some(struct_layout) = layout.as_opt::<Struct>().filter(|_| !identity) else {
+        return supports_layout(layout, reads_fields);
+    };
+    let fields = struct_layout.struct_fields();
+    let mut slots = vec![0];
+    for path in referenced_field_paths(projection)? {
+        // Struct field `i` is in slot `i + 1`, after the validity.
+        let Some(index) = path
+            .parts()
+            .first()
+            .and_then(|part| part.as_name())
+            .and_then(|name| fields.find(name))
+        else {
+            // The projection reads the whole struct, or a part that is not one of its fields.
+            return supports_layout(layout, identity);
+        };
+        slots.push(index + 1);
+    }
+    for slot in slots {
+        if let Some(child) = layout.slot(slot)?
+            && !supports_layout(&child, reads_fields)?
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// Whether a projection only selects or packs fields of the root, computing nothing over them.
+fn reads_only_root_fields(projection: &BoundExpression) -> bool {
+    let Some(scalar_fn) = projection.as_scalar() else {
+        return false;
+    };
+    if scalar_fn.is::<Select>() {
+        return projection.children()[0].is_root();
+    }
+    scalar_fn.is::<Pack>()
+        && projection
+            .children()
+            .iter()
+            .all(|child| child.as_opt::<GetItem>().is_some() && child.children()[0].is_root())
+}
+
 /// Whether every required layout lowers to plans with a pipeline implementation.
 ///
-/// List layouts lower to a list assembly, which cannot compile before its offsets are read.
+/// List layouts lower to a list assembly, which cannot compile before its offsets are read. With
+/// `identity`, the scan reads whole columns and never lowers zone statistics.
 fn supports_layout(layout: &LayoutRef, identity: bool) -> VortexResult<bool> {
     if !(layout.is::<Flat>()
         || layout.is::<Chunked>()
@@ -285,7 +341,7 @@ impl<A: 'static + Send> PreparedScan<A> {
     fn try_new(builder: ScanBuilder<A>) -> VortexResult<Self> {
         let file = builder.file;
         vortex_ensure!(
-            supports_layout(&file.layout, builder.projection.is_root())?,
+            supports_projection(&file.layout, &builder.projection)?,
             "V2 scans do not support this file's layout"
         );
         let root = lower(&file.layout)?;

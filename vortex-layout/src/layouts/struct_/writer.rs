@@ -155,10 +155,12 @@ impl LayoutStrategy for StructStrategy {
                 ));
             }
 
+            // Each column writes its chunks in a nested sequence universe, so the columns of a
+            // wide struct do not all contend on one lock for every sequence they create.
             columns.extend(
                 struct_chunk
                     .iter_unmasked_fields()
-                    .map(|field| (sequence_pointer.advance(), field.clone())),
+                    .map(|field| (sequence_pointer.advance().nest(), field.clone())),
             );
 
             Ok(columns)
@@ -225,7 +227,7 @@ impl LayoutStrategy for StructStrategy {
             .map(move |(index, ((dtype, recv), name))| {
                 let column_stream =
                     SequentialStreamAdapter::new(dtype, recv.into_stream().boxed()).sendable();
-                let child_eof = eof.split_off();
+                let child_eof = eof.split_off_nested();
                 let session = session.clone();
                 let is_validity = index == 0 && is_nullable;
                 // Fields are written unmasked, so a nullable struct hides some of their values

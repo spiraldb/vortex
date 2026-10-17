@@ -2,17 +2,20 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use std::any::Any;
+use std::any::TypeId;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
+use std::sync::Arc;
 
 use arcref::ArcRef;
-use vortex_array::DeserializeMetadata;
+use parking_lot::Mutex;
 use vortex_array::dtype::DType;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_session::VortexSession;
 use vortex_session::registry::ReadContext;
+use vortex_utils::aliases::hash_map::HashMap;
 
 use crate::LayoutId;
 use crate::LayoutRef;
@@ -41,6 +44,8 @@ pub struct LayoutDeserializeArgs<'a> {
     pub segment_ids: Vec<SegmentId>,
     /// Lazy child access.
     pub children: &'a dyn LayoutChildren,
+    /// Values shared by the layouts of the tree being deserialized.
+    pub memo: &'a LayoutBuildMemo,
 }
 
 /// Context shared while recursively deserializing layouts.
@@ -49,6 +54,38 @@ pub struct LayoutBuildContext<'a> {
     pub session: &'a VortexSession,
     /// Array read context referenced by serialized array metadata.
     pub array_read_ctx: &'a ReadContext,
+    /// Values shared by the layouts of the tree being deserialized.
+    pub memo: &'a LayoutBuildMemo,
+}
+
+/// Values a layout encoding derives while deserializing, shared by the layouts of one tree.
+///
+/// A file's layouts often repeat the same metadata, one layout per column of a wide file, so an
+/// encoding can keep what it derives from that metadata here instead of deriving it again for
+/// every layout. A memo belongs to one layout tree, so nothing is shared between files or reads.
+#[derive(Default)]
+pub struct LayoutBuildMemo(Mutex<HashMap<TypeId, Arc<dyn Any + Send + Sync>>>);
+
+impl LayoutBuildMemo {
+    /// Returns the memo's value of type `T`, inserting a default one if it has none.
+    pub fn get_or_default<T: Any + Default + Send + Sync>(&self) -> Arc<T> {
+        let value = Arc::clone(
+            self.0
+                .lock()
+                .entry(TypeId::of::<T>())
+                .or_insert_with(|| Arc::new(T::default())),
+        );
+        value
+            .downcast::<T>()
+            .ok()
+            .vortex_expect("memo values are keyed by their type")
+    }
+}
+
+impl Debug for LayoutBuildMemo {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LayoutBuildMemo").finish_non_exhaustive()
+    }
 }
 
 /// Object-safe plugin registered for a layout ID.
@@ -96,7 +133,7 @@ impl<V: VTable> LayoutVTablePlugin for V {
         children: &dyn LayoutChildren,
         build_ctx: &LayoutBuildContext<'_>,
     ) -> VortexResult<LayoutRef> {
-        let metadata = <V::Metadata as DeserializeMetadata>::deserialize(metadata)?;
+        let metadata = V::deserialize_metadata(metadata, build_ctx.memo)?;
         Ok(V::build(
             self,
             dtype,

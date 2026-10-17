@@ -24,6 +24,7 @@ use std::sync::Arc;
 
 pub(crate) use builder::AggregateStatsAccumulator;
 pub(crate) use builder::aggregate_partials;
+use parking_lot::RwLock;
 use prost::Message;
 pub use schema::MAX_IS_TRUNCATED;
 pub use schema::MIN_IS_TRUNCATED;
@@ -44,8 +45,10 @@ use vortex_error::vortex_ensure_eq;
 use vortex_error::vortex_panic;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
+use vortex_utils::aliases::hash_map::HashMap;
 
 use crate::Layout;
+use crate::LayoutBuildMemo;
 use crate::LayoutChildType;
 use crate::LayoutDeserializeArgs;
 use crate::LayoutId;
@@ -60,7 +63,7 @@ use crate::layouts::zoned::schema::AggregateSpecProto;
 use crate::layouts::zoned::schema::aggregate_specs_from_fns;
 use crate::layouts::zoned::schema::aggregate_stats_table_dtype;
 use crate::layouts::zoned::schema::legacy_stats_table_dtype;
-use crate::layouts::zoned::schema::try_aggregate_fns_from_specs;
+use crate::layouts::zoned::schema::resolve_zone_map_schema;
 use crate::segments::SegmentSource;
 
 /// Zoned layout vtable.
@@ -113,6 +116,22 @@ impl VTable for Zoned {
         }
     }
 
+    fn deserialize_metadata(
+        metadata: &[u8],
+        memo: &LayoutBuildMemo,
+    ) -> VortexResult<ZonedMetadata> {
+        let decoded = memo.get_or_default::<DecodedZonedMetadata>();
+        if let Some(metadata) = decoded.0.read().get(metadata) {
+            return Ok(metadata.clone());
+        }
+        let decoded_metadata = <ZonedMetadata as DeserializeMetadata>::deserialize(metadata)?;
+        decoded
+            .0
+            .write()
+            .insert(metadata.to_vec(), decoded_metadata.clone());
+        Ok(decoded_metadata)
+    }
+
     fn deserialize(
         &self,
         args: &LayoutDeserializeArgs<'_>,
@@ -124,8 +143,12 @@ impl VTable for Zoned {
             "ZonedLayout expects exactly 2 children (data, zones)"
         );
         vortex_ensure_eq!(args.children.child_row_count(0), args.row_count);
-        let Some(aggregate_fns) =
-            try_aggregate_fns_from_specs(&metadata.aggregate_specs, args.session)?
+        let Some((aggregate_fns, stats_table_dtype)) = resolve_zone_map_schema(
+            args.dtype,
+            &metadata.aggregate_specs,
+            args.session,
+            args.memo,
+        )?
         else {
             args.children.child(0, args.dtype)?;
             return Ok(ZonedData {
@@ -134,10 +157,10 @@ impl VTable for Zoned {
                 stats_table_dtype: aggregate_stats_table_dtype(args.dtype, &[]),
             });
         };
-        aggregate_specs_from_fns(&aggregate_fns)?;
-        let stats_table_dtype = aggregate_stats_table_dtype(args.dtype, &aggregate_fns);
+        // The zones child is built when a filter first reads it, not here: a scan that only
+        // projects columns never needs it, and building it for every column of a wide file would
+        // double the work of opening one.
         args.children.child(0, args.dtype)?;
-        args.children.child(1, &stats_table_dtype)?;
         Ok(ZonedData {
             zone_len: metadata.zone_len as usize,
             zone_map_schema: ZoneMapSchema::AggregateFns(aggregate_fns),
@@ -204,8 +227,8 @@ impl VTable for LegacyStats {
                 aggregate_stats_table_dtype(args.dtype, aggregate_fns)
             }
         };
+        // As for the zoned layout, the zones child is built when a filter first reads it.
         args.children.child(0, args.dtype)?;
-        args.children.child(1, &stats_table_dtype)?;
         Ok(ZonedData {
             zone_len: metadata.zone_len as usize,
             zone_map_schema: metadata.zone_map_schema.clone(),
@@ -415,6 +438,14 @@ pub struct ZonedMetadata {
     pub(super) aggregate_specs: Arc<[AggregateSpecProto]>,
 }
 
+/// Zoned metadata decoded while deserializing one layout tree, keyed by its serialized bytes.
+///
+/// Every zoned column of a wide file stores the same metadata. Sharing one decoded copy skips
+/// decoding it again for each column, and lets the columns share one `aggregate_specs`, which the
+/// zone map schema cache then compares by pointer.
+#[derive(Debug, Default)]
+struct DecodedZonedMetadata(RwLock<HashMap<Vec<u8>, ZonedMetadata>>);
+
 /// Serialized metadata for legacy `vortex.stats` layouts.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct LegacyStatsMetadata {
@@ -527,10 +558,12 @@ mod tests {
 
     use super::*;
     use crate::LayoutBuildContext;
+    use crate::LayoutBuildMemo;
     use crate::children::OwnedLayoutChildren;
     use crate::layouts::flat::FlatLayout;
     use crate::layouts::zoned::aggregates::bloom_filter::BloomFilter;
     use crate::layouts::zoned::aggregates::bloom_filter::BloomOptions;
+    use crate::layouts::zoned::schema::try_aggregate_fns_from_specs;
     use crate::segments::SegmentId;
 
     fn aggregate_spec(aggregate_fn: AggregateFnRef) -> AggregateSpecProto {
@@ -651,6 +684,7 @@ mod tests {
         let build_ctx = LayoutBuildContext {
             session: &session,
             array_read_ctx: &build_read_ctx,
+            memo: &LayoutBuildMemo::default(),
         };
 
         let layout = <LegacyStats as VTable>::build(
@@ -682,6 +716,7 @@ mod tests {
         let build_ctx = LayoutBuildContext {
             session: &session,
             array_read_ctx: &build_read_ctx,
+            memo: &LayoutBuildMemo::default(),
         };
 
         let result = <Zoned as VTable>::build(
@@ -711,6 +746,7 @@ mod tests {
         let build_ctx = LayoutBuildContext {
             session: &session,
             array_read_ctx: &build_read_ctx,
+            memo: &LayoutBuildMemo::default(),
         };
 
         let metadata = ZonedMetadata {
@@ -747,6 +783,7 @@ mod tests {
         let build_ctx = LayoutBuildContext {
             session: &session,
             array_read_ctx: &build_read_ctx,
+            memo: &LayoutBuildMemo::default(),
         };
 
         let metadata = ZonedMetadata {

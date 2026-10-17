@@ -17,6 +17,7 @@ use vortex_session::VortexSession;
 use vortex_session::registry::ReadContext;
 
 use crate::LayoutBuildContext;
+use crate::LayoutBuildMemo;
 use crate::LayoutRef;
 use crate::flatbuffers::layout as fbl;
 use crate::layouts::foreign::new_foreign_layout;
@@ -122,19 +123,23 @@ impl LayoutChildren for OwnedLayoutChildren {
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct ViewedLayoutChildren {
+/// What every node of one viewed layout tree shares, so a node clones one handle rather than one
+/// per field: a wide file has a node for every column.
+struct ViewedLayoutTree {
     flatbuffer: FlatBuffer,
-    flatbuffer_loc: usize,
     array_read_ctx: ReadContext,
     layout_read_ctx: ReadContext,
     layouts: LayoutRegistry,
     allow_unknown: bool,
     session: VortexSession,
+    memo: LayoutBuildMemo,
+}
+
+#[derive(Clone)]
+pub(crate) struct ViewedLayoutChildren {
+    tree: Arc<ViewedLayoutTree>,
+    flatbuffer_loc: usize,
     cache: Arc<[OnceCell<LayoutRef>]>,
-    /// Per-child answers to [`LayoutChildren::child_is_indivisible`], precomputed at
-    /// construction from the flatbuffer encoding tags alone.
-    indivisible: Arc<[bool]>,
 }
 
 impl ViewedLayoutChildren {
@@ -152,35 +157,41 @@ impl ViewedLayoutChildren {
         allow_unknown: bool,
         session: VortexSession,
     ) -> Self {
-        // SAFETY: guaranteed by caller
-        let fb_children = unsafe { fbl::Layout::follow(flatbuffer.as_ref(), flatbuffer_loc) }
-            .children()
-            .unwrap_or_default();
-        let cache = vec![OnceCell::new(); fb_children.len()]
-            .into_boxed_slice()
-            .into();
-        // Unknown encodings are conservatively not indivisible so callers fall back to
-        // materializing the child.
-        let indivisible = fb_children
-            .iter()
-            .map(|child| {
-                layout_read_ctx
-                    .resolve(child.encoding())
-                    .and_then(|encoding_id| layouts.get(&encoding_id))
-                    .is_some_and(|encoding| encoding.is_indivisible())
-            })
-            .collect::<Arc<[bool]>>();
-        Self {
+        let tree = Arc::new(ViewedLayoutTree {
             flatbuffer,
-            flatbuffer_loc,
             array_read_ctx,
             layout_read_ctx,
             layouts,
             allow_unknown,
             session,
+            memo: LayoutBuildMemo::default(),
+        });
+        // SAFETY: guaranteed by caller
+        unsafe { Self::in_tree(tree, flatbuffer_loc) }
+    }
+
+    /// Create the [`ViewedLayoutChildren`] of the layout at `flatbuffer_loc` in `tree`.
+    ///
+    /// # Safety
+    ///
+    /// Assumes the tree's flatbuffer is validated and that `flatbuffer_loc` is the offset of a
+    /// layout in it.
+    unsafe fn in_tree(tree: Arc<ViewedLayoutTree>, flatbuffer_loc: usize) -> Self {
+        // SAFETY: guaranteed by caller
+        let nchildren = unsafe { fbl::Layout::follow(tree.flatbuffer.as_ref(), flatbuffer_loc) }
+            .children()
+            .map_or(0, |children| children.len());
+        let cache = vec![OnceCell::new(); nchildren].into_boxed_slice().into();
+        Self {
+            tree,
+            flatbuffer_loc,
             cache,
-            indivisible,
         }
+    }
+
+    /// The memo shared by the layouts of this tree.
+    pub(crate) fn memo(&self) -> &LayoutBuildMemo {
+        &self.tree.memo
     }
 
     /// Return the flatbuffer layout message.
@@ -188,7 +199,7 @@ impl ViewedLayoutChildren {
         // SAFETY: flatbuffer_loc is guaranteed to be a valid offset into the flatbuffer
         // as it was constructed from a validated flatbuffer in ViewedLayoutChildren::try_new.
         // The lifetime of the returned Layout is tied to self, ensuring the buffer remains valid.
-        unsafe { fbl::Layout::follow(self.flatbuffer.as_ref(), self.flatbuffer_loc) }
+        unsafe { fbl::Layout::follow(self.tree.flatbuffer.as_ref(), self.flatbuffer_loc) }
     }
 
     fn foreign_layout_from_fb(
@@ -197,6 +208,7 @@ impl ViewedLayoutChildren {
         dtype: &DType,
     ) -> VortexResult<LayoutRef> {
         let encoding_id = self
+            .tree
             .layout_read_ctx
             .resolve(fb_layout.encoding())
             .ok_or_else(|| vortex_err!("Encoding not found: {}", fb_layout.encoding()))?;
@@ -241,35 +253,28 @@ impl LayoutChildren for ViewedLayoutChildren {
             let fb_child = self.flatbuffer().children().unwrap_or_default().get(idx);
 
             // SAFETY: same validated flatbuffer; fb_child._tab.loc() is a valid offset
-            // We need this to avoid re-initializing cache here
             let viewed_children = unsafe {
-                ViewedLayoutChildren::new_unchecked(
-                    self.flatbuffer.clone(),
-                    fb_child._tab.loc(),
-                    self.array_read_ctx.clone(),
-                    self.layout_read_ctx.clone(),
-                    self.layouts.clone(),
-                    self.allow_unknown,
-                    self.session.clone(),
-                )
+                ViewedLayoutChildren::in_tree(Arc::clone(&self.tree), fb_child._tab.loc())
             };
 
             let encoding_id = self
+                .tree
                 .layout_read_ctx
                 .resolve(fb_child.encoding())
                 .ok_or_else(|| {
                     vortex_err!("Unknown layout encoding index: {}", fb_child.encoding())
                 })?;
-            let Some(encoding) = self.layouts.get(&encoding_id) else {
-                if self.allow_unknown {
+            let Some(encoding) = self.tree.layouts.get(&encoding_id) else {
+                if self.tree.allow_unknown {
                     return viewed_children.foreign_layout_from_fb(fb_child, dtype);
                 }
                 vortex_bail!("Unknown layout encoding: {encoding_id}");
             };
 
             let build_ctx = LayoutBuildContext {
-                session: &self.session,
-                array_read_ctx: &self.array_read_ctx,
+                session: &self.tree.session,
+                array_read_ctx: &self.tree.array_read_ctx,
+                memo: &self.tree.memo,
             };
             encoding.build(
                 dtype,
@@ -306,6 +311,20 @@ impl LayoutChildren for ViewedLayoutChildren {
     }
 
     fn child_is_indivisible(&self, idx: usize) -> bool {
-        self.indivisible.get(idx).copied().unwrap_or(false)
+        // Unknown encodings are conservatively not indivisible so callers fall back to
+        // materializing the child.
+        idx < self.nchildren()
+            && self
+                .tree
+                .layout_read_ctx
+                .resolve(
+                    self.flatbuffer()
+                        .children()
+                        .unwrap_or_default()
+                        .get(idx)
+                        .encoding(),
+                )
+                .and_then(|encoding_id| self.tree.layouts.get(&encoding_id))
+                .is_some_and(|encoding| encoding.is_indivisible())
     }
 }

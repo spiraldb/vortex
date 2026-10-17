@@ -12,6 +12,7 @@ use vortex_array::dtype::DType;
 use vortex_array::flatbuffers::FlatBuffer;
 use vortex_array::flatbuffers::FlatBufferRoot;
 use vortex_array::flatbuffers::WriteFlatBuffer;
+use vortex_array::flatbuffers::verifier_options;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_session::VortexSession;
@@ -27,22 +28,29 @@ use crate::layouts::foreign::new_foreign_layout;
 use crate::segments::SegmentId;
 use crate::session::LayoutSessionExt;
 
-static LAYOUT_VERIFIER: LazyLock<VerifierOptions> = LazyLock::new(|| {
-    VerifierOptions {
-        // Overridden
-        max_tables: env::var("VORTEX_MAX_LAYOUT_TABLES")
-            .ok()
-            .and_then(|lmt| lmt.parse::<usize>().ok())
-            .unwrap_or(1000000),
-        max_depth: env::var("VORTEX_MAX_LAYOUT_DEPTH")
-            .ok()
-            .and_then(|lmt| lmt.parse::<usize>().ok())
-            .unwrap_or(64),
-        // Defaults from flatbuffers
-        max_apparent_size: 1 << 31,
-        ignore_missing_null_terminator: false,
-    }
+/// Table and depth limits for verifying layout flatbuffers, overridden by environment variables.
+static LAYOUT_VERIFIER_LIMITS: LazyLock<(Option<usize>, usize)> = LazyLock::new(|| {
+    let max_tables = env::var("VORTEX_MAX_LAYOUT_TABLES")
+        .ok()
+        .and_then(|lmt| lmt.parse::<usize>().ok());
+    let max_depth = env::var("VORTEX_MAX_LAYOUT_DEPTH")
+        .ok()
+        .and_then(|lmt| lmt.parse::<usize>().ok())
+        .unwrap_or(64);
+    (max_tables, max_depth)
 });
+
+/// Verifier options for a layout flatbuffer of `len` bytes. Without an override, the table limit
+/// grows with the buffer, so a layout with millions of columns verifies.
+fn layout_verifier_options(len: usize) -> VerifierOptions {
+    let (max_tables, max_depth) = *LAYOUT_VERIFIER_LIMITS;
+    let defaults = verifier_options(len);
+    VerifierOptions {
+        max_tables: max_tables.unwrap_or(defaults.max_tables),
+        max_depth,
+        ..defaults
+    }
+}
 
 /// Parse a [`LayoutRef`] from a layout flatbuffer.
 pub fn layout_from_flatbuffer(
@@ -66,7 +74,8 @@ pub fn layout_from_flatbuffer_with_options(
 ) -> VortexResult<LayoutRef> {
     let layout_session = session.layouts();
     let layouts = layout_session.registry();
-    let fb_layout = root_with_opts::<layout::Layout>(&LAYOUT_VERIFIER, &flatbuffer)?;
+    let fb_layout =
+        root_with_opts::<layout::Layout>(&layout_verifier_options(flatbuffer.len()), &flatbuffer)?;
     let encoding_id = layout_ctx
         .resolve(fb_layout.encoding())
         .ok_or_else(|| vortex_err!("Invalid encoding ID: {}", fb_layout.encoding()))?;
@@ -94,6 +103,7 @@ pub fn layout_from_flatbuffer_with_options(
     let build_ctx = LayoutBuildContext {
         session,
         array_read_ctx: ctx,
+        memo: viewed_children.memo(),
     };
     let layout = encoding.build(
         dtype,

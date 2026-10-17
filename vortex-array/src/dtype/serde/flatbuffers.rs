@@ -6,7 +6,6 @@ use std::sync::Arc;
 use flatbuffers::FlatBufferBuilder;
 use flatbuffers::Follow;
 use flatbuffers::WIPOffset;
-use flatbuffers::root;
 use itertools::Itertools;
 use vortex_error::VortexError;
 use vortex_error::VortexResult;
@@ -30,6 +29,7 @@ use crate::flatbuffers::FlatBuffer;
 use crate::flatbuffers::FlatBufferRoot;
 use crate::flatbuffers::WriteFlatBuffer;
 use crate::flatbuffers::dtype as fbd;
+use crate::flatbuffers::root_verified;
 
 /// A lazily evaluated DType, parsed on access from an underlying flatbuffer.
 #[derive(Debug, Clone)]
@@ -168,7 +168,7 @@ impl DType {
     /// Create a [`DType`] from a flatbuffer buffer.
     pub fn from_flatbuffer(buffer: FlatBuffer, session: &VortexSession) -> VortexResult<Self> {
         let fb_loc = {
-            let fb_dtype = root::<fbd::DType>(&buffer)?;
+            let fb_dtype = root_verified::<fbd::DType>(&buffer)?;
             fb_dtype._tab.loc()
         };
         let view = ViewedDType::from_fb_loc(fb_loc, buffer, session.clone());
@@ -568,6 +568,7 @@ mod test {
     use flatbuffers::FlatBufferBuilder;
     use flatbuffers::root;
     use vortex_buffer::ByteBuffer;
+    use vortex_error::VortexResult;
 
     use crate::dtype::DType;
     use crate::dtype::PType;
@@ -592,6 +593,32 @@ mod test {
 
         let deserialized = DType::try_from(view).unwrap();
         assert_eq!(dtype, deserialized);
+    }
+
+    /// A struct this wide holds more tables than the flatbuffers verifier allows by default.
+    #[test]
+    fn struct_with_more_tables_than_the_default_verifier_limit() -> VortexResult<()> {
+        let nfields = 550_000;
+        let dtype = DType::Struct(
+            (0..nfields)
+                .map(|idx| {
+                    (
+                        idx.to_string(),
+                        DType::Primitive(PType::I64, Nullability::NonNullable),
+                    )
+                })
+                .collect::<StructFields>(),
+            Nullability::NonNullable,
+        );
+        let bytes = dtype.write_flatbuffer_bytes()?;
+        assert!(root::<fb::DType>(&bytes).is_err());
+
+        let deserialized = DType::from_flatbuffer(bytes, &SESSION)?;
+        assert_eq!(
+            deserialized.as_struct_fields_opt().map(|f| f.nfields()),
+            Some(nfields)
+        );
+        Ok(())
     }
 
     #[test]

@@ -31,6 +31,7 @@ use vortex_array::expr::is_null;
 use vortex_array::expr::lit;
 use vortex_array::expr::pack;
 use vortex_array::expr::root;
+use vortex_array::expr::select;
 use vortex_array::expr::stats::Stat;
 use vortex_array::scalar::ScalarValue;
 use vortex_array::scalar_fn::fns::operators::CompareOperator;
@@ -43,6 +44,7 @@ use vortex_session::registry::ReadContext;
 
 use super::*;
 use crate::LayoutBuildContext;
+use crate::LayoutBuildMemo;
 use crate::LayoutEncoding;
 use crate::LayoutRef;
 use crate::OwnedLayoutChildren;
@@ -632,6 +634,86 @@ fn empty_projection_prunes_row_idx_child_fields() -> VortexResult<()> {
 
     assert_eq!(empty_struct.nfields(), 0);
     assert_eq!(empty_struct.children().len(), 0);
+    Ok(())
+}
+
+fn three_field_struct() -> LayoutRef {
+    let dtype = primitive(PType::I32, Nullability::NonNullable);
+    StructLayout::new(
+        3,
+        DType::Struct(
+            StructFields::from_iter([
+                ("a", dtype.clone()),
+                ("b", dtype.clone()),
+                ("c", dtype.clone()),
+            ]),
+            Nullability::NonNullable,
+        ),
+        vec![
+            flat(3, dtype.clone(), 0),
+            flat(3, dtype.clone(), 1),
+            flat(3, dtype, 2),
+        ],
+    )
+    .into_layout()
+}
+
+#[test]
+fn field_projection_prunes_struct_to_projected_fields() -> VortexResult<()> {
+    let projection = pack(
+        [("x", get_item("c", root())), ("y", get_item("a", root()))],
+        Nullability::NonNullable,
+    );
+    let plan = make_eval(projection, make_plan(three_field_struct())?)?.into_plan();
+
+    insta::assert_snapshot!(optimize(plan)?.display_tree(), @"
+    root: vortex.plan.eval({x=i32, y=i32}, rows=3) expr=pack(x: $.c, y: $.a)
+      child: vortex.plan.pack({a=i32, c=i32}, rows=3)
+        a: vortex.plan.filter(i32, rows=3)
+          child: vortex.plan.segment_scan(i32, rows=3)
+        c: vortex.plan.filter(i32, rows=3)
+          child: vortex.plan.segment_scan(i32, rows=3)
+    ");
+    Ok(())
+}
+
+#[test]
+fn field_selection_prunes_struct_to_selected_fields() -> VortexResult<()> {
+    let plan = make_eval(select(["c", "a"], root()), make_plan(three_field_struct())?)?.into_plan();
+
+    insta::assert_snapshot!(optimize(plan)?.display_tree(), @"
+    root: vortex.plan.eval({c=i32, a=i32}, rows=3) expr=pack(c: $.c, a: $.a)
+      child: vortex.plan.pack({a=i32, c=i32}, rows=3)
+        a: vortex.plan.filter(i32, rows=3)
+          child: vortex.plan.segment_scan(i32, rows=3)
+        c: vortex.plan.filter(i32, rows=3)
+          child: vortex.plan.segment_scan(i32, rows=3)
+    ");
+    Ok(())
+}
+
+#[test]
+fn field_projection_of_every_field_keeps_the_struct() -> VortexResult<()> {
+    let projection = pack(
+        [
+            ("c", get_item("c", root())),
+            ("a", get_item("a", root())),
+            ("b", get_item("b", root())),
+        ],
+        Nullability::NonNullable,
+    );
+    let plan = make_eval(projection, make_plan(three_field_struct())?)?.into_plan();
+
+    insta::assert_snapshot!(optimize(plan)?.display_tree(), @"
+    root: vortex.plan.eval({c=i32, a=i32, b=i32}, rows=3) expr=pack(c: $.c, a: $.a, b: $.b)
+      child: vortex.plan.pack({a=i32, b=i32, c=i32}, rows=3)
+        a: vortex.plan.filter(i32, rows=3)
+          child: vortex.plan.segment_scan(i32, rows=3)
+        b: vortex.plan.filter(i32, rows=3)
+          child: vortex.plan.segment_scan(i32, rows=3)
+        c: vortex.plan.filter(i32, rows=3)
+          child: vortex.plan.segment_scan(i32, rows=3)
+    ");
     Ok(())
 }
 
@@ -1365,6 +1447,7 @@ fn legacy_layout(
     let build_ctx = LayoutBuildContext {
         session: &session,
         array_read_ctx: &read_ctx,
+        memo: &LayoutBuildMemo::default(),
     };
     let mut metadata = zone_len.to_le_bytes().to_vec();
     metadata.extend(as_stat_bitset_bytes(stats));

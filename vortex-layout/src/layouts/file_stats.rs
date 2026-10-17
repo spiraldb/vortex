@@ -84,10 +84,13 @@ impl StatsAccumulator {
             .iter()
             .filter_map(|&stat| {
                 stat.dtype(dtype).map(|stat_dtype| {
+                    // Builders grow as chunks arrive. A wide table has one accumulator per column,
+                    // often with a single chunk, so reserving room up front would cost far more
+                    // memory than the statistics themselves.
                     stats_builder_with_capacity(
                         stat,
                         &stat_dtype.as_nullable(),
-                        1024,
+                        0,
                         max_variable_length_statistics_size,
                     )
                 })

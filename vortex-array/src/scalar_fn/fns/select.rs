@@ -25,6 +25,7 @@ use crate::arrays::struct_::StructArrayExt;
 use crate::dtype::DType;
 use crate::dtype::FieldName;
 use crate::dtype::FieldNames;
+use crate::dtype::StructFields;
 use crate::expr::BoundExpression;
 use crate::expr::display::ExprDisplay;
 use crate::expr::field::DisplayFieldNames;
@@ -158,7 +159,7 @@ impl ScalarFnVTable for Select {
                 .dtype()
                 .as_struct_fields_opt()
                 .ok_or_else(|| vortex_err!("Select child not a struct dtype"))?;
-            let included = selection.normalize_to_included_fields(child_struct_dtype.names())?;
+            let included = selection.included_fields_of(child_struct_dtype)?;
             let scalar = constant.scalar().as_struct().project(included.as_ref())?;
 
             return Ok(ConstantArray::new(scalar, child.len()).into_array());
@@ -199,7 +200,7 @@ impl ScalarFnVTable for Select {
         })?;
 
         // "Mask" out the unwanted fields of the child struct `DType`.
-        let included_fields = selection.normalize_to_included_fields(struct_fields.names())?;
+        let included_fields = selection.included_fields_of(struct_fields)?;
         let all_included_fields_are_nullable = included_fields.iter().all(|name| {
             struct_fields
                 .field(name)
@@ -303,6 +304,27 @@ impl FieldSelection {
         let (FieldSelection::Include(fields) | FieldSelection::Exclude(fields)) = self;
 
         fields
+    }
+
+    /// The fields of `fields` this selection includes, in output order.
+    ///
+    /// Like [`normalize_to_included_fields`](Self::normalize_to_included_fields), but an inclusion
+    /// looks each selected name up in the struct's name index rather than hashing every available
+    /// field, so selecting a few fields of a wide struct does not visit all of them.
+    pub fn included_fields_of(&self, fields: &StructFields) -> VortexResult<FieldNames> {
+        match self {
+            FieldSelection::Include(included) => {
+                if included.iter().any(|name| fields.find(name).is_none()) {
+                    vortex_bail!(
+                        "Select fields {:?} must be a subset of child fields {:?}",
+                        self,
+                        fields.names()
+                    );
+                }
+                Ok(included.clone())
+            }
+            FieldSelection::Exclude(_) => self.normalize_to_included_fields(fields.names()),
+        }
     }
 
     pub fn normalize_to_included_fields(

@@ -7,8 +7,10 @@ use flatbuffers::FlatBufferBuilder;
 use flatbuffers::Follow;
 use flatbuffers::InvalidFlatbuffer;
 use flatbuffers::Verifiable;
+use flatbuffers::VerifierOptions;
 use flatbuffers::WIPOffset;
 use flatbuffers::root;
+use flatbuffers::root_with_opts;
 use vortex_buffer::ByteBuffer;
 use vortex_buffer::ConstByteBuffer;
 use vortex_error::VortexResult;
@@ -18,6 +20,29 @@ use vortex_error::VortexResult;
 /// This is based on the assumption that the maximum primitive type is 8 bytes.
 /// See: <https://groups.google.com/g/flatbuffers/c/PSgQeWeTx_g>
 pub type FlatBuffer = ConstByteBuffer<8>;
+
+/// Verifier options for a flatbuffer of `len` bytes, allowing as many tables as it can hold.
+///
+/// The verifier counts the tables it visits to bound its work, and by default rejects a buffer
+/// with more than a million. The dtype, layout and statistics of a file with a million columns
+/// each hold more than that. A table occupies at least four bytes, so a limit proportional to the
+/// buffer's length never rejects a valid buffer while still bounding the work of verifying one,
+/// even if its tables are shared to make the verifier revisit them.
+pub fn verifier_options(len: usize) -> VerifierOptions {
+    let defaults = VerifierOptions::default();
+    VerifierOptions {
+        max_tables: defaults.max_tables.max(len / 4),
+        ..defaults
+    }
+}
+
+/// Verifies and returns the root of a flatbuffer with the [`verifier_options`] for its length.
+pub fn root_verified<'buf, T>(buf: &'buf [u8]) -> Result<T::Inner, InvalidFlatbuffer>
+where
+    T: 'buf + Follow<'buf> + Verifiable,
+{
+    root_with_opts::<T>(&verifier_options(buf.len()), buf)
+}
 
 /// Marker trait for types that can be the root of a FlatBuffer.
 pub trait FlatBufferRoot {}

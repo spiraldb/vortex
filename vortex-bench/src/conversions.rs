@@ -14,6 +14,7 @@ use parquet::arrow::AsyncArrowWriter;
 use parquet::arrow::ParquetRecordBatchStreamBuilder;
 use parquet::arrow::arrow_reader::ArrowReaderMetadata;
 use parquet::arrow::arrow_reader::ArrowReaderOptions;
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::async_reader::ParquetRecordBatchStream;
 use parquet::file::metadata::KeyValue;
 use parquet::file::metadata::ParquetMetaData;
@@ -119,23 +120,31 @@ pub async fn parquet_to_vortex_chunks_with_batch_size(
     parquet_path: PathBuf,
     batch_size: Option<usize>,
 ) -> anyhow::Result<ChunkedArray> {
-    let file = File::open(parquet_path).await?;
-    let builder = ParquetRecordBatchStreamBuilder::new(file).await?;
+    // The async Parquet reader checks each column chunk it needs against every byte range it has
+    // fetched, which is quadratic in the column count: a million-column file takes minutes to
+    // read. The synchronous reader does not, so read on a blocking thread.
+    tokio::task::spawn_blocking(move || read_parquet_to_vortex_chunks(&parquet_path, batch_size))
+        .await?
+}
+
+fn read_parquet_to_vortex_chunks(
+    parquet_path: &Path,
+    batch_size: Option<usize>,
+) -> anyhow::Result<ChunkedArray> {
+    let builder = ParquetRecordBatchReaderBuilder::try_new(fs::File::open(parquet_path)?)?;
 
     let Some(batch_size) = batch_size.filter(|size| *size > 0) else {
-        let chunks: Vec<ArrayRef> = parquet_to_vortex_stream(builder.build()?)
-            .map(|r| r.map_err(anyhow::Error::from))
-            .try_collect()
-            .await?;
+        let chunks = builder
+            .build()?
+            .map(|batch| Ok(record_batch_to_vortex(batch?)?))
+            .collect::<anyhow::Result<Vec<ArrayRef>>>()?;
         return Ok(ChunkedArray::from_iter(chunks));
     };
 
-    let batches: Vec<RecordBatch> = builder
+    let batches = builder
         .with_batch_size(batch_size)
         .build()?
-        .map_err(anyhow::Error::from)
-        .try_collect()
-        .await?;
+        .collect::<Result<Vec<RecordBatch>, _>>()?;
 
     let schema = batches
         .first()

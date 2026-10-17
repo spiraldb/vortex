@@ -274,6 +274,7 @@ mod test {
     use vortex_session::registry::ReadContext;
 
     use crate::LayoutBuildContext;
+    use crate::LayoutBuildMemo;
     use crate::LayoutRef;
     use crate::LayoutStrategy;
     use crate::VTable;
@@ -481,6 +482,7 @@ mod test {
         let build_ctx = LayoutBuildContext {
             session: &session,
             array_read_ctx: &read_ctx,
+            memo: &LayoutBuildMemo::default(),
         };
         let legacy_layout = <LegacyStats as VTable>::build(
             &LegacyStatsLayoutEncoding,
