@@ -410,6 +410,44 @@ series 85: LPC >=5% smaller than cascaded Delta in 40, >=10% in 21; than the bet
 
 </details>
 
+## Searching for a show-stopper dataset
+
+**Where LPC can win big.** Delta-of-delta on a sinusoid of amplitude `A`, at normalized frequency
+`ω = 2πf/fs`, leaves a residual of about `(2 − 2cos ω)·A`. LPC removes that down to the noise
+floor. A large LPC win therefore needs a narrowband signal far above its noise floor, sampled
+only moderately often: roughly 5–100 samples per cycle.
+
+- **Heavily oversampled signals don't qualify.** The grid waveforms at 30–500 kHz are an example:
+  Delta already reaches the noise floor there.
+- **Coarsely quantized signals don't either.** Wave buoys at 1 cm resolution are an example: the
+  quantization noise *is* the signal's fine structure.
+
+**Long-period seismic, 15 stations worldwide** (`scan_iris.py`; 6 days of LHZ at 1 Hz, first 512K
+samples, the same model as `lpc_eval.py`):
+
+| station | Delta | delta-of-delta | LPC | gain vs better fixed predictor |
+|---|---|---|---|---|
+| IU.ANMO | 12.41 | 12.24 | 9.46 | 1.29x |
+| IU.RAR | 15.74 | 16.13 | 12.54 | 1.26x |
+| IU.PAB | 11.90 | 12.00 | 9.62 | 1.24x |
+| II.ALE | 13.28 | 13.47 | 10.80 | 1.23x |
+| IU.KIP | 16.33 | 16.87 | 13.48 | 1.21x |
+| II.BFO, IU.TATO, IU.PTCN, G.ECH | 13.5–17.1 | 13.7–17.6 | 11.2–14.2 | 1.20x |
+| IU.COLA, IU.SSPA, IU.GUMO, IU.HRV, II.KDAK | 12.2–14.6 | 12.5–15.1 | 10.2–12.4 | 1.17–1.19x |
+
+All sizes are bits/value.
+
+- **The win is general.** Every station gains 17–29%, because the microseism, a 5–8 s ocean-driven
+  oscillation sampled at 1 Hz, dominates every long-period channel on Earth.
+- **The win is capped at ~2.5–3 bits/value.** That is the gap between the microseism amplitude
+  and the broadband noise floor at these stations.
+- **Higher-rate channels gain less.** BHZ at 40 Hz and HHZ at 100 Hz gain 1.00–1.16x, and the
+  BDF infrasound sensor 1.05x: oversampled noise, where delta-of-delta is near optimal.
+- **Barometers and VH channels** gain 1.03–1.20x.
+
+**CDIP Datawell wave buoys** (`fetch.py waves`, 1.28 Hz, exact 1 cm grid, four buoys, Z and X
+axes): 1.06–1.13x against the best fixed predictor.
+
 ## Encoder ablations
 
 `ablate.py` runs on the 34 series where lane-parallel LPC gains ≥5%. All sizes are bits/value.

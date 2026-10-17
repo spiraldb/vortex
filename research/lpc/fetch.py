@@ -27,7 +27,7 @@ MANIFEST = os.path.join(DATA, "manifest.jsonl")
 def curl(url, path, timeout=600):
     path = os.path.join(RAW, path)
     if not os.path.exists(path) or os.path.getsize(path) == 0:
-        subprocess.run(["curl", "-sSL", "--fail", "-m", str(timeout), "-o", path, url], check=True)
+        subprocess.run(["curl", "-gsSL", "--fail", "-m", str(timeout), "-o", path, url], check=True)
     return path
 
 
@@ -475,6 +475,32 @@ def daphnet():
 
 
 SOURCES["daphnet"] = daphnet
+
+
+def waves():
+    """CDIP Datawell wave-buoy displacement at 1.28 Hz: float32 metres on an exact 1 cm grid."""
+    for stn, label in [("100p1", "torreypines"), ("106p1", "waimea"), ("029p1", "pointreyes"), ("166p1", "papa")]:
+        for axis in ["Z", "X"]:
+            name = f"wave_cdip{stn[:3]}_{label}_{axis.lower()}_1.28hz"
+            url = (
+                f"https://thredds.cdip.ucsd.edu/thredds/dodsC/cdip/archive/{stn}/{stn}_d01.nc.ascii"
+                f"?xyz{axis}Displacement[2000000:1:{2000000 + (1 << 20) - 1}]"
+            )
+            try:
+                text = open(curl(url, name + ".ascii", timeout=1800)).read()
+                body = text.split("xyz" + axis + "Displacement", 2)[-1]
+                vals = np.array(
+                    [float(v) for v in body.replace("\n", ",").split(",")[1:] if v.strip()], dtype=np.float64
+                )
+                vals = vals[vals > -900]
+                cm = np.round(vals * 100)
+                err = np.max(np.abs(cm / 100 - vals))
+                save(name, "waves", cm, 1.28, f"CDIP {stn} d01 xyz{axis}Displacement (cm, max err {err:.1e} m)")
+            except Exception as e:  # noqa: BLE001
+                print("FAILED", name, e)
+
+
+SOURCES["waves"] = waves
 
 
 if __name__ == "__main__":
