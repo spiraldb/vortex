@@ -398,7 +398,6 @@ mod tests {
         let mut ctx = SESSION.create_execution_ctx();
         let arr = PrimitiveArray::from_iter([1i32, 1, 2, 2, 2, 3, 3, 3, 3, 3]);
         let (ends, values) = runend_encode(arr.as_view(), &mut ctx);
-        let values = values.execute::<PrimitiveArray>(&mut ctx)?;
 
         let expected_ends = PrimitiveArray::from_iter(vec![2u8, 5, 10]);
         assert_arrays_eq!(ends, expected_ends, &mut ctx);
@@ -417,7 +416,6 @@ mod tests {
             ])),
         );
         let (ends, values) = runend_encode(arr.as_view(), &mut ctx);
-        let values = values.execute::<PrimitiveArray>(&mut ctx)?;
 
         let expected_ends = PrimitiveArray::from_iter(vec![2u8, 4, 5, 8, 10]);
         assert_arrays_eq!(ends, expected_ends, &mut ctx);
@@ -435,7 +433,6 @@ mod tests {
             Validity::from(BitBuffer::new_unset(5)),
         );
         let (ends, values) = runend_encode(arr.as_view(), &mut ctx);
-        let values = values.execute::<PrimitiveArray>(&mut ctx)?;
 
         let expected_ends = PrimitiveArray::from_iter(vec![5u64]);
         assert_arrays_eq!(ends, expected_ends, &mut ctx);

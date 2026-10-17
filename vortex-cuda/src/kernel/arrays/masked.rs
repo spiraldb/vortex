@@ -92,7 +92,11 @@ mod tests {
             .await?
             .into_array();
 
-        assert_arrays_eq!(masked, gpu_result, &mut ctx);
+        assert_arrays_eq!(
+            gpu_result,
+            PrimitiveArray::from_option_iter([Some(1i32), None, Some(3), Some(4)]),
+            &mut ctx
+        );
 
         Ok(())
     }

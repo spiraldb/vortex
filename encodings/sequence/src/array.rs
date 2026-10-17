@@ -576,7 +576,6 @@ mod tests {
     use vortex_array::expr::stats::StatsProviderExt;
     use vortex_array::scalar::PValue;
     use vortex_array::scalar::Scalar;
-    use vortex_array::scalar::ScalarValue;
     use vortex_array::serde::SerializeOptions;
     use vortex_array::serde::SerializedArray;
     use vortex_buffer::ByteBufferMut;
@@ -622,9 +621,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            scalar,
-            Scalar::try_new(scalar.dtype().clone(), Some(ScalarValue::from(8i64))).unwrap()
-        )
+            scalar.dtype(),
+            &DType::Primitive(PType::I64, Nullability::NonNullable)
+        );
+        assert_eq!(scalar, Scalar::from(8i64));
     }
 
     #[test]

@@ -183,8 +183,6 @@ mod tests {
     use vortex_array::compute::conformance::filter::test_filter_conformance;
     use vortex_array::compute::conformance::mask::test_mask_conformance;
     use vortex_array::compute::conformance::take::test_take_conformance;
-    use vortex_array::dtype::DType;
-    use vortex_array::dtype::Nullability;
     use vortex_array::scalar_fn::fns::operators::Operator;
     use vortex_error::vortex_err;
     use vortex_session::VortexSession;
@@ -333,17 +331,6 @@ mod tests {
     #[case(bb(vec![true]))]
     fn test_take_byte_bool_conformance(#[case] array: ByteBoolArray) {
         test_take_conformance(&array.into_array(), &mut SESSION.create_execution_ctx());
-    }
-
-    #[test]
-    fn test_cast_bytebool_to_nullable() {
-        let array = bb(vec![true, false, true, false]);
-        let casted = array
-            .into_array()
-            .cast(DType::Bool(Nullability::Nullable))
-            .unwrap();
-        assert_eq!(casted.dtype(), &DType::Bool(Nullability::Nullable));
-        assert_eq!(casted.len(), 4);
     }
 
     #[rstest]

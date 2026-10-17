@@ -333,7 +333,7 @@ mod tests {
 
     #[test]
     fn nan_count_all_null() -> VortexResult<()> {
-        let p = PrimitiveArray::from_option_iter::<f64, _>([None, None, None]);
+        let p = PrimitiveArray::new(buffer![f64::NAN, f64::NAN, f64::NAN], Validity::AllInvalid);
         let mut ctx = array_session().create_execution_ctx();
         assert_eq!(nan_count(&p.into_array(), &mut ctx)?, 0);
         Ok(())

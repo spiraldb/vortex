@@ -489,6 +489,7 @@ mod tests {
                 ),
             )
         );
+        assert_eq!(scalar.dtype(), &DType::Extension(timestamp(target)));
         Ok(())
     }
 

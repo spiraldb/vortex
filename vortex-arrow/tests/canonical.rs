@@ -89,6 +89,24 @@ fn test_canonicalize_nested_struct() {
         inner_a.cloned().unwrap(),
         ArrowPrimitiveArray::from_iter([100i64])
     );
+    let inner_fields = vec![Field::new("inner_a", DataType::Int64, false)];
+    let expected = ArrowStructArray::new(
+        vec![
+            Field::new("a", DataType::UInt64, false),
+            Field::new("b", DataType::Struct(inner_fields.clone().into()), false),
+        ]
+        .into(),
+        vec![
+            Arc::new(ArrowPrimitiveArray::<UInt64Type>::from(vec![1])),
+            Arc::new(ArrowStructArray::new(
+                inner_fields.into(),
+                vec![Arc::new(ArrowPrimitiveArray::<Int64Type>::from(vec![100]))],
+                None,
+            )),
+        ],
+        None,
+    );
+    assert_eq!(arrow_struct, expected);
 }
 
 #[test]

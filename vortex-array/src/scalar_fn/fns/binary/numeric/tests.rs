@@ -24,6 +24,7 @@ use crate::dtype::DecimalType;
 use crate::dtype::NativeDecimalType;
 use crate::dtype::NativePType;
 use crate::dtype::Nullability;
+use crate::dtype::PType;
 use crate::dtype::i256;
 use crate::scalar::DecimalValue;
 use crate::scalar::NumericOperator;
@@ -32,13 +33,10 @@ use crate::scalar_fn::fns::operators::Operator;
 use crate::validity::Validity;
 
 fn sub_scalar(array: &ArrayRef, scalar: impl Into<Scalar>) -> VortexResult<ArrayRef> {
-    array
-        .binary(
-            ConstantArray::new(scalar, array.len()).into_array(),
-            Operator::Sub,
-        )
-        .and_then(|a| a.execute::<RecursiveCanonical>(&mut array_session().create_execution_ctx()))
-        .map(|a| a.0.into_array())
+    array.binary(
+        ConstantArray::new(scalar, array.len()).into_array(),
+        Operator::Sub,
+    )
 }
 
 #[test]
@@ -84,8 +82,17 @@ fn test_scalar_subtract_float() {
 #[test]
 fn test_scalar_subtract_float_underflow_is_ok() {
     let values = buffer![f32::MIN, 2.0, 3.0].into_array();
-    let _results = sub_scalar(&values, 1.0f32).unwrap();
-    let _results = sub_scalar(&values, f32::MAX).unwrap();
+    let mut ctx = array_session().create_execution_ctx();
+    assert_arrays_eq!(
+        sub_scalar(&values, 1.0f32).unwrap(),
+        PrimitiveArray::from_iter([f32::MIN, 1.0, 2.0]),
+        &mut ctx
+    );
+    assert_arrays_eq!(
+        sub_scalar(&values, f32::MAX).unwrap(),
+        PrimitiveArray::from_iter([f32::NEG_INFINITY, -f32::MAX, -f32::MAX]),
+        &mut ctx
+    );
 }
 
 #[test]
@@ -97,7 +104,6 @@ fn test_float_divide_by_zero_is_ok() {
             ConstantArray::new(0.0f64, values.len()).into_array(),
             Operator::Div,
         )
-        .and_then(|a| a.execute::<PrimitiveArray>(&mut array_session().create_execution_ctx()))
         .unwrap();
 
     assert_arrays_eq!(
@@ -152,11 +158,7 @@ fn test_integer_divide_errors_ignore_null_lanes() {
     let lhs =
         PrimitiveArray::new(buffer![10i32, 10], Validity::from_iter([false, true])).into_array();
     let rhs = buffer![0i32, 2].into_array();
-    let result = lhs
-        .binary(rhs, Operator::Div)
-        .and_then(|a| a.execute::<RecursiveCanonical>(&mut array_session().create_execution_ctx()))
-        .map(|a| a.0.into_array())
-        .unwrap();
+    let result = lhs.binary(rhs, Operator::Div).unwrap();
 
     assert_arrays_eq!(
         result,
@@ -175,8 +177,6 @@ fn test_integer_errors_ignore_null_lanes() {
             ConstantArray::new(1u8, values.len()).into_array(),
             Operator::Add,
         )
-        .and_then(|a| a.execute::<RecursiveCanonical>(&mut array_session().create_execution_ctx()))
-        .map(|a| a.0.into_array())
         .unwrap();
 
     assert_arrays_eq!(
@@ -278,14 +278,10 @@ fn test_multiply_overflow_on_null_lane_ignored<T: NativePType>(
     )
     .into_array();
 
-    let result = lhs
-        .binary(
-            PrimitiveArray::from_iter([rhs, rhs]).into_array(),
-            Operator::Mul,
-        )?
-        .execute::<RecursiveCanonical>(&mut ctx)?
-        .0
-        .into_array();
+    let result = lhs.binary(
+        PrimitiveArray::from_iter([rhs, rhs]).into_array(),
+        Operator::Mul,
+    )?;
 
     assert_arrays_eq!(
         result,
@@ -319,7 +315,20 @@ fn test_multiply_overflow_survives_batch_reduction(
         )?
         .execute::<RecursiveCanonical>(&mut ctx);
 
-    assert_eq!(result.is_err(), lane_is_valid);
+    if lane_is_valid {
+        assert!(
+            result
+                .err()
+                .expect("valid overflowing lane must fail")
+                .to_string()
+                .contains("integer overflow in checked mul")
+        );
+    } else {
+        let expected = PrimitiveArray::from_option_iter(
+            (0..LEN).map(|i| (i != OVERFLOW_AT).then_some((i % 100 + 1) * 3)),
+        );
+        assert_arrays_eq!(result?.0.into_array(), expected, &mut ctx);
+    }
 
     Ok(())
 }
@@ -333,7 +342,6 @@ fn test_present_nullable_constant_preserves_nullable_output() {
             ConstantArray::new(Some(1u8), values.len()).into_array(),
             Operator::Add,
         )
-        .and_then(|a| a.execute::<PrimitiveArray>(&mut array_session().create_execution_ctx()))
         .unwrap();
 
     assert_arrays_eq!(
@@ -353,6 +361,10 @@ fn test_empty_primitive_constants_do_not_evaluate() -> VortexResult<()> {
         .execute::<RecursiveCanonical>(&mut array_session().create_execution_ctx())?;
 
     assert!(result.0.is_empty());
+    assert_eq!(
+        result.0.dtype(),
+        &DType::Primitive(PType::U8, Nullability::NonNullable)
+    );
     Ok(())
 }
 
@@ -438,16 +450,6 @@ fn test_decimal_nullable_lanes() -> VortexResult<()> {
         &mut ctx
     );
     Ok(())
-}
-
-#[test]
-fn test_decimal_max_precision_overflow_on_valid_lane_errors() {
-    let dtype = DecimalDType::new(76, 0);
-    let max = <i256 as NativeDecimalType>::MAX_BY_PRECISION[76];
-    let lhs = DecimalArray::from_iter::<i256, _>([max], dtype).into_array();
-    let rhs = DecimalArray::from_iter::<i256, _>([i256::from_i128(1)], dtype).into_array();
-
-    assert!(decimal_binary(lhs, rhs, Operator::Add).is_err());
 }
 
 #[test]
@@ -638,14 +640,17 @@ fn test_decimal_mul_above_result_precision_errors() {
 #[case::precision_2(
     DecimalArray::from_iter::<i8, _>([10, 20], DecimalDType::new(2, 0)),
     DecimalType::I16,
+    3,
 )]
 #[case::precision_18(
     DecimalArray::from_iter::<i64, _>([10, 20], DecimalDType::new(18, 0)),
     DecimalType::I128,
+    19,
 )]
 #[case::precision_38(
     DecimalArray::from_iter::<i128, _>([10, 20], DecimalDType::new(38, 0)),
     DecimalType::I256,
+    39,
 )]
 #[case::precision_76(
     DecimalArray::from_iter::<i256, _>(
@@ -653,12 +658,14 @@ fn test_decimal_mul_above_result_precision_errors() {
         DecimalDType::new(76, 0),
     ),
     DecimalType::I256,
+    76,
 )]
 fn test_decimal_result_uses_widened_logical_storage_width(
     #[case] values: DecimalArray,
     #[case] expected_type: DecimalType,
+    #[case] expected_precision: u8,
 ) -> VortexResult<()> {
-    let expected_dtype = result_decimal_dtype(values.decimal_dtype(), NumericOperator::Add)?;
+    let expected_dtype = DecimalDType::new(expected_precision, 0);
     let result = decimal_binary(
         values.clone().into_array(),
         values.into_array(),
@@ -668,6 +675,14 @@ fn test_decimal_result_uses_widened_logical_storage_width(
 
     assert_eq!(result.values_type(), expected_type);
     assert_eq!(result.decimal_dtype(), expected_dtype);
+    assert_arrays_eq!(
+        result,
+        DecimalArray::from_iter::<i256, _>(
+            [i256::from_i128(20), i256::from_i128(40)],
+            expected_dtype
+        ),
+        &mut array_session().create_execution_ctx()
+    );
     Ok(())
 }
 

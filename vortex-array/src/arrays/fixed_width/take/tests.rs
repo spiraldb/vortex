@@ -116,7 +116,14 @@ fn take_variable_length_slices() -> VortexResult<()> {
 #[test]
 fn variable_length_slices_validate_output_length() {
     let values = buffer![10u8, 11, 12, 13].into_byte_buffer();
-    assert!(take_slices(&values, 1, 4, &[0u32, 2], &[1u32, 1], 3, &allocator(),).is_err());
+    let error = take_slices(&values, 1, 4, &[0u32, 2], &[1u32, 1], 3, &allocator())
+        .expect_err("expanded length differs from declared output length");
+    assert!(
+        error
+            .to_string()
+            .contains("expanded byte length does not match declared byte length"),
+        "{error}"
+    );
 }
 
 #[test]

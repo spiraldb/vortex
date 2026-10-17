@@ -219,6 +219,7 @@ mod tests {
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::array_session;
+    use crate::arrays::ConstantArray;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::StructArray;
     use crate::assert_arrays_eq;
@@ -250,8 +251,10 @@ mod tests {
     #[test]
     fn replace_children() {
         let expr = fill_null(root(), lit(0i32));
-        expr.with_children(vec![root(), lit(0i32)])
+        let replaced = expr
+            .with_children(vec![get_item("a", root()), lit(42i32)])
             .vortex_expect("operation should succeed in test");
+        assert_eq!(replaced, fill_null(get_item("a", root()), lit(42i32)));
     }
 
     #[test]
@@ -329,7 +332,11 @@ mod tests {
             DType::Extension(Date::new(TimeUnit::Days, Nullability::Nullable).erased()),
         ];
 
-        for dtype in dtypes {
+        let supported = [
+            true, true, true, true, true, false, false, false, false, false,
+        ];
+        for (dtype, supported) in dtypes.into_iter().zip(supported) {
+            assert_eq!(FillNull::supports_dtype(&dtype), supported, "{dtype}");
             let fill = Scalar::default_value(&dtype.as_nonnullable());
             let mut builder = builder_with_capacity_in(&dtype, 2, ctx.allocator());
             builder.append_scalar(&fill.cast(&dtype)?)?;
@@ -339,10 +346,11 @@ mod tests {
                 .fill_null(fill.clone())?
                 .execute::<Canonical>(&mut ctx);
 
-            if FillNull::supports_dtype(&dtype) {
+            if supported {
                 let filled = filled?.into_array();
                 assert_eq!(filled.dtype(), fill.dtype(), "{dtype}");
                 assert_eq!(filled.execute_scalar(1, &mut ctx)?, fill, "{dtype}");
+                assert_arrays_eq!(filled, ConstantArray::new(fill, 2), &mut ctx);
             } else {
                 assert!(filled.is_err(), "{dtype} executes but is not supported");
             }

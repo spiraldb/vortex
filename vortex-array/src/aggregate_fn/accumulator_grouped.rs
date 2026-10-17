@@ -415,12 +415,15 @@ mod tests {
 
     use crate::ArrayRef;
     use crate::IntoArray;
+    use crate::VortexSessionExecute;
     use crate::aggregate_fn::DynGroupedAccumulator;
     use crate::aggregate_fn::GroupedAccumulator;
     use crate::aggregate_fn::NumericalAggregateOpts;
     use crate::aggregate_fn::fns::count::Count;
+    use crate::array_session;
     use crate::arrays::Chunked;
     use crate::arrays::PrimitiveArray;
+    use crate::assert_arrays_eq;
     use crate::dtype::DType;
     use crate::dtype::Nullability::NonNullable;
     use crate::dtype::PType;
@@ -459,6 +462,12 @@ mod tests {
 
         assert!(flushed.is::<Chunked>());
         assert_eq!(flushed.len(), 4);
+        assert_arrays_eq!(
+            &flushed,
+            &state([1, 2, 3, 4]),
+            &mut array_session().create_execution_ctx()
+        );
+        assert!(accumulator.flush()?.is_empty());
         Ok(())
     }
 
@@ -470,6 +479,7 @@ mod tests {
 
         assert!(flushed.is::<Chunked>());
         assert!(flushed.is_empty());
+        assert_eq!(flushed.dtype(), &DType::Primitive(PType::U64, NonNullable));
         Ok(())
     }
 }

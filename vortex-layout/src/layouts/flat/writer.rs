@@ -212,9 +212,8 @@ mod tests {
 
     // Currently, flat layouts do not force compute stats during write, they only retain
     // pre-computed stats.
-    #[should_panic]
     #[test]
-    fn flat_stats() {
+    fn flat_does_not_compute_missing_stats() {
         block_on(|handle| async {
             let session = new_session().with_handle(handle);
             let ctx = ArrayContext::empty();
@@ -248,7 +247,7 @@ mod tests {
 
             assert_eq!(
                 result.statistics().get_as::<bool>(Stat::IsSorted),
-                Precision::Exact(true)
+                Precision::Absent
             );
         })
     }

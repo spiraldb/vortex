@@ -97,6 +97,7 @@ mod tests {
     use futures::executor::block_on;
     use rstest::rstest;
     use vortex::array::IntoArray;
+    use vortex::array::arrays::PrimitiveArray;
     use vortex::array::assert_arrays_eq;
     use vortex::array::builtins::ArrayBuiltins;
     use vortex::dtype::DType;
@@ -155,7 +156,7 @@ mod tests {
             .unwrap()
             .into_array();
 
-        assert_arrays_eq!(array, gpu_result, &mut ctx);
+        assert_arrays_eq!(gpu_result, array, &mut ctx);
     }
 
     #[crate::test]
@@ -174,7 +175,11 @@ mod tests {
             .await?
             .into_array();
 
-        assert_arrays_eq!(array, gpu_result, &mut ctx);
+        assert_arrays_eq!(
+            gpu_result,
+            PrimitiveArray::from_iter([100u8, 90, 80, 70, 60]),
+            &mut ctx
+        );
 
         Ok(())
     }

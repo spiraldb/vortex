@@ -23,6 +23,7 @@ use crate::arrays::varbinview::VarBinViewData;
 use crate::assert_arrays_eq;
 use crate::dtype::DType;
 use crate::dtype::Nullability;
+use crate::scalar::Scalar;
 use crate::serde::SerializeOptions;
 use crate::serde::SerializedArray;
 use crate::validity::Validity;
@@ -32,6 +33,17 @@ pub fn varbin_view() {
     let mut ctx = array_session().create_execution_ctx();
     let binary_arr =
         VarBinViewArray::from_iter_str(["hello world", "hello world this is a long string"]);
+    assert_eq!(binary_arr.dtype(), &DType::Utf8(Nullability::NonNullable));
+    assert_eq!(binary_arr.len(), 2);
+    for (index, value) in ["hello world", "hello world this is a long string"]
+        .into_iter()
+        .enumerate()
+    {
+        assert_eq!(
+            binary_arr.execute_scalar(index, &mut ctx).unwrap(),
+            Scalar::from(value)
+        );
+    }
     assert_arrays_eq!(
         binary_arr,
         VarBinViewArray::from_iter_str(["hello world", "hello world this is a long string"]),
@@ -46,20 +58,13 @@ pub fn slice_array() {
         VarBinViewArray::from_iter_str(["hello world", "hello world this is a long string"])
             .slice(1..2)
             .unwrap();
+    assert_eq!(
+        binary_arr.execute_scalar(0, &mut ctx).unwrap(),
+        Scalar::from("hello world this is a long string")
+    );
     assert_arrays_eq!(
         binary_arr,
         VarBinViewArray::from_iter_str(["hello world this is a long string"]),
-        &mut ctx
-    );
-}
-
-#[test]
-pub fn flatten_array() {
-    let mut ctx = array_session().create_execution_ctx();
-    let binary_arr = VarBinViewArray::from_iter_str(["string1", "string2"]);
-    assert_arrays_eq!(
-        binary_arr,
-        VarBinViewArray::from_iter_str(["string1", "string2"]),
         &mut ctx
     );
 }
@@ -140,6 +145,11 @@ pub fn deserialize_null_views() -> VortexResult<()> {
         .ok_or_else(|| vortex_err!("expected VarBinView"))?;
     assert_eq!(decoded.views()[0], views[0]);
     assert_eq!(decoded.views()[1], BinaryView::empty_view());
+    assert_arrays_eq!(
+        decoded.array(),
+        VarBinViewArray::from_iter_nullable_str([Some("hello world ol"), None]),
+        &mut session.create_execution_ctx()
+    );
     Ok(())
 }
 

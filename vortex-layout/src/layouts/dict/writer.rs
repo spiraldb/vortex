@@ -592,6 +592,7 @@ mod tests {
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
     use vortex_array::arrays::VarBinArray;
+    use vortex_array::assert_arrays_eq;
     use vortex_array::builders::dict::DictConstraints;
     use vortex_array::dtype::DType;
     use vortex_array::dtype::Nullability::NonNullable;
@@ -748,6 +749,19 @@ mod tests {
         let drained = state.drain_values(&mut labeler);
 
         assert_eq!(encoded_row_count(&encoded) + encoded_row_count(&drained), 3);
+        let dictionaries = encoded
+            .iter()
+            .chain(&drained)
+            .filter_map(|chunk| match chunk {
+                DictionaryChunk::Values((_, values)) => Some(values),
+                DictionaryChunk::Codes { .. } => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(dictionaries.len(), 3);
+        let mut ctx = SESSION.create_execution_ctx();
+        for (values, expected) in dictionaries.into_iter().zip(["a", big.as_str(), "b"]) {
+            assert_arrays_eq!(values, VarBinArray::from(vec![expected]), &mut ctx);
+        }
         Ok(())
     }
 }

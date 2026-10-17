@@ -151,6 +151,7 @@ mod tests {
         chunk.set_len(len);
         let vector = chunk.get_vector(0);
         vector.flatten(len as u64);
+        assert!((0..len).all(|i| !vector.row_is_null(i as u64)));
         Ok(vector.as_slice_with_len::<i32>(len).to_vec())
     }
 

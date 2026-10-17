@@ -588,6 +588,7 @@ mod tests {
             aggregate(&array)?,
             materialized_uncompressed_size_in_bytes(&array)
         );
+        assert_eq!(aggregate(&array)?, 16);
         Ok(())
     }
 
@@ -599,6 +600,7 @@ mod tests {
             aggregate(&array)?,
             materialized_uncompressed_size_in_bytes(&array)
         );
+        assert_eq!(aggregate(&array)?, 13);
         Ok(())
     }
 
@@ -610,6 +612,7 @@ mod tests {
             aggregate(&array)?,
             materialized_uncompressed_size_in_bytes(&array)
         );
+        assert_eq!(aggregate(&array)?, 14);
         Ok(())
     }
 
@@ -621,6 +624,7 @@ mod tests {
             aggregate(&array)?,
             materialized_uncompressed_size_in_bytes(&array)
         );
+        assert_eq!(aggregate(&array)?, 1);
         Ok(())
     }
 
@@ -632,6 +636,7 @@ mod tests {
             aggregate(&array)?,
             materialized_uncompressed_size_in_bytes(&array)
         );
+        assert_eq!(aggregate(&array)?, 2);
         Ok(())
     }
 
@@ -643,6 +648,7 @@ mod tests {
             aggregate(&array)?,
             materialized_uncompressed_size_in_bytes(&array)
         );
+        assert_eq!(aggregate(&array)?, 3);
         Ok(())
     }
 
@@ -654,6 +660,7 @@ mod tests {
             aggregate(&array)?,
             materialized_uncompressed_size_in_bytes(&array)
         );
+        assert_eq!(aggregate(&array)?, 0);
         Ok(())
     }
 
@@ -670,6 +677,7 @@ mod tests {
             aggregate(&array)?,
             materialized_uncompressed_size_in_bytes(&array)
         );
+        assert_eq!(aggregate(&array)?, 12);
         Ok(())
     }
 
@@ -686,6 +694,7 @@ mod tests {
             aggregate(&array)?,
             materialized_uncompressed_size_in_bytes(&array)
         );
+        assert_eq!(aggregate(&array)?, 88);
         Ok(())
     }
 
@@ -707,6 +716,7 @@ mod tests {
             .rebuild(ListViewRebuildMode::MakeExact, &mut ctx)?
             .into_array();
 
+        assert_eq!(materialized_uncompressed_size_in_bytes(&exact), 44);
         assert_eq!(
             aggregate_with(&array, UncompressedSizeOpts::exact())?,
             materialized_uncompressed_size_in_bytes(&exact)
@@ -773,7 +783,11 @@ mod tests {
             .into_array(),
             NullArray::new(5).into_array(),
         ];
-        for array in arrays {
+        for (array, expected) in arrays.into_iter().zip([13, 2, 12, 0]) {
+            assert_eq!(
+                aggregate_with(&array, UncompressedSizeOpts::exact())?,
+                expected
+            );
             assert_eq!(
                 aggregate_with(&array, UncompressedSizeOpts::exact())?,
                 aggregate_with(&array, UncompressedSizeOpts::inexact())?
@@ -806,6 +820,8 @@ mod tests {
             aggregate_with(&strings, UncompressedSizeOpts::exact())?
         );
         assert!(exact < inexact);
+        assert_eq!(exact, 430);
+        assert_eq!(inexact, 27160);
         Ok(())
     }
 
@@ -820,6 +836,7 @@ mod tests {
             sliced.statistics().get(Stat::UncompressedSizeInBytes),
             Precision::exact(u64::try_from(size)?)
         );
+        assert_eq!(size, 430);
         Ok(())
     }
 
@@ -848,6 +865,8 @@ mod tests {
             uncompressed_size_in_bytes(&sliced, UncompressedSizeOpts::inexact(), &mut ctx)?,
             exact
         );
+        assert_eq!(exact, 430);
+        assert_eq!(inexact, 27160);
         Ok(())
     }
 
@@ -886,6 +905,7 @@ mod tests {
             aggregate(&array)?,
             materialized_uncompressed_size_in_bytes(&array)
         );
+        assert_eq!(aggregate(&array)?, 17);
         Ok(())
     }
 
@@ -906,6 +926,7 @@ mod tests {
             aggregate(&array)?,
             materialized_uncompressed_size_in_bytes(&array)
         );
+        assert_eq!(aggregate(&array)?, 62);
         Ok(())
     }
 
@@ -926,6 +947,7 @@ mod tests {
         let array = UnionArray::try_new(type_ids, variants, vec![numbers, flags])?.into_array();
 
         assert_eq!(aggregate(&array)?, expected);
+        assert_eq!(expected, 16);
         Ok(())
     }
 
@@ -939,6 +961,7 @@ mod tests {
             aggregate(&array)?,
             materialized_uncompressed_size_in_bytes(&array)
         );
+        assert_eq!(aggregate(&array)?, 13);
         Ok(())
     }
 
@@ -965,6 +988,7 @@ mod tests {
             aggregate(&array)?,
             materialized_uncompressed_size_in_bytes(&array)
         );
+        assert_eq!(aggregate(&array)?, 40);
         Ok(())
     }
 
@@ -981,18 +1005,19 @@ mod tests {
         .into_array();
 
         assert_eq!(aggregate(&chunked)?, expected);
+        assert_eq!(expected, 20);
         Ok(())
     }
 
     #[test]
-    fn uses_cached_exact_stat() -> VortexResult<()> {
+    fn size_with_cached_exact_stat() -> VortexResult<()> {
         let array = ConstantArray::new(42i32, 10).into_array();
         array.statistics().set(
             Stat::UncompressedSizeInBytes,
-            Precision::Exact(ScalarValue::from(123u64)),
+            Precision::Exact(ScalarValue::from(40u64)),
         );
 
-        assert_eq!(aggregate_with(&array, UncompressedSizeOpts::exact())?, 123);
+        assert_eq!(aggregate_with(&array, UncompressedSizeOpts::exact())?, 40);
         Ok(())
     }
 
@@ -1007,6 +1032,7 @@ mod tests {
             array.statistics().get(Stat::UncompressedSizeInBytes),
             Precision::exact(u64::try_from(size)?)
         );
+        assert_eq!(size, 12);
         Ok(())
     }
 

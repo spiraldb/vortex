@@ -143,7 +143,15 @@ mod tests {
         }];
 
         let allocator = BufferAllocatorRef::statically_allocated();
-        assert!(gather(&values, &[1u8], &[0u8], &allocator).is_err());
-        assert!(gather(&values, &[0u8], &[1u8], &allocator).is_err());
+        let error = gather(&values, &[1u8], &[0u8], &allocator).unwrap_err();
+        assert!(
+            error.to_string().contains("array index out of bounds"),
+            "{error}"
+        );
+        let error = gather(&values, &[0u8], &[1u8], &allocator).unwrap_err();
+        assert!(
+            error.to_string().contains("row index out of bounds"),
+            "{error}"
+        );
     }
 }

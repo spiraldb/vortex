@@ -312,16 +312,18 @@ mod tests {
     }
 
     #[test]
-    fn count_float_shortcircuits_on_exact_nan_count_stat() -> VortexResult<()> {
-        // The array has no NaNs; a planted exact NaNCount stat proves the count is derived from
-        // the stat rather than a scan.
-        let array =
-            PrimitiveArray::new(buffer![1.0f64, 2.0, 3.0, 4.0], Validity::NonNullable).into_array();
+    fn count_float_with_exact_nan_count_stat() -> VortexResult<()> {
+        // The exact NaN count agrees with the batch; the four finite values remain counted.
+        let array = PrimitiveArray::new(
+            buffer![1.0f64, 2.0, 3.0, 4.0, f64::NAN, f64::NAN, f64::NAN],
+            Validity::NonNullable,
+        )
+        .into_array();
         array
             .statistics()
             .set(Stat::NaNCount, Precision::Exact(ScalarValue::from(3u64)));
         let mut ctx = SESSION.create_execution_ctx();
-        assert_eq!(count(&array, &mut ctx)?, 1);
+        assert_eq!(count(&array, &mut ctx)?, 4);
         Ok(())
     }
 

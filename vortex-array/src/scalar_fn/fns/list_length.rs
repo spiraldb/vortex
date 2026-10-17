@@ -248,7 +248,6 @@ mod tests {
         let result = list.apply(&list_length(root()))?;
 
         let mut ctx = array_session().create_execution_ctx();
-        let result = result.execute::<PrimitiveArray>(&mut ctx)?;
 
         let expected = PrimitiveArray::from_option_iter::<u64, _>([Some(2), None, Some(0), None]);
 
@@ -269,6 +268,11 @@ mod tests {
         let mut ctx = array_session().create_execution_ctx();
         assert!(!result.is_valid(0, &mut ctx)?);
         assert!(!result.is_valid(1, &mut ctx)?);
+        assert_arrays_eq!(
+            result,
+            PrimitiveArray::from_option_iter([None::<u64>, None]),
+            &mut ctx
+        );
         Ok(())
     }
 
@@ -301,7 +305,6 @@ mod tests {
         let result = lv.apply(&list_length(root()))?;
 
         let mut ctx = array_session().create_execution_ctx();
-        let result = result.execute::<PrimitiveArray>(&mut ctx)?;
 
         let expected = PrimitiveArray::from_option_iter::<u64, _>([Some(2), None, Some(0), None]);
         assert_arrays_eq!(result, expected, &mut ctx);
@@ -349,7 +352,6 @@ mod tests {
         let result = fsl.apply(&list_length(root()))?;
 
         let mut ctx = array_session().create_execution_ctx();
-        let result = result.execute::<PrimitiveArray>(&mut ctx)?;
 
         let expected = PrimitiveArray::from_option_iter::<u64, _>([Some(2), None, Some(2), None]);
         assert_arrays_eq!(result, expected, &mut ctx);

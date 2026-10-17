@@ -131,24 +131,8 @@ fn constructs_map_with_listview_entries() -> VortexResult<()> {
 
     let mut ctx = array_session().create_execution_ctx();
     assert_eq!(
-        array
-            .map_validity()
-            .execute_mask(array.len(), &mut ctx)?
-            .true_count(),
-        2
-    );
-
-    Ok(())
-}
-
-#[test]
-fn accepts_duplicate_and_unsorted_keys() -> VortexResult<()> {
-    let array = sample_array()?;
-    let mut ctx = array_session().create_execution_ctx();
-
-    assert_eq!(
-        array.execute_scalar(0, &mut ctx)?,
-        sample_scalar(array.dtype().clone())?
+        array.map_validity().execute_mask(array.len(), &mut ctx)?,
+        Mask::from_iter([true, true, false])
     );
 
     Ok(())
@@ -664,6 +648,15 @@ fn builder_appends_existing_map_arrays() -> VortexResult<()> {
     let array = builder.finish_into_map();
 
     assert_eq!(array.len(), 6);
+    assert_eq!(array.dtype(), source.dtype());
+    let expected = [
+        sample_scalar(source.dtype().clone())?,
+        Scalar::try_map(source.dtype().clone(), [])?,
+        Scalar::null(source.dtype().clone()),
+    ];
+    for index in 0..6 {
+        assert_eq!(array.execute_scalar(index, &mut ctx)?, expected[index % 3]);
+    }
     assert_eq!(
         array.execute_scalar(0, &mut ctx)?,
         source.execute_scalar(0, &mut ctx)?
@@ -683,18 +676,38 @@ fn canonicalizes_empty_constant_and_chunked_maps() -> VortexResult<()> {
     let dtype = DType::Map(map_dtype, Nullability::Nullable);
     let empty = Canonical::empty(&dtype);
     assert!(empty.as_map().is_empty());
+    assert_eq!(empty.as_map().dtype(), &dtype);
 
     let mut ctx = array_session().create_execution_ctx();
     let constant = ConstantArray::new(sample_scalar(dtype.clone())?, 2)
         .into_array()
         .execute::<Canonical>(&mut ctx)?;
     assert_eq!(constant.as_map().len(), 2);
+    assert_eq!(constant.as_map().dtype(), &dtype);
+    for index in 0..2 {
+        assert_eq!(
+            constant.as_map().execute_scalar(index, &mut ctx)?,
+            sample_scalar(dtype.clone())?
+        );
+    }
 
     let first = sample_array()?.into_array();
     let second = sample_array()?.into_array();
-    let chunked = ChunkedArray::try_new(vec![first, second], dtype)?.into_array();
+    let chunked = ChunkedArray::try_new(vec![first, second], dtype.clone())?.into_array();
     let canonical = chunked.execute::<Canonical>(&mut ctx)?;
     assert_eq!(canonical.as_map().len(), 6);
+    assert_eq!(canonical.as_map().dtype(), &dtype);
+    let expected = [
+        sample_scalar(dtype.clone())?,
+        Scalar::try_map(dtype.clone(), [])?,
+        Scalar::null(dtype),
+    ];
+    for index in 0..6 {
+        assert_eq!(
+            canonical.as_map().execute_scalar(index, &mut ctx)?,
+            expected[index % 3]
+        );
+    }
 
     Ok(())
 }
@@ -718,6 +731,8 @@ fn serde_roundtrip_uses_registered_map_vtable() -> VortexResult<()> {
     let decoded =
         serialized.decode(&dtype, len, &ReadContext::new(array_ctx.to_ids()), &session)?;
     assert!(decoded.is::<Map>());
+    assert_eq!(decoded.dtype(), &dtype);
+    assert_eq!(decoded.len(), len);
 
     let mut ctx = session.create_execution_ctx();
     for index in 0..len {
