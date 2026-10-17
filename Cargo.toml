@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "leaf-lab",
     # Core crates in dependency order
     "vortex-array-macros",
     "vortex-error",

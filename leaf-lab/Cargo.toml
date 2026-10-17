@@ -1,0 +1,19 @@
+[package]
+name = "leaf-lab"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+arrow-array = { workspace = true }
+parquet = { workspace = true, features = ["arrow"] }
+pco = { workspace = true }
+vortex-array = { workspace = true }
+vortex-arrow = { workspace = true }
+vortex-btrblocks = { workspace = true, features = ["entropy-bins"] }
+vortex-entropy-bins = { workspace = true }
+vortex-file = { workspace = true, features = ["entropy-bins"] }
+vortex-session = { workspace = true }
+vortex-error = { workspace = true }
+serde_json = { workspace = true }
+vortex-fastlanes = { workspace = true }
