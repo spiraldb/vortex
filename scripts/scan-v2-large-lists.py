@@ -18,6 +18,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ["baseline", "candidate", "generator"]:
         parser.add_argument(f"--{name}", type=Path, required=True)
+    parser.add_argument("--intermediate", type=Path)
+    parser.add_argument("--intermediate-commit")
+    parser.add_argument("--confirm-singletons", action="store_true")
     parser.add_argument("--baseline-commit", required=True)
     parser.add_argument("--candidate-commit", required=True)
     parser.add_argument("--data-dir", type=Path, default=Path("scan-v2-large-data"))
@@ -58,8 +61,13 @@ def main():
         "old_v2": (args.baseline.resolve(), "1"),
         "new_v2": (args.candidate.resolve(), "1"),
     }
+    if args.intermediate:
+        versions["mask_v1"] = (args.intermediate.resolve(), "0")
+        versions["mask_v2"] = (args.intermediate.resolve(), "1")
+    iterations, rounds = (4096, 4) if args.confirm_singletons else (32, 2)
     metadata = dict(
         baseline_commit=args.baseline_commit,
+        intermediate_commit=args.intermediate_commit,
         candidate_commit=args.candidate_commit,
         files=fixture_metadata,
         cpus=cpus,
@@ -68,11 +76,12 @@ def main():
             for k, (binary, flag) in versions.items()
         },
         method=dict(
-            iterations=32,
-            rounds=2,
+            iterations=iterations,
+            rounds=rounds,
             seeds=[17, 42, 73],
-            warmups=4,
+            warmups=iterations // 8,
             output="full Arrow decode/drop",
+            confirm_singletons=args.confirm_singletons,
             confirmation_iterations=128,
             confirmation_rounds=4,
         ),
@@ -111,7 +120,7 @@ def main():
             raise RuntimeError(f"Wrong selected output: {name}, {selector}")
         # Artifact uploads reject colons, including those in explicit row selectors.
         filename_selector = selector.replace(":", "-")
-        (checks / f"{name}-{cores}-{filename_selector}.json").write_text(result.stdout)
+        (checks / f"{name}-{cores}-{count}-{filename_selector}.json").write_text(result.stdout)
         check_commands.append(command)
     (checks / "commands.json").write_text(json.dumps(check_commands, indent=2) + "\n")
     print(f"PASS: {len(check_commands)} real-file V1 full-scan-plus-take comparisons", flush=True)
@@ -122,9 +131,20 @@ def main():
             json.dumps(dict(metadata, summary=summary, confirmations=confirmations), indent=2) + "\n"
         )
 
-    for cores, dataset, pattern, mode in itertools.product(
-        [1, 30], files, ["row16", "clustered", "uniform"], ["cached", "reopen"]
-    ):
+    cases = (
+        [
+            (1, "skewed-primitive-65536", "row16", "cached"),
+            (1, "balanced-primitive-65536", "row16", "cached"),
+            (1, "balanced-nested-1048576", "row16", "reopen"),
+            (1, "balanced-nested-65536", "row16", "reopen"),
+            (1, "balanced-nested-1048576", "row16", "cached"),
+            (30, "skewed-nested-65536", "row16", "cached"),
+            (30, "skewed-nested-1048576", "row16", "cached"),
+        ]
+        if args.confirm_singletons
+        else itertools.product([1, 30], files, ["row16", "clustered", "uniform"], ["cached", "reopen"])
+    )
+    for cores, dataset, pattern, mode in cases:
         case = dict(
             dataset=dataset,
             cores=cores,
@@ -133,9 +153,15 @@ def main():
             rows=1 if pattern == "row16" else 100,
             selector="indices:16" if pattern == "row16" else pattern,
         )
-        summary.append(bench.measure(case, versions, files, cpus, raw, 32, 2))
+        row = bench.measure(case, versions, files, cpus, raw, iterations, rounds)
+        if args.intermediate:
+            row["mask_vs_baseline_pct"] = bench.change(row["mask_v2_ms"], row["old_v2_ms"])
+            row["null_span_vs_mask_pct"] = bench.change(row["new_v2_ms"], row["mask_v2_ms"])
+        summary.append(row)
         save()
     for row in summary:
+        if args.confirm_singletons:
+            break
         if row["vs_old_v2_pct"] <= 2 and all(
             bench.change(seed["new_v2"], seed["old_v2"]) <= 3 for seed in row["seeds"]
         ):
