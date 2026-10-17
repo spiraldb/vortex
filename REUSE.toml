@@ -21,7 +21,7 @@ SPDX-License-Identifier = "Apache-2.0"
 
 # Research measurements are licensed under CC-BY-4.0.
 [[annotations]]
-path = "research/**/*.jsonl"
+path = ["research/**/*.jsonl", "research/**/*.tsv"]
 SPDX-FileCopyrightText = "Copyright the Vortex contributors"
 SPDX-License-Identifier = "CC-BY-4.0"
 

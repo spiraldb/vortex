@@ -431,6 +431,52 @@ def more():
 SOURCES["more"] = more
 
 
+def grid():
+    """30 kHz appliance current/voltage (PLAID) and 500 kHz grid voltage (ADMIT)."""
+    import h5py
+
+    p = curl("https://ndownloader.figshare.com/files/18183113", "plaid_submetered.zip", timeout=3600)
+    z = zipfile.ZipFile(p)
+    for rec in ["1005", "1464", "1312", "788", "759", "1816"]:
+        rows = [line.split(",") for line in z.read(f"submetered_new/{rec}.csv").decode().split()]
+        for c, label in [(0, "current"), (1, "voltage")]:
+            if label == "voltage" and rec not in ("1005", "1312"):
+                continue
+            v, s = decimals_to_int([r[c] for r in rows])
+            save(f"grid_plaid_{rec}_{label}_30khz", "grid", v, 30000, f"PLAID 2018 submetered/{rec}.csv {label}", s)
+
+    p = curl("https://zenodo.org/records/14723239/files/data_set_ADMIT.mat?download=1", "admit.mat")
+    a = h5py.File(p)["voltage"][:]
+    q = np.min(np.diff(np.unique(a[:, 0])))
+    ints = np.round(a.T.ravel() / q)
+    err = np.max(np.abs(ints * q - a.T.ravel()))
+    save("grid_admit_voltage_500khz", "grid", ints, 500000, f"ADMIT 5 x 0.04 s voltage, x/{q:.4e} (max err {err:.1e})")
+
+
+SOURCES["grid"] = grid
+
+
+def daphnet():
+    """Daphnet freezing-of-gait: 3 body-worn accelerometers at 64 Hz, integer mg."""
+    z = zipfile.ZipFile(
+        curl("https://archive.ics.uci.edu/static/public/245/daphnet+freezing+of+gait.zip", "daphnet.zip")
+    )
+    for rec, col, label in [
+        ("S01R01", 1, "ankle_fwd"),
+        ("S01R01", 5, "thigh_vert"),
+        ("S01R01", 9, "trunk_lat"),
+        ("S02R01", 3, "ankle_lat"),
+        ("S03R01", 8, "trunk_vert"),
+    ]:
+        rows = np.loadtxt(io.BytesIO(z.read(f"dataset_fog_release/dataset/{rec}.txt")), dtype=np.int64)
+        save(f"imu_daphnet_{rec}_{label}_64hz", "imu", rows[:, col], 64, f"Daphnet {rec} column {col} (mg)")
+        if label == "ankle_fwd":
+            save(f"ts_daphnet_{rec}_ms", "timestamp", rows[:, 0], 64, f"Daphnet {rec} time (ms)")
+
+
+SOURCES["daphnet"] = daphnet
+
+
 if __name__ == "__main__":
     for s in sys.argv[2:] or SOURCES:
         print("==", s)
