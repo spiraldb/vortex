@@ -1,29 +1,95 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-use fearless_simd::Level;
-use fearless_simd::Simd;
-use fearless_simd::prelude::*;
-use fearless_simd::u8x64;
-use fearless_simd::u64x8;
-use fearless_simd_macros::simd;
-use vortex_error::VortexExpect;
+//! Population count over a bit range.
+//!
+//! The kernels are one plain word loop; LLVM vectorizes it according to the target features
+//! enabled on the enclosing function. On x86_64 the loop is compiled once per feature set and
+//! selected at runtime, so the count always uses `vpopcntq` (AVX-512 VPOPCNTDQ), a `vpshufb`
+//! nibble lookup (AVX2), or `popcnt`, even in builds whose baseline target lacks them. Other
+//! architectures use the portable loop, whose baseline already has a vector popcount (NEON
+//! `cnt` on aarch64).
+
+#[cfg(target_arch = "x86_64")]
+use crate::dispatch::CpuKernel;
+
+/// Below this many bits, a build with compile-time POPCNT counts inline rather than paying
+/// for the indirect call to a vectorized kernel.
+#[cfg(target_arch = "x86_64")]
+const DISPATCH_MIN_BITS: usize = 256;
 
 #[inline]
 pub fn count_ones(bytes: &[u8], offset: usize, len: usize) -> usize {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if !cfg!(target_feature = "popcnt") || len >= DISPATCH_MIN_BITS {
+            return count_ones_x86(bytes, offset, len);
+        }
+    }
+    count_ones_portable(bytes, offset, len)
+}
+
+#[cfg(target_arch = "x86_64")]
+#[inline]
+fn count_ones_x86(bytes: &[u8], offset: usize, len: usize) -> usize {
+    type CountOnes = unsafe fn(&[u8], usize, usize) -> usize;
+    static KERNEL: CpuKernel<CountOnes> = CpuKernel::new(|| {
+        if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512vpopcntdq") {
+            return count_ones_avx512;
+        }
+        if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("popcnt") {
+            return count_ones_avx2;
+        }
+        if is_x86_feature_detected!("popcnt") {
+            return count_ones_popcnt;
+        }
+        count_ones_portable
+    });
+    // SAFETY: the selector only returns kernels that are safe or whose required CPU
+    // features were probed before selection.
+    unsafe { KERNEL.get()(bytes, offset, len) }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f,avx512vpopcntdq,popcnt")]
+unsafe fn count_ones_avx512(bytes: &[u8], offset: usize, len: usize) -> usize {
+    count_ones_portable(bytes, offset, len)
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,popcnt")]
+unsafe fn count_ones_avx2(bytes: &[u8], offset: usize, len: usize) -> usize {
+    count_ones_portable(bytes, offset, len)
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "popcnt")]
+unsafe fn count_ones_popcnt(bytes: &[u8], offset: usize, len: usize) -> usize {
+    count_ones_portable(bytes, offset, len)
+}
+
+/// Always inlined so each `#[target_feature]` kernel compiles its own copy with its features.
+#[inline(always)]
+fn count_ones_portable(bytes: &[u8], offset: usize, len: usize) -> usize {
     if bytes.is_empty() {
         return 0;
     }
 
     let (head, middle, tail) = align_offset_len(bytes, offset, len);
 
-    let mut count = head.map_or(0, |v| v.count_ones() as usize);
+    let (words, tail_bytes) = middle.as_chunks::<8>();
+    let middle_count = words
+        .iter()
+        .map(|word| u64::from_le_bytes(*word).count_ones() as usize)
+        .sum::<usize>()
+        + tail_bytes
+            .iter()
+            .map(|byte| byte.count_ones() as usize)
+            .sum::<usize>();
 
-    if !middle.is_empty() {
-        count += count_ones_aligned(middle);
-    }
-
-    count + tail.map_or(0, |v| v.count_ones() as usize)
+    head.map_or(0, |v| v.count_ones() as usize)
+        + middle_count
+        + tail.map_or(0, |v| v.count_ones() as usize)
 }
 
 #[inline]
@@ -75,51 +141,18 @@ fn mask_byte(byte: u8, bit_offset: usize, bit_len: usize) -> u8 {
     shifted & mask
 }
 
-#[inline]
-fn count_ones_aligned(bytes: &[u8]) -> usize {
-    // SIMD kernels only pay off from 32 bytes. Below that, call the scalar kernel
-    // directly: it stays inlinable and skips the dispatch, which would otherwise
-    // dominate the couple of word popcounts.
-    if bytes.len() < 32 {
-        return count_ones_aligned_scalar(bytes);
-    }
-
-    fearless_simd::dispatch!(Level::new(), simd => count_ones_aligned_simd(simd, bytes))
-}
-
-#[inline]
-fn count_ones_aligned_scalar(bytes: &[u8]) -> usize {
-    let (words, tail) = bytes.as_chunks::<8>();
-    let count = words
-        .iter()
-        .map(|word| u64::from_le_bytes(*word).count_ones() as usize)
-        .sum::<usize>();
-
-    count
-        + tail
-            .iter()
-            .map(|byte| byte.count_ones() as usize)
-            .sum::<usize>()
-}
-
-/// Lane-wise `u64` popcount over 64-byte vectors. The total is independent of lane byte order.
-#[simd]
-fn count_ones_aligned_simd<S: Simd>(simd: S, bytes: &[u8]) -> usize {
-    let (chunks, tail) = bytes.as_chunks::<64>();
-    let mut accum = u64x8::splat(simd, 0);
-    for chunk in chunks {
-        let words: u64x8<S> = u8x64::from_slice(simd, chunk).bitcast();
-        accum += words.count_ones();
-    }
-
-    usize::try_from(accum.reduce_sum()).vortex_expect("true_count doesn't fit in usize")
-        + count_ones_aligned_scalar(tail)
-}
-
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
 
+    #[cfg(target_arch = "x86_64")]
+    use super::count_ones_avx2;
+    #[cfg(target_arch = "x86_64")]
+    use super::count_ones_avx512;
+    #[cfg(target_arch = "x86_64")]
+    use super::count_ones_popcnt;
+    #[cfg(target_arch = "x86_64")]
+    use super::count_ones_portable;
     use crate::BitBuffer;
 
     #[cfg_attr(miri, ignore)]
@@ -164,5 +197,32 @@ mod tests {
         let expected = sliced.iter().filter(|bit| *bit).count();
 
         assert_eq!(sliced.true_count(), expected, "offset={offset} len={len}");
+    }
+
+    /// Every kernel the host supports must match the portable count, not only the one the
+    /// dispatcher selects.
+    #[cfg(target_arch = "x86_64")]
+    #[cfg_attr(miri, ignore)]
+    #[rstest]
+    fn test_count_ones_x86_kernels_match_portable(
+        #[values(0usize, 3, 8)] offset: usize,
+        #[values(0usize, 7, 64, 255, 256, 511, 4097, 65_537)] len: usize,
+    ) {
+        let buf = BitBuffer::collect_bool(offset + len, |i| (i % 3 == 0) ^ (i % 7 == 0));
+        let bytes = buf.inner().as_slice();
+        let expected = count_ones_portable(bytes, offset, len);
+
+        if is_x86_feature_detected!("popcnt") {
+            // SAFETY: `popcnt` was detected above.
+            assert_eq!(unsafe { count_ones_popcnt(bytes, offset, len) }, expected);
+        }
+        if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("popcnt") {
+            // SAFETY: `avx2` and `popcnt` were detected above.
+            assert_eq!(unsafe { count_ones_avx2(bytes, offset, len) }, expected);
+        }
+        if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512vpopcntdq") {
+            // SAFETY: `avx512f` and `avx512vpopcntdq` were detected above, and both imply `popcnt`.
+            assert_eq!(unsafe { count_ones_avx512(bytes, offset, len) }, expected);
+        }
     }
 }
