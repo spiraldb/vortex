@@ -12,14 +12,30 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
 
+[dependencies]
+num-traits = { workspace = true }
+prost = { workspace = true }
+smallvec = { workspace = true }
+vortex-array = { workspace = true }
+vortex-buffer = { workspace = true }
+vortex-error = { workspace = true }
+vortex-fastlanes = { workspace = true }
+vortex-mask = { workspace = true }
+vortex-session = { workspace = true }
+
 [dev-dependencies]
 divan = { workspace = true }
 mimalloc = { workspace = true }
 rand = { workspace = true }
 rstest = { workspace = true }
+vortex-array = { path = "../../vortex-array", features = ["_test-harness"] }
 
 [[bench]]
 name = "ef_codec"
+harness = false
+
+[[bench]]
+name = "elias_fano"
 harness = false
 
 [lints]
