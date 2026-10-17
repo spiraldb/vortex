@@ -39,6 +39,8 @@ use vortex_bench::datasets::struct_list_of_ints::StructListOfInts;
 use vortex_bench::datasets::taxi_data::TaxiData;
 use vortex_bench::datasets::tpch_l_comment::TPCHLCommentCanonical;
 use vortex_bench::datasets::tpch_l_comment::TPCHLCommentChunked;
+use vortex_bench::datasets::wide_table::WideTable;
+use vortex_bench::datasets::wide_table::WideTableKind;
 use vortex_bench::display::DisplayFormat;
 use vortex_bench::display::print_measurements_json;
 use vortex_bench::display::render_table;
@@ -266,6 +268,14 @@ async fn run_compress(
         // ),
     ];
 
+    // Very wide flat tables, measuring the per-column cost of writing and reading the schema.
+    let wide_tables = [
+        WideTable::new(WideTableKind::Int64, 10_000, 1000),
+        WideTable::new(WideTableKind::Mixed, 10_000, 1000),
+        // Reads back a fixed 10k-column projection, see `read_projection`.
+        WideTable::new(WideTableKind::Int64, 100_000, 100),
+    ];
+
     // Datasets run in GPU mode. Add one only after a `--gpu-verify` run has confirmed its CUDA
     // decode end to end; a dataset here that cannot decode fails the benchmark job. Between them
     // these cover FSST strings, bit-packed numerics, timestamps, columns with nulls, and lists.
@@ -306,6 +316,7 @@ async fn run_compress(
     ]
     .into_iter()
     .chain(structlistofints.iter().map(|d| d as &dyn Dataset))
+    .chain(wide_tables.iter().map(|d| d as &dyn Dataset))
     .collect();
 
     let datasets: Vec<&dyn Dataset> = if mode.is_gpu() {
