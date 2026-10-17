@@ -14,6 +14,7 @@ use vortex_error::vortex_ensure_eq;
 use crate::ArrayEq;
 use crate::ArrayHash;
 use crate::ArrayRef;
+use crate::ExecutionCtx;
 use crate::ArraySlots;
 use crate::EqMode;
 use crate::IntoArray;
@@ -76,13 +77,15 @@ pub struct MapDataParts {
 /// Accessors for the canonical map representation.
 pub trait MapArrayExt: MapArraySlotsExt {
     /// Returns the entry structs for one map row.
-    fn entries_at(&self, index: usize) -> VortexResult<ArrayRef> {
-        self.entries().as_::<ListView>().list_elements_at(index)
+    fn entries_at(&self, index: usize, ctx: &mut ExecutionCtx) -> VortexResult<ArrayRef> {
+        self.entries()
+            .as_::<ListView>()
+            .list_elements_at(index, ctx)
     }
 
     /// Returns the number of entries in one map row.
-    fn entry_count_at(&self, index: usize) -> usize {
-        self.entries().as_::<ListView>().size_at(index)
+    fn entry_count_at(&self, index: usize, ctx: &mut ExecutionCtx) -> usize {
+        self.entries().as_::<ListView>().size_at(index, ctx)
     }
 
     /// Returns the outer map validity delegated from the entries list-view.

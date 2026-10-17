@@ -174,7 +174,7 @@ unsafe fn build_list_offsets_from_list_view<O: IntegerPType>(
     let final_offset = if len != 0 {
         let last_offset = offsets_slice[len - 1];
 
-        let last_size = list_view.size_at(len - 1);
+        let last_size = list_view.size_at(len - 1, ctx);
         let last_size =
             O::from_usize(last_size).vortex_expect("size somehow did not fit into offsets");
 
@@ -459,8 +459,8 @@ mod tests {
 
         // The resulting ListArray should have monotonic offsets.
         for i in 0..list_array.len() {
-            let start = list_array.offset_at(i)?;
-            let end = list_array.offset_at(i + 1)?;
+            let start = list_array.offset_at(i, &mut ctx)?;
+            let end = list_array.offset_at(i + 1, &mut ctx)?;
             assert!(end >= start, "Offsets should be monotonic after conversion");
         }
 
@@ -480,7 +480,7 @@ mod tests {
 
         // All sublists should be empty.
         for i in 0..list_array.len() {
-            assert_eq!(list_array.list_elements_at(i)?.len(), 0);
+            assert_eq!(list_array.list_elements_at(i, &mut ctx)?.len(), 0);
         }
 
         // Round-trip.

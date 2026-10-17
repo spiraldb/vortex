@@ -8,7 +8,6 @@ use std::sync::Arc;
 use num_traits::AsPrimitive;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
-use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure;
 use vortex_error::vortex_ensure_eq;
 use vortex_error::vortex_panic;
@@ -18,9 +17,6 @@ use crate::ArraySlots;
 use crate::Canonical;
 use crate::ExecutionCtx;
 use crate::IntoArray;
-use crate::VortexSessionExecute;
-use crate::aggregate_fn::NumericalAggregateOpts;
-use crate::aggregate_fn::fns::min_max::min_max;
 use crate::array::Array;
 use crate::array::ArrayParts;
 use crate::array::TypedArrayRef;
@@ -34,7 +30,6 @@ use crate::arrays::Primitive;
 use crate::builtins::ArrayBuiltins;
 use crate::dtype::DType;
 use crate::dtype::NativePType;
-use crate::legacy_session;
 use crate::match_each_integer_ptype;
 use crate::match_each_native_ptype;
 use crate::scalar_fn::fns::operators::Operator;
@@ -83,7 +78,7 @@ pub struct ListSlots {
 /// use vortex_array::arrays::{ListArray, PrimitiveArray};
 /// use vortex_array::arrays::list::ListArrayExt;
 /// use vortex_array::validity::Validity;
-/// use vortex_array::IntoArray;
+/// use vortex_array::{IntoArray, VortexSessionExecute};
 /// use vortex_buffer::buffer;
 /// use std::sync::Arc;
 ///
@@ -100,10 +95,11 @@ pub struct ListSlots {
 /// assert_eq!(list_array.len(), 3);
 ///
 /// // Access individual lists
-/// let first_list = list_array.list_elements_at(0).unwrap();
+/// let mut ctx = vortex_array::array_session().create_execution_ctx();
+/// let first_list = list_array.list_elements_at(0, &mut ctx).unwrap();
 /// assert_eq!(first_list.len(), 2); // [1, 2]
 ///
-/// let third_list = list_array.list_elements_at(2).unwrap();
+/// let third_list = list_array.list_elements_at(2, &mut ctx).unwrap();
 /// assert!(third_list.is_empty()); // []
 /// ```
 #[derive(Clone, Debug, Default)]
@@ -188,8 +184,9 @@ impl ListData {
 
     /// Validates the components that would be used to create a `ListArray`.
     ///
-    /// This function checks all the invariants required by `ListArray::new_unchecked`.
-    #[allow(clippy::disallowed_methods)]
+    /// This function checks all the invariants required by `ListArray::new_unchecked`. The order
+    /// and bounds of the offsets are only checked when they are a canonical, host-resident
+    /// [`PrimitiveArray`](crate::arrays::PrimitiveArray).
     pub fn validate(
         elements: &ArrayRef,
         offsets: &ArrayRef,
@@ -208,33 +205,23 @@ impl ListData {
             offsets.dtype()
         );
 
-        // We can safely unwrap the DType as primitive now
-        let offsets_ptype = offsets.dtype().as_ptype();
-        let mut ctx = legacy_session().create_execution_ctx();
+        // The order and bounds of the offsets are only checked when they are canonical and
+        // host-resident: validation never executes the offsets.
+        if offsets.is_host()
+            && let Some(offsets) = offsets.as_opt::<Primitive>()
+        {
+            match_each_integer_ptype!(offsets.ptype(), |P| {
+                let offsets = offsets.as_slice::<P>();
 
-        // Offsets must be sorted (but not strictly sorted, zero-length lists are allowed)
-        if let Some(is_sorted) = offsets.statistics().compute_is_sorted(&mut ctx) {
-            vortex_ensure!(is_sorted, InvalidArgument: "offsets must be sorted");
-        } else {
-            vortex_bail!(InvalidArgument: "offsets must report is_sorted statistic");
-        }
+                // Offsets must be sorted (but not strictly sorted, zero-length lists are allowed)
+                vortex_ensure!(offsets.is_sorted(), InvalidArgument: "offsets must be sorted");
 
-        // Validate that offsets min is non-negative, and max does not exceed the length of
-        // the elements array.
-        if let Some(min_max) = min_max(offsets, &mut ctx, NumericalAggregateOpts::default())? {
-            match_each_integer_ptype!(offsets_ptype, |P| {
+                // Validate that offsets min is non-negative, and max does not exceed the length
+                // of the elements array.
                 #[allow(clippy::absurd_extreme_comparisons, unused_comparisons)]
                 {
-                    let max = min_max
-                        .max
-                        .as_primitive()
-                        .as_::<P>()
-                        .vortex_expect("offsets type must fit offsets values");
-                    let min = min_max
-                        .min
-                        .as_primitive()
-                        .as_::<P>()
-                        .vortex_expect("offsets type must fit offsets values");
+                    let min = offsets[0];
+                    let max = offsets[offsets.len() - 1];
 
                     vortex_ensure!(
                         min >= 0,
@@ -252,13 +239,7 @@ impl ListData {
                     );
                 }
             })
-        } else {
-            // TODO(aduffy): fallback to slower validation pathway?
-            vortex_bail!(
-                InvalidArgument: "offsets array with encoding {} must support min_max compute function",
-                offsets.encoding_id()
-            );
-        };
+        }
 
         // If a validity array is present, it must be the same length as the ListArray
         if let Some(validity_len) = validity.maybe_len() {
@@ -292,8 +273,7 @@ pub trait ListArrayExt: ListArraySlotsExt {
         )
     }
 
-    #[allow(clippy::disallowed_methods)]
-    fn offset_at(&self, index: usize) -> VortexResult<usize> {
+    fn offset_at(&self, index: usize, ctx: &mut ExecutionCtx) -> VortexResult<usize> {
         vortex_ensure!(
             index <= self.len(),
             "Index {index} out of bounds 0..={}",
@@ -306,22 +286,22 @@ pub trait ListArrayExt: ListArraySlotsExt {
             }))
         } else {
             self.offsets()
-                .execute_scalar(index, &mut legacy_session().create_execution_ctx())?
+                .execute_scalar(index, ctx)?
                 .as_primitive()
                 .as_::<usize>()
                 .ok_or_else(|| vortex_error::vortex_err!("offset value does not fit in usize"))
         }
     }
 
-    fn list_elements_at(&self, index: usize) -> VortexResult<ArrayRef> {
-        let start = self.offset_at(index)?;
-        let end = self.offset_at(index + 1)?;
+    fn list_elements_at(&self, index: usize, ctx: &mut ExecutionCtx) -> VortexResult<ArrayRef> {
+        let start = self.offset_at(index, ctx)?;
+        let end = self.offset_at(index + 1, ctx)?;
         self.elements().slice(start..end)
     }
 
-    fn sliced_elements(&self) -> VortexResult<ArrayRef> {
-        let start = self.offset_at(0)?;
-        let end = self.offset_at(self.len())?;
+    fn sliced_elements(&self, ctx: &mut ExecutionCtx) -> VortexResult<ArrayRef> {
+        let start = self.offset_at(0, ctx)?;
+        let end = self.offset_at(self.len(), ctx)?;
         self.elements().slice(start..end)
     }
 
@@ -330,7 +310,7 @@ pub trait ListArrayExt: ListArraySlotsExt {
     }
 
     fn reset_offsets(&self, recurse: bool, ctx: &mut ExecutionCtx) -> VortexResult<Array<List>> {
-        let mut elements = self.sliced_elements()?;
+        let mut elements = self.sliced_elements(ctx)?;
         if recurse && elements.is_canonical() {
             let compacted = elements
                 .execute::<Canonical>(ctx)?

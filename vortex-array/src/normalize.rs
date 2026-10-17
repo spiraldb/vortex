@@ -104,6 +104,7 @@ mod tests {
 
     use super::NormalizeOptions;
     use super::Operation;
+    use crate::Canonical;
     use crate::ArrayRef;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
@@ -225,8 +226,7 @@ mod tests {
         assert_eq!(normalized.len(), 3);
 
         // Verify the data: codes [1,0,1] -> values [20, 10, 20]
-        #[expect(deprecated)]
-        let normalized_canonical = normalized.to_canonical()?;
+        let normalized_canonical = normalized.execute::<Canonical>(&mut ctx)?;
         assert_arrays_eq!(
             normalized_canonical,
             PrimitiveArray::from_iter(vec![20i32, 10, 20]),

@@ -14,6 +14,7 @@ use vortex_session::registry::CachedId;
 
 use crate::ArrayParts;
 use crate::ArrayRef;
+use crate::VortexSessionExecute;
 use crate::ExecutionCtx;
 use crate::ExecutionResult;
 use crate::IntoArray;
@@ -162,7 +163,7 @@ impl VTable for VarBin {
         metadata: &[u8],
         buffers: &[BufferHandle],
         children: &dyn ArrayChildren,
-        _session: &VortexSession,
+        session: &VortexSession,
     ) -> VortexResult<ArrayParts<Self>> {
         let metadata = VarBinMetadata::decode(metadata)?;
         let validity = if children.len() == 1 {
@@ -185,7 +186,13 @@ impl VTable for VarBin {
         }
         let bytes = buffers[0].clone().try_to_host_sync()?;
 
-        let data = VarBinData::try_build(offsets.clone(), bytes, dtype.clone(), validity.clone())?;
+        let data = VarBinData::try_build(
+            offsets.clone(),
+            bytes,
+            dtype.clone(),
+            validity.clone(),
+            &mut session.create_execution_ctx(),
+        )?;
         let slots = VarBinData::make_slots(offsets, &validity, len);
         Ok(ArrayParts::new(
             self.clone(),

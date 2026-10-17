@@ -31,7 +31,7 @@ impl OperationsVTable<Patched> for Patched {
 
         let lane = (index + array.offset()) % array.n_lanes();
 
-        let range = array.lane_range(chunk, lane)?;
+        let range = array.lane_range(chunk, lane, ctx)?;
 
         // Get the range of indices corresponding to the lane, potentially decoding them to avoid
         // the overhead of repeated scalar_at calls.

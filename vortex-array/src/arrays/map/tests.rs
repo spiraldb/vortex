@@ -117,6 +117,7 @@ fn sample_array() -> VortexResult<MapArray> {
 
 #[test]
 fn constructs_map_with_listview_entries() -> VortexResult<()> {
+    let mut ctx = array_session().create_execution_ctx();
     let MapDataParts { map_dtype, entries } = sample_array()?.into_data_parts();
     let array = MapArray::try_new(map_dtype.clone(), entries)?;
 
@@ -125,9 +126,9 @@ fn constructs_map_with_listview_entries() -> VortexResult<()> {
         &DType::Map(map_dtype.clone(), Nullability::Nullable)
     );
     assert!(array.keys_sorted());
-    assert_eq!(array.entry_count_at(0), 3);
-    assert_eq!(array.entry_count_at(1), 0);
-    assert_eq!(array.entries_at(0)?.dtype(), &map_dtype.entries_dtype());
+    assert_eq!(array.entry_count_at(0, &mut ctx), 3);
+    assert_eq!(array.entry_count_at(1, &mut ctx), 0);
+    assert_eq!(array.entries_at(0, &mut ctx)?.dtype(), &map_dtype.entries_dtype());
 
     let mut ctx = array_session().create_execution_ctx();
     assert_eq!(
@@ -278,10 +279,10 @@ fn scalar_access_preserves_variable_entry_counts_and_utf8_pairs() -> VortexResul
     let array = builder.finish_into_map();
     let mut ctx = array_session().create_execution_ctx();
 
-    assert_eq!(array.entry_count_at(0), 2);
-    assert_eq!(array.entry_count_at(1), 1);
-    assert_eq!(array.entry_count_at(2), 0);
-    assert_eq!(array.entry_count_at(3), 3);
+    assert_eq!(array.entry_count_at(0, &mut ctx), 2);
+    assert_eq!(array.entry_count_at(1, &mut ctx), 1);
+    assert_eq!(array.entry_count_at(2, &mut ctx), 0);
+    assert_eq!(array.entry_count_at(3, &mut ctx), 3);
     for (index, expected) in expected.into_iter().enumerate() {
         assert_eq!(array.execute_scalar(index, &mut ctx)?, expected);
     }

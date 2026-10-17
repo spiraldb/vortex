@@ -7,6 +7,7 @@ use std::fmt::Formatter;
 use std::hash::Hash;
 use std::hash::Hasher;
 
+use num_traits::AsPrimitive;
 use prost::Message;
 use vortex_array::AnyCanonical;
 use vortex_array::Array;
@@ -33,7 +34,7 @@ use vortex_array::buffer::BufferHandle;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
-use vortex_array::legacy_session;
+use vortex_array::match_each_unsigned_integer_ptype;
 use vortex_array::require_child;
 use vortex_array::serde::ArrayChildren;
 use vortex_array::validity::Validity;
@@ -93,7 +94,6 @@ impl VTable for RunEnd {
         *ID
     }
 
-    #[allow(clippy::disallowed_methods)]
     fn validate(
         &self,
         data: &Self::TypedArrayData,
@@ -104,9 +104,7 @@ impl VTable for RunEnd {
         let run_end_slots = RunEndSlotsView::from_slots(slots);
         let ends = run_end_slots.ends;
         let values = run_end_slots.values;
-        // TODO(ctx): trait fixes - VTable::validate has a fixed signature.
-        let mut ctx = legacy_session().create_execution_ctx();
-        RunEndData::validate_parts(ends, values, data.offset, len, &mut ctx)?;
+        RunEndData::validate_parts_without_execution(ends, values, data.offset, len)?;
         vortex_ensure_eq!(values.dtype(), dtype);
         Ok(())
     }
@@ -327,22 +325,7 @@ impl RunEndData {
         length: usize,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<()> {
-        // DType validation
-        vortex_ensure!(
-            ends.dtype().is_unsigned_int(),
-            "run ends must be unsigned integers, was {}",
-            ends.dtype(),
-        );
-        vortex_ensure_eq!(ends.len(), values.len());
-
-        // Handle empty run-ends
-        if ends.is_empty() {
-            vortex_ensure_eq!(offset, 0, "non-zero offset provided for empty RunEndArray");
-            return Ok(());
-        }
-
-        // Zero-length logical slices may retain run metadata from the source array.
-        if length == 0 {
+        if !Self::validate_shape(ends, values, offset, length)? {
             return Ok(());
         }
 
@@ -367,15 +350,85 @@ impl RunEndData {
             return Ok(());
         }
 
-        // Validate the offset and length are valid for the given ends and values
-        if offset != 0 && length != 0 {
-            let first_run_end = usize::try_from(&ends.execute_scalar(0, ctx)?)?;
-            if first_run_end < offset {
-                vortex_bail!("First run end {first_run_end} must be >= offset {offset}");
-            }
+        let first_run_end = if offset == 0 {
+            0
+        } else {
+            usize::try_from(&ends.execute_scalar(0, ctx)?)?
+        };
+        let last_run_end = usize::try_from(&ends.execute_scalar(ends.len() - 1, ctx)?)?;
+        Self::validate_run_end_bounds(first_run_end, last_run_end, offset, length)
+    }
+
+    /// Validate the parts like [`Self::validate_parts`], but without executing `ends`.
+    ///
+    /// The run ends are only checked against `offset..offset + length` when they are canonical
+    /// and host-resident.
+    fn validate_parts_without_execution(
+        ends: &ArrayRef,
+        values: &ArrayRef,
+        offset: usize,
+        length: usize,
+    ) -> VortexResult<()> {
+        if !Self::validate_shape(ends, values, offset, length)? {
+            return Ok(());
         }
 
-        let last_run_end = usize::try_from(&ends.execute_scalar(ends.len() - 1, ctx)?)?;
+        if ends.is_host()
+            && let Some(ends) = ends.as_opt::<Primitive>()
+        {
+            match_each_unsigned_integer_ptype!(ends.ptype(), |E| {
+                let ends = ends.as_slice::<E>();
+                // Run ends must be strictly sorted for binary search to work correctly.
+                debug_assert!(ends.is_sorted_by(|a, b| a < b));
+                Self::validate_run_end_bounds(
+                    ends[0].as_(),
+                    ends[ends.len() - 1].as_(),
+                    offset,
+                    length,
+                )?;
+            });
+        }
+
+        Ok(())
+    }
+
+    /// Validates the dtypes and lengths of the parts. Returns `false` when there are no runs to
+    /// check against `offset..offset + length`.
+    fn validate_shape(
+        ends: &ArrayRef,
+        values: &ArrayRef,
+        offset: usize,
+        length: usize,
+    ) -> VortexResult<bool> {
+        // DType validation
+        vortex_ensure!(
+            ends.dtype().is_unsigned_int(),
+            "run ends must be unsigned integers, was {}",
+            ends.dtype(),
+        );
+        vortex_ensure_eq!(ends.len(), values.len());
+
+        // Handle empty run-ends
+        if ends.is_empty() {
+            vortex_ensure_eq!(offset, 0, "non-zero offset provided for empty RunEndArray");
+            return Ok(false);
+        }
+
+        // Zero-length logical slices may retain run metadata from the source array.
+        Ok(length != 0)
+    }
+
+    /// Validates that the first and last run ends cover `offset..offset + length`.
+    fn validate_run_end_bounds(
+        first_run_end: usize,
+        last_run_end: usize,
+        offset: usize,
+        length: usize,
+    ) -> VortexResult<()> {
+        if first_run_end < offset {
+            vortex_bail!("First run end {first_run_end} must be >= offset {offset}");
+        }
+
         let min_required_end = offset + length;
         if last_run_end < min_required_end {
             vortex_bail!("Last run end {last_run_end} must be >= offset+length {min_required_end}");

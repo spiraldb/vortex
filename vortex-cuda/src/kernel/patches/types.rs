@@ -252,9 +252,10 @@ mod tests {
             Some(chunk_offsets.into_array()),
         )?;
         assert!(patches.chunk_offsets().is_some());
-        assert_eq!(patches.chunk_offset_at(0)?, 0);
-        assert_eq!(patches.chunk_offset_at(1)?, 2);
-        assert_eq!(patches.chunk_offset_at(2)?, 3);
+        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        assert_eq!(patches.chunk_offset_at(0, &mut ctx)?, 0);
+        assert_eq!(patches.chunk_offset_at(1, &mut ctx)?, 2);
+        assert_eq!(patches.chunk_offset_at(2, &mut ctx)?, 3);
 
         Ok(())
     }

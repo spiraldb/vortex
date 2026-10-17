@@ -1161,14 +1161,14 @@ mod test {
         .into_array();
 
         let result = list.take(idx)?.execute::<ListViewArray>(&mut ctx)?;
-        assert_eq!(result.offset_at(0), 0);
-        assert_eq!(result.size_at(0), 2);
-        assert_eq!(result.offset_at(1), 2);
-        assert_eq!(result.size_at(1), 0);
-        assert_eq!(result.offset_at(2), 2);
-        assert_eq!(result.size_at(2), 3);
-        assert_eq!(result.offset_at(3), 5);
-        assert_eq!(result.size_at(3), 1);
+        assert_eq!(result.offset_at(0, &mut ctx), 0);
+        assert_eq!(result.size_at(0, &mut ctx), 2);
+        assert_eq!(result.offset_at(1, &mut ctx), 2);
+        assert_eq!(result.size_at(1, &mut ctx), 0);
+        assert_eq!(result.offset_at(2, &mut ctx), 2);
+        assert_eq!(result.size_at(2, &mut ctx), 3);
+        assert_eq!(result.offset_at(3, &mut ctx), 5);
+        assert_eq!(result.size_at(3, &mut ctx), 1);
 
         let element_dtype: Arc<DType> = Arc::new(I32.into());
         assert_eq!(
@@ -1213,12 +1213,12 @@ mod test {
         .into_array();
 
         let result = list.take(idx)?.execute::<ListViewArray>(&mut ctx)?;
-        assert_eq!(result.offset_at(0), 0);
-        assert_eq!(result.size_at(0), 0);
-        assert_eq!(result.offset_at(1), 0);
-        assert_eq!(result.size_at(1), 3);
-        assert_eq!(result.offset_at(2), 3);
-        assert_eq!(result.size_at(2), 2);
+        assert_eq!(result.offset_at(0, &mut ctx), 0);
+        assert_eq!(result.size_at(0, &mut ctx), 0);
+        assert_eq!(result.offset_at(1, &mut ctx), 0);
+        assert_eq!(result.size_at(1, &mut ctx), 3);
+        assert_eq!(result.offset_at(2, &mut ctx), 3);
+        assert_eq!(result.size_at(2, &mut ctx), 2);
 
         let element_dtype: Arc<DType> = Arc::new(I32.into());
         assert!(result.is_invalid(0, &mut ctx)?);
