@@ -87,7 +87,7 @@ impl ListSource {
         let valid = validity.execute_mask(self.mask.true_count(), cx.exec())?;
         let elements = self.plan.elements()?;
         let offsets = offsets.as_slice::<u64>();
-        let (offsets, ranges) = match self.mask.indices() {
+        let (mut selected_offsets, mut ranges) = match self.mask.indices() {
             AllOr::All => {
                 selected_ranges(0..self.mask.len(), offsets, &valid, elements.row_count())?
             }
@@ -99,6 +99,20 @@ impl ListSource {
             )?,
             AllOr::None => (Buffer::from(vec![0_u64]), Vec::new()),
         };
+        // An all-selected scope can retain payload under null rows. For dense, bounded spans,
+        // this avoids filtering every element just to remove values hidden by list validity.
+        if self.mask.all_true()
+            && !valid.all_true()
+            && let Some(offsets) = work::preserve_null_span(
+                elements.dtype(),
+                offsets,
+                selected_offsets.last().copied().unwrap_or(0),
+                &mut ranges,
+            )
+        {
+            selected_offsets = offsets;
+        }
+        let offsets = selected_offsets;
         let last_offset = offsets.last().copied().unwrap_or(0);
         let offsets = offsets.into_array();
         // These offsets start at zero and are checked sums of nonnegative lengths. Retain

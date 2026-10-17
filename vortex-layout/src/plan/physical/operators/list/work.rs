@@ -6,6 +6,7 @@
 use std::ops::Range;
 
 use vortex_array::dtype::DType;
+use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
 use vortex_mask::Mask;
 
@@ -20,6 +21,45 @@ use crate::plan::physical::pipeline::overlapping;
 
 const MAX_ELEMENT_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_MASK_FRAGMENT_BYTES: u64 = 32 * 1024;
+
+/// Retain a dense, fixed-width element span across null lists. The caller has validated every
+/// offset and selected every row in this scope; only null rows may occupy gaps in `ranges`.
+pub(super) fn preserve_null_span(
+    dtype: &DType,
+    offsets: &[u64],
+    selected: u64,
+    ranges: &mut Vec<Range<u64>>,
+) -> Option<Buffer<u64>> {
+    if ranges.len() < 2 {
+        return None;
+    }
+    let start = ranges.first()?.start;
+    let end = ranges.last()?.end;
+    let span = end - start;
+    let width = match dtype {
+        DType::Primitive(ptype, _) => ptype.byte_width() as u64,
+        DType::Bool(_) => 1,
+        _ => return None,
+    };
+    let validity = if dtype.is_nullable() {
+        span.div_ceil(8)
+    } else {
+        0
+    };
+    if selected < span.div_ceil(2)
+        || span.saturating_mul(width).saturating_add(validity) > MAX_ELEMENT_BYTES
+    {
+        return None;
+    }
+    // Trim payload under leading/trailing nulls while retaining internal gaps.
+    let offsets = offsets
+        .iter()
+        .map(|offset| (*offset).clamp(start, end) - start)
+        .collect();
+    ranges.clear();
+    ranges.push(start..end);
+    Some(offsets)
+}
 
 /// Combine nearby ranges into a mask, keeping holes out of the output without a scan per hole.
 /// Only dense fixed-width spans of at most 8 MiB are grouped. Large contiguous fragments keep
@@ -171,6 +211,55 @@ mod tests {
     fn segment(rows: u64, dtype: DType) -> PlanRef {
         SegmentScanPlan::new(dtype, rows, SegmentId::from(0), ReadContext::new([]), None)
             .into_plan()
+    }
+
+    #[test]
+    fn retained_span_trims_null_edges_and_rebases_internal_offsets() {
+        let mut ranges = vec![10..18, 22..30];
+        let offsets = preserve_null_span(
+            &DType::Primitive(PType::I64, true.into()),
+            &[0, 10, 18, 22, 30, 50],
+            16,
+            &mut ranges,
+        )
+        .unwrap();
+        assert_eq!(offsets.as_slice(), &[0, 0, 8, 12, 20, 20]);
+        assert_eq!(ranges, vec![10..30]);
+    }
+
+    #[rstest]
+    #[case::at_limit(MAX_ELEMENT_BYTES / 8, false, true)]
+    #[case::over_limit(MAX_ELEMENT_BYTES / 8 + 2, false, false)]
+    #[case::validity_counts(MAX_ELEMENT_BYTES / 8, true, false)]
+    fn retained_span_includes_validity_in_byte_estimate(
+        #[case] rows: u64,
+        #[case] nullable: bool,
+        #[case] retained: bool,
+    ) {
+        let original = vec![0..rows / 2, rows / 2 + 2..rows];
+        let mut ranges = original.clone();
+        let actual = preserve_null_span(
+            &DType::Primitive(PType::I64, nullable.into()),
+            &[0, rows / 2, rows / 2 + 2, rows],
+            rows - 2,
+            &mut ranges,
+        );
+        assert_eq!(actual.is_some(), retained);
+        if !retained {
+            assert_eq!(ranges, original);
+        }
+    }
+
+    #[rstest]
+    #[case::sparse(DType::Primitive(PType::I64, false.into()), vec![0..4, 100..104])]
+    #[case::variable_width(DType::Utf8(true.into()), vec![0..4, 6..10])]
+    #[case::one_range(DType::Bool(false.into()), vec![0..4])]
+    #[case::empty(DType::Bool(false.into()), vec![])]
+    fn unsuitable_null_spans_stay_compact(#[case] dtype: DType, #[case] ranges: Vec<Range<u64>>) {
+        let mut actual = ranges.clone();
+        let selected = ranges.iter().map(|range| range.end - range.start).sum();
+        assert!(preserve_null_span(&dtype, &[], selected, &mut actual).is_none());
+        assert_eq!(actual, ranges);
     }
 
     #[rstest]

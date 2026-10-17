@@ -15,10 +15,12 @@ use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ChunkedArray;
+use vortex_array::arrays::List;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinViewArray;
+use vortex_array::arrays::list::ListArraySlotsExt;
 use vortex_array::assert_arrays_eq;
 use vortex_array::buffer::BufferHandle;
 use vortex_array::dtype::StructFields;
@@ -347,6 +349,7 @@ fn grouped_list_ranges_preserve_order_and_shared_reads(
 #[rstest]
 fn dense_nullable_list_ranges_share_one_scan(
     #[values(Delivery::Fifo, Delivery::Lifo)] order: Delivery,
+    #[values(false, true)] partial: bool,
 ) -> VortexResult<()> {
     let mut store = Store::default();
     let elements = Buffer::from_iter(0_i64..20).into_array();
@@ -366,9 +369,17 @@ fn dense_nullable_list_ranges_share_one_scan(
         Some(lower(&store.flat(&valid)?)?),
     )?
     .into_plan();
-    let result = run(&store, &plan, 0..10, Mask::new_true(10), delivery(order))?;
+    let mask = Mask::from_iter((0..10).map(|row| !partial || row != 4));
+    let result = run(&store, &plan, 0..10, mask.clone(), delivery(order))?;
+    if !partial {
+        assert_eq!(result.arrays[0].as_::<List>().elements().len(), 20);
+    }
     let actual = ChunkedArray::try_new(result.arrays, input.dtype().clone())?.into_array();
-    assert_arrays_eq!(actual, input, &mut SESSION.create_execution_ctx());
+    assert_arrays_eq!(
+        actual,
+        input.filter(mask)?,
+        &mut SESSION.create_execution_ctx()
+    );
     assert!(
         result
             .events
