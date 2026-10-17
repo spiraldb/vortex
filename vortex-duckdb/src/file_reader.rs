@@ -128,6 +128,8 @@ pub struct OpenFileReader {
     /// File splits stored in inverse order
     pub splits: Vec<Split>,
     total_splits: usize,
+    /// Whether the threads scanning the file build its splits, see [`Split::Lazy`].
+    lazy_splits: bool,
 }
 
 /// The state of an open file that the threads scanning it share.
@@ -138,7 +140,11 @@ pub struct FileScanState {
 
 impl OpenFileReader {
     async fn open(path: String) -> VortexResult<Self> {
-        let (fs, fs_path) = resolve_filesystem(&parse_uri_or_path(&path)?)?;
+        let url = parse_uri_or_path(&path)?;
+        // Reads of mapped files are cheap to issue late, so their splits are built by the
+        // threads that scan them instead of all up front during reader initialization.
+        let lazy_splits = url.scheme() == "file" && MMAP_LOCAL_FILES.load(Ordering::Relaxed);
+        let (fs, fs_path) = resolve_filesystem(&url)?;
         let source = fs.open_read(&fs_path).await?;
         let file = open_cached(&SESSION, Some(&path), source, None, &|options| options).await?;
         Ok(OpenFileReader {
@@ -148,6 +154,7 @@ impl OpenFileReader {
             })),
             splits: vec![],
             total_splits: 0,
+            lazy_splits,
         })
     }
 
@@ -223,7 +230,17 @@ pub fn reader_initialize(file: &mut OpenFileReader, global: &GlobalState) -> Vor
         .with_some_filter(filter.filter.clone())
         .with_selection(filter.row_selection.clone());
     let scan = builder.prepare()?;
-    let mut splits = scan.execute(filter.row_range.clone())?;
+    let mut splits: Vec<Split> = if file.lazy_splits {
+        scan.execute_lazy(filter.row_range.clone())?
+            .into_iter()
+            .map(Split::Lazy)
+            .collect()
+    } else {
+        scan.execute(filter.row_range.clone())?
+            .into_iter()
+            .map(Split::Started)
+            .collect()
+    };
 
     // threads take last element of file.splits so we need to reverse
     splits.reverse();
@@ -284,7 +301,7 @@ pub fn reader_scan(
         let Some(split) = local.split.take() else {
             return Ok(false);
         };
-        let Some(array) = RUNTIME.block_on(split)? else {
+        let Some(array) = RUNTIME.block_on(split.into_future()?)? else {
             // split is filtered
             return Ok(true);
         };
@@ -306,7 +323,7 @@ fn reader_scan_aggregate(global: &GlobalState, local: &mut LocalState) -> Vortex
     let Some(split) = local.split.take() else {
         return Ok(false);
     };
-    let Some(array) = RUNTIME.block_on(split)? else {
+    let Some(array) = RUNTIME.block_on(split.into_future()?)? else {
         // split is filtered
         return Ok(true);
     };
