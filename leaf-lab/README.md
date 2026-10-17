@@ -101,6 +101,26 @@ Huffman (6.74x -> 6.97x) and rANS (7.11x -> 7.33x); Tunstall-16 loses (7.00x -> 
 | FSST lengths/offsets | 2.77 | 3.05 | 3.41 | 3.37 | 3.41 | 3.41 | 3.46 | 3.50 | 3.48 | *3.33* |
 | Sparse patches | 3.29 | 4.35 | 5.77 | 5.72 | 5.75 | 5.72 | 5.88 | 6.05 | 6.10 | *5.57* |
 
+### BitPacked vs the alternatives, with pco as a baseline
+
+`python3 scripts/versus.py results/results.jsonl`. Restricted to the 355 leaves BitPacked can
+encode (44 leaves with negative values are excluded). Encode speed for binned coders includes bin
+training. pco runs standalone with 8192-value pages; u8/i8 leaves are widened to 16 bits for it.
+
+| Coder | Ratio | vs BitPacked | Encode Mv/s | Decode Mv/s | Decode GB/s |
+|---|---|---|---|---|---|
+| BitPacked | 2.70x | 1.00x | 428 | 6,663 | 22.95 |
+| tANS (eb-4k, lag 0) | 3.52x | 1.30x | 36 | 1,456 | 5.01 |
+| rANS x16 | 3.51x | 1.30x | 52 | 155 | 0.53 |
+| Huffman x16 | 3.46x | 1.28x | 46 | 249 | 0.86 |
+| Adaptive o1 | 3.69x | 1.37x | 36 | 69 | 0.24 |
+| pco leaf (Classic, no delta) | 3.63x | 1.35x | 55 | 365 | 1.26 |
+| *eb with lag* | *4.14x* | *1.53x* | *19* | *1,193* | *4.11* |
+| *pco default (own delta / int-mult)* | *4.27x* | *1.58x* | *29* | *347* | *1.19* |
+
+pco leaf beats tANS on ratio (3.63x vs 3.52x) mainly because it is not capped at 64 bins and has
+no per-block lane overhead; tANS decodes 4x faster.
+
 ### Timing (one core, Xeon 2.1 GHz with AVX-512, best of >= 3 runs)
 
 Only BitPacked and entropy-bins are tuned (entropy-bins uses AVX-512). The other coders are
@@ -145,7 +165,7 @@ The raw leaf values (73 MB) are not committed; `extract` regenerates them.
 - `src/bins.rs`: pco bin training and the id/offset split and merge.
 - `src/huff.rs`, `src/rans.rs`, `src/tunstall.rs`, `src/rc.rs`: id coders behind `SymbolCoder`.
 - `src/golomb.rs`: Rice and Exp-Golomb.
-- `scripts/analyze.py`: tables above.
+- `scripts/analyze.py`: tables above; `scripts/versus.py`: BitPacked vs alternatives and pco.
 
 ## Caveats
 

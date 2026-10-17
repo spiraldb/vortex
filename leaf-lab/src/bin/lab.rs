@@ -131,6 +131,23 @@ fn run_symbols(
     Out { bytes, decode_ns: Some(t.as_nanos()), ids_ns: Some(t_ids.as_nanos()), enc_ns: Some(t_enc.as_nanos()) }
 }
 
+/// pco on the leaf values (u8/i8 widened to 16 bits, which pco requires), pages of 8192 values.
+fn pco_run<T: pco::data_types::Number + PartialEq + std::fmt::Debug>(vals: &[T], config: &pco::ChunkConfig) -> Out {
+    let config = config.clone().with_paging_spec(pco::PagingSpec::EqualPagesUpTo(8192));
+    let bytes = pco::standalone::simple_compress(vals, &config).unwrap();
+    let back: Vec<T> = pco::standalone::simple_decompress(&bytes).unwrap();
+    assert!(back == vals, "pco roundtrip");
+    let t_enc = best_of(|| {
+        black_box(pco::standalone::simple_compress(vals, &config).unwrap());
+    });
+    let mut out = vec![vals[0]; vals.len()];
+    let t = best_of(|| {
+        pco::standalone::simple_decompress_into(&bytes, &mut out).unwrap();
+        black_box(&out);
+    });
+    Out { bytes: bytes.len(), decode_ns: Some(t.as_nanos()), ids_ns: None, enc_ns: Some(t_enc.as_nanos()) }
+}
+
 fn put(row: &mut serde_json::Map<String, Value>, name: &str, o: Out) {
     row.insert(name.to_string(), json!({"bytes": o.bytes, "ns": o.decode_ns, "ids_ns": o.ids_ns, "enc_ns": o.enc_ns}));
 }
@@ -247,6 +264,25 @@ fn main() {
             put(&mut row, name, Out { bytes: eb.nbytes() as usize + meta, decode_ns: Some(t.as_nanos()), ids_ns: None, enc_ns: Some(t_enc.as_nanos()) });
             row.insert(format!("{name}_lag"), json!(plan.options.lag));
             row.insert(format!("{name}_block"), json!(plan.options.block_values));
+        }
+
+        // pco: its default (chooses delta and int-mult modes itself) and leaf-only (plain bins).
+        let pco_default = pco::ChunkConfig::default();
+        let pco_leaf = pco::ChunkConfig::default()
+            .with_mode_spec(pco::ModeSpec::Classic)
+            .with_delta_spec(pco::DeltaSpec::NoOp);
+        for (name, config) in [("pco", &pco_default), ("pco-leaf", &pco_leaf)] {
+            let o = match dtype.as_str() {
+                "u8" => pco_run(&wide.iter().map(|&v| v as u16).collect::<Vec<_>>(), config),
+                "i8" => pco_run(&wide.iter().map(|&v| v as i16).collect::<Vec<_>>(), config),
+                "u16" => pco_run(&wide.iter().map(|&v| v as u16).collect::<Vec<_>>(), config),
+                "i16" => pco_run(&wide.iter().map(|&v| v as i16).collect::<Vec<_>>(), config),
+                "u32" => pco_run(&wide.iter().map(|&v| v as u32).collect::<Vec<_>>(), config),
+                "i32" => pco_run(&wide.iter().map(|&v| v as i32).collect::<Vec<_>>(), config),
+                "u64" => pco_run(&wide.iter().map(|&v| v as u64).collect::<Vec<_>>(), config),
+                _ => pco_run(&wide.iter().map(|&v| v as i64).collect::<Vec<_>>(), config),
+            };
+            put(&mut row, name, o);
         }
 
         // Binned family: identical bins and offsets, only the id coder changes.
