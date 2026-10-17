@@ -6,7 +6,7 @@ run-name: Scan V2 regression comparison on ${{ github.ref_name }}
 
 on:
   push:
-    branches: ["ji/scan-v2-list-null-spans-ci"]
+    branches: ["ji/scan-v2-list-control-ci"]
   workflow_dispatch: { }
 
 permissions:
@@ -48,10 +48,9 @@ jobs:
           set -euo pipefail
           mkdir -p scan-v2-binaries scan-v2-results
           env -u VORTEX_SELECTION_METRICS cargo build --locked --profile release_debug \
-            -p vortex --example selection_scan --example rewrite_list_layout --example generate_list_fixture
+            -p vortex --example selection_scan --example rewrite_list_layout
           cp target/release_debug/examples/selection_scan scan-v2-binaries/current
           cp target/release_debug/examples/rewrite_list_layout scan-v2-binaries/rewrite
-          cp target/release_debug/examples/generate_list_fixture scan-v2-binaries/generate-lists
           env -u VORTEX_SELECTION_METRICS cargo build --locked --profile release_debug \
             -p random-access-bench
           cp target/release_debug/random-access-bench scan-v2-binaries/standard
@@ -65,11 +64,8 @@ jobs:
             cd "$RUNNER_TEMP/scan-v2-baseline"
             env -u VORTEX_SELECTION_METRICS cargo build --locked --profile release_debug \
               -p vortex --example selection_scan
-            env -u VORTEX_SELECTION_METRICS cargo build --locked --profile release_debug \
-              -p random-access-bench
           )
           cp target/release_debug/examples/selection_scan scan-v2-binaries/baseline
-          cp target/release_debug/random-access-bench scan-v2-binaries/baseline-standard
           sha256sum scan-v2-binaries/* > scan-v2-results/binaries.sha256
 
       - name: Prepare shared datasets and verify ListLayout rewrites
@@ -91,45 +87,23 @@ jobs:
       - name: Isolate benchmark CPUs
         run: sudo bash scripts/setup-benchmark.sh
 
-      - name: Check and compare large nullable and nested list rows
+      - name: Confirm clustered list regression with 4096-query rounds
         shell: bash
         env:
           CANDIDATE_COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
-          bash scripts/bench-taskset.sh python3 scripts/scan-v2-large-lists.py \
+          bash scripts/bench-taskset.sh python3 scripts/scan-v2-list-control.py \
             --baseline scan-v2-binaries/baseline \
             --candidate scan-v2-binaries/current \
-            --generator scan-v2-binaries/generate-lists \
             --baseline-commit "$BASELINE_COMMIT" \
             --candidate-commit "$CANDIDATE_COMMIT" \
-            | tee scan-v2-results/large-lists.log
-
-      - name: Upload completed large-list comparison
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
-        with:
-          name: scan-v2-large-lists-${{ github.sha }}
-          path: scan-v2-results/large-lists/
-
-      - name: Compare Arrow and standard suites and repeat borderline regressions
-        shell: bash
-        env:
-          CANDIDATE_COMMIT: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          bash scripts/bench-taskset.sh python3 scripts/scan-v2-regression.py \
-            --baseline scan-v2-binaries/baseline \
-            --candidate scan-v2-binaries/current \
-            --standard-benchmark scan-v2-binaries/standard \
-            --baseline-standard-benchmark scan-v2-binaries/baseline-standard \
-            --baseline-commit "$BASELINE_COMMIT" \
-            --candidate-commit "$CANDIDATE_COMMIT" \
-            | tee scan-v2-results/run.log
+            | tee scan-v2-results/list-control.log
 
       - name: Upload results, raw samples, and layout metadata
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
         with:
-          name: scan-v2-regression-${{ github.sha }}
+          name: scan-v2-list-control-${{ github.sha }}
           path: scan-v2-results/
           if-no-files-found: warn
