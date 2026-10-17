@@ -7,6 +7,7 @@ use std::ops::Range;
 
 use num_traits::NumCast;
 use vortex_buffer::BitBuffer;
+use vortex_buffer::BitBufferMut;
 use vortex_buffer::BufferAllocatorRef;
 use vortex_buffer::BufferMut;
 use vortex_error::VortexError;
@@ -1137,10 +1138,11 @@ fn filter_patches_with_mask<T: IntegerPType>(
     let patch_count = patch_indices.len();
     let expected_matches = true_count.min(patch_count);
 
-    // The mask rank and the original position of each kept patch.
+    // The mask rank of each kept patch, and a bitmap over the original patches marking them.
     let mut new_patch_indices =
         BufferMut::<u64>::with_capacity_in(expected_matches, allocator.clone());
-    let mut kept_patches = Vec::with_capacity(expected_matches);
+    let mut kept_patches = BitBufferMut::with_capacity_in(patch_count, allocator.clone());
+    kept_patches.append_n(false, patch_count);
 
     if patch_count > true_count {
         gallop_patches_for_mask_indices(
@@ -1169,13 +1171,12 @@ fn filter_patches_with_mask<T: IntegerPType>(
         }
     }
 
-    if kept_patches.is_empty() {
-        return Ok(None);
-    }
-
+    let new_patch_values = match new_patch_indices.len() {
+        0 => return Ok(None),
+        kept if kept == patch_count => patch_values.clone(),
+        _ => patch_values.filter(Mask::from_buffer(kept_patches.freeze()))?,
+    };
     let new_patch_indices = new_patch_indices.into_array();
-    let new_patch_values =
-        patch_values.filter(Mask::from_indices(patch_values.len(), kept_patches))?;
 
     // SAFETY: there is one index and one value per kept patch. The indices are strictly
     // increasing non-nullable `u64` mask ranks below `true_count`.
@@ -1218,7 +1219,7 @@ fn gallop_patches_for_mask_indices<T: IntegerPType>(
     offset: usize,
     mask: &MaskValues,
     new_patch_indices: &mut BufferMut<u64>,
-    kept_patches: &mut Vec<usize>,
+    kept_patches: &mut BitBufferMut,
 ) -> VortexResult<()> {
     let Some(&last_patch_index) = patch_indices.last() else {
         return Ok(());
@@ -1236,7 +1237,7 @@ fn gallop_patches_for_mask_indices<T: IntegerPType>(
         patch_position = gallop_lower_bound(patch_indices, patch_position, &needle);
         if patch_indices[patch_position] == needle {
             new_patch_indices.push(mask_position as u64);
-            kept_patches.push(patch_position);
+            kept_patches.set(patch_position);
             patch_position += 1;
         }
 
@@ -1265,7 +1266,7 @@ fn gallop_mask_indices_for_patches<T: IntegerPType>(
     offset: usize,
     mask_indices: &[usize],
     new_patch_indices: &mut BufferMut<u64>,
-    kept_patches: &mut Vec<usize>,
+    kept_patches: &mut BitBufferMut,
 ) -> VortexResult<()> {
     let mut mask_position = 0;
 
@@ -1279,7 +1280,7 @@ fn gallop_mask_indices_for_patches<T: IntegerPType>(
 
         if mask_indices[mask_position] == index {
             new_patch_indices.push(mask_position as u64);
-            kept_patches.push(patch_position);
+            kept_patches.set(patch_position);
             mask_position += 1;
         }
     }
@@ -1295,7 +1296,7 @@ fn rank_patches_in_mask_bitmap<T: IntegerPType>(
     offset: usize,
     mask: &BitBuffer,
     new_patch_indices: &mut BufferMut<u64>,
-    kept_patches: &mut Vec<usize>,
+    kept_patches: &mut BitBufferMut,
 ) -> VortexResult<()> {
     let mut rank = 0;
     let mut previous_index = 0;
@@ -1308,7 +1309,7 @@ fn rank_patches_in_mask_bitmap<T: IntegerPType>(
 
         if mask.value(index) {
             new_patch_indices.push(rank as u64);
-            kept_patches.push(patch_position);
+            kept_patches.set(patch_position);
         }
     }
 
@@ -1824,6 +1825,7 @@ mod test {
     #[case::no_overlap((0..500).collect(), (500..1000).step_by(50).collect())]
     #[case::no_overlap_sparse_patches((500..1000).step_by(100).collect(), (0..500).collect())]
     #[case::edges(vec![0, 1, 998, 999], vec![0, 999])]
+    #[case::all_patches_kept((0..1000).step_by(100).collect(), (0..1000).step_by(2).collect())]
     fn test_filter_matches_naive(
         #[case] patch_indices: Vec<usize>,
         #[case] mask_indices: Vec<usize>,
