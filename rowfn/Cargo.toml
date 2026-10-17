@@ -1,0 +1,33 @@
+[package]
+name = "rowfn"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+categories.workspace = true
+keywords = ["columnar", "kernels", "experimental"]
+readme = "README.md"
+include = [
+    "Cargo.toml",
+    "README.md",
+    "ARCHITECTURE.md",
+    "INTERFACES.md",
+    "BACKENDS.md",
+    "AUTHORING.md",
+    "ADAPTERS.md",
+    "COMPARING.md",
+    "SAFETY.md",
+    "src/**",
+    "tests/**",
+]
+license.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Experimental host-independent strict row functions"
+
+[dependencies]
+rowfn-kernels.workspace = true
+
+[lints]
+workspace = true

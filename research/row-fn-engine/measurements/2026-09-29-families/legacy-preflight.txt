@@ -1,0 +1,650 @@
+   Compiling rofl-examples v0.1.0 (/Users/connor/spiral/vortex-data/vortex4/rofl-examples)
+    Finished `bench` profile [optimized + debuginfo] target(s) in 3.70s
+     Running benches/arrow_scalar.rs (target/release/deps/arrow_scalar-5579b4d9839f28d6)
+arrow_scalar
+├─ arrow_native
+│  ├─ 0
+│  │  ├─ AsciiEqArray
+│  │  ├─ AsciiEqScalar
+│  │  ├─ ConcatLong
+│  │  ├─ ConcatLongDense
+│  │  ├─ ConcatShort
+│  │  ├─ ContainsArray
+│  │  ├─ ContainsScalar
+│  │  ├─ ContainsScalarDense
+│  │  ├─ ContainsUtf8Scalar
+│  │  ├─ EndsWithArray
+│  │  ├─ EndsWithScalar
+│  │  ├─ MultiplyArray
+│  │  ├─ MultiplyArrayDense
+│  │  ├─ MultiplyScalar
+│  │  ├─ StartsWithArray
+│  │  ├─ StartsWithScalar
+│  │  ├─ StartsWithShortScalar
+│  │  ╰─ StartsWithUtf8Scalar
+│  ├─ 64
+│  │  ├─ AsciiEqArray
+│  │  ├─ AsciiEqScalar
+│  │  ├─ ConcatLong
+│  │  ├─ ConcatLongDense
+│  │  ├─ ConcatShort
+│  │  ├─ ContainsArray
+│  │  ├─ ContainsScalar
+│  │  ├─ ContainsScalarDense
+│  │  ├─ ContainsUtf8Scalar
+│  │  ├─ EndsWithArray
+│  │  ├─ EndsWithScalar
+│  │  ├─ MultiplyArray
+│  │  ├─ MultiplyArrayDense
+│  │  ├─ MultiplyScalar
+│  │  ├─ StartsWithArray
+│  │  ├─ StartsWithScalar
+│  │  ├─ StartsWithShortScalar
+│  │  ╰─ StartsWithUtf8Scalar
+│  ├─ 1024
+│  │  ├─ AsciiEqArray
+│  │  ├─ AsciiEqScalar
+│  │  ├─ ConcatLong
+│  │  ├─ ConcatLongDense
+│  │  ├─ ConcatShort
+│  │  ├─ ContainsArray
+│  │  ├─ ContainsScalar
+│  │  ├─ ContainsScalarDense
+│  │  ├─ ContainsUtf8Scalar
+│  │  ├─ EndsWithArray
+│  │  ├─ EndsWithScalar
+│  │  ├─ MultiplyArray
+│  │  ├─ MultiplyArrayDense
+│  │  ├─ MultiplyScalar
+│  │  ├─ StartsWithArray
+│  │  ├─ StartsWithScalar
+│  │  ├─ StartsWithShortScalar
+│  │  ╰─ StartsWithUtf8Scalar
+│  ╰─ 16384
+│     ├─ AsciiEqArray
+│     ├─ AsciiEqScalar
+│     ├─ ConcatLong
+│     ├─ ConcatLongDense
+│     ├─ ConcatShort
+│     ├─ ContainsArray
+│     ├─ ContainsScalar
+│     ├─ ContainsScalarDense
+│     ├─ ContainsUtf8Scalar
+│     ├─ EndsWithArray
+│     ├─ EndsWithScalar
+│     ├─ MultiplyArray
+│     ├─ MultiplyArrayDense
+│     ├─ MultiplyScalar
+│     ├─ StartsWithArray
+│     ├─ StartsWithScalar
+│     ├─ StartsWithShortScalar
+│     ╰─ StartsWithUtf8Scalar
+├─ arrow_plus_two_validations
+│  ├─ 0
+│  │  ├─ ConcatLong
+│  │  ├─ ConcatLongDense
+│  │  ╰─ ConcatShort
+│  ├─ 64
+│  │  ├─ ConcatLong
+│  │  ├─ ConcatLongDense
+│  │  ╰─ ConcatShort
+│  ├─ 1024
+│  │  ├─ ConcatLong
+│  │  ├─ ConcatLongDense
+│  │  ╰─ ConcatShort
+│  ╰─ 16384
+│     ├─ ConcatLong
+│     ├─ ConcatLongDense
+│     ╰─ ConcatShort
+├─ arrow_rofl
+│  ├─ 0
+│  │  ├─ AsciiEqArray
+│  │  ├─ AsciiEqScalar
+│  │  ├─ ConcatLong
+│  │  ├─ ConcatLongDense
+│  │  ├─ ConcatShort
+│  │  ├─ ContainsArray
+│  │  ├─ ContainsScalar
+│  │  ├─ ContainsScalarDense
+│  │  ├─ ContainsUtf8Scalar
+│  │  ├─ EndsWithArray
+│  │  ├─ EndsWithScalar
+│  │  ├─ MultiplyArray
+│  │  ├─ MultiplyArrayDense
+│  │  ├─ MultiplyScalar
+│  │  ├─ StartsWithArray
+│  │  ├─ StartsWithScalar
+│  │  ├─ StartsWithShortScalar
+│  │  ╰─ StartsWithUtf8Scalar
+│  ├─ 64
+│  │  ├─ AsciiEqArray
+│  │  ├─ AsciiEqScalar
+│  │  ├─ ConcatLong
+│  │  ├─ ConcatLongDense
+│  │  ├─ ConcatShort
+│  │  ├─ ContainsArray
+│  │  ├─ ContainsScalar
+│  │  ├─ ContainsScalarDense
+│  │  ├─ ContainsUtf8Scalar
+│  │  ├─ EndsWithArray
+│  │  ├─ EndsWithScalar
+│  │  ├─ MultiplyArray
+│  │  ├─ MultiplyArrayDense
+│  │  ├─ MultiplyScalar
+│  │  ├─ StartsWithArray
+│  │  ├─ StartsWithScalar
+│  │  ├─ StartsWithShortScalar
+│  │  ╰─ StartsWithUtf8Scalar
+│  ├─ 1024
+│  │  ├─ AsciiEqArray
+│  │  ├─ AsciiEqScalar
+│  │  ├─ ConcatLong
+│  │  ├─ ConcatLongDense
+│  │  ├─ ConcatShort
+│  │  ├─ ContainsArray
+│  │  ├─ ContainsScalar
+│  │  ├─ ContainsScalarDense
+│  │  ├─ ContainsUtf8Scalar
+│  │  ├─ EndsWithArray
+│  │  ├─ EndsWithScalar
+│  │  ├─ MultiplyArray
+│  │  ├─ MultiplyArrayDense
+│  │  ├─ MultiplyScalar
+│  │  ├─ StartsWithArray
+│  │  ├─ StartsWithScalar
+│  │  ├─ StartsWithShortScalar
+│  │  ╰─ StartsWithUtf8Scalar
+│  ╰─ 16384
+│     ├─ AsciiEqArray
+│     ├─ AsciiEqScalar
+│     ├─ ConcatLong
+│     ├─ ConcatLongDense
+│     ├─ ConcatShort
+│     ├─ ContainsArray
+│     ├─ ContainsScalar
+│     ├─ ContainsScalarDense
+│     ├─ ContainsUtf8Scalar
+│     ├─ EndsWithArray
+│     ├─ EndsWithScalar
+│     ├─ MultiplyArray
+│     ├─ MultiplyArrayDense
+│     ├─ MultiplyScalar
+│     ├─ StartsWithArray
+│     ├─ StartsWithScalar
+│     ├─ StartsWithShortScalar
+│     ╰─ StartsWithUtf8Scalar
+├─ rofl_arrow_bytes
+│  ├─ 0
+│  │  ├─ AsciiEqArray
+│  │  ├─ AsciiEqScalar
+│  │  ├─ ConcatLong
+│  │  ├─ ConcatLongDense
+│  │  ├─ ConcatShort
+│  │  ├─ ContainsArray
+│  │  ├─ ContainsScalar
+│  │  ├─ ContainsScalarDense
+│  │  ├─ ContainsUtf8Scalar
+│  │  ├─ EndsWithArray
+│  │  ├─ EndsWithScalar
+│  │  ├─ MultiplyArray
+│  │  ├─ MultiplyArrayDense
+│  │  ├─ MultiplyScalar
+│  │  ├─ StartsWithArray
+│  │  ├─ StartsWithScalar
+│  │  ├─ StartsWithShortScalar
+│  │  ╰─ StartsWithUtf8Scalar
+│  ├─ 64
+│  │  ├─ AsciiEqArray
+│  │  ├─ AsciiEqScalar
+│  │  ├─ ConcatLong
+│  │  ├─ ConcatLongDense
+│  │  ├─ ConcatShort
+│  │  ├─ ContainsArray
+│  │  ├─ ContainsScalar
+│  │  ├─ ContainsScalarDense
+│  │  ├─ ContainsUtf8Scalar
+│  │  ├─ EndsWithArray
+│  │  ├─ EndsWithScalar
+│  │  ├─ MultiplyArray
+│  │  ├─ MultiplyArrayDense
+│  │  ├─ MultiplyScalar
+│  │  ├─ StartsWithArray
+│  │  ├─ StartsWithScalar
+│  │  ├─ StartsWithShortScalar
+│  │  ╰─ StartsWithUtf8Scalar
+│  ├─ 1024
+│  │  ├─ AsciiEqArray
+│  │  ├─ AsciiEqScalar
+│  │  ├─ ConcatLong
+│  │  ├─ ConcatLongDense
+│  │  ├─ ConcatShort
+│  │  ├─ ContainsArray
+│  │  ├─ ContainsScalar
+│  │  ├─ ContainsScalarDense
+│  │  ├─ ContainsUtf8Scalar
+│  │  ├─ EndsWithArray
+│  │  ├─ EndsWithScalar
+│  │  ├─ MultiplyArray
+│  │  ├─ MultiplyArrayDense
+│  │  ├─ MultiplyScalar
+│  │  ├─ StartsWithArray
+│  │  ├─ StartsWithScalar
+│  │  ├─ StartsWithShortScalar
+│  │  ╰─ StartsWithUtf8Scalar
+│  ╰─ 16384
+│     ├─ AsciiEqArray
+│     ├─ AsciiEqScalar
+│     ├─ ConcatLong
+│     ├─ ConcatLongDense
+│     ├─ ConcatShort
+│     ├─ ContainsArray
+│     ├─ ContainsScalar
+│     ├─ ContainsScalarDense
+│     ├─ ContainsUtf8Scalar
+│     ├─ EndsWithArray
+│     ├─ EndsWithScalar
+│     ├─ MultiplyArray
+│     ├─ MultiplyArrayDense
+│     ├─ MultiplyScalar
+│     ├─ StartsWithArray
+│     ├─ StartsWithScalar
+│     ├─ StartsWithShortScalar
+│     ╰─ StartsWithUtf8Scalar
+├─ rofl_prepared_pattern
+│  ├─ 0
+│  │  ├─ AsciiEqArray
+│  │  ├─ AsciiEqScalar
+│  │  ├─ ConcatLong
+│  │  ├─ ConcatLongDense
+│  │  ├─ ConcatShort
+│  │  ├─ ContainsArray
+│  │  ├─ ContainsScalar
+│  │  ├─ ContainsScalarDense
+│  │  ├─ ContainsUtf8Scalar
+│  │  ├─ EndsWithArray
+│  │  ├─ EndsWithScalar
+│  │  ├─ MultiplyArray
+│  │  ├─ MultiplyArrayDense
+│  │  ├─ MultiplyScalar
+│  │  ├─ StartsWithArray
+│  │  ├─ StartsWithScalar
+│  │  ├─ StartsWithShortScalar
+│  │  ╰─ StartsWithUtf8Scalar
+│  ├─ 64
+│  │  ├─ AsciiEqArray
+│  │  ├─ AsciiEqScalar
+│  │  ├─ ConcatLong
+│  │  ├─ ConcatLongDense
+│  │  ├─ ConcatShort
+│  │  ├─ ContainsArray
+│  │  ├─ ContainsScalar
+│  │  ├─ ContainsScalarDense
+│  │  ├─ ContainsUtf8Scalar
+│  │  ├─ EndsWithArray
+│  │  ├─ EndsWithScalar
+│  │  ├─ MultiplyArray
+│  │  ├─ MultiplyArrayDense
+│  │  ├─ MultiplyScalar
+│  │  ├─ StartsWithArray
+│  │  ├─ StartsWithScalar
+│  │  ├─ StartsWithShortScalar
+│  │  ╰─ StartsWithUtf8Scalar
+│  ├─ 1024
+│  │  ├─ AsciiEqArray
+│  │  ├─ AsciiEqScalar
+│  │  ├─ ConcatLong
+│  │  ├─ ConcatLongDense
+│  │  ├─ ConcatShort
+│  │  ├─ ContainsArray
+│  │  ├─ ContainsScalar
+│  │  ├─ ContainsScalarDense
+│  │  ├─ ContainsUtf8Scalar
+│  │  ├─ EndsWithArray
+│  │  ├─ EndsWithScalar
+│  │  ├─ MultiplyArray
+│  │  ├─ MultiplyArrayDense
+│  │  ├─ MultiplyScalar
+│  │  ├─ StartsWithArray
+│  │  ├─ StartsWithScalar
+│  │  ├─ StartsWithShortScalar
+│  │  ╰─ StartsWithUtf8Scalar
+│  ╰─ 16384
+│     ├─ AsciiEqArray
+│     ├─ AsciiEqScalar
+│     ├─ ConcatLong
+│     ├─ ConcatLongDense
+│     ├─ ConcatShort
+│     ├─ ContainsArray
+│     ├─ ContainsScalar
+│     ├─ ContainsScalarDense
+│     ├─ ContainsUtf8Scalar
+│     ├─ EndsWithArray
+│     ├─ EndsWithScalar
+│     ├─ MultiplyArray
+│     ├─ MultiplyArrayDense
+│     ├─ MultiplyScalar
+│     ├─ StartsWithArray
+│     ├─ StartsWithScalar
+│     ├─ StartsWithShortScalar
+│     ╰─ StartsWithUtf8Scalar
+├─ rofl_typed_strings
+│  ├─ 0
+│  │  ├─ AsciiEqArray
+│  │  ├─ AsciiEqScalar
+│  │  ├─ ConcatLong
+│  │  ├─ ConcatLongDense
+│  │  ├─ ConcatShort
+│  │  ├─ ContainsArray
+│  │  ├─ ContainsScalar
+│  │  ├─ ContainsScalarDense
+│  │  ├─ ContainsUtf8Scalar
+│  │  ├─ EndsWithArray
+│  │  ├─ EndsWithScalar
+│  │  ├─ MultiplyArray
+│  │  ├─ MultiplyArrayDense
+│  │  ├─ MultiplyScalar
+│  │  ├─ StartsWithArray
+│  │  ├─ StartsWithScalar
+│  │  ├─ StartsWithShortScalar
+│  │  ╰─ StartsWithUtf8Scalar
+│  ├─ 64
+│  │  ├─ AsciiEqArray
+│  │  ├─ AsciiEqScalar
+│  │  ├─ ConcatLong
+│  │  ├─ ConcatLongDense
+│  │  ├─ ConcatShort
+│  │  ├─ ContainsArray
+│  │  ├─ ContainsScalar
+│  │  ├─ ContainsScalarDense
+│  │  ├─ ContainsUtf8Scalar
+│  │  ├─ EndsWithArray
+│  │  ├─ EndsWithScalar
+│  │  ├─ MultiplyArray
+│  │  ├─ MultiplyArrayDense
+│  │  ├─ MultiplyScalar
+│  │  ├─ StartsWithArray
+│  │  ├─ StartsWithScalar
+│  │  ├─ StartsWithShortScalar
+│  │  ╰─ StartsWithUtf8Scalar
+│  ├─ 1024
+│  │  ├─ AsciiEqArray
+│  │  ├─ AsciiEqScalar
+│  │  ├─ ConcatLong
+│  │  ├─ ConcatLongDense
+│  │  ├─ ConcatShort
+│  │  ├─ ContainsArray
+│  │  ├─ ContainsScalar
+│  │  ├─ ContainsScalarDense
+│  │  ├─ ContainsUtf8Scalar
+│  │  ├─ EndsWithArray
+│  │  ├─ EndsWithScalar
+│  │  ├─ MultiplyArray
+│  │  ├─ MultiplyArrayDense
+│  │  ├─ MultiplyScalar
+│  │  ├─ StartsWithArray
+│  │  ├─ StartsWithScalar
+│  │  ├─ StartsWithShortScalar
+│  │  ╰─ StartsWithUtf8Scalar
+│  ╰─ 16384
+│     ├─ AsciiEqArray
+│     ├─ AsciiEqScalar
+│     ├─ ConcatLong
+│     ├─ ConcatLongDense
+│     ├─ ConcatShort
+│     ├─ ContainsArray
+│     ├─ ContainsScalar
+│     ├─ ContainsScalarDense
+│     ├─ ContainsUtf8Scalar
+│     ├─ EndsWithArray
+│     ├─ EndsWithScalar
+│     ├─ MultiplyArray
+│     ├─ MultiplyArrayDense
+│     ├─ MultiplyScalar
+│     ├─ StartsWithArray
+│     ├─ StartsWithScalar
+│     ├─ StartsWithShortScalar
+│     ╰─ StartsWithUtf8Scalar
+╰─ rofl_view_header
+   ├─ 0
+   │  ├─ StartsWithArray
+   │  ├─ StartsWithScalar
+   │  ╰─ StartsWithShortScalar
+   ├─ 64
+   │  ├─ StartsWithArray
+   │  ├─ StartsWithScalar
+   │  ╰─ StartsWithShortScalar
+   ├─ 1024
+   │  ├─ StartsWithArray
+   │  ├─ StartsWithScalar
+   │  ╰─ StartsWithShortScalar
+   ╰─ 16384
+      ├─ StartsWithArray
+      ├─ StartsWithScalar
+      ╰─ StartsWithShortScalar
+
+     Running benches/arrow_workloads.rs (target/release/deps/arrow_workloads-cfa760053e788edd)
+arrow_workloads
+├─ arrow_native
+│  ├─ 0
+│  │  ├─ AllNull
+│  │  ├─ BooleanSlice
+│  │  ├─ CheckedAdd
+│  │  ├─ CheckedAddNullable
+│  │  ├─ DictionaryInteger
+│  │  ├─ DictionaryString
+│  │  ├─ DivideNullable
+│  │  ├─ Nullary
+│  │  ├─ ScalarOnly
+│  │  ├─ ScaleList0
+│  │  ├─ ScaleList4
+│  │  ├─ Timestamp
+│  │  ├─ TrimLargeUtf8
+│  │  ├─ TrimUtf8
+│  │  ├─ TrimViewLong
+│  │  ╰─ TrimViewShort
+│  ├─ 64
+│  │  ├─ AllNull
+│  │  ├─ BooleanSlice
+│  │  ├─ CheckedAdd
+│  │  ├─ CheckedAddNullable
+│  │  ├─ DictionaryInteger
+│  │  ├─ DictionaryString
+│  │  ├─ DivideNullable
+│  │  ├─ Nullary
+│  │  ├─ ScalarOnly
+│  │  ├─ ScaleList0
+│  │  ├─ ScaleList4
+│  │  ├─ Timestamp
+│  │  ├─ TrimLargeUtf8
+│  │  ├─ TrimUtf8
+│  │  ├─ TrimViewLong
+│  │  ╰─ TrimViewShort
+│  ├─ 1024
+│  │  ├─ AllNull
+│  │  ├─ BooleanSlice
+│  │  ├─ CheckedAdd
+│  │  ├─ CheckedAddNullable
+│  │  ├─ DictionaryInteger
+│  │  ├─ DictionaryString
+│  │  ├─ DivideNullable
+│  │  ├─ Nullary
+│  │  ├─ ScalarOnly
+│  │  ├─ ScaleList0
+│  │  ├─ ScaleList4
+│  │  ├─ Timestamp
+│  │  ├─ TrimLargeUtf8
+│  │  ├─ TrimUtf8
+│  │  ├─ TrimViewLong
+│  │  ╰─ TrimViewShort
+│  ╰─ 16384
+│     ├─ AllNull
+│     ├─ BooleanSlice
+│     ├─ CheckedAdd
+│     ├─ CheckedAddNullable
+│     ├─ DictionaryInteger
+│     ├─ DictionaryString
+│     ├─ DivideNullable
+│     ├─ Nullary
+│     ├─ ScalarOnly
+│     ├─ ScaleList0
+│     ├─ ScaleList4
+│     ├─ Timestamp
+│     ├─ TrimLargeUtf8
+│     ├─ TrimUtf8
+│     ├─ TrimViewLong
+│     ╰─ TrimViewShort
+├─ arrow_rofl
+│  ├─ 0
+│  │  ├─ AllNull
+│  │  ├─ BooleanSlice
+│  │  ├─ CheckedAdd
+│  │  ├─ CheckedAddNullable
+│  │  ├─ DictionaryInteger
+│  │  ├─ DictionaryString
+│  │  ├─ DivideNullable
+│  │  ├─ Nullary
+│  │  ├─ ScalarOnly
+│  │  ├─ ScaleList0
+│  │  ├─ ScaleList4
+│  │  ├─ Timestamp
+│  │  ├─ TrimLargeUtf8
+│  │  ├─ TrimUtf8
+│  │  ├─ TrimViewLong
+│  │  ╰─ TrimViewShort
+│  ├─ 64
+│  │  ├─ AllNull
+│  │  ├─ BooleanSlice
+│  │  ├─ CheckedAdd
+│  │  ├─ CheckedAddNullable
+│  │  ├─ DictionaryInteger
+│  │  ├─ DictionaryString
+│  │  ├─ DivideNullable
+│  │  ├─ Nullary
+│  │  ├─ ScalarOnly
+│  │  ├─ ScaleList0
+│  │  ├─ ScaleList4
+│  │  ├─ Timestamp
+│  │  ├─ TrimLargeUtf8
+│  │  ├─ TrimUtf8
+│  │  ├─ TrimViewLong
+│  │  ╰─ TrimViewShort
+│  ├─ 1024
+│  │  ├─ AllNull
+│  │  ├─ BooleanSlice
+│  │  ├─ CheckedAdd
+│  │  ├─ CheckedAddNullable
+│  │  ├─ DictionaryInteger
+│  │  ├─ DictionaryString
+│  │  ├─ DivideNullable
+│  │  ├─ Nullary
+│  │  ├─ ScalarOnly
+│  │  ├─ ScaleList0
+│  │  ├─ ScaleList4
+│  │  ├─ Timestamp
+│  │  ├─ TrimLargeUtf8
+│  │  ├─ TrimUtf8
+│  │  ├─ TrimViewLong
+│  │  ╰─ TrimViewShort
+│  ╰─ 16384
+│     ├─ AllNull
+│     ├─ BooleanSlice
+│     ├─ CheckedAdd
+│     ├─ CheckedAddNullable
+│     ├─ DictionaryInteger
+│     ├─ DictionaryString
+│     ├─ DivideNullable
+│     ├─ Nullary
+│     ├─ ScalarOnly
+│     ├─ ScaleList0
+│     ├─ ScaleList4
+│     ├─ Timestamp
+│     ├─ TrimLargeUtf8
+│     ├─ TrimUtf8
+│     ├─ TrimViewLong
+│     ╰─ TrimViewShort
+╰─ rofl_fixed_width
+   ├─ 0
+   ├─ 64
+   ├─ 1024
+   ╰─ 16384
+
+     Running benches/boundaries.rs (target/release/deps/boundaries-9e8fbf107389efff)
+boundaries
+├─ arrow_invocation
+│  ├─ 0
+│  │  ├─ false
+│  │  ╰─ true
+│  ├─ 1
+│  │  ├─ false
+│  │  ╰─ true
+│  ├─ 64
+│  │  ├─ false
+│  │  ╰─ true
+│  ├─ 1024
+│  │  ├─ false
+│  │  ╰─ true
+│  ╰─ 16384
+│     ├─ false
+│     ╰─ true
+├─ arrow_native_wrapping_add
+│  ├─ 0
+│  │  ├─ false
+│  │  ╰─ true
+│  ├─ 1
+│  │  ├─ false
+│  │  ╰─ true
+│  ├─ 64
+│  │  ├─ false
+│  │  ╰─ true
+│  ├─ 1024
+│  │  ├─ false
+│  │  ╰─ true
+│  ╰─ 16384
+│     ├─ false
+│     ╰─ true
+├─ direct_typed_collection
+│  ├─ 0
+│  ├─ 1
+│  ├─ 64
+│  ├─ 1024
+│  ╰─ 16384
+├─ nullable_bool
+│  ├─ false
+│  │  ├─ Arrow
+│  │  ├─ ArrowBaseline
+│  │  ├─ ExtractedVortex
+│  │  ╰─ LegacyVortex
+│  ╰─ true
+│     ├─ Arrow
+│     ├─ ArrowBaseline
+│     ├─ ExtractedVortex
+│     ╰─ LegacyVortex
+├─ shared_collection
+│  ├─ 0
+│  ├─ 1
+│  ├─ 64
+│  ├─ 1024
+│  ╰─ 16384
+├─ shared_executor
+│  ├─ 0
+│  ├─ 1
+│  ├─ 64
+│  ├─ 1024
+│  ╰─ 16384
+╰─ vortex_add
+   ├─ 0
+   │  ├─ false
+   │  ╰─ true
+   ├─ 1
+   │  ├─ false
+   │  ╰─ true
+   ├─ 64
+   │  ├─ false
+   │  ╰─ true
+   ├─ 1024
+   │  ├─ false
+   │  ╰─ true
+   ╰─ 16384
+      ├─ false
+      ╰─ true
+

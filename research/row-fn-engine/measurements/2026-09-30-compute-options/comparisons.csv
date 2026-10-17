@@ -1,0 +1,126 @@
+host,target,suite,case,label,baseline_kind,baseline_us,rofl_us,ratio,confidence,reason,dataset
+Arrow,x86,host_comparison,WrappingNegate,Wrapping negate,public Arrow kernel,3.329,3.738,1.1228597176329227,Medium,arithmetic-and-numeric-comparisons,2026-09-29-assume-valid-utf8
+Arrow,x86,host_comparison,WrappingMultiply,Wrapping multiply,public Arrow kernel,4.61,5.701,1.2366594360086767,Medium,arithmetic-and-numeric-comparisons,2026-09-29-assume-valid-utf8
+Arrow,x86,host_comparison,ByteLengthView,"Byte length, Utf8View",public Arrow kernel,3.682,4.589,1.246333514394351,Medium,string-lengths-and-comparisons,2026-09-29-assume-valid-utf8
+Arrow,x86,host_comparison,StringEqualViewShort,"Equality, short Utf8View",public Arrow kernel,14.17,15.08,1.0642201834862386,Low,string-lengths-and-comparisons,2026-09-29-assume-valid-utf8
+Arrow,x86,host_comparison,StringLessThanViewScalar,"Less than scalar, Utf8View",public Arrow kernel,33.48,87.78,2.6218637992831546,Low,string-lengths-and-comparisons,2026-09-29-assume-valid-utf8
+Arrow,x86,host_comparison,LikeLiteralScalar,"LIKE, literal scalar pattern",public Arrow kernel,30.31,115.2,3.800725833058397,Low,literal-predicates-like-and-regex,2026-09-29-assume-valid-utf8
+Arrow,x86,host_comparison,StartsWithScalar,"Starts with, five-byte scalar, Utf8View",public Arrow kernel,30.06,38.98,1.296739853626081,Medium,literal-predicates-like-and-regex,2026-09-29-assume-valid-utf8
+Arrow,ARM,arrow_workloads,CheckedAdd,"Checked add, array + scalar",public Arrow kernel,8.416,3.916,0.46530418250950567,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_workloads,CheckedAddNullable,"Checked add, nullable + scalar",public Arrow kernel,11.24,5.291,0.47072953736654805,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,CheckedSub,Checked subtract,public Arrow kernel,9.833,4.291,0.4363876741584461,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,CheckedSubNullable,"Checked subtract, nullable",public Arrow kernel,10.04,4.332,0.4314741035856574,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,WrappingSub,Wrapping subtract,public Arrow kernel,3.52,4.166,1.1835227272727273,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,WrappingMultiply,Wrapping multiply,public Arrow kernel,3.666,4.874,1.3295144571740316,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,Remainder,Integer remainder,public Arrow kernel,23.87,9.041,0.37875994972769167,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,CheckedNegate,Checked negate,public Arrow kernel,18.99,3.229,0.17003686150605585,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,WrappingNegate,Wrapping negate,public Arrow kernel,1.593,2.291,1.4381669805398618,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_scalar,MultiplyArray,"Checked multiply, arrays",public Arrow kernel,11.08,6.124,0.5527075812274368,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_scalar,MultiplyArrayDense,"Checked multiply, dense arrays",public Arrow kernel,10.04,5.541,0.5518924302788846,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_scalar,MultiplyScalar,"Checked multiply, scalar",public Arrow kernel,12.04,7.083,0.5882890365448505,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_workloads,DivideNullable,"Checked divide, nullable + scalar",public Arrow kernel,11.99,18.24,1.5212677231025853,Low,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,boundaries,wrapping_add/false,"Wrapping add, arrays",public Arrow kernel,3.416,4.04,1.1826697892271663,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,boundaries,wrapping_add/true,"Wrapping add, array + scalar",public Arrow kernel,1.551,2.291,1.4771115409413282,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,FloatAdd,Float add,public Arrow kernel,3.458,3.416,0.9878542510121456,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,FloatSubtract,Float subtract,public Arrow kernel,3.499,4.166,1.190625893112318,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,FloatMultiply,Float multiply,public Arrow kernel,2.791,4.124,1.4776065926191329,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,FloatDivide,Float divide,public Arrow kernel,3.499,4.124,1.1786224635610174,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,FloatRemainder,Float remainder,public Arrow kernel,78.66,81.08,1.0307653190948385,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,FloatNegate,Float negate,public Arrow kernel,1.541,2.312,1.500324464633355,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,BitwiseAnd,Bitwise AND,public Arrow kernel,3.499,4.083,1.1669048299514146,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,BitwiseOr,Bitwise OR,public Arrow kernel,3.458,4.166,1.2047426257952574,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,BitwiseXor,Bitwise XOR,public Arrow kernel,3.458,3.415,0.9875650665124349,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,BitwiseAndNot,Bitwise AND NOT,public Arrow kernel,3.395,4.166,1.227098674521355,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,BitwiseNot,Bitwise NOT,public Arrow kernel,1.478,2.312,1.564276048714479,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,ShiftLeft,Shift left,public Arrow kernel,3.541,4.207,1.1880824625811917,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,ShiftRight,Shift right,public Arrow kernel,3.583,4.249,1.185877756070332,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,Equal,Integer equal,public Arrow kernel,2.833,3.249,1.1468408048005647,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,NotEqual,Integer not equal,public Arrow kernel,2.812,3.27,1.162873399715505,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,LessThan,Integer less than,public Arrow kernel,2.833,3.229,1.1397811507236144,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,LessThanOrEqual,Integer less than or equal,public Arrow kernel,2.812,3.249,1.1554054054054055,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,GreaterThan,Integer greater than,public Arrow kernel,2.832,3.249,1.1472457627118644,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,GreaterThanOrEqual,Integer greater than or equal,public Arrow kernel,2.833,3.249,1.1468408048005647,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,FloatEqual,Float equal (total order),public Arrow kernel,2.833,3.27,1.1542534415813623,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,FloatNotEqual,Float not equal (total order),public Arrow kernel,2.833,3.249,1.1468408048005647,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,FloatLessThan,Float less than (total order),public Arrow kernel,4.833,5.166,1.0689013035381751,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,FloatLessThanOrEqual,Float less than or equal (total order),public Arrow kernel,4.874,5.207,1.068321707016824,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,FloatGreaterThan,Float greater than (total order),public Arrow kernel,4.833,5.166,1.0689013035381751,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,FloatGreaterThanOrEqual,Float greater than or equal (total order),public Arrow kernel,4.833,5.207,1.0773846472170494,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,ByteLengthUtf8,"Byte length, Utf8",public Arrow kernel,0.7028,2.062,2.933978372225384,Low,string-lengths-and-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,ByteLengthLargeUtf8,"Byte length, LargeUtf8",public Arrow kernel,1.562,3.499,2.2400768245838667,Low,string-lengths-and-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,BitLengthUtf8,"Bit length, Utf8",public Arrow kernel,0.9165,2.062,2.249863611565739,Low,string-lengths-and-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,BitLengthLargeUtf8,"Bit length, LargeUtf8",public Arrow kernel,4.749,3.541,0.7456306590861235,Low,string-lengths-and-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,ByteLengthView,"Byte length, Utf8View",public Arrow kernel,2.603,3.416,1.3123319247022665,Medium,string-lengths-and-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,BitLengthView,"Bit length, Utf8View",public Arrow kernel,2.833,3.395,1.1983762795623014,Medium,string-lengths-and-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,StringEqualUtf8,"Equality, Utf8",public Arrow kernel,18.04,35.83,1.9861419068736141,Low,string-lengths-and-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,StringEqualLargeUtf8,"Equality, LargeUtf8",public Arrow kernel,15.2,34.33,2.2585526315789473,Low,string-lengths-and-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,StringEqualViewShort,"Equality, short Utf8View",public Arrow kernel,6.165,13.74,2.2287104622871046,Low,string-lengths-and-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,StringEqualViewLong,"Equality, long Utf8View",public Arrow kernel,22.29,35.74,1.603409600717811,Low,string-lengths-and-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,StringNotEqualView,"Not equal, Utf8View",public Arrow kernel,16.12,21.91,1.3591811414392059,Low,string-lengths-and-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,StringLessThanView,"Less than, Utf8View",public Arrow kernel,22.62,42.91,1.896993810786914,Low,string-lengths-and-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,StringLessThanOrEqualView,"Less than or equal, Utf8View",public Arrow kernel,22.62,41.83,1.8492484526967283,Low,string-lengths-and-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,StringGreaterThanView,"Greater than, Utf8View",public Arrow kernel,22.62,42.12,1.862068965517241,Low,string-lengths-and-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,StringGreaterThanOrEqualView,"Greater than or equal, Utf8View",public Arrow kernel,22.7,42.41,1.868281938325991,Low,string-lengths-and-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_families,StringLessThanViewScalar,"Less than scalar, Utf8View",public Arrow kernel,15.29,60.91,3.983649444081099,Low,string-lengths-and-comparisons,2026-09-30-compute-options
+Arrow,ARM,arrow_scalar,StartsWithShortScalar,"Starts with, three-byte scalar, Utf8View",public Arrow kernel,18.08,17.2,0.9513274336283186,Medium,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_scalar,StartsWithScalar,"Starts with, five-byte scalar, Utf8View",public Arrow kernel,18.08,20.43,1.1299778761061947,Medium,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_scalar,StartsWithArray,"Starts with, array patterns, Utf8View",public Arrow kernel,74.49,22.41,0.30084575110753126,Medium,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_scalar,StartsWithUtf8Scalar,"Starts with, scalar, Utf8",public Arrow kernel,13.04,41.08,3.150306748466258,Low,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_scalar,EndsWithScalar,"Ends with, scalar, Utf8View",public Arrow kernel,18.45,20.74,1.124119241192412,Medium,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_scalar,EndsWithArray,"Ends with, array patterns, Utf8View",public Arrow kernel,93.7,22.79,0.24322305229455707,Medium,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_scalar,ContainsScalar,"Contains, scalar, Utf8View",public Arrow kernel,93.99,103.1,1.0969252048090223,Medium,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_scalar,ContainsScalarDense,"Contains, scalar, Utf8View, dense",public Arrow kernel,109.1,119.1,1.0916590284142988,Medium,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_scalar,ContainsArray,"Contains, array patterns, Utf8View",public Arrow kernel,224.7,193.9,0.8629283489096574,Medium,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_scalar,ContainsUtf8Scalar,"Contains, scalar, Utf8",public Arrow kernel,90.2,116.4,1.2904656319290466,Medium,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_scalar,AsciiEqArray,"ASCII case equality, arrays",public Arrow kernel,68.37,14.29,0.20900979961971622,Medium,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_scalar,AsciiEqScalar,"ASCII case equality, scalar",public Arrow kernel,28.24,43.99,1.5577195467422098,Low,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_families,LikeLiteralScalar,"LIKE, literal scalar pattern",public Arrow kernel,17.16,86.49,5.04020979020979,Low,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_families,LikeLiteralScalarDense,"LIKE, literal scalar pattern, dense",public Arrow kernel,16.87,83.37,4.941908713692946,Low,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_families,LikeComplexArray,"LIKE, repeated complex array pattern",public Arrow kernel,323.3,508.2,1.5719146303742653,Low,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_families,LikeAlternatingArray,"LIKE, alternating array patterns ⚑",public Arrow kernel,102100.0,454.9,0.004455435847208619,Low,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_families,ILikeComplexScalar,"ILIKE, complex scalar pattern",public Arrow kernel,360.8,428.7,1.1881929046563193,Low,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_families,NotLikeScalar,"NOT LIKE, scalar",public Arrow kernel,38.74,85.99,2.2196695921528136,Low,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_families,NotILikeScalar,"NOT ILIKE, scalar",public Arrow kernel,187.9,156.8,0.83448642895157,Low,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_families,LikeLiteralViaPredicate,Literal prefix via StartsWith,public Arrow kernel,16.83,25.45,1.5121806298276887,Medium,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_families,LikeLiteralViaPredicateDense,"Literal prefix via StartsWith, dense",public Arrow kernel,16.79,22.7,1.3519952352590827,Medium,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_families,RegexpScalar,"Regex, scalar pattern",public Arrow kernel,207.8,274.3,1.320019249278152,Low,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_families,RegexpArray,"Regex, repeated array pattern",public Arrow kernel,700.3,582.7,0.8320719691560761,Medium,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_families,RegexpAlternatingArray,"Regex, alternating array patterns",public Arrow kernel,731.6,637.0,0.870694368507381,Medium,literal-predicates-like-and-regex,2026-09-30-compute-options
+Arrow,ARM,arrow_scalar,ConcatShort,"Concatenate, short strings",public Arrow kernel,104.6,133.9,1.2801147227533463,Low,string-output-and-lists,2026-09-30-compute-options
+Arrow,ARM,arrow_scalar,ConcatLong,"Concatenate, long strings",public Arrow kernel,140.1,202.6,1.4461099214846538,Low,string-output-and-lists,2026-09-30-compute-options
+Arrow,ARM,arrow_scalar,ConcatLongDense,"Concatenate, long strings, dense",public Arrow kernel,142.9,189.0,1.3226032190342896,Low,string-output-and-lists,2026-09-30-compute-options
+Arrow,ARM,arrow_families,SubstringUtf8,"Substring by byte, Utf8 ‡",public Arrow kernel,100.4,96.54,0.9615537848605578,Low,string-output-and-lists,2026-09-30-compute-options
+Arrow,ARM,arrow_families,SubstringCharsUtf8,"Substring by character, Utf8 ‡",public Arrow kernel,95.16,114.5,1.2032366540563262,Low,string-output-and-lists,2026-09-30-compute-options
+Arrow,ARM,arrow_workloads,TrimUtf8,"Trim, Utf8 †",handwritten or composed Arrow reference,207.1,210.6,1.0169000482858523,Medium,string-output-and-lists,2026-09-30-compute-options
+Arrow,ARM,arrow_workloads,TrimLargeUtf8,"Trim, LargeUtf8 †",handwritten or composed Arrow reference,208.1,212.3,1.0201826045170592,Medium,string-output-and-lists,2026-09-30-compute-options
+Arrow,ARM,arrow_workloads,TrimViewShort,"Trim, short Utf8View †",handwritten or composed Arrow reference,189.4,185.3,0.9783526927138332,Medium,string-output-and-lists,2026-09-30-compute-options
+Arrow,ARM,arrow_workloads,TrimViewLong,"Trim, long Utf8View †",handwritten or composed Arrow reference,217.2,218.3,1.0050644567219154,Medium,string-output-and-lists,2026-09-30-compute-options
+Arrow,ARM,arrow_workloads,ScaleList4,"Scale list, width 4 †",handwritten or composed Arrow reference,8.832,15.99,1.810461956521739,Low,string-output-and-lists,2026-09-30-compute-options
+Arrow,ARM,arrow_workloads,ScaleList0,"Scale list, width 0 †",handwritten or composed Arrow reference,0.06811,1.052,15.445602701512259,N/A,string-output-and-lists,2026-09-30-compute-options
+Arrow,ARM,arrow_workloads,Timestamp,Checked timestamp tick adjustment †,handwritten or composed Arrow reference,10.54,5.416,0.5138519924098672,Medium,deferred-boolean-execution-and-degenerate-batches,2026-09-30-compute-options
+Arrow,ARM,arrow_workloads,DictionaryInteger,Dictionary integer add †,handwritten or composed Arrow reference,45.95,36.74,0.7995647442872688,Low,deferred-boolean-execution-and-degenerate-batches,2026-09-30-compute-options
+Arrow,ARM,arrow_workloads,DictionaryString,Dictionary string trim †,handwritten or composed Arrow reference,286.2,284.9,0.9954577218728162,Low,deferred-boolean-execution-and-degenerate-batches,2026-09-30-compute-options
+Arrow,ARM,arrow_workloads,BooleanSlice,"Boolean NOT, sliced bitmap",public Arrow kernel,0.07138,4.791,67.11964135612217,N/A,deferred-boolean-execution-and-degenerate-batches,2026-09-30-compute-options
+Arrow,ARM,arrow_workloads,AllNull,"Checked add, all-null input",public Arrow kernel,0.7907000000000001,1.165,1.4733780194764132,N/A,deferred-boolean-execution-and-degenerate-batches,2026-09-30-compute-options
+Arrow,ARM,arrow_workloads,ScalarOnly,"Checked add, scalar-only †",handwritten or composed Arrow reference,1.156,1.957,1.6929065743944638,N/A,deferred-boolean-execution-and-degenerate-batches,2026-09-30-compute-options
+Arrow,ARM,arrow_workloads,Nullary,Nullary constant output †,handwritten or composed Arrow reference,1.156,2.145,1.855536332179931,N/A,deferred-boolean-execution-and-degenerate-batches,2026-09-30-compute-options
+Arrow,ARM,boundaries,nullable_bool/false,"Nullable checked predicate, dense accepted †",handwritten valid-only Arrow loop,20.91,5.499,0.26298421807747485,Medium,deferred-boolean-execution-and-degenerate-batches,2026-09-30-compute-options
+Arrow,ARM,boundaries,nullable_bool/true,"Nullable checked predicate, retry †",handwritten valid-only Arrow loop,21.29,32.91,1.5457961484264913,Low,deferred-boolean-execution-and-degenerate-batches,2026-09-30-compute-options
+Vortex,x86,host_comparison,WrappingNegate,Wrapping negate,not measured,,3.515,,Medium,arithmetic-and-numeric-comparisons,2026-09-29-assume-valid-utf8
+Vortex,x86,host_comparison,WrappingMultiply,Wrapping multiply,not measured,,5.034,,Medium,arithmetic-and-numeric-comparisons,2026-09-29-assume-valid-utf8
+Vortex,x86,host_comparison,ByteLengthView,"Byte length, Utf8View",benchmark-defined existing RowFn,34.17,4.179,0.12230026338893767,Medium,string-lengths-and-comparisons,2026-09-29-assume-valid-utf8
+Vortex,x86,host_comparison,StringEqualViewShort,"Equality, short Utf8View",not measured,,52.2,,Low,string-lengths-and-comparisons,2026-09-29-assume-valid-utf8
+Vortex,x86,host_comparison,StringLessThanViewScalar,"Less than scalar, Utf8View",not measured,,118.2,,Low,string-lengths-and-comparisons,2026-09-29-assume-valid-utf8
+Vortex,x86,host_comparison,LikeLiteralScalar,"LIKE, literal scalar pattern",not measured,,157.3,,Low,literal-predicates-like-and-regex,2026-09-29-assume-valid-utf8
+Vortex,x86,host_comparison,StartsWithScalar,"Starts with, five-byte scalar, Utf8View",not measured,,69.41,,Low,literal-predicates-like-and-regex,2026-09-29-assume-valid-utf8
+Vortex,x86,host_comparison_validated,ByteLengthView,"Byte length, Utf8View",benchmark-defined existing RowFn,195.2,158.6,0.8125,Medium,string-lengths-and-comparisons,2026-09-29-assume-valid-utf8
+Vortex,x86,host_comparison_validated,StringEqualViewShort,"Equality, short Utf8View",not measured,,230.1,,Low,string-lengths-and-comparisons,2026-09-29-assume-valid-utf8
+Vortex,x86,host_comparison_validated,StringLessThanViewScalar,"Less than scalar, Utf8View",not measured,,272.0,,Low,string-lengths-and-comparisons,2026-09-29-assume-valid-utf8
+Vortex,x86,host_comparison_validated,LikeLiteralScalar,"LIKE, literal scalar pattern",not measured,,333.3,,Low,literal-predicates-like-and-regex,2026-09-29-assume-valid-utf8
+Vortex,x86,host_comparison_validated,StartsWithScalar,"Starts with, five-byte scalar, Utf8View",not measured,,223.2,,Low,literal-predicates-like-and-regex,2026-09-29-assume-valid-utf8
+Vortex,x86,boundaries,vortex_add,"Wrapping add, array + scalar",benchmark-defined existing RowFn,3.299,4.035,1.2230979084571083,Medium,arithmetic-and-numeric-comparisons,2026-09-29-host-comparison
+Vortex,x86,boundaries,nullable_bool/false,"Nullable checked predicate, dense accepted",benchmark-defined existing RowFn,6.992,7.769,1.1111270022883295,Medium,deferred-boolean-execution-and-degenerate-batches,2026-09-29-host-comparison
+Vortex,x86,boundaries,nullable_bool/true,"Nullable checked predicate, retry",benchmark-defined existing RowFn,20.76,35.92,1.7302504816955684,Low,deferred-boolean-execution-and-degenerate-batches,2026-09-29-host-comparison
+Vortex,ARM,boundaries,vortex_add,"Wrapping add, array + scalar",benchmark-defined existing RowFn,2.79,3.249,1.164516129032258,Medium,arithmetic-and-numeric-comparisons,2026-09-30-compute-options
+Vortex,ARM,boundaries,nullable_bool/false,"Nullable checked predicate, dense accepted",benchmark-defined existing RowFn,5.374,5.915,1.1006698920729439,Medium,deferred-boolean-execution-and-degenerate-batches,2026-09-30-compute-options
+Vortex,ARM,boundaries,nullable_bool/true,"Nullable checked predicate, retry",benchmark-defined existing RowFn,15.99,32.33,2.0218886804252656,Low,deferred-boolean-execution-and-degenerate-batches,2026-09-30-compute-options

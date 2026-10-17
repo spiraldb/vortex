@@ -1,0 +1,309 @@
+{
+  "removed": [
+    {
+      "path": "research/row-fn-engine/measurements/2026-09-25-rofl/tests-initial.log",
+      "bytes": 3882
+    },
+    {
+      "path": "research/row-fn-engine/measurements/2026-09-25-rofl/tests-build-2.log",
+      "bytes": 6929
+    },
+    {
+      "path": "research/row-fn-engine/measurements/2026-09-25-rofl/tests-build-3.log",
+      "bytes": 1864
+    },
+    {
+      "path": "research/row-fn-engine/measurements/2026-09-25-rofl/tests-build-4.log",
+      "bytes": 9792
+    },
+    {
+      "path": "research/row-fn-engine/measurements/2026-09-25-rofl/vortex-tests.log",
+      "bytes": 8185
+    },
+    {
+      "path": "research/row-fn-engine/measurements/2026-09-25-rofl/bench-build.log",
+      "bytes": 7017
+    },
+    {
+      "path": "research/row-fn-engine/measurements/2026-09-25-rofl/bench-build-final.log",
+      "bytes": 6972
+    },
+    {
+      "path": "research/row-fn-engine/measurements/2026-09-25-rofl/boundaries-preflight.log",
+      "bytes": 1549
+    },
+    {
+      "path": "research/row-fn-engine/measurements/2026-09-25-rofl/codegen-arrow.log",
+      "bytes": 163
+    },
+    {
+      "path": "research/row-fn-engine/measurements/2026-09-25-rofl/codegen-boundaries.log",
+      "bytes": 163
+    },
+    {
+      "path": "research/row-fn-engine/measurements/2026-09-25-rofl/implementation.patch",
+      "bytes": 60533
+    },
+    {
+      "path": "research/row-fn-engine/measurements/2026-09-25-rofl/codegen.tar.gz",
+      "bytes": 17165127
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.02.rcgu.ll",
+      "bytes": 4124404
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.12.rcgu.ll",
+      "bytes": 3688497
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.13.rcgu.ll",
+      "bytes": 3296344
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.03.rcgu.ll",
+      "bytes": 1465988
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.08.rcgu.ll",
+      "bytes": 880714
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.01.rcgu.ll",
+      "bytes": 11758490
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.11.rcgu.ll",
+      "bytes": 3985122
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.10.rcgu.ll",
+      "bytes": 2925407
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.00.rcgu.ll",
+      "bytes": 12889843
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.09.rcgu.ll",
+      "bytes": 3038743
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.05.rcgu.ll",
+      "bytes": 4857610
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.15.rcgu.ll",
+      "bytes": 3733336
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.14.rcgu.ll",
+      "bytes": 2452956
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.04.rcgu.ll",
+      "bytes": 4299759
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.06.rcgu.ll",
+      "bytes": 3094624
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.07.rcgu.ll",
+      "bytes": 2053501
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.00.rcgu.s",
+      "bytes": 6032550
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.12.rcgu.s",
+      "bytes": 1976831
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.10.rcgu.s",
+      "bytes": 1602924
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.02.rcgu.s",
+      "bytes": 2111062
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.06.rcgu.s",
+      "bytes": 1823292
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.14.rcgu.s",
+      "bytes": 1532519
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.08.rcgu.s",
+      "bytes": 445279
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.04.rcgu.s",
+      "bytes": 2462214
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.01.rcgu.s",
+      "bytes": 6423616
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.13.rcgu.s",
+      "bytes": 2043411
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.11.rcgu.s",
+      "bytes": 2447882
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.03.rcgu.s",
+      "bytes": 1008120
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.07.rcgu.s",
+      "bytes": 1073825
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.15.rcgu.s",
+      "bytes": 2083438
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.09.rcgu.s",
+      "bytes": 1830996
+    },
+    {
+      "path": "target/release/deps/boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.05.rcgu.s",
+      "bytes": 2635131
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.05.rcgu.ll",
+      "bytes": 1814140
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.15.rcgu.ll",
+      "bytes": 1956868
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.14.rcgu.ll",
+      "bytes": 2194540
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.04.rcgu.ll",
+      "bytes": 1828336
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.06.rcgu.ll",
+      "bytes": 2056152
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.07.rcgu.ll",
+      "bytes": 2769584
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.02.rcgu.ll",
+      "bytes": 988731
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.12.rcgu.ll",
+      "bytes": 2463564
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.13.rcgu.ll",
+      "bytes": 1728425
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.03.rcgu.ll",
+      "bytes": 3096396
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.01.rcgu.ll",
+      "bytes": 1357067
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.11.rcgu.ll",
+      "bytes": 1544469
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.08.rcgu.ll",
+      "bytes": 1638797
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.09.rcgu.ll",
+      "bytes": 1945600
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.10.rcgu.ll",
+      "bytes": 351195
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.00.rcgu.ll",
+      "bytes": 8374213
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.03.rcgu.s",
+      "bytes": 1749334
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.11.rcgu.s",
+      "bytes": 881075
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.13.rcgu.s",
+      "bytes": 1116919
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.01.rcgu.s",
+      "bytes": 733423
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.05.rcgu.s",
+      "bytes": 1109815
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.09.rcgu.s",
+      "bytes": 1212177
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.15.rcgu.s",
+      "bytes": 1172911
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.07.rcgu.s",
+      "bytes": 1754808
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.02.rcgu.s",
+      "bytes": 684508
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.10.rcgu.s",
+      "bytes": 244809
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.12.rcgu.s",
+      "bytes": 1613882
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.00.rcgu.s",
+      "bytes": 4034334
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.04.rcgu.s",
+      "bytes": 1154594
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.08.rcgu.s",
+      "bytes": 969160
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.14.rcgu.s",
+      "bytes": 1269327
+    },
+    {
+      "path": "target/release/deps/arrow_workloads-ac4dc29a7e7d4a00.arrow_workloads.bc0ff36531eaadeb-cgu.06.rcgu.s",
+      "bytes": 1320831
+    }
+  ],
+  "removed_bytes": 180480588
+}

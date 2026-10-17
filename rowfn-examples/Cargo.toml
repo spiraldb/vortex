@@ -1,0 +1,58 @@
+[package]
+name = "rowfn-examples"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+categories.workspace = true
+keywords.workspace = true
+readme = "README.md"
+license.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Cross-host fixtures and registration examples for rowfn"
+
+[dependencies]
+arrow-array.workspace = true
+arrow-buffer.workspace = true
+arrow-schema.workspace = true
+rowfn.workspace = true
+rowfn-arrow.workspace = true
+rowfn-functions = { workspace = true, features = ["arrow", "vortex"] }
+vortex-array = { workspace = true, features = ["unstable_row_fns"] }
+vortex-buffer.workspace = true
+vortex-error.workspace = true
+vortex-session.workspace = true
+
+[dev-dependencies]
+arrow-arith.workspace = true
+arrow-ord.workspace = true
+arrow-string.workspace = true
+divan.workspace = true
+memchr.workspace = true
+rstest.workspace = true
+vortex-array = { workspace = true, features = ["_test-harness"] }
+
+[[bench]]
+name = "boundaries"
+harness = false
+
+[[bench]]
+name = "arrow_workloads"
+harness = false
+
+[[bench]]
+name = "arrow_scalar"
+harness = false
+
+[[bench]]
+name = "arrow_families"
+harness = false
+
+[[bench]]
+name = "host_comparison"
+harness = false
+
+[lints]
+workspace = true

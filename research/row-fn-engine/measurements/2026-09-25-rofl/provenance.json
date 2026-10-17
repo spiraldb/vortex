@@ -1,0 +1,14 @@
+{
+  "base_commit": "24a96cece436409dc4f60f94c6b846d6af017804",
+  "branch": "ct/row-fn-engine-research",
+  "sha256": {
+    "target/release/deps/boundaries-aeac0eb71915d338": "677b68d2833434d7d4fbee8c025d028cd603ae9181a142a9b04c1cd5ec18df43",
+    "target/release/deps/arrow_workloads-c779a9f473e8d9cf": "7ae847ad15c2650abf18c12db1a74402c641418af9bba8ded5915f234a2ceb3b"
+  },
+  "archives_sha256": {
+    "source.tar.gz": "c5955a38de4b5bcb3c2889c9241bc73f91c52001fcd5b317423bbde08a14a80a"
+  },
+  "removed_archive_sha256": {
+    "codegen.tar.gz": "a154e8943959a6d2629a00b9e9c76733284752d338e2aeab97bd29adffd4e85e"
+  }
+}

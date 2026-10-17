@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+cargo bench --locked -p rofl-examples --bench arrow_families --no-run
+Executable benches/arrow_families.rs (target/release/deps/arrow_families-e34007219fb0c2ce)
+Binary SHA-256: 33d1b917cf2e4bafc93eb1819982b90c7e5391c0b69e844bfcc78bf6c3631eee

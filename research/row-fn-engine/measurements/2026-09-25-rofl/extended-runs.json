@@ -1,0 +1,68 @@
+[
+  {
+    "command": [
+      "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/arrow_scalar-604cd22b3782d6c3",
+      "--bench",
+      "--timer",
+      "os",
+      "--color",
+      "never",
+      "--sample-count",
+      "1000",
+      "--min-time",
+      "0.1",
+      "--max-time",
+      "0.3",
+      "--sort",
+      "name"
+    ],
+    "start_unix": 1790382078.906626,
+    "seconds": 14.69030499458313,
+    "output": "extended-scalar-1.txt",
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/arrow_scalar-604cd22b3782d6c3",
+      "--bench",
+      "--timer",
+      "os",
+      "--color",
+      "never",
+      "--sample-count",
+      "1000",
+      "--min-time",
+      "0.1",
+      "--max-time",
+      "0.3",
+      "--sortr",
+      "name"
+    ],
+    "start_unix": 1790382093.597194,
+    "seconds": 14.713948965072632,
+    "output": "extended-scalar-2.txt",
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/arrow_scalar-604cd22b3782d6c3",
+      "--bench",
+      "--timer",
+      "os",
+      "--color",
+      "never",
+      "--sample-count",
+      "1000",
+      "--min-time",
+      "0.1",
+      "--max-time",
+      "0.3",
+      "--sort",
+      "name"
+    ],
+    "start_unix": 1790382108.311405,
+    "seconds": 14.74634313583374,
+    "output": "extended-scalar-3.txt",
+    "exit_code": 0
+  }
+]

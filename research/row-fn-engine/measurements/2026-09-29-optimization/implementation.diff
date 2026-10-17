@@ -1,0 +1,1101 @@
+--- a/rofl-arrow/src/batch.rs
++++ b/rofl-arrow/src/batch.rs
+@@ -3,7 +3,10 @@
+ 
+ //! Explicit dictionary materialization and strict Arrow validity.
+ 
++use std::sync::Arc;
++
+ use arrow_array::{Array, ArrayRef, DictionaryArray, UInt64Array, make_array, new_null_array};
++use arrow_array::{BooleanArray, PrimitiveArray, StringViewArray};
+ use arrow_array::types::*;
+ use arrow_buffer::{BooleanBuffer, NullBuffer};
+ use arrow_schema::{ArrowError, DataType, Field};
+@@ -71,15 +74,17 @@
+ 
+ /// Retained validity and row count for Arrow batches without a null buffer.
+ pub struct ArrowValidity { nulls: Option<NullBuffer>, rows: usize }
+-impl Selection for ArrowValidity {
++// SAFETY: validity construction checks each operand length. The immutable null buffer and row
++// count define one stable domain, and bitmap traversal visits each set bit once in order.
++unsafe impl Selection for ArrowValidity {
+     fn len(&self) -> usize { self.rows }
+     fn count(&self) -> usize { self.rows - self.nulls.as_ref().map_or(0, NullBuffer::null_count) }
+-    fn for_each(&self, visit: impl FnMut(usize)) {
++    fn try_for_each<E>(&self, mut visit: impl FnMut(usize) -> Result<(), E>) -> Result<(), E> {
+         match &self.nulls {
+-            None => (0..self.rows).for_each(visit),
++            None => (0..self.rows).try_for_each(visit),
+             Some(nulls) => {
+                 let bits = nulls.inner();
+-                BitmapView::new(bits.values(), bits.offset(), bits.len()).for_each(visit);
++                BitmapView::new(bits.values(), bits.offset(), bits.len()).try_for_each(&mut visit)
+             }
+         }
+     }
+@@ -100,7 +105,12 @@
+     fn validity(inputs: &[Operand<Self>], rows: usize, _: &mut ()) -> Result<ArrowValidity, ArrowError> {
+         let mut result = None;
+         for input in inputs {
++            Self::validate_operand(input, rows)?;
+             let nulls = input.column.logical_nulls();
++            let expected = if input.scalar { 1 } else { rows };
++            if nulls.as_ref().is_some_and(|nulls| nulls.len() != expected) {
++                return Err(Self::error("Arrow logical validity must match its operand length"));
++            }
+             if input.scalar {
+                 if nulls.as_ref().is_some_and(|nulls| nulls.is_null(0)) {
+                     return Ok(ArrowValidity { nulls: Some(NullBuffer::new_null(rows)), rows });
+@@ -124,7 +134,7 @@
+         let column = if input.scalar { input.column.clone() } else {
+             let bits = selection.nulls.as_ref().map(|nulls| nulls.inner().clone())
+                 .unwrap_or_else(|| BooleanBuffer::new_set(selection.rows));
+-            filter(input.column.as_ref(), &arrow_array::BooleanArray::new(bits, None))?
++            filter(input.column.as_ref(), &BooleanArray::new(bits, None))?
+         };
+         Ok(Operand { column, dtype: input.dtype.clone(), scalar: input.scalar })
+     }
+@@ -135,15 +145,60 @@
+         if column.len() != 1 || column.logical_null_count() != 0 {
+             return Err(Self::error("scalar output must contain one valid row"));
+         }
++        macro_rules! primitive {
++            ($type:ty) => {{
++                let array = column.as_any().downcast_ref::<PrimitiveArray<$type>>()
++                    .ok_or_else(|| Self::error("scalar primitive storage downcast failed"))?;
++                return Ok(Arc::new(PrimitiveArray::<$type>::new(vec![array.value(0); rows].into(), None)));
++            }};
++        }
++        match column.data_type() {
++            DataType::Int8 => primitive!(Int8Type),
++            DataType::Int16 => primitive!(Int16Type),
++            DataType::Int32 => primitive!(Int32Type),
++            DataType::Int64 => primitive!(Int64Type),
++            DataType::UInt8 => primitive!(UInt8Type),
++            DataType::UInt16 => primitive!(UInt16Type),
++            DataType::UInt32 => primitive!(UInt32Type),
++            DataType::UInt64 => primitive!(UInt64Type),
++            DataType::Float32 => primitive!(Float32Type),
++            DataType::Float64 => primitive!(Float64Type),
++            DataType::Boolean => {
++                let array = column.as_any().downcast_ref::<BooleanArray>()
++                    .ok_or_else(|| Self::error("scalar Boolean storage downcast failed"))?;
++                let bits = if array.value(0) { BooleanBuffer::new_set(rows) } else { BooleanBuffer::new_unset(rows) };
++                return Ok(Arc::new(BooleanArray::new(bits, None)));
++            }
++            DataType::Utf8View => {
++                let array = column.as_any().downcast_ref::<StringViewArray>()
++                    .ok_or_else(|| Self::error("scalar UTF-8 storage downcast failed"))?;
++                // SAFETY: the one non-null input view is valid. Every copied view retains the
++                // same backing buffers, and no offsets or lengths change during repetition.
++                return Ok(Arc::new(unsafe {
++                    StringViewArray::new_unchecked(vec![array.views()[0]; rows].into(), array.data_buffers(), None)
++                }));
++            }
++            _ => {}
++        }
+         take(column.as_ref(), &UInt64Array::from(vec![0; rows]), None)
+     }
+     fn publish(column: ArrayRef, storage: &Field, output: &Field, validity: &ArrowValidity,
+         rows: usize, _: &mut ()) -> Result<ArrayRef, ArrowError> {
+-        if column.len() != rows || column.data_type() != storage.data_type() || column.logical_null_count() != 0 {
++        Self::validate_label(storage, output)?;
++        let data = column.to_data();
++        if data.len() != rows || data.data_type() != storage.data_type() || data.null_count() != 0 {
+             return Err(Self::error("row output must contain all-valid planned storage with the logical row count"));
+         }
+-        let data = column.to_data().into_builder().data_type(output.data_type().clone())
+-            .nulls(validity.nulls.clone()).build()?;
++        if validity.rows != rows || validity.nulls.as_ref().is_some_and(|nulls| nulls.len() != rows)
++            || (!output.is_nullable() && validity.count() != rows) {
++            return Err(Self::error("output validity must match the row count and planned nullability"));
++        }
++        let builder = data.into_builder().data_type(output.data_type().clone())
++            .nulls(validity.nulls.clone());
++        // SAFETY: column already owns valid Arrow data. validate_label permits only an identical
++        // type or Int64-to-Timestamp, which has the same layout and accepts every i64. The private
++        // validity retains exactly rows bits. Changing outer nulls preserves all child invariants.
++        let data = unsafe { builder.build_unchecked() };
+         Ok(make_array(data))
+     }
+ }
+--- a/rofl-arrow/src/input.rs
++++ b/rofl-arrow/src/input.rs
+@@ -80,6 +80,7 @@
+ // SAFETY: decoding validates the complete child range, and this view retains its exact shape.
+ unsafe impl<'a, T: 'static> RowView<'a, FixedSizeList<T>> for ListView<'a, T> {
+     fn len(&self) -> usize { self.rows }
++    #[inline]
+     unsafe fn get_unchecked(&self, index: usize) -> &'a [T] {
+         let start = index * self.width;
+         // SAFETY: caller bounds index by rows, and decoding checked rows * width.
+--- a/rofl-arrow/src/string.rs
++++ b/rofl-arrow/src/string.rs
+@@ -9,7 +9,7 @@
+ use arrow_buffer::{Buffer, MutableBuffer, ScalarBuffer};
+ use arrow_data::ByteView;
+ use arrow_schema::{ArrowError, DataType, Field};
+-use rofl::{Host, InputBinding, RowView, Utf8};
++use rofl::{Host, InputBinding, RowKind, RowView, TextBinding, TextValue, Utf8};
+ use rofl::sink::{OutputSink, Utf8Output, WriteUtf8};
+ 
+ use super::{ArrowHost, batch::ordinary};
+@@ -25,17 +25,20 @@
+ }
+ /// A borrowed string view whose owner remains in the current invocation.
+ pub struct StringRows<'a>(&'a Strings);
+-// SAFETY: Arrow constructors validate UTF-8. Null slots are sanitized at access to an empty string,
+-// and borrowed string bytes remain retained by the array owner for the full view lifetime.
++// SAFETY: Arrow string arrays validate UTF-8 and offsets for every slot, including null slots.
++// The retained array owns those bytes for the full view lifetime. Outer nulls are applied later.
+ unsafe impl<'a> RowView<'a, Utf8> for StringRows<'a> {
+     fn len(&self) -> usize {
+         match self.0 { Strings::Utf8(a) => a.len(), Strings::Large(a) => a.len(), Strings::View(a) => a.len() }
+     }
++    #[inline]
+     unsafe fn get_unchecked(&self, index: usize) -> &'a str {
++        // SAFETY: the caller bounds index by the retained array length. Arrow guarantees valid
++        // string payloads even for null slots, as required by its safe value accessor.
+         match self.0 {
+-            Strings::Utf8(a) => if a.is_null(index) { "" } else { a.value(index) },
+-            Strings::Large(a) => if a.is_null(index) { "" } else { a.value(index) },
+-            Strings::View(a) => if a.is_null(index) { "" } else { a.value(index) },
++            Strings::Utf8(a) => unsafe { a.value_unchecked(index) },
++            Strings::Large(a) => unsafe { a.value_unchecked(index) },
++            Strings::View(a) => unsafe { a.value_unchecked(index) },
+         }
+     }
+ }
+@@ -61,6 +64,95 @@
+     fn view(decoded: &Strings) -> StringRows<'_> { StringRows(decoded) }
+ }
+ 
++/// Arrow's text family preserves view headers for byte-prefix and byte-suffix operations.
++pub struct ArrowText;
++
++impl RowKind for ArrowText {
++    type Value<'a> = ArrowTextValue<'a>;
++}
++
++/// A borrowed Arrow view whose header and referenced UTF-8 are valid, including at null rows.
++pub struct ArrowTextValue<'a> {
++    view: &'a u128,
++    buffers: &'a [Buffer],
++}
++
++impl TextValue for ArrowTextValue<'_> {
++    #[inline]
++    fn as_str(&self) -> &str {
++        let len = *self.view as u32 as usize;
++        let bytes = if len <= 12 {
++            // SAFETY: the private value retains a validated inline view with this length.
++            unsafe { StringViewArray::inline_value(self.view, len) }
++        } else {
++            let view = ByteView::from(*self.view);
++            // SAFETY: the private constructor retains the validated array's matching buffers.
++            unsafe {
++                self.buffers.get_unchecked(view.buffer_index as usize)
++                    .get_unchecked(view.offset as usize..view.offset as usize + len)
++            }
++        };
++        // SAFETY: Arrow validates UTF-8 for every view, including views at null rows.
++        unsafe { std::str::from_utf8_unchecked(bytes) }
++    }
++
++    #[inline]
++    fn prefix(&self, len: usize) -> &[u8] {
++        let string_len = *self.view as u32 as usize;
++        if string_len < len { return &[]; }
++        if len <= 4 || string_len <= 12 {
++            // SAFETY: a validated view contains the requested prefix or the entire inline string.
++            return unsafe { StringViewArray::inline_value(self.view, len) };
++        }
++        &self.as_str().as_bytes()[..len]
++    }
++
++    #[inline]
++    fn suffix(&self, len: usize) -> &[u8] {
++        let bytes = self.as_str().as_bytes();
++        bytes.get(bytes.len().wrapping_sub(len)..).unwrap_or_default()
++    }
++}
++
++/// Borrowed text rows with storage dispatch already resolved to Utf8View.
++pub struct TextRows<'a>(&'a StringViewArray);
++
++// SAFETY: the immutable decoded owner retains the exact row domain and all referenced buffers.
++// Arrow validates every view, including null payloads, before safe array construction.
++unsafe impl<'a> RowView<'a, ArrowText> for TextRows<'a> {
++    fn len(&self) -> usize { self.0.len() }
++
++    #[inline]
++    unsafe fn get_unchecked(&self, index: usize) -> ArrowTextValue<'a> {
++        // SAFETY: the caller bounds index by the retained array's row count.
++        let view = unsafe { self.0.views().get_unchecked(index) };
++        ArrowTextValue { view, buffers: self.0.data_buffers() }
++    }
++}
++
++impl InputBinding<ArrowText> for ArrowHost {
++    type Decoded = StringViewArray;
++    type View<'a> = TextRows<'a>;
++    const DENSE_SAFE: bool = true;
++    const DECODE_INFALLIBLE: bool = true;
++    fn validate(dtype: &Field) -> Result<(), ArrowError> {
++        ordinary(dtype)?;
++        if dtype.data_type() != &DataType::Utf8View { return Err(Self::error("expected Utf8View")); }
++        Ok(())
++    }
++    fn decode(column: &ArrayRef, _: bool, _: &mut ()) -> Result<StringViewArray, ArrowError> {
++        column.as_any().downcast_ref::<StringViewArray>().cloned()
++            .ok_or_else(|| Self::error("Utf8View storage downcast failed"))
++    }
++    fn can_decode_null_tolerant(_: &ArrayRef) -> Result<bool, ArrowError> { Ok(true) }
++    fn view(decoded: &StringViewArray) -> TextRows<'_> { TextRows(decoded) }
++}
++
++impl TextBinding for ArrowHost {
++    type Text = ArrowText;
++    fn uses_views(dtype: &Field) -> bool { dtype.data_type() == &DataType::Utf8View }
++}
++
+ /// Arrow-owned Utf8View output storage, initialized to empty strings.
+ pub struct StringSink {
+     views: MutableBuffer,
+@@ -81,34 +173,47 @@
+     error: &'a mut Option<ArrowError>,
+ }
+ impl WriteUtf8 for StringWriter<'_> {
++    #[inline]
+     fn write(self, value: &str) {
++        self.write_parts(&[value]);
++    }
++
++    #[inline]
++    fn write_parts(self, parts: &[&str]) {
+         if self.error.is_some() { return; }
+-        let bytes = value.as_bytes();
+-        let Ok(len) = u32::try_from(bytes.len()) else {
++        let Some(len) = parts.iter().try_fold(0u32, |total, part| {
++            total.checked_add(u32::try_from(part.len()).ok()?)
++        }) else {
+             *self.error = Some(ArrowHost::error("Arrow UTF-8 view length exceeds u32"));
+             return;
+         };
+-        if bytes.len() <= 12 {
++        if len <= 12 {
+             let mut view = [0u8; 16];
+             view[..4].copy_from_slice(&len.to_le_bytes());
+-            view[4..4 + bytes.len()].copy_from_slice(bytes);
++            let mut offset = 4;
++            for part in parts {
++                view[offset..offset + part.len()].copy_from_slice(part.as_bytes());
++                offset += part.len();
++            }
+             *self.view = u128::from_le_bytes(view);
+             return;
+         }
+-        if self.buffers.last().is_none_or(|buffer| buffer.len().saturating_add(bytes.len()) > u32::MAX as usize) {
+-            self.buffers.push(MutableBuffer::new(bytes.len()));
++
++        if self.buffers.last().is_none_or(|buffer| buffer.len().saturating_add(len as usize) > u32::MAX as usize) {
++            self.buffers.push(MutableBuffer::new(len as usize));
+         }
+         let Ok(index) = u32::try_from(self.buffers.len() - 1) else {
+             *self.error = Some(ArrowHost::error("Arrow UTF-8 buffer count exceeds u32"));
+             return;
+         };
+         let buffer = &mut self.buffers[index as usize];
+-        let Ok(offset) = u32::try_from(buffer.len()) else {
+-            *self.error = Some(ArrowHost::error("Arrow UTF-8 buffer offset exceeds u32"));
+-            return;
+-        };
+-        buffer.extend_from_slice(bytes);
+-        *self.view = ByteView::new(len, &bytes[..4]).with_buffer_index(index).with_offset(offset).as_u128();
++        let offset = buffer.len();
++        buffer.reserve(len as usize);
++        for part in parts {
++            buffer.extend_from_slice(part.as_bytes());
++        }
++        *self.view = ByteView::new(len, &buffer.as_slice()[offset..offset + 4])
++            .with_buffer_index(index).with_offset(offset as u32).as_u128();
+     }
+ }
+ impl Utf8Output for ArrowHost { type Sink = StringSink; }
+@@ -138,6 +243,9 @@
+         if let Some(error) = self.error { return Err(error); }
+         let buffers: Vec<Buffer> = self.buffers.into_iter().map(Buffer::from).collect();
+         let views = ScalarBuffer::new(self.views.into(), 0, self.rows);
+-        Ok(Arc::new(StringViewArray::try_new(views, buffers, None)?))
+-    }
+-}
++        // SAFETY: every view starts as a valid empty string. Writers copy only valid UTF-8,
++        // check representation limits, and record offsets into retained output-owned buffers.
++        // No safe row operation can modify another view or invalidate the referenced bytes.
++        Ok(Arc::new(unsafe { StringViewArray::new_unchecked(views, buffers, None) }))
++    }
++}
+--- a/rofl-arrow/tests/storage.rs
++++ b/rofl-arrow/tests/storage.rs
+@@ -3,10 +3,12 @@
+ 
+ //! Arrow-only ownership tests do not add any Vortex dependency to this package.
+ 
+-use arrow_array::Int64Array;
+-use arrow_schema::ArrowError;
+-use rofl::{OutputBinding, OutputBuffer};
+-use rofl::sink::{OutputSink, UninitElementSink};
++use std::sync::Arc;
++
++use arrow_array::{Array, BooleanArray, Int64Array, StringViewArray};
++use arrow_schema::{ArrowError, DataType, Field};
++use rofl::{BatchBinding, Operand, OutputBinding, OutputBuffer};
++use rofl::sink::{OutputSink, UninitElementSink, Utf8Output, WriteUtf8};
+ use rofl_arrow::ArrowHost;
+ 
+ #[test]
+@@ -38,3 +40,71 @@
+     drop(sink);
+     Ok(())
+ }
++
++#[test]
++fn string_parts_preserve_valid_utf8_and_owned_storage() -> Result<(), ArrowError> {
++    type Sink = <ArrowHost as Utf8Output>::Sink;
++    let owned = String::from("a much longer string allocated by the caller");
++    let cases = [vec![], vec!["", "λ"], vec!["123456", "789012"],
++        vec!["123456", "789012λ"], vec![owned.as_str(), " λ"]];
++    let expected: Vec<_> = cases.iter().map(|parts| parts.concat()).collect();
++    let mut sink = Sink::allocate(cases.len() + 1, &(), &mut ())?;
++    {
++        let mut rows = sink.rows();
++        Sink::initialize(&mut rows);
++        for (index, parts) in cases.iter().enumerate() {
++            // SAFETY: the sink has one row per case plus one initialized, skipped row.
++            unsafe { Sink::row(&mut rows, index) }.write_parts(parts);
++        }
++    }
++    drop(cases);
++    drop(owned);
++    // SAFETY: every view started initialized, and each write retained valid output-owned bytes.
++    let result = unsafe { sink.finish(&mut ()) }?;
++    result.to_data().validate_full()?;
++    let strings = result.as_any().downcast_ref::<StringViewArray>().unwrap();
++    assert_eq!(strings.iter().collect::<Vec<_>>(), expected.iter().map(|s| Some(s.as_str()))
++        .chain([Some("")]).collect::<Vec<_>>());
++    Ok(())
++}
++
++#[test]
++fn unchecked_publication_rejects_invalid_labels_shapes_and_nullability() -> Result<(), ArrowError> {
++    let storage = Field::new("result", DataType::Int64, false);
++    let column = Arc::new(Int64Array::from(vec![1, 2]));
++    let valid = ArrowHost::validity(&[], 2, &mut ())?;
++    let invalid = Field::new("result", DataType::Utf8View, false);
++    assert!(ArrowHost::publish(column.clone(), &storage, &invalid, &valid, 2, &mut ()).is_err());
++    let input = Operand::<ArrowHost> {
++        column: Arc::new(Int64Array::from(vec![None, Some(1)])),
++        dtype: storage.clone().with_nullable(true), scalar: false,
++    };
++    let nullable = ArrowHost::validity(&[input.clone()], 2, &mut ())?;
++    assert!(ArrowHost::publish(column.clone(), &storage, &storage, &nullable, 2, &mut ()).is_err());
++    assert!(ArrowHost::validity(&[input], 1, &mut ()).is_err());
++    assert!(ArrowHost::publish(Arc::new(Int64Array::from(vec![1])), &storage,
++        &storage.clone().with_nullable(true), &nullable, 1, &mut ()).is_err());
++    let output = ArrowHost::publish(column, &storage, &storage.clone().with_nullable(true),
++        &nullable, 2, &mut ())?;
++    output.to_data().validate_full()?;
++    Ok(())
++}
++
++#[test]
++fn scalar_broadcast_preserves_owned_views_and_boolean_values() -> Result<(), ArrowError> {
++    let text = String::from("a long scalar string stored outside the header");
++    let column = Arc::new(StringViewArray::from(vec![text.as_str()]));
++    let result = ArrowHost::broadcast(column, 65, &mut ())?;
++    drop(text);
++    result.to_data().validate_full()?;
++    let strings = result.as_any().downcast_ref::<StringViewArray>().unwrap();
++    assert!(strings.iter().all(|value| value == Some("a long scalar string stored outside the header")));
++    for value in [false, true] {
++        let column = Arc::new(BooleanArray::from(vec![value]));
++        let result = ArrowHost::broadcast(column, 65, &mut ())?;
++        result.to_data().validate_full()?;
++        assert!(result.as_any().downcast_ref::<BooleanArray>().unwrap().iter()
++            .all(|item| item == Some(value)));
++    }
++    Ok(())
++}
+--- a/rofl-examples/src/functions.rs
++++ b/rofl-examples/src/functions.rs
+@@ -2,6 +2,8 @@
+ // SPDX-FileCopyrightText: Copyright the Vortex contributors
+ 
+ //! The same dispatch rules and callback definitions execute through both host bindings.
++
++use std::mem::MaybeUninit;
+ 
+ use rofl::{BooleanOutput, Host, HostResult, InputBinding, OutputBinding, RowFn, RowVisitor, TypeBinding, Utf8};
+ use rofl::sink::{FixedSizeListSink, InitializedElement, InitializedRow, ListOutput, OutputSink, UninitElementSink, Utf8Output, WriteUtf8};
+@@ -134,6 +136,32 @@
+         macro_rules! scale {
+             ($t:ty) => {{
+                 <H as ListOutput<$t>>::list_type(width)?;
++                // Common vector widths use a fixed array in the callback, so the inner loop does
++                // not repeat runtime bounds and trip-count handling for each parent row.
++                macro_rules! fixed {
++                    ($n:literal) => {
++                        visitor.visit_prepared_into::<(rofl::FixedSizeList<$t>, $t),
++                            FixedSizeListSink<H, $t>, Option<$t>, InitializedRow>(
++                            $n, |(_, factor)| factor, |constant, (values, factor), row| {
++                                let values: &[$t; $n] = values.try_into()
++                                    .expect("dispatch validated the fixed input width");
++                                let row: &mut [MaybeUninit<$t>; $n] = row.try_into()
++                                    .expect("the sink allocated the dispatched output width");
++                                let factor = constant.unwrap_or(factor);
++                                // SAFETY: conversion preserves the entire exact callback row,
++                                // and fill initializes every slot before returning its token.
++                                unsafe { InitializedRow::fill(row, |index| values[index] * factor) }
++                            })
++                    };
++                }
++                match width {
++                    0 => return fixed!(0),
++                    1 => return fixed!(1),
++                    2 => return fixed!(2),
++                    3 => return fixed!(3),
++                    4 => return fixed!(4),
++                    _ => {}
++                }
+                 visitor.visit_prepared_into::<(rofl::FixedSizeList<$t>, $t), FixedSizeListSink<H, $t>, Option<$t>, InitializedRow>(
+                     width, |(_, factor)| factor, |constant, (values, factor), row| {
+                         let factor = constant.unwrap_or(factor);
+--- a/rofl-examples/src/text.rs
++++ b/rofl-examples/src/text.rs
+@@ -8,7 +8,10 @@
+ use rofl::HostResult;
+ use rofl::InputBinding;
+ use rofl::RowFn;
++use rofl::RowKind;
+ use rofl::RowVisitor;
++use rofl::TextBinding;
++use rofl::TextValue;
+ use rofl::TypeBinding;
+ use rofl::Utf8;
+ use rofl::sink::OutputSink;
+@@ -32,7 +35,8 @@
+ 
+ impl<H> RowFn<H> for StringPredicate
+ where
+-    H: TypeBinding + InputBinding<Utf8> + BooleanOutput,
++    H: TypeBinding + TextBinding + BooleanOutput,
++    for<'a> <H::Text as RowKind>::Value<'a>: TextValue,
+ {
+     type Options = NoOptions;
+     const ARG_NAMES: &'static [&'static str] = &["text", "pattern"];
+@@ -41,34 +45,58 @@
+     fn dispatch<V: RowVisitor<H>>(
+         &self,
+         _: &NoOptions,
+-        _: &[H::NativeType],
++        args: &[H::NativeType],
+         visitor: V,
+     ) -> HostResult<H, V::VisitResult> {
+-        match self {
+-            Self::StartsWith => {
+-                visitor.visit_bool::<(Utf8, Utf8), false>(|(text, pattern)| {
+-                    text.len() >= pattern.len()
+-                        && text.as_bytes().iter().zip(pattern.as_bytes()).all(|(a, b)| a == b)
+-                })
+-            }
+-            Self::EndsWith => {
+-                visitor.visit_bool::<(Utf8, Utf8), false>(|(text, pattern)| {
+-                    text.len() >= pattern.len()
+-                        && text.as_bytes().iter().rev().zip(pattern.as_bytes().iter().rev())
+-                            .all(|(a, b)| a == b)
+-                })
+-            }
+-            Self::EqIgnoreAsciiCase => visitor.visit_bool::<(Utf8, Utf8), false>(|(text, pattern)| {
+-                text.eq_ignore_ascii_case(pattern)
+-            }),
+-            Self::Contains => visitor.visit_prepared::<(Utf8, Utf8), bool, _>(
+-                |(_, pattern)| pattern.map(|pattern| memmem::Finder::new(pattern.as_bytes()).into_owned()),
+-                |finder, (text, pattern)| match finder {
+-                    Some(finder) => finder.find(text.as_bytes()).is_some(),
+-                    None => memmem::find(text.as_bytes(), pattern.as_bytes()).is_some(),
+-                },
+-            ),
++        match (H::uses_views(&args[0]), H::uses_views(&args[1])) {
++            (true, true) => dispatch_predicate::<H, H::Text, H::Text, V>(*self, visitor),
++            (true, false) => dispatch_predicate::<H, H::Text, Utf8, V>(*self, visitor),
++            (false, true) => dispatch_predicate::<H, Utf8, H::Text, V>(*self, visitor),
++            (false, false) => dispatch_predicate::<H, Utf8, Utf8, V>(*self, visitor),
+         }
++    }
++}
++
++fn dispatch_predicate<H, Left, Right, V>(predicate: StringPredicate, visitor: V)
++    -> HostResult<H, V::VisitResult>
++where
++    H: TypeBinding + InputBinding<Left> + InputBinding<Right> + BooleanOutput,
++    Left: RowKind,
++    Right: RowKind,
++    for<'a> Left::Value<'a>: TextValue,
++    for<'a> Right::Value<'a>: TextValue,
++    V: RowVisitor<H>,
++{
++    match predicate {
++        StringPredicate::StartsWith => visitor.visit_prepared::<(Left, Right), bool, _>(
++            |(_, pattern)| pattern.map(|pattern| pattern.as_str().to_owned()),
++            |constant, (text, pattern)| {
++                let pattern = constant.as_deref().unwrap_or_else(|| pattern.as_str()).as_bytes();
++                let bytes = text.prefix(pattern.len());
++                bytes.len() == pattern.len() && bytes.iter().zip(pattern).all(|(a, b)| a == b)
++            },
++        ),
++        StringPredicate::EndsWith => visitor.visit_prepared::<(Left, Right), bool, _>(
++            |(_, pattern)| pattern.map(|pattern| pattern.as_str().to_owned()),
++            |constant, (text, pattern)| {
++                let pattern = constant.as_deref().unwrap_or_else(|| pattern.as_str()).as_bytes();
++                let bytes = text.suffix(pattern.len());
++                bytes.len() == pattern.len() && bytes.iter().zip(pattern).all(|(a, b)| a == b)
++            },
++        ),
++        StringPredicate::EqIgnoreAsciiCase => visitor.visit_prepared::<(Left, Right), bool, _>(
++            |(_, pattern)| pattern.map(|pattern| pattern.as_str().to_owned()),
++            |constant, (text, pattern)| {
++                text.as_str().eq_ignore_ascii_case(constant.as_deref().unwrap_or_else(|| pattern.as_str()))
++            },
++        ),
++        StringPredicate::Contains => visitor.visit_prepared::<(Left, Right), bool, _>(
++            |(_, pattern)| pattern.map(|pattern| memmem::Finder::new(pattern.as_str().as_bytes()).into_owned()),
++            |finder, (text, pattern)| match finder {
++                Some(finder) => finder.find(text.as_str().as_bytes()).is_some(),
++                None => memmem::find(text.as_str().as_bytes(), pattern.as_str().as_bytes()).is_some(),
++            },
++        ),
+     }
+ }
+ 
+@@ -92,11 +120,7 @@
+         visitor: V,
+     ) -> HostResult<H, V::VisitResult> {
+         visitor.visit_into::<(Utf8, Utf8), H::Sink, ()>((), |(left, right), row| {
+-            // WriteUtf8 accepts one complete string, so joining needs temporary storage.
+-            let mut value = String::with_capacity(left.len() + right.len());
+-            value.push_str(left);
+-            value.push_str(right);
+-            row.write(&value);
++            row.write_parts(&[left, right]);
+         })
+     }
+ }
+--- a/rofl-examples/tests/metadata.rs
++++ b/rofl-examples/tests/metadata.rs
+@@ -44,7 +44,7 @@
+ 
+ #[test]
+ fn list_scaling_preserves_shape_and_prepares_each_constant_factor() -> TestResult {
+-    for width in [0, 2] {
++    for width in [0, 1, 2, 3, 4, 7] {
+         for rows in [0, 3] {
+             for factor in [2.0, -3.0] {
+                 let values: Vec<f64> = (0..width * rows).map(|i| i as f64).collect();
+--- a/rofl-examples/tests/scalar_kernels.rs
++++ b/rofl-examples/tests/scalar_kernels.rs
+@@ -8,6 +8,8 @@
+ use arrow_array::Array;
+ use arrow_array::BooleanArray;
+ use arrow_array::Int64Array;
++use arrow_array::LargeStringArray;
++use arrow_array::StringArray;
+ use arrow_array::StringViewArray;
+ use arrow_schema::DataType;
+ use arrow_schema::Field;
+@@ -113,3 +115,40 @@
+ 
+     Ok(())
+ }
++
++#[test]
++fn text_predicates_dispatch_mixed_layouts_and_preserve_byte_boundaries() -> TestResult {
++    let texts = [Some("skip"), Some("λ short"), Some("a long string ending in λ"), Some(""), None];
++    let patterns = [Some("skip"), Some("λ"), Some("λ"), Some(""), Some("x")];
++    for left_layout in 0..3 {
++        for right_layout in 0..3 {
++            for predicate in [StringPredicate::StartsWith, StringPredicate::EndsWith] {
++                let operands = [(texts.as_slice(), left_layout), (patterns.as_slice(), right_layout)]
++                    .map(|(values, layout)| {
++                        let (mut arrow, vortex) = strings(values, false, values.len());
++                        arrow.column = match layout {
++                            0 => Arc::new(StringArray::from(values.to_vec())),
++                            1 => Arc::new(LargeStringArray::from(values.to_vec())),
++                            _ => Arc::new(StringViewArray::from(values.to_vec())),
++                        };
++                        arrow.column = arrow.column.slice(1, values.len() - 1);
++                        arrow.dtype = Field::new("input", arrow.column.data_type().clone(), true);
++                        (arrow, vortex.slice(1..values.len()).unwrap())
++                    });
++                let (arrow, vortex) = run(&predicate, Vec::from(operands), texts.len() - 1)?;
++                let expected: Vec<_> = texts[1..].iter().zip(&patterns[1..]).map(|(text, pattern)| {
++                    text.zip(*pattern).map(|(text, pattern)| match predicate {
++                        StringPredicate::StartsWith => text.starts_with(pattern),
++                        _ => text.ends_with(pattern),
++                    })
++                }).collect();
++                arrow.array.to_data().validate_full()?;
++                assert_eq!(arrow.array.as_any().downcast_ref::<BooleanArray>().unwrap(),
++                    &BooleanArray::from(expected.clone()));
++                assert_arrays_eq!(&vortex, &BoolArray::from_iter(expected).into_array(),
++                    &mut array_session().create_execution_ctx());
++            }
++        }
++    }
++    Ok(())
++}
+--- a/rofl/src/execute/mod.rs
++++ b/rofl/src/execute/mod.rs
+@@ -137,31 +137,27 @@
+     }
+ }
+ 
+-/// Visit selected source/output pairs without trusting a host's selection indices for memory safety.
++/// Resolve selection shape once, then use the selection's unsafe contract for each row.
+ fn selected_rows<H: BatchBinding>(mode: &Mode<'_, H>, input_rows: usize, output_rows: usize,
+     mut visit: impl FnMut(usize, usize) -> HostResult<H, ()>) -> HostResult<H, ()> {
+-    let (selection, filtered) = match mode {
+-        Mode::Valid(selection) => (*selection, false),
+-        Mode::Filtered(selection) => (*selection, true),
++    match mode {
++        Mode::Valid(selection) => {
++            if selection.len() != input_rows || input_rows != output_rows {
++                return Err(H::error("valid selection must match the input and output row counts"));
++            }
++            selection.try_for_each(|index| visit(index, index))
++        }
++        Mode::Filtered(selection) => {
++            if selection.len() != output_rows || selection.count() != input_rows {
++                return Err(H::error("filtered selection must match the input and output row counts"));
++            }
++            let mut input = 0;
++            selection.try_for_each(|output| {
++                let result = visit(input, output);
++                input += 1;
++                result
++            })
++        }
+         _ => unreachable!("selected traversal requires a selection"),
+-    };
+-    let mut result = Ok(());
+-    let mut next_source = 0;
+-    let mut previous = None;
+-    selection.for_each(|output| {
+-        if result.is_err() { return; }
+-        let input = if filtered { next_source } else { output };
+-        if output >= output_rows || input >= input_rows || previous.is_some_and(|last| output <= last) {
+-            result = Err(H::error("selected rows must be ordered, unique, and in bounds"));
+-            return;
+-        }
+-        previous = Some(output);
+-        next_source += 1;
+-        result = visit(input, output);
+-    });
+-    result?;
+-    if next_source != selection.count() || (filtered && next_source != input_rows) {
+-        return Err(H::error("selection count must match its visited rows"));
+     }
+-    Ok(())
+ }
+--- a/rofl/src/host.rs
++++ b/rofl/src/host.rs
+@@ -63,7 +63,13 @@
+ }
+ 
+ /// A retained selection used only when validity must be resolved.
+-pub trait Selection {
++///
++/// # Safety
++/// Length and count must stay fixed across shared access. Traversal must visit exactly `count`
++/// distinct indices below `len`, in increasing order, unless the callback returns an error.
++/// No callback may run after its first error. Violating the index contract can cause undefined
++/// behavior in collectors that use the selection as their bounds proof.
++pub unsafe trait Selection {
+     /// Number of logical rows.
+     fn len(&self) -> usize;
+     /// Whether the logical row domain is empty.
+@@ -71,24 +77,37 @@
+     /// Number of selected rows.
+     fn count(&self) -> usize;
+     /// Visit selected indices in increasing order, exactly once each.
+-    fn for_each(&self, visit: impl FnMut(usize));
++    fn for_each(&self, mut visit: impl FnMut(usize)) {
++        let Ok(()) = self.try_for_each::<std::convert::Infallible>(|index| {
++            visit(index);
++            Ok(())
++        });
++    }
++    /// Visit selected indices until the first error, which is returned unchanged.
++    fn try_for_each<E>(&self, visit: impl FnMut(usize) -> Result<(), E>) -> Result<(), E>;
+ }
+ 
+-impl Selection for BitmapView<'_> {
++// SAFETY: validated bitmap chunks retain their logical length and expose only set in-range bits.
++unsafe impl Selection for BitmapView<'_> {
+     fn len(&self) -> usize { self.len() }
+     fn count(&self) -> usize {
+         let chunks = self.chunks();
+         chunks.iter().map(|word| word.count_ones() as usize).sum::<usize>()
+             + chunks.remainder_bits().count_ones() as usize
+     }
+-    fn for_each(&self, mut visit: impl FnMut(usize)) {
++    fn try_for_each<E>(&self, mut visit: impl FnMut(usize) -> Result<(), E>) -> Result<(), E> {
+         let chunks = self.chunks();
+         for (chunk, mut word) in chunks.iter().chain([chunks.remainder_bits()]).enumerate() {
+-            while word != 0 {
+-                visit(chunk * 64 + word.trailing_zeros() as usize);
+-                word &= word - 1;
++            if word == u64::MAX {
++                for index in 0..64 { visit(chunk * 64 + index)?; }
++            } else {
++                while word != 0 {
++                    visit(chunk * 64 + word.trailing_zeros() as usize)?;
++                    word &= word - 1;
++                }
+             }
+         }
++        Ok(())
+     }
+ }
+ 
+--- a/rofl/src/lib.rs
++++ b/rofl/src/lib.rs
+@@ -15,6 +15,9 @@
+ 
+ mod input;
+ pub use input::*;
++
++mod text;
++pub use text::{TextBinding, TextValue};
+ 
+ mod output;
+ pub use output::*;
+--- a/rofl/src/sink/element.rs
++++ b/rofl/src/sink/element.rs
+@@ -30,6 +30,7 @@
+     /// `row` must be the exact slot supplied to the current callback. Return this token from that
+     /// callback and preserve the slot's initialization until it returns. Another slot's token
+     /// cannot authorize publication. Violating this contract can cause undefined behavior.
++    #[inline]
+     pub unsafe fn write<T>(row: &mut MaybeUninit<T>, value: T) -> Self {
+         row.write(value);
+         Self(())
+@@ -64,6 +65,7 @@
+     fn initialize(rows: &mut Self::Rows<'_>) {
+         for row in rows.iter_mut() { row.write(T::default()); }
+     }
++    #[inline]
+     unsafe fn row<'a>(rows: &'a mut Self::Rows<'_>, index: usize) -> Self::Row<'a> {
+         // SAFETY: the executor bounds the index by the retained slice length.
+         unsafe { rows.get_unchecked_mut(index) }
+--- a/rofl/src/sink/list.rs
++++ b/rofl/src/sink/list.rs
+@@ -31,6 +31,7 @@
+     /// # Safety
+     /// `row` must be the entire row supplied to this callback, not a subslice or another row.
+     /// Return this token and preserve every child's initialization until the callback returns.
++    #[inline]
+     pub unsafe fn fill<T>(row: &mut [MaybeUninit<T>], mut value: impl FnMut(usize) -> T) -> Self {
+         for (index, slot) in row.iter_mut().enumerate() { slot.write(value(index)); }
+         Self(())
+@@ -73,6 +74,7 @@
+     fn initialize(rows: &mut Self::Rows<'_>) {
+         for row in rows.values.iter_mut() { row.write(T::default()); }
+     }
++    #[inline]
+     unsafe fn row<'a>(rows: &'a mut Self::Rows<'_>, index: usize) -> Self::Row<'a> {
+         let start = index * rows.width;
+         // SAFETY: allocation checked rows * width, and the caller bounds index by rows.
+--- a/rofl/src/sink/mod.rs
++++ b/rofl/src/sink/mod.rs
+@@ -57,6 +57,13 @@
+ pub trait WriteUtf8 {
+     /// Replace the row with a valid string. The result must not borrow `value`.
+     fn write(self, value: &str);
++
++    /// Concatenate valid strings directly into output-owned storage.
++    ///
++    /// The default supports existing writers. Hosts can override it to avoid temporary storage.
++    fn write_parts(self, parts: &[&str]) where Self: Sized {
++        self.write(&parts.concat());
++    }
+ }
+ 
+ /// Host binding for an owned string sink.
+--- a/rofl/src/text.rs
++++ b/rofl/src/text.rs
+@@ -0,0 +1,44 @@
++// SPDX-License-Identifier: Apache-2.0
++// SPDX-FileCopyrightText: Copyright the Vortex contributors
++
++//! Borrowed text operations that can retain a host's string-view metadata.
++
++use crate::InputBinding;
++use crate::RowKind;
++use crate::Utf8;
++
++/// A valid UTF-8 value whose binding can use stored lengths and prefixes.
++pub trait TextValue {
++    /// Borrow the complete string.
++    fn as_str(&self) -> &str;
++
++    /// Borrow the first `len` bytes, or an empty slice when the string is shorter.
++    /// The byte range need not end at a character boundary.
++    fn prefix(&self, len: usize) -> &[u8] {
++        self.as_str().as_bytes().get(..len).unwrap_or_default()
++    }
++
++    /// Borrow the last `len` bytes, or an empty slice when the string is shorter.
++    /// The byte range need not start at a character boundary.
++    fn suffix(&self, len: usize) -> &[u8] {
++        let bytes = self.as_str().as_bytes();
++        bytes.get(bytes.len().wrapping_sub(len)..).unwrap_or_default()
++    }
++}
++
++impl TextValue for &str {
++    fn as_str(&self) -> &str { self }
++}
++
++/// A host's string row family, retaining metadata until the function requests bytes.
++///
++/// The value family must implement [`TextValue`]. Functions state that bound on its borrowed value.
++/// The ordinary [`crate::Utf8`] family remains available for functions that need only `&str`.
++pub trait TextBinding: InputBinding<Self::Text> + InputBinding<Utf8> {
++    /// The row kind used by text operations on this host.
++    type Text: RowKind;
++
++    /// Whether a native string type uses the host's view representation.
++    /// Dispatch calls this before selecting a typed visitor, never inside the row loop.
++    fn uses_views(dtype: &Self::NativeType) -> bool;
++}
+--- a/rofl/tests/failure_boundary.rs
++++ b/rofl/tests/failure_boundary.rs
+@@ -6,6 +6,7 @@
+ use std::io;
+ use std::mem::MaybeUninit;
+ 
++use rofl::kernels::bit::BitmapView;
+ use rofl::{BatchBinding, Host, InputBinding, Operand, OutputBinding, OutputBuffer, RowFn, RowVisitor,
+     Selection, TypeBinding, ValiditySummary};
+ 
+@@ -38,13 +39,15 @@
+     fn validate_label(_: &bool, _: &bool) -> io::Result<()> { Ok(()) }
+ }
+ 
+-impl Selection for Rows {
++// SAFETY: the immutable Boolean vector defines the exact ordered selection and its count.
++unsafe impl Selection for Rows {
+     fn len(&self) -> usize { self.0.len() }
+     fn count(&self) -> usize { self.0.iter().filter(|valid| **valid).count() }
+-    fn for_each(&self, mut visit: impl FnMut(usize)) {
++    fn try_for_each<E>(&self, mut visit: impl FnMut(usize) -> Result<(), E>) -> Result<(), E> {
+         for (index, valid) in self.0.iter().enumerate() {
+-            if *valid { visit(index); }
++            if *valid { visit(index)?; }
+         }
++        Ok(())
+     }
+ }
+ 
+@@ -161,3 +164,27 @@
+         assert_eq!(error.to_string(), message);
+     }
+ }
++
++
++#[test]
++fn bitmap_selection_bounds_sliced_rows_and_stops_at_first_error() {
++    for offset in 0..8 {
++        for len in [0, 1, 63, 64, 65, 129] {
++            for bytes in [[0xff; 18], [0xa5; 18]] {
++                let selection = BitmapView::new(&bytes, offset, len);
++                let expected: Vec<_> = (0..len).filter(|i| bytes[(i + offset) / 8] & (1 << ((i + offset) % 8)) != 0).collect();
++                let mut actual = Vec::new();
++                selection.for_each(|i| actual.push(i));
++                assert_eq!(actual, expected);
++                assert_eq!(selection.count(), expected.len());
++                let mut visited = Vec::new();
++                let result = selection.try_for_each(|i| {
++                    visited.push(i);
++                    if visited.len() == 2 { Err("stop") } else { Ok(()) }
++                });
++                assert_eq!(visited, expected[..expected.len().min(2)]);
++                assert_eq!(result, if expected.len() >= 2 { Err("stop") } else { Ok(()) });
++            }
++        }
++    }
++}
+--- a/vortex-array/src/scalar_fn/unstable/rofl/batch.rs
++++ b/vortex-array/src/scalar_fn/unstable/rofl/batch.rs
+@@ -30,14 +30,16 @@
+ 
+ /// Resolved Vortex validity, retaining bitmap storage and offsets.
+ pub struct VortexSelection(Mask);
+-impl Selection for VortexSelection {
++// SAFETY: Mask retains its length and true count. Each traversal visits the immutable mask
++// in increasing order and returns immediately if its callback fails.
++unsafe impl Selection for VortexSelection {
+     fn len(&self) -> usize { self.0.len() }
+     fn count(&self) -> usize { self.0.true_count() }
+-    fn for_each(&self, mut visit: impl FnMut(usize)) {
++    fn try_for_each<E>(&self, mut visit: impl FnMut(usize) -> Result<(), E>) -> Result<(), E> {
+         match &self.0 {
+-            Mask::AllTrue(rows) => (0..*rows).for_each(visit),
+-            Mask::AllFalse(_) => {},
+-            Mask::Values(values) => values.bit_buffer().for_each_set_index(|index| visit(index)),
++            Mask::AllTrue(rows) => (0..*rows).try_for_each(visit),
++            Mask::AllFalse(_) => Ok(()),
++            Mask::Values(values) => values.bit_buffer().try_for_each_set_index(|index| visit(index)),
+         }
+     }
+ }
+--- a/vortex-array/src/scalar_fn/unstable/rofl/input.rs
++++ b/vortex-array/src/scalar_fn/unstable/rofl/input.rs
+@@ -3,7 +3,7 @@
+ 
+ //! Vortex decoders retain native owners and lend the shared row value families.
+ 
+-use ::rofl::{FixedSizeList, InputBinding, RowKind, RowView, Utf8};
++use ::rofl::{FixedSizeList, InputBinding, RowKind, RowView, TextBinding, TextValue, Utf8};
+ use vortex_buffer::{BitBuffer, Buffer};
+ use vortex_error::{VortexResult, vortex_bail, vortex_ensure};
+ 
+@@ -77,6 +77,50 @@
+     fn view(decoded: &Self::Decoded) -> StringView<'_> { StringView(Utf8Column::view(decoded)) }
+ }
+ 
++/// Vortex text rows retain the validated string view until bytes are requested.
++pub struct VortexText;
++
++impl RowKind for VortexText {
++    type Value<'a> = crate::scalar_fn::unstable::row::Utf8View<'a>;
++}
++
++impl TextValue for crate::scalar_fn::unstable::row::Utf8View<'_> {
++    fn as_str(&self) -> &str { self.as_str() }
++
++    fn prefix(&self, len: usize) -> &[u8] {
++        if (self.raw_view().len() as usize) < len { return &[]; }
++        if len <= 4 { return &self.prefix()[..len]; }
++        &self.as_str().as_bytes()[..len]
++    }
++}
++
++// SAFETY: the existing decoder validates UTF-8, sanitizes nulls, and retains both headers and data.
++unsafe impl<'a> RowView<'a, VortexText> for StringView<'a> {
++    fn len(&self) -> usize { self.0.len() }
++    unsafe fn get_unchecked(&self, index: usize) -> <VortexText as RowKind>::Value<'a> {
++        // SAFETY: the caller supplies an index within the retained validated view.
++        unsafe { Utf8Column::get_from_view_unchecked(&self.0, index) }
++    }
++}
++
++impl InputBinding<VortexText> for VortexHost {
++    type Decoded = <Utf8Column as InputElement>::Column;
++    type View<'a> = StringView<'a>;
++    const DENSE_SAFE: bool = true;
++    const DECODE_INFALLIBLE: bool = true;
++    fn validate(dtype: &DType) -> VortexResult<()> { <Self as InputBinding<Utf8>>::validate(dtype) }
++    fn decode(column: &ArrayRef, scalar: bool, ctx: &mut ExecutionCtx) -> VortexResult<Self::Decoded> {
++        <Self as InputBinding<Utf8>>::decode(column, scalar, ctx)
++    }
++    fn can_decode_null_tolerant(_: &ArrayRef) -> VortexResult<bool> { Ok(true) }
++    fn view(decoded: &Self::Decoded) -> StringView<'_> { StringView(Utf8Column::view(decoded)) }
++}
++
++impl TextBinding for VortexHost {
++    type Text = VortexText;
++    fn uses_views(_: &DType) -> bool { true }
++}
++
+ /// Retained list children and an explicit count of logical rows.
+ pub struct ListValues<T> { values: Buffer<T>, width: usize, rows: usize }
+ /// Borrowed fixed-size row view.
+@@ -84,6 +128,7 @@
+ // SAFETY: decoding validates rows * width against this retained child slice, including width zero.
+ unsafe impl<'a, T: 'static> RowView<'a, FixedSizeList<T>> for ListView<'a, T> {
+     fn len(&self) -> usize { self.rows }
++    #[inline]
+     unsafe fn get_unchecked(&self, index: usize) -> &'a [T] {
+         let start = index * self.width;
+         // SAFETY: decoded shape and the caller's index establish the full child range.
+--- a/vortex-array/src/scalar_fn/unstable/rofl/output.rs
++++ b/vortex-array/src/scalar_fn/unstable/rofl/output.rs
+@@ -78,6 +78,7 @@
+ pub struct VortexUtf8Sink(legacy::Utf8Sink);
+ impl WriteUtf8 for legacy::Utf8Writer<'_> {
+     fn write(self, value: &str) { self.write(value); }
++    fn write_parts(self, parts: &[&str]) { self.write_parts(parts); }
+ }
+ impl Utf8Output for VortexHost { type Sink = VortexUtf8Sink; }
+ // SAFETY: delegation retains the existing initialized UTF-8 row mapping and ownership contract.
+--- a/vortex-array/src/scalar_fn/unstable/row/types/sink/utf8.rs
++++ b/vortex-array/src/scalar_fn/unstable/row/types/sink/utf8.rs
+@@ -63,31 +63,39 @@
+ impl Utf8Writer<'_> {
+     /// Write a string into this row and consume the row handle.
+     pub fn write(self, value: impl AsRef<str>) {
+-        let bytes = value.as_ref().as_bytes();
+-        if bytes.len() <= BinaryView::MAX_INLINED_SIZE {
+-            *self.view = BinaryView::make_view(bytes, 0, 0);
++        self.write_parts(&[value.as_ref()]);
++    }
++
++    /// Concatenate string parts directly into this row's output-owned storage.
++    pub fn write_parts(self, parts: &[&str]) {
++        let len = parts.iter().try_fold(0usize, |len, part| len.checked_add(part.len()))
++            .vortex_expect("Utf8Sink string byte count must fit usize");
++        if len <= BinaryView::MAX_INLINED_SIZE {
++            let mut bytes = [0; BinaryView::MAX_INLINED_SIZE];
++            let mut offset = 0;
++            for part in parts {
++                bytes[offset..offset + part.len()].copy_from_slice(part.as_bytes());
++                offset += part.len();
++            }
++            *self.view = BinaryView::make_view(&bytes[..len], 0, 0);
+             return;
+         }
+ 
+-        let needs_buffer = self
+-            .buffers
+-            .last()
+-            .is_none_or(|buffer| buffer.len().saturating_add(bytes.len()) > MAX_BUFFER_LEN);
++        let needs_buffer = self.buffers.last()
++            .is_none_or(|buffer| buffer.len().saturating_add(len) > MAX_BUFFER_LEN);
+         if needs_buffer {
+-            self.buffers.push(self.allocator.with_capacity(bytes.len()));
+-        }
+-
++            self.buffers.push(self.allocator.with_capacity(len));
++        }
+         let buffer_index = u32::try_from(self.buffers.len() - 1)
+             .vortex_expect("Utf8Sink data buffer count must fit in u32");
+-        let buffer = self
+-            .buffers
+-            .last_mut()
++        let buffer = self.buffers.last_mut()
+             .vortex_expect("Utf8Sink creates a data buffer before writing");
+-        let offset =
+-            u32::try_from(buffer.len()).vortex_expect("Utf8Sink buffer offset must fit in u32");
+-
+-        buffer.extend_from_slice(bytes);
+-        *self.view = BinaryView::make_view(bytes, buffer_index, offset);
++        let offset = u32::try_from(buffer.len())
++            .vortex_expect("Utf8Sink buffer offset must fit in u32");
++        for part in parts {
++            buffer.extend_from_slice(part.as_bytes());
++        }
++        *self.view = BinaryView::make_view(&buffer[offset as usize..], buffer_index, offset);
+     }
+ }
+ 

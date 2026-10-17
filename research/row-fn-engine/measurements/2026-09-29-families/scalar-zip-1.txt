@@ -1,0 +1,44 @@
+arrow_families                         fastest       │ slowest       │ median        │ mean          │ samples │ iters
+├─ arrow_native                                      │               │               │               │         │
+│  ├─ 0                                              │               │               │               │         │
+│  │  ├─ LikeLiteralScalar             54.38 ns      │ 97.35 ns      │ 56.34 ns      │ 56.65 ns      │ 1000    │ 128000
+│  │  ├─ LikeLiteralScalarDense        48.84 ns      │ 150.7 ns      │ 54.38 ns      │ 54.98 ns      │ 3253    │ 416384
+│  │  ├─ LikeLiteralViaPredicate       42.34 ns      │ 158.2 ns      │ 48.84 ns      │ 49.21 ns      │ 3542    │ 453376
+│  │  ╰─ LikeLiteralViaPredicateDense  45.91 ns      │ 163.1 ns      │ 47.55 ns      │ 48.07 ns      │ 3600    │ 460800
+│  ├─ 64                                             │               │               │               │         │
+│  │  ├─ LikeLiteralScalar             146.8 ns      │ 577.8 ns      │ 149.4 ns      │ 152.6 ns      │ 5284    │ 169088
+│  │  ├─ LikeLiteralScalarDense        141.6 ns      │ 929.3 ns      │ 154.6 ns      │ 157.2 ns      │ 5146    │ 164672
+│  │  ├─ LikeLiteralViaPredicate       124.7 ns      │ 692.3 ns      │ 148.1 ns      │ 146 ns        │ 5472    │ 175104
+│  │  ╰─ LikeLiteralViaPredicateDense  127.2 ns      │ 461.9 ns      │ 144.2 ns      │ 145 ns        │ 5468    │ 174976
+│  ├─ 1024                                           │               │               │               │         │
+│  │  ├─ LikeLiteralScalar             1.041 µs      │ 3.666 µs      │ 1.176 µs      │ 1.177 µs      │ 6131    │ 24524
+│  │  ├─ LikeLiteralScalarDense        999.7 ns      │ 4.02 µs       │ 1.135 µs      │ 1.141 µs      │ 6321    │ 25284
+│  │  ├─ LikeLiteralViaPredicate       1.009 µs      │ 6.239 µs      │ 1.155 µs      │ 1.187 µs      │ 6081    │ 24324
+│  │  ╰─ LikeLiteralViaPredicateDense  1.01 µs       │ 3.046 µs      │ 1.124 µs      │ 1.14 µs       │ 3190    │ 25520
+│  ╰─ 16384                                          │               │               │               │         │
+│     ├─ LikeLiteralScalar             15.24 µs      │ 33.24 µs      │ 17.91 µs      │ 17.88 µs      │ 1666    │ 1666
+│     ├─ LikeLiteralScalarDense        15.66 µs      │ 34.49 µs      │ 16.74 µs      │ 16.94 µs      │ 1760    │ 1760
+│     ├─ LikeLiteralViaPredicate       15.66 µs      │ 35.91 µs      │ 17.62 µs      │ 17.88 µs      │ 1667    │ 1667
+│     ╰─ LikeLiteralViaPredicateDense  14.99 µs      │ 29.87 µs      │ 16.74 µs      │ 16.89 µs      │ 1764    │ 1764
+╰─ arrow_rofl                                        │               │               │               │         │
+   ├─ 0                                              │               │               │               │         │
+   │  ├─ LikeLiteralScalar             614.2 ns      │ 2.176 µs      │ 635 ns        │ 641.2 ns      │ 5590    │ 44720
+   │  ├─ LikeLiteralScalarDense        551.7 ns      │ 3.187 µs      │ 635 ns        │ 634 ns        │ 5655    │ 45240
+   │  ├─ LikeLiteralViaPredicate       541.2 ns      │ 4.114 µs      │ 635.2 ns      │ 637.8 ns      │ 11084   │ 44336
+   │  ╰─ LikeLiteralViaPredicateDense  562.2 ns      │ 2.515 µs      │ 635 ns        │ 638.6 ns      │ 5627    │ 45016
+   ├─ 64                                             │               │               │               │         │
+   │  ├─ LikeLiteralScalar             869.5 ns      │ 2.51 µs       │ 973.7 ns      │ 982 ns        │ 3685    │ 29480
+   │  ├─ LikeLiteralScalarDense        791.4 ns      │ 2.52 µs       │ 900.7 ns      │ 908.1 ns      │ 3981    │ 31848
+   │  ├─ LikeLiteralViaPredicate       666.3 ns      │ 3.978 µs      │ 775.7 ns      │ 775.9 ns      │ 4610    │ 36880
+   │  ╰─ LikeLiteralViaPredicateDense  676.7 ns      │ 2.395 µs      │ 765.3 ns      │ 768.8 ns      │ 4662    │ 37296
+   ├─ 1024                                           │               │               │               │         │
+   │  ├─ LikeLiteralScalar             3.874 µs      │ 16.2 µs       │ 4.374 µs      │ 4.403 µs      │ 6625    │ 6625
+   │  ├─ LikeLiteralScalarDense        3.624 µs      │ 16.58 µs      │ 4.166 µs      │ 4.201 µs      │ 6935    │ 6935
+   │  ├─ LikeLiteralViaPredicate       2.02 µs       │ 11.08 µs      │ 2.312 µs      │ 2.292 µs      │ 6338    │ 12676
+   │  ╰─ LikeLiteralViaPredicateDense  2.124 µs      │ 8.958 µs      │ 2.416 µs      │ 2.389 µs      │ 6098    │ 12196
+   ╰─ 16384                                          │               │               │               │         │
+      ├─ LikeLiteralScalar             50.99 µs      │ 77.99 µs      │ 56.91 µs      │ 57.2 µs       │ 1000    │ 1000
+      ├─ LikeLiteralScalarDense        49.49 µs      │ 73.08 µs      │ 55.2 µs       │ 56.26 µs      │ 1000    │ 1000
+      ├─ LikeLiteralViaPredicate       21.99 µs      │ 49.58 µs      │ 25.12 µs      │ 25.19 µs      │ 1185    │ 1185
+      ╰─ LikeLiteralViaPredicateDense  23.62 µs      │ 44.24 µs      │ 26.62 µs      │ 26.7 µs       │ 1119    │ 1119
+

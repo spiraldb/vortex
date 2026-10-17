@@ -1,0 +1,298 @@
+[
+  {
+    "path": "target/rofl-diagnosis/lists",
+    "bytes": 7321792
+  },
+  {
+    "path": "target/rofl-diagnosis/baseline",
+    "bytes": 10291056
+  },
+  {
+    "path": "target/rofl-diagnosis/inline",
+    "bytes": 10295536
+  },
+  {
+    "path": "target/rofl-diagnosis/final",
+    "bytes": 10291008
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.11.rcgu.ll",
+    "bytes": 1110112
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.01.rcgu.ll",
+    "bytes": 8626635
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.08.rcgu.ll",
+    "bytes": 2372644
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.09.rcgu.ll",
+    "bytes": 2398583
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.00.rcgu.ll",
+    "bytes": 10640328
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.10.rcgu.ll",
+    "bytes": 2050222
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.12.rcgu.ll",
+    "bytes": 2252452
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.02.rcgu.ll",
+    "bytes": 1559994
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.03.rcgu.ll",
+    "bytes": 1006729
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.13.rcgu.ll",
+    "bytes": 3092670
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.06.rcgu.ll",
+    "bytes": 2169649
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.07.rcgu.ll",
+    "bytes": 1556835
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.15.rcgu.ll",
+    "bytes": 2298480
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.05.rcgu.ll",
+    "bytes": 1017775
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.04.rcgu.ll",
+    "bytes": 3937527
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.14.rcgu.ll",
+    "bytes": 1738812
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.06.rcgu.s",
+    "bytes": 1127993
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.14.rcgu.s",
+    "bytes": 1002936
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.08.rcgu.s",
+    "bytes": 1543739
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.04.rcgu.s",
+    "bytes": 2051471
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.00.rcgu.s",
+    "bytes": 5871982
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.12.rcgu.s",
+    "bytes": 1455863
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.10.rcgu.s",
+    "bytes": 1293477
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.02.rcgu.s",
+    "bytes": 866170
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.07.rcgu.s",
+    "bytes": 891044
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.15.rcgu.s",
+    "bytes": 1415711
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.09.rcgu.s",
+    "bytes": 1395234
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.05.rcgu.s",
+    "bytes": 528248
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.01.rcgu.s",
+    "bytes": 4087115
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.13.rcgu.s",
+    "bytes": 1890539
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.11.rcgu.s",
+    "bytes": 795626
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.03.rcgu.s",
+    "bytes": 782158
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.06.rcgu.ll",
+    "bytes": 3141787
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.07.rcgu.ll",
+    "bytes": 1598974
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.05.rcgu.ll",
+    "bytes": 1828438
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.15.rcgu.ll",
+    "bytes": 2012009
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.14.rcgu.ll",
+    "bytes": 1603594
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.04.rcgu.ll",
+    "bytes": 994916
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.08.rcgu.ll",
+    "bytes": 2682480
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.01.rcgu.ll",
+    "bytes": 1356608
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.11.rcgu.ll",
+    "bytes": 2055219
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.10.rcgu.ll",
+    "bytes": 1959472
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.00.rcgu.ll",
+    "bytes": 8790667
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.09.rcgu.ll",
+    "bytes": 1691725
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.02.rcgu.ll",
+    "bytes": 4609075
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.12.rcgu.ll",
+    "bytes": 2223743
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.13.rcgu.ll",
+    "bytes": 1822590
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.03.rcgu.ll",
+    "bytes": 1003011
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.05.rcgu.s",
+    "bytes": 1154652
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.09.rcgu.s",
+    "bytes": 1002186
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.15.rcgu.s",
+    "bytes": 1310766
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.07.rcgu.s",
+    "bytes": 919219
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.03.rcgu.s",
+    "bytes": 711654
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.11.rcgu.s",
+    "bytes": 1214482
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.13.rcgu.s",
+    "bytes": 1202426
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.01.rcgu.s",
+    "bytes": 733393
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.04.rcgu.s",
+    "bytes": 556086
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.08.rcgu.s",
+    "bytes": 1697188
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.14.rcgu.s",
+    "bytes": 982409
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.06.rcgu.s",
+    "bytes": 1975209
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.02.rcgu.s",
+    "bytes": 2562493
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.10.rcgu.s",
+    "bytes": 1223816
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.12.rcgu.s",
+    "bytes": 1276896
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.00.rcgu.s",
+    "bytes": 4219778
+  },
+  {
+    "path": "/tmp/rofl-diagnosis-build.log",
+    "bytes": 163
+  },
+  {
+    "path": "/tmp/rofl-diagnosis-final-build.log",
+    "bytes": 163
+  },
+  {
+    "path": "/tmp/rofl-diagnosis-tests.log",
+    "bytes": 1272
+  },
+  {
+    "path": "/tmp/rofl-diagnosis-optimized-tests.log",
+    "bytes": 1271
+  },
+  {
+    "path": "/tmp/rofl-diagnosis-list-build.log",
+    "bytes": 163
+  },
+  {
+    "path": "/tmp/rofl-diagnosis-candidate.log",
+    "bytes": 248
+  }
+]

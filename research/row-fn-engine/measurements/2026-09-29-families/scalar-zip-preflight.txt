@@ -1,0 +1,47 @@
+   Compiling rofl-examples v0.1.0 (/Users/connor/spiral/vortex-data/vortex4/rofl-examples)
+    Finished `bench` profile [optimized + debuginfo] target(s) in 10.41s
+     Running benches/arrow_families.rs (target/release/deps/arrow_families-e34007219fb0c2ce)
+arrow_families
+├─ arrow_native
+│  ├─ 0
+│  │  ├─ LikeLiteralScalar
+│  │  ├─ LikeLiteralScalarDense
+│  │  ├─ LikeLiteralViaPredicate
+│  │  ╰─ LikeLiteralViaPredicateDense
+│  ├─ 64
+│  │  ├─ LikeLiteralScalar
+│  │  ├─ LikeLiteralScalarDense
+│  │  ├─ LikeLiteralViaPredicate
+│  │  ╰─ LikeLiteralViaPredicateDense
+│  ├─ 1024
+│  │  ├─ LikeLiteralScalar
+│  │  ├─ LikeLiteralScalarDense
+│  │  ├─ LikeLiteralViaPredicate
+│  │  ╰─ LikeLiteralViaPredicateDense
+│  ╰─ 16384
+│     ├─ LikeLiteralScalar
+│     ├─ LikeLiteralScalarDense
+│     ├─ LikeLiteralViaPredicate
+│     ╰─ LikeLiteralViaPredicateDense
+╰─ arrow_rofl
+   ├─ 0
+   │  ├─ LikeLiteralScalar
+   │  ├─ LikeLiteralScalarDense
+   │  ├─ LikeLiteralViaPredicate
+   │  ╰─ LikeLiteralViaPredicateDense
+   ├─ 64
+   │  ├─ LikeLiteralScalar
+   │  ├─ LikeLiteralScalarDense
+   │  ├─ LikeLiteralViaPredicate
+   │  ╰─ LikeLiteralViaPredicateDense
+   ├─ 1024
+   │  ├─ LikeLiteralScalar
+   │  ├─ LikeLiteralScalarDense
+   │  ├─ LikeLiteralViaPredicate
+   │  ╰─ LikeLiteralViaPredicateDense
+   ╰─ 16384
+      ├─ LikeLiteralScalar
+      ├─ LikeLiteralScalarDense
+      ├─ LikeLiteralViaPredicate
+      ╰─ LikeLiteralViaPredicateDense
+

@@ -1,0 +1,101 @@
+Timer precision: 23 ns
+host_comparison                    fastest       │ slowest       │ median        │ mean          │ samples │ iters
+├─ arrow_native                                  │               │               │               │         │
+│  ├─ 64                                         │               │               │               │         │
+│  │  ├─ ByteLengthView            62.27 ns      │ 1.606 µs      │ 66.83 ns      │ 67.72 ns      │ 24578   │ 786496
+│  │  ├─ LikeLiteralScalar         241.5 ns      │ 8.845 µs      │ 260.3 ns      │ 281.3 ns      │ 34428   │ 275424
+│  │  ├─ StartsWithScalar          222.9 ns      │ 9.064 µs      │ 240.3 ns      │ 259.3 ns      │ 36838   │ 294704
+│  │  ├─ StringEqualViewShort      247.2 ns      │ 4.4 µs        │ 264.8 ns      │ 268.2 ns      │ 34415   │ 275320
+│  │  ├─ StringLessThanViewScalar  234.5 ns      │ 1.361 µs      │ 246.1 ns      │ 250.5 ns      │ 19902   │ 318432
+│  │  ├─ WrappingMultiply          75.17 ns      │ 642.1 ns      │ 81.24 ns      │ 82.46 ns      │ 23166   │ 741312
+│  │  ╰─ WrappingNegate            50.55 ns      │ 544 ns        │ 55.83 ns      │ 56.58 ns      │ 28795   │ 921440
+│  ├─ 1024                                       │               │               │               │         │
+│  │  ├─ ByteLengthView            195.7 ns      │ 16.32 µs      │ 208.7 ns      │ 216.7 ns      │ 191722  │ 191722
+│  │  ├─ LikeLiteralScalar         1.968 µs      │ 19.22 µs      │ 2.117 µs      │ 2.139 µs      │ 40630   │ 40630
+│  │  ├─ StartsWithScalar          1.936 µs      │ 15.96 µs      │ 2.102 µs      │ 2.131 µs      │ 40802   │ 40802
+│  │  ├─ StringEqualViewShort      1.015 µs      │ 10.17 µs      │ 1.074 µs      │ 1.089 µs      │ 39008   │ 78016
+│  │  ├─ StringLessThanViewScalar  2.116 µs      │ 17.48 µs      │ 2.221 µs      │ 2.245 µs      │ 39315   │ 39315
+│  │  ├─ WrappingMultiply          260 ns        │ 2.237 µs      │ 287 ns        │ 287.6 ns      │ 32922   │ 263376
+│  │  ╰─ WrappingNegate            213.6 ns      │ 2.46 µs       │ 226.4 ns      │ 230.4 ns      │ 19144   │ 306304
+│  ╰─ 16384                                      │               │               │               │         │
+│     ├─ ByteLengthView            3.436 µs      │ 19.23 µs      │ 3.682 µs      │ 3.723 µs      │ 24488   │ 24488
+│     ├─ LikeLiteralScalar         28.43 µs      │ 44.39 µs      │ 30.31 µs      │ 30.92 µs      │ 3198    │ 3198
+│     ├─ StartsWithScalar          29.18 µs      │ 43.02 µs      │ 30.06 µs      │ 30.53 µs      │ 3239    │ 3239
+│     ├─ StringEqualViewShort      13.64 µs      │ 29.71 µs      │ 14.17 µs      │ 14.23 µs      │ 6850    │ 6850
+│     ├─ StringLessThanViewScalar  32.26 µs      │ 51.27 µs      │ 33.52 µs      │ 34.16 µs      │ 2899    │ 2899
+│     ├─ WrappingMultiply          4.073 µs      │ 23.27 µs      │ 4.708 µs      │ 4.733 µs      │ 19484   │ 19484
+│     ╰─ WrappingNegate            2.876 µs      │ 47.45 µs      │ 3.329 µs      │ 3.321 µs      │ 27376   │ 27376
+├─ arrow_rofl                                    │               │               │               │         │
+│  ├─ 64                                         │               │               │               │         │
+│  │  ├─ ByteLengthView            774.7 ns      │ 16.36 µs      │ 847.7 ns      │ 858.1 ns      │ 84578   │ 84578
+│  │  ├─ LikeLiteralScalar         1.497 µs      │ 18.82 µs      │ 1.608 µs      │ 1.647 µs      │ 50847   │ 50847
+│  │  ├─ StartsWithScalar          1.045 µs      │ 44.16 µs      │ 1.163 µs      │ 1.193 µs      │ 65849   │ 65849
+│  │  ├─ StringEqualViewShort      1.109 µs      │ 23.34 µs      │ 1.22 µs       │ 1.25 µs       │ 62732   │ 62732
+│  │  ├─ StringLessThanViewScalar  1.271 µs      │ 24.72 µs      │ 1.388 µs      │ 1.423 µs      │ 57345   │ 57345
+│  │  ├─ WrappingMultiply          844.7 ns      │ 15.36 µs      │ 924.7 ns      │ 935.9 ns      │ 79593   │ 79593
+│  │  ╰─ WrappingNegate            696.7 ns      │ 5.296 µs      │ 768.7 ns      │ 779.1 ns      │ 27967   │ 111868
+│  ├─ 1024                                       │               │               │               │         │
+│  │  ├─ ByteLengthView            953.7 ns      │ 20.13 µs      │ 1.044 µs      │ 1.056 µs      │ 72181   │ 72181
+│  │  ├─ LikeLiteralScalar         7.929 µs      │ 54.81 µs      │ 8.594 µs      │ 8.721 µs      │ 11048   │ 11048
+│  │  ├─ StartsWithScalar          3.181 µs      │ 19.24 µs      │ 3.395 µs      │ 3.451 µs      │ 26472   │ 26472
+│  │  ├─ StringEqualViewShort      1.879 µs      │ 35.74 µs      │ 1.986 µs      │ 2.018 µs      │ 42329   │ 42329
+│  │  ├─ StringLessThanViewScalar  6.22 µs       │ 22.27 µs      │ 6.623 µs      │ 6.717 µs      │ 14194   │ 14194
+│  │  ├─ WrappingMultiply          1.065 µs      │ 49.3 µs       │ 1.16 µs       │ 1.172 µs      │ 66711   │ 66711
+│  │  ╰─ WrappingNegate            829.7 ns      │ 16.3 µs       │ 920.7 ns      │ 929.4 ns      │ 79960   │ 79960
+│  ╰─ 16384                                      │               │               │               │         │
+│     ├─ ByteLengthView            4.203 µs      │ 22.5 µs       │ 4.445 µs      │ 4.554 µs      │ 20013   │ 20013
+│     ├─ LikeLiteralScalar         108 µs        │ 137.4 µs      │ 115.2 µs      │ 116.5 µs      │ 856     │ 856
+│     ├─ StartsWithScalar          37.18 µs      │ 57.97 µs      │ 38.88 µs      │ 39.7 µs       │ 2496    │ 2496
+│     ├─ StringEqualViewShort      14.26 µs      │ 36.54 µs      │ 14.85 µs      │ 15.06 µs      │ 6477    │ 6477
+│     ├─ StringLessThanViewScalar  82.87 µs      │ 110.2 µs      │ 88.05 µs      │ 88.63 µs      │ 1124    │ 1124
+│     ├─ WrappingMultiply          4.965 µs      │ 28.71 µs      │ 5.724 µs      │ 5.58 µs       │ 16436   │ 16436
+│     ╰─ WrappingNegate            3.502 µs      │ 52.51 µs      │ 3.738 µs      │ 3.794 µs      │ 23715   │ 23715
+├─ vortex_legacy_byte_length                     │               │               │               │         │
+│  ├─ 64                           909.7 ns      │ 19.19 µs      │ 982.7 ns      │ 996.8 ns      │ 70303   │ 70303
+│  ├─ 1024                         2.845 µs      │ 25.39 µs      │ 3.021 µs      │ 3.064 µs      │ 28644   │ 28644
+│  ╰─ 16384                        32.04 µs      │ 72.7 µs       │ 34.02 µs      │ 34.84 µs      │ 2832    │ 2832
+├─ vortex_rofl_bench                             │               │               │               │         │
+│  ├─ 64                                         │               │               │               │         │
+│  │  ├─ ByteLengthView            907.2 ns      │ 9.739 µs      │ 967.4 ns      │ 981.1 ns      │ 20884   │ 83536
+│  │  ├─ LikeLiteralScalar         2.788 µs      │ 23.3 µs       │ 2.977 µs      │ 3.022 µs      │ 28496   │ 28496
+│  │  ├─ StartsWithScalar          2.177 µs      │ 20.15 µs      │ 2.302 µs      │ 2.338 µs      │ 35524   │ 35524
+│  │  ├─ StringEqualViewShort      1.516 µs      │ 17.27 µs      │ 1.644 µs      │ 1.668 µs      │ 46284   │ 46284
+│  │  ├─ StringLessThanViewScalar  2.399 µs      │ 20.84 µs      │ 2.562 µs      │ 2.6 µs        │ 32435   │ 32435
+│  │  ├─ WrappingMultiply          513.7 ns      │ 4.33 µs       │ 541.4 ns      │ 549 ns        │ 33078   │ 132312
+│  │  ╰─ WrappingNegate            427.7 ns      │ 5.977 µs      │ 449.8 ns      │ 455 ns        │ 19936   │ 159488
+│  ├─ 1024                                       │               │               │               │         │
+│  │  ├─ ByteLengthView            1.127 µs      │ 119.1 µs      │ 1.219 µs      │ 1.24 µs       │ 59789   │ 59789
+│  │  ├─ LikeLiteralScalar         11.5 µs       │ 28.09 µs      │ 12.21 µs      │ 12.37 µs      │ 7761    │ 7761
+│  │  ├─ StartsWithScalar          5.945 µs      │ 40.59 µs      │ 6.233 µs      │ 6.317 µs      │ 14648   │ 14648
+│  │  ├─ StringEqualViewShort      4.508 µs      │ 21.14 µs      │ 4.738 µs      │ 4.826 µs      │ 18744   │ 18744
+│  │  ├─ StringLessThanViewScalar  8.921 µs      │ 24.75 µs      │ 9.406 µs      │ 9.634 µs      │ 9854    │ 9854
+│  │  ├─ WrappingMultiply          681.7 ns      │ 21.08 µs      │ 730.7 ns      │ 743 ns        │ 86530   │ 86530
+│  │  ╰─ WrappingNegate            562.7 ns      │ 10.01 µs      │ 610.4 ns      │ 619.6 ns      │ 30101   │ 120404
+│  ╰─ 16384                                      │               │               │               │         │
+│     ├─ ByteLengthView            3.987 µs      │ 20.6 µs       │ 4.194 µs      │ 4.265 µs      │ 21122   │ 21122
+│     ├─ LikeLiteralScalar         149.7 µs      │ 212 µs        │ 158.1 µs      │ 159.1 µs      │ 626     │ 626
+│     ├─ StartsWithScalar          64.68 µs      │ 104.4 µs      │ 69.42 µs      │ 69.58 µs      │ 1427    │ 1427
+│     ├─ StringEqualViewShort      50.11 µs      │ 75.8 µs       │ 52.2 µs       │ 53.31 µs      │ 1858    │ 1858
+│     ├─ StringLessThanViewScalar  110.6 µs      │ 216.5 µs      │ 122 µs        │ 122.6 µs      │ 812     │ 812
+│     ├─ WrappingMultiply          4.339 µs      │ 45.09 µs      │ 5.034 µs      │ 5.016 µs      │ 18035   │ 18035
+│     ╰─ WrappingNegate            3.263 µs      │ 19.38 µs      │ 3.517 µs      │ 3.584 µs      │ 24677   │ 24677
+╰─ vortex_string_decode                          │               │               │               │         │
+   ├─ 64                                         │               │               │               │         │
+   │  ├─ ByteLengthView            67.08 ns      │ 318.7 ns      │ 69.88 ns      │ 70.72 ns      │ 8462    │ 541568
+   │  ├─ LikeLiteralScalar         67.21 ns      │ 277.7 ns      │ 70.02 ns      │ 70.76 ns      │ 8339    │ 533696
+   │  ├─ StartsWithScalar          66.77 ns      │ 250.3 ns      │ 69.44 ns      │ 69.95 ns      │ 8549    │ 547136
+   │  ├─ StringEqualViewShort      46.58 ns      │ 271.3 ns      │ 48.52 ns      │ 49.16 ns      │ 9632    │ 616448
+   │  ╰─ StringLessThanViewScalar  67.99 ns      │ 447.3 ns      │ 71.05 ns      │ 71.92 ns      │ 16319   │ 522208
+   ├─ 1024                                       │               │               │               │         │
+   │  ├─ ByteLengthView            83.67 ns      │ 469.9 ns      │ 86.71 ns      │ 87.5 ns       │ 14803   │ 473696
+   │  ├─ LikeLiteralScalar         83.14 ns      │ 2.085 µs      │ 86.58 ns      │ 87.93 ns      │ 14624   │ 467968
+   │  ├─ StartsWithScalar          84.46 ns      │ 484.5 ns      │ 87.99 ns      │ 89.53 ns      │ 14447   │ 462304
+   │  ├─ StringEqualViewShort      46.35 ns      │ 357.7 ns      │ 48.33 ns      │ 49.1 ns       │ 9945    │ 636480
+   │  ╰─ StringLessThanViewScalar  84.24 ns      │ 542.1 ns      │ 87.71 ns      │ 88.69 ns      │ 14614   │ 467648
+   ╰─ 16384                                      │               │               │               │         │
+      ├─ ByteLengthView            147.6 ns      │ 1.054 µs      │ 155 ns        │ 157.6 ns      │ 20619   │ 329904
+      ├─ LikeLiteralScalar         154.5 ns      │ 1.115 µs      │ 164.8 ns      │ 167.5 ns      │ 19959   │ 319344
+      ├─ StartsWithScalar          152.8 ns      │ 1.121 µs      │ 163.7 ns      │ 166.5 ns      │ 19960   │ 319360
+      ├─ StringEqualViewShort      46.46 ns      │ 245.1 ns      │ 48.36 ns      │ 48.83 ns      │ 10002   │ 640128
+      ╰─ StringLessThanViewScalar  153.7 ns      │ 2.096 µs      │ 164.9 ns      │ 167.8 ns      │ 19743   │ 315888
+

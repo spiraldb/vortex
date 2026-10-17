@@ -3,6 +3,10 @@
 
 # Proposed library design
 
+The experimental source now implements the accepted extraction boundary. See the
+[implementation record](implementation.md) for current behavior and unrun verification. Alternatives below
+remain research context where they differ from that implementation.
+
 [Overview](README.md)
 
 Share function semantics and typed execution. Let each host bind its types, provide input views,

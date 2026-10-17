@@ -1,0 +1,47 @@
+{
+  "command": [
+    "cargo",
+    "bench",
+    "--locked",
+    "-p",
+    "rofl-examples",
+    "--bench",
+    "arrow_families",
+    "--bench",
+    "arrow_scalar",
+    "--bench",
+    "arrow_workloads",
+    "--bench",
+    "boundaries",
+    "--no-run",
+    "--message-format=json"
+  ],
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: aarch64-apple-darwin\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+  "branch": "ct/rofl-assume-valid-utf8",
+  "head": "24a96cece436409dc4f60f94c6b846d6af017804",
+  "environment": {
+    "RUSTFLAGS": null,
+    "RUSTC_WRAPPER": null,
+    "CARGO_BUILD_RUSTFLAGS": null,
+    "CARGO_ENCODED_RUSTFLAGS": null
+  },
+  "exit_code": 0,
+  "executables": {
+    "arrow_workloads": {
+      "path": "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/arrow_workloads-cfa760053e788edd",
+      "sha256": "07b2370b874ae59ed1f9ab75289b61807b7cfdc54d37622b06e06958b4fc073d"
+    },
+    "arrow_scalar": {
+      "path": "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/arrow_scalar-5579b4d9839f28d6",
+      "sha256": "7623b6d2c2eee407dc59b4fdd7b03eeac0f1e2896c599e14598a755d5ee58b7a"
+    },
+    "boundaries": {
+      "path": "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/boundaries-9e8fbf107389efff",
+      "sha256": "c4a01f3582a4635d0a5767def54064da14897c7efbb33b72dd5e992a5da8d722"
+    },
+    "arrow_families": {
+      "path": "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/arrow_families-e34007219fb0c2ce",
+      "sha256": "00e41378374bed7be0d929b01adad2e1029acb5088e0e76bf012de7530fb0eb9"
+    }
+  }
+}

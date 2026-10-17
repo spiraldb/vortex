@@ -1,0 +1,143 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+//! Borrowed Arrow strings and an independently owned Utf8View output arena.
+
+use std::sync::Arc;
+
+use arrow_array::{Array, ArrayRef, LargeStringArray, StringArray, StringViewArray};
+use arrow_buffer::{Buffer, MutableBuffer, ScalarBuffer};
+use arrow_data::ByteView;
+use arrow_schema::{ArrowError, DataType, Field};
+use rofl::{Host, InputBinding, RowView, Utf8};
+use rofl::sink::{OutputSink, Utf8Output, WriteUtf8};
+
+use super::{ArrowHost, batch::ordinary};
+
+/// Retained decoded owners for the three supported Arrow UTF-8 layouts.
+pub enum Strings {
+    /// 32-bit offsets.
+    Utf8(StringArray),
+    /// 64-bit offsets.
+    Large(LargeStringArray),
+    /// Inline or buffer-referencing views.
+    View(StringViewArray),
+}
+/// A borrowed string view whose owner remains in the current invocation.
+pub struct StringRows<'a>(&'a Strings);
+// SAFETY: Arrow constructors validate UTF-8. Null slots are sanitized at access to an empty string,
+// and borrowed string bytes remain retained by the array owner for the full view lifetime.
+unsafe impl<'a> RowView<'a, Utf8> for StringRows<'a> {
+    fn len(&self) -> usize {
+        match self.0 { Strings::Utf8(a) => a.len(), Strings::Large(a) => a.len(), Strings::View(a) => a.len() }
+    }
+    unsafe fn get_unchecked(&self, index: usize) -> &'a str {
+        match self.0 {
+            Strings::Utf8(a) => if a.is_null(index) { "" } else { a.value(index) },
+            Strings::Large(a) => if a.is_null(index) { "" } else { a.value(index) },
+            Strings::View(a) => if a.is_null(index) { "" } else { a.value(index) },
+        }
+    }
+}
+impl InputBinding<Utf8> for ArrowHost {
+    type Decoded = Strings;
+    type View<'a> = StringRows<'a>;
+    const DENSE_SAFE: bool = true;
+    const DECODE_INFALLIBLE: bool = true;
+    fn validate(dtype: &Field) -> Result<(), ArrowError> {
+        ordinary(dtype)?;
+        if !matches!(dtype.data_type(), DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View) {
+            return Err(Self::error("expected Utf8, LargeUtf8, or Utf8View"));
+        }
+        Ok(())
+    }
+    fn decode(column: &ArrayRef, _: bool, _: &mut ()) -> Result<Strings, ArrowError> {
+        if let Some(array) = column.as_any().downcast_ref::<StringArray>() { return Ok(Strings::Utf8(array.clone())); }
+        if let Some(array) = column.as_any().downcast_ref::<LargeStringArray>() { return Ok(Strings::Large(array.clone())); }
+        if let Some(array) = column.as_any().downcast_ref::<StringViewArray>() { return Ok(Strings::View(array.clone())); }
+        Err(Self::error("UTF-8 storage downcast failed"))
+    }
+    fn can_decode_null_tolerant(_: &ArrayRef) -> Result<bool, ArrowError> { Ok(true) }
+    fn view(decoded: &Strings) -> StringRows<'_> { StringRows(decoded) }
+}
+
+/// Arrow-owned Utf8View output storage, initialized to empty strings.
+pub struct StringSink {
+    views: MutableBuffer,
+    buffers: Vec<MutableBuffer>,
+    rows: usize,
+    error: Option<ArrowError>,
+}
+/// A retained writable view of all output rows and their byte arena.
+pub struct StringOutputRows<'a> {
+    views: &'a mut [u128],
+    buffers: &'a mut Vec<MutableBuffer>,
+    error: &'a mut Option<ArrowError>,
+}
+/// A consuming writer for one initialized output view.
+pub struct StringWriter<'a> {
+    view: &'a mut u128,
+    buffers: &'a mut Vec<MutableBuffer>,
+    error: &'a mut Option<ArrowError>,
+}
+impl WriteUtf8 for StringWriter<'_> {
+    fn write(self, value: &str) {
+        if self.error.is_some() { return; }
+        let bytes = value.as_bytes();
+        let Ok(len) = u32::try_from(bytes.len()) else {
+            *self.error = Some(ArrowHost::error("Arrow UTF-8 view length exceeds u32"));
+            return;
+        };
+        if bytes.len() <= 12 {
+            let mut view = [0u8; 16];
+            view[..4].copy_from_slice(&len.to_le_bytes());
+            view[4..4 + bytes.len()].copy_from_slice(bytes);
+            *self.view = u128::from_le_bytes(view);
+            return;
+        }
+        if self.buffers.last().is_none_or(|buffer| buffer.len().saturating_add(bytes.len()) > u32::MAX as usize) {
+            self.buffers.push(MutableBuffer::new(bytes.len()));
+        }
+        let Ok(index) = u32::try_from(self.buffers.len() - 1) else {
+            *self.error = Some(ArrowHost::error("Arrow UTF-8 buffer count exceeds u32"));
+            return;
+        };
+        let buffer = &mut self.buffers[index as usize];
+        let Ok(offset) = u32::try_from(buffer.len()) else {
+            *self.error = Some(ArrowHost::error("Arrow UTF-8 buffer offset exceeds u32"));
+            return;
+        };
+        buffer.extend_from_slice(bytes);
+        *self.view = ByteView::new(len, &bytes[..4]).with_buffer_index(index).with_offset(offset).as_u128();
+    }
+}
+impl Utf8Output for ArrowHost { type Sink = StringSink; }
+// SAFETY: all views start as valid empty strings. Each borrowed handle identifies one distinct
+// slot and writes only output-owned data. Partial abandonment drops only initialized buffers.
+unsafe impl OutputSink<ArrowHost> for StringSink {
+    type Params = ();
+    type Rows<'a> = StringOutputRows<'a>;
+    type Row<'a> = StringWriter<'a>;
+    type WriteToken = ();
+    fn storage_type(_: &()) -> Result<Field, ArrowError> { Ok(Field::new("result", DataType::Utf8View, false)) }
+    fn allocate(rows: usize, _: &(), _: &mut ()) -> Result<Self, ArrowError> {
+        let bytes = rows.checked_mul(16).ok_or_else(|| ArrowHost::error("string view byte count exceeds usize"))?;
+        Ok(Self { views: MutableBuffer::from_len_zeroed(bytes), buffers: Vec::new(), rows, error: None })
+    }
+    fn rows(&mut self) -> Self::Rows<'_> {
+        StringOutputRows { views: self.views.typed_data_mut::<u128>(), buffers: &mut self.buffers, error: &mut self.error }
+    }
+    fn len(rows: &Self::Rows<'_>) -> usize { rows.views.len() }
+    fn initialize(_: &mut Self::Rows<'_>) {}
+    unsafe fn row<'a>(rows: &'a mut Self::Rows<'_>, index: usize) -> Self::Row<'a> {
+        // SAFETY: caller bounds index by the retained view length.
+        StringWriter { view: unsafe { rows.views.get_unchecked_mut(index) }, buffers: rows.buffers, error: rows.error }
+    }
+    unsafe fn finish(self, _: &mut ()) -> Result<ArrayRef, ArrowError> {
+        // Representation limits are terminal adapter failures, never deferred row evidence.
+        if let Some(error) = self.error { return Err(error); }
+        let buffers: Vec<Buffer> = self.buffers.into_iter().map(Buffer::from).collect();
+        let views = ScalarBuffer::new(self.views.into(), 0, self.rows);
+        Ok(Arc::new(StringViewArray::try_new(views, buffers, None)?))
+    }
+}

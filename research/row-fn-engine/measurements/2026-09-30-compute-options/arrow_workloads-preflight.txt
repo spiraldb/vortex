@@ -1,0 +1,38 @@
+arrow_workloads
+├─ arrow_native
+│  ╰─ 16384
+│     ├─ AllNull
+│     ├─ BooleanSlice
+│     ├─ CheckedAdd
+│     ├─ CheckedAddNullable
+│     ├─ DictionaryInteger
+│     ├─ DictionaryString
+│     ├─ DivideNullable
+│     ├─ Nullary
+│     ├─ ScalarOnly
+│     ├─ ScaleList0
+│     ├─ ScaleList4
+│     ├─ Timestamp
+│     ├─ TrimLargeUtf8
+│     ├─ TrimUtf8
+│     ├─ TrimViewLong
+│     ╰─ TrimViewShort
+╰─ arrow_rofl
+   ╰─ 16384
+      ├─ AllNull
+      ├─ BooleanSlice
+      ├─ CheckedAdd
+      ├─ CheckedAddNullable
+      ├─ DictionaryInteger
+      ├─ DictionaryString
+      ├─ DivideNullable
+      ├─ Nullary
+      ├─ ScalarOnly
+      ├─ ScaleList0
+      ├─ ScaleList4
+      ├─ Timestamp
+      ├─ TrimLargeUtf8
+      ├─ TrimUtf8
+      ├─ TrimViewLong
+      ╰─ TrimViewShort
+

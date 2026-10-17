@@ -3,6 +3,10 @@
 
 # A concrete extraction boundary
 
+The experimental source now implements the accepted extraction boundary. See the
+[implementation record](../implementation.md) for current behavior and unrun verification. Alternatives below
+remain research context where they differ from that implementation.
+
 The proposed core operates on typed row views and row writers. Host adapters bind their logical
 types, prepare those views, allocate outputs, and publish host arrays. This keeps Vortex ownership
 and execution context out of the inner API.

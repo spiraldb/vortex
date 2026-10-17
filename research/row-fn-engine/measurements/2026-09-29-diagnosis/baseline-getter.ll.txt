@@ -1,0 +1,95 @@
+FILE arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.08.rcgu.ll:5132
+  %27 = load ptr, ptr %_6.i, align 8, !dbg !4171, !alias.scope !4173, !noalias !4161, !noundef !26
+  %.not.i1.i = icmp eq ptr %27, null, !dbg !4171
+  br i1 %.not.i1.i, label %bb3.i5.i, label %bb2.i2.i, !dbg !4176
+
+bb2.i2.i:                                         ; preds = %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8ENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit.i
+; call <rofl_arrow::string::StringRows as rofl::input::RowView<rofl::input::Utf8>>::get_unchecked
+  %28 = call { ptr, i64 } @_RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked(ptr noalias nofree noundef nonnull readonly align 8 captures(address, read_provenance) dereferenceable(16) %_6.i, i64 noundef 0), !dbg !4177, !noalias !4161
+  br label %_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8EBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit, !dbg !4178
+
+bb3.i5.i:                                         ; preds = %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8ENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit.i
+  %view.i6.i = getelementptr inbounds nuw i8, ptr %_14.i.i, i64 24, !dbg !4179
+; call <rofl_arrow::string::StringRows as rofl::input::RowView<rofl::input::Utf8>>::get_unchecked
+  %29 = call { ptr, i64 } @_RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked(ptr noalias nofree noundef nonnull readonly align 8 captures(address, read_provenance) dereferenceable(8) %view.i6.i, i64 noundef %input.sroa.0.0.i), !dbg !4180, !noalias !4161
+  br label %_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8EBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit, !dbg !4181
+
+FILE arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.08.rcgu.ll:5138
+  %28 = call { ptr, i64 } @_RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked(ptr noalias nofree noundef nonnull readonly align 8 captures(address, read_provenance) dereferenceable(16) %_6.i, i64 noundef 0), !dbg !4177, !noalias !4161
+  br label %_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8EBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit, !dbg !4178
+
+bb3.i5.i:                                         ; preds = %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8ENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit.i
+  %view.i6.i = getelementptr inbounds nuw i8, ptr %_14.i.i, i64 24, !dbg !4179
+; call <rofl_arrow::string::StringRows as rofl::input::RowView<rofl::input::Utf8>>::get_unchecked
+  %29 = call { ptr, i64 } @_RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked(ptr noalias nofree noundef nonnull readonly align 8 captures(address, read_provenance) dereferenceable(8) %view.i6.i, i64 noundef %input.sroa.0.0.i), !dbg !4180, !noalias !4161
+  br label %_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8EBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit, !dbg !4181
+
+_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8EBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit: ; preds = %bb2.i2.i, %bb3.i5.i
+  %.pn.i3.i = phi { ptr, i64 } [ %28, %bb2.i2.i ], [ %29, %bb3.i5.i ]
+  %_0.sroa.0.0.i4.i = extractvalue { ptr, i64 } %.pn.i3.i, 0, !dbg !4182
+  %30 = icmp ne ptr %_0.sroa.0.0.i4.i, null
+  call void @llvm.assume(i1 %30)
+
+FILE arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.06.rcgu.ll:5672
+  %24 = load ptr, ptr %_6.i, align 8, !dbg !4924, !alias.scope !4926, !noalias !4914, !noundef !26
+  %.not.i1.i = icmp eq ptr %24, null, !dbg !4924
+  br i1 %.not.i1.i, label %bb3.i5.i, label %bb2.i2.i, !dbg !4929
+
+bb2.i2.i:                                         ; preds = %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8ENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit.i
+; call <rofl_arrow::string::StringRows as rofl::input::RowView<rofl::input::Utf8>>::get_unchecked
+  %25 = tail call { ptr, i64 } @_RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked(ptr noalias nofree noundef nonnull readonly align 8 captures(address, read_provenance) dereferenceable(16) %_6.i, i64 noundef 0), !dbg !4930, !noalias !4914
+  br label %_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8EBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit, !dbg !4931
+
+bb3.i5.i:                                         ; preds = %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8ENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit.i
+  %view.i6.i = getelementptr inbounds nuw i8, ptr %_14.i.i.i.i, i64 24, !dbg !4932
+; call <rofl_arrow::string::StringRows as rofl::input::RowView<rofl::input::Utf8>>::get_unchecked
+  %26 = tail call { ptr, i64 } @_RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked(ptr noalias nofree noundef nonnull readonly align 8 captures(address, read_provenance) dereferenceable(8) %view.i6.i, i64 noundef %input.sroa.0.0.i.i.i), !dbg !4933, !noalias !4914
+  br label %_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8EBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit, !dbg !4934
+
+FILE arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.06.rcgu.ll:5678
+  %25 = tail call { ptr, i64 } @_RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked(ptr noalias nofree noundef nonnull readonly align 8 captures(address, read_provenance) dereferenceable(16) %_6.i, i64 noundef 0), !dbg !4930, !noalias !4914
+  br label %_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8EBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit, !dbg !4931
+
+bb3.i5.i:                                         ; preds = %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8ENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit.i
+  %view.i6.i = getelementptr inbounds nuw i8, ptr %_14.i.i.i.i, i64 24, !dbg !4932
+; call <rofl_arrow::string::StringRows as rofl::input::RowView<rofl::input::Utf8>>::get_unchecked
+  %26 = tail call { ptr, i64 } @_RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked(ptr noalias nofree noundef nonnull readonly align 8 captures(address, read_provenance) dereferenceable(8) %view.i6.i, i64 noundef %input.sroa.0.0.i.i.i), !dbg !4933, !noalias !4914
+  br label %_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8EBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit, !dbg !4934
+
+_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8EBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit: ; preds = %bb2.i2.i, %bb3.i5.i
+  %.pn.i3.i = phi { ptr, i64 } [ %25, %bb2.i2.i ], [ %26, %bb3.i5.i ]
+  %_0.sroa.0.0.i4.i = extractvalue { ptr, i64 } %.pn.i3.i, 0, !dbg !4935
+  %27 = icmp ne ptr %_0.sroa.0.0.i4.i, null
+  tail call void @llvm.assume(i1 %27), !noalias !4904
+
+FILE arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.14.rcgu.ll:9541
+  %4 = load ptr, ptr %_6, align 8, !dbg !7219, !alias.scope !7221, !noundef !26
+  %.not.i1 = icmp eq ptr %4, null, !dbg !7219
+  br i1 %.not.i1, label %bb3.i5, label %bb2.i2, !dbg !7224
+
+bb2.i2:                                           ; preds = %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8ENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit
+; call <rofl_arrow::string::StringRows as rofl::input::RowView<rofl::input::Utf8>>::get_unchecked
+  %5 = tail call { ptr, i64 } @_RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked(ptr noalias nofree noundef nonnull readonly align 8 captures(address, read_provenance) dereferenceable(16) %_6, i64 noundef 0), !dbg !7225
+  br label %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8ENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit7, !dbg !7226
+
+bb3.i5:                                           ; preds = %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8ENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit
+  %view.i6 = getelementptr inbounds nuw i8, ptr %self, i64 24, !dbg !7227
+; call <rofl_arrow::string::StringRows as rofl::input::RowView<rofl::input::Utf8>>::get_unchecked
+  %6 = tail call { ptr, i64 } @_RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked(ptr noalias nofree noundef nonnull readonly align 8 captures(address, read_provenance) dereferenceable(8) %view.i6, i64 noundef %index), !dbg !7228
+  br label %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8ENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit7, !dbg !7229
+
+FILE arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.14.rcgu.ll:9547
+  %5 = tail call { ptr, i64 } @_RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked(ptr noalias nofree noundef nonnull readonly align 8 captures(address, read_provenance) dereferenceable(16) %_6, i64 noundef 0), !dbg !7225
+  br label %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8ENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit7, !dbg !7226
+
+bb3.i5:                                           ; preds = %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8ENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit
+  %view.i6 = getelementptr inbounds nuw i8, ptr %self, i64 24, !dbg !7227
+; call <rofl_arrow::string::StringRows as rofl::input::RowView<rofl::input::Utf8>>::get_unchecked
+  %6 = tail call { ptr, i64 } @_RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked(ptr noalias nofree noundef nonnull readonly align 8 captures(address, read_provenance) dereferenceable(8) %view.i6, i64 noundef %index), !dbg !7228
+  br label %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8ENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit7, !dbg !7229
+
+_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtB7_5input4Utf8ENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs6ZXJGSK66WU_12arrow_scalar.exit7: ; preds = %bb3.i5, %bb2.i2
+  %.pn.i3 = phi { ptr, i64 } [ %5, %bb2.i2 ], [ %6, %bb3.i5 ]
+  %_0.sroa.0.0.i4 = extractvalue { ptr, i64 } %.pn.i3, 0, !dbg !7230
+  %7 = icmp ne ptr %_0.sroa.0.0.i4, null
+  tail call void @llvm.assume(i1 %7)

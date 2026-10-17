@@ -1,0 +1,44 @@
+[package]
+name = "rowfn-functions"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+categories.workspace = true
+keywords = ["columnar", "kernels", "experimental"]
+readme = "README.md"
+include = ["Cargo.toml", "README.md", "src/**", "examples/**"]
+license.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Portable strict functions for the experimental rowfn framework"
+
+[package.metadata.docs.rs]
+no-default-features = true
+features = ["arrow"]
+
+[features]
+default = []
+arrow = ["dep:arrow-array", "dep:arrow-buffer", "dep:arrow-schema", "dep:rowfn-arrow"]
+vortex = ["dep:vortex-array", "dep:vortex-buffer", "dep:vortex-error"]
+
+[dependencies]
+memchr.workspace = true
+regex.workspace = true
+regex-syntax.workspace = true
+rowfn.workspace = true
+arrow-array = { workspace = true, optional = true }
+arrow-buffer = { workspace = true, optional = true }
+arrow-schema = { workspace = true, optional = true }
+rowfn-arrow = { workspace = true, optional = true }
+vortex-array = { workspace = true, optional = true, features = ["unstable_row_fns"] }
+vortex-buffer = { workspace = true, optional = true }
+vortex-error = { workspace = true, optional = true }
+
+[lints]
+workspace = true
+
+[[example]]
+name = "arrow"
+required-features = ["arrow"]

@@ -1,0 +1,95 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+//! Portable string functions compared with Arrow's existing scalar kernels.
+
+use memchr::memmem;
+use rofl::BooleanOutput;
+use rofl::HostResult;
+use rofl::InputBinding;
+use rofl::RowFn;
+use rofl::RowVisitor;
+use rofl::TypeBinding;
+use rofl::Utf8;
+use rofl::sink::OutputSink;
+use rofl::sink::Utf8Output;
+use rofl::sink::WriteUtf8;
+
+use crate::NoOptions;
+
+/// Literal string predicates with strict null propagation.
+#[derive(Clone, Copy, Debug)]
+pub enum StringPredicate {
+    /// Match a literal prefix.
+    StartsWith,
+    /// Match a literal suffix.
+    EndsWith,
+    /// Find a literal substring, preparing a searcher for a scalar pattern.
+    Contains,
+    /// Compare strings while ignoring ASCII letter case.
+    EqIgnoreAsciiCase,
+}
+
+impl<H> RowFn<H> for StringPredicate
+where
+    H: TypeBinding + InputBinding<Utf8> + BooleanOutput,
+{
+    type Options = NoOptions;
+    const ARG_NAMES: &'static [&'static str] = &["text", "pattern"];
+    const INFALLIBLE: bool = true;
+
+    fn dispatch<V: RowVisitor<H>>(
+        &self,
+        _: &NoOptions,
+        _: &[H::NativeType],
+        visitor: V,
+    ) -> HostResult<H, V::VisitResult> {
+        match self {
+            Self::StartsWith => {
+                visitor.visit_bool::<(Utf8, Utf8), false>(|(text, pattern)| text.starts_with(pattern))
+            }
+            Self::EndsWith => {
+                visitor.visit_bool::<(Utf8, Utf8), false>(|(text, pattern)| text.ends_with(pattern))
+            }
+            Self::EqIgnoreAsciiCase => visitor.visit_bool::<(Utf8, Utf8), false>(|(text, pattern)| {
+                text.eq_ignore_ascii_case(pattern)
+            }),
+            Self::Contains => visitor.visit_prepared::<(Utf8, Utf8), bool, _>(
+                |(_, pattern)| pattern.map(|pattern| memmem::Finder::new(pattern.as_bytes()).into_owned()),
+                |finder, (text, pattern)| match finder {
+                    Some(finder) => finder.find(text.as_bytes()).is_some(),
+                    None => memmem::find(text.as_bytes(), pattern.as_bytes()).is_some(),
+                },
+            ),
+        }
+    }
+}
+
+/// Concatenate two strings into independently owned output.
+#[derive(Clone, Copy)]
+pub struct Concat;
+
+impl<H> RowFn<H> for Concat
+where
+    H: TypeBinding + InputBinding<Utf8> + Utf8Output,
+    for<'a> <H::Sink as OutputSink<H>>::Row<'a>: WriteUtf8,
+{
+    type Options = NoOptions;
+    const ARG_NAMES: &'static [&'static str] = &["left", "right"];
+    const INFALLIBLE: bool = true;
+
+    fn dispatch<V: RowVisitor<H>>(
+        &self,
+        _: &NoOptions,
+        _: &[H::NativeType],
+        visitor: V,
+    ) -> HostResult<H, V::VisitResult> {
+        visitor.visit_into::<(Utf8, Utf8), H::Sink, ()>((), |(left, right), row| {
+            // WriteUtf8 accepts one complete string, so joining needs temporary storage.
+            let mut value = String::with_capacity(left.len() + right.len());
+            value.push_str(left);
+            value.push_str(right);
+            row.write(&value);
+        })
+    }
+}

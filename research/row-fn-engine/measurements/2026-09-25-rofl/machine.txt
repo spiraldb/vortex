@@ -1,0 +1,9 @@
+CPU: Apple M4 Max
+Logical cores: 16
+Memory: 137438953472 bytes (128 GiB)
+Target: aarch64-apple-darwin
+Compiler: rustc 1.98.0, LLVM 22.1.8
+Benchmark profile: opt-level 3, codegen-units 16, LTO false, debug limited
+Repository rustflags: -C force-frame-pointers=yes
+CPU model queried with unsandboxed read-only sysctl because sandbox blocked that query.
+Compiler wrapper: kache, from ~/.cargo/config.toml

@@ -3,6 +3,10 @@
 
 # Crate and trait choices
 
+The experimental source now implements the accepted extraction boundary. See the
+[implementation record](../implementation.md) for current behavior and unrun verification. Alternatives below
+remain research context where they differ from that implementation.
+
 [Design](../architecture.md) | [Current framework](README.md)
 
 An associated `Engine` type can collect host operations at the batch boundary. It is a useful

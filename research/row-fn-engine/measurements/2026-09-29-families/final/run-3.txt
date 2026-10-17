@@ -1,0 +1,509 @@
+Timer precision: 41 ns
+arrow_families                         fastest       │ slowest       │ median        │ mean          │ samples │ iters
+├─ arrow_native                                      │               │               │               │         │
+│  ├─ 0                                              │               │               │               │         │
+│  │  ├─ BitLengthLargeUtf8            25.65 ns      │ 54.3 ns       │ 28.91 ns      │ 29.04 ns      │ 1000    │ 256000
+│  │  ├─ BitLengthUtf8                 26.14 ns      │ 70.74 ns      │ 29.23 ns      │ 29.64 ns      │ 2409    │ 616704
+│  │  ├─ BitLengthView                 30.37 ns      │ 80.51 ns      │ 30.7 ns       │ 31.3 ns       │ 2377    │ 608512
+│  │  ├─ BitwiseAnd                    96.12 ns      │ 708.1 ns      │ 100 ns        │ 101.2 ns      │ 7687    │ 245984
+│  │  ├─ BitwiseAndNot                 97.43 ns      │ 273.8 ns      │ 100.6 ns      │ 101.4 ns      │ 3870    │ 247680
+│  │  ├─ BitwiseNot                    20.45 ns      │ 98.08 ns      │ 23.05 ns      │ 23.29 ns      │ 2792    │ 714752
+│  │  ├─ BitwiseOr                     97.43 ns      │ 320.7 ns      │ 100.6 ns      │ 101.8 ns      │ 3865    │ 247360
+│  │  ├─ BitwiseXor                    96.78 ns      │ 281 ns        │ 100.6 ns      │ 101.4 ns      │ 3881    │ 248384
+│  │  ├─ ByteLengthLargeUtf8           24.84 ns      │ 136.1 ns      │ 28.1 ns       │ 28.28 ns      │ 4918    │ 629504
+│  │  ├─ ByteLengthUtf8                24.84 ns      │ 139.4 ns      │ 28.1 ns       │ 28.49 ns      │ 2509    │ 642304
+│  │  ├─ ByteLengthView                28.4 ns       │ 421.6 ns      │ 31.03 ns      │ 31.46 ns      │ 18212   │ 582784
+│  │  ├─ CheckedNegate                 30.37 ns      │ 104.9 ns      │ 31.35 ns      │ 31.6 ns       │ 4691    │ 600448
+│  │  ├─ CheckedSub                    103.9 ns      │ 290.7 ns      │ 107.2 ns      │ 108.1 ns      │ 3666    │ 234624
+│  │  ├─ CheckedSubNullable            93.53 ns      │ 396.2 ns      │ 106.5 ns      │ 107.1 ns      │ 3710    │ 237440
+│  │  ├─ Equal                         46.32 ns      │ 139.4 ns      │ 47.63 ns      │ 48.01 ns      │ 3560    │ 455680
+│  │  ├─ FloatAdd                      93.53 ns      │ 323.3 ns      │ 106.5 ns      │ 106.9 ns      │ 3713    │ 237632
+│  │  ├─ FloatDivide                   103.2 ns      │ 310.3 ns      │ 106.5 ns      │ 107.6 ns      │ 3689    │ 236096
+│  │  ├─ FloatEqual                    45.99 ns      │ 122.8 ns      │ 46.98 ns      │ 47.55 ns      │ 3511    │ 449408
+│  │  ├─ FloatGreaterThan              46.32 ns      │ 80.18 ns      │ 46.98 ns      │ 47.34 ns      │ 3479    │ 445312
+│  │  ├─ FloatGreaterThanOrEqual       46.65 ns      │ 61.95 ns      │ 47.31 ns      │ 47.65 ns      │ 3526    │ 451328
+│  │  ├─ FloatLessThan                 42.09 ns      │ 188.2 ns      │ 47.3 ns       │ 47.45 ns      │ 3538    │ 452864
+│  │  ├─ FloatLessThanOrEqual          46.32 ns      │ 86.69 ns      │ 47.3 ns       │ 47.63 ns      │ 3564    │ 456192
+│  │  ├─ FloatMultiply                 102.6 ns      │ 210.7 ns      │ 106.5 ns      │ 107.2 ns      │ 3676    │ 235264
+│  │  ├─ FloatNegate                   23.86 ns      │ 43.72 ns      │ 24.52 ns      │ 24.83 ns      │ 5236    │ 670208
+│  │  ├─ FloatNotEqual                 46.32 ns      │ 81.48 ns      │ 47.3 ns       │ 47.65 ns      │ 3579    │ 458112
+│  │  ├─ FloatRemainder                94.17 ns      │ 435.9 ns      │ 107.2 ns      │ 107.5 ns      │ 3688    │ 236032
+│  │  ├─ FloatSubtract                 92.23 ns      │ 150.8 ns      │ 106.5 ns      │ 107.2 ns      │ 3708    │ 237312
+│  │  ├─ GreaterThan                   46.65 ns      │ 114 ns        │ 47.95 ns      │ 48.41 ns      │ 3545    │ 453760
+│  │  ├─ GreaterThanOrEqual            46.97 ns      │ 98.41 ns      │ 47.95 ns      │ 48.34 ns      │ 3560    │ 455680
+│  │  ├─ ILikeComplexScalar            34.83 µs      │ 76.91 µs      │ 39.91 µs      │ 39.77 µs      │ 1000    │ 1000
+│  │  ├─ LessThan                      42.74 ns      │ 111.7 ns      │ 47.63 ns      │ 47.93 ns      │ 3568    │ 456704
+│  │  ├─ LessThanOrEqual               46.32 ns      │ 103.9 ns      │ 47.3 ns       │ 47.76 ns      │ 3595    │ 460160
+│  │  ├─ LikeAlternatingArray          159.9 ns      │ 351.3 ns      │ 166.4 ns      │ 167.4 ns      │ 5022    │ 160704
+│  │  ├─ LikeComplexArray              144.3 ns      │ 773.2 ns      │ 166.4 ns      │ 166.5 ns      │ 5039    │ 161248
+│  │  ├─ LikeLiteralScalar             55.11 ns      │ 126.4 ns      │ 57.06 ns      │ 57.48 ns      │ 3063    │ 392064
+│  │  ├─ LikeLiteralScalarDense        53.49 ns      │ 72.37 ns      │ 55.12 ns      │ 55.41 ns      │ 3174    │ 406272
+│  │  ├─ LikeLiteralViaPredicate       48.6 ns       │ 121.5 ns      │ 50.88 ns      │ 51.76 ns      │ 3364    │ 430592
+│  │  ├─ LikeLiteralViaPredicateDense  47.3 ns       │ 119.2 ns      │ 48.93 ns      │ 49.42 ns      │ 3485    │ 446080
+│  │  ├─ NotEqual                      42.42 ns      │ 90.27 ns      │ 47.95 ns      │ 48.18 ns      │ 3535    │ 452480
+│  │  ├─ NotILikeScalar                59.35 ns      │ 83.1 ns       │ 61.3 ns       │ 61.72 ns      │ 2940    │ 376320
+│  │  ├─ NotLikeScalar                 55.44 ns      │ 87.35 ns      │ 57.71 ns      │ 58.16 ns      │ 3074    │ 393472
+│  │  ├─ RegexpAlternatingArray        92.21 ns      │ 254.3 ns      │ 96.13 ns      │ 97.81 ns      │ 3995    │ 255680
+│  │  ├─ RegexpArray                   92.23 ns      │ 200.9 ns      │ 96.13 ns      │ 97.46 ns      │ 4052    │ 259328
+│  │  ├─ RegexpScalar                  17.37 µs      │ 47.99 µs      │ 19.54 µs      │ 19.83 µs      │ 1503    │ 1503
+│  │  ├─ Remainder                     94.18 ns      │ 152.1 ns      │ 107.8 ns      │ 109.3 ns      │ 3619    │ 231616
+│  │  ├─ ShiftLeft                     96.78 ns      │ 229.5 ns      │ 100.6 ns      │ 101.6 ns      │ 3877    │ 248128
+│  │  ├─ ShiftRight                    96.78 ns      │ 215.9 ns      │ 100 ns        │ 101.1 ns      │ 3906    │ 249984
+│  │  ├─ StringEqualLargeUtf8          44.37 ns      │ 105.5 ns      │ 49.91 ns      │ 50.19 ns      │ 3434    │ 439552
+│  │  ├─ StringEqualUtf8               48.92 ns      │ 104.9 ns      │ 49.91 ns      │ 50.29 ns      │ 3463    │ 443264
+│  │  ├─ StringEqualViewLong           49.25 ns      │ 87.02 ns      │ 50.23 ns      │ 50.6 ns       │ 3445    │ 440960
+│  │  ├─ StringEqualViewShort          49.25 ns      │ 104.2 ns      │ 50.23 ns      │ 50.74 ns      │ 3437    │ 439936
+│  │  ├─ StringGreaterThanOrEqualView  45.02 ns      │ 105.2 ns      │ 50.24 ns      │ 50.59 ns      │ 3444    │ 440832
+│  │  ├─ StringGreaterThanView         45.35 ns      │ 129.6 ns      │ 50.88 ns      │ 51.33 ns      │ 3404    │ 435712
+│  │  ├─ StringLessThanOrEqualView     49.91 ns      │ 73.67 ns      │ 50.88 ns      │ 51.55 ns      │ 3390    │ 433920
+│  │  ├─ StringLessThanView            50.23 ns      │ 137.8 ns      │ 51.21 ns      │ 51.63 ns      │ 3390    │ 433920
+│  │  ├─ StringLessThanViewScalar      53.16 ns      │ 71.71 ns      │ 54.13 ns      │ 54.56 ns      │ 3254    │ 416512
+│  │  ├─ StringNotEqualView            44.7 ns       │ 138.4 ns      │ 51.21 ns      │ 51.19 ns      │ 6741    │ 431424
+│  │  ├─ SubstringCharsUtf8            69.45 ns      │ 113.7 ns      │ 78.56 ns      │ 79.04 ns      │ 4189    │ 268096
+│  │  ├─ SubstringUtf8                 64.87 ns      │ 114.3 ns      │ 66.84 ns      │ 67.29 ns      │ 4739    │ 303296
+│  │  ├─ WrappingMultiply              103.2 ns      │ 237.4 ns      │ 107.2 ns      │ 107.9 ns      │ 3687    │ 235968
+│  │  ├─ WrappingNegate                20.77 ns      │ 50.4 ns       │ 23.54 ns      │ 23.82 ns      │ 2721    │ 696576
+│  │  ╰─ WrappingSub                   103.2 ns      │ 271.2 ns      │ 107.2 ns      │ 107.6 ns      │ 3697    │ 236608
+│  ├─ 64                                             │               │               │               │         │
+│  │  ├─ BitLengthLargeUtf8            56.42 ns      │ 246.5 ns      │ 58.37 ns      │ 58.86 ns      │ 5408    │ 346112
+│  │  ├─ BitLengthUtf8                 38.19 ns      │ 101 ns        │ 39.17 ns      │ 39.46 ns      │ 3659    │ 468352
+│  │  ├─ BitLengthView                 44.04 ns      │ 137.4 ns      │ 45.35 ns      │ 45.59 ns      │ 3336    │ 427008
+│  │  ├─ BitwiseAnd                    42.42 ns      │ 147.2 ns      │ 46.98 ns      │ 47.81 ns      │ 3081    │ 394368
+│  │  ├─ BitwiseAndNot                 45.34 ns      │ 235.4 ns      │ 47.29 ns      │ 47.7 ns       │ 6200    │ 396800
+│  │  ├─ BitwiseNot                    34.28 ns      │ 198.3 ns      │ 36.23 ns      │ 36.43 ns      │ 7326    │ 468864
+│  │  ├─ BitwiseOr                     45.02 ns      │ 158.9 ns      │ 46.65 ns      │ 47.25 ns      │ 3160    │ 404480
+│  │  ├─ BitwiseXor                    45.02 ns      │ 132.9 ns      │ 46 ns         │ 46.87 ns      │ 3172    │ 406016
+│  │  ├─ ByteLengthLargeUtf8           37.2 ns       │ 132.5 ns      │ 42.1 ns       │ 42.56 ns      │ 3336    │ 427008
+│  │  ├─ ByteLengthUtf8                37.53 ns      │ 159.6 ns      │ 38.52 ns      │ 39.51 ns      │ 3568    │ 456704
+│  │  ├─ ByteLengthView                42.42 ns      │ 148.5 ns      │ 43.72 ns      │ 44.32 ns      │ 3335    │ 426880
+│  │  ├─ CheckedNegate                 62.28 ns      │ 292.7 ns      │ 64.23 ns      │ 65.13 ns      │ 5016    │ 321024
+│  │  ├─ CheckedSub                    73.34 ns      │ 476.9 ns      │ 83.1 ns       │ 83.98 ns      │ 4189    │ 268096
+│  │  ├─ CheckedSubNullable            95.48 ns      │ 270.6 ns      │ 99.38 ns      │ 100.3 ns      │ 3640    │ 232960
+│  │  ├─ Equal                         68.13 ns      │ 429.4 ns      │ 70.09 ns      │ 71.07 ns      │ 4927    │ 315328
+│  │  ├─ FloatAdd                      53.49 ns      │ 146.2 ns      │ 55.11 ns      │ 55.58 ns      │ 2837    │ 363136
+│  │  ├─ FloatDivide                   51.84 ns      │ 477.6 ns      │ 54.46 ns      │ 55.47 ns      │ 11156   │ 356992
+│  │  ├─ FloatEqual                    62.93 ns      │ 447 ns        │ 72.68 ns      │ 73.53 ns      │ 4766    │ 305024
+│  │  ├─ FloatGreaterThan              73.34 ns      │ 322.7 ns      │ 75.95 ns      │ 77.28 ns      │ 4628    │ 296192
+│  │  ├─ FloatGreaterThanOrEqual       72.68 ns      │ 271.2 ns      │ 75.95 ns      │ 76.54 ns      │ 4645    │ 297280
+│  │  ├─ FloatLessThan                 72.7 ns       │ 359.1 ns      │ 75.95 ns      │ 76.59 ns      │ 4645    │ 297280
+│  │  ├─ FloatLessThanOrEqual          66.18 ns      │ 271.9 ns      │ 75.95 ns      │ 76.26 ns      │ 4653    │ 297792
+│  │  ├─ FloatMultiply                 53.16 ns      │ 154.7 ns      │ 54.46 ns      │ 55.23 ns      │ 2850    │ 364800
+│  │  ├─ FloatNegate                   37.53 ns      │ 79.85 ns      │ 38.84 ns      │ 39.08 ns      │ 3544    │ 453632
+│  │  ├─ FloatNotEqual                 69.43 ns      │ 237.4 ns      │ 72.04 ns      │ 72.89 ns      │ 4834    │ 309376
+│  │  ├─ FloatRemainder                239.3 ns      │ 606.5 ns      │ 241.9 ns      │ 245.4 ns      │ 3414    │ 109248
+│  │  ├─ FloatSubtract                 48.28 ns      │ 207.4 ns      │ 54.46 ns      │ 54.95 ns      │ 2858    │ 365824
+│  │  ├─ GreaterThan                   66.82 ns      │ 241.9 ns      │ 70.09 ns      │ 70.41 ns      │ 4955    │ 317120
+│  │  ├─ GreaterThanOrEqual            68.13 ns      │ 282.9 ns      │ 70.09 ns      │ 71.25 ns      │ 4936    │ 315904
+│  │  ├─ ILikeComplexScalar            40.08 µs      │ 63.12 µs      │ 44.79 µs      │ 45.22 µs      │ 1000    │ 1000
+│  │  ├─ LessThan                      60.96 ns      │ 392.3 ns      │ 70.73 ns      │ 71.01 ns      │ 4945    │ 316480
+│  │  ├─ LessThanOrEqual               61.62 ns      │ 293.4 ns      │ 70.09 ns      │ 71.28 ns      │ 4913    │ 314432
+│  │  ├─ LikeAlternatingArray          360.9 µs      │ 454.8 µs      │ 396.1 µs      │ 398.2 µs      │ 252     │ 252
+│  │  ├─ LikeComplexArray              18.95 µs      │ 40.29 µs      │ 21.58 µs      │ 21.68 µs      │ 1375    │ 1375
+│  │  ├─ LikeLiteralScalar             140.4 ns      │ 482.8 ns      │ 144.3 ns      │ 146.2 ns      │ 5421    │ 173472
+│  │  ├─ LikeLiteralScalarDense        145.5 ns      │ 701.6 ns      │ 150.8 ns      │ 152.9 ns      │ 5198    │ 166336
+│  │  ├─ LikeLiteralViaPredicate       141.6 ns      │ 503.6 ns      │ 152.1 ns      │ 153.5 ns      │ 5188    │ 166016
+│  │  ├─ LikeLiteralViaPredicateDense  128.6 ns      │ 775.8 ns      │ 146.9 ns      │ 148.4 ns      │ 5334    │ 170688
+│  │  ├─ NotEqual                      68.13 ns      │ 340.2 ns      │ 70.74 ns      │ 71.46 ns      │ 4913    │ 314432
+│  │  ├─ NotILikeScalar                38.66 µs      │ 66.83 µs      │ 44.04 µs      │ 44.08 µs      │ 1000    │ 1000
+│  │  ├─ NotLikeScalar                 200.3 ns      │ 852.6 ns      │ 222.4 ns      │ 225 ns        │ 3701    │ 118432
+│  │  ├─ RegexpAlternatingArray        42.37 µs      │ 64.83 µs      │ 47.7 µs       │ 47.69 µs      │ 1000    │ 1000
+│  │  ├─ RegexpArray                   23.49 µs      │ 39.04 µs      │ 26.49 µs      │ 26.65 µs      │ 1120    │ 1120
+│  │  ├─ RegexpScalar                  21.49 µs      │ 43.7 µs       │ 24.16 µs      │ 24.3 µs       │ 1228    │ 1228
+│  │  ├─ Remainder                     69.43 ns      │ 261.4 ns      │ 78.56 ns      │ 79.47 ns      │ 4393    │ 281152
+│  │  ├─ ShiftLeft                     40.46 ns      │ 137.4 ns      │ 46 ns         │ 46.25 ns      │ 3207    │ 410496
+│  │  ├─ ShiftRight                    44.37 ns      │ 138.7 ns      │ 45.35 ns      │ 45.89 ns      │ 3216    │ 411648
+│  │  ├─ StringEqualLargeUtf8          179.4 ns      │ 499.7 ns      │ 184.6 ns      │ 186.1 ns      │ 4191    │ 134112
+│  │  ├─ StringEqualUtf8               185.9 ns      │ 557 ns        │ 191.1 ns      │ 193.2 ns      │ 4057    │ 129824
+│  │  ├─ StringEqualViewLong           223.7 ns      │ 602.6 ns      │ 232.8 ns      │ 234.8 ns      │ 3438    │ 110016
+│  │  ├─ StringEqualViewShort          140.4 ns      │ 516.6 ns      │ 159.9 ns      │ 160.8 ns      │ 4695    │ 150240
+│  │  ├─ StringGreaterThanOrEqualView  215.9 ns      │ 611.7 ns      │ 225 ns        │ 227 ns        │ 3529    │ 112928
+│  │  ├─ StringGreaterThanView         215.9 ns      │ 580.4 ns      │ 225 ns        │ 227.2 ns      │ 3517    │ 112544
+│  │  ├─ StringLessThanOrEqualView     215.9 ns      │ 575.3 ns      │ 222.4 ns      │ 225.3 ns      │ 3544    │ 113408
+│  │  ├─ StringLessThanView            192.4 ns      │ 857.8 ns      │ 218.5 ns      │ 221 ns        │ 3593    │ 114976
+│  │  ├─ StringLessThanViewScalar      141.6 ns      │ 488 ns        │ 146.9 ns      │ 148 ns        │ 5387    │ 172384
+│  │  ├─ StringNotEqualView            209.4 ns      │ 408.6 ns      │ 218.5 ns      │ 219.4 ns      │ 3603    │ 115296
+│  │  ├─ SubstringCharsUtf8            489.2 ns      │ 1.541 µs      │ 505 ns        │ 511.4 ns      │ 6501    │ 52008
+│  │  ├─ SubstringUtf8                 473.6 ns      │ 2.109 µs      │ 489.4 ns      │ 498.5 ns      │ 6656    │ 53248
+│  │  ├─ WrappingMultiply              55.1 ns       │ 273.2 ns      │ 62.28 ns      │ 63.17 ns      │ 5152    │ 329728
+│  │  ├─ WrappingNegate                35.91 ns      │ 127.7 ns      │ 36.56 ns      │ 36.97 ns      │ 3689    │ 472192
+│  │  ╰─ WrappingSub                   51.2 ns       │ 169.7 ns      │ 52.51 ns      │ 53.12 ns      │ 2917    │ 373376
+│  ├─ 1024                                           │               │               │               │         │
+│  │  ├─ BitLengthLargeUtf8            281 ns        │ 1.447 µs      │ 320 ns        │ 321.7 ns      │ 5244    │ 83904
+│  │  ├─ BitLengthUtf8                 90.9 ns       │ 478.9 ns      │ 94.84 ns      │ 96.42 ns      │ 7445    │ 238240
+│  │  ├─ BitLengthView                 129.9 ns      │ 880 ns        │ 135.2 ns      │ 137.7 ns      │ 11058   │ 176928
+│  │  ├─ BitwiseAnd                    161.2 ns      │ 519.3 ns      │ 166.4 ns      │ 168.4 ns      │ 4667    │ 149344
+│  │  ├─ BitwiseAndNot                 130 ns        │ 1.27 µs       │ 156 ns        │ 156.6 ns      │ 9832    │ 157312
+│  │  ├─ BitwiseNot                    111.7 ns      │ 895.6 ns      │ 116.9 ns      │ 119.3 ns      │ 12300   │ 196800
+│  │  ├─ BitwiseOr                     158.6 ns      │ 730.2 ns      │ 163.8 ns      │ 165.8 ns      │ 4770    │ 152640
+│  │  ├─ BitwiseXor                    159.9 ns      │ 524.5 ns      │ 166.4 ns      │ 168 ns        │ 4697    │ 150304
+│  │  ├─ ByteLengthLargeUtf8           126 ns        │ 504.9 ns      │ 132.5 ns      │ 133.2 ns      │ 5723    │ 183136
+│  │  ├─ ByteLengthUtf8                73.99 ns      │ 583.1 ns      │ 85.71 ns      │ 86.1 ns       │ 8105    │ 259360
+│  │  ├─ ByteLengthView                124.7 ns      │ 833.1 ns      │ 135.1 ns      │ 134.3 ns      │ 21954   │ 175632
+│  │  ├─ CheckedNegate                 366.9 ns      │ 1.346 µs      │ 450.2 ns      │ 460.9 ns      │ 3780    │ 60480
+│  │  ├─ CheckedSub                    562.2 ns      │ 2.307 µs      │ 572.7 ns      │ 584.9 ns      │ 5996    │ 47968
+│  │  ├─ CheckedSubNullable            614.4 ns      │ 2.015 µs      │ 692.5 ns      │ 700.1 ns      │ 5063    │ 40504
+│  │  ├─ Equal                         158.6 ns      │ 557 ns        │ 179.4 ns      │ 179.3 ns      │ 4531    │ 144992
+│  │  ├─ FloatAdd                      171.6 ns      │ 515.4 ns      │ 178.1 ns      │ 179.9 ns      │ 4441    │ 142112
+│  │  ├─ FloatDivide                   179.4 ns      │ 859.1 ns      │ 189.9 ns      │ 191.9 ns      │ 8278    │ 132448
+│  │  ├─ FloatEqual                    161.2 ns      │ 894.3 ns      │ 184.6 ns      │ 184.7 ns      │ 4387    │ 140384
+│  │  ├─ FloatGreaterThan              307 ns        │ 1.387 µs      │ 348.7 ns      │ 347.3 ns      │ 4950    │ 79200
+│  │  ├─ FloatGreaterThanOrEqual       309.6 ns      │ 1.387 µs      │ 348.7 ns      │ 347.8 ns      │ 4959    │ 79344
+│  │  ├─ FloatLessThan                 307 ns        │ 1.176 µs      │ 351.3 ns      │ 349.1 ns      │ 4937    │ 78992
+│  │  ├─ FloatLessThanOrEqual          307 ns        │ 1.853 µs      │ 348.7 ns      │ 343.2 ns      │ 5026    │ 80416
+│  │  ├─ FloatMultiply                 154.7 ns      │ 503.6 ns      │ 178.1 ns      │ 178.7 ns      │ 4470    │ 143040
+│  │  ├─ FloatNegate                   126 ns        │ 519.3 ns      │ 132.5 ns      │ 133.5 ns      │ 5718    │ 182976
+│  │  ├─ FloatNotEqual                 176.8 ns      │ 517.9 ns      │ 183.3 ns      │ 185 ns        │ 4384    │ 140288
+│  │  ├─ FloatRemainder                4.207 µs      │ 25.24 µs      │ 4.79 µs       │ 4.761 µs      │ 6173    │ 6173
+│  │  ├─ FloatSubtract                 154.7 ns      │ 495.8 ns      │ 180.7 ns      │ 181.8 ns      │ 4388    │ 140416
+│  │  ├─ GreaterThan                   172.9 ns      │ 554.4 ns      │ 178.1 ns      │ 179.5 ns      │ 4510    │ 144320
+│  │  ├─ GreaterThanOrEqual            175.5 ns      │ 618.2 ns      │ 179.4 ns      │ 181.5 ns      │ 4472    │ 143104
+│  │  ├─ ILikeComplexScalar            55.66 µs      │ 89.7 µs       │ 63.2 µs       │ 63.65 µs      │ 1000    │ 1000
+│  │  ├─ LessThan                      158.6 ns      │ 567.4 ns      │ 179.4 ns      │ 180.9 ns      │ 4497    │ 143904
+│  │  ├─ LessThanOrEqual               175.5 ns      │ 558.3 ns      │ 179.4 ns      │ 181.4 ns      │ 4481    │ 143392
+│  │  ├─ LikeAlternatingArray          5.822 ms      │ 6.157 ms      │ 6.093 ms      │ 6.068 ms      │ 17      │ 17
+│  │  ├─ LikeComplexArray              34.91 µs      │ 59.83 µs      │ 39.04 µs      │ 39.39 µs      │ 1000    │ 1000
+│  │  ├─ LikeLiteralScalar             1.187 µs      │ 4.135 µs      │ 1.218 µs      │ 1.232 µs      │ 5865    │ 23460
+│  │  ├─ LikeLiteralScalarDense        978.7 ns      │ 6.02 µs       │ 1.114 µs      │ 1.129 µs      │ 6375    │ 25500
+│  │  ├─ LikeLiteralViaPredicate       999.7 ns      │ 4.239 µs      │ 1.135 µs      │ 1.16 µs       │ 6207    │ 24828
+│  │  ├─ LikeLiteralViaPredicateDense  1.093 µs      │ 4.072 µs      │ 1.114 µs      │ 1.128 µs      │ 6388    │ 25552
+│  │  ├─ NotEqual                      158.6 ns      │ 542.7 ns      │ 179.4 ns      │ 181.2 ns      │ 4476    │ 143232
+│  │  ├─ NotILikeScalar                46.12 µs      │ 77.24 µs      │ 52.41 µs      │ 52.21 µs      │ 1000    │ 1000
+│  │  ├─ NotLikeScalar                 2.083 µs      │ 8.353 µs      │ 2.582 µs      │ 2.556 µs      │ 5729    │ 11458
+│  │  ├─ RegexpAlternatingArray        77.62 µs      │ 113.3 µs      │ 87.62 µs      │ 88.35 µs      │ 1000    │ 1000
+│  │  ├─ RegexpArray                   62.62 µs      │ 79.62 µs      │ 64.08 µs      │ 64.89 µs      │ 1000    │ 1000
+│  │  ├─ RegexpScalar                  34.33 µs      │ 49.08 µs      │ 34.7 µs       │ 35.03 µs      │ 1000    │ 1000
+│  │  ├─ Remainder                     520.6 ns      │ 3.14 µs       │ 593.5 ns      │ 597.1 ns      │ 5876    │ 47008
+│  │  ├─ ShiftLeft                     166.4 ns      │ 631.2 ns      │ 172.9 ns      │ 174.7 ns      │ 4540    │ 145280
+│  │  ├─ ShiftRight                    172.9 ns      │ 558.3 ns      │ 178.1 ns      │ 179.8 ns      │ 4438    │ 142016
+│  │  ├─ StringEqualLargeUtf8          1.041 µs      │ 3.958 µs      │ 1.072 µs      │ 1.083 µs      │ 6537    │ 26148
+│  │  ├─ StringEqualUtf8               1.072 µs      │ 8.124 µs      │ 1.229 µs      │ 1.244 µs      │ 5736    │ 22944
+│  │  ├─ StringEqualViewLong           1.52 µs       │ 5.27 µs       │ 1.718 µs      │ 1.718 µs      │ 4215    │ 16860
+│  │  ├─ StringEqualViewShort          416.4 ns      │ 2.132 µs      │ 473.7 ns      │ 476.8 ns      │ 3595    │ 57520
+│  │  ├─ StringGreaterThanOrEqualView  1.343 µs      │ 5.249 µs      │ 1.437 µs      │ 1.45 µs       │ 4964    │ 19856
+│  │  ├─ StringGreaterThanView         1.354 µs      │ 4.176 µs      │ 1.447 µs      │ 1.464 µs      │ 4914    │ 19656
+│  │  ├─ StringLessThanOrEqualView     1.354 µs      │ 4.562 µs      │ 1.447 µs      │ 1.458 µs      │ 4933    │ 19732
+│  │  ├─ StringLessThanView            1.333 µs      │ 5.354 µs      │ 1.447 µs      │ 1.465 µs      │ 4896    │ 19584
+│  │  ├─ StringLessThanViewScalar      1.197 µs      │ 5.385 µs      │ 1.218 µs      │ 1.234 µs      │ 5866    │ 23464
+│  │  ├─ StringNotEqualView            1.166 µs      │ 7.302 µs      │ 1.333 µs      │ 1.327 µs      │ 5373    │ 21492
+│  │  ├─ SubstringCharsUtf8            5.707 µs      │ 18.83 µs      │ 6.083 µs      │ 6.228 µs      │ 4702    │ 4702
+│  │  ├─ SubstringUtf8                 5.707 µs      │ 16.99 µs      │ 5.791 µs      │ 5.867 µs      │ 4987    │ 4987
+│  │  ├─ WrappingMultiply              249.7 ns      │ 1.726 µs      │ 260.2 ns      │ 263 ns        │ 6309    │ 100944
+│  │  ├─ WrappingNegate                111.7 ns      │ 451.6 ns      │ 131.3 ns      │ 131.7 ns      │ 5783    │ 185056
+│  │  ╰─ WrappingSub                   167.7 ns      │ 471.1 ns      │ 172.9 ns      │ 175.4 ns      │ 4548    │ 145536
+│  ╰─ 16384                                          │               │               │               │         │
+│     ├─ BitLengthLargeUtf8            4.582 µs      │ 16.41 µs      │ 4.749 µs      │ 4.818 µs      │ 5949    │ 5949
+│     ├─ BitLengthUtf8                 791.2 ns      │ 6.926 µs      │ 947.7 ns      │ 973.5 ns      │ 7120    │ 28480
+│     ├─ BitLengthView                 2.458 µs      │ 9.749 µs      │ 2.791 µs      │ 2.814 µs      │ 5135    │ 10270
+│     ├─ BitwiseAnd                    3.082 µs      │ 10.18 µs      │ 3.499 µs      │ 3.559 µs      │ 4076    │ 8152
+│     ├─ BitwiseAndNot                 3.103 µs      │ 9.416 µs      │ 3.541 µs      │ 3.57 µs       │ 4066    │ 8132
+│     ├─ BitwiseNot                    1.322 µs      │ 5.708 µs      │ 1.593 µs      │ 1.616 µs      │ 4363    │ 17452
+│     ├─ BitwiseOr                     3.083 µs      │ 9.228 µs      │ 3.499 µs      │ 3.508 µs      │ 4141    │ 8282
+│     ├─ BitwiseXor                    3.082 µs      │ 9.895 µs      │ 3.52 µs       │ 3.534 µs      │ 4115    │ 8230
+│     ├─ ByteLengthLargeUtf8           1.364 µs      │ 6.614 µs      │ 1.562 µs      │ 1.584 µs      │ 4498    │ 17992
+│     ├─ ByteLengthUtf8                583 ns        │ 4.119 µs      │ 755 ns        │ 763.4 ns      │ 4511    │ 36088
+│     ├─ ByteLengthView                2.478 µs      │ 9.02 µs       │ 2.812 µs      │ 2.794 µs      │ 5180    │ 10360
+│     ├─ CheckedNegate                 4.999 µs      │ 33.87 µs      │ 15.37 µs      │ 14.77 µs      │ 2006    │ 2006
+│     ├─ CheckedSub                    8.707 µs      │ 21.7 µs       │ 9.791 µs      │ 9.886 µs      │ 2987    │ 2987
+│     ├─ CheckedSubNullable            9.958 µs      │ 27.58 µs      │ 10.29 µs      │ 10.4 µs       │ 2835    │ 2835
+│     ├─ Equal                         2.457 µs      │ 8.583 µs      │ 2.791 µs      │ 2.808 µs      │ 5211    │ 10422
+│     ├─ FloatAdd                      3.062 µs      │ 9.812 µs      │ 3.458 µs      │ 3.493 µs      │ 4156    │ 8312
+│     ├─ FloatDivide                   3.082 µs      │ 11.6 µs       │ 3.582 µs      │ 3.574 µs      │ 4078    │ 8156
+│     ├─ FloatEqual                    2.416 µs      │ 10.77 µs      │ 2.77 µs       │ 2.74 µs       │ 5328    │ 10656
+│     ├─ FloatGreaterThan              4.249 µs      │ 16.49 µs      │ 4.832 µs      │ 4.826 µs      │ 6007    │ 6007
+│     ├─ FloatGreaterThanOrEqual       4.249 µs      │ 16.41 µs      │ 4.832 µs      │ 4.836 µs      │ 6001    │ 6001
+│     ├─ FloatLessThan                 4.249 µs      │ 16.91 µs      │ 4.832 µs      │ 4.848 µs      │ 5979    │ 5979
+│     ├─ FloatLessThanOrEqual          4.249 µs      │ 22.83 µs      │ 4.832 µs      │ 4.786 µs      │ 6059    │ 6059
+│     ├─ FloatMultiply                 2.999 µs      │ 12.22 µs      │ 3.437 µs      │ 3.464 µs      │ 4193    │ 8386
+│     ├─ FloatNegate                   1.52 µs       │ 5.895 µs      │ 1.593 µs      │ 1.613 µs      │ 4360    │ 17440
+│     ├─ FloatNotEqual                 2.457 µs      │ 8.624 µs      │ 2.812 µs      │ 2.823 µs      │ 5180    │ 10360
+│     ├─ FloatRemainder                70.54 µs      │ 204.7 µs      │ 78.91 µs      │ 79.75 µs      │ 1000    │ 1000
+│     ├─ FloatSubtract                 3.02 µs       │ 9.353 µs      │ 3.416 µs      │ 3.421 µs      │ 4255    │ 8510
+│     ├─ GreaterThan                   2.457 µs      │ 14.49 µs      │ 2.791 µs      │ 2.78 µs       │ 5263    │ 10526
+│     ├─ GreaterThanOrEqual            2.457 µs      │ 8.208 µs      │ 2.812 µs      │ 2.808 µs      │ 5210    │ 10420
+│     ├─ ILikeComplexScalar            328.6 µs      │ 494.9 µs      │ 383.8 µs      │ 392.2 µs      │ 255     │ 255
+│     ├─ LessThan                      2.458 µs      │ 8.27 µs       │ 2.812 µs      │ 2.797 µs      │ 5221    │ 10442
+│     ├─ LessThanOrEqual               2.457 µs      │ 11.93 µs      │ 2.791 µs      │ 2.804 µs      │ 5219    │ 10438
+│     ├─ LikeAlternatingArray          97.97 ms      │ 98.42 ms      │ 98.2 ms       │ 98.2 ms       │ 2       │ 2
+│     ├─ LikeComplexArray              280.3 µs      │ 351.6 µs      │ 317.9 µs      │ 318.9 µs      │ 314     │ 314
+│     ├─ LikeLiteralScalar             16.91 µs      │ 35.08 µs      │ 17.29 µs      │ 17.47 µs      │ 1706    │ 1706
+│     ├─ LikeLiteralScalarDense        16.04 µs      │ 32.08 µs      │ 16.12 µs      │ 16.36 µs      │ 1821    │ 1821
+│     ├─ LikeLiteralViaPredicate       15.41 µs      │ 36.04 µs      │ 17.29 µs      │ 17.39 µs      │ 1715    │ 1715
+│     ├─ LikeLiteralViaPredicateDense  14.49 µs      │ 26.74 µs      │ 16.16 µs      │ 16.28 µs      │ 1829    │ 1829
+│     ├─ NotEqual                      2.478 µs      │ 9.728 µs      │ 2.832 µs      │ 2.835 µs      │ 5172    │ 10344
+│     ├─ NotILikeScalar                176.6 µs      │ 219 µs        │ 181.6 µs      │ 183.3 µs      │ 545     │ 545
+│     ├─ NotLikeScalar                 32.37 µs      │ 57.87 µs      │ 37.95 µs      │ 37.69 µs      │ 1000    │ 1000
+│     ├─ RegexpAlternatingArray        709.8 µs      │ 827.2 µs      │ 738.4 µs      │ 745.4 µs      │ 135     │ 135
+│     ├─ RegexpArray                   622 µs        │ 829.2 µs      │ 679.5 µs      │ 684.5 µs      │ 147     │ 147
+│     ├─ RegexpScalar                  183.7 µs      │ 232.5 µs      │ 202.5 µs      │ 204.5 µs      │ 489     │ 489
+│     ├─ Remainder                     7.749 µs      │ 41.49 µs      │ 22.91 µs      │ 19.42 µs      │ 1532    │ 1532
+│     ├─ ShiftLeft                     2.979 µs      │ 12.68 µs      │ 3.478 µs      │ 3.435 µs      │ 4234    │ 8468
+│     ├─ ShiftRight                    3.187 µs      │ 10.39 µs      │ 3.604 µs      │ 3.633 µs      │ 4006    │ 8012
+│     ├─ StringEqualLargeUtf8          15.12 µs      │ 28.62 µs      │ 15.29 µs      │ 15.42 µs      │ 1928    │ 1928
+│     ├─ StringEqualUtf8               16.83 µs      │ 28.54 µs      │ 16.95 µs      │ 17.12 µs      │ 1737    │ 1737
+│     ├─ StringEqualViewLong           21.99 µs      │ 45.79 µs      │ 24.58 µs      │ 24.68 µs      │ 1208    │ 1208
+│     ├─ StringEqualViewShort          5.874 µs      │ 19.2 µs       │ 6.124 µs      │ 6.192 µs      │ 4734    │ 4734
+│     ├─ StringGreaterThanOrEqualView  19.08 µs      │ 36.99 µs      │ 22.66 µs      │ 22.71 µs      │ 1312    │ 1312
+│     ├─ StringGreaterThanView         21.2 µs       │ 38.08 µs      │ 22.7 µs       │ 22.8 µs       │ 1307    │ 1307
+│     ├─ StringLessThanOrEqualView     21.2 µs       │ 33.49 µs      │ 22.74 µs      │ 22.8 µs       │ 1308    │ 1308
+│     ├─ StringLessThanView            21.2 µs       │ 42.54 µs      │ 22.79 µs      │ 22.91 µs      │ 1301    │ 1301
+│     ├─ StringLessThanViewScalar      18.24 µs      │ 30.41 µs      │ 18.37 µs      │ 18.57 µs      │ 1603    │ 1603
+│     ├─ StringNotEqualView            18.79 µs      │ 36.49 µs      │ 18.91 µs      │ 19.17 µs      │ 1552    │ 1552
+│     ├─ SubstringCharsUtf8            85.99 µs      │ 136.8 µs      │ 96.2 µs       │ 98.82 µs      │ 1000    │ 1000
+│     ├─ SubstringUtf8                 80.74 µs      │ 142.3 µs      │ 94.08 µs      │ 94.15 µs      │ 1000    │ 1000
+│     ├─ WrappingMultiply              3.082 µs      │ 163.9 µs      │ 3.707 µs      │ 3.845 µs      │ 7491    │ 7491
+│     ├─ WrappingNegate                1.249 µs      │ 10.52 µs      │ 1.666 µs      │ 1.662 µs      │ 8283    │ 16566
+│     ╰─ WrappingSub                   3.062 µs      │ 15.89 µs      │ 3.52 µs       │ 3.58 µs       │ 4053    │ 8106
+╰─ arrow_rofl                                        │               │               │               │         │
+   ├─ 0                                              │               │               │               │         │
+   │  ├─ BitLengthLargeUtf8            452.9 ns      │ 5.239 µs      │ 531 ns        │ 538.5 ns      │ 6598    │ 52784
+   │  ├─ BitLengthUtf8                 458.1 ns      │ 3.874 µs      │ 536.1 ns      │ 546.8 ns      │ 6496    │ 51968
+   │  ├─ BitLengthView                 463.2 ns      │ 2.791 µs      │ 541.4 ns      │ 551.3 ns      │ 6459    │ 51672
+   │  ├─ BitwiseAnd                    525.7 ns      │ 3.614 µs      │ 614.4 ns      │ 623.2 ns      │ 5743    │ 45944
+   │  ├─ BitwiseAndNot                 536.1 ns      │ 3.629 µs      │ 614.2 ns      │ 619 ns        │ 5786    │ 46288
+   │  ├─ BitwiseNot                    484.1 ns      │ 2.124 µs      │ 510.1 ns      │ 514.9 ns      │ 6899    │ 55192
+   │  ├─ BitwiseOr                     588.4 ns      │ 1.973 µs      │ 614.4 ns      │ 618.6 ns      │ 5786    │ 46288
+   │  ├─ BitwiseXor                    546.6 ns      │ 3.833 µs      │ 624.7 ns      │ 627.2 ns      │ 5708    │ 45664
+   │  ├─ ByteLengthLargeUtf8           504.9 ns      │ 1.994 µs      │ 531 ns        │ 538.8 ns      │ 6595    │ 52760
+   │  ├─ ByteLengthUtf8                505 ns        │ 1.88 µs       │ 531 ns        │ 535.4 ns      │ 6634    │ 53072
+   │  ├─ ByteLengthView                468.5 ns      │ 3.286 µs      │ 536.2 ns      │ 540.2 ns      │ 6581    │ 52648
+   │  ├─ CheckedNegate                 473.6 ns      │ 2.369 µs      │ 499.7 ns      │ 507.6 ns      │ 6978    │ 55824
+   │  ├─ CheckedSub                    583 ns        │ 2.109 µs      │ 609.1 ns      │ 616.6 ns      │ 5800    │ 46400
+   │  ├─ CheckedSubNullable            588.2 ns      │ 2.723 µs      │ 614.4 ns      │ 622.4 ns      │ 5750    │ 46000
+   │  ├─ Equal                         577.9 ns      │ 1.958 µs      │ 598.6 ns      │ 601.9 ns      │ 5957    │ 47656
+   │  ├─ FloatAdd                      588.2 ns      │ 2.109 µs      │ 614.2 ns      │ 617.7 ns      │ 5801    │ 46408
+   │  ├─ FloatDivide                   531 ns        │ 2.999 µs      │ 609.1 ns      │ 612.6 ns      │ 5845    │ 46760
+   │  ├─ FloatEqual                    583 ns        │ 2.598 µs      │ 604 ns        │ 611.3 ns      │ 5858    │ 46864
+   │  ├─ FloatGreaterThan              588.2 ns      │ 2.057 µs      │ 614.4 ns      │ 625.7 ns      │ 5732    │ 45856
+   │  ├─ FloatGreaterThanOrEqual       588.2 ns      │ 2.343 µs      │ 609.1 ns      │ 621.8 ns      │ 5770    │ 46160
+   │  ├─ FloatLessThan                 531 ns        │ 3.827 µs      │ 609.1 ns      │ 616.4 ns      │ 5815    │ 46520
+   │  ├─ FloatLessThanOrEqual          525.7 ns      │ 2.322 µs      │ 603.9 ns      │ 607.4 ns      │ 5907    │ 47256
+   │  ├─ FloatMultiply                 541.4 ns      │ 2.098 µs      │ 609.1 ns      │ 621.2 ns      │ 5768    │ 46144
+   │  ├─ FloatNegate                   484.1 ns      │ 2.15 µs       │ 505 ns        │ 511.3 ns      │ 6948    │ 55584
+   │  ├─ FloatNotEqual                 583 ns        │ 2.135 µs      │ 614.2 ns      │ 620.7 ns      │ 5781    │ 46248
+   │  ├─ FloatRemainder                531 ns        │ 2.192 µs      │ 614.4 ns      │ 622.8 ns      │ 5749    │ 45992
+   │  ├─ FloatSubtract                 536.2 ns      │ 2.984 µs      │ 609.1 ns      │ 618.6 ns      │ 5791    │ 46328
+   │  ├─ GreaterThan                   577.9 ns      │ 2.13 µs       │ 604 ns        │ 614.7 ns      │ 5835    │ 46680
+   │  ├─ GreaterThanOrEqual            583.1 ns      │ 2.447 µs      │ 609.1 ns      │ 616.5 ns      │ 5819    │ 46552
+   │  ├─ ILikeComplexScalar            577.9 ns      │ 3.838 µs      │ 661.2 ns      │ 670.7 ns      │ 5356    │ 42848
+   │  ├─ LessThan                      583 ns        │ 2.281 µs      │ 609.1 ns      │ 623.6 ns      │ 5743    │ 45944
+   │  ├─ LessThanOrEqual               583.1 ns      │ 2.057 µs      │ 614.2 ns      │ 620.6 ns      │ 5776    │ 46208
+   │  ├─ LikeAlternatingArray          635.1 ns      │ 27.97 µs      │ 671.6 ns      │ 697.2 ns      │ 5171    │ 41368
+   │  ├─ LikeComplexArray              577.9 ns      │ 4.52 µs       │ 702.9 ns      │ 706.2 ns      │ 5108    │ 40864
+   │  ├─ LikeLiteralScalar             577.9 ns      │ 2.739 µs      │ 676.7 ns      │ 680.9 ns      │ 5286    │ 42288
+   │  ├─ LikeLiteralScalarDense        619.5 ns      │ 2.775 µs      │ 650.7 ns      │ 659.3 ns      │ 5456    │ 43648
+   │  ├─ LikeLiteralViaPredicate       619.6 ns      │ 2.421 µs      │ 666.4 ns      │ 672.5 ns      │ 5351    │ 42808
+   │  ├─ LikeLiteralViaPredicateDense  557.1 ns      │ 3.218 µs      │ 640.4 ns      │ 646.1 ns      │ 5563    │ 44504
+   │  ├─ NotEqual                      577.9 ns      │ 2.156 µs      │ 603.9 ns      │ 609.7 ns      │ 5884    │ 47072
+   │  ├─ NotILikeScalar                635.1 ns      │ 2.692 µs      │ 671.6 ns      │ 675.5 ns      │ 5332    │ 42656
+   │  ├─ NotLikeScalar                 645.6 ns      │ 1.958 µs      │ 692.4 ns      │ 697.5 ns      │ 5164    │ 41312
+   │  ├─ RegexpAlternatingArray        572.6 ns      │ 4.27 µs       │ 666.4 ns      │ 670.1 ns      │ 5373    │ 42984
+   │  ├─ RegexpArray                   635.1 ns      │ 2.343 µs      │ 661.2 ns      │ 669.5 ns      │ 5377    │ 43016
+   │  ├─ RegexpScalar                  635.1 ns      │ 2.135 µs      │ 666.4 ns      │ 671.6 ns      │ 5360    │ 42880
+   │  ├─ Remainder                     583.1 ns      │ 2.505 µs      │ 609.1 ns      │ 618.5 ns      │ 5787    │ 46296
+   │  ├─ ShiftLeft                     536.2 ns      │ 3.036 µs      │ 619.5 ns      │ 619.7 ns      │ 5780    │ 46240
+   │  ├─ ShiftRight                    583.1 ns      │ 1.546 µs      │ 614.2 ns      │ 617 ns        │ 5793    │ 46344
+   │  ├─ StringEqualLargeUtf8          609.1 ns      │ 2.036 µs      │ 630 ns        │ 635.5 ns      │ 5651    │ 45208
+   │  ├─ StringEqualUtf8               603.9 ns      │ 2.182 µs      │ 624.7 ns      │ 633.9 ns      │ 5666    │ 45328
+   │  ├─ StringEqualViewLong           650.7 ns      │ 2.234 µs      │ 687.2 ns      │ 691.7 ns      │ 5212    │ 41696
+   │  ├─ StringEqualViewShort          650.7 ns      │ 942.5 ns      │ 692.4 ns      │ 695.6 ns      │ 5177    │ 41416
+   │  ├─ StringGreaterThanOrEqualView  577.9 ns      │ 4.822 µs      │ 687.2 ns      │ 689 ns        │ 5226    │ 41808
+   │  ├─ StringGreaterThanView         572.7 ns      │ 2.197 µs      │ 650.9 ns      │ 661.1 ns      │ 5439    │ 43512
+   │  ├─ StringLessThanOrEqualView     640.4 ns      │ 2.473 µs      │ 676.7 ns      │ 685.6 ns      │ 5245    │ 41960
+   │  ├─ StringLessThanView            640.4 ns      │ 2.265 µs      │ 671.6 ns      │ 683.6 ns      │ 5272    │ 42176
+   │  ├─ StringLessThanViewScalar      572.6 ns      │ 3.458 µs      │ 666.4 ns      │ 670.8 ns      │ 5358    │ 42864
+   │  ├─ StringNotEqualView            577.9 ns      │ 2.317 µs      │ 666.4 ns      │ 673.2 ns      │ 5340    │ 42720
+   │  ├─ SubstringCharsUtf8            551.9 ns      │ 1.921 µs      │ 572.7 ns      │ 579.9 ns      │ 6094    │ 48752
+   │  ├─ SubstringUtf8                 541.5 ns      │ 2.072 µs      │ 567.5 ns      │ 576.9 ns      │ 6118    │ 48944
+   │  ├─ WrappingMultiply              588.4 ns      │ 2.051 µs      │ 614.4 ns      │ 623 ns        │ 5751    │ 46008
+   │  ├─ WrappingNegate                437.2 ns      │ 3.77 µs       │ 505 ns        │ 507.1 ns      │ 6999    │ 55992
+   │  ╰─ WrappingSub                   588.2 ns      │ 2.062 µs      │ 609.1 ns      │ 618.6 ns      │ 5780    │ 46240
+   ├─ 64                                             │               │               │               │         │
+   │  ├─ BitLengthLargeUtf8            562.2 ns      │ 1.942 µs      │ 588.2 ns      │ 593.9 ns      │ 5938    │ 47504
+   │  ├─ BitLengthUtf8                 510.1 ns      │ 2.531 µs      │ 588.2 ns      │ 591.3 ns      │ 5962    │ 47696
+   │  ├─ BitLengthView                 515.4 ns      │ 1.937 µs      │ 588.2 ns      │ 589.9 ns      │ 5981    │ 47848
+   │  ├─ BitwiseAnd                    603.9 ns      │ 2.307 µs      │ 629.9 ns      │ 633.1 ns      │ 5593    │ 44744
+   │  ├─ BitwiseAndNot                 609.1 ns      │ 2.025 µs      │ 635.1 ns      │ 639.1 ns      │ 5545    │ 44360
+   │  ├─ BitwiseNot                    468.5 ns      │ 3.546 µs      │ 536.2 ns      │ 542.9 ns      │ 6458    │ 51664
+   │  ├─ BitwiseOr                     614.2 ns      │ 2.104 µs      │ 635.2 ns      │ 640.7 ns      │ 5515    │ 44120
+   │  ├─ BitwiseXor                    557 ns        │ 4.468 µs      │ 645.5 ns      │ 649.8 ns      │ 5441    │ 43528
+   │  ├─ ByteLengthLargeUtf8           557 ns        │ 1.952 µs      │ 583.1 ns      │ 587.9 ns      │ 5995    │ 47960
+   │  ├─ ByteLengthUtf8                557 ns        │ 2.489 µs      │ 588.4 ns      │ 597.8 ns      │ 5906    │ 47248
+   │  ├─ ByteLengthView                505 ns        │ 3.114 µs      │ 588.2 ns      │ 597.7 ns      │ 5880    │ 47040
+   │  ├─ CheckedNegate                 504.9 ns      │ 2.15 µs       │ 536.1 ns      │ 541.1 ns      │ 6472    │ 51776
+   │  ├─ CheckedSub                    614.4 ns      │ 2.27 µs       │ 640.4 ns      │ 647.7 ns      │ 5465    │ 43720
+   │  ├─ CheckedSubNullable            624.7 ns      │ 2.088 µs      │ 656 ns        │ 664.4 ns      │ 5335    │ 42680
+   │  ├─ Equal                         536.1 ns      │ 2.775 µs      │ 619.6 ns      │ 627.7 ns      │ 5653    │ 45224
+   │  ├─ FloatAdd                      614.4 ns      │ 2.161 µs      │ 640.4 ns      │ 653.3 ns      │ 5427    │ 43416
+   │  ├─ FloatDivide                   619.5 ns      │ 2.499 µs      │ 645.5 ns      │ 653.4 ns      │ 5426    │ 43408
+   │  ├─ FloatEqual                    546.6 ns      │ 3.291 µs      │ 630 ns        │ 638.3 ns      │ 5562    │ 44496
+   │  ├─ FloatGreaterThan              614.2 ns      │ 2.098 µs      │ 640.4 ns      │ 647.9 ns      │ 5480    │ 43840
+   │  ├─ FloatGreaterThanOrEqual       614.2 ns      │ 2.083 µs      │ 635.1 ns      │ 643 ns        │ 5530    │ 44240
+   │  ├─ FloatLessThan                 609.1 ns      │ 2.327 µs      │ 635.1 ns      │ 643.5 ns      │ 5524    │ 44192
+   │  ├─ FloatLessThanOrEqual          551.7 ns      │ 3.567 µs      │ 630 ns        │ 639.2 ns      │ 5566    │ 44528
+   │  ├─ FloatMultiply                 614.2 ns      │ 2.098 µs      │ 640.4 ns      │ 649.6 ns      │ 5454    │ 43632
+   │  ├─ FloatNegate                   520.5 ns      │ 2.083 µs      │ 541.5 ns      │ 547.9 ns      │ 6402    │ 51216
+   │  ├─ FloatNotEqual                 614.2 ns      │ 2.176 µs      │ 635.2 ns      │ 646.1 ns      │ 5488    │ 43904
+   │  ├─ FloatRemainder                734.1 ns      │ 3.447 µs      │ 838.2 ns      │ 843.3 ns      │ 4254    │ 34032
+   │  ├─ FloatSubtract                 557 ns        │ 9.182 µs      │ 640.4 ns      │ 645.9 ns      │ 5500    │ 44000
+   │  ├─ GreaterThan                   557.1 ns      │ 2.369 µs      │ 635.1 ns      │ 640.9 ns      │ 5563    │ 44504
+   │  ├─ GreaterThanOrEqual            609.1 ns      │ 2.807 µs      │ 630 ns        │ 639.8 ns      │ 5574    │ 44592
+   │  ├─ ILikeComplexScalar            40.49 µs      │ 64.49 µs      │ 46.12 µs      │ 46.37 µs      │ 1000    │ 1000
+   │  ├─ LessThan                      536.2 ns      │ 2.926 µs      │ 619.5 ns      │ 626.6 ns      │ 5692    │ 45536
+   │  ├─ LessThanOrEqual               598.6 ns      │ 2.187 µs      │ 624.7 ns      │ 631.3 ns      │ 5651    │ 45208
+   │  ├─ LikeAlternatingArray          18.95 µs      │ 36.29 µs      │ 21.37 µs      │ 21.5 µs       │ 1385    │ 1385
+   │  ├─ LikeComplexArray              20.33 µs      │ 41.45 µs      │ 22.87 µs      │ 23.16 µs      │ 1287    │ 1287
+   │  ├─ LikeLiteralScalar             978.7 ns      │ 6.624 µs      │ 1.135 µs      │ 1.143 µs      │ 6274    │ 25096
+   │  ├─ LikeLiteralScalarDense        1.02 µs       │ 4.291 µs      │ 1.083 µs      │ 1.094 µs      │ 6532    │ 26128
+   │  ├─ LikeLiteralViaPredicate       739.2 ns      │ 2.041 µs      │ 781 ns        │ 789 ns        │ 4539    │ 36312
+   │  ├─ LikeLiteralViaPredicateDense  708 ns        │ 3.057 µs      │ 739.2 ns      │ 750.5 ns      │ 4761    │ 38088
+   │  ├─ NotEqual                      541.4 ns      │ 3.208 µs      │ 619.6 ns      │ 627.5 ns      │ 5660    │ 45280
+   │  ├─ NotILikeScalar                38.83 µs      │ 62.49 µs      │ 44.04 µs      │ 44.12 µs      │ 1000    │ 1000
+   │  ├─ NotLikeScalar                 1.01 µs       │ 4.978 µs      │ 1.135 µs      │ 1.15 µs       │ 6228    │ 24912
+   │  ├─ RegexpAlternatingArray        41.91 µs      │ 98.87 µs      │ 47.41 µs      │ 47.28 µs      │ 1000    │ 1000
+   │  ├─ RegexpArray                   23.99 µs      │ 38.95 µs      │ 26.99 µs      │ 26.88 µs      │ 1110    │ 1110
+   │  ├─ RegexpScalar                  22.91 µs      │ 39.45 µs      │ 25.83 µs      │ 25.9 µs       │ 1152    │ 1152
+   │  ├─ Remainder                     567.5 ns      │ 2.031 µs      │ 645.6 ns      │ 654.4 ns      │ 5425    │ 43400
+   │  ├─ ShiftLeft                     557 ns        │ 3.531 µs      │ 635.2 ns      │ 642.8 ns      │ 5511    │ 44088
+   │  ├─ ShiftRight                    609.1 ns      │ 2.843 µs      │ 635.1 ns      │ 641.8 ns      │ 5513    │ 44104
+   │  ├─ StringEqualLargeUtf8          906 ns        │ 3.406 µs      │ 947.5 ns      │ 954.1 ns      │ 7365    │ 29460
+   │  ├─ StringEqualUtf8               890.4 ns      │ 2.614 µs      │ 921.6 ns      │ 929.5 ns      │ 3828    │ 30624
+   │  ├─ StringEqualViewLong           921.6 ns      │ 2.963 µs      │ 963.2 ns      │ 973.2 ns      │ 3665    │ 29320
+   │  ├─ StringEqualViewShort          900.7 ns      │ 2.244 µs      │ 937.2 ns      │ 948.1 ns      │ 3761    │ 30088
+   │  ├─ StringGreaterThanOrEqualView  968.5 ns      │ 2.416 µs      │ 1.01 µs       │ 1.018 µs      │ 3513    │ 28104
+   │  ├─ StringGreaterThanView         854 ns        │ 6.77 µs       │ 999.7 ns      │ 1.003 µs      │ 7053    │ 28212
+   │  ├─ StringLessThanOrEqualView     958 ns        │ 3.874 µs      │ 1.01 µs       │ 1.019 µs      │ 6943    │ 27772
+   │  ├─ StringLessThanView            874.7 ns      │ 9.395 µs      │ 1.031 µs      │ 1.034 µs      │ 6853    │ 27412
+   │  ├─ StringLessThanViewScalar      796.6 ns      │ 3.015 µs      │ 932 ns        │ 930.1 ns      │ 3880    │ 31040
+   │  ├─ StringNotEqualView            879.9 ns      │ 2.4 µs        │ 921.6 ns      │ 932.1 ns      │ 3817    │ 30536
+   │  ├─ SubstringCharsUtf8            1.031 µs      │ 4.041 µs      │ 1.072 µs      │ 1.083 µs      │ 6541    │ 26164
+   │  ├─ SubstringUtf8                 978.7 ns      │ 3.989 µs      │ 1.031 µs      │ 1.037 µs      │ 6818    │ 27272
+   │  ├─ WrappingMultiply              551.9 ns      │ 3.291 µs      │ 640.4 ns      │ 643.6 ns      │ 5505    │ 44040
+   │  ├─ WrappingNegate                505 ns        │ 1.822 µs      │ 531 ns        │ 533.6 ns      │ 6575    │ 52600
+   │  ╰─ WrappingSub                   551.7 ns      │ 3.525 µs      │ 630 ns        │ 637 ns        │ 5552    │ 44416
+   ├─ 1024                                           │               │               │               │         │
+   │  ├─ BitLengthLargeUtf8            968.5 ns      │ 6.906 µs      │ 1.124 µs      │ 1.122 µs      │ 6372    │ 25488
+   │  ├─ BitLengthUtf8                 906 ns        │ 4.072 µs      │ 947.7 ns      │ 958.6 ns      │ 7412    │ 29648
+   │  ├─ BitLengthView                 890.4 ns      │ 2.468 µs      │ 926.7 ns      │ 931.4 ns      │ 3864    │ 30912
+   │  ├─ BitwiseAnd                    713.4 ns      │ 2.228 µs      │ 739.4 ns      │ 748.2 ns      │ 4748    │ 37984
+   │  ├─ BitwiseAndNot                 656 ns        │ 4.213 µs      │ 734.1 ns      │ 745.4 ns      │ 4772    │ 38176
+   │  ├─ BitwiseNot                    541.4 ns      │ 1.921 µs      │ 619.6 ns      │ 624.5 ns      │ 5634    │ 45072
+   │  ├─ BitwiseOr                     734.1 ns      │ 2.583 µs      │ 754.9 ns      │ 760.8 ns      │ 4676    │ 37408
+   │  ├─ BitwiseXor                    723.6 ns      │ 2.171 µs      │ 749.7 ns      │ 754.8 ns      │ 4708    │ 37664
+   │  ├─ ByteLengthLargeUtf8           947.6 ns      │ 2.557 µs      │ 973.6 ns      │ 980.6 ns      │ 3667    │ 29336
+   │  ├─ ByteLengthUtf8                812.2 ns      │ 3.416 µs      │ 921.6 ns      │ 927.2 ns      │ 3879    │ 31032
+   │  ├─ ByteLengthView                760.1 ns      │ 2.692 µs      │ 869.6 ns      │ 875.9 ns      │ 4096    │ 32768
+   │  ├─ CheckedNegate                 598.7 ns      │ 2.13 µs       │ 624.7 ns      │ 629.8 ns      │ 5582    │ 44656
+   │  ├─ CheckedSub                    807 ns        │ 2.317 µs      │ 838.2 ns      │ 847.1 ns      │ 4217    │ 33736
+   │  ├─ CheckedSubNullable            749.7 ns      │ 3.89 µs       │ 859.1 ns      │ 868.2 ns      │ 4118    │ 32944
+   │  ├─ Equal                         645.5 ns      │ 1.853 µs      │ 718.5 ns      │ 724.4 ns      │ 4928    │ 39424
+   │  ├─ FloatAdd                      713.2 ns      │ 2.301 µs      │ 749.7 ns      │ 753.9 ns      │ 4721    │ 37768
+   │  ├─ FloatDivide                   744.5 ns      │ 3.171 µs      │ 770.6 ns      │ 778.4 ns      │ 4574    │ 36592
+   │  ├─ FloatEqual                    692.5 ns      │ 2.114 µs      │ 723.7 ns      │ 730.2 ns      │ 4882    │ 39056
+   │  ├─ FloatGreaterThan              791.4 ns      │ 3.692 µs      │ 906 ns        │ 908.2 ns      │ 3958    │ 31664
+   │  ├─ FloatGreaterThanOrEqual       781 ns        │ 2.447 µs      │ 895.5 ns      │ 898.8 ns      │ 4005    │ 32040
+   │  ├─ FloatLessThan                 864.2 ns      │ 3.041 µs      │ 895.6 ns      │ 901.8 ns      │ 3991    │ 31928
+   │  ├─ FloatLessThanOrEqual          869.5 ns      │ 2.588 µs      │ 890.4 ns      │ 899.5 ns      │ 4000    │ 32000
+   │  ├─ FloatMultiply                 661.1 ns      │ 3.249 µs      │ 760.1 ns      │ 762.8 ns      │ 4665    │ 37320
+   │  ├─ FloatNegate                   593.5 ns      │ 2.182 µs      │ 624.7 ns      │ 629.4 ns      │ 5587    │ 44696
+   │  ├─ FloatNotEqual                 723.6 ns      │ 2.213 µs      │ 749.7 ns      │ 757.6 ns      │ 4708    │ 37664
+   │  ├─ FloatRemainder                4.79 µs       │ 24.33 µs      │ 5.458 µs      │ 5.519 µs      │ 5324    │ 5324
+   │  ├─ FloatSubtract                 650.7 ns      │ 3.536 µs      │ 749.7 ns      │ 755.1 ns      │ 4713    │ 37704
+   │  ├─ GreaterThan                   708 ns        │ 2.38 µs       │ 734.1 ns      │ 741.9 ns      │ 4813    │ 38504
+   │  ├─ GreaterThanOrEqual            708 ns        │ 1.973 µs      │ 734.1 ns      │ 742.8 ns      │ 4803    │ 38424
+   │  ├─ ILikeComplexScalar            59.91 µs      │ 110.5 µs      │ 72.58 µs      │ 73.83 µs      │ 1000    │ 1000
+   │  ├─ LessThan                      645.5 ns      │ 2.489 µs      │ 728.9 ns      │ 734 ns        │ 4876    │ 39008
+   │  ├─ LessThanOrEqual               629.9 ns      │ 3.906 µs      │ 728.9 ns      │ 735.3 ns      │ 4864    │ 38912
+   │  ├─ LikeAlternatingArray          46.83 µs      │ 70.12 µs      │ 48.54 µs      │ 49.63 µs      │ 1000    │ 1000
+   │  ├─ LikeComplexArray              53.58 µs      │ 66.74 µs      │ 54.24 µs      │ 54.72 µs      │ 1000    │ 1000
+   │  ├─ LikeLiteralScalar             5.249 µs      │ 34.62 µs      │ 5.999 µs      │ 6.083 µs      │ 4823    │ 4823
+   │  ├─ LikeLiteralScalarDense        5.165 µs      │ 19.91 µs      │ 5.874 µs      │ 5.892 µs      │ 4994    │ 4994
+   │  ├─ LikeLiteralViaPredicate       1.77 µs       │ 10.16 µs      │ 2.082 µs      │ 2.093 µs      │ 6934    │ 13868
+   │  ├─ LikeLiteralViaPredicateDense  2.02 µs       │ 7.707 µs      │ 2.083 µs      │ 2.107 µs      │ 6898    │ 13796
+   │  ├─ NotEqual                      718.5 ns      │ 2.104 µs      │ 744.5 ns      │ 753.8 ns      │ 4725    │ 37800
+   │  ├─ NotILikeScalar                44.12 µs      │ 86.41 µs      │ 49.99 µs      │ 49.62 µs      │ 1000    │ 1000
+   │  ├─ NotLikeScalar                 5.249 µs      │ 18.49 µs      │ 5.999 µs      │ 6.063 µs      │ 4844    │ 4844
+   │  ├─ RegexpAlternatingArray        76.2 µs       │ 143.9 µs      │ 84.91 µs      │ 85.32 µs      │ 1000    │ 1000
+   │  ├─ RegexpArray                   62.62 µs      │ 77.54 µs      │ 63.29 µs      │ 64.05 µs      │ 1000    │ 1000
+   │  ├─ RegexpScalar                  43.37 µs      │ 88.37 µs      │ 48.83 µs      │ 48.72 µs      │ 1000    │ 1000
+   │  ├─ Remainder                     1.041 µs      │ 4.864 µs      │ 1.156 µs      │ 1.18 µs       │ 6068    │ 24272
+   │  ├─ ShiftLeft                     718.5 ns      │ 2.124 µs      │ 744.5 ns      │ 751 ns        │ 4737    │ 37896
+   │  ├─ ShiftRight                    718.5 ns      │ 1.822 µs      │ 744.5 ns      │ 750 ns        │ 4740    │ 37920
+   │  ├─ StringEqualLargeUtf8          3.499 µs      │ 24.29 µs      │ 3.999 µs      │ 4.013 µs      │ 7239    │ 7239
+   │  ├─ StringEqualUtf8               3.603 µs      │ 10.99 µs      │ 3.687 µs      │ 3.717 µs      │ 3944    │ 7888
+   │  ├─ StringEqualViewLong           3.145 µs      │ 9.208 µs      │ 3.228 µs      │ 3.263 µs      │ 4464    │ 8928
+   │  ├─ StringEqualViewShort          2.895 µs      │ 8.103 µs      │ 2.979 µs      │ 3.002 µs      │ 4840    │ 9680
+   │  ├─ StringGreaterThanOrEqualView  3.833 µs      │ 27.37 µs      │ 4.416 µs      │ 4.448 µs      │ 6544    │ 6544
+   │  ├─ StringGreaterThanView         3.749 µs      │ 15.2 µs       │ 4.374 µs      │ 4.36 µs       │ 6674    │ 6674
+   │  ├─ StringLessThanOrEqualView     3.957 µs      │ 17.37 µs      │ 4.458 µs      │ 4.514 µs      │ 6442    │ 6442
+   │  ├─ StringLessThanView            4.207 µs      │ 15.54 µs      │ 4.332 µs      │ 4.377 µs      │ 6652    │ 6652
+   │  ├─ StringLessThanViewScalar      3.999 µs      │ 16.24 µs      │ 4.124 µs      │ 4.184 µs      │ 6963    │ 6963
+   │  ├─ StringNotEqualView            2.312 µs      │ 14.54 µs      │ 2.687 µs      │ 2.68 µs       │ 5424    │ 10848
+   │  ├─ SubstringCharsUtf8            6.915 µs      │ 19.29 µs      │ 7.832 µs      │ 7.859 µs      │ 3758    │ 3758
+   │  ├─ SubstringUtf8                 6.332 µs      │ 22.58 µs      │ 6.457 µs      │ 6.497 µs      │ 4531    │ 4531
+   │  ├─ WrappingMultiply              853.7 ns      │ 5.083 µs      │ 916.5 ns      │ 929.9 ns      │ 7597    │ 30388
+   │  ├─ WrappingNegate                536.2 ns      │ 1.702 µs      │ 614.4 ns      │ 616.9 ns      │ 5707    │ 45656
+   │  ╰─ WrappingSub                   723.7 ns      │ 1.307 µs      │ 755 ns        │ 769.3 ns      │ 4621    │ 36968
+   ╰─ 16384                                          │               │               │               │         │
+      ├─ BitLengthLargeUtf8            9.041 µs      │ 16.45 µs      │ 9.207 µs      │ 9.315 µs      │ 3158    │ 3158
+      ├─ BitLengthUtf8                 7.415 µs      │ 19.66 µs      │ 7.582 µs      │ 7.657 µs      │ 3800    │ 3800
+      ├─ BitLengthView                 5.29 µs       │ 26.37 µs      │ 6.207 µs      │ 6.161 µs      │ 4732    │ 4732
+      ├─ BitwiseAnd                    3.832 µs      │ 18.41 µs      │ 4.457 µs      │ 4.505 µs      │ 6409    │ 6409
+      ├─ BitwiseAndNot                 3.874 µs      │ 83.91 µs      │ 4.457 µs      │ 4.551 µs      │ 6348    │ 6348
+      ├─ BitwiseNot                    2.832 µs      │ 12.58 µs      │ 3.228 µs      │ 3.228 µs      │ 4489    │ 8978
+      ├─ BitwiseOr                     3.874 µs      │ 24.66 µs      │ 4.499 µs      │ 4.554 µs      │ 6355    │ 6355
+      ├─ BitwiseXor                    3.874 µs      │ 16.54 µs      │ 4.416 µs      │ 4.442 µs      │ 6512    │ 6512
+      ├─ ByteLengthLargeUtf8           7.124 µs      │ 19.37 µs      │ 7.249 µs      │ 7.309 µs      │ 4008    │ 4008
+      ├─ ByteLengthUtf8                5.499 µs      │ 20.54 µs      │ 6.041 µs      │ 6.16 µs       │ 4688    │ 4688
+      ├─ ByteLengthView                5.207 µs      │ 23.54 µs      │ 5.916 µs      │ 5.989 µs      │ 4868    │ 4868
+      ├─ CheckedNegate                 2.812 µs      │ 9.582 µs      │ 3.207 µs      │ 3.243 µs      │ 4471    │ 8942
+      ├─ CheckedSub                    4.041 µs      │ 21.12 µs      │ 4.249 µs      │ 4.299 µs      │ 6682    │ 6682
+      ├─ CheckedSubNullable            3.749 µs      │ 16.91 µs      │ 4.249 µs      │ 4.296 µs      │ 6711    │ 6711
+      ├─ Equal                         2.791 µs      │ 9.145 µs      │ 3.229 µs      │ 3.237 µs      │ 4525    │ 9050
+      ├─ FloatAdd                      3.916 µs      │ 19.24 µs      │ 4.458 µs      │ 4.539 µs      │ 6374    │ 6374
+      ├─ FloatDivide                   4.291 µs      │ 16.7 µs       │ 4.457 µs      │ 4.513 µs      │ 6409    │ 6409
+      ├─ FloatEqual                    2.791 µs      │ 15.47 µs      │ 3.228 µs      │ 3.211 µs      │ 4552    │ 9104
+      ├─ FloatGreaterThan              4.54 µs       │ 22.33 µs      │ 5.166 µs      │ 5.151 µs      │ 5682    │ 5682
+      ├─ FloatGreaterThanOrEqual       4.54 µs       │ 15.49 µs      │ 5.165 µs      │ 5.122 µs      │ 5706    │ 5706
+      ├─ FloatLessThan                 4.499 µs      │ 18.62 µs      │ 5.124 µs      │ 5.12 µs       │ 5699    │ 5699
+      ├─ FloatLessThanOrEqual          4.54 µs       │ 15.7 µs       │ 5.165 µs      │ 5.115 µs      │ 5717    │ 5717
+      ├─ FloatMultiply                 3.832 µs      │ 27.24 µs      │ 4.415 µs      │ 4.352 µs      │ 6642    │ 6642
+      ├─ FloatNegate                   2.812 µs      │ 11.72 µs      │ 3.207 µs      │ 3.22 µs       │ 4502    │ 9004
+      ├─ FloatNotEqual                 2.812 µs      │ 10.14 µs      │ 3.27 µs       │ 3.317 µs      │ 4401    │ 8802
+      ├─ FloatRemainder                70.91 µs      │ 172.4 µs      │ 80.37 µs      │ 81.19 µs      │ 1000    │ 1000
+      ├─ FloatSubtract                 3.832 µs      │ 16.74 µs      │ 4.416 µs      │ 4.45 µs       │ 6500    │ 6500
+      ├─ GreaterThan                   2.791 µs      │ 9.77 µs       │ 3.228 µs      │ 3.252 µs      │ 4504    │ 9008
+      ├─ GreaterThanOrEqual            2.791 µs      │ 12.02 µs      │ 3.229 µs      │ 3.259 µs      │ 4492    │ 8984
+      ├─ ILikeComplexScalar            403.6 µs      │ 905.2 µs      │ 583.3 µs      │ 566.7 µs      │ 177     │ 177
+      ├─ LessThan                      2.791 µs      │ 11.43 µs      │ 3.27 µs       │ 3.277 µs      │ 4473    │ 8946
+      ├─ LessThanOrEqual               2.77 µs       │ 10.31 µs      │ 3.228 µs      │ 3.24 µs       │ 4516    │ 9032
+      ├─ LikeAlternatingArray          452.7 µs      │ 521.1 µs      │ 471.1 µs      │ 474.7 µs      │ 211     │ 211
+      ├─ LikeComplexArray              531.2 µs      │ 598.7 µs      │ 550.5 µs      │ 554.9 µs      │ 181     │ 181
+      ├─ LikeLiteralScalar             75.99 µs      │ 107.9 µs      │ 83.41 µs      │ 84.42 µs      │ 1000    │ 1000
+      ├─ LikeLiteralScalarDense        73.7 µs       │ 110.6 µs      │ 83.74 µs      │ 83.4 µs       │ 1000    │ 1000
+      ├─ LikeLiteralViaPredicate       20.08 µs      │ 40.08 µs      │ 22.83 µs      │ 22.84 µs      │ 1306    │ 1306
+      ├─ LikeLiteralViaPredicateDense  19.79 µs      │ 33.04 µs      │ 19.95 µs      │ 20.15 µs      │ 1480    │ 1480
+      ├─ NotEqual                      2.812 µs      │ 10.52 µs      │ 3.249 µs      │ 3.289 µs      │ 4461    │ 8922
+      ├─ NotILikeScalar                131.2 µs      │ 180.1 µs      │ 149.6 µs      │ 150.6 µs      │ 663     │ 663
+      ├─ NotLikeScalar                 74.66 µs      │ 110.8 µs      │ 82.58 µs      │ 83.04 µs      │ 1000    │ 1000
+      ├─ RegexpAlternatingArray        649.8 µs      │ 759 µs        │ 678.7 µs      │ 680.8 µs      │ 147     │ 147
+      ├─ RegexpArray                   629.8 µs      │ 696.6 µs      │ 638.4 µs      │ 642.6 µs      │ 156     │ 156
+      ├─ RegexpScalar                  371.8 µs      │ 475.2 µs      │ 413.4 µs      │ 414 µs        │ 242     │ 242
+      ├─ Remainder                     8.874 µs      │ 25.95 µs      │ 8.999 µs      │ 9.057 µs      │ 3252    │ 3252
+      ├─ ShiftLeft                     3.832 µs      │ 21.62 µs      │ 4.416 µs      │ 4.39 µs       │ 6586    │ 6586
+      ├─ ShiftRight                    3.832 µs      │ 15.62 µs      │ 4.457 µs      │ 4.449 µs      │ 6509    │ 6509
+      ├─ StringEqualLargeUtf8          51.66 µs      │ 71.95 µs      │ 52.08 µs      │ 52.62 µs      │ 1000    │ 1000
+      ├─ StringEqualUtf8               47.41 µs      │ 68.74 µs      │ 49.79 µs      │ 49.76 µs      │ 1000    │ 1000
+      ├─ StringEqualViewLong           34.58 µs      │ 68.58 µs      │ 38.62 µs      │ 38.7 µs       │ 1000    │ 1000
+      ├─ StringEqualViewShort          31.04 µs      │ 54.29 µs      │ 34.79 µs      │ 34.52 µs      │ 1000    │ 1000
+      ├─ StringGreaterThanOrEqualView  51.74 µs      │ 85.45 µs      │ 60.33 µs      │ 60.09 µs      │ 1000    │ 1000
+      ├─ StringGreaterThanView         50.58 µs      │ 82.2 µs       │ 57.12 µs      │ 58.06 µs      │ 1000    │ 1000
+      ├─ StringLessThanOrEqualView     49.49 µs      │ 150.4 µs      │ 57.06 µs      │ 57.02 µs      │ 1000    │ 1000
+      ├─ StringLessThanView            51.45 µs      │ 83.45 µs      │ 57.58 µs      │ 57.88 µs      │ 1000    │ 1000
+      ├─ StringLessThanViewScalar      50.04 µs      │ 75.58 µs      │ 53.95 µs      │ 54.62 µs      │ 1000    │ 1000
+      ├─ StringNotEqualView            30.49 µs      │ 45.24 µs      │ 31.08 µs      │ 31.39 µs      │ 1000    │ 1000
+      ├─ SubstringCharsUtf8            101.4 µs      │ 145.3 µs      │ 113.5 µs      │ 114.3 µs      │ 874     │ 874
+      ├─ SubstringUtf8                 82.62 µs      │ 123.4 µs      │ 92.41 µs      │ 93.18 µs      │ 1000    │ 1000
+      ├─ WrappingMultiply              5.874 µs      │ 21.83 µs      │ 5.999 µs      │ 6.078 µs      │ 4790    │ 4790
+      ├─ WrappingNegate                2.791 µs      │ 14.77 µs      │ 3.187 µs      │ 3.168 µs      │ 4557    │ 9114
+      ╰─ WrappingSub                   3.833 µs      │ 15.04 µs      │ 4.416 µs      │ 4.404 µs      │ 6555    │ 6555
+

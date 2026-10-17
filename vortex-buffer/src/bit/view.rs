@@ -494,6 +494,18 @@ impl BitBufferMut {
     }
 }
 
+impl rowfn_kernels::bit::Bitmap for BitBuffer {
+    fn bitmap(&self) -> rowfn_kernels::bit::BitmapView<'_> {
+        rowfn_kernels::bit::BitmapView::new(self.inner().as_slice(), self.offset(), self.len())
+    }
+}
+
+impl rowfn_kernels::bit::Bitmap for BitBufferView<'_> {
+    fn bitmap(&self) -> rowfn_kernels::bit::BitmapView<'_> {
+        rowfn_kernels::bit::BitmapView::new(self.inner(), self.offset(), self.len())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::BitBuffer;

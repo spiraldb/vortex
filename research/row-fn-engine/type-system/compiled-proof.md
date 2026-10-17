@@ -3,6 +3,10 @@
 
 # An isolated Rust proof
 
+The experimental source now implements the accepted extraction boundary. See the
+[implementation record](../implementation.md) for current behavior and unrun verification. Alternatives below
+remain research context where they differ from that implementation.
+
 One shared function binder and typed row loop compiled against two unrelated host descriptors.
 Each adapter compiled in its own crate. Both adapters returned borrowed views, and unsupported
 semantic types were rejected.

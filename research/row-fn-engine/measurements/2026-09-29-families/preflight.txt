@@ -1,0 +1,356 @@
+arrow_families
+├─ arrow_native
+│  ├─ 0
+│  │  ├─ BitwiseAnd
+│  │  ├─ BitwiseAndNot
+│  │  ├─ BitwiseNot
+│  │  ├─ BitwiseOr
+│  │  ├─ BitwiseXor
+│  │  ├─ CheckedNegate
+│  │  ├─ CheckedSub
+│  │  ├─ CheckedSubNullable
+│  │  ├─ Equal
+│  │  ├─ FloatAdd
+│  │  ├─ FloatDivide
+│  │  ├─ FloatEqual
+│  │  ├─ FloatGreaterThan
+│  │  ├─ FloatGreaterThanOrEqual
+│  │  ├─ FloatLessThan
+│  │  ├─ FloatLessThanOrEqual
+│  │  ├─ FloatMultiply
+│  │  ├─ FloatNegate
+│  │  ├─ FloatNotEqual
+│  │  ├─ FloatRemainder
+│  │  ├─ FloatSubtract
+│  │  ├─ GreaterThan
+│  │  ├─ GreaterThanOrEqual
+│  │  ├─ ILikeComplexScalar
+│  │  ├─ LessThan
+│  │  ├─ LessThanOrEqual
+│  │  ├─ LikeAlternatingArray
+│  │  ├─ LikeComplexArray
+│  │  ├─ LikeLiteralScalar
+│  │  ├─ NotEqual
+│  │  ├─ NotILikeScalar
+│  │  ├─ NotLikeScalar
+│  │  ├─ RegexpAlternatingArray
+│  │  ├─ RegexpArray
+│  │  ├─ RegexpScalar
+│  │  ├─ Remainder
+│  │  ├─ ShiftLeft
+│  │  ├─ ShiftRight
+│  │  ├─ SubstringCharsUtf8
+│  │  ├─ SubstringUtf8
+│  │  ├─ WrappingMultiply
+│  │  ├─ WrappingNegate
+│  │  ╰─ WrappingSub
+│  ├─ 64
+│  │  ├─ BitwiseAnd
+│  │  ├─ BitwiseAndNot
+│  │  ├─ BitwiseNot
+│  │  ├─ BitwiseOr
+│  │  ├─ BitwiseXor
+│  │  ├─ CheckedNegate
+│  │  ├─ CheckedSub
+│  │  ├─ CheckedSubNullable
+│  │  ├─ Equal
+│  │  ├─ FloatAdd
+│  │  ├─ FloatDivide
+│  │  ├─ FloatEqual
+│  │  ├─ FloatGreaterThan
+│  │  ├─ FloatGreaterThanOrEqual
+│  │  ├─ FloatLessThan
+│  │  ├─ FloatLessThanOrEqual
+│  │  ├─ FloatMultiply
+│  │  ├─ FloatNegate
+│  │  ├─ FloatNotEqual
+│  │  ├─ FloatRemainder
+│  │  ├─ FloatSubtract
+│  │  ├─ GreaterThan
+│  │  ├─ GreaterThanOrEqual
+│  │  ├─ ILikeComplexScalar
+│  │  ├─ LessThan
+│  │  ├─ LessThanOrEqual
+│  │  ├─ LikeAlternatingArray
+│  │  ├─ LikeComplexArray
+│  │  ├─ LikeLiteralScalar
+│  │  ├─ NotEqual
+│  │  ├─ NotILikeScalar
+│  │  ├─ NotLikeScalar
+│  │  ├─ RegexpAlternatingArray
+│  │  ├─ RegexpArray
+│  │  ├─ RegexpScalar
+│  │  ├─ Remainder
+│  │  ├─ ShiftLeft
+│  │  ├─ ShiftRight
+│  │  ├─ SubstringCharsUtf8
+│  │  ├─ SubstringUtf8
+│  │  ├─ WrappingMultiply
+│  │  ├─ WrappingNegate
+│  │  ╰─ WrappingSub
+│  ├─ 1024
+│  │  ├─ BitwiseAnd
+│  │  ├─ BitwiseAndNot
+│  │  ├─ BitwiseNot
+│  │  ├─ BitwiseOr
+│  │  ├─ BitwiseXor
+│  │  ├─ CheckedNegate
+│  │  ├─ CheckedSub
+│  │  ├─ CheckedSubNullable
+│  │  ├─ Equal
+│  │  ├─ FloatAdd
+│  │  ├─ FloatDivide
+│  │  ├─ FloatEqual
+│  │  ├─ FloatGreaterThan
+│  │  ├─ FloatGreaterThanOrEqual
+│  │  ├─ FloatLessThan
+│  │  ├─ FloatLessThanOrEqual
+│  │  ├─ FloatMultiply
+│  │  ├─ FloatNegate
+│  │  ├─ FloatNotEqual
+│  │  ├─ FloatRemainder
+│  │  ├─ FloatSubtract
+│  │  ├─ GreaterThan
+│  │  ├─ GreaterThanOrEqual
+│  │  ├─ ILikeComplexScalar
+│  │  ├─ LessThan
+│  │  ├─ LessThanOrEqual
+│  │  ├─ LikeAlternatingArray
+│  │  ├─ LikeComplexArray
+│  │  ├─ LikeLiteralScalar
+│  │  ├─ NotEqual
+│  │  ├─ NotILikeScalar
+│  │  ├─ NotLikeScalar
+│  │  ├─ RegexpAlternatingArray
+│  │  ├─ RegexpArray
+│  │  ├─ RegexpScalar
+│  │  ├─ Remainder
+│  │  ├─ ShiftLeft
+│  │  ├─ ShiftRight
+│  │  ├─ SubstringCharsUtf8
+│  │  ├─ SubstringUtf8
+│  │  ├─ WrappingMultiply
+│  │  ├─ WrappingNegate
+│  │  ╰─ WrappingSub
+│  ╰─ 16384
+│     ├─ BitwiseAnd
+│     ├─ BitwiseAndNot
+│     ├─ BitwiseNot
+│     ├─ BitwiseOr
+│     ├─ BitwiseXor
+│     ├─ CheckedNegate
+│     ├─ CheckedSub
+│     ├─ CheckedSubNullable
+│     ├─ Equal
+│     ├─ FloatAdd
+│     ├─ FloatDivide
+│     ├─ FloatEqual
+│     ├─ FloatGreaterThan
+│     ├─ FloatGreaterThanOrEqual
+│     ├─ FloatLessThan
+│     ├─ FloatLessThanOrEqual
+│     ├─ FloatMultiply
+│     ├─ FloatNegate
+│     ├─ FloatNotEqual
+│     ├─ FloatRemainder
+│     ├─ FloatSubtract
+│     ├─ GreaterThan
+│     ├─ GreaterThanOrEqual
+│     ├─ ILikeComplexScalar
+│     ├─ LessThan
+│     ├─ LessThanOrEqual
+│     ├─ LikeAlternatingArray
+│     ├─ LikeComplexArray
+│     ├─ LikeLiteralScalar
+│     ├─ NotEqual
+│     ├─ NotILikeScalar
+│     ├─ NotLikeScalar
+│     ├─ RegexpAlternatingArray
+│     ├─ RegexpArray
+│     ├─ RegexpScalar
+│     ├─ Remainder
+│     ├─ ShiftLeft
+│     ├─ ShiftRight
+│     ├─ SubstringCharsUtf8
+│     ├─ SubstringUtf8
+│     ├─ WrappingMultiply
+│     ├─ WrappingNegate
+│     ╰─ WrappingSub
+╰─ arrow_rofl
+   ├─ 0
+   │  ├─ BitwiseAnd
+   │  ├─ BitwiseAndNot
+   │  ├─ BitwiseNot
+   │  ├─ BitwiseOr
+   │  ├─ BitwiseXor
+   │  ├─ CheckedNegate
+   │  ├─ CheckedSub
+   │  ├─ CheckedSubNullable
+   │  ├─ Equal
+   │  ├─ FloatAdd
+   │  ├─ FloatDivide
+   │  ├─ FloatEqual
+   │  ├─ FloatGreaterThan
+   │  ├─ FloatGreaterThanOrEqual
+   │  ├─ FloatLessThan
+   │  ├─ FloatLessThanOrEqual
+   │  ├─ FloatMultiply
+   │  ├─ FloatNegate
+   │  ├─ FloatNotEqual
+   │  ├─ FloatRemainder
+   │  ├─ FloatSubtract
+   │  ├─ GreaterThan
+   │  ├─ GreaterThanOrEqual
+   │  ├─ ILikeComplexScalar
+   │  ├─ LessThan
+   │  ├─ LessThanOrEqual
+   │  ├─ LikeAlternatingArray
+   │  ├─ LikeComplexArray
+   │  ├─ LikeLiteralScalar
+   │  ├─ NotEqual
+   │  ├─ NotILikeScalar
+   │  ├─ NotLikeScalar
+   │  ├─ RegexpAlternatingArray
+   │  ├─ RegexpArray
+   │  ├─ RegexpScalar
+   │  ├─ Remainder
+   │  ├─ ShiftLeft
+   │  ├─ ShiftRight
+   │  ├─ SubstringCharsUtf8
+   │  ├─ SubstringUtf8
+   │  ├─ WrappingMultiply
+   │  ├─ WrappingNegate
+   │  ╰─ WrappingSub
+   ├─ 64
+   │  ├─ BitwiseAnd
+   │  ├─ BitwiseAndNot
+   │  ├─ BitwiseNot
+   │  ├─ BitwiseOr
+   │  ├─ BitwiseXor
+   │  ├─ CheckedNegate
+   │  ├─ CheckedSub
+   │  ├─ CheckedSubNullable
+   │  ├─ Equal
+   │  ├─ FloatAdd
+   │  ├─ FloatDivide
+   │  ├─ FloatEqual
+   │  ├─ FloatGreaterThan
+   │  ├─ FloatGreaterThanOrEqual
+   │  ├─ FloatLessThan
+   │  ├─ FloatLessThanOrEqual
+   │  ├─ FloatMultiply
+   │  ├─ FloatNegate
+   │  ├─ FloatNotEqual
+   │  ├─ FloatRemainder
+   │  ├─ FloatSubtract
+   │  ├─ GreaterThan
+   │  ├─ GreaterThanOrEqual
+   │  ├─ ILikeComplexScalar
+   │  ├─ LessThan
+   │  ├─ LessThanOrEqual
+   │  ├─ LikeAlternatingArray
+   │  ├─ LikeComplexArray
+   │  ├─ LikeLiteralScalar
+   │  ├─ NotEqual
+   │  ├─ NotILikeScalar
+   │  ├─ NotLikeScalar
+   │  ├─ RegexpAlternatingArray
+   │  ├─ RegexpArray
+   │  ├─ RegexpScalar
+   │  ├─ Remainder
+   │  ├─ ShiftLeft
+   │  ├─ ShiftRight
+   │  ├─ SubstringCharsUtf8
+   │  ├─ SubstringUtf8
+   │  ├─ WrappingMultiply
+   │  ├─ WrappingNegate
+   │  ╰─ WrappingSub
+   ├─ 1024
+   │  ├─ BitwiseAnd
+   │  ├─ BitwiseAndNot
+   │  ├─ BitwiseNot
+   │  ├─ BitwiseOr
+   │  ├─ BitwiseXor
+   │  ├─ CheckedNegate
+   │  ├─ CheckedSub
+   │  ├─ CheckedSubNullable
+   │  ├─ Equal
+   │  ├─ FloatAdd
+   │  ├─ FloatDivide
+   │  ├─ FloatEqual
+   │  ├─ FloatGreaterThan
+   │  ├─ FloatGreaterThanOrEqual
+   │  ├─ FloatLessThan
+   │  ├─ FloatLessThanOrEqual
+   │  ├─ FloatMultiply
+   │  ├─ FloatNegate
+   │  ├─ FloatNotEqual
+   │  ├─ FloatRemainder
+   │  ├─ FloatSubtract
+   │  ├─ GreaterThan
+   │  ├─ GreaterThanOrEqual
+   │  ├─ ILikeComplexScalar
+   │  ├─ LessThan
+   │  ├─ LessThanOrEqual
+   │  ├─ LikeAlternatingArray
+   │  ├─ LikeComplexArray
+   │  ├─ LikeLiteralScalar
+   │  ├─ NotEqual
+   │  ├─ NotILikeScalar
+   │  ├─ NotLikeScalar
+   │  ├─ RegexpAlternatingArray
+   │  ├─ RegexpArray
+   │  ├─ RegexpScalar
+   │  ├─ Remainder
+   │  ├─ ShiftLeft
+   │  ├─ ShiftRight
+   │  ├─ SubstringCharsUtf8
+   │  ├─ SubstringUtf8
+   │  ├─ WrappingMultiply
+   │  ├─ WrappingNegate
+   │  ╰─ WrappingSub
+   ╰─ 16384
+      ├─ BitwiseAnd
+      ├─ BitwiseAndNot
+      ├─ BitwiseNot
+      ├─ BitwiseOr
+      ├─ BitwiseXor
+      ├─ CheckedNegate
+      ├─ CheckedSub
+      ├─ CheckedSubNullable
+      ├─ Equal
+      ├─ FloatAdd
+      ├─ FloatDivide
+      ├─ FloatEqual
+      ├─ FloatGreaterThan
+      ├─ FloatGreaterThanOrEqual
+      ├─ FloatLessThan
+      ├─ FloatLessThanOrEqual
+      ├─ FloatMultiply
+      ├─ FloatNegate
+      ├─ FloatNotEqual
+      ├─ FloatRemainder
+      ├─ FloatSubtract
+      ├─ GreaterThan
+      ├─ GreaterThanOrEqual
+      ├─ ILikeComplexScalar
+      ├─ LessThan
+      ├─ LessThanOrEqual
+      ├─ LikeAlternatingArray
+      ├─ LikeComplexArray
+      ├─ LikeLiteralScalar
+      ├─ NotEqual
+      ├─ NotILikeScalar
+      ├─ NotLikeScalar
+      ├─ RegexpAlternatingArray
+      ├─ RegexpArray
+      ├─ RegexpScalar
+      ├─ Remainder
+      ├─ ShiftLeft
+      ├─ ShiftRight
+      ├─ SubstringCharsUtf8
+      ├─ SubstringUtf8
+      ├─ WrappingMultiply
+      ├─ WrappingNegate
+      ╰─ WrappingSub
+

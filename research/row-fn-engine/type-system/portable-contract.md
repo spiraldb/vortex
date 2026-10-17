@@ -3,6 +3,10 @@
 
 # A proposed binding contract
 
+The experimental source now implements the accepted extraction boundary. See the
+[implementation record](../implementation.md) for current behavior and unrun verification. Alternatives below
+remain research context where they differ from that implementation.
+
 The proposed core executes typed row kernels. Host adapters bind semantic requests to their arrays
 and construct host-native outputs. The shared contract describes what the function means and which
 inputs it accepts.

@@ -1,0 +1,100 @@
+host_comparison
+├─ arrow_native
+│  ├─ 64
+│  │  ├─ ByteLengthView
+│  │  ├─ LikeLiteralScalar
+│  │  ├─ StartsWithScalar
+│  │  ├─ StringEqualViewShort
+│  │  ├─ StringLessThanViewScalar
+│  │  ├─ WrappingMultiply
+│  │  ╰─ WrappingNegate
+│  ├─ 1024
+│  │  ├─ ByteLengthView
+│  │  ├─ LikeLiteralScalar
+│  │  ├─ StartsWithScalar
+│  │  ├─ StringEqualViewShort
+│  │  ├─ StringLessThanViewScalar
+│  │  ├─ WrappingMultiply
+│  │  ╰─ WrappingNegate
+│  ╰─ 16384
+│     ├─ ByteLengthView
+│     ├─ LikeLiteralScalar
+│     ├─ StartsWithScalar
+│     ├─ StringEqualViewShort
+│     ├─ StringLessThanViewScalar
+│     ├─ WrappingMultiply
+│     ╰─ WrappingNegate
+├─ arrow_rofl
+│  ├─ 64
+│  │  ├─ ByteLengthView
+│  │  ├─ LikeLiteralScalar
+│  │  ├─ StartsWithScalar
+│  │  ├─ StringEqualViewShort
+│  │  ├─ StringLessThanViewScalar
+│  │  ├─ WrappingMultiply
+│  │  ╰─ WrappingNegate
+│  ├─ 1024
+│  │  ├─ ByteLengthView
+│  │  ├─ LikeLiteralScalar
+│  │  ├─ StartsWithScalar
+│  │  ├─ StringEqualViewShort
+│  │  ├─ StringLessThanViewScalar
+│  │  ├─ WrappingMultiply
+│  │  ╰─ WrappingNegate
+│  ╰─ 16384
+│     ├─ ByteLengthView
+│     ├─ LikeLiteralScalar
+│     ├─ StartsWithScalar
+│     ├─ StringEqualViewShort
+│     ├─ StringLessThanViewScalar
+│     ├─ WrappingMultiply
+│     ╰─ WrappingNegate
+├─ vortex_legacy_byte_length
+│  ├─ 64
+│  ├─ 1024
+│  ╰─ 16384
+├─ vortex_rofl_bench
+│  ├─ 64
+│  │  ├─ ByteLengthView
+│  │  ├─ LikeLiteralScalar
+│  │  ├─ StartsWithScalar
+│  │  ├─ StringEqualViewShort
+│  │  ├─ StringLessThanViewScalar
+│  │  ├─ WrappingMultiply
+│  │  ╰─ WrappingNegate
+│  ├─ 1024
+│  │  ├─ ByteLengthView
+│  │  ├─ LikeLiteralScalar
+│  │  ├─ StartsWithScalar
+│  │  ├─ StringEqualViewShort
+│  │  ├─ StringLessThanViewScalar
+│  │  ├─ WrappingMultiply
+│  │  ╰─ WrappingNegate
+│  ╰─ 16384
+│     ├─ ByteLengthView
+│     ├─ LikeLiteralScalar
+│     ├─ StartsWithScalar
+│     ├─ StringEqualViewShort
+│     ├─ StringLessThanViewScalar
+│     ├─ WrappingMultiply
+│     ╰─ WrappingNegate
+╰─ vortex_string_decode
+   ├─ 64
+   │  ├─ ByteLengthView
+   │  ├─ LikeLiteralScalar
+   │  ├─ StartsWithScalar
+   │  ├─ StringEqualViewShort
+   │  ╰─ StringLessThanViewScalar
+   ├─ 1024
+   │  ├─ ByteLengthView
+   │  ├─ LikeLiteralScalar
+   │  ├─ StartsWithScalar
+   │  ├─ StringEqualViewShort
+   │  ╰─ StringLessThanViewScalar
+   ╰─ 16384
+      ├─ ByteLengthView
+      ├─ LikeLiteralScalar
+      ├─ StartsWithScalar
+      ├─ StringEqualViewShort
+      ╰─ StringLessThanViewScalar
+

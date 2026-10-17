@@ -1,0 +1,71 @@
+[
+  {
+    "command": [
+      "target/rofl-diagnosis/lists",
+      "16384",
+      "--bench",
+      "--timer",
+      "os",
+      "--color",
+      "never",
+      "--sample-count",
+      "1000",
+      "--min-time",
+      "0.1",
+      "--max-time",
+      "0.3",
+      "--sort",
+      "name"
+    ],
+    "start_unix": 1790690451.486745,
+    "seconds": 4.911993741989136,
+    "output": "lists-1.txt",
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "target/rofl-diagnosis/lists",
+      "16384",
+      "--bench",
+      "--timer",
+      "os",
+      "--color",
+      "never",
+      "--sample-count",
+      "1000",
+      "--min-time",
+      "0.1",
+      "--max-time",
+      "0.3",
+      "--sortr",
+      "name"
+    ],
+    "start_unix": 1790690456.399162,
+    "seconds": 4.907818078994751,
+    "output": "lists-2.txt",
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "target/rofl-diagnosis/lists",
+      "16384",
+      "--bench",
+      "--timer",
+      "os",
+      "--color",
+      "never",
+      "--sample-count",
+      "1000",
+      "--min-time",
+      "0.1",
+      "--max-time",
+      "0.3",
+      "--sort",
+      "name"
+    ],
+    "start_unix": 1790690461.307358,
+    "seconds": 4.94960880279541,
+    "output": "lists-3.txt",
+    "exit_code": 0
+  }
+]

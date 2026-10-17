@@ -1,0 +1,11 @@
+{
+  "name": "rofl-utf8-20260929",
+  "region": "us-east-1",
+  "key": "rofl-utf8-20260929",
+  "group": "sg-0516c4e225b7071ec",
+  "instance": "i-026864dd922fdece5",
+  "instance_state": "terminated",
+  "security_group_matches": 0,
+  "key_pair_matches": 0,
+  "downloaded_log_hashes_verified": true
+}

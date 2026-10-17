@@ -251,7 +251,8 @@ fn try_map_masked_in_place_narrow_i32_u32(bencher: Bencher, n: usize) {
     bencher
         .with_inputs(|| (f.values_i32.as_slice().to_vec(), f.mask.clone()))
         .bench_values(|(mut values, mask)| {
-            ReinterpretSink::<i32, u32>::new(values.as_mut_slice())
+            // SAFETY: u32 has no padding, and every u32 bit pattern is a valid i32.
+            unsafe { ReinterpretSink::<i32, u32>::new(values.as_mut_slice()) }
                 .try_map_masked_in_place(&mask, <u32 as NumCast>::from)
                 .unwrap();
             values

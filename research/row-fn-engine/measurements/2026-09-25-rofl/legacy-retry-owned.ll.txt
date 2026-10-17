@@ -1,0 +1,1392 @@
+; Source: boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.04.rcgu.ll:17496
+define hidden void @_RINvNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row7execute5owned24execute_owned_valid_rowsTxxEbubNCINvYINtNtNtB6_7visitor7execute16ExecuteValidRowsINtCs3jOYrsLZdRr_10boundaries15LegacyPredicateKb1_EENtNtB1X_11row_visitor10RowVisitor19visit_deferred_boolB1F_bKB3l_NCINvXs_B2D_B2A_NtNtB6_6row_fn5RowFn8dispatchB1S_E0NCB4u_s_0E0NCB1O_s_0B5h_EB2D_(ptr dead_on_unwind noalias nofree noundef writable writeonly sret([80 x i8]) align 8 captures(none) dereferenceable(80) %_0, ptr noundef nonnull %args.0, ptr noalias nofree noundef readonly align 8 captures(address, read_provenance) dereferenceable(48) %args.1, ptr noalias nofree noundef readonly align 8 captures(none) dereferenceable(8) %valid, ptr noalias nofree noundef align 8 dereferenceable(40) %ctx) unnamed_addr #0 personality ptr @rust_eh_personality !dbg !11144 {
+start:
+  %_6.i.i29 = alloca [40 x i8], align 8
+  %_6.i27 = alloca [16 x i8], align 8
+  %_6.i.i = alloca [40 x i8], align 8
+  %_87 = alloca [72 x i8], align 8
+  %_80 = alloca [80 x i8], align 8
+  %args2 = alloca [16 x i8], align 8
+  %_68 = alloca [16 x i8], align 8
+  %_65 = alloca [80 x i8], align 8
+  %args1 = alloca [16 x i8], align 8
+  %_52 = alloca [16 x i8], align 8
+  %_49 = alloca [80 x i8], align 8
+  %values = alloca [72 x i8], align 8
+  %args = alloca [32 x i8], align 8
+  %_22 = alloca [8 x i8], align 8
+  %_20 = alloca [16 x i8], align 8
+  %_17 = alloca [80 x i8], align 8
+  %row_count = alloca [8 x i8], align 8
+  %_9 = alloca [80 x i8], align 8
+  %_8.sroa.7.sroa.8 = alloca [64 x i8], align 8
+  %columns = alloca [64 x i8], align 8
+  call void @llvm.lifetime.start.p0(ptr nonnull %_9), !dbg !11145
+; call <(i64, i64) as vortex_array::scalar_fn::unstable::row::types::element::tuple::element_tuple::ElementTuple>::decode_null_tolerant
+  call void @_RNvXs4_NtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleTxxENtB5_12ElementTuple20decode_null_tolerantCs3jOYrsLZdRr_10boundaries(ptr noalias nofree noundef nonnull sret([80 x i8]) align 8 captures(none) dereferenceable(80) %_9, ptr noundef nonnull %args.0, ptr noalias nofree noundef nonnull readonly align 8 captures(address, read_provenance) dereferenceable(48) %args.1, ptr noalias nofree noundef nonnull align 8 dereferenceable(40) %ctx), !dbg !11145
+  %0 = load i64, ptr %_9, align 8, !dbg !11146, !range !7333, !noundef !30
+  %.not = icmp eq i64 %0, -1, !dbg !11146
+  %1 = getelementptr inbounds nuw i8, ptr %_9, i64 8, !dbg !11148
+  %_96.sroa.4.0..sroa_idx = getelementptr inbounds nuw i8, ptr %_9, i64 16, !dbg !11148
+  %_96.sroa.0.0.copyload = load i64, ptr %1, align 8, !dbg !11148
+  call void @llvm.memcpy.p0.p0.i64(ptr noundef nonnull align 8 dereferenceable(64) %_8.sroa.7.sroa.8, ptr noundef nonnull align 8 dereferenceable(64) %_96.sroa.4.0..sroa_idx, i64 64, i1 false), !dbg !11148
+  call void @llvm.lifetime.end.p0(ptr nonnull %_9), !dbg !11149
+  br i1 %.not, label %bb63, label %bb62, !dbg !11150
+
+common.resume:                                    ; preds = %cleanup.i168, %cleanup.i, %bb45
+  %common.resume.op = phi { ptr, i32 } [ %207, %cleanup.i ], [ %.pn17, %bb45 ], [ %223, %cleanup.i168 ]
+  resume { ptr, i32 } %common.resume.op, !dbg !11151
+
+bb62:                                             ; preds = %start
+  %_100.sroa.5.0._0.sroa_idx = getelementptr inbounds nuw i8, ptr %_0, i64 16, !dbg !11152
+  call void @llvm.memcpy.p0.p0.i64(ptr noundef nonnull align 8 dereferenceable(64) %_100.sroa.5.0._0.sroa_idx, ptr noundef nonnull align 8 dereferenceable(64) %_8.sroa.7.sroa.8, i64 64, i1 false), !dbg !11149
+  store i64 %0, ptr %_0, align 8, !dbg !11152
+  %_100.sroa.4.0._0.sroa_idx = getelementptr inbounds nuw i8, ptr %_0, i64 8, !dbg !11152
+  store i64 %_96.sroa.0.0.copyload, ptr %_100.sroa.4.0._0.sroa_idx, align 8, !dbg !11152
+  br label %bb42, !dbg !11159
+
+bb63:                                             ; preds = %start
+  %2 = trunc nuw i64 %_96.sroa.0.0.copyload to i1, !dbg !11161
+  br i1 %2, label %bb4, label %bb3, !dbg !11161
+
+bb4:                                              ; preds = %bb63
+  call void @llvm.lifetime.start.p0(ptr nonnull %columns), !dbg !11162
+  call void @llvm.memcpy.p0.p0.i64(ptr noundef nonnull align 8 dereferenceable(64) %columns, ptr noundef nonnull align 8 dereferenceable(64) %_8.sroa.7.sroa.8, i64 64, i1 false), !dbg !11162
+  call void @llvm.lifetime.start.p0(ptr nonnull %row_count), !dbg !11163
+  %3 = getelementptr inbounds nuw i8, ptr %args.1, i64 40, !dbg !11165
+  %4 = load ptr, ptr %3, align 8, !dbg !11165, !invariant.load !30, !nonnull !30
+  %5 = invoke noundef i64 %4(ptr noundef nonnull %args.0)
+          to label %bb5 unwind label %cleanup5, !dbg !11166
+
+bb3:                                              ; preds = %bb63
+  %6 = getelementptr inbounds nuw i8, ptr %_0, i64 8, !dbg !11167
+  store ptr null, ptr %6, align 8, !dbg !11167
+  store i64 -1, ptr %_0, align 8, !dbg !11167
+  br label %bb42, !dbg !11168
+
+bb45:                                             ; preds = %bb54, %bb52, %cleanup10, %bb2.i.i.i.i.i.i, %bb2.i.i.i.i, %cleanup.i.i, %cleanup7, %cleanup5
+  %.pn17 = phi { ptr, i32 } [ %7, %cleanup5 ], [ %98, %cleanup.i.i ], [ %.pn.ph, %bb54 ], [ %195, %cleanup10 ], [ %11, %cleanup7 ], [ %216, %bb52 ], [ %98, %bb2.i.i.i.i.i.i ], [ %98, %bb2.i.i.i.i ]
+; invoke core::ptr::drop_glue::<(vortex_array::scalar_fn::unstable::row::types::element::tuple::element_tuple::ArgColumn<i64>, vortex_array::scalar_fn::unstable::row::types::element::tuple::element_tuple::ArgColumn<i64>)>
+  invoke fastcc void @_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueTINtNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tuple9ArgColumnxEBC_EECs3jOYrsLZdRr_10boundaries(ptr noalias nofree noundef align 8 dereferenceable(64) %columns) #27
+          to label %common.resume unwind label %terminate, !dbg !11169
+
+cleanup5:                                         ; preds = %bb6, %bb4
+  %7 = landingpad { ptr, i32 }
+          cleanup
+  br label %bb45
+
+bb5:                                              ; preds = %bb4
+  store i64 %5, ptr %row_count, align 8, !dbg !11165
+  %_103 = load ptr, ptr %valid, align 8, !dbg !11170, !nonnull !30, !noundef !30
+  %valid_rows = getelementptr inbounds nuw i8, ptr %_103, i64 16, !dbg !11178
+  %8 = getelementptr inbounds nuw i8, ptr %_103, i64 56, !dbg !11181
+  %_16 = load i64, ptr %8, align 8, !dbg !11181, !noundef !30
+  %_15.not = icmp eq i64 %_16, %5, !dbg !11185
+  br i1 %_15.not, label %bb10, label %bb6, !dbg !11185, !prof !8944
+
+bb6:                                              ; preds = %bb5
+  call void @llvm.lifetime.start.p0(ptr nonnull %_17), !dbg !11185
+  call void @llvm.lifetime.start.p0(ptr nonnull %_20), !dbg !11185
+  call void @llvm.lifetime.start.p0(ptr nonnull %_22), !dbg !11186
+  store i64 %_16, ptr %_22, align 8, !dbg !11187
+  call void @llvm.lifetime.start.p0(ptr nonnull %args), !dbg !11189
+  store ptr %row_count, ptr %args, align 8, !dbg !11189
+  %_25.sroa.4.0..sroa_idx = getelementptr inbounds nuw i8, ptr %args, i64 8, !dbg !11189
+  store ptr @_RNvXsi_NtNtNtCslWxY2MhVcag_4core3fmt3num3impjNtB9_7Display3fmt, ptr %_25.sroa.4.0..sroa_idx, align 8, !dbg !11189
+  %9 = getelementptr inbounds nuw i8, ptr %args, i64 16, !dbg !11189
+  store ptr %_22, ptr %9, align 8, !dbg !11189
+  %_26.sroa.4.0..sroa_idx = getelementptr inbounds nuw i8, ptr %args, i64 24, !dbg !11189
+  store ptr @_RNvXsi_NtNtNtCslWxY2MhVcag_4core3fmt3num3impjNtB9_7Display3fmt, ptr %_26.sroa.4.0..sroa_idx, align 8, !dbg !11189
+  store ptr @alloc_d5becb9eab0161f9bd6f433cffeec7e7, ptr %_20, align 8, !dbg !11192
+  %10 = getelementptr inbounds nuw i8, ptr %_20, i64 8, !dbg !11192
+  store ptr %args, ptr %10, align 8, !dbg !11192
+; invoke vortex_error::__private::fmt_err
+  invoke void @_RNvNtCs6NFVb2nVDVl_12vortex_error9___private7fmt_err(ptr noalias nofree noundef nonnull sret([80 x i8]) align 8 captures(address) dereferenceable(80) %_17, ptr noundef nonnull @_RNcNtNtCs6NFVb2nVDVl_12vortex_error11VortexError5Other0, ptr noalias nofree noundef nonnull readonly align 8 captures(address, read_provenance) dereferenceable(16) %_20)
+          to label %bb7 unwind label %cleanup5, !dbg !11185
+
+bb10:                                             ; preds = %bb5
+  call void @llvm.lifetime.start.p0(ptr nonnull %values), !dbg !11198
+; invoke <vortex_array::executor::ExecutionCtx>::allocator
+  %_34 = invoke noundef nonnull align 8 ptr @_RNvMs_NtCsg1Afd8KoF7C_12vortex_array8executorNtB4_12ExecutionCtx9allocator(ptr noundef nonnull align 8 %ctx)
+          to label %bb11 unwind label %cleanup7, !dbg !11200
+
+cleanup7:                                         ; preds = %bb2.i.i.i.i3.i.i, %bb11, %bb10
+  %11 = landingpad { ptr, i32 }
+          cleanup
+  br label %bb45
+
+bb11:                                             ; preds = %bb10
+  %12 = load i64, ptr %row_count, align 8, !dbg !11201, !noundef !30
+; invoke <bool as vortex_array::scalar_fn::unstable::row::types::element::output::OutputElement>::with_capacity
+  invoke void @_RNvXs_NtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element4boolbNtNtB6_6output13OutputElement13with_capacity(ptr noalias nofree noundef nonnull sret([72 x i8]) align 8 captures(address) dereferenceable(72) %values, i64 noundef %12, ptr noalias nofree noundef nonnull readonly align 8 captures(address, read_provenance) dereferenceable(16) %_34)
+          to label %bb13 unwind label %cleanup7, !dbg !11201
+
+cleanup8.loopexit:                                ; preds = %panic.i.i5.i78.invoke
+  %lpad.loopexit = landingpad { ptr, i32 }
+          cleanup
+  br label %bb54
+
+cleanup8.loopexit.split-lp.loopexit:              ; preds = %panic.i.i5.i.invoke
+  %lpad.loopexit220 = landingpad { ptr, i32 }
+          cleanup
+  br label %bb54
+
+cleanup8.loopexit.split-lp.loopexit.split-lp.loopexit: ; preds = %panic.i.i5.i120.invoke
+  %lpad.loopexit224 = landingpad { ptr, i32 }
+          cleanup
+  br label %bb54
+
+cleanup8.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp.loopexit: ; preds = %panic.i.i5.i99.invoke
+  %lpad.loopexit226 = landingpad { ptr, i32 }
+          cleanup
+  br label %bb54
+
+cleanup8.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp: ; preds = %bb26, %bb27, %bb1.i, %bb66
+  %lpad.loopexit.split-lp227 = landingpad { ptr, i32 }
+          cleanup
+  br label %bb54
+
+bb13:                                             ; preds = %bb11
+  %13 = getelementptr inbounds nuw i8, ptr %values, i64 48, !dbg !11202
+  store i64 0, ptr %13, align 8, !dbg !11202, !alias.scope !11206
+  %14 = getelementptr inbounds nuw i8, ptr %values, i64 40, !dbg !11209
+  %_8.i = load ptr, ptr %14, align 8, !dbg !11209, !alias.scope !11206, !nonnull !30, !noundef !30
+  %15 = getelementptr inbounds nuw i8, ptr %values, i64 56, !dbg !11212
+  %_6.i = load i64, ptr %15, align 8, !dbg !11212, !alias.scope !11206, !noundef !30
+  %16 = load i64, ptr %row_count, align 8, !dbg !11214, !noundef !30
+  %_116.not = icmp ugt i64 %16, %_6.i
+  br i1 %_116.not, label %bb66, label %bb64, !dbg !11214, !prof !9003
+
+bb64:                                             ; preds = %bb13
+  %_134261 = icmp samesign eq i64 %16, 0, !dbg !11223
+  br i1 %_134261, label %bb16, label %bb15.preheader, !dbg !11225
+
+bb15.preheader:                                   ; preds = %bb64
+  call void @llvm.memset.p0.i64(ptr nonnull align 1 %_8.i, i8 0, i64 %16, i1 false), !dbg !11233
+  br label %bb16, !dbg !11237
+
+bb66:                                             ; preds = %bb13
+; invoke core::slice::index::slice_index_fail
+  invoke void @_RNvNtNtCslWxY2MhVcag_4core5slice5index16slice_index_fail(i64 noundef 0, i64 noundef %16, i64 noundef %_6.i, ptr noalias nofree noundef readonly align 8 captures(address, read_provenance) dereferenceable(24) @alloc_ab997fc892085ad1318d2be96aca83e9) #25
+          to label %unreachable unwind label %cleanup8.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp, !dbg !11240
+
+bb16:                                             ; preds = %bb15.preheader, %bb64
+  %17 = load ptr, ptr %columns, align 8, !dbg !11241, !alias.scope !11244, !noalias !11247, !noundef !30
+  %18 = icmp eq ptr %17, null, !dbg !11241
+  br i1 %18, label %bb2.i, label %bb10.i, !dbg !11249
+
+bb10.i:                                           ; preds = %bb16
+  %19 = getelementptr inbounds nuw i8, ptr %columns, i64 32, !dbg !11250
+  %20 = load ptr, ptr %19, align 8, !dbg !11250, !alias.scope !11244, !noalias !11247, !noundef !30
+  %21 = icmp eq ptr %20, null, !dbg !11250
+  br i1 %21, label %bb48, label %bb19, !dbg !11252
+
+bb48:                                             ; preds = %bb10.i
+  %22 = load i64, ptr %row_count, align 8, !dbg !11253, !noundef !30
+  %23 = getelementptr inbounds nuw i8, ptr %columns, i64 8
+  %columns.val2.i = load i64, ptr %23, align 8, !alias.scope !11254
+  %24 = icmp eq i64 %columns.val2.i, %22
+  br i1 %24, label %bb2.i.thread, label %bb27, !dbg !11257, !prof !9054
+
+bb2.i.thread:                                     ; preds = %bb48
+  %_6.i18248 = getelementptr inbounds nuw i8, ptr %columns, i64 32, !dbg !11260
+  %25 = getelementptr inbounds nuw i8, ptr %columns, i64 40
+  br label %bb26, !dbg !11261
+
+bb2.i:                                            ; preds = %bb16
+  %26 = load i64, ptr %row_count, align 8, !dbg !11253, !noundef !30
+  %27 = getelementptr inbounds nuw i8, ptr %columns, i64 8
+  %_6.i18.phi.trans.insert = getelementptr inbounds nuw i8, ptr %columns, i64 32
+  %_6.val.i.pre = load ptr, ptr %_6.i18.phi.trans.insert, align 8, !dbg !11263, !alias.scope !11254
+  %28 = icmp eq ptr %_6.val.i.pre, null, !dbg !11264
+  %_6.i18 = getelementptr inbounds nuw i8, ptr %columns, i64 32, !dbg !11260
+  %29 = getelementptr inbounds nuw i8, ptr %columns, i64 40
+  %_6.val1.i = load i64, ptr %29, align 8
+  %30 = icmp eq i64 %_6.val1.i, %26
+  %or.cond = select i1 %28, i1 true, i1 %30, !dbg !11261, !prof !10039
+  br i1 %or.cond, label %bb26, label %bb27, !dbg !11261, !prof !9061
+
+cleanup9.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp: ; preds = %bb20, %bb21
+  %lpad.loopexit.split-lp240 = landingpad { ptr, i32 }
+          cleanup
+  br label %bb54
+
+bb19:                                             ; preds = %bb10.i
+  %31 = getelementptr inbounds nuw i8, ptr %columns, i64 8, !dbg !11265
+  %columns.val3.i = load i64, ptr %31, align 8, !dbg !11265, !alias.scope !11244, !noalias !11247, !noundef !30
+  %32 = getelementptr inbounds nuw i8, ptr %columns, i64 40, !dbg !11265
+  %.val2.i = load i64, ptr %32, align 8, !dbg !11265, !alias.scope !11244, !noalias !11247, !noundef !30
+  %33 = load i64, ptr %row_count, align 8, !dbg !11266, !noundef !30
+  %_3.i = icmp eq i64 %columns.val3.i, %33, !dbg !11267
+  %_6.i16 = icmp eq i64 %.val2.i, %33, !dbg !11267
+  %_0.sroa.0.0.off0.i = and i1 %_3.i, %_6.i16, !dbg !11267
+  br i1 %_0.sroa.0.0.off0.i, label %bb20, label %bb21, !dbg !11266, !prof !8944
+
+bb21:                                             ; preds = %bb19
+  call void @llvm.lifetime.start.p0(ptr nonnull %_49), !dbg !11269
+  call void @llvm.lifetime.start.p0(ptr nonnull %_52), !dbg !11269
+  call void @llvm.lifetime.start.p0(ptr nonnull %args1), !dbg !11270
+  store ptr %row_count, ptr %args1, align 8, !dbg !11270
+  %_55.sroa.4.0..sroa_idx = getelementptr inbounds nuw i8, ptr %args1, i64 8, !dbg !11270
+  store ptr @_RNvXsi_NtNtNtCslWxY2MhVcag_4core3fmt3num3impjNtB9_7Display3fmt, ptr %_55.sroa.4.0..sroa_idx, align 8, !dbg !11270
+  store ptr @alloc_8cb1b9e1c7b448ff8aa56230a8661784, ptr %_52, align 8, !dbg !11273
+  %34 = getelementptr inbounds nuw i8, ptr %_52, i64 8, !dbg !11273
+  store ptr %args1, ptr %34, align 8, !dbg !11273
+; invoke vortex_error::__private::fmt_err
+  invoke void @_RNvNtCs6NFVb2nVDVl_12vortex_error9___private7fmt_err(ptr noalias nofree noundef nonnull sret([80 x i8]) align 8 captures(address) dereferenceable(80) %_49, ptr noundef nonnull @_RNcNtNtCs6NFVb2nVDVl_12vortex_error11VortexError5Other0, ptr noalias nofree noundef nonnull readonly align 8 captures(address, read_provenance) dereferenceable(16) %_52)
+          to label %bb22 unwind label %cleanup9.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp, !dbg !11269
+
+bb20:                                             ; preds = %bb19
+  call void @llvm.experimental.noalias.scope.decl(metadata !11279), !dbg !11282
+  call void @llvm.experimental.noalias.scope.decl(metadata !11283), !dbg !11286
+  call void @llvm.lifetime.start.p0(ptr nonnull %_6.i.i), !dbg !11289, !noalias !11293
+  %_37.i.i = load ptr, ptr %valid_rows, align 8, !dbg !11296, !alias.scope !11301, !noalias !11302, !nonnull !30, !noundef !30
+  %35 = getelementptr inbounds nuw i8, ptr %_103, i64 24, !dbg !11303
+  %_38.i.i = load i64, ptr %35, align 8, !dbg !11303, !alias.scope !11301, !noalias !11302, !noundef !30
+  %36 = getelementptr inbounds nuw i8, ptr %_103, i64 48, !dbg !11304
+  %_34.i.i = load i64, ptr %36, align 8, !dbg !11304, !alias.scope !11301, !noalias !11302, !noundef !30
+  %_35.i.i = load i64, ptr %8, align 8, !dbg !11305, !alias.scope !11301, !noalias !11302, !noundef !30
+; invoke <arrow_buffer::util::bit_chunk_iterator::BitChunks>::new
+  invoke void @_RNvMs_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB4_9BitChunks3new(ptr noalias nofree noundef nonnull sret([40 x i8]) align 8 captures(none) dereferenceable(40) %_6.i.i, ptr noalias nofree noundef nonnull readonly captures(address, read_provenance) %_37.i.i, i64 noundef %_38.i.i, i64 noundef %_34.i.i, i64 noundef %_35.i.i)
+          to label %.noexc unwind label %cleanup9.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp, !dbg !11306
+
+.noexc:                                           ; preds = %bb20
+  %_43.0.i.i = load ptr, ptr %_6.i.i, align 8, !dbg !11307, !noalias !11293, !nonnull !30, !noundef !30
+  %37 = getelementptr inbounds nuw i8, ptr %_6.i.i, i64 16, !dbg !11312
+  %_44.i.i = load i64, ptr %37, align 8, !dbg !11312, !noalias !11293, !noundef !30
+  %38 = getelementptr inbounds nuw i8, ptr %_6.i.i, i64 24, !dbg !11313
+  %_45.i.i = load i64, ptr %38, align 8, !dbg !11313, !noalias !11293, !noundef !30
+  call void @llvm.experimental.noalias.scope.decl(metadata !11314), !dbg !11317
+  %39 = getelementptr inbounds nuw i8, ptr %_6.i.i, i64 32, !dbg !11318
+  %bit_len.i.i.i = load i64, ptr %39, align 8, !dbg !11318, !alias.scope !11314, !noalias !11293, !noundef !30
+  %40 = icmp eq i64 %bit_len.i.i.i, 0, !dbg !11320
+  br i1 %40, label %start._RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit_crit_edge.i.i, label %bb2.i.i.i, !dbg !11320
+
+start._RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit_crit_edge.i.i: ; preds = %.noexc
+  %.pre.i.i = and i64 %_44.i.i, 63
+  br label %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i, !dbg !11320
+
+bb2.i.i.i:                                        ; preds = %.noexc
+  %_5.i.i.i = add i64 %bit_len.i.i.i, %_44.i.i, !dbg !11321
+  %_243.i.i.i = lshr i64 %_5.i.i.i, 3, !dbg !11322
+  %_25.i.i.i = and i64 %_5.i.i.i, 7, !dbg !11325
+  %_26.not.i.i.i = icmp ne i64 %_25.i.i.i, 0, !dbg !11326
+  %41 = zext i1 %_26.not.i.i.i to i64, !dbg !11326
+  %byte_len.sroa.0.0.i.i.i = add nuw nsw i64 %_243.i.i.i, %41, !dbg !11326
+  %_8.i.i.i = shl i64 %_45.i.i, 3, !dbg !11327
+  %base.i.i.i = getelementptr inbounds nuw i8, ptr %_43.0.i.i, i64 %_8.i.i.i, !dbg !11328
+  %_12.i.i.i = load i8, ptr %base.i.i.i, align 1, !dbg !11330, !noalias !11332, !noundef !30
+  %_11.i.i.i = zext i8 %_12.i.i.i to i64, !dbg !11333
+  %42 = and i64 %_44.i.i, 63, !dbg !11333
+  %43 = lshr i64 %_11.i.i.i, %42, !dbg !11333
+  %_284.i.i.i = icmp samesign ugt i64 %byte_len.sroa.0.0.i.i.i, 1, !dbg !11334
+  br i1 %_284.i.i.i, label %iter.check, label %bb9.i.i.i, !dbg !11338
+
+iter.check:                                       ; preds = %bb2.i.i.i
+  %44 = add nuw nsw i64 %_243.i.i.i, %41, !dbg !11338
+  %45 = add nsw i64 %44, -1, !dbg !11338
+  %min.iters.check = icmp ult i64 %45, 4, !dbg !11338
+  br i1 %min.iters.check, label %bb8.i.i.i.preheader, label %vector.main.loop.iter.check, !dbg !11338
+
+vector.main.loop.iter.check:                      ; preds = %iter.check
+  %min.iters.check318 = icmp ult i64 %45, 16, !dbg !11338
+  br i1 %min.iters.check318, label %vec.epilog.ph, label %vector.ph, !dbg !11338
+
+vector.ph:                                        ; preds = %vector.main.loop.iter.check
+  %n.mod.vf = and i64 %45, 12
+  %n.vec = and i64 %45, -16
+  %46 = or disjoint i64 %n.vec, 1
+  %47 = insertelement <16 x i64> <i64 poison, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0>, i64 %43, i64 0
+  %broadcast.splatinsert = insertelement <16 x i64> poison, i64 %_44.i.i, i64 0
+  %broadcast.splat = shufflevector <16 x i64> %broadcast.splatinsert, <16 x i64> poison, <16 x i32> zeroinitializer
+  br label %vector.body, !dbg !11338
+
+vector.body:                                      ; preds = %vector.body, %vector.ph
+  %index = phi i64 [ 0, %vector.ph ], [ %index.next, %vector.body ]
+  %vec.phi = phi <16 x i64> [ %47, %vector.ph ], [ %55, %vector.body ]
+  %vec.ind = phi <16 x i64> [ <i64 1, i64 2, i64 3, i64 4, i64 5, i64 6, i64 7, i64 8, i64 9, i64 10, i64 11, i64 12, i64 13, i64 14, i64 15, i64 16>, %vector.ph ], [ %vec.ind.next, %vector.body ]
+  %48 = getelementptr inbounds nuw i8, ptr %base.i.i.i, i64 %index, !dbg !11339
+  %49 = getelementptr inbounds nuw i8, ptr %48, i64 1, !dbg !11339
+  %wide.load = load <16 x i8>, ptr %49, align 1, !dbg !11341, !noalias !11332
+  %50 = zext <16 x i8> %wide.load to <16 x i64>, !dbg !11343
+  %51 = shl nuw <16 x i64> %vec.ind, splat (i64 3), !dbg !11344
+  %52 = sub <16 x i64> %51, %broadcast.splat, !dbg !11345
+  %53 = and <16 x i64> %52, splat (i64 63), !dbg !11343
+  %54 = shl <16 x i64> %50, %53, !dbg !11343
+  %55 = or <16 x i64> %54, %vec.phi, !dbg !11346
+  %index.next = add nuw i64 %index, 16
+  %vec.ind.next = add nuw nsw <16 x i64> %vec.ind, splat (i64 16)
+  %56 = icmp eq i64 %index.next, %n.vec, !dbg !11338
+  br i1 %56, label %middle.block, label %vector.body, !dbg !11338, !llvm.loop !11347
+
+middle.block:                                     ; preds = %vector.body
+  %57 = call i64 @llvm.vector.reduce.or.v16i64(<16 x i64> %55), !dbg !11338
+  %cmp.n = icmp eq i64 %45, %n.vec, !dbg !11338
+  br i1 %cmp.n, label %bb9.i.i.i, label %vec.epilog.iter.check, !dbg !11338
+
+vec.epilog.iter.check:                            ; preds = %middle.block
+  %ind.end = or disjoint i64 %n.vec, 1
+  %min.epilog.iters.check = icmp eq i64 %n.mod.vf, 0
+  br i1 %min.epilog.iters.check, label %bb8.i.i.i.preheader, label %vec.epilog.ph, !prof !797
+
+vec.epilog.ph:                                    ; preds = %vector.main.loop.iter.check, %vec.epilog.iter.check
+  %vec.epilog.resume.val = phi i64 [ %n.vec, %vec.epilog.iter.check ], [ 0, %vector.main.loop.iter.check ]
+  %bc.merge.rdx = phi i64 [ %57, %vec.epilog.iter.check ], [ %43, %vector.main.loop.iter.check ]
+  %bc.resume.val = phi i64 [ %46, %vec.epilog.iter.check ], [ 1, %vector.main.loop.iter.check ]
+  %n.vec320 = and i64 %45, -4
+  %58 = or disjoint i64 %n.vec320, 1
+  %59 = insertelement <4 x i64> <i64 poison, i64 0, i64 0, i64 0>, i64 %bc.merge.rdx, i64 0
+  %broadcast.splatinsert321 = insertelement <4 x i64> poison, i64 %_44.i.i, i64 0
+  %broadcast.splat322 = shufflevector <4 x i64> %broadcast.splatinsert321, <4 x i64> poison, <4 x i32> zeroinitializer
+  %broadcast.splatinsert323 = insertelement <4 x i64> poison, i64 %bc.resume.val, i64 0
+  %broadcast.splat324 = shufflevector <4 x i64> %broadcast.splatinsert323, <4 x i64> poison, <4 x i32> zeroinitializer
+  %induction = add nuw nsw <4 x i64> %broadcast.splat324, <i64 0, i64 1, i64 2, i64 3>
+  br label %vec.epilog.vector.body
+
+vec.epilog.vector.body:                           ; preds = %vec.epilog.vector.body, %vec.epilog.ph
+  %index325 = phi i64 [ %vec.epilog.resume.val, %vec.epilog.ph ], [ %index.next329, %vec.epilog.vector.body ]
+  %vec.phi326 = phi <4 x i64> [ %59, %vec.epilog.ph ], [ %67, %vec.epilog.vector.body ]
+  %vec.ind327 = phi <4 x i64> [ %induction, %vec.epilog.ph ], [ %vec.ind.next330, %vec.epilog.vector.body ]
+  %60 = getelementptr inbounds nuw i8, ptr %base.i.i.i, i64 %index325, !dbg !11339
+  %61 = getelementptr inbounds nuw i8, ptr %60, i64 1, !dbg !11339
+  %wide.load328 = load <4 x i8>, ptr %61, align 1, !dbg !11341, !noalias !11332
+  %62 = zext <4 x i8> %wide.load328 to <4 x i64>, !dbg !11343
+  %63 = shl nuw <4 x i64> %vec.ind327, splat (i64 3), !dbg !11344
+  %64 = sub <4 x i64> %63, %broadcast.splat322, !dbg !11345
+  %65 = and <4 x i64> %64, splat (i64 63), !dbg !11343
+  %66 = shl <4 x i64> %62, %65, !dbg !11343
+  %67 = or <4 x i64> %66, %vec.phi326, !dbg !11346
+  %index.next329 = add nuw i64 %index325, 4
+  %vec.ind.next330 = add nuw nsw <4 x i64> %vec.ind327, splat (i64 4)
+  %68 = icmp eq i64 %index.next329, %n.vec320, !dbg !11338
+  br i1 %68, label %vec.epilog.middle.block, label %vec.epilog.vector.body, !dbg !11338, !llvm.loop !11348
+
+vec.epilog.middle.block:                          ; preds = %vec.epilog.vector.body
+  %69 = call i64 @llvm.vector.reduce.or.v4i64(<4 x i64> %67), !dbg !11338
+  %cmp.n331 = icmp eq i64 %45, %n.vec320, !dbg !11338
+  br i1 %cmp.n331, label %bb9.i.i.i, label %bb8.i.i.i.preheader, !dbg !11338
+
+bb8.i.i.i.preheader:                              ; preds = %iter.check, %vec.epilog.iter.check, %vec.epilog.middle.block
+  %bits.sroa.0.06.i.i.i.ph = phi i64 [ %43, %iter.check ], [ %57, %vec.epilog.iter.check ], [ %69, %vec.epilog.middle.block ]
+  %iter.sroa.0.05.i.i.i.ph = phi i64 [ 1, %iter.check ], [ %ind.end, %vec.epilog.iter.check ], [ %58, %vec.epilog.middle.block ]
+  br label %bb8.i.i.i, !dbg !11338
+
+bb9.i.i.i:                                        ; preds = %bb8.i.i.i, %middle.block, %vec.epilog.middle.block, %bb2.i.i.i
+  %bits.sroa.0.0.lcssa.i.i.i = phi i64 [ %43, %bb2.i.i.i ], [ %69, %vec.epilog.middle.block ], [ %57, %middle.block ], [ %74, %bb8.i.i.i ], !dbg !11349
+  %70 = and i64 %bit_len.i.i.i, 63, !dbg !11350
+  %notmask.i.i.i = shl nsw i64 -1, %70, !dbg !11351
+  %_21.i.i.i = xor i64 %notmask.i.i.i, -1, !dbg !11351
+  %71 = and i64 %bits.sroa.0.0.lcssa.i.i.i, %_21.i.i.i, !dbg !11352
+  br label %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i, !dbg !11353
+
+bb8.i.i.i:                                        ; preds = %bb8.i.i.i.preheader, %bb8.i.i.i
+  %bits.sroa.0.06.i.i.i = phi i64 [ %74, %bb8.i.i.i ], [ %bits.sroa.0.06.i.i.i.ph, %bb8.i.i.i.preheader ]
+  %iter.sroa.0.05.i.i.i = phi i64 [ %72, %bb8.i.i.i ], [ %iter.sroa.0.05.i.i.i.ph, %bb8.i.i.i.preheader ]
+  %72 = add nuw nsw i64 %iter.sroa.0.05.i.i.i, 1, !dbg !11354
+  %_16.i.i.i = getelementptr inbounds nuw i8, ptr %base.i.i.i, i64 %iter.sroa.0.05.i.i.i, !dbg !11339
+  %byte.i.i.i = load i8, ptr %_16.i.i.i, align 1, !dbg !11341, !noalias !11332, !noundef !30
+  %_18.i.i.i = zext i8 %byte.i.i.i to i64, !dbg !11343
+  %_20.i.i.i = shl nuw i64 %iter.sroa.0.05.i.i.i, 3, !dbg !11344
+  %_19.i.i.i = sub i64 %_20.i.i.i, %_44.i.i, !dbg !11345
+  %73 = and i64 %_19.i.i.i, 63, !dbg !11343
+  %_17.i.i.i = shl i64 %_18.i.i.i, %73, !dbg !11343
+  %74 = or i64 %_17.i.i.i, %bits.sroa.0.06.i.i.i, !dbg !11346
+  %exitcond.not.i.i.i = icmp eq i64 %72, %byte_len.sroa.0.0.i.i.i, !dbg !11334
+  br i1 %exitcond.not.i.i.i, label %bb9.i.i.i, label %bb8.i.i.i, !dbg !11338, !llvm.loop !11357
+
+_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i: ; preds = %bb9.i.i.i, %start._RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit_crit_edge.i.i
+  %.pre-phi.i.i = phi i64 [ %.pre.i.i, %start._RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit_crit_edge.i.i ], [ %42, %bb9.i.i.i ]
+  %_0.sroa.0.0.i.i.i = phi i64 [ 0, %start._RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit_crit_edge.i.i ], [ %71, %bb9.i.i.i ], !dbg !11358
+  %75 = icmp eq i64 %_44.i.i, 0
+  %_15.i.i.i.i.i = sub i64 0, %_44.i.i
+  %76 = and i64 %_15.i.i.i.i.i, 63
+  br i1 %75, label %bb1.i.us.i, label %bb1.i.i
+
+bb1.i.us.i:                                       ; preds = %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i, %bb13.i.us.i
+  %failure.sroa.0.5.off0 = phi i1 [ %failure.sroa.0.6.off0, %bb13.i.us.i ], [ false, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i ]
+  %iter.sroa.0.0.i.us.i = phi i1 [ %iter.sroa.0.143.i.us.i, %bb13.i.us.i ], [ true, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i ], !dbg !11289
+  %iter.sroa.7.0.i.us.i = phi ptr [ %iter.sroa.7.13142.i.us.i, %bb13.i.us.i ], [ %_43.0.i.i, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i ], !dbg !11289
+  %iter.sroa.12.0.i.us.i = phi i64 [ %iter.sroa.12.13341.i.us.i, %bb13.i.us.i ], [ 0, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i ], !dbg !11289
+  %base.sroa.0.0.i.us.i = phi i64 [ %86, %bb13.i.us.i ], [ 0, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i ], !dbg !11359
+  %.not.i.i.us.i = icmp ne ptr %iter.sroa.7.0.i.us.i, null, !dbg !11360
+  %_3.not.i.i.i.i.us.i = icmp ult i64 %iter.sroa.12.0.i.us.i, %_45.i.i
+  %or.cond.i.us.i = select i1 %.not.i.i.us.i, i1 %_3.not.i.i.i.i.us.i, i1 false, !dbg !11367
+  br i1 %or.cond.i.us.i, label %bb2.i.i.i.i.us.i, label %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.us.i, !dbg !11367
+
+_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.us.i: ; preds = %bb1.i.us.i
+  br i1 %iter.sroa.0.0.i.us.i, label %bb3.i.us.i, label %bb30, !dbg !11368
+
+bb2.i.i.i.i.us.i:                                 ; preds = %bb1.i.us.i
+  %_7.i.i.i.i.us.i = getelementptr inbounds nuw i64, ptr %iter.sroa.7.0.i.us.i, i64 %iter.sroa.12.0.i.us.i, !dbg !11369
+  %_19.sroa.0.0.copyload.i.i.i.i.us.i = load i64, ptr %_7.i.i.i.i.us.i, align 1, !dbg !11373, !noalias !11376
+  %77 = add nuw i64 %iter.sroa.12.0.i.us.i, 1, !dbg !11383
+  br label %bb3.i.us.i, !dbg !11368
+
+bb3.i.us.i:                                       ; preds = %bb2.i.i.i.i.us.i, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.us.i
+  %self.1.pn.i44.i.us.i = phi i64 [ %_19.sroa.0.0.copyload.i.i.i.i.us.i, %bb2.i.i.i.i.us.i ], [ %_0.sroa.0.0.i.i.i, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.us.i ]
+  %iter.sroa.0.143.i.us.i = phi i1 [ %iter.sroa.0.0.i.us.i, %bb2.i.i.i.i.us.i ], [ false, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.us.i ]
+  %iter.sroa.7.13142.i.us.i = phi ptr [ %iter.sroa.7.0.i.us.i, %bb2.i.i.i.i.us.i ], [ null, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.us.i ]
+  %iter.sroa.12.13341.i.us.i = phi i64 [ %77, %bb2.i.i.i.i.us.i ], [ %iter.sroa.12.0.i.us.i, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.us.i ]
+  switch i64 %self.1.pn.i44.i.us.i, label %bb10.i.us.i [
+    i64 -1, label %bb23.i.us.i
+    i64 0, label %bb13.i.us.i
+  ], !dbg !11384
+
+bb23.i.us.i:                                      ; preds = %bb3.i.us.i, %bb23.i.us.i
+  %failure.sroa.0.7.off0 = phi i1 [ %79, %bb23.i.us.i ], [ %failure.sroa.0.5.off0, %bb3.i.us.i ]
+  %iter2.sroa.0.047.i.us.i = phi i64 [ %80, %bb23.i.us.i ], [ 0, %bb3.i.us.i ]
+  %_17.i.us.i = or disjoint i64 %iter2.sroa.0.047.i.us.i, %base.sroa.0.0.i.us.i, !dbg !11386
+  %_5.i.i = icmp ult i64 %_17.i.us.i, %columns.val3.i, !dbg !11389
+  call void @llvm.assume(i1 %_5.i.i), !dbg !11399
+  %_4.i.i = getelementptr inbounds nuw i64, ptr %17, i64 %_17.i.us.i, !dbg !11400
+  %_0.i.i = load i64, ptr %_4.i.i, align 8, !dbg !11401, !noalias !11402, !noundef !30
+  %_5.i3.i = icmp ult i64 %_17.i.us.i, %.val2.i, !dbg !11405
+  call void @llvm.assume(i1 %_5.i3.i), !dbg !11409
+  %_4.i4.i = getelementptr inbounds nuw i64, ptr %20, i64 %_17.i.us.i, !dbg !11410
+  %_0.i5.i = load i64, ptr %_4.i4.i, align 8, !dbg !11411, !noalias !11402, !noundef !30
+  %78 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %_0.i.i, i64 %_0.i5.i), !dbg !11412
+  %_7.0.i.i.i.i.i.us.i = extractvalue { i64, i1 } %78, 0, !dbg !11412
+  %_7.1.i.i.i.i.i.us.i = extractvalue { i64, i1 } %78, 1, !dbg !11412
+  %_8.i.i.i.i.i.us.i = icmp sgt i64 %_7.0.i.i.i.i.i.us.i, 0, !dbg !11421
+  %_14.i.i.i.us.i = getelementptr inbounds nuw i8, ptr %_8.i, i64 %_17.i.us.i, !dbg !11423
+  %_15.i.i.i.us.i = zext i1 %_8.i.i.i.i.i.us.i to i8, !dbg !11429
+  store i8 %_15.i.i.i.us.i, ptr %_14.i.i.i.us.i, align 1, !dbg !11434, !noalias !11435
+  %79 = or i1 %failure.sroa.0.7.off0, %_7.1.i.i.i.i.i.us.i, !dbg !11438
+  %80 = add nuw nsw i64 %iter2.sroa.0.047.i.us.i, 1, !dbg !11440
+  %exitcond.not.i.us.i = icmp eq i64 %80, 64, !dbg !11451
+  br i1 %exitcond.not.i.us.i, label %bb13.i.us.i, label %bb23.i.us.i, !dbg !11454
+
+bb10.i.us.i:                                      ; preds = %bb3.i.us.i, %bb10.i.us.i
+  %failure.sroa.0.8.off0 = phi i1 [ %83, %bb10.i.us.i ], [ %failure.sroa.0.5.off0, %bb3.i.us.i ]
+  %word.sroa.0.046.i.us.i = phi i64 [ %84, %bb10.i.us.i ], [ %self.1.pn.i44.i.us.i, %bb3.i.us.i ]
+  %81 = call range(i64 0, 65) i64 @llvm.cttz.i64(i64 %word.sroa.0.046.i.us.i, i1 true), !dbg !11455
+  %_25.i.us.i = or disjoint i64 %81, %base.sroa.0.0.i.us.i, !dbg !11459
+  %_5.i.i24 = icmp ult i64 %_25.i.us.i, %columns.val3.i, !dbg !11460
+  call void @llvm.assume(i1 %_5.i.i24), !dbg !11467
+  %_4.i.i25 = getelementptr inbounds nuw i64, ptr %17, i64 %_25.i.us.i, !dbg !11468
+  %_0.i.i26 = load i64, ptr %_4.i.i25, align 8, !dbg !11469, !noalias !11470, !noundef !30
+  %_5.i3.i31 = icmp ult i64 %_25.i.us.i, %.val2.i, !dbg !11473
+  call void @llvm.assume(i1 %_5.i3.i31), !dbg !11477
+  %_4.i4.i32 = getelementptr inbounds nuw i64, ptr %20, i64 %_25.i.us.i, !dbg !11478
+  %_0.i5.i33 = load i64, ptr %_4.i4.i32, align 8, !dbg !11479, !noalias !11470, !noundef !30
+  %82 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %_0.i.i26, i64 %_0.i5.i33), !dbg !11480
+  %_7.0.i.i.i.i18.i.us.i = extractvalue { i64, i1 } %82, 0, !dbg !11480
+  %_7.1.i.i.i.i19.i.us.i = extractvalue { i64, i1 } %82, 1, !dbg !11480
+  %_8.i.i.i.i20.i.us.i = icmp sgt i64 %_7.0.i.i.i.i18.i.us.i, 0, !dbg !11484
+  %_14.i.i22.i.us.i = getelementptr inbounds nuw i8, ptr %_8.i, i64 %_25.i.us.i, !dbg !11485
+  %_15.i.i23.i.us.i = zext i1 %_8.i.i.i.i20.i.us.i to i8, !dbg !11488
+  store i8 %_15.i.i23.i.us.i, ptr %_14.i.i22.i.us.i, align 1, !dbg !11491, !noalias !11492
+  %83 = or i1 %failure.sroa.0.8.off0, %_7.1.i.i.i.i19.i.us.i, !dbg !11495
+  %_31.i.us.i = add i64 %word.sroa.0.046.i.us.i, -1, !dbg !11497
+  %84 = and i64 %_31.i.us.i, %word.sroa.0.046.i.us.i, !dbg !11498
+  %85 = icmp eq i64 %84, 0, !dbg !11499
+  br i1 %85, label %bb13.i.us.i, label %bb10.i.us.i, !dbg !11499
+
+bb13.i.us.i:                                      ; preds = %bb23.i.us.i, %bb10.i.us.i, %bb3.i.us.i
+  %failure.sroa.0.6.off0 = phi i1 [ %failure.sroa.0.5.off0, %bb3.i.us.i ], [ %83, %bb10.i.us.i ], [ %79, %bb23.i.us.i ]
+  %86 = add i64 %base.sroa.0.0.i.us.i, 64, !dbg !11500
+  br label %bb1.i.us.i, !dbg !11501
+
+bb1.i.i:                                          ; preds = %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i, %bb13.i.i
+  %failure.sroa.0.1.off0 = phi i1 [ %failure.sroa.0.2.off0, %bb13.i.i ], [ false, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i ]
+  %iter.sroa.0.0.i.i = phi i1 [ %iter.sroa.0.143.i.i, %bb13.i.i ], [ true, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i ], !dbg !11289
+  %iter.sroa.7.0.i.i = phi ptr [ %iter.sroa.7.13142.i.i, %bb13.i.i ], [ %_43.0.i.i, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i ], !dbg !11289
+  %iter.sroa.12.0.i.i = phi i64 [ %iter.sroa.12.13341.i.i, %bb13.i.i ], [ 0, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i ], !dbg !11289
+  %base.sroa.0.0.i.i = phi i64 [ %92, %bb13.i.i ], [ 0, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i ], !dbg !11359
+  %.not.i.i.i = icmp ne ptr %iter.sroa.7.0.i.i, null, !dbg !11360
+  %_3.not.i.i.i.i.i = icmp ult i64 %iter.sroa.12.0.i.i, %_45.i.i
+  %or.cond.i.i = select i1 %.not.i.i.i, i1 %_3.not.i.i.i.i.i, i1 false, !dbg !11367
+  br i1 %or.cond.i.i, label %bb2.i.i.i.i.i, label %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i, !dbg !11367
+
+bb2.i.i.i.i.i:                                    ; preds = %bb1.i.i
+  %_7.i.i.i.i.i = getelementptr inbounds nuw i64, ptr %iter.sroa.7.0.i.i, i64 %iter.sroa.12.0.i.i, !dbg !11369
+  %_19.sroa.0.0.copyload.i.i.i.i.i = load i64, ptr %_7.i.i.i.i.i, align 1, !dbg !11373, !noalias !11376
+  %_11.i.i.i.i.i = getelementptr i8, ptr %_7.i.i.i.i.i, i64 8, !dbg !11502
+  %_21.sroa.0.0.copyload.i.i.i.i.i = load i8, ptr %_11.i.i.i.i.i, align 1, !dbg !11504, !noalias !11376
+  %next.i.i.i.i.i = zext i8 %_21.sroa.0.0.copyload.i.i.i.i.i to i64, !dbg !11507
+  %_13.i.i.i.i.i = lshr i64 %_19.sroa.0.0.copyload.i.i.i.i.i, %.pre-phi.i.i, !dbg !11508
+  %_14.i.i.i.i.i = shl i64 %next.i.i.i.i.i, %76, !dbg !11509
+  %87 = or i64 %_14.i.i.i.i.i, %_13.i.i.i.i.i, !dbg !11508
+  %88 = add nuw i64 %iter.sroa.12.0.i.i, 1, !dbg !11383
+  br label %bb3.i.i, !dbg !11368
+
+_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i: ; preds = %bb1.i.i
+  br i1 %iter.sroa.0.0.i.i, label %bb3.i.i, label %bb30, !dbg !11368
+
+bb3.i.i:                                          ; preds = %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i, %bb2.i.i.i.i.i
+  %self.1.pn.i44.i.i = phi i64 [ %87, %bb2.i.i.i.i.i ], [ %_0.sroa.0.0.i.i.i, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i ]
+  %iter.sroa.0.143.i.i = phi i1 [ %iter.sroa.0.0.i.i, %bb2.i.i.i.i.i ], [ false, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i ]
+  %iter.sroa.7.13142.i.i = phi ptr [ %iter.sroa.7.0.i.i, %bb2.i.i.i.i.i ], [ null, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i ]
+  %iter.sroa.12.13341.i.i = phi i64 [ %88, %bb2.i.i.i.i.i ], [ %iter.sroa.12.0.i.i, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i ]
+  switch i64 %self.1.pn.i44.i.i, label %bb10.i.i [
+    i64 -1, label %bb23.i.i
+    i64 0, label %bb13.i.i
+  ], !dbg !11384
+
+bb23.i.i:                                         ; preds = %bb3.i.i, %bb23.i.i
+  %failure.sroa.0.3.off0 = phi i1 [ %90, %bb23.i.i ], [ %failure.sroa.0.1.off0, %bb3.i.i ]
+  %iter2.sroa.0.047.i.i = phi i64 [ %91, %bb23.i.i ], [ 0, %bb3.i.i ]
+  %_17.i.i = or disjoint i64 %iter2.sroa.0.047.i.i, %base.sroa.0.0.i.i, !dbg !11386
+  %_5.i.i36 = icmp ult i64 %_17.i.i, %columns.val3.i, !dbg !11510
+  call void @llvm.assume(i1 %_5.i.i36), !dbg !11515
+  %_4.i.i37 = getelementptr inbounds nuw i64, ptr %17, i64 %_17.i.i, !dbg !11516
+  %_0.i.i38 = load i64, ptr %_4.i.i37, align 8, !dbg !11517, !noalias !11518, !noundef !30
+  %_5.i3.i42 = icmp ult i64 %_17.i.i, %.val2.i, !dbg !11521
+  call void @llvm.assume(i1 %_5.i3.i42), !dbg !11525
+  %_4.i4.i43 = getelementptr inbounds nuw i64, ptr %20, i64 %_17.i.i, !dbg !11526
+  %_0.i5.i44 = load i64, ptr %_4.i4.i43, align 8, !dbg !11527, !noalias !11518, !noundef !30
+  %89 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %_0.i.i38, i64 %_0.i5.i44), !dbg !11412
+  %_7.0.i.i.i.i.i.i = extractvalue { i64, i1 } %89, 0, !dbg !11412
+  %_7.1.i.i.i.i.i.i = extractvalue { i64, i1 } %89, 1, !dbg !11412
+  %_8.i.i.i.i.i.i = icmp sgt i64 %_7.0.i.i.i.i.i.i, 0, !dbg !11421
+  %_14.i.i.i.i = getelementptr inbounds nuw i8, ptr %_8.i, i64 %_17.i.i, !dbg !11423
+  %_15.i.i.i.i = zext i1 %_8.i.i.i.i.i.i to i8, !dbg !11429
+  store i8 %_15.i.i.i.i, ptr %_14.i.i.i.i, align 1, !dbg !11434, !noalias !11435
+  %90 = or i1 %failure.sroa.0.3.off0, %_7.1.i.i.i.i.i.i, !dbg !11438
+  %91 = add nuw nsw i64 %iter2.sroa.0.047.i.i, 1, !dbg !11440
+  %exitcond.not.i.i = icmp eq i64 %91, 64, !dbg !11451
+  br i1 %exitcond.not.i.i, label %bb13.i.i, label %bb23.i.i, !dbg !11454
+
+bb13.i.i:                                         ; preds = %bb23.i.i, %bb10.i.i, %bb3.i.i
+  %failure.sroa.0.2.off0 = phi i1 [ %failure.sroa.0.1.off0, %bb3.i.i ], [ %95, %bb10.i.i ], [ %90, %bb23.i.i ]
+  %92 = add i64 %base.sroa.0.0.i.i, 64, !dbg !11500
+  br label %bb1.i.i, !dbg !11501
+
+bb10.i.i:                                         ; preds = %bb3.i.i, %bb10.i.i
+  %failure.sroa.0.4.off0 = phi i1 [ %95, %bb10.i.i ], [ %failure.sroa.0.1.off0, %bb3.i.i ]
+  %word.sroa.0.046.i.i = phi i64 [ %96, %bb10.i.i ], [ %self.1.pn.i44.i.i, %bb3.i.i ]
+  %93 = call range(i64 0, 65) i64 @llvm.cttz.i64(i64 %word.sroa.0.046.i.i, i1 true), !dbg !11455
+  %_25.i.i = or disjoint i64 %93, %base.sroa.0.0.i.i, !dbg !11459
+  %_5.i.i47 = icmp ult i64 %_25.i.i, %columns.val3.i, !dbg !11528
+  call void @llvm.assume(i1 %_5.i.i47), !dbg !11533
+  %_4.i.i48 = getelementptr inbounds nuw i64, ptr %17, i64 %_25.i.i, !dbg !11534
+  %_0.i.i49 = load i64, ptr %_4.i.i48, align 8, !dbg !11535, !noalias !11536, !noundef !30
+  %_5.i3.i53 = icmp ult i64 %_25.i.i, %.val2.i, !dbg !11539
+  call void @llvm.assume(i1 %_5.i3.i53), !dbg !11543
+  %_4.i4.i54 = getelementptr inbounds nuw i64, ptr %20, i64 %_25.i.i, !dbg !11544
+  %_0.i5.i55 = load i64, ptr %_4.i4.i54, align 8, !dbg !11545, !noalias !11536, !noundef !30
+  %94 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %_0.i.i49, i64 %_0.i5.i55), !dbg !11480
+  %_7.0.i.i.i.i18.i.i = extractvalue { i64, i1 } %94, 0, !dbg !11480
+  %_7.1.i.i.i.i19.i.i = extractvalue { i64, i1 } %94, 1, !dbg !11480
+  %_8.i.i.i.i20.i.i = icmp sgt i64 %_7.0.i.i.i.i18.i.i, 0, !dbg !11484
+  %_14.i.i22.i.i = getelementptr inbounds nuw i8, ptr %_8.i, i64 %_25.i.i, !dbg !11485
+  %_15.i.i23.i.i = zext i1 %_8.i.i.i.i20.i.i to i8, !dbg !11488
+  store i8 %_15.i.i23.i.i, ptr %_14.i.i22.i.i, align 1, !dbg !11491, !noalias !11492
+  %95 = or i1 %failure.sroa.0.4.off0, %_7.1.i.i.i.i19.i.i, !dbg !11495
+  %_31.i.i = add i64 %word.sroa.0.046.i.i, -1, !dbg !11497
+  %96 = and i64 %_31.i.i, %word.sroa.0.046.i.i, !dbg !11498
+  %97 = icmp eq i64 %96, 0, !dbg !11499
+  br i1 %97, label %bb13.i.i, label %bb10.i.i, !dbg !11499
+
+bb22:                                             ; preds = %bb21
+  call void @llvm.memcpy.p0.p0.i64(ptr noundef nonnull align 8 dereferenceable(80) %_0, ptr noundef nonnull align 8 dereferenceable(80) %_49, i64 80, i1 false), !dbg !11269
+  call void @llvm.lifetime.end.p0(ptr nonnull %_49), !dbg !11269
+  call void @llvm.lifetime.end.p0(ptr nonnull %args1), !dbg !11269
+  call void @llvm.lifetime.end.p0(ptr nonnull %_52), !dbg !11269
+  br label %bb37, !dbg !11546
+
+bb37:                                             ; preds = %bb81, %bb28, %bb22
+; invoke <vortex_buffer::allocation::Allocation as core::ops::drop::Drop>::drop
+  invoke void @_RNvXs7_NtCs7x6tOKv5niH_13vortex_buffer10allocationNtB5_10AllocationNtNtNtCslWxY2MhVcag_4core3ops4drop4Drop4drop(ptr noalias nofree noundef nonnull align 8 dereferenceable(72) %values)
+          to label %bb4.i.i unwind label %cleanup.i.i, !dbg !11548
+
+cleanup.i.i:                                      ; preds = %bb37
+  %98 = landingpad { ptr, i32 }
+          cleanup
+  %99 = getelementptr inbounds nuw i8, ptr %values, i64 24, !dbg !11548
+  call void @llvm.experimental.noalias.scope.decl(metadata !11551), !dbg !11548
+  call void @llvm.experimental.noalias.scope.decl(metadata !11554), !dbg !11557
+  %100 = load ptr, ptr %99, align 8, !dbg !11559, !alias.scope !11561, !noundef !30
+  %101 = icmp eq ptr %100, null, !dbg !11559
+  br i1 %101, label %bb45, label %bb2.i.i.i.i, !dbg !11559
+
+bb2.i.i.i.i:                                      ; preds = %cleanup.i.i
+  %_2.i.i.i.i.i.i = atomicrmw sub ptr %100, i64 1 release, align 8, !dbg !11566, !noalias !11571
+  %102 = icmp eq i64 %_2.i.i.i.i.i.i, 1, !dbg !11576
+  br i1 %102, label %bb2.i.i.i.i.i.i, label %bb45, !dbg !11576
+
+bb2.i.i.i.i.i.i:                                  ; preds = %bb2.i.i.i.i
+  fence acquire, !dbg !11577
+; invoke <alloc::sync::Arc<dyn vortex_buffer::allocation::BufferAllocator>>::drop_slow
+  invoke void @_RNvMsn_NtCs6KVRSXc8uZF_5alloc4syncINtB5_3ArcDNtNtCs7x6tOKv5niH_13vortex_buffer10allocation15BufferAllocatorEL_E9drop_slowBL_(ptr noalias nofree noundef nonnull align 8 dereferenceable(16) %99) #29
+          to label %bb45 unwind label %terminate.i.i, !dbg !11579
+
+bb4.i.i:                                          ; preds = %bb37
+  %103 = getelementptr inbounds nuw i8, ptr %values, i64 24, !dbg !11548
+  call void @llvm.experimental.noalias.scope.decl(metadata !11580), !dbg !11548
+  call void @llvm.experimental.noalias.scope.decl(metadata !11583), !dbg !11586
+  %104 = load ptr, ptr %103, align 8, !dbg !11588, !alias.scope !11590, !noundef !30
+  %105 = icmp eq ptr %104, null, !dbg !11588
+  br i1 %105, label %bb38, label %bb2.i.i1.i.i, !dbg !11588
+
+bb2.i.i1.i.i:                                     ; preds = %bb4.i.i
+  %_2.i.i.i.i2.i.i = atomicrmw sub ptr %104, i64 1 release, align 8, !dbg !11591, !noalias !11596
+  %106 = icmp eq i64 %_2.i.i.i.i2.i.i, 1, !dbg !11601
+  br i1 %106, label %bb2.i.i.i.i3.i.i, label %bb38, !dbg !11601
+
+bb2.i.i.i.i3.i.i:                                 ; preds = %bb2.i.i1.i.i
+  fence acquire, !dbg !11602
+; invoke <alloc::sync::Arc<dyn vortex_buffer::allocation::BufferAllocator>>::drop_slow
+  invoke void @_RNvMsn_NtCs6KVRSXc8uZF_5alloc4syncINtB5_3ArcDNtNtCs7x6tOKv5niH_13vortex_buffer10allocation15BufferAllocatorEL_E9drop_slowBL_(ptr noalias nofree noundef nonnull align 8 dereferenceable(16) %103) #29
+          to label %bb38 unwind label %cleanup7, !dbg !11604
+
+terminate.i.i:                                    ; preds = %bb2.i.i.i.i.i.i
+  %107 = landingpad { ptr, i32 }
+          filter [0 x ptr] zeroinitializer
+; call core::panicking::panic_in_cleanup
+  call void @_RNvNtCslWxY2MhVcag_4core9panicking16panic_in_cleanup() #28, !dbg !11548
+  unreachable, !dbg !11548
+
+bb30:                                             ; preds = %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.us.i
+  %failure.sroa.0.9.off0 = phi i1 [ %failure.sroa.0.5.off0, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.us.i ], [ %failure.sroa.0.1.off0, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i ]
+  call void @llvm.lifetime.end.p0(ptr nonnull %_6.i.i), !dbg !11605, !noalias !11293
+  call void @llvm.lifetime.start.p0(ptr nonnull %_80), !dbg !11606
+  br i1 %failure.sroa.0.9.off0, label %bb1.i, label %bb82, !dbg !11607, !prof !120
+
+bb1.i:                                            ; preds = %bb29, %bb30
+  call void @llvm.lifetime.start.p0(ptr nonnull %_6.i27), !dbg !11610, !noalias !11611
+  store ptr @alloc_9af6f4b9ec8797d4b950ec3330fd4cbb, ptr %_6.i27, align 8, !dbg !11614, !noalias !11611
+  %108 = getelementptr inbounds nuw i8, ptr %_6.i27, i64 8, !dbg !11614
+  store ptr inttoptr (i64 65 to ptr), ptr %108, align 8, !dbg !11614, !noalias !11611
+; invoke vortex_error::__private::fmt_err
+  invoke void @_RNvNtCs6NFVb2nVDVl_12vortex_error9___private7fmt_err(ptr noalias nofree noundef nonnull sret([80 x i8]) align 8 captures(address) dereferenceable(80) %_80, ptr noundef nonnull @_RNcNtNtCs6NFVb2nVDVl_12vortex_error11VortexError5Other0, ptr noalias nofree noundef nonnull readonly align 8 captures(address, read_provenance) dereferenceable(16) %_6.i27) #29
+          to label %bb31 unwind label %cleanup8.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp, !dbg !11610
+
+bb27:                                             ; preds = %bb2.i, %bb48
+  call void @llvm.lifetime.start.p0(ptr nonnull %_65), !dbg !11617
+  call void @llvm.lifetime.start.p0(ptr nonnull %_68), !dbg !11617
+  call void @llvm.lifetime.start.p0(ptr nonnull %args2), !dbg !11618
+  store ptr %row_count, ptr %args2, align 8, !dbg !11618
+  %_71.sroa.4.0..sroa_idx = getelementptr inbounds nuw i8, ptr %args2, i64 8, !dbg !11618
+  store ptr @_RNvXsi_NtNtNtCslWxY2MhVcag_4core3fmt3num3impjNtB9_7Display3fmt, ptr %_71.sroa.4.0..sroa_idx, align 8, !dbg !11618
+  store ptr @alloc_8cb1b9e1c7b448ff8aa56230a8661784, ptr %_68, align 8, !dbg !11621
+  %109 = getelementptr inbounds nuw i8, ptr %_68, i64 8, !dbg !11621
+  store ptr %args2, ptr %109, align 8, !dbg !11621
+; invoke vortex_error::__private::fmt_err
+  invoke void @_RNvNtCs6NFVb2nVDVl_12vortex_error9___private7fmt_err(ptr noalias nofree noundef nonnull sret([80 x i8]) align 8 captures(address) dereferenceable(80) %_65, ptr noundef nonnull @_RNcNtNtCs6NFVb2nVDVl_12vortex_error11VortexError5Other0, ptr noalias nofree noundef nonnull readonly align 8 captures(address, read_provenance) dereferenceable(16) %_68)
+          to label %bb28 unwind label %cleanup8.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp, !dbg !11617
+
+bb26:                                             ; preds = %bb2.i.thread, %bb2.i
+  %110 = phi ptr [ %25, %bb2.i.thread ], [ %29, %bb2.i ]
+  %_6.i18251 = phi ptr [ %_6.i18248, %bb2.i.thread ], [ %_6.i18, %bb2.i ]
+  %111 = phi ptr [ %23, %bb2.i.thread ], [ %27, %bb2.i ]
+  call void @llvm.experimental.noalias.scope.decl(metadata !11626), !dbg !11629
+  call void @llvm.experimental.noalias.scope.decl(metadata !11630), !dbg !11633
+  call void @llvm.lifetime.start.p0(ptr nonnull %_6.i.i29), !dbg !11636, !noalias !11640
+  %_37.i.i30 = load ptr, ptr %valid_rows, align 8, !dbg !11643, !alias.scope !11648, !noalias !11649, !nonnull !30, !noundef !30
+  %112 = getelementptr inbounds nuw i8, ptr %_103, i64 24, !dbg !11650
+  %_38.i.i31 = load i64, ptr %112, align 8, !dbg !11650, !alias.scope !11648, !noalias !11649, !noundef !30
+  %113 = getelementptr inbounds nuw i8, ptr %_103, i64 48, !dbg !11651
+  %_34.i.i32 = load i64, ptr %113, align 8, !dbg !11651, !alias.scope !11648, !noalias !11649, !noundef !30
+  %_35.i.i33 = load i64, ptr %8, align 8, !dbg !11652, !alias.scope !11648, !noalias !11649, !noundef !30
+; invoke <arrow_buffer::util::bit_chunk_iterator::BitChunks>::new
+  invoke void @_RNvMs_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB4_9BitChunks3new(ptr noalias nofree noundef nonnull sret([40 x i8]) align 8 captures(none) dereferenceable(40) %_6.i.i29, ptr noalias nofree noundef nonnull readonly captures(address, read_provenance) %_37.i.i30, i64 noundef %_38.i.i31, i64 noundef %_34.i.i32, i64 noundef %_35.i.i33)
+          to label %.noexc148 unwind label %cleanup8.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp, !dbg !11653
+
+.noexc148:                                        ; preds = %bb26
+  %_43.0.i.i34 = load ptr, ptr %_6.i.i29, align 8, !dbg !11654, !noalias !11640, !nonnull !30, !noundef !30
+  %114 = getelementptr inbounds nuw i8, ptr %_6.i.i29, i64 16, !dbg !11659
+  %_44.i.i35 = load i64, ptr %114, align 8, !dbg !11659, !noalias !11640, !noundef !30
+  %115 = getelementptr inbounds nuw i8, ptr %_6.i.i29, i64 24, !dbg !11660
+  %_45.i.i36 = load i64, ptr %115, align 8, !dbg !11660, !noalias !11640, !noundef !30
+  call void @llvm.experimental.noalias.scope.decl(metadata !11661), !dbg !11664
+  %116 = getelementptr inbounds nuw i8, ptr %_6.i.i29, i64 32, !dbg !11665
+  %bit_len.i.i.i37 = load i64, ptr %116, align 8, !dbg !11665, !alias.scope !11661, !noalias !11640, !noundef !30
+  %117 = icmp eq i64 %bit_len.i.i.i37, 0, !dbg !11667
+  br i1 %117, label %start._RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit_crit_edge.i.i146, label %bb2.i.i.i38, !dbg !11667
+
+start._RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit_crit_edge.i.i146: ; preds = %.noexc148
+  %.pre.i.i147 = and i64 %_44.i.i35, 63
+  br label %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i53, !dbg !11667
+
+bb2.i.i.i38:                                      ; preds = %.noexc148
+  %_5.i.i.i39 = add i64 %bit_len.i.i.i37, %_44.i.i35, !dbg !11668
+  %_243.i.i.i40 = lshr i64 %_5.i.i.i39, 3, !dbg !11669
+  %_25.i.i.i41 = and i64 %_5.i.i.i39, 7, !dbg !11672
+  %_26.not.i.i.i42 = icmp ne i64 %_25.i.i.i41, 0, !dbg !11673
+  %118 = zext i1 %_26.not.i.i.i42 to i64, !dbg !11673
+  %byte_len.sroa.0.0.i.i.i43 = add nuw nsw i64 %_243.i.i.i40, %118, !dbg !11673
+  %_8.i.i.i44 = shl i64 %_45.i.i36, 3, !dbg !11674
+  %base.i.i.i45 = getelementptr inbounds nuw i8, ptr %_43.0.i.i34, i64 %_8.i.i.i44, !dbg !11675
+  %_12.i.i.i46 = load i8, ptr %base.i.i.i45, align 1, !dbg !11677, !noalias !11679, !noundef !30
+  %_11.i.i.i47 = zext i8 %_12.i.i.i46 to i64, !dbg !11680
+  %119 = and i64 %_44.i.i35, 63, !dbg !11680
+  %120 = lshr i64 %_11.i.i.i47, %119, !dbg !11680
+  %_284.i.i.i48 = icmp samesign ugt i64 %byte_len.sroa.0.0.i.i.i43, 1, !dbg !11681
+  br i1 %_284.i.i.i48, label %iter.check336, label %bb9.i.i.i49, !dbg !11685
+
+iter.check336:                                    ; preds = %bb2.i.i.i38
+  %121 = add nuw nsw i64 %_243.i.i.i40, %118, !dbg !11685
+  %122 = add nsw i64 %121, -1, !dbg !11685
+  %min.iters.check334 = icmp ult i64 %122, 4, !dbg !11685
+  br i1 %min.iters.check334, label %bb8.i.i.i136.preheader, label %vector.main.loop.iter.check338, !dbg !11685
+
+vector.main.loop.iter.check338:                   ; preds = %iter.check336
+  %min.iters.check337 = icmp ult i64 %122, 16, !dbg !11685
+  br i1 %min.iters.check337, label %vec.epilog.ph359, label %vector.ph339, !dbg !11685
+
+vector.ph339:                                     ; preds = %vector.main.loop.iter.check338
+  %n.mod.vf340 = and i64 %122, 12
+  %n.vec341 = and i64 %122, -16
+  %123 = or disjoint i64 %n.vec341, 1
+  %124 = insertelement <16 x i64> <i64 poison, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0>, i64 %120, i64 0
+  %broadcast.splatinsert342 = insertelement <16 x i64> poison, i64 %_44.i.i35, i64 0
+  %broadcast.splat343 = shufflevector <16 x i64> %broadcast.splatinsert342, <16 x i64> poison, <16 x i32> zeroinitializer
+  br label %vector.body344, !dbg !11685
+
+vector.body344:                                   ; preds = %vector.body344, %vector.ph339
+  %index345 = phi i64 [ 0, %vector.ph339 ], [ %index.next349, %vector.body344 ]
+  %vec.phi346 = phi <16 x i64> [ %124, %vector.ph339 ], [ %132, %vector.body344 ]
+  %vec.ind347 = phi <16 x i64> [ <i64 1, i64 2, i64 3, i64 4, i64 5, i64 6, i64 7, i64 8, i64 9, i64 10, i64 11, i64 12, i64 13, i64 14, i64 15, i64 16>, %vector.ph339 ], [ %vec.ind.next350, %vector.body344 ]
+  %125 = getelementptr inbounds nuw i8, ptr %base.i.i.i45, i64 %index345, !dbg !11686
+  %126 = getelementptr inbounds nuw i8, ptr %125, i64 1, !dbg !11686
+  %wide.load348 = load <16 x i8>, ptr %126, align 1, !dbg !11688, !noalias !11679
+  %127 = zext <16 x i8> %wide.load348 to <16 x i64>, !dbg !11690
+  %128 = shl nuw <16 x i64> %vec.ind347, splat (i64 3), !dbg !11691
+  %129 = sub <16 x i64> %128, %broadcast.splat343, !dbg !11692
+  %130 = and <16 x i64> %129, splat (i64 63), !dbg !11690
+  %131 = shl <16 x i64> %127, %130, !dbg !11690
+  %132 = or <16 x i64> %131, %vec.phi346, !dbg !11693
+  %index.next349 = add nuw i64 %index345, 16
+  %vec.ind.next350 = add nuw nsw <16 x i64> %vec.ind347, splat (i64 16)
+  %133 = icmp eq i64 %index.next349, %n.vec341, !dbg !11685
+  br i1 %133, label %middle.block351, label %vector.body344, !dbg !11685, !llvm.loop !11694
+
+middle.block351:                                  ; preds = %vector.body344
+  %134 = call i64 @llvm.vector.reduce.or.v16i64(<16 x i64> %132), !dbg !11685
+  %cmp.n352 = icmp eq i64 %122, %n.vec341, !dbg !11685
+  br i1 %cmp.n352, label %bb9.i.i.i49, label %vec.epilog.iter.check357, !dbg !11685
+
+vec.epilog.iter.check357:                         ; preds = %middle.block351
+  %ind.end379 = or disjoint i64 %n.vec341, 1
+  %min.epilog.iters.check358 = icmp eq i64 %n.mod.vf340, 0
+  br i1 %min.epilog.iters.check358, label %bb8.i.i.i136.preheader, label %vec.epilog.ph359, !prof !797
+
+vec.epilog.ph359:                                 ; preds = %vector.main.loop.iter.check338, %vec.epilog.iter.check357
+  %vec.epilog.resume.val353 = phi i64 [ %n.vec341, %vec.epilog.iter.check357 ], [ 0, %vector.main.loop.iter.check338 ]
+  %bc.merge.rdx354 = phi i64 [ %134, %vec.epilog.iter.check357 ], [ %120, %vector.main.loop.iter.check338 ]
+  %bc.resume.val355 = phi i64 [ %123, %vec.epilog.iter.check357 ], [ 1, %vector.main.loop.iter.check338 ]
+  %n.vec361 = and i64 %122, -4
+  %135 = or disjoint i64 %n.vec361, 1
+  %136 = insertelement <4 x i64> <i64 poison, i64 0, i64 0, i64 0>, i64 %bc.merge.rdx354, i64 0
+  %broadcast.splatinsert362 = insertelement <4 x i64> poison, i64 %_44.i.i35, i64 0
+  %broadcast.splat363 = shufflevector <4 x i64> %broadcast.splatinsert362, <4 x i64> poison, <4 x i32> zeroinitializer
+  %broadcast.splatinsert364 = insertelement <4 x i64> poison, i64 %bc.resume.val355, i64 0
+  %broadcast.splat365 = shufflevector <4 x i64> %broadcast.splatinsert364, <4 x i64> poison, <4 x i32> zeroinitializer
+  %induction366 = add nuw nsw <4 x i64> %broadcast.splat365, <i64 0, i64 1, i64 2, i64 3>
+  br label %vec.epilog.vector.body367
+
+vec.epilog.vector.body367:                        ; preds = %vec.epilog.vector.body367, %vec.epilog.ph359
+  %index368 = phi i64 [ %vec.epilog.resume.val353, %vec.epilog.ph359 ], [ %index.next373, %vec.epilog.vector.body367 ]
+  %vec.phi369 = phi <4 x i64> [ %136, %vec.epilog.ph359 ], [ %144, %vec.epilog.vector.body367 ]
+  %vec.ind370 = phi <4 x i64> [ %induction366, %vec.epilog.ph359 ], [ %vec.ind.next374, %vec.epilog.vector.body367 ]
+  %137 = getelementptr inbounds nuw i8, ptr %base.i.i.i45, i64 %index368, !dbg !11686
+  %138 = getelementptr inbounds nuw i8, ptr %137, i64 1, !dbg !11686
+  %wide.load372 = load <4 x i8>, ptr %138, align 1, !dbg !11688, !noalias !11679
+  %139 = zext <4 x i8> %wide.load372 to <4 x i64>, !dbg !11690
+  %140 = shl nuw <4 x i64> %vec.ind370, splat (i64 3), !dbg !11691
+  %141 = sub <4 x i64> %140, %broadcast.splat363, !dbg !11692
+  %142 = and <4 x i64> %141, splat (i64 63), !dbg !11690
+  %143 = shl <4 x i64> %139, %142, !dbg !11690
+  %144 = or <4 x i64> %143, %vec.phi369, !dbg !11693
+  %index.next373 = add nuw i64 %index368, 4
+  %vec.ind.next374 = add nuw nsw <4 x i64> %vec.ind370, splat (i64 4)
+  %145 = icmp eq i64 %index.next373, %n.vec361, !dbg !11685
+  br i1 %145, label %vec.epilog.middle.block375, label %vec.epilog.vector.body367, !dbg !11685, !llvm.loop !11695
+
+vec.epilog.middle.block375:                       ; preds = %vec.epilog.vector.body367
+  %146 = call i64 @llvm.vector.reduce.or.v4i64(<4 x i64> %144), !dbg !11685
+  %cmp.n376 = icmp eq i64 %122, %n.vec361, !dbg !11685
+  br i1 %cmp.n376, label %bb9.i.i.i49, label %bb8.i.i.i136.preheader, !dbg !11685
+
+bb8.i.i.i136.preheader:                           ; preds = %iter.check336, %vec.epilog.iter.check357, %vec.epilog.middle.block375
+  %bits.sroa.0.06.i.i.i137.ph = phi i64 [ %120, %iter.check336 ], [ %134, %vec.epilog.iter.check357 ], [ %146, %vec.epilog.middle.block375 ]
+  %iter.sroa.0.05.i.i.i138.ph = phi i64 [ 1, %iter.check336 ], [ %ind.end379, %vec.epilog.iter.check357 ], [ %135, %vec.epilog.middle.block375 ]
+  br label %bb8.i.i.i136, !dbg !11685
+
+bb9.i.i.i49:                                      ; preds = %bb8.i.i.i136, %middle.block351, %vec.epilog.middle.block375, %bb2.i.i.i38
+  %bits.sroa.0.0.lcssa.i.i.i50 = phi i64 [ %120, %bb2.i.i.i38 ], [ %146, %vec.epilog.middle.block375 ], [ %134, %middle.block351 ], [ %151, %bb8.i.i.i136 ], !dbg !11696
+  %147 = and i64 %bit_len.i.i.i37, 63, !dbg !11697
+  %notmask.i.i.i51 = shl nsw i64 -1, %147, !dbg !11698
+  %_21.i.i.i52 = xor i64 %notmask.i.i.i51, -1, !dbg !11698
+  %148 = and i64 %bits.sroa.0.0.lcssa.i.i.i50, %_21.i.i.i52, !dbg !11699
+  br label %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i53, !dbg !11700
+
+bb8.i.i.i136:                                     ; preds = %bb8.i.i.i136.preheader, %bb8.i.i.i136
+  %bits.sroa.0.06.i.i.i137 = phi i64 [ %151, %bb8.i.i.i136 ], [ %bits.sroa.0.06.i.i.i137.ph, %bb8.i.i.i136.preheader ]
+  %iter.sroa.0.05.i.i.i138 = phi i64 [ %149, %bb8.i.i.i136 ], [ %iter.sroa.0.05.i.i.i138.ph, %bb8.i.i.i136.preheader ]
+  %149 = add nuw nsw i64 %iter.sroa.0.05.i.i.i138, 1, !dbg !11701
+  %_16.i.i.i139 = getelementptr inbounds nuw i8, ptr %base.i.i.i45, i64 %iter.sroa.0.05.i.i.i138, !dbg !11686
+  %byte.i.i.i140 = load i8, ptr %_16.i.i.i139, align 1, !dbg !11688, !noalias !11679, !noundef !30
+  %_18.i.i.i141 = zext i8 %byte.i.i.i140 to i64, !dbg !11690
+  %_20.i.i.i142 = shl nuw i64 %iter.sroa.0.05.i.i.i138, 3, !dbg !11691
+  %_19.i.i.i143 = sub i64 %_20.i.i.i142, %_44.i.i35, !dbg !11692
+  %150 = and i64 %_19.i.i.i143, 63, !dbg !11690
+  %_17.i.i.i144 = shl i64 %_18.i.i.i141, %150, !dbg !11690
+  %151 = or i64 %_17.i.i.i144, %bits.sroa.0.06.i.i.i137, !dbg !11693
+  %exitcond.not.i.i.i145 = icmp eq i64 %149, %byte_len.sroa.0.0.i.i.i43, !dbg !11681
+  br i1 %exitcond.not.i.i.i145, label %bb9.i.i.i49, label %bb8.i.i.i136, !dbg !11685, !llvm.loop !11704
+
+_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i53: ; preds = %bb9.i.i.i49, %start._RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit_crit_edge.i.i146
+  %.pre-phi.i.i54 = phi i64 [ %.pre.i.i147, %start._RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit_crit_edge.i.i146 ], [ %119, %bb9.i.i.i49 ]
+  %_0.sroa.0.0.i.i.i55 = phi i64 [ 0, %start._RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit_crit_edge.i.i146 ], [ %148, %bb9.i.i.i49 ], !dbg !11705
+  %152 = icmp eq i64 %_44.i.i35, 0
+  %_15.i.i.i.i.i56 = sub i64 0, %_44.i.i35
+  %153 = and i64 %_15.i.i.i.i.i56, 63
+  br i1 %152, label %bb1.i.us.i100, label %bb1.i.i59
+
+bb1.i.us.i100:                                    ; preds = %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i53, %bb13.i.us.i114
+  %failure.sroa.0.14.off0 = phi i1 [ %failure.sroa.0.15.off0, %bb13.i.us.i114 ], [ false, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i53 ]
+  %iter.sroa.0.0.i.us.i101 = phi i1 [ %iter.sroa.0.143.i.us.i111, %bb13.i.us.i114 ], [ true, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i53 ], !dbg !11636
+  %iter.sroa.7.0.i.us.i102 = phi ptr [ %iter.sroa.7.13142.i.us.i112, %bb13.i.us.i114 ], [ %_43.0.i.i34, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i53 ], !dbg !11636
+  %iter.sroa.12.0.i.us.i103 = phi i64 [ %iter.sroa.12.13341.i.us.i113, %bb13.i.us.i114 ], [ 0, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i53 ], !dbg !11636
+  %base.sroa.0.0.i.us.i104 = phi i64 [ %173, %bb13.i.us.i114 ], [ 0, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i53 ], !dbg !11706
+  %.not.i.i.us.i105 = icmp ne ptr %iter.sroa.7.0.i.us.i102, null, !dbg !11707
+  %_3.not.i.i.i.i.us.i106 = icmp ult i64 %iter.sroa.12.0.i.us.i103, %_45.i.i36
+  %or.cond.i.us.i107 = select i1 %.not.i.i.us.i105, i1 %_3.not.i.i.i.i.us.i106, i1 false, !dbg !11714
+  br i1 %or.cond.i.us.i107, label %bb2.i.i.i.i.us.i133, label %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.us.i108, !dbg !11714
+
+_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.us.i108: ; preds = %bb1.i.us.i100
+  br i1 %iter.sroa.0.0.i.us.i101, label %bb3.i.us.i109, label %bb29, !dbg !11715
+
+bb2.i.i.i.i.us.i133:                              ; preds = %bb1.i.us.i100
+  %_7.i.i.i.i.us.i134 = getelementptr inbounds nuw i64, ptr %iter.sroa.7.0.i.us.i102, i64 %iter.sroa.12.0.i.us.i103, !dbg !11716
+  %_19.sroa.0.0.copyload.i.i.i.i.us.i135 = load i64, ptr %_7.i.i.i.i.us.i134, align 1, !dbg !11720, !noalias !11723
+  %154 = add nuw i64 %iter.sroa.12.0.i.us.i103, 1, !dbg !11730
+  br label %bb3.i.us.i109, !dbg !11715
+
+bb3.i.us.i109:                                    ; preds = %bb2.i.i.i.i.us.i133, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.us.i108
+  %self.1.pn.i44.i.us.i110 = phi i64 [ %_19.sroa.0.0.copyload.i.i.i.i.us.i135, %bb2.i.i.i.i.us.i133 ], [ %_0.sroa.0.0.i.i.i55, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.us.i108 ]
+  %iter.sroa.0.143.i.us.i111 = phi i1 [ %iter.sroa.0.0.i.us.i101, %bb2.i.i.i.i.us.i133 ], [ false, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.us.i108 ]
+  %iter.sroa.7.13142.i.us.i112 = phi ptr [ %iter.sroa.7.0.i.us.i102, %bb2.i.i.i.i.us.i133 ], [ null, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.us.i108 ]
+  %iter.sroa.12.13341.i.us.i113 = phi i64 [ %154, %bb2.i.i.i.i.us.i133 ], [ %iter.sroa.12.0.i.us.i103, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.us.i108 ]
+  switch i64 %self.1.pn.i44.i.us.i110, label %bb10.i.us.i124 [
+    i64 -1, label %bb23.i.us.i115
+    i64 0, label %bb13.i.us.i114
+  ], !dbg !11731
+
+bb23.i.us.i115:                                   ; preds = %bb3.i.us.i109, %.noexc149
+  %failure.sroa.0.16.off0 = phi i1 [ %161, %.noexc149 ], [ %failure.sroa.0.14.off0, %bb3.i.us.i109 ]
+  %iter2.sroa.0.047.i.us.i116 = phi i64 [ %162, %.noexc149 ], [ 0, %bb3.i.us.i109 ]
+  %_17.i.us.i117 = or disjoint i64 %iter2.sroa.0.047.i.us.i116, %base.sroa.0.0.i.us.i104, !dbg !11733
+  call void @llvm.experimental.noalias.scope.decl(metadata !11736), !dbg !11739
+  %columns.val.i56 = load ptr, ptr %columns, align 8, !dbg !11744, !alias.scope !11736, !noundef !30
+  %columns.val2.i57 = load i64, ptr %111, align 8, !dbg !11744, !alias.scope !11736
+  %155 = icmp eq ptr %columns.val.i56, null, !dbg !11746
+  br i1 %155, label %_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i, label %bb3.i.i58, !dbg !11748
+
+bb3.i.i58:                                        ; preds = %bb23.i.us.i115
+  %_3.i.i.i = icmp ult i64 %_17.i.us.i117, %columns.val2.i57, !dbg !11749
+  br i1 %_3.i.i.i, label %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i.i, label %panic.i.i5.i.invoke, !dbg !11749
+
+_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i.i: ; preds = %bb3.i.i58
+  %156 = getelementptr inbounds nuw i64, ptr %columns.val.i56, i64 %_17.i.us.i117, !dbg !11749
+  %_0.i.i.i = load i64, ptr %156, align 8, !dbg !11749, !noalias !11736, !noundef !30
+  br label %_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i, !dbg !11751
+
+_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i: ; preds = %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i.i, %bb23.i.us.i115
+  %_0.sroa.0.0.i.i = phi i64 [ %_0.i.i.i, %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i.i ], [ %columns.val2.i57, %bb23.i.us.i115 ], !dbg !11752
+  %_6.val.i60 = load ptr, ptr %_6.i18251, align 8, !dbg !11744, !alias.scope !11736, !noundef !30
+  %_6.val1.i61 = load i64, ptr %110, align 8, !dbg !11744, !alias.scope !11736
+  %157 = icmp eq ptr %_6.val.i60, null, !dbg !11753
+  br i1 %157, label %.noexc149, label %bb3.i3.i, !dbg !11755
+
+bb3.i3.i:                                         ; preds = %_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i
+  %_3.i.i4.i = icmp ult i64 %_17.i.us.i117, %_6.val1.i61, !dbg !11756
+  br i1 %_3.i.i4.i, label %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i6.i, label %panic.i.i5.i.invoke, !dbg !11756
+
+panic.i.i5.i.invoke:                              ; preds = %bb3.i3.i, %bb3.i.i58
+  %158 = phi i64 [ %columns.val2.i57, %bb3.i.i58 ], [ %_6.val1.i61, %bb3.i3.i ]
+; invoke core::panicking::panic_bounds_check
+  invoke void @_RNvNtCslWxY2MhVcag_4core9panicking18panic_bounds_check(i64 noundef %_17.i.us.i117, i64 noundef %158, ptr noalias nofree noundef readonly align 8 captures(address, read_provenance) dereferenceable(24) @alloc_3f28617b1f3af5fd4f65c871cacd3b1c.llvm.225733484165914085) #24
+          to label %panic.i.i5.i.cont unwind label %cleanup8.loopexit.split-lp.loopexit, !dbg !11758
+
+panic.i.i5.i.cont:                                ; preds = %panic.i.i5.i.invoke
+  unreachable
+
+_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i6.i: ; preds = %bb3.i3.i
+  %159 = getelementptr inbounds nuw i64, ptr %_6.val.i60, i64 %_17.i.us.i117, !dbg !11756
+  %_0.i.i7.i = load i64, ptr %159, align 8, !dbg !11756, !noalias !11736, !noundef !30
+  br label %.noexc149, !dbg !11760
+
+.noexc149:                                        ; preds = %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i6.i, %_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i
+  %_0.sroa.0.0.i8.i = phi i64 [ %_0.i.i7.i, %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i6.i ], [ %_6.val1.i61, %_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i ], !dbg !11761
+  %160 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %_0.sroa.0.0.i.i, i64 %_0.sroa.0.0.i8.i), !dbg !11762
+  %_7.0.i.i.i.i.i.us.i118 = extractvalue { i64, i1 } %160, 0, !dbg !11762
+  %_7.1.i.i.i.i.i.us.i119 = extractvalue { i64, i1 } %160, 1, !dbg !11762
+  %_8.i.i.i.i.i.us.i120 = icmp sgt i64 %_7.0.i.i.i.i.i.us.i118, 0, !dbg !11766
+  %_14.i.i.i.us.i121 = getelementptr inbounds nuw i8, ptr %_8.i, i64 %_17.i.us.i117, !dbg !11767
+  %_15.i.i.i.us.i122 = zext i1 %_8.i.i.i.i.i.us.i120 to i8, !dbg !11773
+  store i8 %_15.i.i.i.us.i122, ptr %_14.i.i.i.us.i121, align 1, !dbg !11778, !noalias !11779
+  %161 = or i1 %failure.sroa.0.16.off0, %_7.1.i.i.i.i.i.us.i119, !dbg !11782
+  %162 = add nuw nsw i64 %iter2.sroa.0.047.i.us.i116, 1, !dbg !11784
+  %exitcond.not.i.us.i123 = icmp eq i64 %162, 64, !dbg !11795
+  br i1 %exitcond.not.i.us.i123, label %bb13.i.us.i114, label %bb23.i.us.i115, !dbg !11798
+
+bb10.i.us.i124:                                   ; preds = %bb3.i.us.i109, %.noexc150
+  %failure.sroa.0.17.off0 = phi i1 [ %170, %.noexc150 ], [ %failure.sroa.0.14.off0, %bb3.i.us.i109 ]
+  %word.sroa.0.046.i.us.i125 = phi i64 [ %171, %.noexc150 ], [ %self.1.pn.i44.i.us.i110, %bb3.i.us.i109 ]
+  %163 = call range(i64 0, 65) i64 @llvm.cttz.i64(i64 %word.sroa.0.046.i.us.i125, i1 true), !dbg !11799
+  %_25.i.us.i126 = or disjoint i64 %163, %base.sroa.0.0.i.us.i104, !dbg !11803
+  call void @llvm.experimental.noalias.scope.decl(metadata !11804), !dbg !11807
+  %columns.val.i64 = load ptr, ptr %columns, align 8, !dbg !11810, !alias.scope !11804, !noundef !30
+  %columns.val2.i65 = load i64, ptr %111, align 8, !dbg !11810, !alias.scope !11804
+  %164 = icmp eq ptr %columns.val.i64, null, !dbg !11812
+  br i1 %164, label %_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i71, label %bb3.i.i66, !dbg !11814
+
+bb3.i.i66:                                        ; preds = %bb10.i.us.i124
+  %_3.i.i.i67 = icmp ult i64 %_25.i.us.i126, %columns.val2.i65, !dbg !11815
+  br i1 %_3.i.i.i67, label %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i.i69, label %panic.i.i5.i78.invoke, !dbg !11815
+
+_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i.i69: ; preds = %bb3.i.i66
+  %165 = getelementptr inbounds nuw i64, ptr %columns.val.i64, i64 %_25.i.us.i126, !dbg !11815
+  %_0.i.i.i70 = load i64, ptr %165, align 8, !dbg !11815, !noalias !11804, !noundef !30
+  br label %_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i71, !dbg !11817
+
+_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i71: ; preds = %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i.i69, %bb10.i.us.i124
+  %_0.sroa.0.0.i.i72 = phi i64 [ %_0.i.i.i70, %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i.i69 ], [ %columns.val2.i65, %bb10.i.us.i124 ], !dbg !11818
+  %_6.val.i74 = load ptr, ptr %_6.i18251, align 8, !dbg !11810, !alias.scope !11804, !noundef !30
+  %_6.val1.i75 = load i64, ptr %110, align 8, !dbg !11810, !alias.scope !11804
+  %166 = icmp eq ptr %_6.val.i74, null, !dbg !11819
+  br i1 %166, label %.noexc150, label %bb3.i3.i76, !dbg !11821
+
+bb3.i3.i76:                                       ; preds = %_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i71
+  %_3.i.i4.i77 = icmp ult i64 %_25.i.us.i126, %_6.val1.i75, !dbg !11822
+  br i1 %_3.i.i4.i77, label %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i6.i79, label %panic.i.i5.i78.invoke, !dbg !11822
+
+panic.i.i5.i78.invoke:                            ; preds = %bb3.i3.i76, %bb3.i.i66
+  %167 = phi i64 [ %columns.val2.i65, %bb3.i.i66 ], [ %_6.val1.i75, %bb3.i3.i76 ]
+; invoke core::panicking::panic_bounds_check
+  invoke void @_RNvNtCslWxY2MhVcag_4core9panicking18panic_bounds_check(i64 noundef %_25.i.us.i126, i64 noundef %167, ptr noalias nofree noundef readonly align 8 captures(address, read_provenance) dereferenceable(24) @alloc_3f28617b1f3af5fd4f65c871cacd3b1c.llvm.225733484165914085) #24
+          to label %panic.i.i5.i78.cont unwind label %cleanup8.loopexit, !dbg !11824
+
+panic.i.i5.i78.cont:                              ; preds = %panic.i.i5.i78.invoke
+  unreachable
+
+_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i6.i79: ; preds = %bb3.i3.i76
+  %168 = getelementptr inbounds nuw i64, ptr %_6.val.i74, i64 %_25.i.us.i126, !dbg !11822
+  %_0.i.i7.i80 = load i64, ptr %168, align 8, !dbg !11822, !noalias !11804, !noundef !30
+  br label %.noexc150, !dbg !11826
+
+.noexc150:                                        ; preds = %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i6.i79, %_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i71
+  %_0.sroa.0.0.i8.i81 = phi i64 [ %_0.i.i7.i80, %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i6.i79 ], [ %_6.val1.i75, %_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i71 ], !dbg !11827
+  %169 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %_0.sroa.0.0.i.i72, i64 %_0.sroa.0.0.i8.i81), !dbg !11828
+  %_7.0.i.i.i.i18.i.us.i127 = extractvalue { i64, i1 } %169, 0, !dbg !11828
+  %_7.1.i.i.i.i19.i.us.i128 = extractvalue { i64, i1 } %169, 1, !dbg !11828
+  %_8.i.i.i.i20.i.us.i129 = icmp sgt i64 %_7.0.i.i.i.i18.i.us.i127, 0, !dbg !11832
+  %_14.i.i22.i.us.i130 = getelementptr inbounds nuw i8, ptr %_8.i, i64 %_25.i.us.i126, !dbg !11833
+  %_15.i.i23.i.us.i131 = zext i1 %_8.i.i.i.i20.i.us.i129 to i8, !dbg !11836
+  store i8 %_15.i.i23.i.us.i131, ptr %_14.i.i22.i.us.i130, align 1, !dbg !11839, !noalias !11840
+  %170 = or i1 %failure.sroa.0.17.off0, %_7.1.i.i.i.i19.i.us.i128, !dbg !11843
+  %_31.i.us.i132 = add i64 %word.sroa.0.046.i.us.i125, -1, !dbg !11845
+  %171 = and i64 %_31.i.us.i132, %word.sroa.0.046.i.us.i125, !dbg !11846
+  %172 = icmp eq i64 %171, 0, !dbg !11847
+  br i1 %172, label %bb13.i.us.i114, label %bb10.i.us.i124, !dbg !11847
+
+bb13.i.us.i114:                                   ; preds = %.noexc149, %.noexc150, %bb3.i.us.i109
+  %failure.sroa.0.15.off0 = phi i1 [ %failure.sroa.0.14.off0, %bb3.i.us.i109 ], [ %170, %.noexc150 ], [ %161, %.noexc149 ]
+  %173 = add i64 %base.sroa.0.0.i.us.i104, 64, !dbg !11848
+  br label %bb1.i.us.i100, !dbg !11849
+
+bb1.i.i59:                                        ; preds = %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i53, %bb13.i.i73
+  %failure.sroa.0.10.off0 = phi i1 [ %failure.sroa.0.11.off0, %bb13.i.i73 ], [ false, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i53 ]
+  %iter.sroa.0.0.i.i60 = phi i1 [ %iter.sroa.0.143.i.i70, %bb13.i.i73 ], [ true, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i53 ], !dbg !11636
+  %iter.sroa.7.0.i.i61 = phi ptr [ %iter.sroa.7.13142.i.i71, %bb13.i.i73 ], [ %_43.0.i.i34, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i53 ], !dbg !11636
+  %iter.sroa.12.0.i.i62 = phi i64 [ %iter.sroa.12.13341.i.i72, %bb13.i.i73 ], [ 0, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i53 ], !dbg !11636
+  %base.sroa.0.0.i.i63 = phi i64 [ %184, %bb13.i.i73 ], [ 0, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i53 ], !dbg !11706
+  %.not.i.i.i64 = icmp ne ptr %iter.sroa.7.0.i.i61, null, !dbg !11707
+  %_3.not.i.i.i.i.i65 = icmp ult i64 %iter.sroa.12.0.i.i62, %_45.i.i36
+  %or.cond.i.i66 = select i1 %.not.i.i.i64, i1 %_3.not.i.i.i.i.i65, i1 false, !dbg !11714
+  br i1 %or.cond.i.i66, label %bb2.i.i.i.i.i92, label %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i67, !dbg !11714
+
+bb2.i.i.i.i.i92:                                  ; preds = %bb1.i.i59
+  %_7.i.i.i.i.i93 = getelementptr inbounds nuw i64, ptr %iter.sroa.7.0.i.i61, i64 %iter.sroa.12.0.i.i62, !dbg !11716
+  %_19.sroa.0.0.copyload.i.i.i.i.i94 = load i64, ptr %_7.i.i.i.i.i93, align 1, !dbg !11720, !noalias !11723
+  %_11.i.i.i.i.i95 = getelementptr i8, ptr %_7.i.i.i.i.i93, i64 8, !dbg !11850
+  %_21.sroa.0.0.copyload.i.i.i.i.i96 = load i8, ptr %_11.i.i.i.i.i95, align 1, !dbg !11852, !noalias !11723
+  %next.i.i.i.i.i97 = zext i8 %_21.sroa.0.0.copyload.i.i.i.i.i96 to i64, !dbg !11855
+  %_13.i.i.i.i.i98 = lshr i64 %_19.sroa.0.0.copyload.i.i.i.i.i94, %.pre-phi.i.i54, !dbg !11856
+  %_14.i.i.i.i.i99 = shl i64 %next.i.i.i.i.i97, %153, !dbg !11857
+  %174 = or i64 %_14.i.i.i.i.i99, %_13.i.i.i.i.i98, !dbg !11856
+  %175 = add nuw i64 %iter.sroa.12.0.i.i62, 1, !dbg !11730
+  br label %bb3.i.i68, !dbg !11715
+
+_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i67: ; preds = %bb1.i.i59
+  br i1 %iter.sroa.0.0.i.i60, label %bb3.i.i68, label %bb29, !dbg !11715
+
+bb3.i.i68:                                        ; preds = %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i67, %bb2.i.i.i.i.i92
+  %self.1.pn.i44.i.i69 = phi i64 [ %174, %bb2.i.i.i.i.i92 ], [ %_0.sroa.0.0.i.i.i55, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i67 ]
+  %iter.sroa.0.143.i.i70 = phi i1 [ %iter.sroa.0.0.i.i60, %bb2.i.i.i.i.i92 ], [ false, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i67 ]
+  %iter.sroa.7.13142.i.i71 = phi ptr [ %iter.sroa.7.0.i.i61, %bb2.i.i.i.i.i92 ], [ null, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i67 ]
+  %iter.sroa.12.13341.i.i72 = phi i64 [ %175, %bb2.i.i.i.i.i92 ], [ %iter.sroa.12.0.i.i62, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i67 ]
+  switch i64 %self.1.pn.i44.i.i69, label %bb10.i.i83 [
+    i64 -1, label %bb23.i.i74
+    i64 0, label %bb13.i.i73
+  ], !dbg !11731
+
+bb23.i.i74:                                       ; preds = %bb3.i.i68, %.noexc151
+  %failure.sroa.0.12.off0 = phi i1 [ %182, %.noexc151 ], [ %failure.sroa.0.10.off0, %bb3.i.i68 ]
+  %iter2.sroa.0.047.i.i75 = phi i64 [ %183, %.noexc151 ], [ 0, %bb3.i.i68 ]
+  %_17.i.i76 = or disjoint i64 %iter2.sroa.0.047.i.i75, %base.sroa.0.0.i.i63, !dbg !11733
+  call void @llvm.experimental.noalias.scope.decl(metadata !11858), !dbg !11739
+  %columns.val.i85 = load ptr, ptr %columns, align 8, !dbg !11861, !alias.scope !11858, !noundef !30
+  %columns.val2.i86 = load i64, ptr %111, align 8, !dbg !11861, !alias.scope !11858
+  %176 = icmp eq ptr %columns.val.i85, null, !dbg !11863
+  br i1 %176, label %_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i92, label %bb3.i.i87, !dbg !11865
+
+bb3.i.i87:                                        ; preds = %bb23.i.i74
+  %_3.i.i.i88 = icmp ult i64 %_17.i.i76, %columns.val2.i86, !dbg !11866
+  br i1 %_3.i.i.i88, label %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i.i90, label %panic.i.i5.i99.invoke, !dbg !11866
+
+_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i.i90: ; preds = %bb3.i.i87
+  %177 = getelementptr inbounds nuw i64, ptr %columns.val.i85, i64 %_17.i.i76, !dbg !11866
+  %_0.i.i.i91 = load i64, ptr %177, align 8, !dbg !11866, !noalias !11858, !noundef !30
+  br label %_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i92, !dbg !11868
+
+_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i92: ; preds = %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i.i90, %bb23.i.i74
+  %_0.sroa.0.0.i.i93 = phi i64 [ %_0.i.i.i91, %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i.i90 ], [ %columns.val2.i86, %bb23.i.i74 ], !dbg !11869
+  %_6.val.i95 = load ptr, ptr %_6.i18251, align 8, !dbg !11861, !alias.scope !11858, !noundef !30
+  %_6.val1.i96 = load i64, ptr %110, align 8, !dbg !11861, !alias.scope !11858
+  %178 = icmp eq ptr %_6.val.i95, null, !dbg !11870
+  br i1 %178, label %.noexc151, label %bb3.i3.i97, !dbg !11872
+
+bb3.i3.i97:                                       ; preds = %_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i92
+  %_3.i.i4.i98 = icmp ult i64 %_17.i.i76, %_6.val1.i96, !dbg !11873
+  br i1 %_3.i.i4.i98, label %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i6.i100, label %panic.i.i5.i99.invoke, !dbg !11873
+
+panic.i.i5.i99.invoke:                            ; preds = %bb3.i3.i97, %bb3.i.i87
+  %179 = phi i64 [ %columns.val2.i86, %bb3.i.i87 ], [ %_6.val1.i96, %bb3.i3.i97 ]
+; invoke core::panicking::panic_bounds_check
+  invoke void @_RNvNtCslWxY2MhVcag_4core9panicking18panic_bounds_check(i64 noundef %_17.i.i76, i64 noundef %179, ptr noalias nofree noundef readonly align 8 captures(address, read_provenance) dereferenceable(24) @alloc_3f28617b1f3af5fd4f65c871cacd3b1c.llvm.225733484165914085) #24
+          to label %panic.i.i5.i99.cont unwind label %cleanup8.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp.loopexit, !dbg !11875
+
+panic.i.i5.i99.cont:                              ; preds = %panic.i.i5.i99.invoke
+  unreachable
+
+_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i6.i100: ; preds = %bb3.i3.i97
+  %180 = getelementptr inbounds nuw i64, ptr %_6.val.i95, i64 %_17.i.i76, !dbg !11873
+  %_0.i.i7.i101 = load i64, ptr %180, align 8, !dbg !11873, !noalias !11858, !noundef !30
+  br label %.noexc151, !dbg !11877
+
+.noexc151:                                        ; preds = %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i6.i100, %_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i92
+  %_0.sroa.0.0.i8.i102 = phi i64 [ %_0.i.i7.i101, %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i6.i100 ], [ %_6.val1.i96, %_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i92 ], !dbg !11878
+  %181 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %_0.sroa.0.0.i.i93, i64 %_0.sroa.0.0.i8.i102), !dbg !11762
+  %_7.0.i.i.i.i.i.i77 = extractvalue { i64, i1 } %181, 0, !dbg !11762
+  %_7.1.i.i.i.i.i.i78 = extractvalue { i64, i1 } %181, 1, !dbg !11762
+  %_8.i.i.i.i.i.i79 = icmp sgt i64 %_7.0.i.i.i.i.i.i77, 0, !dbg !11766
+  %_14.i.i.i.i80 = getelementptr inbounds nuw i8, ptr %_8.i, i64 %_17.i.i76, !dbg !11767
+  %_15.i.i.i.i81 = zext i1 %_8.i.i.i.i.i.i79 to i8, !dbg !11773
+  store i8 %_15.i.i.i.i81, ptr %_14.i.i.i.i80, align 1, !dbg !11778, !noalias !11779
+  %182 = or i1 %failure.sroa.0.12.off0, %_7.1.i.i.i.i.i.i78, !dbg !11782
+  %183 = add nuw nsw i64 %iter2.sroa.0.047.i.i75, 1, !dbg !11784
+  %exitcond.not.i.i82 = icmp eq i64 %183, 64, !dbg !11795
+  br i1 %exitcond.not.i.i82, label %bb13.i.i73, label %bb23.i.i74, !dbg !11798
+
+bb13.i.i73:                                       ; preds = %.noexc151, %.noexc152, %bb3.i.i68
+  %failure.sroa.0.11.off0 = phi i1 [ %failure.sroa.0.10.off0, %bb3.i.i68 ], [ %192, %.noexc152 ], [ %182, %.noexc151 ]
+  %184 = add i64 %base.sroa.0.0.i.i63, 64, !dbg !11848
+  br label %bb1.i.i59, !dbg !11849
+
+bb10.i.i83:                                       ; preds = %bb3.i.i68, %.noexc152
+  %failure.sroa.0.13.off0 = phi i1 [ %192, %.noexc152 ], [ %failure.sroa.0.10.off0, %bb3.i.i68 ]
+  %word.sroa.0.046.i.i84 = phi i64 [ %193, %.noexc152 ], [ %self.1.pn.i44.i.i69, %bb3.i.i68 ]
+  %185 = call range(i64 0, 65) i64 @llvm.cttz.i64(i64 %word.sroa.0.046.i.i84, i1 true), !dbg !11799
+  %_25.i.i85 = or disjoint i64 %185, %base.sroa.0.0.i.i63, !dbg !11803
+  call void @llvm.experimental.noalias.scope.decl(metadata !11879), !dbg !11807
+  %columns.val.i106 = load ptr, ptr %columns, align 8, !dbg !11882, !alias.scope !11879, !noundef !30
+  %columns.val2.i107 = load i64, ptr %111, align 8, !dbg !11882, !alias.scope !11879
+  %186 = icmp eq ptr %columns.val.i106, null, !dbg !11884
+  br i1 %186, label %_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i113, label %bb3.i.i108, !dbg !11886
+
+bb3.i.i108:                                       ; preds = %bb10.i.i83
+  %_3.i.i.i109 = icmp ult i64 %_25.i.i85, %columns.val2.i107, !dbg !11887
+  br i1 %_3.i.i.i109, label %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i.i111, label %panic.i.i5.i120.invoke, !dbg !11887
+
+_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i.i111: ; preds = %bb3.i.i108
+  %187 = getelementptr inbounds nuw i64, ptr %columns.val.i106, i64 %_25.i.i85, !dbg !11887
+  %_0.i.i.i112 = load i64, ptr %187, align 8, !dbg !11887, !noalias !11879, !noundef !30
+  br label %_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i113, !dbg !11889
+
+_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i113: ; preds = %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i.i111, %bb10.i.i83
+  %_0.sroa.0.0.i.i114 = phi i64 [ %_0.i.i.i112, %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i.i111 ], [ %columns.val2.i107, %bb10.i.i83 ], !dbg !11890
+  %_6.val.i116 = load ptr, ptr %_6.i18251, align 8, !dbg !11882, !alias.scope !11879, !noundef !30
+  %_6.val1.i117 = load i64, ptr %110, align 8, !dbg !11882, !alias.scope !11879
+  %188 = icmp eq ptr %_6.val.i116, null, !dbg !11891
+  br i1 %188, label %.noexc152, label %bb3.i3.i118, !dbg !11893
+
+bb3.i3.i118:                                      ; preds = %_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i113
+  %_3.i.i4.i119 = icmp ult i64 %_25.i.i85, %_6.val1.i117, !dbg !11894
+  br i1 %_3.i.i4.i119, label %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i6.i121, label %panic.i.i5.i120.invoke, !dbg !11894
+
+panic.i.i5.i120.invoke:                           ; preds = %bb3.i3.i118, %bb3.i.i108
+  %189 = phi i64 [ %columns.val2.i107, %bb3.i.i108 ], [ %_6.val1.i117, %bb3.i3.i118 ]
+; invoke core::panicking::panic_bounds_check
+  invoke void @_RNvNtCslWxY2MhVcag_4core9panicking18panic_bounds_check(i64 noundef %_25.i.i85, i64 noundef %189, ptr noalias nofree noundef readonly align 8 captures(address, read_provenance) dereferenceable(24) @alloc_3f28617b1f3af5fd4f65c871cacd3b1c.llvm.225733484165914085) #24
+          to label %panic.i.i5.i120.cont unwind label %cleanup8.loopexit.split-lp.loopexit.split-lp.loopexit, !dbg !11896
+
+panic.i.i5.i120.cont:                             ; preds = %panic.i.i5.i120.invoke
+  unreachable
+
+_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i6.i121: ; preds = %bb3.i3.i118
+  %190 = getelementptr inbounds nuw i64, ptr %_6.val.i116, i64 %_25.i.i85, !dbg !11894
+  %_0.i.i7.i122 = load i64, ptr %190, align 8, !dbg !11894, !noalias !11879, !noundef !30
+  br label %.noexc152, !dbg !11898
+
+.noexc152:                                        ; preds = %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i6.i121, %_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i113
+  %_0.sroa.0.0.i8.i123 = phi i64 [ %_0.i.i7.i122, %_RNvXNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element9primitivexNtNtB4_5input12InputElement3getCs3jOYrsLZdRr_10boundaries.exit.i6.i121 ], [ %_6.val1.i117, %_RNvMNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tupleINtB2_9ArgColumnxE3getCs3jOYrsLZdRr_10boundaries.exit.i113 ], !dbg !11899
+  %191 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %_0.sroa.0.0.i.i114, i64 %_0.sroa.0.0.i8.i123), !dbg !11828
+  %_7.0.i.i.i.i18.i.i86 = extractvalue { i64, i1 } %191, 0, !dbg !11828
+  %_7.1.i.i.i.i19.i.i87 = extractvalue { i64, i1 } %191, 1, !dbg !11828
+  %_8.i.i.i.i20.i.i88 = icmp sgt i64 %_7.0.i.i.i.i18.i.i86, 0, !dbg !11832
+  %_14.i.i22.i.i89 = getelementptr inbounds nuw i8, ptr %_8.i, i64 %_25.i.i85, !dbg !11833
+  %_15.i.i23.i.i90 = zext i1 %_8.i.i.i.i20.i.i88 to i8, !dbg !11836
+  store i8 %_15.i.i23.i.i90, ptr %_14.i.i22.i.i89, align 1, !dbg !11839, !noalias !11840
+  %192 = or i1 %failure.sroa.0.13.off0, %_7.1.i.i.i.i19.i.i87, !dbg !11843
+  %_31.i.i91 = add i64 %word.sroa.0.046.i.i84, -1, !dbg !11845
+  %193 = and i64 %_31.i.i91, %word.sroa.0.046.i.i84, !dbg !11846
+  %194 = icmp eq i64 %193, 0, !dbg !11847
+  br i1 %194, label %bb13.i.i73, label %bb10.i.i83, !dbg !11847
+
+bb28:                                             ; preds = %bb27
+  call void @llvm.memcpy.p0.p0.i64(ptr noundef nonnull align 8 dereferenceable(80) %_0, ptr noundef nonnull align 8 dereferenceable(80) %_65, i64 80, i1 false), !dbg !11617
+  call void @llvm.lifetime.end.p0(ptr nonnull %_65), !dbg !11617
+  call void @llvm.lifetime.end.p0(ptr nonnull %args2), !dbg !11617
+  call void @llvm.lifetime.end.p0(ptr nonnull %_68), !dbg !11617
+  br label %bb37, !dbg !11546
+
+bb29:                                             ; preds = %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i67, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.us.i108
+  %failure.sroa.0.18.off0 = phi i1 [ %failure.sroa.0.14.off0, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.us.i108 ], [ %failure.sroa.0.10.off0, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i67 ]
+  call void @llvm.lifetime.end.p0(ptr nonnull %_6.i.i29), !dbg !11900, !noalias !11640
+  call void @llvm.lifetime.start.p0(ptr nonnull %_80), !dbg !11606
+  br i1 %failure.sroa.0.18.off0, label %bb1.i, label %bb82, !dbg !11607, !prof !120
+
+bb31:                                             ; preds = %bb1.i
+  call void @llvm.lifetime.end.p0(ptr nonnull %_6.i27), !dbg !11610, !noalias !11611
+  %.pr = load i64, ptr %_80, align 8, !dbg !11901
+  %.not15 = icmp eq i64 %.pr, -1, !dbg !11901
+  br i1 %.not15, label %bb82, label %bb81, !dbg !11903
+
+bb81:                                             ; preds = %bb31
+  call void @llvm.memcpy.p0.p0.i64(ptr noundef nonnull align 8 dereferenceable(80) %_0, ptr noundef nonnull align 8 dereferenceable(80) %_80, i64 80, i1 false), !dbg !11904
+  call void @llvm.lifetime.end.p0(ptr nonnull %_80), !dbg !11905
+  br label %bb37, !dbg !11546
+
+bb82:                                             ; preds = %bb31, %bb29, %bb30
+  call void @llvm.lifetime.end.p0(ptr nonnull %_80), !dbg !11905
+  call void @llvm.lifetime.start.p0(ptr nonnull %_87), !dbg !11906
+  call void @llvm.memcpy.p0.p0.i64(ptr noundef nonnull align 8 dereferenceable(72) %_87, ptr noundef nonnull align 8 dereferenceable(72) %values, i64 72, i1 false), !dbg !11906
+; invoke <vortex_array::executor::ExecutionCtx>::allocator
+  %_88 = invoke noundef nonnull align 8 ptr @_RNvMs_NtCsg1Afd8KoF7C_12vortex_array8executorNtB4_12ExecutionCtx9allocator(ptr noundef nonnull align 8 %ctx)
+          to label %bb32 unwind label %bb52, !dbg !11907
+
+cleanup10:                                        ; preds = %bb32
+  %195 = landingpad { ptr, i32 }
+          cleanup
+  br label %bb45, !dbg !11908
+
+bb32:                                             ; preds = %bb82
+  %196 = load i64, ptr %row_count, align 8, !dbg !11906, !noundef !30
+; invoke <vortex_buffer::buffer_mut::BufferMut<bool> as vortex_array::scalar_fn::unstable::row::types::element::output::OutputBuffer<bool>>::finish
+  %197 = invoke { ptr, ptr } @_RNvXs0_NtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element4boolINtNtCs7x6tOKv5niH_13vortex_buffer10buffer_mut9BufferMutbEINtNtB7_6output12OutputBufferbE6finish(ptr noalias nofree noundef nonnull align 8 captures(address) dereferenceable(72) %_87, i64 noundef %196, ptr noalias nofree noundef nonnull readonly align 8 captures(address, read_provenance) dereferenceable(16) %_88)
+          to label %bb33 unwind label %cleanup10, !dbg !11909
+
+bb33:                                             ; preds = %bb32
+  %_86.0 = extractvalue { ptr, ptr } %197, 0, !dbg !11906
+  %_86.1 = extractvalue { ptr, ptr } %197, 1, !dbg !11906
+  call void @llvm.lifetime.end.p0(ptr nonnull %_87), !dbg !11908
+  %198 = icmp ne ptr %_86.0, null, !dbg !11910
+  call void @llvm.assume(i1 %198), !dbg !11910
+  %199 = icmp ne ptr %_86.1, null, !dbg !11910
+  call void @llvm.assume(i1 %199), !dbg !11910
+  %200 = getelementptr inbounds nuw i8, ptr %_0, i64 8, !dbg !11911
+  store ptr %_86.0, ptr %200, align 8, !dbg !11911
+  %201 = getelementptr inbounds nuw i8, ptr %_0, i64 16, !dbg !11911
+  store ptr %_86.1, ptr %201, align 8, !dbg !11911
+  store i64 -1, ptr %_0, align 8, !dbg !11911
+  call void @llvm.lifetime.end.p0(ptr nonnull %values), !dbg !11912
+  call void @llvm.lifetime.end.p0(ptr nonnull %row_count), !dbg !11913
+  call void @llvm.experimental.noalias.scope.decl(metadata !11914), !dbg !11169
+  call void @llvm.experimental.noalias.scope.decl(metadata !11917), !dbg !11920
+  call void @llvm.experimental.noalias.scope.decl(metadata !11922), !dbg !11925
+  %202 = load ptr, ptr %columns, align 8, !dbg !11927, !alias.scope !11929, !noundef !30
+  %.not.i.i.i153 = icmp eq ptr %202, null, !dbg !11927
+  br i1 %.not.i.i.i153, label %bb4.i, label %bb2.i.i.i154, !dbg !11927
+
+bb2.i.i.i154:                                     ; preds = %bb33
+  call void @llvm.experimental.noalias.scope.decl(metadata !11930), !dbg !11927
+  %203 = getelementptr inbounds nuw i8, ptr %columns, i64 16, !dbg !11933
+  call void @llvm.experimental.noalias.scope.decl(metadata !11935), !dbg !11933
+  %204 = load ptr, ptr %203, align 8, !dbg !11938, !alias.scope !11940, !noundef !30
+  %205 = icmp eq ptr %204, null, !dbg !11938
+  br i1 %205, label %bb4.i, label %bb2.i.i.i.i.i155, !dbg !11938
+
+bb2.i.i.i.i.i155:                                 ; preds = %bb2.i.i.i154
+  %_2.i.i.i.i.i.i.i = atomicrmw sub ptr %204, i64 1 release, align 8, !dbg !11941, !noalias !11946
+  %206 = icmp eq i64 %_2.i.i.i.i.i.i.i, 1, !dbg !11951
+  br i1 %206, label %bb2.i.i.i.i.i.i.i, label %bb4.i, !dbg !11951
+
+bb2.i.i.i.i.i.i.i:                                ; preds = %bb2.i.i.i.i.i155
+  fence acquire, !dbg !11952
+; invoke <alloc::sync::Arc<vortex_buffer::allocation::BufferBacking>>::drop_slow
+  invoke void @_RNvMsn_NtCs6KVRSXc8uZF_5alloc4syncINtB5_3ArcNtNtCs7x6tOKv5niH_13vortex_buffer10allocation13BufferBackingE9drop_slowBK_(ptr noalias nofree noundef nonnull align 8 dereferenceable(8) %203) #29
+          to label %bb4.i unwind label %cleanup.i, !dbg !11954
+
+cleanup.i:                                        ; preds = %bb2.i.i.i.i.i.i.i
+  %207 = landingpad { ptr, i32 }
+          cleanup
+  %208 = getelementptr inbounds nuw i8, ptr %columns, i64 32, !dbg !11920
+; invoke core::ptr::drop_glue::<vortex_array::scalar_fn::unstable::row::types::element::tuple::element_tuple::ArgColumn<i64>>
+  invoke fastcc void @_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueINtNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tuple9ArgColumnxEECs3jOYrsLZdRr_10boundaries(ptr noalias nofree noundef align 8 dereferenceable(32) %208) #27
+          to label %common.resume unwind label %terminate.i, !dbg !11920
+
+bb4.i:                                            ; preds = %bb2.i.i.i.i.i.i.i, %bb2.i.i.i.i.i155, %bb2.i.i.i154, %bb33
+  %209 = getelementptr inbounds nuw i8, ptr %columns, i64 32, !dbg !11920
+  call void @llvm.experimental.noalias.scope.decl(metadata !11955), !dbg !11920
+  call void @llvm.experimental.noalias.scope.decl(metadata !11958), !dbg !11961
+  %210 = load ptr, ptr %209, align 8, !dbg !11963, !alias.scope !11965, !noundef !30
+  %.not.i.i1.i = icmp eq ptr %210, null, !dbg !11963
+  br i1 %.not.i.i1.i, label %_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueTINtNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tuple9ArgColumnxEBC_EECs3jOYrsLZdRr_10boundaries.exit, label %bb2.i.i2.i, !dbg !11963
+
+bb2.i.i2.i:                                       ; preds = %bb4.i
+  call void @llvm.experimental.noalias.scope.decl(metadata !11966), !dbg !11963
+  %211 = getelementptr inbounds nuw i8, ptr %columns, i64 48, !dbg !11969
+  call void @llvm.experimental.noalias.scope.decl(metadata !11971), !dbg !11969
+  %212 = load ptr, ptr %211, align 8, !dbg !11974, !alias.scope !11976, !noundef !30
+  %213 = icmp eq ptr %212, null, !dbg !11974
+  br i1 %213, label %_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueTINtNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tuple9ArgColumnxEBC_EECs3jOYrsLZdRr_10boundaries.exit, label %bb2.i.i.i.i3.i, !dbg !11974
+
+bb2.i.i.i.i3.i:                                   ; preds = %bb2.i.i2.i
+  %_2.i.i.i.i.i.i4.i = atomicrmw sub ptr %212, i64 1 release, align 8, !dbg !11977, !noalias !11982
+  %214 = icmp eq i64 %_2.i.i.i.i.i.i4.i, 1, !dbg !11987
+  br i1 %214, label %bb2.i.i.i.i.i.i5.i, label %_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueTINtNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tuple9ArgColumnxEBC_EECs3jOYrsLZdRr_10boundaries.exit, !dbg !11987
+
+bb2.i.i.i.i.i.i5.i:                               ; preds = %bb2.i.i.i.i3.i
+  fence acquire, !dbg !11988
+; call <alloc::sync::Arc<vortex_buffer::allocation::BufferBacking>>::drop_slow
+  call void @_RNvMsn_NtCs6KVRSXc8uZF_5alloc4syncINtB5_3ArcNtNtCs7x6tOKv5niH_13vortex_buffer10allocation13BufferBackingE9drop_slowBK_(ptr noalias nofree noundef nonnull align 8 dereferenceable(8) %211) #29, !dbg !11990
+  br label %_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueTINtNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tuple9ArgColumnxEBC_EECs3jOYrsLZdRr_10boundaries.exit, !dbg !11990
+
+terminate.i:                                      ; preds = %cleanup.i
+  %215 = landingpad { ptr, i32 }
+          filter [0 x ptr] zeroinitializer
+; call core::panicking::panic_in_cleanup
+  call void @_RNvNtCslWxY2MhVcag_4core9panicking16panic_in_cleanup() #28, !dbg !11920
+  unreachable, !dbg !11920
+
+_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueTINtNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tuple9ArgColumnxEBC_EECs3jOYrsLZdRr_10boundaries.exit: ; preds = %bb2.i.i.i.i.i.i5.i, %bb2.i.i.i.i3.i, %bb2.i.i2.i, %bb4.i
+  call void @llvm.lifetime.end.p0(ptr nonnull %columns), !dbg !11169
+  br label %bb42, !dbg !11169
+
+bb42:                                             ; preds = %bb7, %_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueTINtNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tuple9ArgColumnxEBC_EECs3jOYrsLZdRr_10boundaries.exit171, %_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueTINtNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tuple9ArgColumnxEBC_EECs3jOYrsLZdRr_10boundaries.exit, %bb3, %bb62
+  ret void, !dbg !11991
+
+bb52:                                             ; preds = %bb82
+  %216 = landingpad { ptr, i32 }
+          cleanup
+; invoke core::ptr::drop_glue::<vortex_buffer::buffer_mut::BufferMut<bool>>
+  invoke fastcc void @_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueINtNtCs7x6tOKv5niH_13vortex_buffer10buffer_mut9BufferMutbEECs3jOYrsLZdRr_10boundaries(ptr noalias nofree noundef align 8 dereferenceable(72) %_87) #27
+          to label %bb45 unwind label %terminate, !dbg !11908
+
+terminate:                                        ; preds = %bb54, %bb52, %bb45
+  %217 = landingpad { ptr, i32 }
+          filter [0 x ptr] zeroinitializer
+; call core::panicking::panic_in_cleanup
+  call void @_RNvNtCslWxY2MhVcag_4core9panicking16panic_in_cleanup() #28, !dbg !11992
+  unreachable, !dbg !11992
+
+bb38:                                             ; preds = %bb2.i.i.i.i3.i.i, %bb2.i.i1.i.i, %bb4.i.i
+  call void @llvm.lifetime.end.p0(ptr nonnull %values), !dbg !11912
+  call void @llvm.lifetime.end.p0(ptr nonnull %row_count), !dbg !11913
+  call void @llvm.experimental.noalias.scope.decl(metadata !11993), !dbg !11169
+  call void @llvm.experimental.noalias.scope.decl(metadata !11996), !dbg !11999
+  call void @llvm.experimental.noalias.scope.decl(metadata !12001), !dbg !12004
+  %218 = load ptr, ptr %columns, align 8, !dbg !12006, !alias.scope !12008, !noundef !30
+  %.not.i.i.i157 = icmp eq ptr %218, null, !dbg !12006
+  br i1 %.not.i.i.i157, label %bb4.i161, label %bb2.i.i.i158, !dbg !12006
+
+bb2.i.i.i158:                                     ; preds = %bb38
+  call void @llvm.experimental.noalias.scope.decl(metadata !12009), !dbg !12006
+  %219 = getelementptr inbounds nuw i8, ptr %columns, i64 16, !dbg !12012
+  call void @llvm.experimental.noalias.scope.decl(metadata !12014), !dbg !12012
+  %220 = load ptr, ptr %219, align 8, !dbg !12017, !alias.scope !12019, !noundef !30
+  %221 = icmp eq ptr %220, null, !dbg !12017
+  br i1 %221, label %bb4.i161, label %bb2.i.i.i.i.i159, !dbg !12017
+
+bb2.i.i.i.i.i159:                                 ; preds = %bb2.i.i.i158
+  %_2.i.i.i.i.i.i.i160 = atomicrmw sub ptr %220, i64 1 release, align 8, !dbg !12020, !noalias !12025
+  %222 = icmp eq i64 %_2.i.i.i.i.i.i.i160, 1, !dbg !12030
+  br i1 %222, label %bb2.i.i.i.i.i.i.i167, label %bb4.i161, !dbg !12030
+
+bb2.i.i.i.i.i.i.i167:                             ; preds = %bb2.i.i.i.i.i159
+  fence acquire, !dbg !12031
+; invoke <alloc::sync::Arc<vortex_buffer::allocation::BufferBacking>>::drop_slow
+  invoke void @_RNvMsn_NtCs6KVRSXc8uZF_5alloc4syncINtB5_3ArcNtNtCs7x6tOKv5niH_13vortex_buffer10allocation13BufferBackingE9drop_slowBK_(ptr noalias nofree noundef nonnull align 8 dereferenceable(8) %219) #29
+          to label %bb4.i161 unwind label %cleanup.i168, !dbg !12033
+
+cleanup.i168:                                     ; preds = %bb2.i.i.i.i.i.i.i167
+  %223 = landingpad { ptr, i32 }
+          cleanup
+  %224 = getelementptr inbounds nuw i8, ptr %columns, i64 32, !dbg !11999
+; invoke core::ptr::drop_glue::<vortex_array::scalar_fn::unstable::row::types::element::tuple::element_tuple::ArgColumn<i64>>
+  invoke fastcc void @_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueINtNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tuple9ArgColumnxEECs3jOYrsLZdRr_10boundaries(ptr noalias nofree noundef align 8 dereferenceable(32) %224) #27
+          to label %common.resume unwind label %terminate.i169, !dbg !11999
+
+bb4.i161:                                         ; preds = %bb2.i.i.i.i.i.i.i167, %bb2.i.i.i.i.i159, %bb2.i.i.i158, %bb38
+  %225 = getelementptr inbounds nuw i8, ptr %columns, i64 32, !dbg !11999
+  call void @llvm.experimental.noalias.scope.decl(metadata !12034), !dbg !11999
+  call void @llvm.experimental.noalias.scope.decl(metadata !12037), !dbg !12040
+  %226 = load ptr, ptr %225, align 8, !dbg !12042, !alias.scope !12044, !noundef !30
+  %.not.i.i1.i162 = icmp eq ptr %226, null, !dbg !12042
+  br i1 %.not.i.i1.i162, label %_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueTINtNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tuple9ArgColumnxEBC_EECs3jOYrsLZdRr_10boundaries.exit171, label %bb2.i.i2.i163, !dbg !12042
+
+bb2.i.i2.i163:                                    ; preds = %bb4.i161
+  call void @llvm.experimental.noalias.scope.decl(metadata !12045), !dbg !12042
+  %227 = getelementptr inbounds nuw i8, ptr %columns, i64 48, !dbg !12048
+  call void @llvm.experimental.noalias.scope.decl(metadata !12050), !dbg !12048
+  %228 = load ptr, ptr %227, align 8, !dbg !12053, !alias.scope !12055, !noundef !30
+  %229 = icmp eq ptr %228, null, !dbg !12053
+  br i1 %229, label %_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueTINtNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tuple9ArgColumnxEBC_EECs3jOYrsLZdRr_10boundaries.exit171, label %bb2.i.i.i.i3.i164, !dbg !12053
+
+bb2.i.i.i.i3.i164:                                ; preds = %bb2.i.i2.i163
+  %_2.i.i.i.i.i.i4.i165 = atomicrmw sub ptr %228, i64 1 release, align 8, !dbg !12056, !noalias !12061
+  %230 = icmp eq i64 %_2.i.i.i.i.i.i4.i165, 1, !dbg !12066
+  br i1 %230, label %bb2.i.i.i.i.i.i5.i166, label %_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueTINtNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tuple9ArgColumnxEBC_EECs3jOYrsLZdRr_10boundaries.exit171, !dbg !12066
+
+bb2.i.i.i.i.i.i5.i166:                            ; preds = %bb2.i.i.i.i3.i164
+  fence acquire, !dbg !12067
+; call <alloc::sync::Arc<vortex_buffer::allocation::BufferBacking>>::drop_slow
+  call void @_RNvMsn_NtCs6KVRSXc8uZF_5alloc4syncINtB5_3ArcNtNtCs7x6tOKv5niH_13vortex_buffer10allocation13BufferBackingE9drop_slowBK_(ptr noalias nofree noundef nonnull align 8 dereferenceable(8) %227) #29, !dbg !12069
+  br label %_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueTINtNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tuple9ArgColumnxEBC_EECs3jOYrsLZdRr_10boundaries.exit171, !dbg !12069
+
+terminate.i169:                                   ; preds = %cleanup.i168
+  %231 = landingpad { ptr, i32 }
+          filter [0 x ptr] zeroinitializer
+; call core::panicking::panic_in_cleanup
+  call void @_RNvNtCslWxY2MhVcag_4core9panicking16panic_in_cleanup() #28, !dbg !11999
+  unreachable, !dbg !11999
+
+_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueTINtNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tuple9ArgColumnxEBC_EECs3jOYrsLZdRr_10boundaries.exit171: ; preds = %bb2.i.i.i.i.i.i5.i166, %bb2.i.i.i.i3.i164, %bb2.i.i2.i163, %bb4.i161
+  call void @llvm.lifetime.end.p0(ptr nonnull %columns), !dbg !11169
+  br label %bb42, !dbg !11169
+
+unreachable:                                      ; preds = %bb66
+  unreachable
+
+bb54:                                             ; preds = %cleanup9.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp, %cleanup8.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp, %cleanup8.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp.loopexit, %cleanup8.loopexit.split-lp.loopexit.split-lp.loopexit, %cleanup8.loopexit.split-lp.loopexit, %cleanup8.loopexit
+  %.pn.ph = phi { ptr, i32 } [ %lpad.loopexit.split-lp227, %cleanup8.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp ], [ %lpad.loopexit, %cleanup8.loopexit ], [ %lpad.loopexit220, %cleanup8.loopexit.split-lp.loopexit ], [ %lpad.loopexit224, %cleanup8.loopexit.split-lp.loopexit.split-lp.loopexit ], [ %lpad.loopexit226, %cleanup8.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp.loopexit ], [ %lpad.loopexit.split-lp240, %cleanup9.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp.loopexit.split-lp ]
+; invoke core::ptr::drop_glue::<vortex_buffer::buffer_mut::BufferMut<bool>>
+  invoke fastcc void @_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueINtNtCs7x6tOKv5niH_13vortex_buffer10buffer_mut9BufferMutbEECs3jOYrsLZdRr_10boundaries(ptr noalias nofree noundef align 8 dereferenceable(72) %values) #27
+          to label %bb45 unwind label %terminate, !dbg !11912
+
+bb7:                                              ; preds = %bb6
+  call void @llvm.memcpy.p0.p0.i64(ptr noundef nonnull align 8 dereferenceable(80) %_0, ptr noundef nonnull align 8 dereferenceable(80) %_17, i64 80, i1 false), !dbg !11185
+  call void @llvm.lifetime.end.p0(ptr nonnull %_17), !dbg !11185
+  call void @llvm.lifetime.end.p0(ptr nonnull %args), !dbg !11185
+  call void @llvm.lifetime.end.p0(ptr nonnull %_22), !dbg !11185
+  call void @llvm.lifetime.end.p0(ptr nonnull %_20), !dbg !11185
+  call void @llvm.lifetime.end.p0(ptr nonnull %row_count), !dbg !11913
+; call core::ptr::drop_glue::<(vortex_array::scalar_fn::unstable::row::types::element::tuple::element_tuple::ArgColumn<i64>, vortex_array::scalar_fn::unstable::row::types::element::tuple::element_tuple::ArgColumn<i64>)>
+  call fastcc void @_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueTINtNtNtNtNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable3row5types7element5tuple13element_tuple9ArgColumnxEBC_EECs3jOYrsLZdRr_10boundaries(ptr noalias nofree noundef align 8 dereferenceable(64) %columns), !dbg !11169
+  call void @llvm.lifetime.end.p0(ptr nonnull %columns), !dbg !11169
+  br label %bb42, !dbg !11159
+}

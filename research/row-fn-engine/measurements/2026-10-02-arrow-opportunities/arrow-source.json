@@ -1,0 +1,23 @@
+{
+  "arrow-string-59.3.0/src/like.rs": {
+    "sha256": "279b55bd549937d1dc92e39ec8c81bb88eee7c858495fc65231bdfa1649cb205"
+  },
+  "arrow-string-59.3.0/src/regexp.rs": {
+    "sha256": "e6937bd3aa67228a376afe547affbfcf31e8aad7c233f15233091804d6c366aa"
+  },
+  "arrow-string-59.3.0/src/predicate.rs": {
+    "sha256": "690b4d85c8346fdf609b392c7bf05b32a49360354438989053189197643c50a4"
+  },
+  "arrow-string-59.3.0/src/length.rs": {
+    "sha256": "064270fe2142284dbee47ecb4b4dcb38dfc264f362f17833a63d01076988cd4f"
+  },
+  "arrow-arith-59.3.0/src/numeric.rs": {
+    "sha256": "e0cfad94c16c93fb829109bb2efd2362d71ca85cfaf55545ed0df2e8f8442384"
+  },
+  "arrow-arith-59.3.0/src/arity.rs": {
+    "sha256": "1c1590a4e9eedc63869b142bd1ecc5cc229155bbd1585144c825788353a72b65"
+  },
+  "arrow-array-59.3.0/src/array/primitive_array.rs": {
+    "sha256": "36c0d618f16ea9bef08027ddc9261c611e007589c175ebc02a2e1f228ffb3ea3"
+  }
+}

@@ -1,0 +1,1946 @@
+diff --git c/Cargo.lock w/Cargo.lock
+index 6fb32917a6..a7be950352 100644
+--- c/Cargo.lock
++++ w/Cargo.lock
+@@ -8767,6 +8767,55 @@ version = "1.2.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "4e27ee8bb91ca0adcf0ecb116293afa12d393f9c2b9b9cd54d33e8078fe19839"
+ 
++[[package]]
++name = "rofl"
++version = "0.1.0"
++dependencies = [
++ "rofl-kernels",
++]
++
++[[package]]
++name = "rofl-arrow"
++version = "0.1.0"
++dependencies = [
++ "arrow-array 59.3.0",
++ "arrow-buffer 59.3.0",
++ "arrow-data 59.3.0",
++ "arrow-schema 59.3.0",
++ "arrow-select 59.3.0",
++ "rofl",
++]
++
++[[package]]
++name = "rofl-examples"
++version = "0.1.0"
++dependencies = [
++ "arrow-arith 59.3.0",
++ "arrow-array 59.3.0",
++ "arrow-buffer 59.3.0",
++ "arrow-ord 59.3.0",
++ "arrow-schema 59.3.0",
++ "arrow-string 59.3.0",
++ "codspeed-divan-compat",
++ "memchr",
++ "regex",
++ "regex-syntax",
++ "rofl",
++ "rofl-arrow",
++ "rstest",
++ "vortex-array",
++ "vortex-buffer",
++ "vortex-error",
++ "vortex-session",
++]
++
++[[package]]
++name = "rofl-kernels"
++version = "0.1.0"
++dependencies = [
++ "rstest",
++]
++
+ [[package]]
+ name = "rstar"
+ version = "0.12.2"
+@@ -10649,6 +10698,7 @@ dependencies = [
+  "rand_distr 0.6.0",
+  "regex",
+  "regex-syntax",
++ "rofl",
+  "rstest",
+  "rstest_reuse",
+  "rustc-hash",
+@@ -10831,6 +10881,7 @@ dependencies = [
+  "memmap2",
+  "mimalloc",
+  "num-traits",
++ "rofl-kernels",
+  "rstest",
+  "serde",
+  "simdutf8",
+@@ -10943,6 +10994,7 @@ dependencies = [
+  "mimalloc",
+  "num-traits",
+  "rand 0.10.2",
++ "rofl-kernels",
+  "vortex-bench-support",
+  "vortex-buffer",
+ ]
+diff --git c/Cargo.toml w/Cargo.toml
+index 4d73870beb..013a2ff493 100644
+--- c/Cargo.toml
++++ w/Cargo.toml
+@@ -1,5 +1,10 @@
+ [workspace]
+ members = [
++    # Experimental independent row-function framework and adapters
++    "rofl-kernels",
++    "rofl",
++    "rofl-arrow",
++    "rofl-examples",
+     # Core crates in dependency order
+     "vortex-array-macros",
+     "vortex-error",
+@@ -105,6 +110,7 @@ arcref = "0.2.0"
+ arrow-arith = "59.2"
+ arrow-array = "59.2"
+ arrow-buffer = "59.2"
++arrow-ord = "59.2"
+ arrow-cast = "59.2"
+ arrow-data = "59.2"
+ arrow-ipc = "59.2"
+@@ -241,6 +247,9 @@ reqwest = { version = "0.13.0", features = [
+     "system-proxy",
+ ], default-features = false }
+ roaring = "0.11.0"
++rofl = { path = "rofl" }
++rofl-arrow = { path = "rofl-arrow" }
++rofl-kernels = { path = "rofl-kernels" }
+ rstest = "0.26.1"
+ rstest_reuse = "0.7.0"
+ rustc-hash = "2.1.1"
+diff --git c/research/row-fn-engine/README.md w/research/row-fn-engine/README.md
+index 462fc5b0e0..0a0caeef54 100644
+--- c/research/row-fn-engine/README.md
++++ w/research/row-fn-engine/README.md
+@@ -3,18 +3,23 @@
+ 
+ # RowFn engine research
+ 
+-**RowFn can become a shared function library for Vortex and other engines.** The useful boundary
+-separates function semantics, typed row execution, and host adapters. Replacing `DType` is part of
+-that work. Decoding, output ownership, errors, and registration need the same treatment.
++The experimental `rofl` extraction now has framework, kernel, Vortex, and Arrow source
++implementations. Shared visitor definitions exercise the same dispatch and row operations on both
++hosts. Focused debug and optimized tests pass. The [first measurements](measurements/2026-09-25-rofl/README.md)
++show substantial differences across workloads, including slower list sinks and Boolean retry.
++The [additional Arrow kernel comparisons](measurements/2026-09-25-rofl/scalar-kernels.md) cover
++string predicates, concatenation, and multiplication.
++The [implementation record](implementation.md) separates tested behavior from remaining work.
+ 
+-The recommendation is to prove this boundary with Vortex and Arrow before stabilizing an API.
+-DataFusion can then reuse the Arrow adapter. DuckDB needs a separate choice between its C callback
+-and a version-matched C++ adapter.
++The design keeps native runtime types in each adapter. Small semantic capabilities let portable
++functions share dispatch without replacing `DType`. Host adapters retain decoding, allocation,
++validity, and registration. RowFn preserves strict null propagation and cannot produce null from
++valid inputs. Whole-batch functions remain supported by the broader scalar-function registry.
+ 
+-This tree contains findings and design proposals from 2026-09-21, updated for the Vortex source
+-baseline on 2026-09-25. The portable library and host adapters are not implemented. The
+-[recent changes](current-system/recent-changes.md) record completed RowFn improvements. The
+-[evidence record](evidence.md) separates the updated source findings from historical experiments.
++This tree also retains findings and design alternatives from earlier research. Those proposals are
++historical where they differ from the implementation record. The [recent changes](current-system/recent-changes.md)
++describe the baseline improvements on which extraction builds. The [evidence record](evidence.md)
++keeps earlier measurements separate from current source findings.
+ 
+ ## Start here
+ 
+@@ -22,6 +27,8 @@ These pages contain the main argument. The other files provide supporting detail
+ 
+ | Page | What it answers |
+ | --- | --- |
++| [Implementation](implementation.md) | What works, and which evidence is still missing? |
++| [Current measurements](measurements/2026-09-25-rofl/README.md) | How does the extraction compare with retained Vortex and Arrow execution? |
+ | [Recent changes](current-system/recent-changes.md) | Which research concerns have been addressed since September 21? |
+ | [Design](architecture.md) | What belongs in the library, and which API choices remain open? |
+ | [Performance](performance/README.md) | What was measured, and which costs need attention? |
+@@ -35,9 +42,9 @@ An isolated [Rust experiment](type-system/compiled-proof.md) demonstrates shared
+ borrowing across two adapter crates. A portable function still needs a semantic contract.
+ An `i64` timestamp, a decimal coefficient, and an ordinary integer are not interchangeable inputs.
+ 
+-**Outer nullability can move to the binding boundary.** The core can represent a semantic type and
+-its outer nullability separately. Nested child nullability and extension metadata must survive.
+-A small built-in type vocabulary is useful, but hosts must be able to reject unsupported types.
++**Outer nullability can move to the binding boundary.** The core delegates outer nullability to
++native type bindings. Nested child nullability and extension metadata must survive.
++The implementation uses semantic capabilities and rejects unsupported mappings.
+ The [type analysis](type-system/README.md) compares this with an extensible capability design.
+ 
+ **Most reusable logic sits between host operations.** Typed traversal, constants, preparation,
+@@ -64,7 +71,8 @@ required behavior and safe output representation.
+ **The row API needs a batch alternative.** Buffer reuse, dictionary transforms, and fused kernels
+ can require whole-column access. Keep that path under the same function semantics. Existing
+ RowFn also has a narrower contract than a general UDF: strict null propagation, fixed arity,
+-synchronous execution, and no null result from valid inputs. Those extensions need separate design.
++synchronous execution, and no null result from valid inputs. Functions with wider semantics belong
++to the broader plugin system.
+ 
+ ## Supporting detail
+ 
+diff --git c/research/row-fn-engine/architecture.md w/research/row-fn-engine/architecture.md
+index 5eca118b7a..4ded33251d 100644
+--- c/research/row-fn-engine/architecture.md
++++ w/research/row-fn-engine/architecture.md
+@@ -3,6 +3,10 @@
+ 
+ # Proposed library design
+ 
++The experimental source now implements the accepted extraction boundary. See the
++[implementation record](implementation.md) for current behavior and unrun verification. Alternatives below
++remain research context where they differ from that implementation.
++
+ [Overview](README.md)
+ 
+ Share function semantics and typed execution. Let each host bind its types, provide input views,
+diff --git c/research/row-fn-engine/current-system/engine-boundary.md w/research/row-fn-engine/current-system/engine-boundary.md
+index 412f15eaf0..fce1181bfd 100644
+--- c/research/row-fn-engine/current-system/engine-boundary.md
++++ w/research/row-fn-engine/current-system/engine-boundary.md
+@@ -3,6 +3,10 @@
+ 
+ # Crate and trait choices
+ 
++The experimental source now implements the accepted extraction boundary. See the
++[implementation record](../implementation.md) for current behavior and unrun verification. Alternatives below
++remain research context where they differ from that implementation.
++
+ [Design](../architecture.md) | [Current framework](README.md)
+ 
+ An associated `Engine` type can collect host operations at the batch boundary. It is a useful
+diff --git c/research/row-fn-engine/current-system/extraction.md w/research/row-fn-engine/current-system/extraction.md
+index 2e636c1d0e..e2b8701ef8 100644
+--- c/research/row-fn-engine/current-system/extraction.md
++++ w/research/row-fn-engine/current-system/extraction.md
+@@ -3,6 +3,10 @@
+ 
+ # A concrete extraction boundary
+ 
++The experimental source now implements the accepted extraction boundary. See the
++[implementation record](../implementation.md) for current behavior and unrun verification. Alternatives below
++remain research context where they differ from that implementation.
++
+ The proposed core operates on typed row views and row writers. Host adapters bind their logical
+ types, prepare those views, allocate outputs, and publish host arrays. This keeps Vortex ownership
+ and execution context out of the inner API.
+diff --git c/research/row-fn-engine/integrations/arrow.md w/research/row-fn-engine/integrations/arrow.md
+index da89165361..4f40eb7124 100644
+--- c/research/row-fn-engine/integrations/arrow.md
++++ w/research/row-fn-engine/integrations/arrow.md
+@@ -3,6 +3,10 @@
+ 
+ # Arrow has several integration boundaries
+ 
++The experimental source now implements the accepted extraction boundary. See the
++[implementation record](../implementation.md) for current behavior and unrun verification. Alternatives below
++remain research context where they differ from that implementation.
++
+ Arrow supplies a columnar format, libraries in several languages, and an interchange ABI. Those
+ pieces do not create one universal UDF registry. An Arrow Rust callable, an Arrow C++ compute
+ function, and an Arrow C Data export are different integration products.
+diff --git c/research/row-fn-engine/next-steps.md w/research/row-fn-engine/next-steps.md
+index e31dff2c91..108d730b43 100644
+--- c/research/row-fn-engine/next-steps.md
++++ w/research/row-fn-engine/next-steps.md
+@@ -5,98 +5,47 @@
+ 
+ [Overview](README.md)
+ 
+-The next useful experiment shares a real RowFn operation and executor between Vortex and a second
+-adapter. It must preserve semantics, ownership, and generated code before the library API becomes
+-stable. The isolated [type proof](type-system/compiled-proof.md) covers only the Rust mechanisms.
++The [rofl implementation](implementation.md) now has executable evidence on Vortex and Arrow.
++Focused debug, optimized, and compile-fail tests pass. The
++[first measurements](measurements/2026-09-25-rofl/README.md) show substantial workload differences.
+ 
+-The portable library and adapters remain proposals. The branch base already contains the
+-[September 23 and 24 RowFn improvements](current-system/recent-changes.md), including output
+-allocation, packed Boolean retry, and mask reduction. The steps below start from that implementation.
++## Resolve measured regressions
+ 
+-## 1. Fix the contract before the crate split
++Investigate selected-row retry and runtime-width list sinks first. The extracted Vortex Boolean
++retry path is about 2.1 times slower than the retained executor. Width-four Arrow list scaling is
++about 7.7 times slower than a matched contiguous child loop at 16,384 rows on the measured ARM host.
+ 
+-The prototype needs four explicit decisions:
++Then isolate string validation and scalar broadcasting costs. Preserve the full selection and
++initialization contracts when changing fast paths. Keep direct collection separate from invocation.
++Use matching compiler, target, CGU, and LTO settings, including the multi-CGU, no-LTO Boolean retry
++comparison. Repeat on x86 before making cross-platform claims. Earlier research timings do not
++establish this implementation's performance.
+ 
+-- Accepted semantic types, outer nullability, nested constraints, and unsupported mappings.
+-- Binding errors, row-local errors, decoder errors, and permitted reevaluation.
+-- Input ownership, writer completion, allocation, and exact output metadata.
+-- Caller demand, successful completion, and export of partial results.
++## Migrate consumers and function packages
+ 
+-The recommendation is in [the design](architecture.md). Start with the types and execution machinery
+-that the shared executor consumes. Host glue resolves runtime types, decodes inputs, and constructs
+-results. The existing `OutputBuffer` boundary supplies collection storage and publication, so the
+-prototype can generalize it without requiring another output layer or one large `Engine` trait.
++After resolving the relevant regressions, migrate existing RowFn consumers and remove the duplicate
++executor. Move scalar-function implementations into external packages with their registration,
++expression helpers, optimizer rules, and statistics rules. Keep registry infrastructure usable
++without a mandatory built-in catalog.
+ 
+-## 2. Prove extraction with representative functions
++Some functions need whole-batch access or permit null results from valid inputs. Those functions
++remain part of the broader scalar-function plugin system. They must not broaden RowFn's intentional
++strict contract.
+ 
+-Start with a Vortex adapter and a plain-slice adapter that compiles without Vortex arrays.
+-Then add Arrow to prove the boundary with a second columnar representation.
++## Extend hosts at batch boundaries
+ 
+-| Function | Required evidence |
+-| --- | --- |
+-| Wrapping `i64` addition. | One binder and row operation, with equal values and output metadata. |
+-| Checked integer division. | Exact errors on active rows, with invalid null and inactive payloads suppressed. |
+-| Timestamp truncation. | Preserved unit, interpretation, timezone, and empty-output metadata. |
+-| UTF-8 transformation. | Borrowed input lifetime, selected validation, and owned output bytes. |
+-| Fixed-size vector operation. | Runtime shape, child nullability, and sink initialization. |
++A DataFusion wrapper can use `rofl-arrow` for typed execution. It still needs DataFusion signatures,
++coercion, scalar arguments, output fields, and optimizer metadata.
+ 
+-The function definition must not import a host array type. Host-specific extension functions can
+-retain a native dispatch path. Explicit rejection of an unsupported mapping is a successful outcome.
++DuckDB and Velox need batch-level FFI designs with explicit registration and invocation contracts.
++Rust traits are not a stable binary ABI, and Arrow C Data alone does not define those contracts.
+ 
+-Keep the Vortex implementation in place during the prototype. Move crates after the second adapter
+-demonstrates the boundary. Buffer and lane-kernel dependencies need a deliberate decision, not a
+-second copy of compiler-sensitive loops.
++## Keep performance changes separate
+ 
+-## 3. Evaluate performance fixes independently
++Dispatch caching, UTF-8 validation caching, delayed rich errors, and selected Boolean packing remain
++separate experiments. Combining them with extraction would prevent attribution of performance
++changes. The [candidate list](performance/optimization-candidates.md) retains their context.
+ 
+-The [candidate list](performance/optimization-candidates.md) identifies work that does not depend
+-on extraction:
+-
+-| Candidate | What the experiment must distinguish |
+-| --- | --- |
+-| Retain UTF-8 validation evidence. | Saved work versus required validation and null-payload sanitation. |
+-| Delay rich error construction after rejected deferred evidence. | Retry signaling versus an observable error, with and without backtraces. |
+-| Pack selected and filtered Boolean output directly. | Avoided byte storage versus sparse writes, failure evidence, and original row positions. Dense retry already packs directly. |
+-| Retain a bound call and classify constants once. | Saved binding work versus changing batch types, options, and owners. |
+-| Measure remaining validity and finalization work. | Composition and wrapper costs after eligible all-valid arrays gained direct lazy-mask attachment. |
+-| Improve output collection or reuse. | Wrapper cost versus collector code generation and ownership, using the existing allocator-aware buffer contract. |
+-
+-Each candidate needs a separate comparison. Combining them with the crate move prevents useful
+-attribution. UTF-8 decoding already avoids the intermediate array, but still validates every decode.
+-The ARM harness and x86 sweep predate these changes. Establish new measurements before using their
+-numbers to prioritize current work, and preserve their original sources as historical evidence.
+-
+-## 4. Prove demand through one conditional
+-
+-Use `CASE WHEN denominator != 0 THEN numerator / denominator ELSE 0 END`. Put zero divisors only
+-outside the division branch first, then inside it. Propagate demand through child evaluation,
+-decoding, preparation, and traversal.
+-
+-The next cases are empty demand, invalid constants, row-local parsing errors, unused dictionary
+-entries, nested validity, and overlapping requests for a cached result. Boolean error suppression
+-needs the host's own policy. `TRY` and functions that produce null need wider contracts.
+-
+-The [worked cases](definedness/worked-cases.md) specify expected outcomes. Begin with selected
+-execution or compaction, then compare dense speculation under the same semantics.
+-
+-## 5. Add real host integration
+-
+-DataFusion can reuse Arrow readers and writers. Its adapter still needs signatures, scalar
+-arguments, coercion, output fields, and optimizer metadata. A foreign UDF route needs separate
+-measurements because it can materialize scalars before the call.
+-
+-For DuckDB, compare the C callback with a version-matched C++ adapter. Include input flattening,
+-constants, dictionaries, strings, output allocation, and error conversion in the timing boundary.
+-The [integration notes](integrations/README.md) describe both contracts.
+-
+-## Evidence required before publication
+-
+-The prototype needs equivalent values, nulls, errors, and output metadata across supported hosts.
+-It also needs a review of unsafe ownership and initialization contracts.
+-
+-Performance work needs matched semantic baselines, small and large batches, and separate ARM and
+-x86 results. Generated-code inspection must accompany compiler-sensitive changes. Host benchmarks
+-must include adapter work. Query-level results require actual query integration.
+-
+-The [measurement plan](performance/measurement-plan.md) lists the remaining matrix. Checks remain
+-explicit follow-up work, under the repository's verification policy.
++Demand propagation through conditionals also remains future work. It must reach child evaluation,
++decoding, preparation, and traversal. The [definedness contract](definedness/contract.md) describes
++that separate problem. Functions such as `TRY` belong outside RowFn's fixed null behavior.
+diff --git c/research/row-fn-engine/type-system/compiled-proof.md w/research/row-fn-engine/type-system/compiled-proof.md
+index 6e8e100616..fbfdda343d 100644
+--- c/research/row-fn-engine/type-system/compiled-proof.md
++++ w/research/row-fn-engine/type-system/compiled-proof.md
+@@ -3,6 +3,10 @@
+ 
+ # An isolated Rust proof
+ 
++The experimental source now implements the accepted extraction boundary. See the
++[implementation record](../implementation.md) for current behavior and unrun verification. Alternatives below
++remain research context where they differ from that implementation.
++
+ One shared function binder and typed row loop compiled against two unrelated host descriptors.
+ Each adapter compiled in its own crate. Both adapters returned borrowed views, and unsupported
+ semantic types were rejected.
+diff --git c/research/row-fn-engine/type-system/portable-contract.md w/research/row-fn-engine/type-system/portable-contract.md
+index c41cd3d244..2c828d91ea 100644
+--- c/research/row-fn-engine/type-system/portable-contract.md
++++ w/research/row-fn-engine/type-system/portable-contract.md
+@@ -3,6 +3,10 @@
+ 
+ # A proposed binding contract
+ 
++The experimental source now implements the accepted extraction boundary. See the
++[implementation record](../implementation.md) for current behavior and unrun verification. Alternatives below
++remain research context where they differ from that implementation.
++
+ The proposed core executes typed row kernels. Host adapters bind semantic requests to their arrays
+ and construct host-native outputs. The shared contract describes what the function means and which
+ inputs it accepts.
+diff --git c/vortex-array/Cargo.toml w/vortex-array/Cargo.toml
+index f061e9bc57..3d054b511f 100644
+--- c/vortex-array/Cargo.toml
++++ w/vortex-array/Cargo.toml
+@@ -58,6 +58,7 @@ prost-types = { workspace = true }
+ rand = { workspace = true }
+ regex = { workspace = true }
+ regex-syntax = { workspace = true }
++rofl = { workspace = true }
+ rstest = { workspace = true, optional = true }
+ rstest_reuse = { workspace = true, optional = true }
+ rustc-hash = { workspace = true }
+diff --git c/vortex-array/src/arrays/primitive/compute/cast.rs w/vortex-array/src/arrays/primitive/compute/cast.rs
+index fdebc7d0d4..78555f6739 100644
+--- c/vortex-array/src/arrays/primitive/compute/cast.rs
++++ w/vortex-array/src/arrays/primitive/compute/cast.rs
+@@ -523,7 +523,9 @@ where
+     if infallible {
+         return match owned {
+             Some(mut buf) => {
+-                ReinterpretSink::<F, T>::new(buf.as_mut_slice()).map_into_in_place(|v: F| v.as_());
++                // SAFETY: NativePType values have no padding and accept every bit pattern.
++                unsafe { ReinterpretSink::<F, T>::new(buf.as_mut_slice()) }
++                    .map_into_in_place(|v: F| v.as_());
+                 // SAFETY: same size + alignment for NativePType
+                 let result: BufferMut<T> = unsafe { buf.transmute::<T>() };
+                 Ok(PrimitiveArray::new(result.freeze(), new_validity).into_array())
+@@ -542,7 +544,8 @@ where
+ 
+     let buffer: Buffer<T> = match (&mask, owned) {
+         (Mask::AllTrue(_), Some(mut buf)) => {
+-            ReinterpretSink::<F, T>::new(buf.as_mut_slice())
++            // SAFETY: NativePType values have no padding and accept every bit pattern.
++            unsafe { ReinterpretSink::<F, T>::new(buf.as_mut_slice()) }
+                 .try_map_in_place(|v: F| <T as NumCast>::from(v))
+                 .map_err(|_| overflow())?;
+             // SAFETY: same size + alignment for NativePType
+@@ -562,7 +565,8 @@ where
+         }
+         (Mask::AllFalse(_), _) => BufferMut::<T>::zeroed(len).freeze(),
+         (Mask::Values(m), Some(mut buf)) => {
+-            ReinterpretSink::<F, T>::new(buf.as_mut_slice())
++            // SAFETY: NativePType values have no padding and accept every bit pattern.
++            unsafe { ReinterpretSink::<F, T>::new(buf.as_mut_slice()) }
+                 .try_map_masked_in_place(m.bit_buffer(), |v: F| <T as NumCast>::from(v))
+                 .map_err(|_| overflow())?;
+             // SAFETY: same size + alignment for NativePType
+diff --git c/vortex-array/src/scalar_fn/unstable/mod.rs w/vortex-array/src/scalar_fn/unstable/mod.rs
+index 6849c0bc66..2fb88079cc 100644
+--- c/vortex-array/src/scalar_fn/unstable/mod.rs
++++ w/vortex-array/src/scalar_fn/unstable/mod.rs
+@@ -7,3 +7,5 @@
+ //! the corresponding `unstable_*` Cargo feature before importing them.
+ 
+ pub mod row;
++
++pub mod rofl;
+diff --git c/vortex-array/src/scalar_fn/unstable/row/mod.rs w/vortex-array/src/scalar_fn/unstable/row/mod.rs
+index d94e399dba..afb007848e 100644
+--- c/vortex-array/src/scalar_fn/unstable/row/mod.rs
++++ w/vortex-array/src/scalar_fn/unstable/row/mod.rs
+@@ -55,3 +55,8 @@ pub use visitor::RowVisitor;
+ mod vtable;
+ pub use vtable::execute_rows;
+ pub use vtable::row_fn_return_dtype;
++
++/// Reuse encoding-aware constant classification in the experimental adapter.
++pub(crate) fn constant_input(array: &crate::ArrayRef) -> Option<crate::ArrayRef> {
++    types::batch_const(array)
++}
+diff --git c/vortex-array/src/scalar_fn/unstable/row/types/element/tuple/indexed.rs w/vortex-array/src/scalar_fn/unstable/row/types/element/tuple/indexed.rs
+index 73605aa7d3..c936650ddb 100644
+--- c/vortex-array/src/scalar_fn/unstable/row/types/element/tuple/indexed.rs
++++ w/vortex-array/src/scalar_fn/unstable/row/types/element/tuple/indexed.rs
+@@ -74,7 +74,8 @@ impl<'a, T: InputElement> ArgColumnSource<'a, T> {
+     }
+ }
+ 
+-impl<'a, T: InputElement> IndexedSource for ArgColumnSource<'a, T> {
++// SAFETY: InputElement preserves each validated view, and constants address a fixed row domain.
++unsafe impl<'a, T: InputElement> IndexedSource for ArgColumnSource<'a, T> {
+     type Item = T::Elem<'a>;
+ 
+     fn len(&self) -> usize {
+@@ -102,7 +103,8 @@ struct ArgTupleSource<Sources> {
+     row_count: usize,
+ }
+ 
+-impl IndexedSource for ArgTupleSource<()> {
++// SAFETY: the private row count is stable, and unit reads do not access storage.
++unsafe impl IndexedSource for ArgTupleSource<()> {
+     type Item = ();
+ 
+     fn len(&self) -> usize {
+@@ -123,7 +125,8 @@ impl<'a, T: InputElement> ElementSource<'a, T> {
+     }
+ }
+ 
+-impl<'a, T: InputElement> IndexedSource for ElementSource<'a, T> {
++// SAFETY: InputElement requires this view's length and readable elements to remain stable.
++unsafe impl<'a, T: InputElement> IndexedSource for ElementSource<'a, T> {
+     type Item = T::Elem<'a>;
+ 
+     fn len(&self) -> usize {
+@@ -140,7 +143,8 @@ impl<'a, T: InputElement> IndexedSource for ElementSource<'a, T> {
+ /// An indexed element source yielding the one-tuples expected by a unary row closure.
+ pub struct UnaryTupleSource<Source>(Source);
+ 
+-impl<Source: IndexedSource> IndexedSource for UnaryTupleSource<Source> {
++// SAFETY: delegation preserves the wrapped source's stable length and readable index domain.
++unsafe impl<Source: IndexedSource> IndexedSource for UnaryTupleSource<Source> {
+     type Item = (Source::Item,);
+ 
+     fn len(&self) -> usize {
+@@ -159,7 +163,8 @@ pub struct ElementTupleSource<'a, Args: ElementTuple> {
+     row_count: usize,
+ }
+ 
+-impl<'a, Args: ElementTuple> IndexedSource for ElementTupleSource<'a, Args> {
++// SAFETY: unsafe indexed_source construction validates every retained view against row_count.
++unsafe impl<'a, Args: ElementTuple> IndexedSource for ElementTupleSource<'a, Args> {
+     type Item = Args::Elems<'a>;
+ 
+     fn len(&self) -> usize {
+@@ -238,7 +243,8 @@ impl<A: InputElement, B: InputElement> private::DecodedSource for (A, B) {
+ 
+ macro_rules! arg_tuple_source {
+     ($($source:ident: $idx:tt),+) => {
+-        impl<$($source: IndexedSource),+> IndexedSource
++        // SAFETY: construction checks every stable source against this tuple's row count.
++        unsafe impl<$($source: IndexedSource),+> IndexedSource
+             for ArgTupleSource<($($source,)+)>
+         {
+             type Item = ($($source::Item,)+);
+diff --git c/vortex-array/src/scalar_fn/unstable/row/types/sink/utf8.rs w/vortex-array/src/scalar_fn/unstable/row/types/sink/utf8.rs
+index 2ca2e5e13c..4eeec73c38 100644
+--- c/vortex-array/src/scalar_fn/unstable/row/types/sink/utf8.rs
++++ w/vortex-array/src/scalar_fn/unstable/row/types/sink/utf8.rs
+@@ -63,31 +63,39 @@ pub struct Utf8Writer<'a> {
+ impl Utf8Writer<'_> {
+     /// Write a string into this row and consume the row handle.
+     pub fn write(self, value: impl AsRef<str>) {
+-        let bytes = value.as_ref().as_bytes();
+-        if bytes.len() <= BinaryView::MAX_INLINED_SIZE {
+-            *self.view = BinaryView::make_view(bytes, 0, 0);
++        self.write_parts(&[value.as_ref()]);
++    }
++
++    /// Concatenate string parts directly into this row's output-owned storage.
++    pub fn write_parts(self, parts: &[&str]) {
++        let len = parts.iter().try_fold(0usize, |len, part| len.checked_add(part.len()))
++            .vortex_expect("Utf8Sink string byte count must fit usize");
++        if len <= BinaryView::MAX_INLINED_SIZE {
++            let mut bytes = [0; BinaryView::MAX_INLINED_SIZE];
++            let mut offset = 0;
++            for part in parts {
++                bytes[offset..offset + part.len()].copy_from_slice(part.as_bytes());
++                offset += part.len();
++            }
++            *self.view = BinaryView::make_view(&bytes[..len], 0, 0);
+             return;
+         }
+ 
+-        let needs_buffer = self
+-            .buffers
+-            .last()
+-            .is_none_or(|buffer| buffer.len().saturating_add(bytes.len()) > MAX_BUFFER_LEN);
++        let needs_buffer = self.buffers.last()
++            .is_none_or(|buffer| buffer.len().saturating_add(len) > MAX_BUFFER_LEN);
+         if needs_buffer {
+-            self.buffers.push(self.allocator.with_capacity(bytes.len()));
++            self.buffers.push(self.allocator.with_capacity(len));
+         }
+-
+         let buffer_index = u32::try_from(self.buffers.len() - 1)
+             .vortex_expect("Utf8Sink data buffer count must fit in u32");
+-        let buffer = self
+-            .buffers
+-            .last_mut()
++        let buffer = self.buffers.last_mut()
+             .vortex_expect("Utf8Sink creates a data buffer before writing");
+-        let offset =
+-            u32::try_from(buffer.len()).vortex_expect("Utf8Sink buffer offset must fit in u32");
+-
+-        buffer.extend_from_slice(bytes);
+-        *self.view = BinaryView::make_view(bytes, buffer_index, offset);
++        let offset = u32::try_from(buffer.len())
++            .vortex_expect("Utf8Sink buffer offset must fit in u32");
++        for part in parts {
++            buffer.extend_from_slice(part.as_bytes());
++        }
++        *self.view = BinaryView::make_view(&buffer[offset as usize..], buffer_index, offset);
+     }
+ }
+ 
+diff --git c/vortex-buffer/Cargo.toml w/vortex-buffer/Cargo.toml
+index 6cdd999aef..c27c65503f 100644
+--- c/vortex-buffer/Cargo.toml
++++ w/vortex-buffer/Cargo.toml
+@@ -29,6 +29,7 @@ bitvec = { workspace = true }
+ bytes = { workspace = true }
+ itertools = { workspace = true }
+ memmap2 = { workspace = true, optional = true }
++rofl-kernels = { workspace = true }
+ serde = { workspace = true, optional = true }
+ simdutf8 = { workspace = true }
+ tracing = { workspace = true, optional = true }
+diff --git c/vortex-buffer/src/bit/mod.rs w/vortex-buffer/src/bit/mod.rs
+index c0d82e10b3..db917d46dd 100644
+--- c/vortex-buffer/src/bit/mod.rs
++++ w/vortex-buffer/src/bit/mod.rs
+@@ -31,127 +31,7 @@ pub use meta::*;
+ pub use pack::*;
+ pub use view::*;
+ 
+-/// Packs up to 64 boolean values into a little-endian `u64` word.
+-///
+-/// This is [`collect_bool_words`] for a single word: a full 64-bit word is materialized as a
+-/// `[bool; 64]` and packed with the baseline SIMD byte→bit instruction of the target; shorter
+-/// lengths fall back to the bit-at-a-time [`collect_bool_word_scalar`] loop.
+-#[inline]
+-pub fn collect_bool_word<F>(len: usize, f: F) -> u64
+-where
+-    F: FnMut(usize) -> bool,
+-{
+-    assert!(len <= 64, "cannot pack {len} bits into a u64 word");
+-
+-    let mut word = [0u64; 1];
+-    collect_bool_words_inline(&mut word, len, f);
+-    word[0]
+-}
+-
+-/// Pack `len` boolean values returned by `f` into the prefix of `words`, LSB-first,
+-/// 64 bits per `u64`. `words` must have capacity for at least `len.div_ceil(64)` entries.
+-///
+-/// `f` is invoked exactly once per index, in ascending order `0..len`.
+-///
+-/// Writes via `=` (not `|=`), so the destination need not be zero-initialised.
+-///
+-/// The word loop packs with the baseline SIMD kernel of the target (SSE2 on x86-64, NEON on
+-/// aarch64), which inlines fully into the caller together with the predicate and the
+-/// `[bool; 64]` materialization — wider kernels would sit behind a non-inlinable
+-/// `#[target_feature]` boundary that deoptimizes expensive predicates. See
+-/// [`BitBuffer::collect_bool`] for the performance note on
+-/// avoiding bounds checks in `f`.
+-///
+-/// Prefer this entry point for every predicate; only switch to
+-/// [`collect_bool_words_multiversioned`] after carefully checking that your specific `f`
+-/// meets its contract.
+-#[inline]
+-pub fn collect_bool_words<F>(words: &mut [u64], len: usize, f: F)
+-where
+-    F: FnMut(usize) -> bool,
+-{
+-    let num_words = len.div_ceil(64);
+-    assert!(
+-        words.len() >= num_words,
+-        "words slice has {} entries, need at least {num_words}",
+-        words.len(),
+-    );
+-
+-    collect_bool_words_inline(words, len, f)
+-}
+-
+-/// Read up to 8 bytes as a little-endian `u64`, zero-padding the high bytes when fewer than 8
+-/// bytes are supplied.
+-///
+-/// This preserves Vortex's least-significant-bit-first bitmap numbering on little- and big-endian
+-/// targets. For a full 8-byte slice it lowers to a single word load.
+-#[inline]
+-pub fn read_u64_le(bytes: &[u8]) -> u64 {
+-    debug_assert!(bytes.len() <= 8);
+-    let mut buf = [0u8; 8];
+-    buf[..bytes.len()].copy_from_slice(bytes);
+-    u64::from_le_bytes(buf)
+-}
+-
+-/// Splice a packed word `w` (whose bits above the highest valid bit are zero) into
+-/// `words` at the given bit position.
+-///
+-/// The destination word at `bit_offset / 64` is OR'd, preserving any bits below
+-/// `bit_offset % 64`. When `w` has high bits that spill into the next word, those
+-/// bits are *assigned* (not OR'd) — so callers must ensure that next slot is zero
+-/// (e.g. via `BufferMut::zeroed`).
+-///
+-/// `words.len()` need only cover the slots `w` actually writes to: skipping the
+-/// spillover when its bits are all zero means a tail that fits entirely in the
+-/// leading word never touches `words[dest_word + 1]`.
+-#[inline]
+-pub fn splice_word_at_bit(words: &mut [u64], bit_offset: usize, word: u64) {
+-    let dest_word = bit_offset / 64;
+-    let bit_in_word = bit_offset % 64;
+-    words[dest_word] |= word << bit_in_word;
+-    if bit_in_word != 0 {
+-        let high = word >> (64 - bit_in_word);
+-        if high != 0 {
+-            words[dest_word + 1] = high;
+-        }
+-    }
+-}
+-
+-/// Pack `len` boolean values returned by `f` into `words` starting at bit position
+-/// `bit_offset`, LSB-first.
+-///
+-/// Composes [`collect_bool_word`] (pack up to 64 bools into a u64) with
+-/// [`splice_word_at_bit`] (merge the packed word into the destination via shift-OR).
+-///
+-/// `words` must have at least `(bit_offset + len).div_ceil(64)` entries; see
+-/// [`splice_word_at_bit`] for zero-init requirements on words above the cursor.
+-#[inline]
+-pub fn pack_bools_into_words<F>(words: &mut [u64], bit_offset: usize, len: usize, mut f: F)
+-where
+-    F: FnMut(usize) -> bool,
+-{
+-    if len == 0 {
+-        return;
+-    }
+-    let num_words = (bit_offset + len).div_ceil(64);
+-    assert!(
+-        words.len() >= num_words,
+-        "words slice has {} entries, need at least {num_words}",
+-        words.len(),
+-    );
+-
+-    let mut done = 0;
+-    while len - done >= 64 {
+-        let word = collect_bool_word(64, |bit| f(done + bit));
+-        splice_word_at_bit(words, bit_offset + done, word);
+-        done += 64;
+-    }
+-    let tail = len - done;
+-    if tail > 0 {
+-        let word = collect_bool_word(tail, |bit| f(done + bit));
+-        splice_word_at_bit(words, bit_offset + done, word);
+-    }
+-}
++pub use rofl_kernels::bit::{collect_bool_word, collect_bool_words, read_u64_le, splice_word_at_bit, pack_bools_into_words};
+ 
+ /// Get the bit value at `index` out of `buf`.
+ ///
+diff --git c/vortex-buffer/src/bit/pack.rs w/vortex-buffer/src/bit/pack.rs
+index cf18008466..299bd2cc0c 100644
+--- c/vortex-buffer/src/bit/pack.rs
++++ w/vortex-buffer/src/bit/pack.rs
+@@ -1,546 +1,6 @@
+ // SPDX-License-Identifier: Apache-2.0
+ // SPDX-FileCopyrightText: Copyright the Vortex contributors
+ 
+-//! Kernels for packing boolean values into bitmap words.
+-//!
+-//! `collect_bool` materializes each full 64-bit chunk as a `[bool; 64]` (a loop the
+-//! auto-vectorizer turns into vector stores for simple predicates) and then packs the 64 bytes
+-//! into a single `u64` with a byte→bit kernel:
+-//!
+-//! - x86-64 AVX-512BW: one `vptestmb` produces the full 64-bit mask.
+-//! - x86-64 AVX2: two `vpmovmskb` halves.
+-//! - x86-64 SSE2 (baseline): four `pmovmskb` quarters.
+-//! - aarch64 NEON (baseline): per-lane `ushl` by the bit position, then an `addp` reduction tree.
+-//! - elsewhere (and under Miri): a branch-free SWAR multiply.
+-//!
+-//! There are two tiers. The default ([`collect_bool_words_inline`]) compiles the loop once
+-//! with the widest *statically-enabled* kernel (SSE2 / NEON / SWAR on stock targets) and
+-//! inlines fully into the caller — safe for arbitrary predicates. The opt-in tier
+-//! ([`collect_bool_words_multiversioned`]) compiles the loop — with `f` inside — once per CPU
+-//! feature level and selects a clone by runtime detection; only for predicates small and
+-//! simple enough that the per-level duplication and its `#[target_feature]` call boundary pay
+-//! off.
+-//!
+-//! The bit-at-a-time loop lives on as [`collect_bool_word_scalar`], the reference implementation
+-//! for tests and benchmarks. The word loop packs its tail chunk with [`collect_bool_word_tail`],
+-//! its own copy of that loop.
++//! Boolean packing implementations shared with other hosts.
+ 
+-/// Packs up to 64 boolean values into a little-endian `u64` word one bit at a time.
+-///
+-/// This is the scalar reference implementation behind
+-/// [`collect_bool_word`](crate::bit::collect_bool_word); prefer calling that entry point, which
+-/// takes the SIMD fast path for full 64-bit words.
+-#[inline]
+-pub fn collect_bool_word_scalar<F>(len: usize, mut f: F) -> u64
+-where
+-    F: FnMut(usize) -> bool,
+-{
+-    assert!(len <= 64, "cannot pack {len} bits into a u64 word");
+-
+-    let mut packed = 0;
+-    for bit_idx in 0..len {
+-        packed |= (f(bit_idx) as u64) << bit_idx;
+-    }
+-    packed
+-}
+-
+-/// Body of [`collect_bool_words`](crate::bit::collect_bool_words) (and, via a one-word slice,
+-/// of [`collect_bool_word`](crate::bit::collect_bool_word)): the word loop with the widest
+-/// pack kernel enabled *at compile time* — SSE2 on stock x86-64 (AVX2/AVX-512BW when built
+-/// with e.g. `-C target-cpu=native`), NEON on aarch64, SWAR elsewhere and under Miri.
+-///
+-/// Statically-enabled kernels are part of every function's feature set, so this loop
+-/// (predicate, the `[bool; 64]` materialization, and the pack) inlines fully into the caller
+-/// with no `#[target_feature]` boundary. That boundary is why *runtime*-detected wider kernels
+-/// are not used here: hiding an expensive, non-vectorizable predicate (e.g. FSST's per-string
+-/// DFA scan) behind a non-inlinable AVX-512 loop copy costs far more (~30% end to end) than
+-/// the wider pack saves — and an indirect call per word is worse still (~4x on cheap
+-/// predicates), since an opaque call target blocks fill/pack fusion regardless of how cheap
+-/// the kernel *selection* is. For provably cheap predicates, use [`collect_bool_words_multiversioned`].
+-#[allow(clippy::inline_always)]
+-#[inline(always)]
+-pub(crate) fn collect_bool_words_inline<F>(words: &mut [u64], len: usize, f: F)
+-where
+-    F: FnMut(usize) -> bool,
+-{
+-    #[cfg(all(
+-        target_arch = "x86_64",
+-        target_feature = "avx512f",
+-        target_feature = "avx512bw",
+-        not(miri)
+-    ))]
+-    {
+-        // SAFETY: AVX-512F/BW are statically enabled for this build (e.g. -C
+-        // target-cpu=native), so they are in every function's feature set and the kernel
+-        // inlines here like any other function.
+-        collect_bool_words_with(words, len, f, |bools| unsafe {
+-            pack_bool_word_avx512(bools)
+-        })
+-    }
+-    #[cfg(all(
+-        target_arch = "x86_64",
+-        target_feature = "avx2",
+-        not(all(target_feature = "avx512f", target_feature = "avx512bw")),
+-        not(miri)
+-    ))]
+-    {
+-        // SAFETY: AVX2 is statically enabled for this build.
+-        collect_bool_words_with(words, len, f, |bools| unsafe { pack_bool_word_avx2(bools) })
+-    }
+-    #[cfg(all(target_arch = "x86_64", not(target_feature = "avx2"), not(miri)))]
+-    {
+-        // SAFETY: SSE2 is part of the x86-64 baseline instruction set.
+-        collect_bool_words_with(words, len, f, |bools| unsafe { pack_bool_word_sse2(bools) })
+-    }
+-    #[cfg(all(target_arch = "aarch64", not(miri)))]
+-    {
+-        // SAFETY: NEON is part of the aarch64 baseline instruction set.
+-        collect_bool_words_with(words, len, f, |bools| unsafe { pack_bool_word_neon(bools) })
+-    }
+-    #[cfg(any(not(any(target_arch = "x86_64", target_arch = "aarch64")), miri))]
+-    collect_bool_words_with(words, len, f, pack_bool_word_swar)
+-}
+-
+-/// Word loop with the *widest* pack kernel the CPU offers (AVX-512BW, then AVX2, then the
+-/// baseline), for predicates known to be cheap.
+-///
+-/// The wide loop copies live behind a `#[target_feature]` function boundary that cannot inline
+-/// into the caller, which deoptimizes expensive predicates (see the module docs and
+-/// `collect_bool_words_inline`). Only route a predicate here when its evaluation is trivial
+-/// — e.g. the bounds-check-free slice gathers in the `From<&[bool]>` / `From<&[u8]>`
+-/// conversions, or unchecked slice comparisons like the `between` kernels — where the fused
+-/// AVX-512 loop is worth another ~2x over the baseline kernel.
+-///
+-/// `words` must hold at least `len.div_ceil(64)` entries and `f` is invoked with `0..len`,
+-/// exactly once per index in ascending order.
+-///
+-/// Panics if `words` is too short.
+-#[inline]
+-pub fn collect_bool_words_multiversioned<F>(words: &mut [u64], len: usize, f: F)
+-where
+-    F: FnMut(usize) -> bool,
+-{
+-    let num_words = len.div_ceil(64);
+-    assert!(
+-        words.len() >= num_words,
+-        "words slice has {} entries, need at least {num_words}",
+-        words.len(),
+-    );
+-
+-    // Without a full 64-bit word only the scalar tail would run; skip feature detection and
+-    // the `#[target_feature]` call boundary entirely.
+-    if len < 64 {
+-        return collect_bool_words_inline(words, len, f);
+-    }
+-
+-    #[cfg(all(target_arch = "x86_64", not(miri)))]
+-    {
+-        if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw") {
+-            // SAFETY: runtime detection guarantees the required target features.
+-            return unsafe { collect_bool_words_avx512(words, len, f) };
+-        }
+-        if is_x86_feature_detected!("avx2") {
+-            // SAFETY: runtime detection guarantees the required target features.
+-            return unsafe { collect_bool_words_avx2(words, len, f) };
+-        }
+-    }
+-    collect_bool_words_inline(words, len, f)
+-}
+-
+-/// Shared word loop: materialize each full 64-bit chunk as a `[bool; 64]` and pack it with
+-/// `pack`; the tail chunk goes through the scalar loop.
+-///
+-/// Marked `#[inline(always)]` so each `#[target_feature]` wrapper gets its own fully-inlined
+-/// copy compiled with that feature set.
+-#[allow(clippy::inline_always)]
+-#[inline(always)]
+-fn collect_bool_words_with<F, P>(words: &mut [u64], len: usize, mut f: F, pack: P)
+-where
+-    F: FnMut(usize) -> bool,
+-    P: Fn(&[bool; 64]) -> u64,
+-{
+-    let full = len / 64;
+-    let remainder = len % 64;
+-
+-    for (word_idx, word) in words[..full].iter_mut().enumerate() {
+-        let offset = word_idx * 64;
+-        let mut bools = [false; 64];
+-        for (bit_idx, b) in bools.iter_mut().enumerate() {
+-            *b = f(offset + bit_idx);
+-        }
+-        *word = pack(&bools);
+-    }
+-
+-    if remainder != 0 {
+-        let offset = full * 64;
+-        words[full] = collect_bool_word_tail(remainder, |bit_idx| f(offset + bit_idx));
+-    }
+-}
+-
+-/// Tail chunk of [`collect_bool_words_with`]: a copy of [`collect_bool_word_scalar`] that always
+-/// inlines. `len` **must** be at most 64.
+-///
+-/// The word loop must keep the borrowed callback inline. An out-of-line tail lets the callback
+-/// state escape, and the full words packed by the same loop then fail to vectorize.
+-/// [`collect_bool_word_scalar`] stays an ordinary `#[inline]` function so that this constraint does
+-/// not reach its public callers, which include the scalar benchmark baselines.
+-#[expect(clippy::inline_always)]
+-#[inline(always)]
+-fn collect_bool_word_tail<F>(len: usize, mut f: F) -> u64
+-where
+-    F: FnMut(usize) -> bool,
+-{
+-    debug_assert!(len <= 64, "cannot pack {len} bits into a u64 word");
+-
+-    let mut packed = 0;
+-    for bit_idx in 0..len {
+-        packed |= (f(bit_idx) as u64) << bit_idx;
+-    }
+-    packed
+-}
+-
+-/// SSE2 copy of the [`collect_bool_words`](crate::bit::collect_bool_words) word loop.
+-///
+-/// `words` must hold at least `len.div_ceil(64)` entries and `f` is invoked with `0..len`.
+-///
+-/// # Safety
+-///
+-/// The caller must ensure the CPU supports SSE2 (always true on x86-64).
+-#[cfg(target_arch = "x86_64")]
+-#[target_feature(enable = "sse2")]
+-pub unsafe fn collect_bool_words_sse2<F: FnMut(usize) -> bool>(
+-    words: &mut [u64],
+-    len: usize,
+-    f: F,
+-) {
+-    // SAFETY: the caller guarantees SSE2 support.
+-    collect_bool_words_with(words, len, f, |bools| unsafe { pack_bool_word_sse2(bools) })
+-}
+-
+-/// AVX2 copy of the [`collect_bool_words`](crate::bit::collect_bool_words) word loop.
+-///
+-/// `words` must hold at least `len.div_ceil(64)` entries and `f` is invoked with `0..len`.
+-///
+-/// # Safety
+-///
+-/// The caller must ensure the CPU supports AVX2.
+-#[cfg(target_arch = "x86_64")]
+-#[target_feature(enable = "avx2")]
+-pub unsafe fn collect_bool_words_avx2<F: FnMut(usize) -> bool>(
+-    words: &mut [u64],
+-    len: usize,
+-    f: F,
+-) {
+-    // SAFETY: the caller guarantees AVX2 support.
+-    collect_bool_words_with(words, len, f, |bools| unsafe { pack_bool_word_avx2(bools) })
+-}
+-
+-/// AVX-512BW copy of the [`collect_bool_words`](crate::bit::collect_bool_words) word loop.
+-///
+-/// `words` must hold at least `len.div_ceil(64)` entries and `f` is invoked with `0..len`.
+-///
+-/// # Safety
+-///
+-/// The caller must ensure the CPU supports AVX-512F and AVX-512BW.
+-#[cfg(target_arch = "x86_64")]
+-#[target_feature(enable = "avx512f,avx512bw")]
+-pub unsafe fn collect_bool_words_avx512<F: FnMut(usize) -> bool>(
+-    words: &mut [u64],
+-    len: usize,
+-    f: F,
+-) {
+-    // SAFETY: the caller guarantees AVX-512F and AVX-512BW support.
+-    collect_bool_words_with(words, len, f, |bools| unsafe {
+-        pack_bool_word_avx512(bools)
+-    })
+-}
+-
+-/// NEON copy of the [`collect_bool_words`](crate::bit::collect_bool_words) word loop.
+-///
+-/// `words` must hold at least `len.div_ceil(64)` entries and `f` is invoked with `0..len`.
+-///
+-/// # Safety
+-///
+-/// The caller must ensure the CPU supports NEON (always true on aarch64).
+-#[cfg(target_arch = "aarch64")]
+-#[target_feature(enable = "neon")]
+-pub unsafe fn collect_bool_words_neon<F: FnMut(usize) -> bool>(
+-    words: &mut [u64],
+-    len: usize,
+-    f: F,
+-) {
+-    // SAFETY: the caller guarantees NEON support.
+-    collect_bool_words_with(words, len, f, |bools| unsafe { pack_bool_word_neon(bools) })
+-}
+-
+-/// Portable branch-free byte→bit pack kernel, used when no SIMD kernel is available.
+-///
+-/// Reads the bools eight at a time as a `u64` and gathers the eight `0x00`/`0x01` bytes into
+-/// eight contiguous bits with a single multiply: byte `i` contributes `2^(8i)`, and the magic
+-/// constant `0x0102_0408_1020_4080 = Σ 2^(56-7i)` shifts each contribution to bit `56 + i`
+-/// without any cross-term collisions, so the mask falls out of the top byte of the product.
+-#[inline]
+-pub fn pack_bool_word_swar(bools: &[bool; 64]) -> u64 {
+-    const MAGIC: u64 = 0x0102_0408_1020_4080;
+-
+-    let (chunks, rest) = bools.as_chunks::<8>();
+-    debug_assert!(rest.is_empty());
+-
+-    let mut packed = 0u64;
+-    for (chunk_idx, chunk) in chunks.iter().enumerate() {
+-        let word = u64::from_le_bytes(chunk.map(|b| b as u8));
+-        packed |= (word.wrapping_mul(MAGIC) >> 56) << (8 * chunk_idx);
+-    }
+-    packed
+-}
+-
+-/// SSE2 byte→bit pack kernel: four 16-byte `pcmpeqb`-against-zero + `pmovmskb` rounds.
+-///
+-/// # Safety
+-///
+-/// The caller must ensure the CPU supports SSE2 (always true on x86-64).
+-#[cfg(target_arch = "x86_64")]
+-#[inline]
+-#[target_feature(enable = "sse2")]
+-pub unsafe fn pack_bool_word_sse2(bools: &[bool; 64]) -> u64 {
+-    use std::arch::x86_64::__m128i;
+-    use std::arch::x86_64::_mm_cmpeq_epi8;
+-    use std::arch::x86_64::_mm_loadu_si128;
+-    use std::arch::x86_64::_mm_movemask_epi8;
+-    use std::arch::x86_64::_mm_setzero_si128;
+-
+-    let ptr = bools.as_ptr().cast::<u8>();
+-    let zero = _mm_setzero_si128();
+-
+-    let mut packed = 0u64;
+-    for lane in 0..4 {
+-        // SAFETY: `lane * 16 + 16 <= 64`, so the 16-byte load is in bounds.
+-        let chunk = unsafe { _mm_loadu_si128(ptr.add(lane * 16).cast::<__m128i>()) };
+-        // `cmpeq` against zero sets 0xFF for *false* bytes; invert to get the truthy mask.
+-        let zero_mask = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, zero)) as u32 as u64;
+-        packed |= (!zero_mask & 0xFFFF) << (16 * lane);
+-    }
+-    packed
+-}
+-
+-/// AVX2 byte→bit pack kernel: two 32-byte `vpcmpeqb`-against-zero + `vpmovmskb` rounds.
+-///
+-/// # Safety
+-///
+-/// The caller must ensure the CPU supports AVX2.
+-#[cfg(target_arch = "x86_64")]
+-#[inline]
+-#[target_feature(enable = "avx2")]
+-pub unsafe fn pack_bool_word_avx2(bools: &[bool; 64]) -> u64 {
+-    use std::arch::x86_64::__m256i;
+-    use std::arch::x86_64::_mm256_cmpeq_epi8;
+-    use std::arch::x86_64::_mm256_loadu_si256;
+-    use std::arch::x86_64::_mm256_movemask_epi8;
+-    use std::arch::x86_64::_mm256_setzero_si256;
+-
+-    let ptr = bools.as_ptr().cast::<u8>();
+-    let zero = _mm256_setzero_si256();
+-
+-    // SAFETY: both 32-byte loads are within the 64-byte array.
+-    let lo = unsafe { _mm256_loadu_si256(ptr.cast::<__m256i>()) };
+-    // SAFETY: see above.
+-    let hi = unsafe { _mm256_loadu_si256(ptr.add(32).cast::<__m256i>()) };
+-
+-    // `cmpeq` against zero sets 0xFF for *false* bytes; invert to get the truthy mask.
+-    let lo_mask = !(_mm256_movemask_epi8(_mm256_cmpeq_epi8(lo, zero)) as u32) as u64;
+-    let hi_mask = !(_mm256_movemask_epi8(_mm256_cmpeq_epi8(hi, zero)) as u32) as u64;
+-    lo_mask | (hi_mask << 32)
+-}
+-
+-/// AVX-512BW byte→bit pack kernel: a single 64-byte `vptestmb` produces the whole word.
+-///
+-/// # Safety
+-///
+-/// The caller must ensure the CPU supports AVX-512F and AVX-512BW.
+-#[cfg(target_arch = "x86_64")]
+-#[inline]
+-#[target_feature(enable = "avx512f,avx512bw")]
+-pub unsafe fn pack_bool_word_avx512(bools: &[bool; 64]) -> u64 {
+-    use std::arch::x86_64::__m512i;
+-    use std::arch::x86_64::_mm512_loadu_si512;
+-    use std::arch::x86_64::_mm512_test_epi8_mask;
+-
+-    // SAFETY: the 64-byte load covers exactly the `[bool; 64]` array.
+-    let chunk = unsafe { _mm512_loadu_si512(bools.as_ptr().cast::<__m512i>()) };
+-    // Mask bit `i` is set iff byte `i` AND byte `i` is nonzero, i.e. iff `bools[i]`.
+-    _mm512_test_epi8_mask(chunk, chunk)
+-}
+-
+-/// NEON byte→bit pack kernel: shift each `0x00`/`0x01` byte left by its bit position
+-/// (`ushl`), then fold the four vectors into one `u64` with a pairwise-add (`addp`) tree.
+-///
+-/// # Safety
+-///
+-/// The caller must ensure the CPU supports NEON (always true on aarch64).
+-#[cfg(target_arch = "aarch64")]
+-#[inline]
+-#[target_feature(enable = "neon")]
+-pub unsafe fn pack_bool_word_neon(bools: &[bool; 64]) -> u64 {
+-    use std::arch::aarch64::vgetq_lane_u64;
+-    use std::arch::aarch64::vld1q_s8;
+-    use std::arch::aarch64::vld1q_u8;
+-    use std::arch::aarch64::vpaddq_u8;
+-    use std::arch::aarch64::vreinterpretq_u64_u8;
+-    use std::arch::aarch64::vshlq_u8;
+-
+-    const BIT_SHIFTS: [i8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7];
+-
+-    let ptr = bools.as_ptr().cast::<u8>();
+-    // SAFETY: loading 16 constant bytes from `BIT_SHIFTS`; the four 16-byte data loads below are
+-    // all within the 64-byte array.
+-    unsafe {
+-        let shifts = vld1q_s8(BIT_SHIFTS.as_ptr());
+-
+-        // Byte j of each vector becomes `bools[16v + j] << (j % 8)`.
+-        let m0 = vshlq_u8(vld1q_u8(ptr), shifts);
+-        let m1 = vshlq_u8(vld1q_u8(ptr.add(16)), shifts);
+-        let m2 = vshlq_u8(vld1q_u8(ptr.add(32)), shifts);
+-        let m3 = vshlq_u8(vld1q_u8(ptr.add(48)), shifts);
+-
+-        // Three rounds of pairwise adds sum each group of 8 weighted bytes into one mask byte,
+-        // yielding the 8 mask bytes in order in the low half of the final vector.
+-        let sum01 = vpaddq_u8(m0, m1);
+-        let sum23 = vpaddq_u8(m2, m3);
+-        let sum = vpaddq_u8(sum01, sum23);
+-        let sum = vpaddq_u8(sum, sum);
+-        vgetq_lane_u64::<0>(vreinterpretq_u64_u8(sum))
+-    }
+-}
+-
+-#[cfg(test)]
+-mod tests {
+-    use rstest::rstest;
+-
+-    use super::collect_bool_word_scalar;
+-    use super::pack_bool_word_swar;
+-
+-    fn patterns() -> Vec<[bool; 64]> {
+-        let mut patterns = vec![
+-            [false; 64],
+-            [true; 64],
+-            std::array::from_fn(|i| i % 2 == 0),
+-            std::array::from_fn(|i| i % 3 == 0),
+-            std::array::from_fn(|i| i < 32),
+-            std::array::from_fn(|i| i == 0 || i == 63),
+-        ];
+-        // A few deterministic pseudo-random patterns.
+-        let mut state = 0x9E37_79B9_7F4A_7C15u64;
+-        for _ in 0..8 {
+-            patterns.push(std::array::from_fn(|_| {
+-                state = state
+-                    .wrapping_mul(6364136223846793005)
+-                    .wrapping_add(1442695040888963407);
+-                (state >> 33) & 1 == 1
+-            }));
+-        }
+-        patterns
+-    }
+-
+-    fn reference(bools: &[bool; 64]) -> u64 {
+-        collect_bool_word_scalar(64, |i| bools[i])
+-    }
+-
+-    #[test]
+-    fn swar_matches_scalar() {
+-        for bools in patterns() {
+-            assert_eq!(pack_bool_word_swar(&bools), reference(&bools));
+-        }
+-    }
+-
+-    #[test]
+-    fn dispatch_matches_scalar() {
+-        for bools in patterns() {
+-            assert_eq!(
+-                crate::bit::collect_bool_word(64, |i| bools[i]),
+-                reference(&bools)
+-            );
+-        }
+-    }
+-
+-    #[cfg(all(target_arch = "x86_64", not(miri)))]
+-    #[test]
+-    fn sse2_matches_scalar() {
+-        for bools in patterns() {
+-            // SAFETY: SSE2 is part of the x86-64 baseline instruction set.
+-            assert_eq!(
+-                unsafe { super::pack_bool_word_sse2(&bools) },
+-                reference(&bools)
+-            );
+-        }
+-    }
+-
+-    #[cfg(all(target_arch = "x86_64", not(miri)))]
+-    #[test]
+-    fn avx2_matches_scalar() {
+-        if !is_x86_feature_detected!("avx2") {
+-            return;
+-        }
+-        for bools in patterns() {
+-            // SAFETY: runtime detection guarantees AVX2.
+-            assert_eq!(
+-                unsafe { super::pack_bool_word_avx2(&bools) },
+-                reference(&bools)
+-            );
+-        }
+-    }
+-
+-    #[cfg(all(target_arch = "x86_64", not(miri)))]
+-    #[test]
+-    fn avx512_matches_scalar() {
+-        if !(is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw")) {
+-            return;
+-        }
+-        for bools in patterns() {
+-            // SAFETY: runtime detection guarantees AVX-512F and AVX-512BW.
+-            assert_eq!(
+-                unsafe { super::pack_bool_word_avx512(&bools) },
+-                reference(&bools)
+-            );
+-        }
+-    }
+-
+-    #[cfg(all(target_arch = "aarch64", not(miri)))]
+-    #[test]
+-    fn neon_matches_scalar() {
+-        for bools in patterns() {
+-            // SAFETY: NEON is part of the aarch64 baseline instruction set.
+-            assert_eq!(
+-                unsafe { super::pack_bool_word_neon(&bools) },
+-                reference(&bools)
+-            );
+-        }
+-    }
+-
+-    #[rstest]
+-    #[case(0)]
+-    #[case(1)]
+-    #[case(63)]
+-    #[case(64)]
+-    #[case(65)]
+-    #[case(200)]
+-    fn multiversioned_matches_inline(#[case] len: usize) {
+-        let pattern = |i: usize| i.is_multiple_of(3) || i.is_multiple_of(7);
+-        let num_words = len.div_ceil(64);
+-        let mut multiversioned = vec![0u64; num_words];
+-        super::collect_bool_words_multiversioned(&mut multiversioned, len, pattern);
+-        let mut inline = vec![0u64; num_words];
+-        super::collect_bool_words_inline(&mut inline, len, pattern);
+-        assert_eq!(multiversioned, inline);
+-    }
+-
+-    #[rstest]
+-    #[case(0)]
+-    #[case(1)]
+-    #[case(5)]
+-    #[case(63)]
+-    #[case(64)]
+-    fn collect_bool_word_partial_lens_match(#[case] len: usize) {
+-        let expected = collect_bool_word_scalar(len, |i| i % 3 == 0);
+-        assert_eq!(crate::bit::collect_bool_word(len, |i| i % 3 == 0), expected);
+-    }
+-}
++pub use rofl_kernels::bit::pack::*;
+diff --git c/vortex-buffer/src/bit/view.rs w/vortex-buffer/src/bit/view.rs
+index 073df5943b..89206be51a 100644
+--- c/vortex-buffer/src/bit/view.rs
++++ w/vortex-buffer/src/bit/view.rs
+@@ -494,6 +494,18 @@ impl BitBufferMut {
+     }
+ }
+ 
++impl rofl_kernels::bit::Bitmap for BitBuffer {
++    fn bitmap(&self) -> rofl_kernels::bit::BitmapView<'_> {
++        rofl_kernels::bit::BitmapView::new(self.inner().as_slice(), self.offset(), self.len())
++    }
++}
++
++impl rofl_kernels::bit::Bitmap for BitBufferView<'_> {
++    fn bitmap(&self) -> rofl_kernels::bit::BitmapView<'_> {
++        rofl_kernels::bit::BitmapView::new(self.inner(), self.offset(), self.len())
++    }
++}
++
+ #[cfg(test)]
+ mod tests {
+     use crate::BitBuffer;
+diff --git c/vortex-compute/Cargo.toml w/vortex-compute/Cargo.toml
+index 07b489ede8..c2182df1bc 100644
+--- c/vortex-compute/Cargo.toml
++++ w/vortex-compute/Cargo.toml
+@@ -17,6 +17,7 @@ version = { workspace = true }
+ all-features = true
+ 
+ [dependencies]
++rofl-kernels = { workspace = true }
+ vortex-buffer = { workspace = true }
+ 
+ [dev-dependencies]
+diff --git c/vortex-compute/benches/lane_kernels.rs w/vortex-compute/benches/lane_kernels.rs
+index 1afa99de0d..de66778588 100644
+--- c/vortex-compute/benches/lane_kernels.rs
++++ w/vortex-compute/benches/lane_kernels.rs
+@@ -251,7 +251,8 @@ fn try_map_masked_in_place_narrow_i32_u32(bencher: Bencher, n: usize) {
+     bencher
+         .with_inputs(|| (f.values_i32.as_slice().to_vec(), f.mask.clone()))
+         .bench_values(|(mut values, mask)| {
+-            ReinterpretSink::<i32, u32>::new(values.as_mut_slice())
++            // SAFETY: u32 has no padding, and every u32 bit pattern is a valid i32.
++            unsafe { ReinterpretSink::<i32, u32>::new(values.as_mut_slice()) }
+                 .try_map_masked_in_place(&mask, <u32 as NumCast>::from)
+                 .unwrap();
+             values
+diff --git c/vortex-compute/src/lane_kernels/map_in_place.rs w/vortex-compute/src/lane_kernels/map_in_place.rs
+index 7ca58ac160..a422a9cfd5 100644
+--- c/vortex-compute/src/lane_kernels/map_in_place.rs
++++ w/vortex-compute/src/lane_kernels/map_in_place.rs
+@@ -326,7 +326,8 @@ mod tests {
+     fn reinterpret_sink_same_width_f32_u32() {
+         let mut buf: Vec<f32> = (0..130).map(|i| i as f32).collect();
+         let mask = BitBuffer::new_set(130);
+-        ReinterpretSink::<f32, u32>::new(buf.as_mut_slice())
++        // SAFETY: u32 has no padding, and every u32 bit pattern is a valid f32.
++        unsafe { ReinterpretSink::<f32, u32>::new(buf.as_mut_slice()) }
+             .try_map_masked_in_place(&mask, |f| Some(f.to_bits().wrapping_add(1)))
+             .unwrap();
+         // SAFETY: same size + alignment for f32 and u32; every slot now holds a u32 written by
+@@ -342,7 +343,9 @@ mod tests {
+     fn reinterpret_sink_failure_reports_lane() {
+         let mut buf: Vec<f32> = (0..200).map(|i| i as f32).collect();
+         let mask = BitBuffer::new_set(200);
+-        let res = ReinterpretSink::<f32, u32>::new(buf.as_mut_slice()).try_map_masked_in_place(
++        // SAFETY: u32 has no padding, and every u32 bit pattern is a valid f32.
++        let sink = unsafe { ReinterpretSink::<f32, u32>::new(buf.as_mut_slice()) };
++        let res = sink.try_map_masked_in_place(
+             &mask,
+             |f| {
+                 if f as u32 == 137 {
+diff --git c/vortex-compute/src/lane_kernels/map_into.rs w/vortex-compute/src/lane_kernels/map_into.rs
+index ee8c10b147..151fbbcf8e 100644
+--- c/vortex-compute/src/lane_kernels/map_into.rs
++++ w/vortex-compute/src/lane_kernels/map_into.rs
+@@ -1,400 +1,15 @@
+ // SPDX-License-Identifier: Apache-2.0
+ // SPDX-FileCopyrightText: Copyright the Vortex contributors
+ 
+-//! Out-of-place lane kernels: read from an [`IndexedSource`] and write into a
+-//! caller-provided `&mut [MaybeUninit<R>]`.
++//! Shared lane kernels, with Vortex storage conformance tests.
+ 
+-use std::mem::MaybeUninit;
+-use std::ops::BitOrAssign;
+-
+-use vortex_buffer::BitBuffer;
+-
+-use crate::lane_kernels::CHUNK_LEN;
+-use crate::lane_kernels::source::IndexedSource;
+-
+-/// Extension trait providing out-of-place lane-kernel methods on any [`IndexedSource`].
+-///
+-/// All methods have default implementations and are inherited via the blanket
+-/// `impl<S: IndexedSource> IndexedSourceExt for S` below. Bring the trait into
+-/// scope (`use vortex_compute::lane_kernels::IndexedSourceExt;`) to call
+-/// them with method syntax: `values.try_map_masked_into(&mask, &mut out, f)`.
+-///
+-/// Callbacks implement [`Fn`] because each lane must be independent. A callback that mutates
+-/// captured state introduces a loop-carried dependency that can prevent vectorization.
+-pub trait IndexedSourceExt: IndexedSource + Sized {
+-    /// Fallible map with mask-aware error attribution. `f` returns `Option<R>`;
+-    /// `None` indicates a per-lane failure (e.g. range overflow on a narrowing cast).
+-    ///
+-    /// **Null-lane failures are filtered automatically.** The closure is called on
+-    /// every lane regardless of validity; if a null lane's stored value causes `f(v)`
+-    /// to return `None`, the kernel does *not* propagate that as `Err`. The per-lane
+-    /// `is_none()` flags are bit-packed into a `u64` at the lane's position, then
+-    /// AND-combined with the chunk's validity bitmap — null-lane bits vanish.
+-    ///
+-    /// The closure shape is the same as [`try_map_into`] (`Fn(Item) -> Option<R>`);
+-    /// the mask parameter is what makes this kernel mask-aware. Callers that need to
+-    /// distinguish null lanes inside the closure (e.g. to short-circuit an expensive
+-    /// computation) should construct their own per-lane validity check externally; for
+-    /// the common case, the kernel's automatic filter is sufficient.
+-    ///
+-    /// On failure returns `Err(failing_lane_index)`. Lanes whose `f` returned `None`
+-    /// write `R::default()` into `out`, but the contents of `out` must not be relied
+-    /// upon when this function returns `Err`.
+-    ///
+-    /// [`try_map_into`]: IndexedSourceExt::try_map_into
+-    ///
+-    /// # Panics
+-    ///
+-    /// Panics if `self.len() != mask.len()` or `out.len() != self.len()`.
+-    #[inline]
+-    fn try_map_masked_into<R, F>(
+-        self,
+-        mask: &BitBuffer,
+-        out: &mut [MaybeUninit<R>],
+-        f: F,
+-    ) -> Result<(), usize>
+-    where
+-        R: Copy + Default,
+-        F: Fn(Self::Item) -> Option<R>,
+-    {
+-        #[allow(clippy::inline_always)]
+-        #[inline(always)]
+-        fn chunk<S, R, F>(
+-            values: &S,
+-            out: &mut [MaybeUninit<R>],
+-            f: &F,
+-            src_chunk: u64,
+-            base: usize,
+-            count: usize,
+-        ) -> Option<usize>
+-        where
+-            S: IndexedSource,
+-            R: Copy + Default,
+-            F: Fn(S::Item) -> Option<R>,
+-        {
+-            let mut fail_bits: u64 = 0;
+-            for bit_idx in 0..count {
+-                let idx = base + bit_idx;
+-                // SAFETY: caller guarantees base + count <= len.
+-                let val = unsafe { values.get_unchecked(idx) };
+-                let opt = f(val);
+-                fail_bits |= (opt.is_none() as u64) << bit_idx;
+-                let result = opt.unwrap_or_default();
+-                unsafe { out.get_unchecked_mut(idx).write(result) };
+-            }
+-            let valid_failures = fail_bits & src_chunk;
+-            (valid_failures != 0).then_some(base + valid_failures.trailing_zeros() as usize)
+-        }
+-
+-        let values = self;
+-        let len = values.len();
+-        assert_eq!(len, mask.len(), "values and mask must have the same length");
+-        assert_eq!(out.len(), len, "out must have the same length as values");
+-
+-        let chunks = mask.chunks();
+-        let chunks_count = len / 64;
+-        let remainder = len % 64;
+-
+-        for (chunk_idx, src_chunk) in chunks.iter().enumerate() {
+-            if let Some(idx) = chunk(&values, out, &f, src_chunk, chunk_idx * 64, 64) {
+-                return Err(idx);
+-            }
+-        }
+-        if remainder != 0
+-            && let Some(idx) = chunk(
+-                &values,
+-                out,
+-                &f,
+-                chunks.remainder_bits(),
+-                chunks_count * 64,
+-                remainder,
+-            )
+-        {
+-            return Err(idx);
+-        }
+-        Ok(())
+-    }
+-
+-    /// Apply `f(value)` lane-by-lane with **no validity awareness at all** — every
+-    /// closure invocation is treated as "happened", regardless of whether the lane
+-    /// is null. Use this only when the input is known non-nullable.
+-    ///
+-    /// # Panics
+-    ///
+-    /// Panics if `out.len() != self.len()`.
+-    #[inline]
+-    fn map_into<R, F>(self, out: &mut [MaybeUninit<R>], f: F)
+-    where
+-        F: Fn(Self::Item) -> R,
+-    {
+-        #[allow(clippy::inline_always)]
+-        #[inline(always)]
+-        fn chunk<S, R, F>(values: &S, out: &mut [MaybeUninit<R>], f: &F, base: usize, count: usize)
+-        where
+-            S: IndexedSource,
+-            F: Fn(S::Item) -> R,
+-        {
+-            for bit_idx in 0..count {
+-                let idx = base + bit_idx;
+-                // SAFETY: caller guarantees base + count <= len.
+-                let val = unsafe { values.get_unchecked(idx) };
+-                unsafe { out.get_unchecked_mut(idx).write(f(val)) };
+-            }
+-        }
+-
+-        let values = self;
+-        let len = values.len();
+-        assert_eq!(out.len(), len, "out must have the same length as values");
+-
+-        let chunks_count = len / CHUNK_LEN;
+-        let remainder = len % CHUNK_LEN;
+-
+-        for chunk_idx in 0..chunks_count {
+-            chunk(&values, out, &f, chunk_idx * CHUNK_LEN, CHUNK_LEN);
+-        }
+-        if remainder != 0 {
+-            chunk(&values, out, &f, chunks_count * CHUNK_LEN, remainder);
+-        }
+-    }
+-
+-    /// Apply the predicate `f(value)` lane-by-lane and bit-pack the results into
+-    /// `words`, LSB-first, 64 lanes per `u64`.
+-    ///
+-    /// This is the kernel shape behind comparison operators: each lane read is an
+-    /// independent indexed load (drive two columns via [`LaneZip`]) and the 64
+-    /// per-lane booleans of a chunk reduce into a single word with `OR + shift`,
+-    /// which the autovectorizer lowers to a vector compare plus movemask.
+-    ///
+-    /// Words are written with `=` (not `|=`), so `words` need not be
+-    /// zero-initialised. Bits at positions `>= self.len()` in the last word are
+-    /// written as zero.
+-    ///
+-    /// Like [`map_into`], this kernel has no validity awareness; pair the packed
+-    /// bits with a separately computed validity mask.
+-    ///
+-    /// [`LaneZip`]: crate::lane_kernels::LaneZip
+-    /// [`map_into`]: IndexedSourceExt::map_into
+-    ///
+-    /// # Panics
+-    ///
+-    /// Panics if `words.len() < self.len().div_ceil(64)`.
+-    #[inline]
+-    fn map_bits_into<F>(self, words: &mut [u64], f: F)
+-    where
+-        F: Fn(Self::Item) -> bool,
+-    {
+-        #[allow(clippy::inline_always)]
+-        #[inline(always)]
+-        fn chunk<S, F>(values: &S, f: &F, base: usize, count: usize) -> u64
+-        where
+-            S: IndexedSource,
+-            F: Fn(S::Item) -> bool,
+-        {
+-            let mut packed: u64 = 0;
+-            for bit_idx in 0..count {
+-                // SAFETY: caller guarantees base + count <= len.
+-                let val = unsafe { values.get_unchecked(base + bit_idx) };
+-                packed |= (f(val) as u64) << bit_idx;
+-            }
+-            packed
+-        }
+-
+-        let values = self;
+-        let len = values.len();
+-        let num_words = len.div_ceil(64);
+-        assert!(
+-            words.len() >= num_words,
+-            "words slice has {} entries, need at least {num_words}",
+-            words.len(),
+-        );
+-
+-        let full = len / 64;
+-        let remainder = len % 64;
+-
+-        for word_idx in 0..full {
+-            words[word_idx] = chunk(&values, &f, word_idx * 64, 64);
+-        }
+-        if remainder != 0 {
+-            words[full] = chunk(&values, &f, full * 64, remainder);
+-        }
+-    }
+-
+-    /// Split value/failure map with **no validity awareness at all**: write every lane's value
+-    /// unconditionally and OR-reduce its failure evidence into the return.
+-    ///
+-    /// The fastest checked shape, running at the speed of the unchecked [`map_into`] in exchange
+-    /// for reporting only _that_ some lane failed and never exiting early. Re-run the now known
+-    /// cold input through [`try_map_into`] or [`try_map_masked_into`] to attribute the failure or
+-    /// to drop the null-lane ones. The evidence reduces inside the kernel because a captured `&mut`
+-    /// becomes a loop-carried memory dependence that blocks vectorization.
+-    ///
+-    /// Anything other than [`Default`] means failure, and `bool` is the ordinary `Fail`. Wider
+-    /// words exist for operations where deriving a `bool` costs the vectorization it guards.
+-    /// **`Fail` must be no wider than `R`**, asserted below, or the reduction rather than the
+-    /// operation decides how many lanes fit in a vector.
+-    ///
+-    /// [`map_into`]: IndexedSourceExt::map_into
+-    /// [`try_map_into`]: IndexedSourceExt::try_map_into
+-    /// [`try_map_masked_into`]: IndexedSourceExt::try_map_masked_into
+-    ///
+-    /// # Panics
+-    ///
+-    /// Panics if `out.len() != self.len()`.
+-    #[inline]
+-    fn map_checked_into<R, Fail, Apply>(self, out: &mut [MaybeUninit<R>], apply: Apply) -> Fail
+-    where
+-        Fail: Copy + Default + BitOrAssign,
+-        Apply: Fn(Self::Item) -> (R, Fail),
+-    {
+-        const {
+-            assert!(
+-                size_of::<Fail>() <= size_of::<R>(),
+-                "failure evidence must be no wider than the value, or it bounds the vector width"
+-            )
+-        };
+-
+-        let values = self;
+-        let len = values.len();
+-        assert_eq!(out.len(), len, "out must have the same length as values");
+-
+-        let mut failed = Fail::default();
+-        for idx in 0..len {
+-            // SAFETY: idx < len by the loop bound, and out.len() == len.
+-            let val = unsafe { values.get_unchecked(idx) };
+-
+-            let (result, failure) = apply(val);
+-            failed |= failure;
+-
+-            // SAFETY: idx < len == out.len().
+-            unsafe { out.get_unchecked_mut(idx).write(result) };
+-        }
+-        failed
+-    }
+-
+-    /// Fallible map with **no validity awareness at all** — every `None` returned
+-    /// by the closure is treated as a failure, even at null lanes.
+-    ///
+-    /// # Use this only for non-nullable inputs.
+-    ///
+-    /// For nullable inputs with a fallible closure, use [`try_map_masked_into`] —
+-    /// it has the same value-only closure shape (and the same perf win) but
+-    /// **correctly suppresses null-lane failures** via per-chunk
+-    /// `fail_bits & mask_chunk`.
+-    ///
+-    /// Using this kernel on a nullable input where a null lane's stored value
+-    /// would cause `f` to return `None` will produce a spurious `Err`. This is a
+-    /// correctness footgun on purpose — the name and this doc are how the API
+-    /// signals "you must know your input has no nulls."
+-    ///
+-    /// On failure returns `Err(failing_lane_index)`.
+-    ///
+-    /// [`try_map_masked_into`]: IndexedSourceExt::try_map_masked_into
+-    ///
+-    /// # Panics
+-    ///
+-    /// Panics if `out.len() != self.len()`.
+-    #[inline]
+-    fn try_map_into<R, F>(self, out: &mut [MaybeUninit<R>], f: F) -> Result<(), usize>
+-    where
+-        R: Copy + Default,
+-        F: Fn(Self::Item) -> Option<R>,
+-    {
+-        /// Returns `true` if any lane in `[base, base+count)` failed (OR-reduced);
+-        /// the cold attribution path is called at the kernel level so it can be
+-        /// inlined separately for full vs remainder.
+-        #[allow(clippy::inline_always)]
+-        #[inline(always)]
+-        fn chunk<S, R, F>(
+-            values: &S,
+-            out: &mut [MaybeUninit<R>],
+-            f: &F,
+-            base: usize,
+-            count: usize,
+-        ) -> bool
+-        where
+-            S: IndexedSource,
+-            R: Copy + Default,
+-            F: Fn(S::Item) -> Option<R>,
+-        {
+-            let mut fail_acc: u64 = 0;
+-            for bit_idx in 0..count {
+-                let idx = base + bit_idx;
+-                // SAFETY: caller guarantees base + count <= len.
+-                let val = unsafe { values.get_unchecked(idx) };
+-                let opt = f(val);
+-                fail_acc |= opt.is_none() as u64;
+-                let result = opt.unwrap_or_default();
+-                unsafe { out.get_unchecked_mut(idx).write(result) };
+-            }
+-            fail_acc != 0
+-        }
+-
+-        let values = self;
+-        let len = values.len();
+-        assert_eq!(out.len(), len, "out must have the same length as values");
+-
+-        let chunks_count = len / CHUNK_LEN;
+-        let remainder = len % CHUNK_LEN;
+-
+-        for chunk_idx in 0..chunks_count {
+-            let base = chunk_idx * CHUNK_LEN;
+-            if chunk(&values, out, &f, base, CHUNK_LEN) {
+-                return Err(attribute_failure_no_mask(&values, base, CHUNK_LEN, &f));
+-            }
+-        }
+-        if remainder != 0 {
+-            let base = chunks_count * CHUNK_LEN;
+-            if chunk(&values, out, &f, base, remainder) {
+-                return Err(attribute_failure_no_mask(&values, base, remainder, &f));
+-            }
+-        }
+-        Ok(())
+-    }
+-}
+-
+-impl<S: IndexedSource> IndexedSourceExt for S {}
+-
+-/// Shared cold scan: walks a chunk, returns the first lane index where
+-/// `lane_fails(bit_idx, value)` returns `true`. Used by
+-/// [`attribute_failure_no_mask`].
+-///
+-/// Caller guarantees `base + chunk_len <= values.len()`.
+-#[cold]
+-#[inline(never)]
+-fn cold_scan<S>(
+-    values: &S,
+-    base: usize,
+-    chunk_len: usize,
+-    lane_fails: impl Fn(usize /* bit_idx */, S::Item) -> bool,
+-) -> usize
+-where
+-    S: IndexedSource,
+-{
+-    for bit_idx in 0..chunk_len {
+-        let idx = base + bit_idx;
+-        // SAFETY: caller guarantees idx < values.len().
+-        let val = unsafe { values.get_unchecked(idx) };
+-        if lane_fails(bit_idx, val) {
+-            return idx;
+-        }
+-    }
+-    unreachable!("cold_scan called without a failing lane")
+-}
+-
+-/// Cold attribution for the no-mask variant. Replays `f` over the chunk to find
+-/// the first lane that returns `None`.
+-#[inline]
+-fn attribute_failure_no_mask<S, R, F>(values: &S, base: usize, chunk_len: usize, f: &F) -> usize
+-where
+-    S: IndexedSource,
+-    F: Fn(S::Item) -> Option<R>,
+-{
+-    cold_scan(values, base, chunk_len, |_bit_idx, val| f(val).is_none())
+-}
++pub use rofl_kernels::lane_kernels::map_into::*;
+ 
+ #[cfg(test)]
+ #[allow(clippy::cast_possible_truncation)]
+ mod tests {
++    use std::mem::MaybeUninit;
++
+     use vortex_buffer::BitBuffer;
+     use vortex_buffer::BitBufferMut;
+ 
+diff --git c/vortex-compute/src/lane_kernels/sink.rs w/vortex-compute/src/lane_kernels/sink.rs
+index 86826fd521..e9f32d8bff 100644
+--- c/vortex-compute/src/lane_kernels/sink.rs
++++ w/vortex-compute/src/lane_kernels/sink.rs
+@@ -1,7 +1,7 @@
+ // SPDX-License-Identifier: Apache-2.0
+ // SPDX-FileCopyrightText: Copyright the Vortex contributors
+ 
+-//! Writable lane sink — the [`IndexedSink`] trait and the [`ReinterpretSink`] adapter
++//! Writable lane sink, the [`IndexedSink`] trait and the [`ReinterpretSink`] adapter
+ //! for in-place type-punning kernels.
+ 
+ use std::marker::PhantomData;
+@@ -10,12 +10,12 @@ use std::mem::size_of;
+ 
+ use crate::lane_kernels::source::IndexedSource;
+ 
+-/// An [`IndexedSource`] that also supports unchecked indexed writes — the binding
++/// An [`IndexedSource`] that also supports unchecked indexed writes, the binding
+ /// for in-place kernels.
+ ///
+ /// `Write` is the type written by `set_unchecked` and may differ from
+ /// `IndexedSource::Item` (the read type). For the canonical `&mut [T]` impl
+-/// both are `T`. The decoupling is what makes [`ReinterpretSink`] possible —
++/// both are `T`. The decoupling is what makes [`ReinterpretSink`] possible,
+ /// a wrapper that reads `F` and writes `T` over the same backing memory when
+ /// the two have identical size and alignment.
+ ///
+@@ -66,7 +66,18 @@ impl<'a, F, T> ReinterpretSink<'a, F, T> {
+     ///
+     /// Panics if `size_of::<F>() != size_of::<T>()` or
+     /// `align_of::<F>() != align_of::<T>()`.
+-    pub fn new(slice: &'a mut [F]) -> Self {
++    ///
++    /// # Safety
++    /// Every T value written through this sink must also be a fully initialized, valid F value.
++    /// This must hold after partial writes and errors, while the original F slice still exists.
++    /// Equal-width numeric primitives satisfy this requirement. Arbitrary Copy types do not.
++    ///
++    /// ```compile_fail
++    /// use vortex_compute::lane_kernels::ReinterpretSink;
++    /// let mut values = [false];
++    /// let sink = ReinterpretSink::<bool, u8>::new(&mut values);
++    /// ```
++    pub unsafe fn new(slice: &'a mut [F]) -> Self {
+         assert_eq!(
+             size_of::<F>(),
+             size_of::<T>(),
+@@ -84,7 +95,9 @@ impl<'a, F, T> ReinterpretSink<'a, F, T> {
+     }
+ }
+ 
+-impl<F: Copy, T: Copy> IndexedSource for ReinterpretSink<'_, F, T> {
++// SAFETY: the slice length is stable. The unsafe constructor requires writes to preserve valid,
++// initialized F values, including when traversal fails after a partial update.
++unsafe impl<F: Copy, T: Copy> IndexedSource for ReinterpretSink<'_, F, T> {
+     type Item = F;
+     #[inline]
+     fn len(&self) -> usize {
+diff --git c/vortex-compute/src/lane_kernels/source.rs w/vortex-compute/src/lane_kernels/source.rs
+index f578d7a295..60915d7941 100644
+--- c/vortex-compute/src/lane_kernels/source.rs
++++ w/vortex-compute/src/lane_kernels/source.rs
+@@ -1,92 +1,9 @@
+ // SPDX-License-Identifier: Apache-2.0
+ // SPDX-FileCopyrightText: Copyright the Vortex contributors
+ 
+-//! Read-only lane source — the [`IndexedSource`] trait and the [`LaneZip`] adapter.
++//! Shared lane kernels, with Vortex storage conformance tests.
+ 
+-/// A length-known source supporting unchecked indexed reads.
+-///
+-/// Implemented for `&[T]` (with `T: Copy`) and for [`LaneZip`] over two `IndexedSource`s.
+-/// The kernels in this crate require this trait instead of `Iterator` so that lane
+-/// reads carry no inter-iteration data dependency — the autovectorizer treats each
+-/// lane independently.
+-pub trait IndexedSource {
+-    /// The per-lane item type passed through the kernel by value.
+-    type Item;
+-    /// Logical lane count.
+-    fn len(&self) -> usize;
+-    /// Returns true when there are no lanes.
+-    fn is_empty(&self) -> bool {
+-        self.len() == 0
+-    }
+-    /// Read the lane at `i` without bounds checking.
+-    ///
+-    /// # Safety
+-    ///
+-    /// `i` must be strictly less than `self.len()`.
+-    unsafe fn get_unchecked(&self, i: usize) -> Self::Item;
+-}
+-
+-impl<T: Copy> IndexedSource for &[T] {
+-    type Item = T;
+-    #[inline]
+-    fn len(&self) -> usize {
+-        <[T]>::len(self)
+-    }
+-    #[inline]
+-    unsafe fn get_unchecked(&self, i: usize) -> T {
+-        // SAFETY: caller guarantees i < self.len().
+-        unsafe { *<[T]>::get_unchecked(self, i) }
+-    }
+-}
+-
+-impl<T: Copy> IndexedSource for &mut [T] {
+-    type Item = T;
+-    #[inline]
+-    fn len(&self) -> usize {
+-        <[T]>::len(self)
+-    }
+-    #[inline]
+-    unsafe fn get_unchecked(&self, i: usize) -> T {
+-        // SAFETY: caller guarantees i < self.len().
+-        unsafe { *<[T]>::get_unchecked(self, i) }
+-    }
+-}
+-
+-/// Pair of two [`IndexedSource`]s of equal length. Yields `(A::Item, B::Item)` per lane.
+-///
+-/// Use this to drive a binary kernel from two columns. Length equality is enforced at
+-/// construction, and the private fields prevent callers from bypassing that check.
+-#[derive(Clone, Copy)]
+-pub struct LaneZip<A, B>(A, B);
+-
+-impl<A: IndexedSource, B: IndexedSource> LaneZip<A, B> {
+-    /// Build a `LaneZip` from two equal-length sources.
+-    ///
+-    /// # Panics
+-    ///
+-    /// Panics if the two operands have different lengths.
+-    pub fn new(a: A, b: B) -> Self {
+-        assert_eq!(
+-            a.len(),
+-            b.len(),
+-            "LaneZip operands must have the same length"
+-        );
+-        Self(a, b)
+-    }
+-}
+-
+-impl<A: IndexedSource, B: IndexedSource> IndexedSource for LaneZip<A, B> {
+-    type Item = (A::Item, B::Item);
+-    #[inline]
+-    fn len(&self) -> usize {
+-        self.0.len()
+-    }
+-    #[inline]
+-    unsafe fn get_unchecked(&self, i: usize) -> (A::Item, B::Item) {
+-        // SAFETY: caller guarantees i < self.len(); `new` enforces matching lengths.
+-        unsafe { (self.0.get_unchecked(i), self.1.get_unchecked(i)) }
+-    }
+-}
++pub use rofl_kernels::lane_kernels::source::*;
+ 
+ #[cfg(test)]
+ mod tests {

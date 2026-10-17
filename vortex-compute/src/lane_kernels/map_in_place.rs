@@ -326,7 +326,8 @@ mod tests {
     fn reinterpret_sink_same_width_f32_u32() {
         let mut buf: Vec<f32> = (0..130).map(|i| i as f32).collect();
         let mask = BitBuffer::new_set(130);
-        ReinterpretSink::<f32, u32>::new(buf.as_mut_slice())
+        // SAFETY: u32 has no padding, and every u32 bit pattern is a valid f32.
+        unsafe { ReinterpretSink::<f32, u32>::new(buf.as_mut_slice()) }
             .try_map_masked_in_place(&mask, |f| Some(f.to_bits().wrapping_add(1)))
             .unwrap();
         // SAFETY: same size + alignment for f32 and u32; every slot now holds a u32 written by
@@ -342,7 +343,9 @@ mod tests {
     fn reinterpret_sink_failure_reports_lane() {
         let mut buf: Vec<f32> = (0..200).map(|i| i as f32).collect();
         let mask = BitBuffer::new_set(200);
-        let res = ReinterpretSink::<f32, u32>::new(buf.as_mut_slice()).try_map_masked_in_place(
+        // SAFETY: u32 has no padding, and every u32 bit pattern is a valid f32.
+        let sink = unsafe { ReinterpretSink::<f32, u32>::new(buf.as_mut_slice()) };
+        let res = sink.try_map_masked_in_place(
             &mask,
             |f| {
                 if f as u32 == 137 {

@@ -1,0 +1,113 @@
+{
+  "benchmark": "rofl-examples/benches/arrow_families.rs",
+  "declared_build_profile": "bench",
+  "build_profile_verified_from_binary": false,
+  "binary": "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/arrow_families-e34007219fb0c2ce",
+  "binary_sha256": "33d1b917cf2e4bafc93eb1819982b90c7e5391c0b69e844bfcc78bf6c3631eee",
+  "binary_bytes": 14440112,
+  "output_dir": "/Users/connor/spiral/vortex-data/vortex4/research/row-fn-engine/measurements/2026-09-29-families/final",
+  "git_head": "24a96cece436409dc4f60f94c6b846d6af017804",
+  "git_branch": "ct/row-fn-engine-research",
+  "git_status_porcelain": "M Cargo.lock\n M Cargo.toml\n M research/row-fn-engine/README.md\n M research/row-fn-engine/architecture.md\n M research/row-fn-engine/current-system/engine-boundary.md\n M research/row-fn-engine/current-system/extraction.md\n M research/row-fn-engine/integrations/arrow.md\n M research/row-fn-engine/next-steps.md\n M research/row-fn-engine/type-system/compiled-proof.md\n M research/row-fn-engine/type-system/portable-contract.md\n M vortex-array/Cargo.toml\n M vortex-array/src/arrays/primitive/compute/cast.rs\n M vortex-array/src/scalar_fn/unstable/mod.rs\n M vortex-array/src/scalar_fn/unstable/row/mod.rs\n M vortex-array/src/scalar_fn/unstable/row/types/element/tuple/indexed.rs\n M vortex-array/src/scalar_fn/unstable/row/types/sink/utf8.rs\n M vortex-buffer/Cargo.toml\n M vortex-buffer/src/bit/mod.rs\n M vortex-buffer/src/bit/pack.rs\n M vortex-buffer/src/bit/view.rs\n M vortex-compute/Cargo.toml\n M vortex-compute/benches/lane_kernels.rs\n M vortex-compute/src/lane_kernels/map_in_place.rs\n M vortex-compute/src/lane_kernels/map_into.rs\n M vortex-compute/src/lane_kernels/sink.rs\n M vortex-compute/src/lane_kernels/source.rs\n?? research/row-fn-engine/implementation.md\n?? research/row-fn-engine/measurements/\n?? rofl-arrow/\n?? rofl-examples/\n?? rofl-kernels/\n?? rofl/\n?? vortex-array/src/scalar_fn/unstable/rofl/",
+  "cargo_lock_sha256": "429485cd99f69143d12dc9b16805bbe8f4fe3e74bbae0a304674beed337dca14",
+  "rustc_version": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: aarch64-apple-darwin\nrelease: 1.98.0\nLLVM version: 22.1.8",
+  "system": {
+    "system": "Darwin",
+    "node": "Mac.localdomain",
+    "release": "27.0.0",
+    "version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:05:48 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6041",
+    "machine": "arm64"
+  },
+  "python_version": "3.9.6 (default, Apr 30 2025, 02:07:17) \n[Clang 17.0.0 (clang-1700.0.13.5)]",
+  "repo": "/Users/connor/spiral/vortex-data/vortex4",
+  "configured_rows": [
+    0,
+    64,
+    1024,
+    16384
+  ],
+  "timer": "os",
+  "sample_count": 1000,
+  "min_time_seconds": 0.03,
+  "max_time_seconds": 0.1,
+  "runs": [
+    {
+      "command": [
+        "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/arrow_families-e34007219fb0c2ce",
+        "--bench",
+        "--timer",
+        "os",
+        "--color",
+        "never",
+        "--sample-count",
+        "1000",
+        "--min-time",
+        "0.03",
+        "--max-time",
+        "0.1",
+        "--sort",
+        "name"
+      ],
+      "output": "run-1.txt",
+      "started_utc": "2026-09-29T19:58:18.991514+00:00",
+      "elapsed_seconds": 17.635029792,
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/arrow_families-e34007219fb0c2ce",
+        "--bench",
+        "--timer",
+        "os",
+        "--color",
+        "never",
+        "--sample-count",
+        "1000",
+        "--min-time",
+        "0.03",
+        "--max-time",
+        "0.1",
+        "--sortr",
+        "name"
+      ],
+      "output": "run-2.txt",
+      "started_utc": "2026-09-29T19:58:36.627063+00:00",
+      "elapsed_seconds": 17.625025875000002,
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/arrow_families-e34007219fb0c2ce",
+        "--bench",
+        "--timer",
+        "os",
+        "--color",
+        "never",
+        "--sample-count",
+        "1000",
+        "--min-time",
+        "0.03",
+        "--max-time",
+        "0.1",
+        "--sort",
+        "name"
+      ],
+      "output": "run-3.txt",
+      "started_utc": "2026-09-29T19:58:54.252635+00:00",
+      "elapsed_seconds": 17.614889833999996,
+      "exit_code": 0
+    }
+  ],
+  "preflight": {
+    "command": [
+      "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/arrow_families-e34007219fb0c2ce",
+      "--test",
+      "--color",
+      "never"
+    ],
+    "output": "preflight.txt",
+    "started_utc": "2026-09-29T19:58:18.434839+00:00",
+    "elapsed_seconds": 0.556179666,
+    "exit_code": 0
+  }
+}

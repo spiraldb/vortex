@@ -1,0 +1,36 @@
+Compiler and exact flags: build-candidate.json and environment.json.
+
+Counts cover all emitted CGUs. An absent helper call means inlining, not zero work.
+
+
+arrow_scalar-468e1e00a84a4ac8
+
+{'StringRows accessor calls': 0, 'StringWriter write_parts calls': 0, 'InitializedRow fill calls': 0}
+
+
+arrow_workloads-c6ec49480bb17fe7
+
+{'StringRows accessor calls': 0, 'StringWriter write_parts calls': 0, 'InitializedRow fill calls': 0}
+
+target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.05.rcgu.ll
+Symbol: _RINvXs_NtCs7Kazvvc7DnG_10rofl_arrow5batchNtB5_13ArrowValidityNtNtCshZi9mpuUhIi_4rofl4host9Selection12try_for_eachNtNtCsahM43VdRvdp_12arrow_schema5error10ArrowErrorNCINvNtB11_7execute13selected_rowsNtB7_9ArrowHostNCINvMNtB2G_4sinkINtB2G_7ExecuteB39_NtNtCs6mBffczUiYQ_13rofl_examples9functions5ScaleE4sinkTINtNtB11_5input13FixedSizeListdEdEINtNtNtB11_4sink4list17FixedSizeListSinkB39_dEINtNtCslWxY2MhVcag_4core6option6OptiondENtB5t_14InitializedRowNCINvXs3_B40_B3Y_INtNtB11_7visitor5RowFnB39_E8dispatchB3F_Esa_0NCB7c_sb_0E0E0ECs4I15memKWBy_15arrow_workloads
+  %wide.load = load <2 x double>, ptr %25, align 8, !dbg !1197, !noalias !1205
+  %wide.load5 = load <2 x double>, ptr %26, align 8, !dbg !1197, !noalias !1205
+  %wide.load6 = load <2 x double>, ptr %27, align 8, !dbg !1197, !noalias !1205
+  %wide.load7 = load <2 x double>, ptr %28, align 8, !dbg !1197, !noalias !1205
+  %29 = fmul <2 x double> %broadcast.splat, %wide.load, !dbg !1197
+  %30 = fmul <2 x double> %broadcast.splat, %wide.load5, !dbg !1197
+  %31 = fmul <2 x double> %broadcast.splat, %wide.load6, !dbg !1197
+  %32 = fmul <2 x double> %broadcast.splat, %wide.load7, !dbg !1197
+  %33 = getelementptr i8, ptr %next.gep, i64 16, !dbg !1210
+
+Assembly:
+LBB5_11:
+	.loc	31 170 68 is_stmt 1
+	ldp	q1, q2, [x4, #-32]
+	ldp	q3, q4, [x4], #64
+	fmul.2d	v1, v1, v0[0]
+	fmul.2d	v2, v2, v0[0]
+	fmul.2d	v3, v3, v0[0]
+	fmul.2d	v4, v4, v0[0]
+Ltmp155:

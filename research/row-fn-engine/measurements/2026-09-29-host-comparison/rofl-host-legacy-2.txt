@@ -1,0 +1,9 @@
+    Finished `bench` profile [optimized + debuginfo] target(s) in 0.17s
+     Running benches/host_comparison.rs (target/release/deps/host_comparison-b0b97826503bbef6)
+Timer precision: 41 ns
+host_comparison               fastest       │ slowest       │ median        │ mean          │ samples │ iters
+╰─ vortex_legacy_byte_length                │               │               │               │         │
+   ├─ 64                      999.7 ns      │ 17.74 µs      │ 1.082 µs      │ 1.109 µs      │ 1073    │ 1073
+   ├─ 1024                    7.457 µs      │ 17.66 µs      │ 7.791 µs      │ 7.852 µs      │ 3725    │ 3725
+   ╰─ 16384                   110 µs        │ 134.1 µs      │ 111.3 µs      │ 111.9 µs      │ 268     │ 268
+

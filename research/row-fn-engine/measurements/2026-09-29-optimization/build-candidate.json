@@ -1,0 +1,59 @@
+[
+  {
+    "command": [
+      "cargo",
+      "rustc",
+      "--locked",
+      "--profile",
+      "bench",
+      "-p",
+      "rofl-examples",
+      "--bench",
+      "arrow_scalar",
+      "--message-format=json",
+      "--",
+      "--emit=llvm-ir,asm,link"
+    ],
+    "executable": "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/arrow_scalar-468e1e00a84a4ac8",
+    "captured": "target/rofl-opt/candidate-scalar",
+    "sha256": "fb6aade088f79671a76e91080b6566893bf5a018da608bef734b0db0ae82fa4d"
+  },
+  {
+    "command": [
+      "cargo",
+      "rustc",
+      "--locked",
+      "--profile",
+      "bench",
+      "-p",
+      "rofl-examples",
+      "--bench",
+      "arrow_workloads",
+      "--message-format=json",
+      "--",
+      "--emit=llvm-ir,asm,link"
+    ],
+    "executable": "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/arrow_workloads-c6ec49480bb17fe7",
+    "captured": "target/rofl-opt/candidate-workloads",
+    "sha256": "15fb8b2d0b518b6ae1084d64d5ae6d7f4c9e31afe7646cdc68013429539fabd7"
+  },
+  {
+    "command": [
+      "cargo",
+      "rustc",
+      "--locked",
+      "--profile",
+      "bench",
+      "-p",
+      "rofl-examples",
+      "--bench",
+      "boundaries",
+      "--message-format=json",
+      "--",
+      "--emit=llvm-ir,asm,link"
+    ],
+    "executable": "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/boundaries-3c3a77a76c6fcdfa",
+    "captured": "target/rofl-opt/candidate-boundaries",
+    "sha256": "22da265cbe07b2ab11dc8b587d285d2e17edc0cc5ea848cd0277d0be6caf7c56"
+  }
+]

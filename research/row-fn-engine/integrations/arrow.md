@@ -3,6 +3,10 @@
 
 # Arrow has several integration boundaries
 
+The experimental source now implements the accepted extraction boundary. See the
+[implementation record](../implementation.md) for current behavior and unrun verification. Alternatives below
+remain research context where they differ from that implementation.
+
 Arrow supplies a columnar format, libraries in several languages, and an interchange ABI. Those
 pieces do not create one universal UDF registry. An Arrow Rust callable, an Arrow C++ compute
 function, and an Arrow C Data export are different integration products.

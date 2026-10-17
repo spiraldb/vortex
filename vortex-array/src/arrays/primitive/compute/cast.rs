@@ -523,7 +523,9 @@ where
     if infallible {
         return match owned {
             Some(mut buf) => {
-                ReinterpretSink::<F, T>::new(buf.as_mut_slice()).map_into_in_place(|v: F| v.as_());
+                // SAFETY: NativePType values have no padding and accept every bit pattern.
+                unsafe { ReinterpretSink::<F, T>::new(buf.as_mut_slice()) }
+                    .map_into_in_place(|v: F| v.as_());
                 // SAFETY: same size + alignment for NativePType
                 let result: BufferMut<T> = unsafe { buf.transmute::<T>() };
                 Ok(PrimitiveArray::new(result.freeze(), new_validity).into_array())
@@ -542,7 +544,8 @@ where
 
     let buffer: Buffer<T> = match (&mask, owned) {
         (Mask::AllTrue(_), Some(mut buf)) => {
-            ReinterpretSink::<F, T>::new(buf.as_mut_slice())
+            // SAFETY: NativePType values have no padding and accept every bit pattern.
+            unsafe { ReinterpretSink::<F, T>::new(buf.as_mut_slice()) }
                 .try_map_in_place(|v: F| <T as NumCast>::from(v))
                 .map_err(|_| overflow())?;
             // SAFETY: same size + alignment for NativePType
@@ -562,7 +565,8 @@ where
         }
         (Mask::AllFalse(_), _) => BufferMut::<T>::zeroed(len).freeze(),
         (Mask::Values(m), Some(mut buf)) => {
-            ReinterpretSink::<F, T>::new(buf.as_mut_slice())
+            // SAFETY: NativePType values have no padding and accept every bit pattern.
+            unsafe { ReinterpretSink::<F, T>::new(buf.as_mut_slice()) }
                 .try_map_masked_in_place(m.bit_buffer(), |v: F| <T as NumCast>::from(v))
                 .map_err(|_| overflow())?;
             // SAFETY: same size + alignment for NativePType

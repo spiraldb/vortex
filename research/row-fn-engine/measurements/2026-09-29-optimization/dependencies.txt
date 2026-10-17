@@ -1,0 +1,65 @@
+rofl v0.1.0 (/Users/connor/spiral/vortex-data/vortex4/rofl)
+└── rofl-kernels v0.1.0 (/Users/connor/spiral/vortex-data/vortex4/rofl-kernels)
+
+rofl-arrow v0.1.0 (/Users/connor/spiral/vortex-data/vortex4/rofl-arrow)
+├── arrow-array v59.3.0
+│   ├── ahash v0.8.12
+│   │   ├── cfg-if v1.0.4
+│   │   ├── getrandom v0.3.4
+│   │   │   ├── cfg-if v1.0.4
+│   │   │   └── libc v0.2.189
+│   │   ├── once_cell v1.21.4
+│   │   └── zerocopy v0.8.57
+│   │       └── zerocopy-derive v0.8.57 (proc-macro)
+│   │           ├── proc-macro2 v1.0.107
+│   │           │   └── unicode-ident v1.0.24
+│   │           ├── quote v1.0.47
+│   │           │   └── proc-macro2 v1.0.107 (*)
+│   │           └── syn v2.0.119
+│   │               ├── proc-macro2 v1.0.107 (*)
+│   │               ├── quote v1.0.47 (*)
+│   │               └── unicode-ident v1.0.24
+│   │   [build-dependencies]
+│   │   └── version_check v0.9.5
+│   ├── arrow-buffer v59.3.0
+│   │   ├── bytes v1.12.1
+│   │   ├── half v2.7.1
+│   │   │   ├── cfg-if v1.0.4
+│   │   │   ├── num-traits v0.2.19
+│   │   │   │   └── libm v0.2.16
+│   │   │   │   [build-dependencies]
+│   │   │   │   └── autocfg v1.5.1
+│   │   │   └── zerocopy v0.8.57 (*)
+│   │   ├── num-bigint v0.5.1
+│   │   │   ├── num-integer v0.1.47
+│   │   │   │   └── num-traits v0.2.19 (*)
+│   │   │   └── num-traits v0.2.19 (*)
+│   │   └── num-traits v0.2.19 (*)
+│   ├── arrow-data v59.3.0
+│   │   ├── arrow-buffer v59.3.0 (*)
+│   │   ├── arrow-schema v59.3.0
+│   │   ├── half v2.7.1 (*)
+│   │   ├── num-integer v0.1.47 (*)
+│   │   └── num-traits v0.2.19 (*)
+│   ├── arrow-schema v59.3.0
+│   ├── chrono v0.4.45
+│   │   ├── iana-time-zone v0.1.65
+│   │   │   └── core-foundation-sys v0.8.7
+│   │   └── num-traits v0.2.19 (*)
+│   ├── half v2.7.1 (*)
+│   ├── hashbrown v0.17.1
+│   ├── num-complex v0.4.6
+│   │   └── num-traits v0.2.19 (*)
+│   ├── num-integer v0.1.47 (*)
+│   └── num-traits v0.2.19 (*)
+├── arrow-buffer v59.3.0 (*)
+├── arrow-data v59.3.0 (*)
+├── arrow-schema v59.3.0
+├── arrow-select v59.3.0
+│   ├── ahash v0.8.12 (*)
+│   ├── arrow-array v59.3.0 (*)
+│   ├── arrow-buffer v59.3.0 (*)
+│   ├── arrow-data v59.3.0 (*)
+│   ├── arrow-schema v59.3.0
+│   └── num-traits v0.2.19 (*)
+└── rofl v0.1.0 (/Users/connor/spiral/vortex-data/vortex4/rofl) (*)

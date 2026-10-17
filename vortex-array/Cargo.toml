@@ -58,6 +58,7 @@ prost-types = { workspace = true }
 rand = { workspace = true }
 regex = { workspace = true }
 regex-syntax = { workspace = true }
+rowfn = { workspace = true }
 rstest = { workspace = true, optional = true }
 rstest_reuse = { workspace = true, optional = true }
 rustc-hash = { workspace = true }

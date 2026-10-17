@@ -1,0 +1,134 @@
+[
+  {
+    "command": [
+      "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/boundaries-aeac0eb71915d338",
+      "--bench",
+      "--timer",
+      "os",
+      "--color",
+      "never",
+      "--sample-count",
+      "1000",
+      "--min-time",
+      "0.1",
+      "--max-time",
+      "0.3",
+      "--sort",
+      "name"
+    ],
+    "start_unix": 1790374104.06422,
+    "seconds": 5.323668956756592,
+    "output": "baseline-boundaries-1.txt",
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/arrow_workloads-c779a9f473e8d9cf",
+      "--bench",
+      "--timer",
+      "os",
+      "--color",
+      "never",
+      "--sample-count",
+      "1000",
+      "--min-time",
+      "0.1",
+      "--max-time",
+      "0.3",
+      "--sort",
+      "name"
+    ],
+    "start_unix": 1790374109.388144,
+    "seconds": 14.373661994934082,
+    "output": "baseline-arrow-1.txt",
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/arrow_workloads-c779a9f473e8d9cf",
+      "--bench",
+      "--timer",
+      "os",
+      "--color",
+      "never",
+      "--sample-count",
+      "1000",
+      "--min-time",
+      "0.1",
+      "--max-time",
+      "0.3",
+      "--sortr",
+      "name"
+    ],
+    "start_unix": 1790374123.762097,
+    "seconds": 14.389951944351196,
+    "output": "baseline-arrow-2.txt",
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/boundaries-aeac0eb71915d338",
+      "--bench",
+      "--timer",
+      "os",
+      "--color",
+      "never",
+      "--sample-count",
+      "1000",
+      "--min-time",
+      "0.1",
+      "--max-time",
+      "0.3",
+      "--sortr",
+      "name"
+    ],
+    "start_unix": 1790374138.152527,
+    "seconds": 5.318339824676514,
+    "output": "baseline-boundaries-2.txt",
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/boundaries-aeac0eb71915d338",
+      "--bench",
+      "--timer",
+      "os",
+      "--color",
+      "never",
+      "--sample-count",
+      "1000",
+      "--min-time",
+      "0.1",
+      "--max-time",
+      "0.3",
+      "--sort",
+      "name"
+    ],
+    "start_unix": 1790374143.471141,
+    "seconds": 5.320376873016357,
+    "output": "baseline-boundaries-3.txt",
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "/Users/connor/spiral/vortex-data/vortex4/target/release/deps/arrow_workloads-c779a9f473e8d9cf",
+      "--bench",
+      "--timer",
+      "os",
+      "--color",
+      "never",
+      "--sample-count",
+      "1000",
+      "--min-time",
+      "0.1",
+      "--max-time",
+      "0.3",
+      "--sort",
+      "name"
+    ],
+    "start_unix": 1790374148.791789,
+    "seconds": 14.395911931991577,
+    "output": "baseline-arrow-3.txt",
+    "exit_code": 0
+  }
+]

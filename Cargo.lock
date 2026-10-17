@@ -8768,6 +8768,71 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e27ee8bb91ca0adcf0ecb116293afa12d393f9c2b9b9cd54d33e8078fe19839"
 
 [[package]]
+name = "rowfn"
+version = "0.1.0"
+dependencies = [
+ "rowfn-kernels",
+]
+
+[[package]]
+name = "rowfn-arrow"
+version = "0.1.0"
+dependencies = [
+ "arrow-array 59.3.0",
+ "arrow-buffer 59.3.0",
+ "arrow-data 59.3.0",
+ "arrow-schema 59.3.0",
+ "arrow-select 59.3.0",
+ "rowfn",
+]
+
+[[package]]
+name = "rowfn-examples"
+version = "0.1.0"
+dependencies = [
+ "arrow-arith 59.3.0",
+ "arrow-array 59.3.0",
+ "arrow-buffer 59.3.0",
+ "arrow-ord 59.3.0",
+ "arrow-schema 59.3.0",
+ "arrow-string 59.3.0",
+ "codspeed-divan-compat",
+ "memchr",
+ "rowfn",
+ "rowfn-arrow",
+ "rowfn-functions",
+ "rstest",
+ "vortex-array",
+ "vortex-buffer",
+ "vortex-error",
+ "vortex-session",
+]
+
+[[package]]
+name = "rowfn-functions"
+version = "0.1.0"
+dependencies = [
+ "arrow-array 59.3.0",
+ "arrow-buffer 59.3.0",
+ "arrow-schema 59.3.0",
+ "memchr",
+ "regex",
+ "regex-syntax",
+ "rowfn",
+ "rowfn-arrow",
+ "vortex-array",
+ "vortex-buffer",
+ "vortex-error",
+]
+
+[[package]]
+name = "rowfn-kernels"
+version = "0.1.0"
+dependencies = [
+ "rstest",
+]
+
+[[package]]
 name = "rstar"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10649,6 +10714,7 @@ dependencies = [
  "rand_distr 0.6.0",
  "regex",
  "regex-syntax",
+ "rowfn",
  "rstest",
  "rstest_reuse",
  "rustc-hash",
@@ -10831,6 +10897,7 @@ dependencies = [
  "memmap2",
  "mimalloc",
  "num-traits",
+ "rowfn-kernels",
  "rstest",
  "serde",
  "simdutf8",
@@ -10943,6 +11010,7 @@ dependencies = [
  "mimalloc",
  "num-traits",
  "rand 0.10.2",
+ "rowfn-kernels",
  "vortex-bench-support",
  "vortex-buffer",
 ]

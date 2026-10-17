@@ -1,0 +1,25 @@
+   Compiling rofl-examples v0.1.0 (/Users/connor/spiral/vortex-data/vortex4/rofl-examples)
+    Finished `bench` profile [optimized + debuginfo] target(s) in 0.25s
+     Running benches/host_comparison.rs (target/release/deps/host_comparison-b0b97826503bbef6)
+Timer precision: 41 ns
+host_comparison                    fastest       │ slowest       │ median        │ mean          │ samples │ iters
+╰─ vortex_string_decode                          │               │               │               │         │
+   ├─ 64                                         │               │               │               │         │
+   │  ├─ ByteLengthView            332.7 ns      │ 12.66 µs      │ 416.7 ns      │ 442.5 ns      │ 4175    │ 4175
+   │  ├─ LikeLiteralScalar         377.3 ns      │ 2.004 µs      │ 437.2 ns      │ 438.2 ns      │ 3982    │ 63712
+   │  ├─ StartsWithScalar          429.4 ns      │ 1.32 µs       │ 439.8 ns      │ 447.6 ns      │ 3897    │ 62352
+   │  ├─ StringEqualViewShort      239.3 ns      │ 1.002 µs      │ 249.7 ns      │ 259 ns        │ 6492    │ 103872
+   │  ╰─ StringLessThanViewScalar  419 ns        │ 1.184 µs      │ 432 ns        │ 439 ns        │ 3962    │ 63392
+   ├─ 1024                                       │               │               │               │         │
+   │  ├─ ByteLengthView            4.832 µs      │ 23.37 µs      │ 5.332 µs      │ 5.454 µs      │ 5356    │ 5356
+   │  ├─ LikeLiteralScalar         5.166 µs      │ 17.62 µs      │ 5.291 µs      │ 5.393 µs      │ 5431    │ 5431
+   │  ├─ StartsWithScalar          5.207 µs      │ 15.99 µs      │ 5.54 µs       │ 5.538 µs      │ 5288    │ 5288
+   │  ├─ StringEqualViewShort      2.603 µs      │ 9.791 µs      │ 2.957 µs      │ 2.909 µs      │ 5046    │ 10092
+   │  ╰─ StringLessThanViewScalar  5.54 µs       │ 16.91 µs      │ 5.624 µs      │ 5.678 µs      │ 5162    │ 5162
+   ╰─ 16384                                      │               │               │               │         │
+      ├─ ByteLengthView            84.79 µs      │ 100.2 µs      │ 84.99 µs      │ 85.49 µs      │ 351     │ 351
+      ├─ LikeLiteralScalar         84.91 µs      │ 110.4 µs      │ 86.29 µs      │ 87.35 µs      │ 343     │ 343
+      ├─ StartsWithScalar          81.7 µs       │ 130.2 µs      │ 83.58 µs      │ 85.03 µs      │ 353     │ 353
+      ├─ StringEqualViewShort      40.87 µs      │ 64.29 µs      │ 41.08 µs      │ 42.97 µs      │ 696     │ 696
+      ╰─ StringLessThanViewScalar  81.66 µs      │ 130.4 µs      │ 82.33 µs      │ 84.11 µs      │ 356     │ 356
+

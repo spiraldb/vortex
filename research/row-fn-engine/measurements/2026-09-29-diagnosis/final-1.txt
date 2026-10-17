@@ -1,0 +1,113 @@
+Timer precision: 41 ns
+arrow_scalar                    fastest       │ slowest       │ median        │ mean          │ samples │ iters
+├─ arrow_native                               │               │               │               │         │
+│  ╰─ 16384                                   │               │               │               │         │
+│     ├─ AsciiEqArray           60.12 µs      │ 213.8 µs      │ 69.49 µs      │ 71.31 µs      │ 1014    │ 1014
+│     ├─ AsciiEqScalar          25.08 µs      │ 141.4 µs      │ 28.49 µs      │ 28.95 µs      │ 3433    │ 3433
+│     ├─ ConcatLong             115 µs        │ 421.4 µs      │ 132.7 µs      │ 134.5 µs      │ 1000    │ 1000
+│     ├─ ConcatLongDense        118.2 µs      │ 240.9 µs      │ 136.9 µs      │ 137.8 µs      │ 1000    │ 1000
+│     ├─ ConcatShort            87.87 µs      │ 242.7 µs      │ 102.3 µs      │ 103.5 µs      │ 1000    │ 1000
+│     ├─ ContainsArray          194.1 µs      │ 422.4 µs      │ 222.3 µs      │ 225.4 µs      │ 1000    │ 1000
+│     ├─ ContainsScalar         80.37 µs      │ 250.3 µs      │ 94.49 µs      │ 95.51 µs      │ 1045    │ 1045
+│     ├─ ContainsScalarDense    94.29 µs      │ 283.9 µs      │ 107.2 µs      │ 108.1 µs      │ 1000    │ 1000
+│     ├─ ContainsUtf8Scalar     76.66 µs      │ 207.6 µs      │ 87.87 µs      │ 88.6 µs       │ 1127    │ 1127
+│     ├─ EndsWithArray          80.87 µs      │ 150.1 µs      │ 92.33 µs      │ 92.53 µs      │ 1079    │ 1079
+│     ├─ EndsWithScalar         15.87 µs      │ 43.74 µs      │ 17.79 µs      │ 18.5 µs       │ 5371    │ 5371
+│     ├─ MultiplyArray          8.999 µs      │ 50.24 µs      │ 10.33 µs      │ 10.44 µs      │ 9391    │ 9391
+│     ├─ MultiplyArrayDense     8.707 µs      │ 87.29 µs      │ 9.832 µs      │ 10.18 µs      │ 9642    │ 9642
+│     ├─ MultiplyScalar         10.41 µs      │ 45.99 µs      │ 11.83 µs      │ 12.01 µs      │ 8202    │ 8202
+│     ├─ StartsWithArray        62.95 µs      │ 192.7 µs      │ 71.49 µs      │ 73.15 µs      │ 1364    │ 1364
+│     ├─ StartsWithScalar       14.87 µs      │ 48.24 µs      │ 16.74 µs      │ 17.28 µs      │ 5743    │ 5743
+│     ├─ StartsWithShortScalar  15.74 µs      │ 161.6 µs      │ 17.66 µs      │ 18.02 µs      │ 5508    │ 5508
+│     ╰─ StartsWithUtf8Scalar   11.33 µs      │ 32.33 µs      │ 12.7 µs       │ 12.83 µs      │ 7709    │ 7709
+├─ arrow_plus_two_validations                 │               │               │               │         │
+│  ╰─ 16384                                   │               │               │               │         │
+│     ├─ ConcatLong             316.8 µs      │ 626.2 µs      │ 348.1 µs      │ 353.7 µs      │ 848     │ 848
+│     ├─ ConcatLongDense        312.5 µs      │ 577.5 µs      │ 367.4 µs      │ 370.8 µs      │ 809     │ 809
+│     ╰─ ConcatShort            174.2 µs      │ 310.2 µs      │ 206.5 µs      │ 206.9 µs      │ 1000    │ 1000
+├─ arrow_rofl                                 │               │               │               │         │
+│  ╰─ 16384                                   │               │               │               │         │
+│     ├─ AsciiEqArray           47.58 µs      │ 103.2 µs      │ 52.24 µs      │ 53.18 µs      │ 1875    │ 1875
+│     ├─ AsciiEqScalar          60.24 µs      │ 92.99 µs      │ 68.12 µs      │ 68.86 µs      │ 1450    │ 1450
+│     ├─ ConcatLong             684.7 µs      │ 1.994 ms      │ 767.9 µs      │ 773.3 µs      │ 388     │ 388
+│     ├─ ConcatLongDense        665.4 µs      │ 870.2 µs      │ 744.5 µs      │ 750.9 µs      │ 400     │ 400
+│     ├─ ConcatShort            448.5 µs      │ 574.9 µs      │ 510 µs        │ 513.4 µs      │ 584     │ 584
+│     ├─ ContainsArray          203.4 µs      │ 263.8 µs      │ 224 µs        │ 223.2 µs      │ 1000    │ 1000
+│     ├─ ContainsScalar         121.5 µs      │ 227.7 µs      │ 136.2 µs      │ 136.3 µs      │ 1000    │ 1000
+│     ├─ ContainsScalarDense    132.7 µs      │ 183.2 µs      │ 150.8 µs      │ 150.9 µs      │ 1000    │ 1000
+│     ├─ ContainsUtf8Scalar     123.4 µs      │ 231.2 µs      │ 140.3 µs      │ 141.1 µs      │ 1000    │ 1000
+│     ├─ EndsWithArray          56.12 µs      │ 162.1 µs      │ 63.62 µs      │ 64.52 µs      │ 1546    │ 1546
+│     ├─ EndsWithScalar         50.16 µs      │ 183.2 µs      │ 59.66 µs      │ 61.49 µs      │ 1623    │ 1623
+│     ├─ MultiplyArray          5.166 µs      │ 67.7 µs       │ 6.166 µs      │ 6.263 µs      │ 15467   │ 15467
+│     ├─ MultiplyArrayDense     4.707 µs      │ 81.2 µs       │ 5.54 µs       │ 5.629 µs      │ 17162   │ 17162
+│     ├─ MultiplyScalar         6.707 µs      │ 19.91 µs      │ 7.166 µs      │ 7.245 µs      │ 13502   │ 13502
+│     ├─ StartsWithArray        51.33 µs      │ 83.87 µs      │ 58.12 µs      │ 58.13 µs      │ 1716    │ 1716
+│     ├─ StartsWithScalar       51.74 µs      │ 87.33 µs      │ 57.97 µs      │ 58.28 µs      │ 1712    │ 1712
+│     ├─ StartsWithShortScalar  49.91 µs      │ 80.2 µs       │ 56.7 µs       │ 59.18 µs      │ 1686    │ 1686
+│     ╰─ StartsWithUtf8Scalar   54.12 µs      │ 86.24 µs      │ 60.95 µs      │ 60.94 µs      │ 1637    │ 1637
+├─ rofl_arrow_bytes                           │               │               │               │         │
+│  ╰─ 16384                                   │               │               │               │         │
+│     ├─ AsciiEqArray           46.54 µs      │ 95.7 µs       │ 52.2 µs       │ 53.54 µs      │ 1863    │ 1863
+│     ├─ AsciiEqScalar          61.74 µs      │ 644.5 µs      │ 68.45 µs      │ 75.5 µs       │ 1321    │ 1321
+│     ├─ ConcatLong             686.9 µs      │ 984.7 µs      │ 778.7 µs      │ 782.7 µs      │ 383     │ 383
+│     ├─ ConcatLongDense        667.9 µs      │ 975.4 µs      │ 758.1 µs      │ 759.9 µs      │ 395     │ 395
+│     ├─ ConcatShort            460.8 µs      │ 896.3 µs      │ 520.2 µs      │ 523.8 µs      │ 573     │ 573
+│     ├─ ContainsArray          201.7 µs      │ 392.8 µs      │ 234.2 µs      │ 236.4 µs      │ 1000    │ 1000
+│     ├─ ContainsScalar         120.6 µs      │ 174.2 µs      │ 136.7 µs      │ 138.2 µs      │ 1000    │ 1000
+│     ├─ ContainsScalarDense    135.6 µs      │ 252.9 µs      │ 154.8 µs      │ 155.7 µs      │ 1000    │ 1000
+│     ├─ ContainsUtf8Scalar     124.5 µs      │ 358.2 µs      │ 146.8 µs      │ 147.2 µs      │ 1000    │ 1000
+│     ├─ EndsWithArray          50.66 µs      │ 87.91 µs      │ 56.99 µs      │ 58.49 µs      │ 1705    │ 1705
+│     ├─ EndsWithScalar         49.95 µs      │ 179.1 µs      │ 57.37 µs      │ 59.57 µs      │ 1675    │ 1675
+│     ├─ MultiplyArray          5.416 µs      │ 50.08 µs      │ 6.249 µs      │ 6.302 µs      │ 15355   │ 15355
+│     ├─ MultiplyArrayDense     4.749 µs      │ 58.16 µs      │ 5.541 µs      │ 5.654 µs      │ 17065   │ 17065
+│     ├─ MultiplyScalar         6.082 µs      │ 43.16 µs      │ 7.166 µs      │ 7.282 µs      │ 13413   │ 13413
+│     ├─ StartsWithArray        51.37 µs      │ 110.7 µs      │ 59.66 µs      │ 59.73 µs      │ 1670    │ 1670
+│     ├─ StartsWithScalar       55.87 µs      │ 164.4 µs      │ 65.91 µs      │ 64.87 µs      │ 1539    │ 1539
+│     ├─ StartsWithShortScalar  51.24 µs      │ 361.2 µs      │ 58.2 µs       │ 61.05 µs      │ 1634    │ 1634
+│     ╰─ StartsWithUtf8Scalar   54.49 µs      │ 113.1 µs      │ 61.87 µs      │ 62.34 µs      │ 1601    │ 1601
+├─ rofl_prepared_pattern                      │               │               │               │         │
+│  ╰─ 16384                                   │               │               │               │         │
+│     ├─ AsciiEqArray           47.29 µs      │ 142.4 µs      │ 53.12 µs      │ 53.94 µs      │ 1849    │ 1849
+│     ├─ AsciiEqScalar          61.08 µs      │ 99.87 µs      │ 67.91 µs      │ 68.29 µs      │ 1461    │ 1461
+│     ├─ ConcatLong             683.1 µs      │ 881.6 µs      │ 762.1 µs      │ 767.1 µs      │ 391     │ 391
+│     ├─ ConcatLongDense        675.7 µs      │ 865 µs        │ 747.9 µs      │ 752.6 µs      │ 399     │ 399
+│     ├─ ConcatShort            478.6 µs      │ 597.7 µs      │ 528.7 µs      │ 531.5 µs      │ 565     │ 565
+│     ├─ ContainsArray          204.9 µs      │ 289.3 µs      │ 226.5 µs      │ 226.8 µs      │ 1000    │ 1000
+│     ├─ ContainsScalar         120.5 µs      │ 158.5 µs      │ 129.9 µs      │ 131.2 µs      │ 1000    │ 1000
+│     ├─ ContainsScalarDense    126.9 µs      │ 177.9 µs      │ 142.9 µs      │ 143.5 µs      │ 1000    │ 1000
+│     ├─ ContainsUtf8Scalar     124.3 µs      │ 178.6 µs      │ 140.7 µs      │ 142 µs        │ 1000    │ 1000
+│     ├─ EndsWithArray          52.12 µs      │ 87.7 µs       │ 58.24 µs      │ 59.2 µs       │ 1685    │ 1685
+│     ├─ EndsWithScalar         49.7 µs       │ 68.79 µs      │ 54.33 µs      │ 54.96 µs      │ 1815    │ 1815
+│     ├─ MultiplyArray          5.291 µs      │ 25.24 µs      │ 6.124 µs      │ 6.191 µs      │ 15669   │ 15669
+│     ├─ MultiplyArrayDense     4.832 µs      │ 26.49 µs      │ 5.499 µs      │ 5.559 µs      │ 17375   │ 17375
+│     ├─ MultiplyScalar         6.165 µs      │ 29.74 µs      │ 7.124 µs      │ 7.194 µs      │ 13577   │ 13577
+│     ├─ StartsWithArray        51.2 µs       │ 82.33 µs      │ 57.31 µs      │ 57.9 µs       │ 1722    │ 1722
+│     ├─ StartsWithScalar       51.58 µs      │ 88.91 µs      │ 64.08 µs      │ 63.01 µs      │ 1584    │ 1584
+│     ├─ StartsWithShortScalar  50.12 µs      │ 85.45 µs      │ 57.12 µs      │ 57.63 µs      │ 1731    │ 1731
+│     ╰─ StartsWithUtf8Scalar   57.04 µs      │ 119.2 µs      │ 64.29 µs      │ 64.69 µs      │ 1543    │ 1543
+├─ rofl_typed_strings                         │               │               │               │         │
+│  ╰─ 16384                                   │               │               │               │         │
+│     ├─ AsciiEqArray           47.29 µs      │ 93.37 µs      │ 52.91 µs      │ 53.78 µs      │ 1854    │ 1854
+│     ├─ AsciiEqScalar          56.87 µs      │ 93.33 µs      │ 63.95 µs      │ 64.78 µs      │ 1540    │ 1540
+│     ├─ ConcatLong             694.4 µs      │ 850.4 µs      │ 769.2 µs      │ 771.5 µs      │ 389     │ 389
+│     ├─ ConcatLongDense        683.2 µs      │ 855.1 µs      │ 745.4 µs      │ 748.3 µs      │ 401     │ 401
+│     ├─ ConcatShort            454.4 µs      │ 609.9 µs      │ 530.9 µs      │ 524.1 µs      │ 573     │ 573
+│     ├─ ContainsArray          202.6 µs      │ 272.9 µs      │ 222.7 µs      │ 222.9 µs      │ 1000    │ 1000
+│     ├─ ContainsScalar         124.4 µs      │ 168.1 µs      │ 130.7 µs      │ 132.8 µs      │ 1000    │ 1000
+│     ├─ ContainsScalarDense    127.7 µs      │ 170.2 µs      │ 142.1 µs      │ 143 µs        │ 1000    │ 1000
+│     ├─ ContainsUtf8Scalar     124.9 µs      │ 180.6 µs      │ 143.8 µs      │ 143.9 µs      │ 1000    │ 1000
+│     ├─ EndsWithArray          49.91 µs      │ 85.08 µs      │ 57.45 µs      │ 57.81 µs      │ 1725    │ 1725
+│     ├─ EndsWithScalar         45.99 µs      │ 76.33 µs      │ 51.83 µs      │ 52.82 µs      │ 1888    │ 1888
+│     ├─ MultiplyArray          5.332 µs      │ 32.7 µs       │ 6.124 µs      │ 6.189 µs      │ 15656   │ 15656
+│     ├─ MultiplyArrayDense     5.166 µs      │ 18.95 µs      │ 5.499 µs      │ 5.569 µs      │ 17324   │ 17324
+│     ├─ MultiplyScalar         6.124 µs      │ 33.08 µs      │ 7.124 µs      │ 7.166 µs      │ 13633   │ 13633
+│     ├─ StartsWithArray        49.24 µs      │ 80.99 µs      │ 55.2 µs       │ 55.67 µs      │ 1791    │ 1791
+│     ├─ StartsWithScalar       47.99 µs      │ 80.33 µs      │ 53.83 µs      │ 54.42 µs      │ 1833    │ 1833
+│     ├─ StartsWithShortScalar  49.08 µs      │ 77.58 µs      │ 50.99 µs      │ 52.13 µs      │ 1913    │ 1913
+│     ╰─ StartsWithUtf8Scalar   58.95 µs      │ 95.7 µs       │ 65.87 µs      │ 66.11 µs      │ 1509    │ 1509
+╰─ rofl_view_header                           │               │               │               │         │
+   ╰─ 16384                                   │               │               │               │         │
+      ├─ StartsWithArray        49.74 µs      │ 81.87 µs      │ 56.49 µs      │ 56.89 µs      │ 1753    │ 1753
+      ├─ StartsWithScalar       43.45 µs      │ 71.62 µs      │ 47.41 µs      │ 48.12 µs      │ 2072    │ 2072
+      ╰─ StartsWithShortScalar  29.99 µs      │ 59.62 µs      │ 36.08 µs      │ 35.83 µs      │ 2780    │ 2780
+

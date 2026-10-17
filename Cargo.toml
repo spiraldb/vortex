@@ -1,5 +1,11 @@
 [workspace]
 members = [
+    # Experimental independent row-function framework and adapters
+    "rowfn-kernels",
+    "rowfn",
+    "rowfn-arrow",
+    "rowfn-functions",
+    "rowfn-examples",
     # Core crates in dependency order
     "vortex-array-macros",
     "vortex-error",
@@ -105,6 +111,7 @@ arcref = "0.2.0"
 arrow-arith = "59.2"
 arrow-array = "59.2"
 arrow-buffer = "59.2"
+arrow-ord = "59.2"
 arrow-cast = "59.2"
 arrow-data = "59.2"
 arrow-ipc = "59.2"
@@ -241,6 +248,10 @@ reqwest = { version = "0.13.0", features = [
     "system-proxy",
 ], default-features = false }
 roaring = "0.11.0"
+rowfn = { version = "0.1.0", path = "rowfn" }
+rowfn-arrow = { version = "0.1.0", path = "rowfn-arrow" }
+rowfn-kernels = { version = "0.1.0", path = "rowfn-kernels" }
+rowfn-functions = { version = "0.1.0", path = "rowfn-functions" }
 rstest = "0.26.1"
 rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"

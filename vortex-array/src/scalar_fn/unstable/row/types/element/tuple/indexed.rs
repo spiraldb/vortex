@@ -74,7 +74,8 @@ impl<'a, T: InputElement> ArgColumnSource<'a, T> {
     }
 }
 
-impl<'a, T: InputElement> IndexedSource for ArgColumnSource<'a, T> {
+// SAFETY: InputElement preserves each validated view, and constants address a fixed row domain.
+unsafe impl<'a, T: InputElement> IndexedSource for ArgColumnSource<'a, T> {
     type Item = T::Elem<'a>;
 
     fn len(&self) -> usize {
@@ -102,7 +103,8 @@ struct ArgTupleSource<Sources> {
     row_count: usize,
 }
 
-impl IndexedSource for ArgTupleSource<()> {
+// SAFETY: the private row count is stable, and unit reads do not access storage.
+unsafe impl IndexedSource for ArgTupleSource<()> {
     type Item = ();
 
     fn len(&self) -> usize {
@@ -123,7 +125,8 @@ impl<'a, T: InputElement> ElementSource<'a, T> {
     }
 }
 
-impl<'a, T: InputElement> IndexedSource for ElementSource<'a, T> {
+// SAFETY: InputElement requires this view's length and readable elements to remain stable.
+unsafe impl<'a, T: InputElement> IndexedSource for ElementSource<'a, T> {
     type Item = T::Elem<'a>;
 
     fn len(&self) -> usize {
@@ -140,7 +143,8 @@ impl<'a, T: InputElement> IndexedSource for ElementSource<'a, T> {
 /// An indexed element source yielding the one-tuples expected by a unary row closure.
 pub struct UnaryTupleSource<Source>(Source);
 
-impl<Source: IndexedSource> IndexedSource for UnaryTupleSource<Source> {
+// SAFETY: delegation preserves the wrapped source's stable length and readable index domain.
+unsafe impl<Source: IndexedSource> IndexedSource for UnaryTupleSource<Source> {
     type Item = (Source::Item,);
 
     fn len(&self) -> usize {
@@ -159,7 +163,8 @@ pub struct ElementTupleSource<'a, Args: ElementTuple> {
     row_count: usize,
 }
 
-impl<'a, Args: ElementTuple> IndexedSource for ElementTupleSource<'a, Args> {
+// SAFETY: unsafe indexed_source construction validates every retained view against row_count.
+unsafe impl<'a, Args: ElementTuple> IndexedSource for ElementTupleSource<'a, Args> {
     type Item = Args::Elems<'a>;
 
     fn len(&self) -> usize {
@@ -238,7 +243,8 @@ impl<A: InputElement, B: InputElement> private::DecodedSource for (A, B) {
 
 macro_rules! arg_tuple_source {
     ($($source:ident: $idx:tt),+) => {
-        impl<$($source: IndexedSource),+> IndexedSource
+        // SAFETY: construction checks every stable source against this tuple's row count.
+        unsafe impl<$($source: IndexedSource),+> IndexedSource
             for ArgTupleSource<($($source,)+)>
         {
             type Item = ($($source::Item,)+);

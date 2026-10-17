@@ -1,0 +1,74 @@
+[
+  {
+    "command": [
+      "cargo",
+      "nextest",
+      "run",
+      "--locked",
+      "-p",
+      "rofl",
+      "-p",
+      "rofl-kernels",
+      "-p",
+      "rofl-arrow",
+      "-p",
+      "rofl-examples"
+    ],
+    "exit_code": 0,
+    "seconds": 5.059785842895508,
+    "log": "tests-debug-final.log"
+  },
+  {
+    "command": [
+      "cargo",
+      "nextest",
+      "run",
+      "--locked",
+      "--cargo-profile",
+      "bench",
+      "-p",
+      "rofl",
+      "-p",
+      "rofl-kernels",
+      "-p",
+      "rofl-arrow",
+      "-p",
+      "rofl-examples"
+    ],
+    "exit_code": 0,
+    "seconds": 9.437926292419434,
+    "log": "tests-bench-final.log"
+  },
+  {
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--doc",
+      "-p",
+      "rofl",
+      "-p",
+      "rofl-arrow"
+    ],
+    "exit_code": 0,
+    "seconds": 8.015196084976196,
+    "log": "tests-doc-final.log"
+  },
+  {
+    "command": [
+      "cargo",
+      "nextest",
+      "run",
+      "--locked",
+      "-p",
+      "vortex-array",
+      "--features",
+      "unstable_row_fns",
+      "-E",
+      "test(scalar_fn::unstable::rofl) | test(scalar_fn::unstable::row::types::sink::utf8)"
+    ],
+    "exit_code": 0,
+    "seconds": 39.71756315231323,
+    "log": "tests-vortex-final.log"
+  }
+]

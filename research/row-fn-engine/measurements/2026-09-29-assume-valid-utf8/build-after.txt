@@ -1,0 +1,4 @@
+   Compiling vortex-array v0.1.0 (/home/ec2-user/source/vortex-array)
+   Compiling rofl-examples v0.1.0 (/home/ec2-user/source/rofl-examples)
+    Finished `bench` profile [optimized + debuginfo] target(s) in 1m 10s
+  Executable benches/host_comparison.rs (target/release/deps/host_comparison-1f123536a7c646d8)

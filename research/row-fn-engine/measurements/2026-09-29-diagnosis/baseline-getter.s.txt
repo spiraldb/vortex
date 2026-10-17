@@ -1,0 +1,159 @@
+FILE arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.06.rcgu.s:8932
+	add	x0, x24, #8
+Ltmp1230:
+	.loc	19 108 53 is_stmt 0
+	mov	x1, x22
+Ltmp1231:
+	.loc	19 0 0
+	bl	__RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked
+	str	x0, [sp]
+	str	x1, [sp, #40]
+Ltmp1232:
+	.loc	19 106 15 is_stmt 1
+	ldr	x8, [x25, #16]!
+	.loc	19 106 9 is_stmt 0
+	cbnz	x8, LBB22_19
+
+FILE arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.06.rcgu.s:8949
+Ltmp1233:
+	.loc	19 108 53 is_stmt 0
+	mov	x1, x22
+Ltmp1234:
+LBB22_22:
+	.loc	19 0 0
+	bl	__RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked
+	mov	x2, x1
+	mov	x24, x27
+	mov	x25, x23
+	ldr	x8, [sp, #40]
+Ltmp1235:
+	.loc	44 2660 9 is_stmt 1
+	subs	x8, x8, x1
+
+FILE arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.14.rcgu.s:15980
+	add	x0, x23, #8
+Ltmp2094:
+	.loc	20 108 53 is_stmt 0
+	mov	x1, x22
+Ltmp2095:
+	.loc	20 0 0
+	bl	__RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked
+	mov	x20, x0
+	mov	x21, x1
+Ltmp2096:
+	.loc	20 106 15 is_stmt 1
+	mov	x0, x23
+	ldr	x8, [x0, #16]!
+	.loc	20 106 9 is_stmt 0
+
+FILE arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.14.rcgu.s:15998
+Ltmp2097:
+	.loc	20 108 53 is_stmt 0
+	mov	x1, x22
+Ltmp2098:
+LBB79_5:
+	.loc	20 0 0
+	bl	__RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked
+Ltmp2099:
+	.loc	20 222 17 is_stmt 1
+	stp	x20, x21, [x19]
+	stp	x0, x1, [x19, #16]
+	.cfi_def_cfa wsp, 64
+	.loc	20 223 14 epilogue_begin
+	ldp	x29, x30, [sp, #48]
+
+FILE arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.08.rcgu.s:8540
+	add	x0, x22, #8
+Ltmp1196:
+	.loc	19 108 53 is_stmt 0
+	mov	x1, x25
+Ltmp1197:
+	.loc	19 0 0
+	bl	__RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked
+	str	x0, [sp, #32]
+	str	x1, [sp, #48]
+Ltmp1198:
+	.loc	19 106 15 is_stmt 1
+	ldr	x8, [x28, #16]!
+	.loc	19 106 9 is_stmt 0
+	cbnz	x8, LBB18_24
+
+FILE arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.08.rcgu.s:8557
+Ltmp1199:
+	.loc	19 108 53 is_stmt 0
+	mov	x1, x25
+Ltmp1200:
+LBB18_27:
+	.loc	19 0 0
+	bl	__RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked
+	mov	x2, x1
+	mov	x28, x21
+Lloh92:
+	adrp	x22, l_alloc_1c63d24b05a9c3b13168fa9e48442273@PAGE
+Lloh93:
+	add	x22, x22, l_alloc_1c63d24b05a9c3b13168fa9e48442273@PAGEOFF
+	ldr	x8, [sp, #48]
+
+FILE arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.04.rcgu.s:16997
+LBB16_57:
+	.loc	13 108 53
+	add	x27, x20, x23
+Ltmp705:
+	add	x0, x22, #8
+	add	x1, x20, x23
+	bl	__RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked
+Ltmp4118:
+Ltmp706:
+	.loc	13 0 0 is_stmt 0
+	mov	x25, x0
+	mov	x26, x1
+Ltmp4119:
+	cmp	x21, #0
+
+FILE arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.04.rcgu.s:17008
+	mov	x26, x1
+Ltmp4119:
+	cmp	x21, #0
+	csel	x1, x27, xzr, eq
+Ltmp707:
+	mov	x0, x24
+	bl	__RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked
+Ltmp4120:
+Ltmp708:
+	.loc	1 75 0 is_stmt 1
+	mov	x2, x1
+Ltmp4121:
+	.loc	5 2660 9
+	cmp	x26, x1
+
+FILE arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.01.rcgu.s:51175
+	cmp	x8, #0
+	csel	x8, x11, xzr, eq
+	mov	x22, x9
+	csel	x1, x9, xzr, eq
+Ltmp3361:
+	orr	x0, x10, x8
+	bl	__RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked
+Ltmp10651:
+Ltmp3362:
+	mov	x26, x0
+	mov	x25, x1
+Ltmp10652:
+	.loc	11 106 15
+	ldr	x8, [sp, #656]
+
+FILE arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.01.rcgu.s:51189
+	.loc	11 0 0
+	cmp	x8, #0
+	ldp	x9, x8, [sp, #32]
+	csel	x0, x9, x8, eq
+	csel	x1, x22, xzr, eq
+Ltmp3363:
+	bl	__RNvXNtCs7Kazvvc7DnG_10rofl_arrow6stringNtB2_10StringRowsINtNtCshZi9mpuUhIi_4rofl5input7RowViewNtBV_4Utf8E13get_unchecked
+Ltmp10653:
+Ltmp3364:
+	mov	x24, x0
+	mov	x23, x1
+	str	x22, [sp, #24]
+Ltmp10654:
+	.file	60 "/kache/workspace" "rofl-arrow/src/string.rs"

@@ -1,0 +1,109 @@
+diff --git i/vortex-array/src/scalar_fn/unstable/row/types/element/utf8.rs w/vortex-array/src/scalar_fn/unstable/row/types/element/utf8.rs
+index 1cc0c4e25c..bf8b4e83d5 100644
+--- i/vortex-array/src/scalar_fn/unstable/row/types/element/utf8.rs
++++ w/vortex-array/src/scalar_fn/unstable/row/types/element/utf8.rs
+@@ -22,8 +22,6 @@ use crate::ExecutionCtx;
+ use crate::arrays::Constant;
+ use crate::arrays::VarBinViewArray;
+ use crate::arrays::varbinview::BinaryView;
+-use crate::arrays::varbinview::VarBinViewArrayExt as _;
+-use crate::arrays::varbinview::VarBinViewData;
+ use crate::buffer::BufferHandle;
+ use crate::dtype::DType;
+ use crate::scalar::ScalarValue;
+@@ -115,8 +113,8 @@ impl<'a> Utf8View<'a> {
+             &self.buffers[view.buffer_index as usize][view.as_range()]
+         };
+ 
+-        // SAFETY: the `VarBinViewArray` Utf8 invariant requires every valid view to contain UTF-8.
+-        // `decode_utf8` replaces each null row's view before this value can be constructed.
++        // SAFETY: this experimental branch assumes every decoded view addresses valid UTF-8,
++        // including null slots. `decode_utf8` does not enforce this assumption.
+         unsafe { std::str::from_utf8_unchecked(bytes) }
+     }
+ }
+@@ -135,11 +133,11 @@ impl AsRef<str> for Utf8View<'_> {
+     }
+ }
+ 
+-/// Decodes `array` into views and data buffers whose every view addresses valid UTF-8.
++/// Decodes `array` without validating its string views.
+ ///
+-/// Validation also replaces each null view with an empty one. Canonical arrays built from
+-/// buffer handles do not carry host-content validation evidence, so this step remains necessary
+-/// before unchecked string access, even when an earlier decode validated the same input.
++/// This benchmark experiment assumes every view has valid bounds, a matching prefix, and valid
++/// UTF-8, including null slots. Safe Vortex construction paths do not enforce this assumption.
++/// Invalid input can therefore cause undefined behavior on this branch.
+ fn decode_utf8(array: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<Utf8Values> {
+     let array = array.execute::<VarBinViewArray>(ctx)?;
+     let views = Buffer::<BinaryView>::from_byte_buffer(array.views_handle().try_to_host_sync()?);
+@@ -151,9 +149,6 @@ fn decode_utf8(array: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<Utf8Valu
+             .collect::<VortexResult<Vec<_>>>()?,
+     );
+ 
+-    let validity = array.varbinview_validity();
+-    let views = VarBinViewData::validate_and_fix(views, &buffers, array.dtype(), &validity, ctx)?;
+-
+     Ok(Utf8Values { views, buffers })
+ }
+ 
+@@ -202,9 +197,9 @@ unsafe fn value_at_unchecked<'a>(view: &Utf8ValuesView<'a>, index: usize) -> Utf
+     }
+ }
+ 
+-// SAFETY: `decode_utf8` validates every valid view and replaces null rows with empty views. The
+-// borrowed view reports that exact stable length. Therefore each view addresses valid UTF-8, and
+-// null rows are safe for dense callbacks whose outputs the executor masks with the input validity.
++// SAFETY: this experimental branch assumes readable UTF-8 at every decoded slot, including nulls.
++// The borrowed view reports the stable view-buffer length. The UTF-8 and null-payload assumptions
++// are not enforced by the safe input API; this is only a benchmark of trusted inputs.
+ unsafe impl InputElement for Utf8Column {
+     type Column = Utf8Values;
+     type Constant = Utf8Values;
+--- a/vortex-array/src/scalar_fn/unstable/rofl/input.rs
++++ b/vortex-array/src/scalar_fn/unstable/rofl/input.rs
+@@ -53,13 +53,15 @@
+     fn view(decoded: &BitBuffer) -> BoolView<'_> { BoolView(decoded) }
+ }
+ 
+-/// A validated UTF-8 view borrowed from the existing decoder's retained buffers.
++/// A UTF-8 view borrowed from the decoder, which assumes valid input on this experimental branch.
+ pub struct StringView<'a>(<Utf8Column as InputElement>::View<'a>);
+-// SAFETY: Utf8Column validates UTF-8 and sanitizes null payloads before lending this exact view.
++// SAFETY: this branch assumes Utf8Column receives valid UTF-8 views even at null slots. It retains
++// the matching buffers, but does not enforce the validity assumption at the safe input boundary.
+ unsafe impl<'a> RowView<'a, Utf8> for StringView<'a> {
+     fn len(&self) -> usize { self.0.len() }
+     unsafe fn get_unchecked(&self, index: usize) -> &'a str {
+-        // SAFETY: the caller supplies an index within the validated retained view.
++        // SAFETY: the caller supplies an index within the retained view. This branch assumes the
++        // view's contents are valid.
+         unsafe { Utf8Column::get_from_view_unchecked(&self.0, index) }.as_str()
+     }
+ }
+@@ -77,7 +79,7 @@
+     fn view(decoded: &Self::Decoded) -> StringView<'_> { StringView(Utf8Column::view(decoded)) }
+ }
+ 
+-/// Vortex text rows retain the validated string view until bytes are requested.
++/// Vortex text rows retain the assumed-valid string view until bytes are requested.
+ pub struct VortexText;
+ 
+ impl RowKind for VortexText {
+@@ -96,11 +98,13 @@
+     }
+ }
+ 
+-// SAFETY: the existing decoder validates UTF-8, sanitizes nulls, and retains both headers and data.
++// SAFETY: the decoder retains both headers and data. This branch assumes readable UTF-8 at every
++// slot, including nulls, without enforcing that assumption at the safe input boundary.
+ unsafe impl<'a> RowView<'a, VortexText> for StringView<'a> {
+     fn len(&self) -> usize { self.0.len() }
+     unsafe fn get_unchecked(&self, index: usize) -> <VortexText as RowKind>::Value<'a> {
+-        // SAFETY: the caller supplies an index within the retained validated view.
++        // SAFETY: the caller supplies an index within the retained view. This branch assumes the
++        // view's contents are valid.
+         unsafe { Utf8Column::get_from_view_unchecked(&self.0, index) }
+     }
+ }

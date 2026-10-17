@@ -7,3 +7,5 @@
 //! the corresponding `unstable_*` Cargo feature before importing them.
 
 pub mod row;
+
+pub mod rowfn;

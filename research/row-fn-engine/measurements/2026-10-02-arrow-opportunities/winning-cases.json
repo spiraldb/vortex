@@ -1,0 +1,542 @@
+[
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_workloads",
+    "case": "CheckedAdd",
+    "label": "Checked add, array + scalar",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "8.416",
+    "rofl_us": "3.916",
+    "ratio": "0.46530418250950567",
+    "confidence": "Medium",
+    "reason": "arithmetic-and-numeric-comparisons",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 2.1491317671092953,
+    "paired_ratios": [
+      0.46518536121673004,
+      0.46763792691664674,
+      0.47029467680608367
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_workloads",
+    "case": "CheckedAddNullable",
+    "label": "Checked add, nullable + scalar",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "11.24",
+    "rofl_us": "5.291",
+    "ratio": "0.47072953736654805",
+    "confidence": "Medium",
+    "reason": "arithmetic-and-numeric-comparisons",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 2.1243621243621242,
+    "paired_ratios": [
+      0.47072953736654805,
+      0.4689533861037819,
+      0.4741039426523298
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_families",
+    "case": "CheckedSub",
+    "label": "Checked subtract",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "9.833",
+    "rofl_us": "4.291",
+    "ratio": "0.4363876741584461",
+    "confidence": "Medium",
+    "reason": "arithmetic-and-numeric-comparisons",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 2.2915404334653924,
+    "paired_ratios": [
+      0.4327349737797499,
+      0.4364320585842148,
+      0.4363876741584461
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_families",
+    "case": "CheckedSubNullable",
+    "label": "Checked subtract, nullable",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "10.04",
+    "rofl_us": "4.332",
+    "ratio": "0.4314741035856574",
+    "confidence": "Medium",
+    "reason": "arithmetic-and-numeric-comparisons",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 2.3176361957525393,
+    "paired_ratios": [
+      0.42976190476190473,
+      0.42320717131474106,
+      0.4314741035856574
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_families",
+    "case": "Remainder",
+    "label": "Integer remainder",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "23.87",
+    "rofl_us": "9.041",
+    "ratio": "0.37875994972769167",
+    "confidence": "Medium",
+    "reason": "arithmetic-and-numeric-comparisons",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 2.640194668731335,
+    "paired_ratios": [
+      0.37608153078203,
+      0.38341815097540294,
+      0.38047758692919986
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_families",
+    "case": "CheckedNegate",
+    "label": "Checked negate",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "18.99",
+    "rofl_us": "3.229",
+    "ratio": "0.17003686150605585",
+    "confidence": "Medium",
+    "reason": "arithmetic-and-numeric-comparisons",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 5.881077733044285,
+    "paired_ratios": [
+      0.1689310163243813,
+      0.1877325581395349,
+      0.148559670781893
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_scalar",
+    "case": "MultiplyArray",
+    "label": "Checked multiply, arrays",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "11.08",
+    "rofl_us": "6.124",
+    "ratio": "0.5527075812274368",
+    "confidence": "Medium",
+    "reason": "arithmetic-and-numeric-comparisons",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 1.8092749836708035,
+    "paired_ratios": [
+      0.5527075812274368,
+      0.5527075812274368,
+      0.5387953941541187
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_scalar",
+    "case": "MultiplyArrayDense",
+    "label": "Checked multiply, dense arrays",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "10.04",
+    "rofl_us": "5.541",
+    "ratio": "0.5518924302788846",
+    "confidence": "Medium",
+    "reason": "arithmetic-and-numeric-comparisons",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 1.811947301931059,
+    "paired_ratios": [
+      0.5587938684953611,
+      0.5477091633466136,
+      0.5432352941176471
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_scalar",
+    "case": "MultiplyScalar",
+    "label": "Checked multiply, scalar",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "12.04",
+    "rofl_us": "7.083",
+    "ratio": "0.5882890365448505",
+    "confidence": "Medium",
+    "reason": "arithmetic-and-numeric-comparisons",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 1.6998446985740503,
+    "paired_ratios": [
+      0.5967144060657119,
+      0.5882890365448505,
+      0.5882890365448505
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_families",
+    "case": "FloatAdd",
+    "label": "Float add",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "3.458",
+    "rofl_us": "3.416",
+    "ratio": "0.9878542510121456",
+    "confidence": "Medium",
+    "reason": "arithmetic-and-numeric-comparisons",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 1.0122950819672132,
+    "paired_ratios": [
+      0.9704545454545455,
+      1.2165991902834008,
+      1.1172185430463577
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_families",
+    "case": "BitwiseXor",
+    "label": "Bitwise XOR",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "3.458",
+    "rofl_us": "3.415",
+    "ratio": "0.9875650665124349",
+    "confidence": "Medium",
+    "reason": "arithmetic-and-numeric-comparisons",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 1.0125915080527086,
+    "paired_ratios": [
+      0.952272077736496,
+      1.2047426257952574,
+      0.9935990689554844
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_families",
+    "case": "BitLengthLargeUtf8",
+    "label": "Bit length, LargeUtf8",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "4.749",
+    "rofl_us": "3.541",
+    "ratio": "0.7456306590861235",
+    "confidence": "Low",
+    "reason": "string-lengths-and-comparisons",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 1.3411465687658852,
+    "paired_ratios": [
+      0.739094134836151,
+      0.7412086755106339,
+      0.7544746262371026
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_scalar",
+    "case": "StartsWithShortScalar",
+    "label": "Starts with, three-byte scalar, Utf8View",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "18.08",
+    "rofl_us": "17.2",
+    "ratio": "0.9513274336283186",
+    "confidence": "Medium",
+    "reason": "literal-predicates-like-and-regex",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 1.0511627906976744,
+    "paired_ratios": [
+      0.9513274336283186,
+      0.9950221238938053,
+      0.9556926528323052
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_scalar",
+    "case": "StartsWithArray",
+    "label": "Starts with, array patterns, Utf8View",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "74.49",
+    "rofl_us": "22.41",
+    "ratio": "0.30084575110753126",
+    "confidence": "Medium",
+    "reason": "literal-predicates-like-and-regex",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 3.3239625167336007,
+    "paired_ratios": [
+      0.3017463110870448,
+      0.29816391697711553,
+      0.30755806148476306
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_scalar",
+    "case": "EndsWithArray",
+    "label": "Ends with, array patterns, Utf8View",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "93.7",
+    "rofl_us": "22.79",
+    "ratio": "0.24322305229455707",
+    "confidence": "Medium",
+    "reason": "literal-predicates-like-and-regex",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 4.111452391399737,
+    "paired_ratios": [
+      0.24508745411358235,
+      0.2543223052294557,
+      0.24065469904963038
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_scalar",
+    "case": "ContainsArray",
+    "label": "Contains, array patterns, Utf8View",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "224.7",
+    "rofl_us": "193.9",
+    "ratio": "0.8629283489096574",
+    "confidence": "Medium",
+    "reason": "literal-predicates-like-and-regex",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 1.15884476534296,
+    "paired_ratios": [
+      0.8856238698010851,
+      0.8629283489096574,
+      0.8251599147121536
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_scalar",
+    "case": "AsciiEqArray",
+    "label": "ASCII case equality, arrays",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "68.37",
+    "rofl_us": "14.29",
+    "ratio": "0.20900979961971622",
+    "confidence": "Medium",
+    "reason": "literal-predicates-like-and-regex",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 4.78446466060182,
+    "paired_ratios": [
+      0.21017796734813943,
+      0.20959485154307445,
+      0.19565217391304346
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_families",
+    "case": "LikeAlternatingArray",
+    "label": "LIKE, alternating array patterns \u2691",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "102100.0",
+    "rofl_us": "454.9",
+    "ratio": "0.004455435847208619",
+    "confidence": "Low",
+    "reason": "literal-predicates-like-and-regex",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 224.44493295229722,
+    "paired_ratios": [
+      0.004428011753183154,
+      0.004515810276679842,
+      0.00444672531769306
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_families",
+    "case": "NotILikeScalar",
+    "label": "NOT ILIKE, scalar",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "187.9",
+    "rofl_us": "156.8",
+    "ratio": "0.83448642895157",
+    "confidence": "Low",
+    "reason": "literal-predicates-like-and-regex",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 1.1983418367346939,
+    "paired_ratios": [
+      0.8896396396396397,
+      0.83448642895157,
+      0.8098701298701299
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_families",
+    "case": "RegexpArray",
+    "label": "Regex, repeated array pattern",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "700.3",
+    "rofl_us": "582.7",
+    "ratio": "0.8320719691560761",
+    "confidence": "Medium",
+    "reason": "literal-predicates-like-and-regex",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 1.2018191178994335,
+    "paired_ratios": [
+      0.8189347422533201,
+      0.8399541087050051,
+      0.82512036250354
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_families",
+    "case": "RegexpAlternatingArray",
+    "label": "Regex, alternating array patterns",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "731.6",
+    "rofl_us": "637.0",
+    "ratio": "0.870694368507381",
+    "confidence": "Medium",
+    "reason": "literal-predicates-like-and-regex",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 1.14850863422292,
+    "paired_ratios": [
+      0.839673185105813,
+      0.870694368507381,
+      0.8761001100110011
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_families",
+    "case": "SubstringUtf8",
+    "label": "Substring by byte, Utf8 \u2021",
+    "baseline_kind": "public Arrow kernel",
+    "baseline_us": "100.4",
+    "rofl_us": "96.54",
+    "ratio": "0.9615537848605578",
+    "confidence": "Low",
+    "reason": "string-output-and-lists",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 1.0399834265589394,
+    "paired_ratios": [
+      0.9570009930486594,
+      0.9615537848605578,
+      0.9650049850448655
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_workloads",
+    "case": "TrimViewShort",
+    "label": "Trim, short Utf8View \u2020",
+    "baseline_kind": "handwritten or composed Arrow reference",
+    "baseline_us": "189.4",
+    "rofl_us": "185.3",
+    "ratio": "0.9783526927138332",
+    "confidence": "Medium",
+    "reason": "string-output-and-lists",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 1.0221262817053427,
+    "paired_ratios": [
+      0.9283208020050124,
+      1.0102591792656588,
+      0.9783526927138332
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_workloads",
+    "case": "Timestamp",
+    "label": "Checked timestamp tick adjustment \u2020",
+    "baseline_kind": "handwritten or composed Arrow reference",
+    "baseline_us": "10.54",
+    "rofl_us": "5.416",
+    "ratio": "0.5138519924098672",
+    "confidence": "Medium",
+    "reason": "deferred-boolean-execution-and-degenerate-batches",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 1.9460856720827175,
+    "paired_ratios": [
+      0.524207492795389,
+      0.5138519924098672,
+      0.5099811676082864
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_workloads",
+    "case": "DictionaryInteger",
+    "label": "Dictionary integer add \u2020",
+    "baseline_kind": "handwritten or composed Arrow reference",
+    "baseline_us": "45.95",
+    "rofl_us": "36.74",
+    "ratio": "0.7995647442872688",
+    "confidence": "Low",
+    "reason": "deferred-boolean-execution-and-degenerate-batches",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 1.2506804572672836,
+    "paired_ratios": [
+      0.7986942328618063,
+      0.7841650873868183,
+      0.800959232613909
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "arrow_workloads",
+    "case": "DictionaryString",
+    "label": "Dictionary string trim \u2020",
+    "baseline_kind": "handwritten or composed Arrow reference",
+    "baseline_us": "286.2",
+    "rofl_us": "284.9",
+    "ratio": "0.9954577218728162",
+    "confidence": "Low",
+    "reason": "deferred-boolean-execution-and-degenerate-batches",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 1.0045630045630045,
+    "paired_ratios": [
+      0.9824253075571178,
+      0.9882067291016301,
+      1.0094339622641508
+    ]
+  },
+  {
+    "host": "Arrow",
+    "target": "ARM",
+    "suite": "boundaries",
+    "case": "nullable_bool/false",
+    "label": "Nullable checked predicate, dense accepted \u2020",
+    "baseline_kind": "handwritten valid-only Arrow loop",
+    "baseline_us": "20.91",
+    "rofl_us": "5.499",
+    "ratio": "0.26298421807747485",
+    "confidence": "Medium",
+    "reason": "deferred-boolean-execution-and-degenerate-batches",
+    "dataset": "2026-09-30-compute-options",
+    "speedup": 3.8025095471903985,
+    "paired_ratios": [
+      0.2610234337637494,
+      0.25636363636363635,
+      0.26298421807747485
+    ]
+  }
+]

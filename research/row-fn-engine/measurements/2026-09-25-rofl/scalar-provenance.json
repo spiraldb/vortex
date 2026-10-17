@@ -1,0 +1,15 @@
+{
+  "base_commit": "24a96cece436409dc4f60f94c6b846d6af017804",
+  "source_overlay": "scalar-source.tar.gz overlays source.tar.gz",
+  "sha256": {
+    "rofl-examples/Cargo.toml": "9b9d8684e7e091b1179512a4592de613f0db4478a956b183a5cbf3e9425e6801",
+    "rofl-examples/src/lib.rs": "f5b5becde6d1274812295116a969a1302831ca77ac2a137900c5a0cee0cd0b61",
+    "rofl-examples/src/functions.rs": "daa0ddc3eb4a8061a19c6c27e6273a46362067fd7db5cb6597cb4c63632ac94f",
+    "rofl-examples/src/text.rs": "c29a7bb00f88fda9bf9c3ad27242b5b5d4d808e761dce0fc90c9434a477cfb28",
+    "rofl-examples/benches/arrow_scalar.rs": "8981d7c2cccaea8cc033e4a786393c231b9615f163c0ffb1c14c2d02894dae4b",
+    "rofl-examples/tests/scalar_kernels.rs": "8ed80b9aa1a48d600f091af7ae6024c02d5587c1bfcd06a9ee79bfabdf408c8a",
+    "Cargo.lock": "c260f109b74a4f92801c1a9c078579c67897c05ebf0e4d63f4214a5a051f7975",
+    "target/release/deps/arrow_scalar-604cd22b3782d6c3": "9dd0145471bb7cc3b09503aeec55162914b51c1904e376070cd9ee38d2fa1cf3"
+  },
+  "archive_sha256": "4fe479264118a3046c1f120eafcc397d5ebad70e09f2f16994f00acac16034aa"
+}

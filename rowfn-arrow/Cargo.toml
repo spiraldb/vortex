@@ -1,0 +1,26 @@
+[package]
+name = "rowfn-arrow"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+categories.workspace = true
+keywords = ["arrow", "columnar", "kernels", "experimental"]
+readme = "README.md"
+include = ["Cargo.toml", "README.md", "src/**", "tests/**"]
+license.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Experimental Arrow bindings for rowfn"
+
+[dependencies]
+arrow-array.workspace = true
+arrow-buffer.workspace = true
+arrow-data.workspace = true
+arrow-schema.workspace = true
+arrow-select.workspace = true
+rowfn.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,4 @@
+   Compiling vortex-array v0.1.0 (/Users/connor/spiral/vortex-data/vortex4/vortex-array)
+   Compiling rofl-examples v0.1.0 (/Users/connor/spiral/vortex-data/vortex4/rofl-examples)
+    Finished `bench` profile [optimized + debuginfo] target(s) in 42.58s
+  Executable benches/host_comparison.rs (target/release/deps/host_comparison-b0b97826503bbef6)

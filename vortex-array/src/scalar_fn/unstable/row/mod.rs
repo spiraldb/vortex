@@ -55,3 +55,8 @@ pub use visitor::RowVisitor;
 mod vtable;
 pub use vtable::execute_rows;
 pub use vtable::row_fn_return_dtype;
+
+/// Reuse encoding-aware constant classification in the experimental adapter.
+pub(crate) fn constant_input(array: &crate::ArrayRef) -> Option<crate::ArrayRef> {
+    types::batch_const(array)
+}

@@ -1,0 +1,23 @@
+   Compiling rofl-examples v0.1.0 (/Users/connor/spiral/vortex-data/vortex4/rofl-examples)
+    Finished `bench` profile [optimized + debuginfo] target(s) in 10.10s
+     Running benches/arrow_families.rs (target/release/deps/arrow_families-e34007219fb0c2ce)
+arrow_families
+├─ arrow_native
+│  ├─ 0
+│  │  ╰─ LikeLiteralScalarDense
+│  ├─ 64
+│  │  ╰─ LikeLiteralScalarDense
+│  ├─ 1024
+│  │  ╰─ LikeLiteralScalarDense
+│  ╰─ 16384
+│     ╰─ LikeLiteralScalarDense
+╰─ arrow_rofl
+   ├─ 0
+   │  ╰─ LikeLiteralScalarDense
+   ├─ 64
+   │  ╰─ LikeLiteralScalarDense
+   ├─ 1024
+   │  ╰─ LikeLiteralScalarDense
+   ╰─ 16384
+      ╰─ LikeLiteralScalarDense
+

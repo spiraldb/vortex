@@ -1,0 +1,418 @@
+   Compiling rofl v0.1.0 (/Users/connor/spiral/vortex-data/vortex4/rofl)
+   Compiling vortex-array v0.1.0 (/Users/connor/spiral/vortex-data/vortex4/vortex-array)
+   Compiling rofl-arrow v0.1.0 (/Users/connor/spiral/vortex-data/vortex4/rofl-arrow)
+   Compiling rofl-examples v0.1.0 (/Users/connor/spiral/vortex-data/vortex4/rofl-examples)
+    Finished `bench` profile [optimized + debuginfo] target(s) in 46.53s
+     Running benches/arrow_families.rs (target/release/deps/arrow_families-e34007219fb0c2ce)
+arrow_families
+├─ arrow_native
+│  ├─ 0
+│  │  ├─ BitLengthLargeUtf8
+│  │  ├─ BitLengthUtf8
+│  │  ├─ BitLengthView
+│  │  ├─ BitwiseAnd
+│  │  ├─ BitwiseAndNot
+│  │  ├─ BitwiseNot
+│  │  ├─ BitwiseOr
+│  │  ├─ BitwiseXor
+│  │  ├─ ByteLengthLargeUtf8
+│  │  ├─ ByteLengthUtf8
+│  │  ├─ ByteLengthView
+│  │  ├─ CheckedNegate
+│  │  ├─ CheckedSub
+│  │  ├─ CheckedSubNullable
+│  │  ├─ Equal
+│  │  ├─ FloatAdd
+│  │  ├─ FloatDivide
+│  │  ├─ FloatEqual
+│  │  ├─ FloatGreaterThan
+│  │  ├─ FloatGreaterThanOrEqual
+│  │  ├─ FloatLessThan
+│  │  ├─ FloatLessThanOrEqual
+│  │  ├─ FloatMultiply
+│  │  ├─ FloatNegate
+│  │  ├─ FloatNotEqual
+│  │  ├─ FloatRemainder
+│  │  ├─ FloatSubtract
+│  │  ├─ GreaterThan
+│  │  ├─ GreaterThanOrEqual
+│  │  ├─ ILikeComplexScalar
+│  │  ├─ LessThan
+│  │  ├─ LessThanOrEqual
+│  │  ├─ LikeAlternatingArray
+│  │  ├─ LikeComplexArray
+│  │  ├─ LikeLiteralScalar
+│  │  ├─ LikeLiteralViaPredicate
+│  │  ├─ NotEqual
+│  │  ├─ NotILikeScalar
+│  │  ├─ NotLikeScalar
+│  │  ├─ RegexpAlternatingArray
+│  │  ├─ RegexpArray
+│  │  ├─ RegexpScalar
+│  │  ├─ Remainder
+│  │  ├─ ShiftLeft
+│  │  ├─ ShiftRight
+│  │  ├─ SubstringCharsUtf8
+│  │  ├─ SubstringUtf8
+│  │  ├─ WrappingMultiply
+│  │  ├─ WrappingNegate
+│  │  ╰─ WrappingSub
+│  ├─ 64
+│  │  ├─ BitLengthLargeUtf8
+│  │  ├─ BitLengthUtf8
+│  │  ├─ BitLengthView
+│  │  ├─ BitwiseAnd
+│  │  ├─ BitwiseAndNot
+│  │  ├─ BitwiseNot
+│  │  ├─ BitwiseOr
+│  │  ├─ BitwiseXor
+│  │  ├─ ByteLengthLargeUtf8
+│  │  ├─ ByteLengthUtf8
+│  │  ├─ ByteLengthView
+│  │  ├─ CheckedNegate
+│  │  ├─ CheckedSub
+│  │  ├─ CheckedSubNullable
+│  │  ├─ Equal
+│  │  ├─ FloatAdd
+│  │  ├─ FloatDivide
+│  │  ├─ FloatEqual
+│  │  ├─ FloatGreaterThan
+│  │  ├─ FloatGreaterThanOrEqual
+│  │  ├─ FloatLessThan
+│  │  ├─ FloatLessThanOrEqual
+│  │  ├─ FloatMultiply
+│  │  ├─ FloatNegate
+│  │  ├─ FloatNotEqual
+│  │  ├─ FloatRemainder
+│  │  ├─ FloatSubtract
+│  │  ├─ GreaterThan
+│  │  ├─ GreaterThanOrEqual
+│  │  ├─ ILikeComplexScalar
+│  │  ├─ LessThan
+│  │  ├─ LessThanOrEqual
+│  │  ├─ LikeAlternatingArray
+│  │  ├─ LikeComplexArray
+│  │  ├─ LikeLiteralScalar
+│  │  ├─ LikeLiteralViaPredicate
+│  │  ├─ NotEqual
+│  │  ├─ NotILikeScalar
+│  │  ├─ NotLikeScalar
+│  │  ├─ RegexpAlternatingArray
+│  │  ├─ RegexpArray
+│  │  ├─ RegexpScalar
+│  │  ├─ Remainder
+│  │  ├─ ShiftLeft
+│  │  ├─ ShiftRight
+│  │  ├─ SubstringCharsUtf8
+│  │  ├─ SubstringUtf8
+│  │  ├─ WrappingMultiply
+│  │  ├─ WrappingNegate
+│  │  ╰─ WrappingSub
+│  ├─ 1024
+│  │  ├─ BitLengthLargeUtf8
+│  │  ├─ BitLengthUtf8
+│  │  ├─ BitLengthView
+│  │  ├─ BitwiseAnd
+│  │  ├─ BitwiseAndNot
+│  │  ├─ BitwiseNot
+│  │  ├─ BitwiseOr
+│  │  ├─ BitwiseXor
+│  │  ├─ ByteLengthLargeUtf8
+│  │  ├─ ByteLengthUtf8
+│  │  ├─ ByteLengthView
+│  │  ├─ CheckedNegate
+│  │  ├─ CheckedSub
+│  │  ├─ CheckedSubNullable
+│  │  ├─ Equal
+│  │  ├─ FloatAdd
+│  │  ├─ FloatDivide
+│  │  ├─ FloatEqual
+│  │  ├─ FloatGreaterThan
+│  │  ├─ FloatGreaterThanOrEqual
+│  │  ├─ FloatLessThan
+│  │  ├─ FloatLessThanOrEqual
+│  │  ├─ FloatMultiply
+│  │  ├─ FloatNegate
+│  │  ├─ FloatNotEqual
+│  │  ├─ FloatRemainder
+│  │  ├─ FloatSubtract
+│  │  ├─ GreaterThan
+│  │  ├─ GreaterThanOrEqual
+│  │  ├─ ILikeComplexScalar
+│  │  ├─ LessThan
+│  │  ├─ LessThanOrEqual
+│  │  ├─ LikeAlternatingArray
+│  │  ├─ LikeComplexArray
+│  │  ├─ LikeLiteralScalar
+│  │  ├─ LikeLiteralViaPredicate
+│  │  ├─ NotEqual
+│  │  ├─ NotILikeScalar
+│  │  ├─ NotLikeScalar
+│  │  ├─ RegexpAlternatingArray
+│  │  ├─ RegexpArray
+│  │  ├─ RegexpScalar
+│  │  ├─ Remainder
+│  │  ├─ ShiftLeft
+│  │  ├─ ShiftRight
+│  │  ├─ SubstringCharsUtf8
+│  │  ├─ SubstringUtf8
+│  │  ├─ WrappingMultiply
+│  │  ├─ WrappingNegate
+│  │  ╰─ WrappingSub
+│  ╰─ 16384
+│     ├─ BitLengthLargeUtf8
+│     ├─ BitLengthUtf8
+│     ├─ BitLengthView
+│     ├─ BitwiseAnd
+│     ├─ BitwiseAndNot
+│     ├─ BitwiseNot
+│     ├─ BitwiseOr
+│     ├─ BitwiseXor
+│     ├─ ByteLengthLargeUtf8
+│     ├─ ByteLengthUtf8
+│     ├─ ByteLengthView
+│     ├─ CheckedNegate
+│     ├─ CheckedSub
+│     ├─ CheckedSubNullable
+│     ├─ Equal
+│     ├─ FloatAdd
+│     ├─ FloatDivide
+│     ├─ FloatEqual
+│     ├─ FloatGreaterThan
+│     ├─ FloatGreaterThanOrEqual
+│     ├─ FloatLessThan
+│     ├─ FloatLessThanOrEqual
+│     ├─ FloatMultiply
+│     ├─ FloatNegate
+│     ├─ FloatNotEqual
+│     ├─ FloatRemainder
+│     ├─ FloatSubtract
+│     ├─ GreaterThan
+│     ├─ GreaterThanOrEqual
+│     ├─ ILikeComplexScalar
+│     ├─ LessThan
+│     ├─ LessThanOrEqual
+│     ├─ LikeAlternatingArray
+│     ├─ LikeComplexArray
+│     ├─ LikeLiteralScalar
+│     ├─ LikeLiteralViaPredicate
+│     ├─ NotEqual
+│     ├─ NotILikeScalar
+│     ├─ NotLikeScalar
+│     ├─ RegexpAlternatingArray
+│     ├─ RegexpArray
+│     ├─ RegexpScalar
+│     ├─ Remainder
+│     ├─ ShiftLeft
+│     ├─ ShiftRight
+│     ├─ SubstringCharsUtf8
+│     ├─ SubstringUtf8
+│     ├─ WrappingMultiply
+│     ├─ WrappingNegate
+│     ╰─ WrappingSub
+╰─ arrow_rofl
+   ├─ 0
+   │  ├─ BitLengthLargeUtf8
+   │  ├─ BitLengthUtf8
+   │  ├─ BitLengthView
+   │  ├─ BitwiseAnd
+   │  ├─ BitwiseAndNot
+   │  ├─ BitwiseNot
+   │  ├─ BitwiseOr
+   │  ├─ BitwiseXor
+   │  ├─ ByteLengthLargeUtf8
+   │  ├─ ByteLengthUtf8
+   │  ├─ ByteLengthView
+   │  ├─ CheckedNegate
+   │  ├─ CheckedSub
+   │  ├─ CheckedSubNullable
+   │  ├─ Equal
+   │  ├─ FloatAdd
+   │  ├─ FloatDivide
+   │  ├─ FloatEqual
+   │  ├─ FloatGreaterThan
+   │  ├─ FloatGreaterThanOrEqual
+   │  ├─ FloatLessThan
+   │  ├─ FloatLessThanOrEqual
+   │  ├─ FloatMultiply
+   │  ├─ FloatNegate
+   │  ├─ FloatNotEqual
+   │  ├─ FloatRemainder
+   │  ├─ FloatSubtract
+   │  ├─ GreaterThan
+   │  ├─ GreaterThanOrEqual
+   │  ├─ ILikeComplexScalar
+   │  ├─ LessThan
+   │  ├─ LessThanOrEqual
+   │  ├─ LikeAlternatingArray
+   │  ├─ LikeComplexArray
+   │  ├─ LikeLiteralScalar
+   │  ├─ LikeLiteralViaPredicate
+   │  ├─ NotEqual
+   │  ├─ NotILikeScalar
+   │  ├─ NotLikeScalar
+   │  ├─ RegexpAlternatingArray
+   │  ├─ RegexpArray
+   │  ├─ RegexpScalar
+   │  ├─ Remainder
+   │  ├─ ShiftLeft
+   │  ├─ ShiftRight
+   │  ├─ SubstringCharsUtf8
+   │  ├─ SubstringUtf8
+   │  ├─ WrappingMultiply
+   │  ├─ WrappingNegate
+   │  ╰─ WrappingSub
+   ├─ 64
+   │  ├─ BitLengthLargeUtf8
+   │  ├─ BitLengthUtf8
+   │  ├─ BitLengthView
+   │  ├─ BitwiseAnd
+   │  ├─ BitwiseAndNot
+   │  ├─ BitwiseNot
+   │  ├─ BitwiseOr
+   │  ├─ BitwiseXor
+   │  ├─ ByteLengthLargeUtf8
+   │  ├─ ByteLengthUtf8
+   │  ├─ ByteLengthView
+   │  ├─ CheckedNegate
+   │  ├─ CheckedSub
+   │  ├─ CheckedSubNullable
+   │  ├─ Equal
+   │  ├─ FloatAdd
+   │  ├─ FloatDivide
+   │  ├─ FloatEqual
+   │  ├─ FloatGreaterThan
+   │  ├─ FloatGreaterThanOrEqual
+   │  ├─ FloatLessThan
+   │  ├─ FloatLessThanOrEqual
+   │  ├─ FloatMultiply
+   │  ├─ FloatNegate
+   │  ├─ FloatNotEqual
+   │  ├─ FloatRemainder
+   │  ├─ FloatSubtract
+   │  ├─ GreaterThan
+   │  ├─ GreaterThanOrEqual
+   │  ├─ ILikeComplexScalar
+   │  ├─ LessThan
+   │  ├─ LessThanOrEqual
+   │  ├─ LikeAlternatingArray
+   │  ├─ LikeComplexArray
+   │  ├─ LikeLiteralScalar
+   │  ├─ LikeLiteralViaPredicate
+   │  ├─ NotEqual
+   │  ├─ NotILikeScalar
+   │  ├─ NotLikeScalar
+   │  ├─ RegexpAlternatingArray
+   │  ├─ RegexpArray
+   │  ├─ RegexpScalar
+   │  ├─ Remainder
+   │  ├─ ShiftLeft
+   │  ├─ ShiftRight
+   │  ├─ SubstringCharsUtf8
+   │  ├─ SubstringUtf8
+   │  ├─ WrappingMultiply
+   │  ├─ WrappingNegate
+   │  ╰─ WrappingSub
+   ├─ 1024
+   │  ├─ BitLengthLargeUtf8
+   │  ├─ BitLengthUtf8
+   │  ├─ BitLengthView
+   │  ├─ BitwiseAnd
+   │  ├─ BitwiseAndNot
+   │  ├─ BitwiseNot
+   │  ├─ BitwiseOr
+   │  ├─ BitwiseXor
+   │  ├─ ByteLengthLargeUtf8
+   │  ├─ ByteLengthUtf8
+   │  ├─ ByteLengthView
+   │  ├─ CheckedNegate
+   │  ├─ CheckedSub
+   │  ├─ CheckedSubNullable
+   │  ├─ Equal
+   │  ├─ FloatAdd
+   │  ├─ FloatDivide
+   │  ├─ FloatEqual
+   │  ├─ FloatGreaterThan
+   │  ├─ FloatGreaterThanOrEqual
+   │  ├─ FloatLessThan
+   │  ├─ FloatLessThanOrEqual
+   │  ├─ FloatMultiply
+   │  ├─ FloatNegate
+   │  ├─ FloatNotEqual
+   │  ├─ FloatRemainder
+   │  ├─ FloatSubtract
+   │  ├─ GreaterThan
+   │  ├─ GreaterThanOrEqual
+   │  ├─ ILikeComplexScalar
+   │  ├─ LessThan
+   │  ├─ LessThanOrEqual
+   │  ├─ LikeAlternatingArray
+   │  ├─ LikeComplexArray
+   │  ├─ LikeLiteralScalar
+   │  ├─ LikeLiteralViaPredicate
+   │  ├─ NotEqual
+   │  ├─ NotILikeScalar
+   │  ├─ NotLikeScalar
+   │  ├─ RegexpAlternatingArray
+   │  ├─ RegexpArray
+   │  ├─ RegexpScalar
+   │  ├─ Remainder
+   │  ├─ ShiftLeft
+   │  ├─ ShiftRight
+   │  ├─ SubstringCharsUtf8
+   │  ├─ SubstringUtf8
+   │  ├─ WrappingMultiply
+   │  ├─ WrappingNegate
+   │  ╰─ WrappingSub
+   ╰─ 16384
+      ├─ BitLengthLargeUtf8
+      ├─ BitLengthUtf8
+      ├─ BitLengthView
+      ├─ BitwiseAnd
+      ├─ BitwiseAndNot
+      ├─ BitwiseNot
+      ├─ BitwiseOr
+      ├─ BitwiseXor
+      ├─ ByteLengthLargeUtf8
+      ├─ ByteLengthUtf8
+      ├─ ByteLengthView
+      ├─ CheckedNegate
+      ├─ CheckedSub
+      ├─ CheckedSubNullable
+      ├─ Equal
+      ├─ FloatAdd
+      ├─ FloatDivide
+      ├─ FloatEqual
+      ├─ FloatGreaterThan
+      ├─ FloatGreaterThanOrEqual
+      ├─ FloatLessThan
+      ├─ FloatLessThanOrEqual
+      ├─ FloatMultiply
+      ├─ FloatNegate
+      ├─ FloatNotEqual
+      ├─ FloatRemainder
+      ├─ FloatSubtract
+      ├─ GreaterThan
+      ├─ GreaterThanOrEqual
+      ├─ ILikeComplexScalar
+      ├─ LessThan
+      ├─ LessThanOrEqual
+      ├─ LikeAlternatingArray
+      ├─ LikeComplexArray
+      ├─ LikeLiteralScalar
+      ├─ LikeLiteralViaPredicate
+      ├─ NotEqual
+      ├─ NotILikeScalar
+      ├─ NotLikeScalar
+      ├─ RegexpAlternatingArray
+      ├─ RegexpArray
+      ├─ RegexpScalar
+      ├─ Remainder
+      ├─ ShiftLeft
+      ├─ ShiftRight
+      ├─ SubstringCharsUtf8
+      ├─ SubstringUtf8
+      ├─ WrappingMultiply
+      ├─ WrappingNegate
+      ╰─ WrappingSub
+

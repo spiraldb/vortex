@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Writable lane sink — the [`IndexedSink`] trait and the [`ReinterpretSink`] adapter
+//! Writable lane sink, the [`IndexedSink`] trait and the [`ReinterpretSink`] adapter
 //! for in-place type-punning kernels.
 
 use std::marker::PhantomData;
@@ -10,12 +10,12 @@ use std::mem::size_of;
 
 use crate::lane_kernels::source::IndexedSource;
 
-/// An [`IndexedSource`] that also supports unchecked indexed writes — the binding
+/// An [`IndexedSource`] that also supports unchecked indexed writes, the binding
 /// for in-place kernels.
 ///
 /// `Write` is the type written by `set_unchecked` and may differ from
 /// `IndexedSource::Item` (the read type). For the canonical `&mut [T]` impl
-/// both are `T`. The decoupling is what makes [`ReinterpretSink`] possible —
+/// both are `T`. The decoupling is what makes [`ReinterpretSink`] possible,
 /// a wrapper that reads `F` and writes `T` over the same backing memory when
 /// the two have identical size and alignment.
 ///
@@ -66,7 +66,18 @@ impl<'a, F, T> ReinterpretSink<'a, F, T> {
     ///
     /// Panics if `size_of::<F>() != size_of::<T>()` or
     /// `align_of::<F>() != align_of::<T>()`.
-    pub fn new(slice: &'a mut [F]) -> Self {
+    ///
+    /// # Safety
+    /// Every T value written through this sink must also be a fully initialized, valid F value.
+    /// This must hold after partial writes and errors, while the original F slice still exists.
+    /// Equal-width numeric primitives satisfy this requirement. Arbitrary Copy types do not.
+    ///
+    /// ```compile_fail
+    /// use vortex_compute::lane_kernels::ReinterpretSink;
+    /// let mut values = [false];
+    /// let sink = ReinterpretSink::<bool, u8>::new(&mut values);
+    /// ```
+    pub unsafe fn new(slice: &'a mut [F]) -> Self {
         assert_eq!(
             size_of::<F>(),
             size_of::<T>(),
@@ -84,7 +95,9 @@ impl<'a, F, T> ReinterpretSink<'a, F, T> {
     }
 }
 
-impl<F: Copy, T: Copy> IndexedSource for ReinterpretSink<'_, F, T> {
+// SAFETY: the slice length is stable. The unsafe constructor requires writes to preserve valid,
+// initialized F values, including when traversal fails after a partial update.
+unsafe impl<F: Copy, T: Copy> IndexedSource for ReinterpretSink<'_, F, T> {
     type Item = F;
     #[inline]
     fn len(&self) -> usize {

@@ -1,0 +1,24 @@
+{
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: aarch64-apple-darwin\nrelease: 1.98.0\nLLVM version: 22.1.8",
+  "os": "ProductName:\t\tmacOS\nProductVersion:\t\t27.0\nBuildVersion:\t\t26A428",
+  "cpu": "Apple M4 Max",
+  "branch": "ct/rofl-assume-valid-utf8",
+  "base": "24a96cece436409dc4f60f94c6b846d6af017804",
+  "benchmark_sha256": "0c0bce6f08216ab3222fe7d3b3915724bdd91a8ed3e6bdfea5528d4f27ae781b",
+  "source_archive_sha256": "ed57dc52e9e6d50f2e98d0a824090be391dbaa3c40c5d9b3bd6a806b38d6b412",
+  "timing_args": [
+    "--bench",
+    "--min-time",
+    "0.1",
+    "--max-time",
+    "0.3"
+  ],
+  "order": [
+    "before-1",
+    "after-1",
+    "after-2",
+    "before-2",
+    "before-3",
+    "after-3"
+  ]
+}

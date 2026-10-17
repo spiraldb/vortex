@@ -1,0 +1,506 @@
+[
+  {
+    "path": "target/rofl-opt/access-scalar",
+    "bytes": 10565488
+  },
+  {
+    "path": "target/rofl-opt/baseline-boundaries",
+    "bytes": 26535576
+  },
+  {
+    "path": "target/rofl-opt/baseline-scalar",
+    "bytes": 10291008
+  },
+  {
+    "path": "target/rofl-opt/baseline-workloads",
+    "bytes": 7321792
+  },
+  {
+    "path": "target/rofl-opt/bool-buffer-scalar",
+    "bytes": 10576144
+  },
+  {
+    "path": "target/rofl-opt/candidate-boundaries",
+    "bytes": 26628872
+  },
+  {
+    "path": "target/rofl-opt/candidate-scalar",
+    "bytes": 10564704
+  },
+  {
+    "path": "target/rofl-opt/candidate-workloads",
+    "bytes": 7505392
+  },
+  {
+    "path": "target/rofl-opt/loops-workloads",
+    "bytes": 7321392
+  },
+  {
+    "path": "target/rofl-opt/output-scalar",
+    "bytes": 10291008
+  },
+  {
+    "path": "target/rofl-opt/selection-workloads",
+    "bytes": 7412288
+  },
+  {
+    "path": "target/rofl-opt/text-scalar",
+    "bytes": 10291088
+  },
+  {
+    "path": "target/rofl-opt/typed-scalar",
+    "bytes": 10415952
+  },
+  {
+    "path": "target/rofl-opt/valid-payload-scalar",
+    "bytes": 10564704
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.06.rcgu.s",
+    "bytes": 528778
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.14.rcgu.s",
+    "bytes": 1075840
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.11.rcgu.ll",
+    "bytes": 2167148
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.01.rcgu.ll",
+    "bytes": 10639325
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.08.rcgu.ll",
+    "bytes": 2013257
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.09.rcgu.ll",
+    "bytes": 1677947
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.08.rcgu.s",
+    "bytes": 1127427
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.04.rcgu.s",
+    "bytes": 2999356
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.00.rcgu.ll",
+    "bytes": 13657459
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.10.rcgu.ll",
+    "bytes": 3042730
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.00.rcgu.s",
+    "bytes": 6572919
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.12.rcgu.s",
+    "bytes": 2240804
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.12.rcgu.ll",
+    "bytes": 3458941
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.02.rcgu.ll",
+    "bytes": 1559983
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.10.rcgu.s",
+    "bytes": 1844909
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.03.rcgu.ll",
+    "bytes": 1005969
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.02.rcgu.s",
+    "bytes": 866646
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.13.rcgu.ll",
+    "bytes": 2436351
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.06.rcgu.ll",
+    "bytes": 1018829
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.07.rcgu.s",
+    "bytes": 1581780
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.15.rcgu.s",
+    "bytes": 933704
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.07.rcgu.ll",
+    "bytes": 3036732
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.09.rcgu.s",
+    "bytes": 1044814
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.05.rcgu.s",
+    "bytes": 2358109
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.15.rcgu.ll",
+    "bytes": 1330515
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.05.rcgu.ll",
+    "bytes": 4665400
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.01.rcgu.s",
+    "bytes": 5871457
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.13.rcgu.s",
+    "bytes": 1432302
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.11.rcgu.s",
+    "bytes": 1390167
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.04.rcgu.ll",
+    "bytes": 5761014
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.14.rcgu.ll",
+    "bytes": 1889816
+  },
+  {
+    "path": "target/release/deps/arrow_scalar-468e1e00a84a4ac8.arrow_scalar.5186c6e49f6fdb4e-cgu.03.rcgu.s",
+    "bytes": 781796
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.06.rcgu.ll",
+    "bytes": 1828930
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.05.rcgu.s",
+    "bytes": 1723549
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.09.rcgu.s",
+    "bytes": 1648856
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.15.rcgu.s",
+    "bytes": 987538
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.07.rcgu.s",
+    "bytes": 1520537
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.07.rcgu.ll",
+    "bytes": 2518005
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.03.rcgu.s",
+    "bytes": 712068
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.11.rcgu.s",
+    "bytes": 1241368
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.05.rcgu.ll",
+    "bytes": 3466815
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.15.rcgu.ll",
+    "bytes": 1694052
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.14.rcgu.ll",
+    "bytes": 2009981
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.04.rcgu.ll",
+    "bytes": 994596
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.13.rcgu.s",
+    "bytes": 2024233
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.01.rcgu.s",
+    "bytes": 733407
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.08.rcgu.ll",
+    "bytes": 2437601
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.04.rcgu.s",
+    "bytes": 556584
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.08.rcgu.s",
+    "bytes": 1606304
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.01.rcgu.ll",
+    "bytes": 1355635
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.11.rcgu.ll",
+    "bytes": 2124111
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.10.rcgu.ll",
+    "bytes": 3702230
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.00.rcgu.ll",
+    "bytes": 12072633
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.09.rcgu.ll",
+    "bytes": 2645088
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.14.rcgu.s",
+    "bytes": 1291447
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.06.rcgu.s",
+    "bytes": 1155128
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.02.rcgu.ll",
+    "bytes": 4609500
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.12.rcgu.ll",
+    "bytes": 1106248
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.02.rcgu.s",
+    "bytes": 2563000
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.10.rcgu.s",
+    "bytes": 1768478
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.12.rcgu.s",
+    "bytes": 742479
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.00.rcgu.s",
+    "bytes": 5742779
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.13.rcgu.ll",
+    "bytes": 3198496
+  },
+  {
+    "path": "target/release/deps/arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.03.rcgu.ll",
+    "bytes": 1003480
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.06.rcgu.ll",
+    "bytes": 3042020
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.09.rcgu.s",
+    "bytes": 1858796
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.05.rcgu.s",
+    "bytes": 2847995
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.07.rcgu.s",
+    "bytes": 2099750
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.15.rcgu.s",
+    "bytes": 1489800
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.07.rcgu.ll",
+    "bytes": 4262216
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.11.rcgu.s",
+    "bytes": 2113446
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.03.rcgu.s",
+    "bytes": 1008893
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.05.rcgu.ll",
+    "bytes": 5178832
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.15.rcgu.ll",
+    "bytes": 3002178
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.14.rcgu.ll",
+    "bytes": 3387809
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.04.rcgu.ll",
+    "bytes": 4984096
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.01.rcgu.s",
+    "bytes": 6424071
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.13.rcgu.s",
+    "bytes": 478363
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.08.rcgu.ll",
+    "bytes": 3362124
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.08.rcgu.s",
+    "bytes": 2084730
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.04.rcgu.s",
+    "bytes": 2927765
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.01.rcgu.ll",
+    "bytes": 11758457
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.11.rcgu.ll",
+    "bytes": 3881144
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.10.rcgu.ll",
+    "bytes": 2900427
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.00.rcgu.ll",
+    "bytes": 13365106
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.09.rcgu.ll",
+    "bytes": 3063988
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.06.rcgu.s",
+    "bytes": 1802443
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.14.rcgu.s",
+    "bytes": 2086044
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.02.rcgu.ll",
+    "bytes": 4124836
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.12.rcgu.ll",
+    "bytes": 2081148
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.10.rcgu.s",
+    "bytes": 1437732
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.02.rcgu.s",
+    "bytes": 2112029
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.00.rcgu.s",
+    "bytes": 6316392
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.12.rcgu.s",
+    "bytes": 1086956
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.13.rcgu.ll",
+    "bytes": 913662
+  },
+  {
+    "path": "target/release/deps/boundaries-3c3a77a76c6fcdfa.boundaries.ecd45eb892372cfc-cgu.03.rcgu.ll",
+    "bytes": 1467342
+  },
+  {
+    "path": "target/release/deps/rofl_examples-898d0605eb685b69.rofl_examples.6b1de7f4c4a74f9e-cgu.0.rcgu.s",
+    "bytes": 795
+  },
+  {
+    "path": "target/release/deps/rofl_examples-898d0605eb685b69.rofl_examples.6b1de7f4c4a74f9e-cgu.2.rcgu.s",
+    "bytes": 6975
+  },
+  {
+    "path": "target/release/deps/rofl_examples-898d0605eb685b69.rofl_examples.6b1de7f4c4a74f9e-cgu.1.rcgu.ll",
+    "bytes": 8584
+  },
+  {
+    "path": "target/release/deps/rofl_examples-898d0605eb685b69.rofl_examples.6b1de7f4c4a74f9e-cgu.1.rcgu.s",
+    "bytes": 10473
+  },
+  {
+    "path": "target/release/deps/rofl_examples-898d0605eb685b69.rofl_examples.6b1de7f4c4a74f9e-cgu.0.rcgu.ll",
+    "bytes": 981
+  },
+  {
+    "path": "target/release/deps/rofl_examples-898d0605eb685b69.rofl_examples.6b1de7f4c4a74f9e-cgu.3.rcgu.s",
+    "bytes": 4387
+  },
+  {
+    "path": "target/release/deps/rofl_examples-898d0605eb685b69.rofl_examples.6b1de7f4c4a74f9e-cgu.2.rcgu.ll",
+    "bytes": 4021
+  },
+  {
+    "path": "target/release/deps/rofl_examples-898d0605eb685b69.rofl_examples.6b1de7f4c4a74f9e-cgu.3.rcgu.ll",
+    "bytes": 5075
+  },
+  {
+    "path": "target/debug/deps/boundaries-9196befb95c4b015.ll",
+    "bytes": 76062767
+  },
+  {
+    "path": "target/debug/deps/boundaries-9196befb95c4b015.s",
+    "bytes": 49543510
+  },
+  {
+    "path": "target/debug/deps/arrow_workloads-f16bb9a2af684bcd.ll",
+    "bytes": 39467210
+  },
+  {
+    "path": "target/debug/deps/arrow_workloads-f16bb9a2af684bcd.s",
+    "bytes": 26289115
+  },
+  {
+    "path": "target/debug/deps/arrow_scalar-dd859d0b81fb9db0.ll",
+    "bytes": 63783434
+  },
+  {
+    "path": "target/debug/deps/arrow_scalar-dd859d0b81fb9db0.s",
+    "bytes": 41452972
+  },
+  {
+    "path": "/tmp/rofl-opt-output-direct.rs",
+    "bytes": 5651
+  },
+  {
+    "path": "/tmp/rofl-opt-current.tar.gz",
+    "bytes": 72253
+  }
+]

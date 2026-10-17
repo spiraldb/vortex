@@ -1,0 +1,792 @@
+; Source: boundaries-1520874a4a5c30bc.boundaries.26aaafca9565cd6f-cgu.12.rcgu.ll:10434
+define hidden void @_RINvXs_NtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl5batchNtB5_15VortexSelectionNtNtCshZi9mpuUhIi_4rofl4host9Selection8for_eachNCINvNtB1z_7execute13selected_rowsNtB7_10VortexHostNCINvMNtB2l_5ownedINtB2l_7ExecuteB2O_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB3n_INtNtB1z_7visitor10RowVisitorB2O_E19visit_deferred_boolB4Q_bKB4C_NCINvXs0_B3J_B3G_INtB5a_5RowFnB2O_E8dispatchB3n_Es4_0NCB6c_s5_0E0NCB4Z_s_0B71_Es_0E0ECs3jOYrsLZdRr_10boundaries(ptr noalias nofree noundef readonly align 8 captures(none) dereferenceable(16) %self, ptr dead_on_return noalias nofree noundef readonly align 8 captures(none) dereferenceable(56) %visit) unnamed_addr #0 personality ptr @rust_eh_personality !dbg !8690 {
+start:
+  %_13.i = alloca [80 x i8], align 8
+  %_13.i28.i.i = alloca [80 x i8], align 8
+  %_13.i.i.i = alloca [80 x i8], align 8
+  %_6.i.i = alloca [40 x i8], align 8
+  %_3 = load i64, ptr %self, align 8, !dbg !8691, !range !769, !noundef !25
+  %0 = getelementptr inbounds nuw i8, ptr %self, i64 8, !dbg !8691
+  switch i64 %_3, label %default.unreachable96 [
+    i64 0, label %bb3
+    i64 1, label %bb5
+    i64 2, label %bb2
+  ], !dbg !8692
+
+default.unreachable96:                            ; preds = %start
+  unreachable
+
+bb3:                                              ; preds = %start
+  %_6 = load i64, ptr %0, align 8, !dbg !8693, !noundef !25
+  %_7.sroa.0.0.copyload = load ptr, ptr %visit, align 8, !dbg !8695
+  %_7.sroa.4.0.visit.sroa_idx = getelementptr inbounds nuw i8, ptr %visit, i64 8, !dbg !8695
+  %_7.sroa.4.0.copyload = load ptr, ptr %_7.sroa.4.0.visit.sroa_idx, align 8, !dbg !8695
+  %_7.sroa.5.0.visit.sroa_idx = getelementptr inbounds nuw i8, ptr %visit, i64 16, !dbg !8695
+  %_7.sroa.5.0.copyload = load ptr, ptr %_7.sroa.5.0.visit.sroa_idx, align 8, !dbg !8695
+  %_7.sroa.6.0.visit.sroa_idx = getelementptr inbounds nuw i8, ptr %visit, i64 24, !dbg !8695
+  %_7.sroa.6.0.copyload = load ptr, ptr %_7.sroa.6.0.visit.sroa_idx, align 8, !dbg !8695
+  %_7.sroa.7.0.visit.sroa_idx = getelementptr inbounds nuw i8, ptr %visit, i64 32, !dbg !8695
+  %_7.sroa.7.0.copyload = load ptr, ptr %_7.sroa.7.0.visit.sroa_idx, align 8, !dbg !8695
+  %_7.sroa.8.0.visit.sroa_idx = getelementptr inbounds nuw i8, ptr %visit, i64 40, !dbg !8695
+  %_7.sroa.8.0.copyload = load ptr, ptr %_7.sroa.8.0.visit.sroa_idx, align 8, !dbg !8695
+  %_0.i.i.i5.not.i = icmp eq i64 %_6, 0, !dbg !8696
+  br i1 %_0.i.i.i5.not.i, label %bb5, label %bb3.i.preheader, !dbg !8706
+
+bb3.i.preheader:                                  ; preds = %bb3
+  %_7.sroa.9.0.visit.sroa_idx = getelementptr inbounds nuw i8, ptr %visit, i64 48, !dbg !8695
+  %_7.sroa.9.0.copyload = load ptr, ptr %_7.sroa.9.0.visit.sroa_idx, align 8, !dbg !8695
+  %1 = icmp ne ptr %_7.sroa.0.0.copyload, null
+  tail call void @llvm.assume(i1 %1)
+  %2 = icmp ne ptr %_7.sroa.4.0.copyload, null
+  %3 = icmp ne ptr %_7.sroa.5.0.copyload, null
+  %4 = icmp ne ptr %_7.sroa.6.0.copyload, null
+  %5 = icmp ne ptr %_7.sroa.7.0.copyload, null
+  %6 = icmp ne ptr %_7.sroa.8.0.copyload, null
+  %7 = getelementptr inbounds nuw i8, ptr %_7.sroa.8.0.copyload, i64 8
+  %8 = icmp ne ptr %_7.sroa.9.0.copyload, null
+  %9 = getelementptr inbounds nuw i8, ptr %_7.sroa.9.0.copyload, i64 16
+  %10 = getelementptr inbounds nuw i8, ptr %_7.sroa.9.0.copyload, i64 32
+  %11 = getelementptr inbounds nuw i8, ptr %_7.sroa.9.0.copyload, i64 24
+  %12 = getelementptr inbounds nuw i8, ptr %_7.sroa.9.0.copyload, i64 40
+  %13 = load i64, ptr %_7.sroa.0.0.copyload, align 8, !dbg !8707, !range !5407, !noalias !8718, !noundef !25
+  %14 = icmp eq i64 %13, -1, !dbg !8707
+  br i1 %14, label %bb3.i, label %bb5
+
+bb3.ithread-pre-split:                            ; preds = %_RNCINvNtCshZi9mpuUhIi_4rofl7execute13selected_rowsNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostNCINvMNtB4_5ownedINtB4_7ExecuteBM_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB2d_INtNtB6_7visitor10RowVisitorBM_E19visit_deferred_boolB3E_bKB3q_NCINvXs0_B2x_B2u_INtB3Y_5RowFnBM_E8dispatchB2d_Es4_0NCB4Y_s5_0E0NCB3N_s_0B5M_Es_0E0Cs3jOYrsLZdRr_10boundaries.exit
+  %.pr = load i64, ptr %_7.sroa.0.0.copyload, align 8, !dbg !8707, !noalias !8718
+  br label %bb3.i, !dbg !8721
+
+bb3.i:                                            ; preds = %bb3.i.preheader, %bb3.ithread-pre-split
+  %15 = phi i64 [ %.pr, %bb3.ithread-pre-split ], [ -1, %bb3.i.preheader ], !dbg !8707
+  %self.sroa.0.06.i = phi i64 [ %_0.i1.i.i.i, %bb3.ithread-pre-split ], [ 0, %bb3.i.preheader ]
+  %_0.i1.i.i.i = add nuw i64 %self.sroa.0.06.i, 1, !dbg !8721
+  %.not.i = icmp eq i64 %15, -1, !dbg !8707
+  br i1 %.not.i, label %bb2.i, label %_RNCINvNtCshZi9mpuUhIi_4rofl7execute13selected_rowsNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostNCINvMNtB4_5ownedINtB4_7ExecuteBM_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB2d_INtNtB6_7visitor10RowVisitorBM_E19visit_deferred_boolB3E_bKB3q_NCINvXs0_B2x_B2u_INtB3Y_5RowFnBM_E8dispatchB2d_Es4_0NCB4Y_s5_0E0NCB3N_s_0B5M_Es_0E0Cs3jOYrsLZdRr_10boundaries.exit, !dbg !8724
+
+bb2.i:                                            ; preds = %bb3.i
+  call void @llvm.assume(i1 %2)
+  %16 = load i8, ptr %_7.sroa.4.0.copyload, align 1, !dbg !8725, !range !28, !noalias !8718, !noundef !25
+  %_5.i = trunc nuw i8 %16 to i1, !dbg !8725
+  br i1 %_5.i, label %bb3.i1, label %bb5.i, !dbg !8725
+
+bb3.i1:                                           ; preds = %bb2.i
+  call void @llvm.assume(i1 %3)
+  %17 = load i64, ptr %_7.sroa.5.0.copyload, align 8, !dbg !8726, !noalias !8718, !noundef !25
+  br label %bb5.i, !dbg !8727
+
+bb5.i:                                            ; preds = %bb3.i1, %bb2.i
+  %input.sroa.0.0.i = phi i64 [ %17, %bb3.i1 ], [ %self.sroa.0.06.i, %bb2.i ], !dbg !8728
+  call void @llvm.assume(i1 %4)
+  %_7.i = load i64, ptr %_7.sroa.6.0.copyload, align 8, !dbg !8729, !noalias !8718, !noundef !25
+  %_6.not.i = icmp ult i64 %self.sroa.0.06.i, %_7.i, !dbg !8731
+  br i1 %_6.not.i, label %bb7.i, label %bb11.i, !dbg !8731
+
+bb7.i:                                            ; preds = %bb5.i
+  call void @llvm.assume(i1 %5)
+  %_10.i = load i64, ptr %_7.sroa.7.0.copyload, align 8, !dbg !8732, !noalias !8718, !noundef !25
+  %_8.not.i = icmp ult i64 %input.sroa.0.0.i, %_10.i, !dbg !8733
+  br i1 %_8.not.i, label %bb9.i, label %bb11.i, !dbg !8733
+
+bb9.i:                                            ; preds = %bb7.i
+  call void @llvm.assume(i1 %6)
+  %18 = load i64, ptr %_7.sroa.8.0.copyload, align 8, !dbg !8734, !range !2561, !noalias !8718, !noundef !25
+  %19 = load i64, ptr %7, align 8, !dbg !8734, !noalias !8718
+  %20 = trunc nuw i64 %18 to i1, !dbg !8735
+  %_11.i = icmp ule i64 %self.sroa.0.06.i, %19
+  %or.cond.i = select i1 %20, i1 %_11.i, i1 false, !dbg !8735
+  br i1 %or.cond.i, label %bb11.i, label %bb15.i, !dbg !8735
+
+bb15.i:                                           ; preds = %bb9.i
+  store i64 1, ptr %_7.sroa.8.0.copyload, align 8, !dbg !8738, !noalias !8718
+  store i64 %self.sroa.0.06.i, ptr %7, align 8, !dbg !8738, !noalias !8718
+  call void @llvm.assume(i1 %3)
+  %21 = load i64, ptr %_7.sroa.5.0.copyload, align 8, !dbg !8739, !noalias !8718, !noundef !25
+  %22 = add i64 %21, 1, !dbg !8739
+  store i64 %22, ptr %_7.sroa.5.0.copyload, align 8, !dbg !8739, !noalias !8718
+  call void @llvm.assume(i1 %8)
+  call void @llvm.experimental.noalias.scope.decl(metadata !8740), !dbg !8743
+  %_16.i.i = load ptr, ptr %9, align 8, !dbg !8744, !alias.scope !8740, !noalias !8747, !nonnull !25, !align !931, !noundef !25
+  call void @llvm.experimental.noalias.scope.decl(metadata !8749), !dbg !8752
+  call void @llvm.experimental.noalias.scope.decl(metadata !8753), !dbg !8756, !noalias !8759
+  %23 = load ptr, ptr %_16.i.i, align 8, !dbg !8760, !alias.scope !8763, !noalias !8759, !noundef !25
+  %.not.i.i = icmp eq ptr %23, null, !dbg !8760
+  br i1 %.not.i.i, label %bb3.i.i4, label %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit.i, !dbg !8764
+
+bb3.i.i4:                                         ; preds = %bb15.i
+  %view.i.i = getelementptr inbounds nuw i8, ptr %_16.i.i, i64 8, !dbg !8765
+  %view.val.i.i = load ptr, ptr %view.i.i, align 8, !dbg !8766, !alias.scope !8763, !noalias !8759, !nonnull !25, !align !931, !noundef !25
+  %24 = getelementptr inbounds nuw i8, ptr %_16.i.i, i64 16, !dbg !8766
+  %view.val2.i.i = load i64, ptr %24, align 8, !dbg !8766, !alias.scope !8763, !noalias !8759, !noundef !25
+  %_5.i3.i.i = icmp ult i64 %input.sroa.0.0.i, %view.val2.i.i, !dbg !8768
+  call void @llvm.assume(i1 %_5.i3.i.i), !dbg !8772, !noalias !8759
+  %_4.i.i.i = getelementptr inbounds nuw i64, ptr %view.val.i.i, i64 %input.sroa.0.0.i, !dbg !8773
+  br label %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit.i, !dbg !8774
+
+_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit.i: ; preds = %bb15.i, %bb3.i.i4
+  %_0.sroa.0.0.in.i.i = phi ptr [ %_4.i.i.i, %bb3.i.i4 ], [ %23, %bb15.i ]
+  %_0.sroa.0.0.i.i = load i64, ptr %_0.sroa.0.0.in.i.i, align 8, !dbg !8775, !noalias !8777, !noundef !25
+  %_6.i = getelementptr inbounds nuw i8, ptr %_16.i.i, i64 24, !dbg !8778
+  call void @llvm.experimental.noalias.scope.decl(metadata !8779), !dbg !8756, !noalias !8759
+  %25 = load ptr, ptr %_6.i, align 8, !dbg !8782, !alias.scope !8784, !noalias !8759, !noundef !25
+  %.not.i1.i = icmp eq ptr %25, null, !dbg !8782
+  br i1 %.not.i1.i, label %bb3.i8.i, label %_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxEBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit, !dbg !8785
+
+bb3.i8.i:                                         ; preds = %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit.i
+  %view.i2.i = getelementptr inbounds nuw i8, ptr %_16.i.i, i64 32, !dbg !8786
+  %view.val.i9.i = load ptr, ptr %view.i2.i, align 8, !dbg !8787, !alias.scope !8784, !noalias !8759, !nonnull !25, !align !931, !noundef !25
+  %26 = getelementptr inbounds nuw i8, ptr %_16.i.i, i64 40, !dbg !8787
+  %view.val2.i10.i = load i64, ptr %26, align 8, !dbg !8787, !alias.scope !8784, !noalias !8759, !noundef !25
+  %_5.i3.i11.i = icmp ult i64 %input.sroa.0.0.i, %view.val2.i10.i, !dbg !8788
+  call void @llvm.assume(i1 %_5.i3.i11.i), !dbg !8792, !noalias !8759
+  %_4.i.i12.i = getelementptr inbounds nuw i64, ptr %view.val.i9.i, i64 %input.sroa.0.0.i, !dbg !8793
+  br label %_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxEBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit, !dbg !8794
+
+_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxEBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit: ; preds = %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit.i, %bb3.i8.i
+  %_0.sroa.0.0.in.i6.i = phi ptr [ %_4.i.i12.i, %bb3.i8.i ], [ %25, %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit.i ]
+  %_17.1.i.i = load i64, ptr %10, align 8, !dbg !8795, !alias.scope !8740, !noalias !8747, !noundef !25
+  %_11.i.i = icmp ult i64 %self.sroa.0.06.i, %_17.1.i.i, !dbg !8795
+  br i1 %_11.i.i, label %_RNCINvMNtNtCshZi9mpuUhIi_4rofl7execute5ownedINtB7_7ExecuteNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostINtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYBG_INtNtB9_7visitor10RowVisitorBU_E19visit_deferred_boolB3e_bKB30_NCINvXs0_B27_B24_INtB3x_5RowFnBU_E8dispatchBG_Es4_0NCB4x_s5_0E0NCB3n_s_0B5k_Es_0Cs3jOYrsLZdRr_10boundaries.exit.i, label %panic.i.i, !dbg !8795
+
+panic.i.i:                                        ; preds = %_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxEBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit
+; call core::panicking::panic_bounds_check
+  call void @_RNvNtCslWxY2MhVcag_4core9panicking18panic_bounds_check(i64 noundef %self.sroa.0.06.i, i64 noundef %_17.1.i.i, ptr noalias nofree noundef readonly align 8 captures(address, read_provenance) dereferenceable(24) @alloc_c8cf1bbab415705cba2a60ca1246f948) #19, !dbg !8795, !noalias !8759
+  unreachable
+
+_RNCINvMNtNtCshZi9mpuUhIi_4rofl7execute5ownedINtB7_7ExecuteNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostINtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYBG_INtNtB9_7visitor10RowVisitorBU_E19visit_deferred_boolB3e_bKB30_NCINvXs0_B27_B24_INtB3x_5RowFnBU_E8dispatchBG_Es4_0NCB4x_s5_0E0NCB3n_s_0B5k_Es_0Cs3jOYrsLZdRr_10boundaries.exit.i: ; preds = %_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxEBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit
+  %_0.sroa.0.0.i7.i = load i64, ptr %_0.sroa.0.0.in.i6.i, align 8, !dbg !8797, !noalias !8799, !noundef !25
+  %27 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %_0.sroa.0.0.i.i, i64 %_0.sroa.0.0.i7.i), !dbg !8800
+  %_7.0.i.i.i.i = extractvalue { i64, i1 } %27, 0, !dbg !8800
+  %_8.i.i.i.i = icmp sgt i64 %_7.0.i.i.i.i, 0, !dbg !8808
+  %_7.1.i.i.i.i = extractvalue { i64, i1 } %27, 1, !dbg !8800
+  %_18.0.i.i = load ptr, ptr %11, align 8, !dbg !8795, !alias.scope !8740, !noalias !8747, !nonnull !25, !noundef !25
+  %_9.i.i = getelementptr inbounds nuw i8, ptr %_18.0.i.i, i64 %self.sroa.0.06.i, !dbg !8795
+  %_21.i.i = zext i1 %_8.i.i.i.i to i8, !dbg !8810
+  store i8 %_21.i.i, ptr %_9.i.i, align 1, !dbg !8815, !noalias !8759
+  %_19.i.i = load ptr, ptr %12, align 8, !dbg !8816, !alias.scope !8740, !noalias !8747, !nonnull !25, !noundef !25
+  %28 = load i8, ptr %_19.i.i, align 1, !dbg !8817, !range !28, !alias.scope !8819, !noalias !8759, !noundef !25
+  %29 = trunc nuw i8 %28 to i1, !dbg !8817
+  %30 = or i1 %_7.1.i.i.i.i, %29, !dbg !8817
+  %31 = zext i1 %30 to i8, !dbg !8817
+  store i8 %31, ptr %_19.i.i, align 1, !dbg !8817, !alias.scope !8819, !noalias !8759
+  %32 = load i64, ptr %_7.sroa.0.0.copyload, align 8, !dbg !8822, !range !5407, !alias.scope !8824, !noalias !8718, !noundef !25
+  %33 = icmp eq i64 %32, -1, !dbg !8822
+  br i1 %33, label %bb17.i, label %bb2.i.i, !dbg !8822
+
+bb2.i.i:                                          ; preds = %_RNCINvMNtNtCshZi9mpuUhIi_4rofl7execute5ownedINtB7_7ExecuteNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostINtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYBG_INtNtB9_7visitor10RowVisitorBU_E19visit_deferred_boolB3e_bKB30_NCINvXs0_B27_B24_INtB3x_5RowFnBU_E8dispatchBG_Es4_0NCB4x_s5_0E0NCB3n_s_0B5k_Es_0Cs3jOYrsLZdRr_10boundaries.exit.i
+; invoke core::ptr::drop_glue::<vortex_error::VortexError>
+  invoke fastcc void @_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueNtCs6NFVb2nVDVl_12vortex_error11VortexErrorECs3jOYrsLZdRr_10boundaries(ptr noalias nofree noundef nonnull align 8 dereferenceable(80) %_7.sroa.0.0.copyload)
+          to label %bb17.i unwind label %cleanup.i, !dbg !8822, !noalias !8718
+
+cleanup.i:                                        ; preds = %bb2.i.i
+  %34 = landingpad { ptr, i32 }
+          cleanup
+  store i64 -1, ptr %_7.sroa.0.0.copyload, align 8, !dbg !8827, !noalias !8718
+  br label %common.resume, !dbg !8828
+
+bb17.i:                                           ; preds = %bb2.i.i, %_RNCINvMNtNtCshZi9mpuUhIi_4rofl7execute5ownedINtB7_7ExecuteNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostINtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYBG_INtNtB9_7visitor10RowVisitorBU_E19visit_deferred_boolB3e_bKB30_NCINvXs0_B27_B24_INtB3x_5RowFnBU_E8dispatchBG_Es4_0NCB4x_s5_0E0NCB3n_s_0B5k_Es_0Cs3jOYrsLZdRr_10boundaries.exit.i
+  store i64 -1, ptr %_7.sroa.0.0.copyload, align 8, !dbg !8827, !noalias !8718
+  br label %_RNCINvNtCshZi9mpuUhIi_4rofl7execute13selected_rowsNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostNCINvMNtB4_5ownedINtB4_7ExecuteBM_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB2d_INtNtB6_7visitor10RowVisitorBM_E19visit_deferred_boolB3E_bKB3q_NCINvXs0_B2x_B2u_INtB3Y_5RowFnBM_E8dispatchB2d_Es4_0NCB4Y_s5_0E0NCB3N_s_0B5M_Es_0E0Cs3jOYrsLZdRr_10boundaries.exit, !dbg !8829
+
+common.resume:                                    ; preds = %cleanup1.i41.i.i, %cleanup.i71.i.i, %cleanup1.i.i.i, %cleanup.i.i.i, %cleanup1.i, %cleanup.i
+  %common.resume.op = phi { ptr, i32 } [ %34, %cleanup.i ], [ %37, %cleanup1.i ], [ %119, %cleanup.i.i.i ], [ %122, %cleanup1.i.i.i ], [ %148, %cleanup1.i41.i.i ], [ %145, %cleanup.i71.i.i ]
+  resume { ptr, i32 } %common.resume.op, !dbg !8830
+
+bb11.i:                                           ; preds = %bb9.i, %bb7.i, %bb5.i
+  call void @llvm.lifetime.start.p0(ptr nonnull %_13.i), !dbg !8831, !noalias !8718
+; call <vortex_array::scalar_fn::unstable::rofl::VortexHost as rofl::host::Host>::error
+  call void @_RNvXNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4roflNtB2_10VortexHostNtNtCshZi9mpuUhIi_4rofl4host4Host5error(ptr noalias nofree noundef nonnull sret([80 x i8]) align 8 captures(address) dereferenceable(80) %_13.i, ptr noalias nofree noundef nonnull readonly captures(address, read_provenance) @alloc_1c63d24b05a9c3b13168fa9e48442273, i64 noundef 52), !dbg !8832, !noalias !8718
+  %35 = load i64, ptr %_7.sroa.0.0.copyload, align 8, !dbg !8833, !range !5407, !alias.scope !8835, !noalias !8718, !noundef !25
+  %36 = icmp eq i64 %35, -1, !dbg !8833
+  br i1 %36, label %bb13.i, label %bb2.i5.i, !dbg !8833
+
+bb2.i5.i:                                         ; preds = %bb11.i
+; invoke core::ptr::drop_glue::<vortex_error::VortexError>
+  invoke fastcc void @_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueNtCs6NFVb2nVDVl_12vortex_error11VortexErrorECs3jOYrsLZdRr_10boundaries(ptr noalias nofree noundef nonnull align 8 dereferenceable(80) %_7.sroa.0.0.copyload)
+          to label %bb13.i unwind label %cleanup1.i, !dbg !8833, !noalias !8718
+
+cleanup1.i:                                       ; preds = %bb2.i5.i
+  %37 = landingpad { ptr, i32 }
+          cleanup
+  call void @llvm.memcpy.p0.p0.i64(ptr noundef nonnull align 8 dereferenceable(80) %_7.sroa.0.0.copyload, ptr noundef nonnull align 8 dereferenceable(80) %_13.i, i64 80, i1 false), !dbg !8838, !noalias !8718
+  br label %common.resume, !dbg !8838
+
+bb13.i:                                           ; preds = %bb2.i5.i, %bb11.i
+  call void @llvm.memcpy.p0.p0.i64(ptr noundef nonnull align 8 dereferenceable(80) %_7.sroa.0.0.copyload, ptr noundef nonnull align 8 dereferenceable(80) %_13.i, i64 80, i1 false), !dbg !8838, !noalias !8718
+  call void @llvm.lifetime.end.p0(ptr nonnull %_13.i), !dbg !8839, !noalias !8718
+  br label %_RNCINvNtCshZi9mpuUhIi_4rofl7execute13selected_rowsNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostNCINvMNtB4_5ownedINtB4_7ExecuteBM_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB2d_INtNtB6_7visitor10RowVisitorBM_E19visit_deferred_boolB3E_bKB3q_NCINvXs0_B2x_B2u_INtB3Y_5RowFnBM_E8dispatchB2d_Es4_0NCB4Y_s5_0E0NCB3N_s_0B5M_Es_0E0Cs3jOYrsLZdRr_10boundaries.exit, !dbg !8840
+
+_RNCINvNtCshZi9mpuUhIi_4rofl7execute13selected_rowsNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostNCINvMNtB4_5ownedINtB4_7ExecuteBM_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB2d_INtNtB6_7visitor10RowVisitorBM_E19visit_deferred_boolB3E_bKB3q_NCINvXs0_B2x_B2u_INtB3Y_5RowFnBM_E8dispatchB2d_Es4_0NCB4Y_s5_0E0NCB3N_s_0B5M_Es_0E0Cs3jOYrsLZdRr_10boundaries.exit: ; preds = %bb13.i, %bb17.i, %bb3.i
+  %exitcond.not.i = icmp eq i64 %_0.i1.i.i.i, %_6, !dbg !8696
+  br i1 %exitcond.not.i, label %bb5, label %bb3.ithread-pre-split, !dbg !8706, !llvm.loop !8842
+
+bb2:                                              ; preds = %start
+  %_14 = load ptr, ptr %0, align 8, !dbg !8843, !nonnull !25, !noundef !25
+  %_9 = getelementptr inbounds nuw i8, ptr %_14, i64 16, !dbg !8851
+  tail call void @llvm.experimental.noalias.scope.decl(metadata !8854), !dbg !8857
+  tail call void @llvm.experimental.noalias.scope.decl(metadata !8858), !dbg !8857
+  tail call void @llvm.experimental.noalias.scope.decl(metadata !8860), !dbg !8863
+  call void @llvm.lifetime.start.p0(ptr nonnull %_6.i.i), !dbg !8866, !noalias !8870
+  %_37.i.i = load ptr, ptr %_9, align 8, !dbg !8872, !alias.scope !8877, !noalias !8878, !nonnull !25, !noundef !25
+  %38 = getelementptr inbounds nuw i8, ptr %_14, i64 24, !dbg !8879
+  %_38.i.i = load i64, ptr %38, align 8, !dbg !8879, !alias.scope !8877, !noalias !8878, !noundef !25
+  %39 = getelementptr inbounds nuw i8, ptr %_14, i64 48, !dbg !8880
+  %_34.i.i = load i64, ptr %39, align 8, !dbg !8880, !alias.scope !8877, !noalias !8878, !noundef !25
+  %40 = getelementptr inbounds nuw i8, ptr %_14, i64 56, !dbg !8881
+  %_35.i.i = load i64, ptr %40, align 8, !dbg !8881, !alias.scope !8877, !noalias !8878, !noundef !25
+; call <arrow_buffer::util::bit_chunk_iterator::BitChunks>::new
+  call void @_RNvMs_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB4_9BitChunks3new(ptr noalias nofree noundef nonnull sret([40 x i8]) align 8 captures(none) dereferenceable(40) %_6.i.i, ptr noalias nofree noundef nonnull readonly captures(address, read_provenance) %_37.i.i, i64 noundef %_38.i.i, i64 noundef %_34.i.i, i64 noundef %_35.i.i), !dbg !8882, !noalias !8870
+  %_43.0.i.i = load ptr, ptr %_6.i.i, align 8, !dbg !8883, !noalias !8870, !nonnull !25, !noundef !25
+  %41 = getelementptr inbounds nuw i8, ptr %_6.i.i, i64 16, !dbg !8888
+  %_44.i.i = load i64, ptr %41, align 8, !dbg !8888, !noalias !8870, !noundef !25
+  %42 = getelementptr inbounds nuw i8, ptr %_6.i.i, i64 24, !dbg !8889
+  %_45.i.i = load i64, ptr %42, align 8, !dbg !8889, !noalias !8870, !noundef !25
+  tail call void @llvm.experimental.noalias.scope.decl(metadata !8890), !dbg !8893
+  %43 = getelementptr inbounds nuw i8, ptr %_6.i.i, i64 32, !dbg !8894
+  %bit_len.i.i.i = load i64, ptr %43, align 8, !dbg !8894, !alias.scope !8890, !noalias !8870, !noundef !25
+  %44 = icmp eq i64 %bit_len.i.i.i, 0, !dbg !8896
+  br i1 %44, label %start._RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit_crit_edge.i.i, label %bb2.i.i.i, !dbg !8896
+
+start._RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit_crit_edge.i.i: ; preds = %bb2
+  %.pre.i.i = and i64 %_44.i.i, 63
+  br label %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i, !dbg !8896
+
+bb2.i.i.i:                                        ; preds = %bb2
+  %_5.i.i.i = add i64 %bit_len.i.i.i, %_44.i.i, !dbg !8897
+  %_243.i.i.i = lshr i64 %_5.i.i.i, 3, !dbg !8898
+  %_25.i.i.i = and i64 %_5.i.i.i, 7, !dbg !8901
+  %_26.not.i.i.i = icmp ne i64 %_25.i.i.i, 0, !dbg !8902
+  %45 = zext i1 %_26.not.i.i.i to i64, !dbg !8902
+  %byte_len.sroa.0.0.i.i.i = add nuw nsw i64 %_243.i.i.i, %45, !dbg !8902
+  %_8.i.i.i = shl i64 %_45.i.i, 3, !dbg !8903
+  %base.i.i.i = getelementptr inbounds nuw i8, ptr %_43.0.i.i, i64 %_8.i.i.i, !dbg !8904
+  %_12.i.i.i = load i8, ptr %base.i.i.i, align 1, !dbg !8906, !noalias !8908, !noundef !25
+  %_11.i.i.i = zext i8 %_12.i.i.i to i64, !dbg !8909
+  %46 = and i64 %_44.i.i, 63, !dbg !8909
+  %47 = lshr i64 %_11.i.i.i, %46, !dbg !8909
+  %_284.i.i.i = icmp samesign ugt i64 %byte_len.sroa.0.0.i.i.i, 1, !dbg !8910
+  br i1 %_284.i.i.i, label %iter.check, label %bb9.i.i.i, !dbg !8914
+
+iter.check:                                       ; preds = %bb2.i.i.i
+  %48 = add nuw nsw i64 %_243.i.i.i, %45, !dbg !8914
+  %49 = add nsw i64 %48, -1, !dbg !8914
+  %min.iters.check = icmp ult i64 %49, 4, !dbg !8914
+  br i1 %min.iters.check, label %bb8.i.i.i.preheader, label %vector.main.loop.iter.check, !dbg !8914
+
+vector.main.loop.iter.check:                      ; preds = %iter.check
+  %min.iters.check126 = icmp ult i64 %49, 16, !dbg !8914
+  br i1 %min.iters.check126, label %vec.epilog.ph, label %vector.ph, !dbg !8914
+
+vector.ph:                                        ; preds = %vector.main.loop.iter.check
+  %n.mod.vf = and i64 %49, 12
+  %n.vec = and i64 %49, -16
+  %50 = or disjoint i64 %n.vec, 1
+  %51 = insertelement <16 x i64> <i64 poison, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i64 0>, i64 %47, i64 0
+  %broadcast.splatinsert = insertelement <16 x i64> poison, i64 %_44.i.i, i64 0
+  %broadcast.splat = shufflevector <16 x i64> %broadcast.splatinsert, <16 x i64> poison, <16 x i32> zeroinitializer
+  br label %vector.body, !dbg !8914
+
+vector.body:                                      ; preds = %vector.body, %vector.ph
+  %index = phi i64 [ 0, %vector.ph ], [ %index.next, %vector.body ]
+  %vec.phi = phi <16 x i64> [ %51, %vector.ph ], [ %59, %vector.body ]
+  %vec.ind = phi <16 x i64> [ <i64 1, i64 2, i64 3, i64 4, i64 5, i64 6, i64 7, i64 8, i64 9, i64 10, i64 11, i64 12, i64 13, i64 14, i64 15, i64 16>, %vector.ph ], [ %vec.ind.next, %vector.body ]
+  %52 = getelementptr inbounds nuw i8, ptr %base.i.i.i, i64 %index, !dbg !8915
+  %53 = getelementptr inbounds nuw i8, ptr %52, i64 1, !dbg !8915
+  %wide.load = load <16 x i8>, ptr %53, align 1, !dbg !8917, !noalias !8908
+  %54 = zext <16 x i8> %wide.load to <16 x i64>, !dbg !8919
+  %55 = shl nuw <16 x i64> %vec.ind, splat (i64 3), !dbg !8920
+  %56 = sub <16 x i64> %55, %broadcast.splat, !dbg !8921
+  %57 = and <16 x i64> %56, splat (i64 63), !dbg !8919
+  %58 = shl <16 x i64> %54, %57, !dbg !8919
+  %59 = or <16 x i64> %58, %vec.phi, !dbg !8922
+  %index.next = add nuw i64 %index, 16
+  %vec.ind.next = add nuw nsw <16 x i64> %vec.ind, splat (i64 16)
+  %60 = icmp eq i64 %index.next, %n.vec, !dbg !8914
+  br i1 %60, label %middle.block, label %vector.body, !dbg !8914, !llvm.loop !8923
+
+middle.block:                                     ; preds = %vector.body
+  %61 = tail call i64 @llvm.vector.reduce.or.v16i64(<16 x i64> %59), !dbg !8914
+  %cmp.n = icmp eq i64 %49, %n.vec, !dbg !8914
+  br i1 %cmp.n, label %bb9.i.i.i, label %vec.epilog.iter.check, !dbg !8914
+
+vec.epilog.iter.check:                            ; preds = %middle.block
+  %ind.end = or disjoint i64 %n.vec, 1
+  %min.epilog.iters.check = icmp eq i64 %n.mod.vf, 0
+  br i1 %min.epilog.iters.check, label %bb8.i.i.i.preheader, label %vec.epilog.ph, !prof !5657
+
+vec.epilog.ph:                                    ; preds = %vector.main.loop.iter.check, %vec.epilog.iter.check
+  %vec.epilog.resume.val = phi i64 [ %n.vec, %vec.epilog.iter.check ], [ 0, %vector.main.loop.iter.check ]
+  %bc.merge.rdx = phi i64 [ %61, %vec.epilog.iter.check ], [ %47, %vector.main.loop.iter.check ]
+  %bc.resume.val = phi i64 [ %50, %vec.epilog.iter.check ], [ 1, %vector.main.loop.iter.check ]
+  %n.vec128 = and i64 %49, -4
+  %62 = or disjoint i64 %n.vec128, 1
+  %63 = insertelement <4 x i64> <i64 poison, i64 0, i64 0, i64 0>, i64 %bc.merge.rdx, i64 0
+  %broadcast.splatinsert129 = insertelement <4 x i64> poison, i64 %_44.i.i, i64 0
+  %broadcast.splat130 = shufflevector <4 x i64> %broadcast.splatinsert129, <4 x i64> poison, <4 x i32> zeroinitializer
+  %broadcast.splatinsert131 = insertelement <4 x i64> poison, i64 %bc.resume.val, i64 0
+  %broadcast.splat132 = shufflevector <4 x i64> %broadcast.splatinsert131, <4 x i64> poison, <4 x i32> zeroinitializer
+  %induction = add nuw nsw <4 x i64> %broadcast.splat132, <i64 0, i64 1, i64 2, i64 3>
+  br label %vec.epilog.vector.body
+
+vec.epilog.vector.body:                           ; preds = %vec.epilog.vector.body, %vec.epilog.ph
+  %index133 = phi i64 [ %vec.epilog.resume.val, %vec.epilog.ph ], [ %index.next137, %vec.epilog.vector.body ]
+  %vec.phi134 = phi <4 x i64> [ %63, %vec.epilog.ph ], [ %71, %vec.epilog.vector.body ]
+  %vec.ind135 = phi <4 x i64> [ %induction, %vec.epilog.ph ], [ %vec.ind.next138, %vec.epilog.vector.body ]
+  %64 = getelementptr inbounds nuw i8, ptr %base.i.i.i, i64 %index133, !dbg !8915
+  %65 = getelementptr inbounds nuw i8, ptr %64, i64 1, !dbg !8915
+  %wide.load136 = load <4 x i8>, ptr %65, align 1, !dbg !8917, !noalias !8908
+  %66 = zext <4 x i8> %wide.load136 to <4 x i64>, !dbg !8919
+  %67 = shl nuw <4 x i64> %vec.ind135, splat (i64 3), !dbg !8920
+  %68 = sub <4 x i64> %67, %broadcast.splat130, !dbg !8921
+  %69 = and <4 x i64> %68, splat (i64 63), !dbg !8919
+  %70 = shl <4 x i64> %66, %69, !dbg !8919
+  %71 = or <4 x i64> %70, %vec.phi134, !dbg !8922
+  %index.next137 = add nuw i64 %index133, 4
+  %vec.ind.next138 = add nuw nsw <4 x i64> %vec.ind135, splat (i64 4)
+  %72 = icmp eq i64 %index.next137, %n.vec128, !dbg !8914
+  br i1 %72, label %vec.epilog.middle.block, label %vec.epilog.vector.body, !dbg !8914, !llvm.loop !8924
+
+vec.epilog.middle.block:                          ; preds = %vec.epilog.vector.body
+  %73 = tail call i64 @llvm.vector.reduce.or.v4i64(<4 x i64> %71), !dbg !8914
+  %cmp.n139 = icmp eq i64 %49, %n.vec128, !dbg !8914
+  br i1 %cmp.n139, label %bb9.i.i.i, label %bb8.i.i.i.preheader, !dbg !8914
+
+bb8.i.i.i.preheader:                              ; preds = %iter.check, %vec.epilog.iter.check, %vec.epilog.middle.block
+  %bits.sroa.0.06.i.i.i.ph = phi i64 [ %47, %iter.check ], [ %61, %vec.epilog.iter.check ], [ %73, %vec.epilog.middle.block ]
+  %iter.sroa.0.05.i.i.i.ph = phi i64 [ 1, %iter.check ], [ %ind.end, %vec.epilog.iter.check ], [ %62, %vec.epilog.middle.block ]
+  br label %bb8.i.i.i, !dbg !8914
+
+bb9.i.i.i:                                        ; preds = %bb8.i.i.i, %middle.block, %vec.epilog.middle.block, %bb2.i.i.i
+  %bits.sroa.0.0.lcssa.i.i.i = phi i64 [ %47, %bb2.i.i.i ], [ %73, %vec.epilog.middle.block ], [ %61, %middle.block ], [ %78, %bb8.i.i.i ], !dbg !8925
+  %74 = and i64 %bit_len.i.i.i, 63, !dbg !8926
+  %notmask.i.i.i = shl nsw i64 -1, %74, !dbg !8927
+  %_21.i.i.i = xor i64 %notmask.i.i.i, -1, !dbg !8927
+  %75 = and i64 %bits.sroa.0.0.lcssa.i.i.i, %_21.i.i.i, !dbg !8928
+  br label %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i, !dbg !8929
+
+bb8.i.i.i:                                        ; preds = %bb8.i.i.i.preheader, %bb8.i.i.i
+  %bits.sroa.0.06.i.i.i = phi i64 [ %78, %bb8.i.i.i ], [ %bits.sroa.0.06.i.i.i.ph, %bb8.i.i.i.preheader ]
+  %iter.sroa.0.05.i.i.i = phi i64 [ %76, %bb8.i.i.i ], [ %iter.sroa.0.05.i.i.i.ph, %bb8.i.i.i.preheader ]
+  %76 = add nuw nsw i64 %iter.sroa.0.05.i.i.i, 1, !dbg !8930
+  %_16.i.i.i = getelementptr inbounds nuw i8, ptr %base.i.i.i, i64 %iter.sroa.0.05.i.i.i, !dbg !8915
+  %byte.i.i.i = load i8, ptr %_16.i.i.i, align 1, !dbg !8917, !noalias !8908, !noundef !25
+  %_18.i.i.i = zext i8 %byte.i.i.i to i64, !dbg !8919
+  %_20.i.i.i = shl nuw i64 %iter.sroa.0.05.i.i.i, 3, !dbg !8920
+  %_19.i.i.i = sub i64 %_20.i.i.i, %_44.i.i, !dbg !8921
+  %77 = and i64 %_19.i.i.i, 63, !dbg !8919
+  %_17.i.i.i = shl i64 %_18.i.i.i, %77, !dbg !8919
+  %78 = or i64 %_17.i.i.i, %bits.sroa.0.06.i.i.i, !dbg !8922
+  %exitcond.not.i.i.i = icmp eq i64 %76, %byte_len.sroa.0.0.i.i.i, !dbg !8910
+  br i1 %exitcond.not.i.i.i, label %bb9.i.i.i, label %bb8.i.i.i, !dbg !8914, !llvm.loop !8933
+
+_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i: ; preds = %bb9.i.i.i, %start._RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit_crit_edge.i.i
+  %.pre-phi.i.i = phi i64 [ %.pre.i.i, %start._RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit_crit_edge.i.i ], [ %46, %bb9.i.i.i ]
+  %_0.sroa.0.0.i.i.i = phi i64 [ 0, %start._RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit_crit_edge.i.i ], [ %75, %bb9.i.i.i ], !dbg !8934
+  %79 = icmp eq i64 %_44.i.i, 0
+  %_15.i.i.i.i.i = sub i64 0, %_44.i.i
+  %80 = and i64 %_15.i.i.i.i.i, 63
+  %81 = getelementptr inbounds nuw i8, ptr %visit, i64 8
+  %82 = getelementptr inbounds nuw i8, ptr %visit, i64 16
+  %83 = getelementptr inbounds nuw i8, ptr %visit, i64 24
+  %84 = getelementptr inbounds nuw i8, ptr %visit, i64 32
+  %85 = getelementptr inbounds nuw i8, ptr %visit, i64 40
+  %86 = getelementptr inbounds nuw i8, ptr %visit, i64 48
+  %_18.i16.i.i = load ptr, ptr %visit, align 8, !alias.scope !8858, !noalias !8854, !nonnull !25, !align !931
+  %_19.i19.i.i = load ptr, ptr %81, align 8, !alias.scope !8858, !noalias !8854, !nonnull !25
+  %_20.i27.i.i = load ptr, ptr %82, align 8, !alias.scope !8858, !noalias !8854, !nonnull !25, !align !931
+  %_21.i21.i.i = load ptr, ptr %83, align 8, !alias.scope !8858, !noalias !8854, !nonnull !25, !align !931
+  %_22.i.i.i = load ptr, ptr %84, align 8, !alias.scope !8858, !noalias !8854, !nonnull !25, !align !931
+  %_23.i.i.i = load ptr, ptr %85, align 8, !alias.scope !8858, !noalias !8854, !nonnull !25, !align !931
+  %87 = getelementptr inbounds nuw i8, ptr %_23.i.i.i, i64 8
+  %_30.i.i.i = load ptr, ptr %86, align 8, !alias.scope !8858, !noalias !8854, !nonnull !25, !align !931
+  %88 = getelementptr inbounds nuw i8, ptr %_30.i.i.i, i64 16
+  %89 = getelementptr inbounds nuw i8, ptr %_30.i.i.i, i64 32
+  %90 = getelementptr inbounds nuw i8, ptr %_30.i.i.i, i64 24
+  %91 = getelementptr inbounds nuw i8, ptr %_30.i.i.i, i64 40
+  br label %bb1.i.i, !dbg !8935
+
+bb1.i.i:                                          ; preds = %bb13.i.i, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i
+  %iter.sroa.0.0.i.i = phi i1 [ true, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i ], [ %iter.sroa.0.194.i.i, %bb13.i.i ], !dbg !8866
+  %iter.sroa.7.0.i.i = phi ptr [ %_43.0.i.i, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i ], [ %iter.sroa.7.18293.i.i, %bb13.i.i ], !dbg !8866
+  %iter.sroa.12.0.i.i = phi i64 [ 0, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i ], [ %iter.sroa.12.18492.i.i, %bb13.i.i ], !dbg !8866
+  %base.sroa.0.0.i.i = phi i64 [ 0, %_RNvMs0_NtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iteratorNtB5_9BitChunks14remainder_bits.exit.i.i ], [ %124, %bb13.i.i ], !dbg !8937
+  %.not.i.i.i = icmp ne ptr %iter.sroa.7.0.i.i, null, !dbg !8938
+  %_3.not.i.i.i.i.i = icmp ult i64 %iter.sroa.12.0.i.i, %_45.i.i
+  %or.cond.i.i = select i1 %.not.i.i.i, i1 %_3.not.i.i.i.i.i, i1 false, !dbg !8944
+  br i1 %or.cond.i.i, label %bb2.i.i.i.i.i, label %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i, !dbg !8944
+
+bb2.i.i.i.i.i:                                    ; preds = %bb1.i.i
+  %_7.i.i.i.i.i = getelementptr inbounds nuw i64, ptr %iter.sroa.7.0.i.i, i64 %iter.sroa.12.0.i.i, !dbg !8945
+  %_19.sroa.0.0.copyload.i.i.i.i.i = load i64, ptr %_7.i.i.i.i.i, align 1, !dbg !8949, !noalias !8952
+  br i1 %79, label %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.thread.i.i, label %bb4.i.i.i.i.i, !dbg !8959
+
+bb4.i.i.i.i.i:                                    ; preds = %bb2.i.i.i.i.i
+  %_11.i.i.i.i.i = getelementptr i8, ptr %_7.i.i.i.i.i, i64 8, !dbg !8960
+  %_21.sroa.0.0.copyload.i.i.i.i.i = load i8, ptr %_11.i.i.i.i.i, align 1, !dbg !8962, !noalias !8952
+  %next.i.i.i.i.i = zext i8 %_21.sroa.0.0.copyload.i.i.i.i.i to i64, !dbg !8965
+  %_13.i.i.i.i.i = lshr i64 %_19.sroa.0.0.copyload.i.i.i.i.i, %.pre-phi.i.i, !dbg !8966
+  %_14.i.i.i.i.i = shl i64 %next.i.i.i.i.i, %80, !dbg !8967
+  %92 = or i64 %_14.i.i.i.i.i, %_13.i.i.i.i.i, !dbg !8966
+  br label %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.thread.i.i, !dbg !8968
+
+_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.thread.i.i: ; preds = %bb4.i.i.i.i.i, %bb2.i.i.i.i.i
+  %current.sroa.0.0.i.i.i.i.i = phi i64 [ %_19.sroa.0.0.copyload.i.i.i.i.i, %bb2.i.i.i.i.i ], [ %92, %bb4.i.i.i.i.i ], !dbg !8969
+  %93 = add nuw i64 %iter.sroa.12.0.i.i, 1, !dbg !8970
+  br label %bb3.i.i, !dbg !8971
+
+_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i: ; preds = %bb1.i.i
+  br i1 %iter.sroa.0.0.i.i, label %bb3.i.i, label %_RINvMs0_NtNtCs7x6tOKv5niH_13vortex_buffer3bit3bufNtB6_9BitBuffer18for_each_set_indexNCINvXs_NtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl5batchNtB1s_15VortexSelectionNtNtCshZi9mpuUhIi_4rofl4host9Selection8for_eachNCINvNtB2X_7execute13selected_rowsNtB1u_10VortexHostNCINvMNtB3J_5ownedINtB3J_7ExecuteB4c_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB4M_INtNtB2X_7visitor10RowVisitorB4c_E19visit_deferred_boolB6f_bKB61_NCINvXs0_B58_B55_INtB6z_5RowFnB4c_E8dispatchB4M_Es4_0NCB7B_s5_0E0NCB6o_s_0B8q_Es_0E0E0ECs3jOYrsLZdRr_10boundaries.exit, !dbg !8971
+
+bb3.i.i:                                          ; preds = %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.thread.i.i
+  %self.1.pn.i95.i.i = phi i64 [ %current.sroa.0.0.i.i.i.i.i, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.thread.i.i ], [ %_0.sroa.0.0.i.i.i, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i ]
+  %iter.sroa.0.194.i.i = phi i1 [ %iter.sroa.0.0.i.i, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.thread.i.i ], [ false, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i ]
+  %iter.sroa.7.18293.i.i = phi ptr [ %iter.sroa.7.0.i.i, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.thread.i.i ], [ null, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i ]
+  %iter.sroa.12.18492.i.i = phi i64 [ %93, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.thread.i.i ], [ %iter.sroa.12.0.i.i, %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i ]
+  switch i64 %self.1.pn.i95.i.i, label %bb10.lr.ph.i.i [
+    i64 -1, label %bb6.preheader.i.i
+    i64 0, label %bb13.i.i
+  ], !dbg !8972
+
+bb10.lr.ph.i.i:                                   ; preds = %bb3.i.i
+  %94 = load i64, ptr %_18.i16.i.i, align 8, !dbg !8974, !range !5407, !noalias !8983, !noundef !25
+  %95 = icmp eq i64 %94, -1, !dbg !8974
+  br i1 %95, label %bb10.i.i, label %bb10.us.i.i
+
+bb10.us.i.i:                                      ; preds = %bb10.lr.ph.i.i, %bb10.us.i.i
+  %word.sroa.0.0107.us.i.i = phi i64 [ %96, %bb10.us.i.i ], [ %self.1.pn.i95.i.i, %bb10.lr.ph.i.i ]
+  %_31.us.i.i = add i64 %word.sroa.0.0107.us.i.i, -1, !dbg !8986
+  %96 = and i64 %_31.us.i.i, %word.sroa.0.0107.us.i.i, !dbg !8987
+  %97 = icmp eq i64 %96, 0, !dbg !8988
+  br i1 %97, label %bb13.i.i, label %bb10.us.i.i, !dbg !8988
+
+bb6.preheader.i.i:                                ; preds = %bb3.i.i
+  %98 = load i64, ptr %_18.i16.i.i, align 8, !dbg !8989, !range !5407, !noalias !8997, !noundef !25
+  %99 = icmp eq i64 %98, -1, !dbg !8989
+  br i1 %99, label %bb23.i.i, label %bb13.i.i
+
+bb23thread-pre-split.i.i:                         ; preds = %_RNCINvNtCshZi9mpuUhIi_4rofl7execute13selected_rowsNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostNCINvMNtB4_5ownedINtB4_7ExecuteBM_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB2d_INtNtB6_7visitor10RowVisitorBM_E19visit_deferred_boolB3E_bKB3q_NCINvXs0_B2x_B2u_INtB3Y_5RowFnBM_E8dispatchB2d_Es4_0NCB4Y_s5_0E0NCB3N_s_0B5M_Es_0E0Cs3jOYrsLZdRr_10boundaries.exit.i.i
+  %.pr.i.i = load i64, ptr %_18.i16.i.i, align 8, !dbg !8989, !noalias !8997
+  br label %bb23.i.i, !dbg !9000
+
+bb23.i.i:                                         ; preds = %bb6.preheader.i.i, %bb23thread-pre-split.i.i
+  %100 = phi i64 [ %.pr.i.i, %bb23thread-pre-split.i.i ], [ -1, %bb6.preheader.i.i ], !dbg !8989
+  %iter2.sroa.0.0108.i.i = phi i64 [ %123, %bb23thread-pre-split.i.i ], [ 0, %bb6.preheader.i.i ]
+  %_17.i.i = or disjoint i64 %iter2.sroa.0.0108.i.i, %base.sroa.0.0.i.i, !dbg !9000
+  %.not.i17.i.i = icmp eq i64 %100, -1, !dbg !8989
+  br i1 %.not.i17.i.i, label %bb2.i18.i.i, label %_RNCINvNtCshZi9mpuUhIi_4rofl7execute13selected_rowsNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostNCINvMNtB4_5ownedINtB4_7ExecuteBM_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB2d_INtNtB6_7visitor10RowVisitorBM_E19visit_deferred_boolB3E_bKB3q_NCINvXs0_B2x_B2u_INtB3Y_5RowFnBM_E8dispatchB2d_Es4_0NCB4Y_s5_0E0NCB3N_s_0B5M_Es_0E0Cs3jOYrsLZdRr_10boundaries.exit.i.i, !dbg !9001
+
+bb2.i18.i.i:                                      ; preds = %bb23.i.i
+  %101 = load i8, ptr %_19.i19.i.i, align 1, !dbg !9002, !range !28, !noalias !8997, !noundef !25
+  %_5.i20.i.i = trunc nuw i8 %101 to i1, !dbg !9002
+  br i1 %_5.i20.i.i, label %bb3.i26.i.i, label %bb5.i.i.i, !dbg !9002
+
+bb3.i26.i.i:                                      ; preds = %bb2.i18.i.i
+  %102 = load i64, ptr %_20.i27.i.i, align 8, !dbg !9003, !noalias !8997, !noundef !25
+  br label %bb5.i.i.i, !dbg !9004
+
+bb5.i.i.i:                                        ; preds = %bb3.i26.i.i, %bb2.i18.i.i
+  %input.sroa.0.0.i.i.i = phi i64 [ %102, %bb3.i26.i.i ], [ %_17.i.i, %bb2.i18.i.i ], !dbg !9005
+  %_7.i.i.i = load i64, ptr %_21.i21.i.i, align 8, !dbg !9006, !noalias !8997, !noundef !25
+  %_6.not.i.i.i = icmp ult i64 %_17.i.i, %_7.i.i.i, !dbg !9007
+  br i1 %_6.not.i.i.i, label %bb7.i.i.i, label %bb11.i22.i.i, !dbg !9007
+
+bb7.i.i.i:                                        ; preds = %bb5.i.i.i
+  %_10.i.i.i = load i64, ptr %_22.i.i.i, align 8, !dbg !9008, !noalias !8997, !noundef !25
+  %_8.not.i.i.i = icmp ult i64 %input.sroa.0.0.i.i.i, %_10.i.i.i, !dbg !9009
+  br i1 %_8.not.i.i.i, label %bb9.i24.i.i, label %bb11.i22.i.i, !dbg !9009
+
+bb9.i24.i.i:                                      ; preds = %bb7.i.i.i
+  %103 = load i64, ptr %_23.i.i.i, align 8, !dbg !9010, !range !2561, !noalias !8997, !noundef !25
+  %104 = load i64, ptr %87, align 8, !dbg !9010, !noalias !8997
+  %105 = trunc nuw i64 %103 to i1, !dbg !9011
+  %_11.i25.i.i = icmp ule i64 %_17.i.i, %104
+  %or.cond.i.i.i = select i1 %105, i1 %_11.i25.i.i, i1 false, !dbg !9011
+  br i1 %or.cond.i.i.i, label %bb11.i22.i.i, label %bb15.i.i.i, !dbg !9011
+
+bb15.i.i.i:                                       ; preds = %bb9.i24.i.i
+  store i64 1, ptr %_23.i.i.i, align 8, !dbg !9013, !noalias !8997
+  store i64 %_17.i.i, ptr %87, align 8, !dbg !9013, !noalias !8997
+  %106 = load i64, ptr %_20.i27.i.i, align 8, !dbg !9014, !noalias !8997, !noundef !25
+  %107 = add i64 %106, 1, !dbg !9014
+  store i64 %107, ptr %_20.i27.i.i, align 8, !dbg !9014, !noalias !8997
+  call void @llvm.experimental.noalias.scope.decl(metadata !9015), !dbg !9018
+  %_16.i.i.i.i = load ptr, ptr %88, align 8, !dbg !9019, !alias.scope !9015, !noalias !9021, !nonnull !25, !align !931, !noundef !25
+  call void @llvm.experimental.noalias.scope.decl(metadata !9023), !dbg !9026
+  call void @llvm.experimental.noalias.scope.decl(metadata !9027), !dbg !9030, !noalias !9032
+  %108 = load ptr, ptr %_16.i.i.i.i, align 8, !dbg !9033, !alias.scope !9035, !noalias !9032, !noundef !25
+  %.not.i.i5 = icmp eq ptr %108, null, !dbg !9033
+  br i1 %.not.i.i5, label %bb3.i.i26, label %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit.i10, !dbg !9036
+
+bb3.i.i26:                                        ; preds = %bb15.i.i.i
+  %view.i.i6 = getelementptr inbounds nuw i8, ptr %_16.i.i.i.i, i64 8, !dbg !9037
+  %view.val.i.i27 = load ptr, ptr %view.i.i6, align 8, !dbg !9038, !alias.scope !9035, !noalias !9032, !nonnull !25, !align !931, !noundef !25
+  %109 = getelementptr inbounds nuw i8, ptr %_16.i.i.i.i, i64 16, !dbg !9038
+  %view.val2.i.i28 = load i64, ptr %109, align 8, !dbg !9038, !alias.scope !9035, !noalias !9032, !noundef !25
+  %_5.i3.i.i29 = icmp ult i64 %input.sroa.0.0.i.i.i, %view.val2.i.i28, !dbg !9039
+  call void @llvm.assume(i1 %_5.i3.i.i29), !dbg !9043, !noalias !9032
+  %_4.i.i.i30 = getelementptr inbounds nuw i64, ptr %view.val.i.i27, i64 %input.sroa.0.0.i.i.i, !dbg !9044
+  br label %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit.i10, !dbg !9045
+
+_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit.i10: ; preds = %bb15.i.i.i, %bb3.i.i26
+  %_0.sroa.0.0.in.i.i11 = phi ptr [ %_4.i.i.i30, %bb3.i.i26 ], [ %108, %bb15.i.i.i ]
+  %_0.sroa.0.0.i.i12 = load i64, ptr %_0.sroa.0.0.in.i.i11, align 8, !dbg !9046, !noalias !9048, !noundef !25
+  %_6.i13 = getelementptr inbounds nuw i8, ptr %_16.i.i.i.i, i64 24, !dbg !9049
+  call void @llvm.experimental.noalias.scope.decl(metadata !9050), !dbg !9030, !noalias !9032
+  %110 = load ptr, ptr %_6.i13, align 8, !dbg !9053, !alias.scope !9055, !noalias !9032, !noundef !25
+  %.not.i1.i14 = icmp eq ptr %110, null, !dbg !9053
+  br i1 %.not.i1.i14, label %bb3.i8.i21, label %_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxEBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit31, !dbg !9056
+
+bb3.i8.i21:                                       ; preds = %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit.i10
+  %view.i2.i15 = getelementptr inbounds nuw i8, ptr %_16.i.i.i.i, i64 32, !dbg !9057
+  %view.val.i9.i22 = load ptr, ptr %view.i2.i15, align 8, !dbg !9058, !alias.scope !9055, !noalias !9032, !nonnull !25, !align !931, !noundef !25
+  %111 = getelementptr inbounds nuw i8, ptr %_16.i.i.i.i, i64 40, !dbg !9058
+  %view.val2.i10.i23 = load i64, ptr %111, align 8, !dbg !9058, !alias.scope !9055, !noalias !9032, !noundef !25
+  %_5.i3.i11.i24 = icmp ult i64 %input.sroa.0.0.i.i.i, %view.val2.i10.i23, !dbg !9059
+  call void @llvm.assume(i1 %_5.i3.i11.i24), !dbg !9063, !noalias !9032
+  %_4.i.i12.i25 = getelementptr inbounds nuw i64, ptr %view.val.i9.i22, i64 %input.sroa.0.0.i.i.i, !dbg !9064
+  br label %_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxEBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit31, !dbg !9065
+
+_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxEBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit31: ; preds = %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit.i10, %bb3.i8.i21
+  %_0.sroa.0.0.in.i6.i19 = phi ptr [ %_4.i.i12.i25, %bb3.i8.i21 ], [ %110, %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit.i10 ]
+  %_17.1.i.i.i.i = load i64, ptr %89, align 8, !dbg !9066, !alias.scope !9015, !noalias !9021, !noundef !25
+  %_11.i.i.i.i = icmp ult i64 %_17.i.i, %_17.1.i.i.i.i, !dbg !9066
+  br i1 %_11.i.i.i.i, label %_RNCINvMNtNtCshZi9mpuUhIi_4rofl7execute5ownedINtB7_7ExecuteNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostINtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYBG_INtNtB9_7visitor10RowVisitorBU_E19visit_deferred_boolB3e_bKB30_NCINvXs0_B27_B24_INtB3x_5RowFnBU_E8dispatchBG_Es4_0NCB4x_s5_0E0NCB3n_s_0B5k_Es_0Cs3jOYrsLZdRr_10boundaries.exit.i.i.i, label %panic.i.i.i.i, !dbg !9066
+
+panic.i.i.i.i:                                    ; preds = %_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxEBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit31
+; call core::panicking::panic_bounds_check
+  call void @_RNvNtCslWxY2MhVcag_4core9panicking18panic_bounds_check(i64 noundef %_17.i.i, i64 noundef %_17.1.i.i.i.i, ptr noalias nofree noundef readonly align 8 captures(address, read_provenance) dereferenceable(24) @alloc_c8cf1bbab415705cba2a60ca1246f948) #19, !dbg !9066, !noalias !9032
+  unreachable
+
+_RNCINvMNtNtCshZi9mpuUhIi_4rofl7execute5ownedINtB7_7ExecuteNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostINtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYBG_INtNtB9_7visitor10RowVisitorBU_E19visit_deferred_boolB3e_bKB30_NCINvXs0_B27_B24_INtB3x_5RowFnBU_E8dispatchBG_Es4_0NCB4x_s5_0E0NCB3n_s_0B5k_Es_0Cs3jOYrsLZdRr_10boundaries.exit.i.i.i: ; preds = %_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxEBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit31
+  %_0.sroa.0.0.i7.i20 = load i64, ptr %_0.sroa.0.0.in.i6.i19, align 8, !dbg !9067, !noalias !9069, !noundef !25
+  %112 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %_0.sroa.0.0.i.i12, i64 %_0.sroa.0.0.i7.i20), !dbg !9070
+  %_7.0.i.i.i.i.i.i = extractvalue { i64, i1 } %112, 0, !dbg !9070
+  %_8.i.i.i.i.i.i = icmp sgt i64 %_7.0.i.i.i.i.i.i, 0, !dbg !9074
+  %_7.1.i.i.i.i.i.i = extractvalue { i64, i1 } %112, 1, !dbg !9070
+  %_18.0.i.i.i.i = load ptr, ptr %90, align 8, !dbg !9066, !alias.scope !9015, !noalias !9021, !nonnull !25, !noundef !25
+  %_9.i.i.i.i = getelementptr inbounds nuw i8, ptr %_18.0.i.i.i.i, i64 %_17.i.i, !dbg !9066
+  %_21.i.i.i.i = zext i1 %_8.i.i.i.i.i.i to i8, !dbg !9075
+  store i8 %_21.i.i.i.i, ptr %_9.i.i.i.i, align 1, !dbg !9078, !noalias !9032
+  %_19.i.i.i.i = load ptr, ptr %91, align 8, !dbg !9079, !alias.scope !9015, !noalias !9021, !nonnull !25, !noundef !25
+  %113 = load i8, ptr %_19.i.i.i.i, align 1, !dbg !9080, !range !28, !alias.scope !9082, !noalias !9032, !noundef !25
+  %114 = trunc nuw i8 %113 to i1, !dbg !9080
+  %115 = or i1 %_7.1.i.i.i.i.i.i, %114, !dbg !9080
+  %116 = zext i1 %115 to i8, !dbg !9080
+  store i8 %116, ptr %_19.i.i.i.i, align 1, !dbg !9080, !alias.scope !9082, !noalias !9032
+  %117 = load i64, ptr %_18.i16.i.i, align 8, !dbg !9085, !range !5407, !alias.scope !9087, !noalias !8997, !noundef !25
+  %118 = icmp eq i64 %117, -1, !dbg !9085
+  br i1 %118, label %bb17.i.i.i, label %bb2.i.i.i.i, !dbg !9085
+
+bb2.i.i.i.i:                                      ; preds = %_RNCINvMNtNtCshZi9mpuUhIi_4rofl7execute5ownedINtB7_7ExecuteNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostINtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYBG_INtNtB9_7visitor10RowVisitorBU_E19visit_deferred_boolB3e_bKB30_NCINvXs0_B27_B24_INtB3x_5RowFnBU_E8dispatchBG_Es4_0NCB4x_s5_0E0NCB3n_s_0B5k_Es_0Cs3jOYrsLZdRr_10boundaries.exit.i.i.i
+; invoke core::ptr::drop_glue::<vortex_error::VortexError>
+  invoke fastcc void @_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueNtCs6NFVb2nVDVl_12vortex_error11VortexErrorECs3jOYrsLZdRr_10boundaries(ptr noalias nofree noundef nonnull align 8 dereferenceable(80) %_18.i16.i.i)
+          to label %bb17.i.i.i unwind label %cleanup.i.i.i, !dbg !9085, !noalias !8997
+
+cleanup.i.i.i:                                    ; preds = %bb2.i.i.i.i
+  %119 = landingpad { ptr, i32 }
+          cleanup
+  store i64 -1, ptr %_18.i16.i.i, align 8, !dbg !9090, !noalias !8997
+  br label %common.resume, !dbg !9091
+
+bb17.i.i.i:                                       ; preds = %bb2.i.i.i.i, %_RNCINvMNtNtCshZi9mpuUhIi_4rofl7execute5ownedINtB7_7ExecuteNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostINtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYBG_INtNtB9_7visitor10RowVisitorBU_E19visit_deferred_boolB3e_bKB30_NCINvXs0_B27_B24_INtB3x_5RowFnBU_E8dispatchBG_Es4_0NCB4x_s5_0E0NCB3n_s_0B5k_Es_0Cs3jOYrsLZdRr_10boundaries.exit.i.i.i
+  store i64 -1, ptr %_18.i16.i.i, align 8, !dbg !9090, !noalias !8997
+  br label %_RNCINvNtCshZi9mpuUhIi_4rofl7execute13selected_rowsNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostNCINvMNtB4_5ownedINtB4_7ExecuteBM_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB2d_INtNtB6_7visitor10RowVisitorBM_E19visit_deferred_boolB3E_bKB3q_NCINvXs0_B2x_B2u_INtB3Y_5RowFnBM_E8dispatchB2d_Es4_0NCB4Y_s5_0E0NCB3N_s_0B5M_Es_0E0Cs3jOYrsLZdRr_10boundaries.exit.i.i, !dbg !9092
+
+bb11.i22.i.i:                                     ; preds = %bb9.i24.i.i, %bb7.i.i.i, %bb5.i.i.i
+  call void @llvm.lifetime.start.p0(ptr nonnull %_13.i.i.i), !dbg !9093, !noalias !8997
+; call <vortex_array::scalar_fn::unstable::rofl::VortexHost as rofl::host::Host>::error
+  call void @_RNvXNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4roflNtB2_10VortexHostNtNtCshZi9mpuUhIi_4rofl4host4Host5error(ptr noalias nofree noundef nonnull sret([80 x i8]) align 8 captures(address) dereferenceable(80) %_13.i.i.i, ptr noalias nofree noundef nonnull readonly captures(address, read_provenance) @alloc_1c63d24b05a9c3b13168fa9e48442273, i64 noundef 52), !dbg !9094, !noalias !8997
+  %120 = load i64, ptr %_18.i16.i.i, align 8, !dbg !9095, !range !5407, !alias.scope !9097, !noalias !8997, !noundef !25
+  %121 = icmp eq i64 %120, -1, !dbg !9095
+  br i1 %121, label %bb13.i.i.i, label %bb2.i5.i.i.i, !dbg !9095
+
+bb2.i5.i.i.i:                                     ; preds = %bb11.i22.i.i
+; invoke core::ptr::drop_glue::<vortex_error::VortexError>
+  invoke fastcc void @_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueNtCs6NFVb2nVDVl_12vortex_error11VortexErrorECs3jOYrsLZdRr_10boundaries(ptr noalias nofree noundef nonnull align 8 dereferenceable(80) %_18.i16.i.i)
+          to label %bb13.i.i.i unwind label %cleanup1.i.i.i, !dbg !9095, !noalias !8997
+
+cleanup1.i.i.i:                                   ; preds = %bb2.i5.i.i.i
+  %122 = landingpad { ptr, i32 }
+          cleanup
+  call void @llvm.memcpy.p0.p0.i64(ptr noundef nonnull align 8 dereferenceable(80) %_18.i16.i.i, ptr noundef nonnull align 8 dereferenceable(80) %_13.i.i.i, i64 80, i1 false), !dbg !9100, !noalias !8997
+  br label %common.resume, !dbg !9100
+
+bb13.i.i.i:                                       ; preds = %bb2.i5.i.i.i, %bb11.i22.i.i
+  call void @llvm.memcpy.p0.p0.i64(ptr noundef nonnull align 8 dereferenceable(80) %_18.i16.i.i, ptr noundef nonnull align 8 dereferenceable(80) %_13.i.i.i, i64 80, i1 false), !dbg !9100, !noalias !8997
+  call void @llvm.lifetime.end.p0(ptr nonnull %_13.i.i.i), !dbg !9101, !noalias !8997
+  br label %_RNCINvNtCshZi9mpuUhIi_4rofl7execute13selected_rowsNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostNCINvMNtB4_5ownedINtB4_7ExecuteBM_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB2d_INtNtB6_7visitor10RowVisitorBM_E19visit_deferred_boolB3E_bKB3q_NCINvXs0_B2x_B2u_INtB3Y_5RowFnBM_E8dispatchB2d_Es4_0NCB4Y_s5_0E0NCB3N_s_0B5M_Es_0E0Cs3jOYrsLZdRr_10boundaries.exit.i.i, !dbg !9102
+
+_RNCINvNtCshZi9mpuUhIi_4rofl7execute13selected_rowsNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostNCINvMNtB4_5ownedINtB4_7ExecuteBM_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB2d_INtNtB6_7visitor10RowVisitorBM_E19visit_deferred_boolB3E_bKB3q_NCINvXs0_B2x_B2u_INtB3Y_5RowFnBM_E8dispatchB2d_Es4_0NCB4Y_s5_0E0NCB3N_s_0B5M_Es_0E0Cs3jOYrsLZdRr_10boundaries.exit.i.i: ; preds = %bb13.i.i.i, %bb17.i.i.i, %bb23.i.i
+  %123 = add nuw nsw i64 %iter2.sroa.0.0108.i.i, 1, !dbg !9103
+  %exitcond.not.i.i = icmp eq i64 %123, 64, !dbg !9114
+  br i1 %exitcond.not.i.i, label %bb13.i.i, label %bb23thread-pre-split.i.i, !dbg !9117, !llvm.loop !9118
+
+bb13.i.i:                                         ; preds = %_RNCINvNtCshZi9mpuUhIi_4rofl7execute13selected_rowsNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostNCINvMNtB4_5ownedINtB4_7ExecuteBM_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB2d_INtNtB6_7visitor10RowVisitorBM_E19visit_deferred_boolB3E_bKB3q_NCINvXs0_B2x_B2u_INtB3Y_5RowFnBM_E8dispatchB2d_Es4_0NCB4Y_s5_0E0NCB3N_s_0B5M_Es_0E0Cs3jOYrsLZdRr_10boundaries.exit.i.i, %bb10.us.i.i, %_RNCINvNtCshZi9mpuUhIi_4rofl7execute13selected_rowsNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostNCINvMNtB4_5ownedINtB4_7ExecuteBM_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB2d_INtNtB6_7visitor10RowVisitorBM_E19visit_deferred_boolB3E_bKB3q_NCINvXs0_B2x_B2u_INtB3Y_5RowFnBM_E8dispatchB2d_Es4_0NCB4Y_s5_0E0NCB3N_s_0B5M_Es_0E0Cs3jOYrsLZdRr_10boundaries.exit75.i.i, %bb6.preheader.i.i, %bb3.i.i
+  %124 = add i64 %base.sroa.0.0.i.i, 64, !dbg !9119
+  br label %bb1.i.i, !dbg !8935
+
+bb10thread-pre-split.i.i:                         ; preds = %_RNCINvNtCshZi9mpuUhIi_4rofl7execute13selected_rowsNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostNCINvMNtB4_5ownedINtB4_7ExecuteBM_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB2d_INtNtB6_7visitor10RowVisitorBM_E19visit_deferred_boolB3E_bKB3q_NCINvXs0_B2x_B2u_INtB3Y_5RowFnBM_E8dispatchB2d_Es4_0NCB4Y_s5_0E0NCB3N_s_0B5M_Es_0E0Cs3jOYrsLZdRr_10boundaries.exit75.i.i
+  %.pr125.i.i = load i64, ptr %_18.i16.i.i, align 8, !dbg !8974, !noalias !8983
+  br label %bb10.i.i, !dbg !9120
+
+bb10.i.i:                                         ; preds = %bb10.lr.ph.i.i, %bb10thread-pre-split.i.i
+  %125 = phi i64 [ %.pr125.i.i, %bb10thread-pre-split.i.i ], [ -1, %bb10.lr.ph.i.i ], !dbg !8974
+  %word.sroa.0.0107.i.i = phi i64 [ %149, %bb10thread-pre-split.i.i ], [ %self.1.pn.i95.i.i, %bb10.lr.ph.i.i ]
+  %126 = call range(i64 0, 65) i64 @llvm.cttz.i64(i64 %word.sroa.0.0107.i.i, i1 true), !dbg !9120
+  %_25.i.i = or disjoint i64 %126, %base.sroa.0.0.i.i, !dbg !9123
+  %.not.i30.i.i = icmp eq i64 %125, -1, !dbg !8974
+  br i1 %.not.i30.i.i, label %bb2.i31.i.i, label %_RNCINvNtCshZi9mpuUhIi_4rofl7execute13selected_rowsNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostNCINvMNtB4_5ownedINtB4_7ExecuteBM_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB2d_INtNtB6_7visitor10RowVisitorBM_E19visit_deferred_boolB3E_bKB3q_NCINvXs0_B2x_B2u_INtB3Y_5RowFnBM_E8dispatchB2d_Es4_0NCB4Y_s5_0E0NCB3N_s_0B5M_Es_0E0Cs3jOYrsLZdRr_10boundaries.exit75.i.i, !dbg !9124
+
+bb2.i31.i.i:                                      ; preds = %bb10.i.i
+  %127 = load i8, ptr %_19.i19.i.i, align 1, !dbg !9125, !range !28, !noalias !8983, !noundef !25
+  %_5.i33.i.i = trunc nuw i8 %127 to i1, !dbg !9125
+  br i1 %_5.i33.i.i, label %bb3.i73.i.i, label %bb5.i34.i.i, !dbg !9125
+
+bb3.i73.i.i:                                      ; preds = %bb2.i31.i.i
+  %128 = load i64, ptr %_20.i27.i.i, align 8, !dbg !9126, !noalias !8983, !noundef !25
+  br label %bb5.i34.i.i, !dbg !9127
+
+bb5.i34.i.i:                                      ; preds = %bb3.i73.i.i, %bb2.i31.i.i
+  %input.sroa.0.0.i35.i.i = phi i64 [ %128, %bb3.i73.i.i ], [ %_25.i.i, %bb2.i31.i.i ], !dbg !9128
+  %_7.i37.i.i = load i64, ptr %_21.i21.i.i, align 8, !dbg !9129, !noalias !8983, !noundef !25
+  %_6.not.i38.i.i = icmp ult i64 %_25.i.i, %_7.i37.i.i, !dbg !9130
+  br i1 %_6.not.i38.i.i, label %bb7.i45.i.i, label %bb11.i39.i.i, !dbg !9130
+
+bb7.i45.i.i:                                      ; preds = %bb5.i34.i.i
+  %_10.i47.i.i = load i64, ptr %_22.i.i.i, align 8, !dbg !9131, !noalias !8983, !noundef !25
+  %_8.not.i48.i.i = icmp ult i64 %input.sroa.0.0.i35.i.i, %_10.i47.i.i, !dbg !9132
+  br i1 %_8.not.i48.i.i, label %bb9.i49.i.i, label %bb11.i39.i.i, !dbg !9132
+
+bb9.i49.i.i:                                      ; preds = %bb7.i45.i.i
+  %129 = load i64, ptr %_23.i.i.i, align 8, !dbg !9133, !range !2561, !noalias !8983, !noundef !25
+  %130 = load i64, ptr %87, align 8, !dbg !9133, !noalias !8983
+  %131 = trunc nuw i64 %129 to i1, !dbg !9134
+  %_11.i51.i.i = icmp ule i64 %_25.i.i, %130
+  %or.cond.i52.i.i = select i1 %131, i1 %_11.i51.i.i, i1 false, !dbg !9134
+  br i1 %or.cond.i52.i.i, label %bb11.i39.i.i, label %bb15.i53.i.i, !dbg !9134
+
+bb15.i53.i.i:                                     ; preds = %bb9.i49.i.i
+  store i64 1, ptr %_23.i.i.i, align 8, !dbg !9136, !noalias !8983
+  store i64 %_25.i.i, ptr %87, align 8, !dbg !9136, !noalias !8983
+  %132 = load i64, ptr %_20.i27.i.i, align 8, !dbg !9137, !noalias !8983, !noundef !25
+  %133 = add i64 %132, 1, !dbg !9137
+  store i64 %133, ptr %_20.i27.i.i, align 8, !dbg !9137, !noalias !8983
+  call void @llvm.experimental.noalias.scope.decl(metadata !9138), !dbg !9141
+  %_16.i.i56.i.i = load ptr, ptr %88, align 8, !dbg !9142, !alias.scope !9138, !noalias !9144, !nonnull !25, !align !931, !noundef !25
+  call void @llvm.experimental.noalias.scope.decl(metadata !9146), !dbg !9149
+  call void @llvm.experimental.noalias.scope.decl(metadata !9150), !dbg !9153, !noalias !9155
+  %134 = load ptr, ptr %_16.i.i56.i.i, align 8, !dbg !9156, !alias.scope !9158, !noalias !9155, !noundef !25
+  %.not.i.i32 = icmp eq ptr %134, null, !dbg !9156
+  br i1 %.not.i.i32, label %bb3.i.i53, label %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit.i37, !dbg !9159
+
+bb3.i.i53:                                        ; preds = %bb15.i53.i.i
+  %view.i.i33 = getelementptr inbounds nuw i8, ptr %_16.i.i56.i.i, i64 8, !dbg !9160
+  %view.val.i.i54 = load ptr, ptr %view.i.i33, align 8, !dbg !9161, !alias.scope !9158, !noalias !9155, !nonnull !25, !align !931, !noundef !25
+  %135 = getelementptr inbounds nuw i8, ptr %_16.i.i56.i.i, i64 16, !dbg !9161
+  %view.val2.i.i55 = load i64, ptr %135, align 8, !dbg !9161, !alias.scope !9158, !noalias !9155, !noundef !25
+  %_5.i3.i.i56 = icmp ult i64 %input.sroa.0.0.i35.i.i, %view.val2.i.i55, !dbg !9162
+  call void @llvm.assume(i1 %_5.i3.i.i56), !dbg !9166, !noalias !9155
+  %_4.i.i.i57 = getelementptr inbounds nuw i64, ptr %view.val.i.i54, i64 %input.sroa.0.0.i35.i.i, !dbg !9167
+  br label %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit.i37, !dbg !9168
+
+_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit.i37: ; preds = %bb15.i53.i.i, %bb3.i.i53
+  %_0.sroa.0.0.in.i.i38 = phi ptr [ %_4.i.i.i57, %bb3.i.i53 ], [ %134, %bb15.i53.i.i ]
+  %_0.sroa.0.0.i.i39 = load i64, ptr %_0.sroa.0.0.in.i.i38, align 8, !dbg !9169, !noalias !9171, !noundef !25
+  %_6.i40 = getelementptr inbounds nuw i8, ptr %_16.i.i56.i.i, i64 24, !dbg !9172
+  call void @llvm.experimental.noalias.scope.decl(metadata !9173), !dbg !9153, !noalias !9155
+  %136 = load ptr, ptr %_6.i40, align 8, !dbg !9176, !alias.scope !9178, !noalias !9155, !noundef !25
+  %.not.i1.i41 = icmp eq ptr %136, null, !dbg !9176
+  br i1 %.not.i1.i41, label %bb3.i8.i48, label %_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxEBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit58, !dbg !9179
+
+bb3.i8.i48:                                       ; preds = %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit.i37
+  %view.i2.i42 = getelementptr inbounds nuw i8, ptr %_16.i.i56.i.i, i64 32, !dbg !9180
+  %view.val.i9.i49 = load ptr, ptr %view.i2.i42, align 8, !dbg !9181, !alias.scope !9178, !noalias !9155, !nonnull !25, !align !931, !noundef !25
+  %137 = getelementptr inbounds nuw i8, ptr %_16.i.i56.i.i, i64 40, !dbg !9181
+  %view.val2.i10.i50 = load i64, ptr %137, align 8, !dbg !9181, !alias.scope !9178, !noalias !9155, !noundef !25
+  %_5.i3.i11.i51 = icmp ult i64 %input.sroa.0.0.i35.i.i, %view.val2.i10.i50, !dbg !9182
+  call void @llvm.assume(i1 %_5.i3.i11.i51), !dbg !9186, !noalias !9155
+  %_4.i.i12.i52 = getelementptr inbounds nuw i64, ptr %view.val.i9.i49, i64 %input.sroa.0.0.i35.i.i, !dbg !9187
+  br label %_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxEBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit58, !dbg !9188
+
+_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxEBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit58: ; preds = %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit.i37, %bb3.i8.i48
+  %_0.sroa.0.0.in.i6.i46 = phi ptr [ %_4.i.i12.i52, %bb3.i8.i48 ], [ %136, %_RNvXs0_NtCshZi9mpuUhIi_4rofl5tupleINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit.i37 ]
+  %_17.1.i.i57.i.i = load i64, ptr %89, align 8, !dbg !9189, !alias.scope !9138, !noalias !9144, !noundef !25
+  %_11.i.i58.i.i = icmp ult i64 %_25.i.i, %_17.1.i.i57.i.i, !dbg !9189
+  br i1 %_11.i.i58.i.i, label %_RNCINvMNtNtCshZi9mpuUhIi_4rofl7execute5ownedINtB7_7ExecuteNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostINtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYBG_INtNtB9_7visitor10RowVisitorBU_E19visit_deferred_boolB3e_bKB30_NCINvXs0_B27_B24_INtB3x_5RowFnBU_E8dispatchBG_Es4_0NCB4x_s5_0E0NCB3n_s_0B5k_Es_0Cs3jOYrsLZdRr_10boundaries.exit.i60.i.i, label %panic.i.i59.i.i, !dbg !9189
+
+panic.i.i59.i.i:                                  ; preds = %_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxEBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit58
+; call core::panicking::panic_bounds_check
+  call void @_RNvNtCslWxY2MhVcag_4core9panicking18panic_bounds_check(i64 noundef %_25.i.i, i64 noundef %_17.1.i.i57.i.i, ptr noalias nofree noundef readonly align 8 captures(address, read_provenance) dereferenceable(24) @alloc_c8cf1bbab415705cba2a60ca1246f948) #19, !dbg !9189, !noalias !9155
+  unreachable
+
+_RNCINvMNtNtCshZi9mpuUhIi_4rofl7execute5ownedINtB7_7ExecuteNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostINtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYBG_INtNtB9_7visitor10RowVisitorBU_E19visit_deferred_boolB3e_bKB30_NCINvXs0_B27_B24_INtB3x_5RowFnBU_E8dispatchBG_Es4_0NCB4x_s5_0E0NCB3n_s_0B5k_Es_0Cs3jOYrsLZdRr_10boundaries.exit.i60.i.i: ; preds = %_RNvXsb_NtCshZi9mpuUhIi_4rofl5tupleINtB5_11TupleSourceTINtB5_6SourceNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostxEBQ_EENtNtNtCs7tX4SdoNkTE_12rofl_kernels12lane_kernels6source13IndexedSource13get_uncheckedCs3jOYrsLZdRr_10boundaries.exit58
+  %_0.sroa.0.0.i7.i47 = load i64, ptr %_0.sroa.0.0.in.i6.i46, align 8, !dbg !9190, !noalias !9192, !noundef !25
+  %138 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %_0.sroa.0.0.i.i39, i64 %_0.sroa.0.0.i7.i47), !dbg !9193
+  %_7.0.i.i.i.i63.i.i = extractvalue { i64, i1 } %138, 0, !dbg !9193
+  %_8.i.i.i.i64.i.i = icmp sgt i64 %_7.0.i.i.i.i63.i.i, 0, !dbg !9197
+  %_7.1.i.i.i.i65.i.i = extractvalue { i64, i1 } %138, 1, !dbg !9193
+  %_18.0.i.i66.i.i = load ptr, ptr %90, align 8, !dbg !9189, !alias.scope !9138, !noalias !9144, !nonnull !25, !noundef !25
+  %_9.i.i67.i.i = getelementptr inbounds nuw i8, ptr %_18.0.i.i66.i.i, i64 %_25.i.i, !dbg !9189
+  %_21.i.i68.i.i = zext i1 %_8.i.i.i.i64.i.i to i8, !dbg !9198
+  store i8 %_21.i.i68.i.i, ptr %_9.i.i67.i.i, align 1, !dbg !9201, !noalias !9155
+  %_19.i.i69.i.i = load ptr, ptr %91, align 8, !dbg !9202, !alias.scope !9138, !noalias !9144, !nonnull !25, !noundef !25
+  %139 = load i8, ptr %_19.i.i69.i.i, align 1, !dbg !9203, !range !28, !alias.scope !9205, !noalias !9155, !noundef !25
+  %140 = trunc nuw i8 %139 to i1, !dbg !9203
+  %141 = or i1 %_7.1.i.i.i.i65.i.i, %140, !dbg !9203
+  %142 = zext i1 %141 to i8, !dbg !9203
+  store i8 %142, ptr %_19.i.i69.i.i, align 1, !dbg !9203, !alias.scope !9205, !noalias !9155
+  %143 = load i64, ptr %_18.i16.i.i, align 8, !dbg !9208, !range !5407, !alias.scope !9210, !noalias !8983, !noundef !25
+  %144 = icmp eq i64 %143, -1, !dbg !9208
+  br i1 %144, label %bb17.i72.i.i, label %bb2.i.i70.i.i, !dbg !9208
+
+bb2.i.i70.i.i:                                    ; preds = %_RNCINvMNtNtCshZi9mpuUhIi_4rofl7execute5ownedINtB7_7ExecuteNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostINtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYBG_INtNtB9_7visitor10RowVisitorBU_E19visit_deferred_boolB3e_bKB30_NCINvXs0_B27_B24_INtB3x_5RowFnBU_E8dispatchBG_Es4_0NCB4x_s5_0E0NCB3n_s_0B5k_Es_0Cs3jOYrsLZdRr_10boundaries.exit.i60.i.i
+; invoke core::ptr::drop_glue::<vortex_error::VortexError>
+  invoke fastcc void @_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueNtCs6NFVb2nVDVl_12vortex_error11VortexErrorECs3jOYrsLZdRr_10boundaries(ptr noalias nofree noundef nonnull align 8 dereferenceable(80) %_18.i16.i.i)
+          to label %bb17.i72.i.i unwind label %cleanup.i71.i.i, !dbg !9208, !noalias !8983
+
+cleanup.i71.i.i:                                  ; preds = %bb2.i.i70.i.i
+  %145 = landingpad { ptr, i32 }
+          cleanup
+  store i64 -1, ptr %_18.i16.i.i, align 8, !dbg !9213, !noalias !8983
+  br label %common.resume, !dbg !9214
+
+bb17.i72.i.i:                                     ; preds = %bb2.i.i70.i.i, %_RNCINvMNtNtCshZi9mpuUhIi_4rofl7execute5ownedINtB7_7ExecuteNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostINtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYBG_INtNtB9_7visitor10RowVisitorBU_E19visit_deferred_boolB3e_bKB30_NCINvXs0_B27_B24_INtB3x_5RowFnBU_E8dispatchBG_Es4_0NCB4x_s5_0E0NCB3n_s_0B5k_Es_0Cs3jOYrsLZdRr_10boundaries.exit.i60.i.i
+  store i64 -1, ptr %_18.i16.i.i, align 8, !dbg !9213, !noalias !8983
+  br label %_RNCINvNtCshZi9mpuUhIi_4rofl7execute13selected_rowsNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostNCINvMNtB4_5ownedINtB4_7ExecuteBM_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB2d_INtNtB6_7visitor10RowVisitorBM_E19visit_deferred_boolB3E_bKB3q_NCINvXs0_B2x_B2u_INtB3Y_5RowFnBM_E8dispatchB2d_Es4_0NCB4Y_s5_0E0NCB3N_s_0B5M_Es_0E0Cs3jOYrsLZdRr_10boundaries.exit75.i.i, !dbg !9215
+
+bb11.i39.i.i:                                     ; preds = %bb9.i49.i.i, %bb7.i45.i.i, %bb5.i34.i.i
+  call void @llvm.lifetime.start.p0(ptr nonnull %_13.i28.i.i), !dbg !9216, !noalias !8983
+; call <vortex_array::scalar_fn::unstable::rofl::VortexHost as rofl::host::Host>::error
+  call void @_RNvXNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4roflNtB2_10VortexHostNtNtCshZi9mpuUhIi_4rofl4host4Host5error(ptr noalias nofree noundef nonnull sret([80 x i8]) align 8 captures(address) dereferenceable(80) %_13.i28.i.i, ptr noalias nofree noundef nonnull readonly captures(address, read_provenance) @alloc_1c63d24b05a9c3b13168fa9e48442273, i64 noundef 52), !dbg !9217, !noalias !8983
+  %146 = load i64, ptr %_18.i16.i.i, align 8, !dbg !9218, !range !5407, !alias.scope !9220, !noalias !8983, !noundef !25
+  %147 = icmp eq i64 %146, -1, !dbg !9218
+  br i1 %147, label %bb13.i44.i.i, label %bb2.i5.i40.i.i, !dbg !9218
+
+bb2.i5.i40.i.i:                                   ; preds = %bb11.i39.i.i
+; invoke core::ptr::drop_glue::<vortex_error::VortexError>
+  invoke fastcc void @_RINvNtCslWxY2MhVcag_4core3ptr9drop_glueNtCs6NFVb2nVDVl_12vortex_error11VortexErrorECs3jOYrsLZdRr_10boundaries(ptr noalias nofree noundef nonnull align 8 dereferenceable(80) %_18.i16.i.i)
+          to label %bb13.i44.i.i unwind label %cleanup1.i41.i.i, !dbg !9218, !noalias !8983
+
+cleanup1.i41.i.i:                                 ; preds = %bb2.i5.i40.i.i
+  %148 = landingpad { ptr, i32 }
+          cleanup
+  call void @llvm.memcpy.p0.p0.i64(ptr noundef nonnull align 8 dereferenceable(80) %_18.i16.i.i, ptr noundef nonnull align 8 dereferenceable(80) %_13.i28.i.i, i64 80, i1 false), !dbg !9223, !noalias !8983
+  br label %common.resume, !dbg !9223
+
+bb13.i44.i.i:                                     ; preds = %bb2.i5.i40.i.i, %bb11.i39.i.i
+  call void @llvm.memcpy.p0.p0.i64(ptr noundef nonnull align 8 dereferenceable(80) %_18.i16.i.i, ptr noundef nonnull align 8 dereferenceable(80) %_13.i28.i.i, i64 80, i1 false), !dbg !9223, !noalias !8983
+  call void @llvm.lifetime.end.p0(ptr nonnull %_13.i28.i.i), !dbg !9224, !noalias !8983
+  br label %_RNCINvNtCshZi9mpuUhIi_4rofl7execute13selected_rowsNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostNCINvMNtB4_5ownedINtB4_7ExecuteBM_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB2d_INtNtB6_7visitor10RowVisitorBM_E19visit_deferred_boolB3E_bKB3q_NCINvXs0_B2x_B2u_INtB3Y_5RowFnBM_E8dispatchB2d_Es4_0NCB4Y_s5_0E0NCB3N_s_0B5M_Es_0E0Cs3jOYrsLZdRr_10boundaries.exit75.i.i, !dbg !9225
+
+_RNCINvNtCshZi9mpuUhIi_4rofl7execute13selected_rowsNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostNCINvMNtB4_5ownedINtB4_7ExecuteBM_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB2d_INtNtB6_7visitor10RowVisitorBM_E19visit_deferred_boolB3E_bKB3q_NCINvXs0_B2x_B2u_INtB3Y_5RowFnBM_E8dispatchB2d_Es4_0NCB4Y_s5_0E0NCB3N_s_0B5M_Es_0E0Cs3jOYrsLZdRr_10boundaries.exit75.i.i: ; preds = %bb13.i44.i.i, %bb17.i72.i.i, %bb10.i.i
+  %_31.i.i = add i64 %word.sroa.0.0107.i.i, -1, !dbg !8986
+  %149 = and i64 %_31.i.i, %word.sroa.0.0107.i.i, !dbg !8987
+  %150 = icmp eq i64 %149, 0, !dbg !8988
+  br i1 %150, label %bb13.i.i, label %bb10thread-pre-split.i.i, !dbg !8988, !llvm.loop !9226
+
+_RINvMs0_NtNtCs7x6tOKv5niH_13vortex_buffer3bit3bufNtB6_9BitBuffer18for_each_set_indexNCINvXs_NtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl5batchNtB1s_15VortexSelectionNtNtCshZi9mpuUhIi_4rofl4host9Selection8for_eachNCINvNtB2X_7execute13selected_rowsNtB1u_10VortexHostNCINvMNtB3J_5ownedINtB3J_7ExecuteB4c_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB4M_INtNtB2X_7visitor10RowVisitorB4c_E19visit_deferred_boolB6f_bKB61_NCINvXs0_B58_B55_INtB6z_5RowFnB4c_E8dispatchB4M_Es4_0NCB7B_s5_0E0NCB6o_s_0B8q_Es_0E0E0ECs3jOYrsLZdRr_10boundaries.exit: ; preds = %_RINvMNtCslWxY2MhVcag_4core6optionINtB3_6OptionyE7or_elseNCNvXs_NtNtNtB5_4iter8adapters5chainINtBZ_5ChainNtNtNtCs6stDIWloaLs_12arrow_buffer4util18bit_chunk_iterator16BitChunkIteratorINtNtNtB13_7sources4once4OnceyEENtNtNtB13_6traits8iterator8Iterator4next0ECs3jOYrsLZdRr_10boundaries.exit.i.i
+  call void @llvm.lifetime.end.p0(ptr nonnull %_6.i.i), !dbg !9227, !noalias !8870
+  br label %bb5, !dbg !8857
+
+bb5:                                              ; preds = %_RNCINvNtCshZi9mpuUhIi_4rofl7execute13selected_rowsNtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl10VortexHostNCINvMNtB4_5ownedINtB4_7ExecuteBM_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB2d_INtNtB6_7visitor10RowVisitorBM_E19visit_deferred_boolB3E_bKB3q_NCINvXs0_B2x_B2u_INtB3Y_5RowFnBM_E8dispatchB2d_Es4_0NCB4Y_s5_0E0NCB3N_s_0B5M_Es_0E0Cs3jOYrsLZdRr_10boundaries.exit, %_RINvMs0_NtNtCs7x6tOKv5niH_13vortex_buffer3bit3bufNtB6_9BitBuffer18for_each_set_indexNCINvXs_NtNtNtNtCsg1Afd8KoF7C_12vortex_array9scalar_fn8unstable4rofl5batchNtB1s_15VortexSelectionNtNtCshZi9mpuUhIi_4rofl4host9Selection8for_eachNCINvNtB2X_7execute13selected_rowsNtB1u_10VortexHostNCINvMNtB3J_5ownedINtB3J_7ExecuteB4c_INtNtCs90wW8VhDdn5_13rofl_examples9functions11PositiveSumKb1_EE8deferredTxxEbubNCINvYB4M_INtNtB2X_7visitor10RowVisitorB4c_E19visit_deferred_boolB6f_bKB61_NCINvXs0_B58_B55_INtB6z_5RowFnB4c_E8dispatchB4M_Es4_0NCB7B_s5_0E0NCB6o_s_0B8q_Es_0E0E0ECs3jOYrsLZdRr_10boundaries.exit, %bb3.i.preheader, %bb3, %start
+  ret void, !dbg !9228
+}

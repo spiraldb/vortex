@@ -1,0 +1,20 @@
+{
+  "head": "24a96cece436409dc4f60f94c6b846d6af017804",
+  "branch": "ct/row-fn-engine-research",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: aarch64-apple-darwin\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+  "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)\n",
+  "cpu": "Apple M4 Max",
+  "cpu_note": "Same local host as the preceding reports. Final sysctl refresh was blocked by the filesystem sandbox.",
+  "environment": {},
+  "profile": {
+    "name": "bench",
+    "opt_level": 3,
+    "codegen_units": 16,
+    "lto": false,
+    "debug": "limited",
+    "target_cpu": "rustc default",
+    "force_frame_pointers": true
+  },
+  "arrow_version": "59.3.0",
+  "method": "Three sequential process pairs, alternating order. No concurrent build or test process. Median of process medians. No CPU affinity."
+}

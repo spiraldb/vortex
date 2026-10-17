@@ -1,0 +1,233 @@
+FILE arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.05.rcgu.ll
+define hidden void @_RINvMs_NtNtCs6AFQLBbsvVR_11arrow_array5array15primitive_arrayINtB5_14PrimitiveArrayNtNtB9_5types11Float64TypeE5unaryNCNvMCs4I15memKWBy_15arrow_workloadsNtB1V_7Fixture6native0B1j_EB1V_(ptr dead_on_unwind noalias nofree noundef writable writeonly sret([96 x i8]) align 8 captures(none) dereferenceable(96) %_0, ptr noalias nofree noundef readonly align 8 captures(none) dereferenceable(96) %self, ptr noalias nofree noundef readonly align 8 captures(none) dereferenceable(8) %0) unnamed_addr #0 personality ptr @rust_eh_personality !dbg !23 {
+...
+  %14 = getelementptr inbounds nuw i8, ptr %11, i64 48, !dbg !263
+  %wide.load = load <2 x double>, ptr %11, align 8, !dbg !263, !noalias !264
+  %wide.load6 = load <2 x double>, ptr %12, align 8, !dbg !263, !noalias !264
+  %wide.load7 = load <2 x double>, ptr %13, align 8, !dbg !263, !noalias !264
+  %wide.load8 = load <2 x double>, ptr %14, align 8, !dbg !263, !noalias !264
+  %15 = fmul <2 x double> %wide.load, %broadcast.splat, !dbg !265
+  %16 = fmul <2 x double> %wide.load6, %broadcast.splat, !dbg !265
+  %17 = fmul <2 x double> %wide.load7, %broadcast.splat, !dbg !265
+  %18 = fmul <2 x double> %wide.load8, %broadcast.splat, !dbg !265
+  %19 = getelementptr inbounds nuw double, ptr %7, i64 %index, !dbg !279
+  %20 = getelementptr inbounds nuw i8, ptr %19, i64 16, !dbg !290
+  %21 = getelementptr inbounds nuw i8, ptr %19, i64 32, !dbg !290
+  %22 = getelementptr inbounds nuw i8, ptr %19, i64 48, !dbg !290
+  store <2 x double> %15, ptr %19, align 8, !dbg !290, !noalias !294
+...
+
+bb27.i.i.i:                                       ; preds = %bb27.i.i.i.preheader9, %bb27.i.i.i
+  %24 = phi i64 [ %25, %bb27.i.i.i ], [ %.ph, %bb27.i.i.i.preheader9 ], !dbg !260
+  %_45.i.i.i = getelementptr inbounds nuw double, ptr %_33, i64 %24, !dbg !260
+  %_45.val.i.i.i = load double, ptr %_45.i.i.i, align 8, !dbg !263, !noalias !264, !noundef !30
+  %_0.i.i.i.i.i.i = fmul double %_45.val.i.i.i, %_3.i.i.i.i.i.i, !dbg !265
+  %_3.i.i1.i.i.i.i = getelementptr inbounds nuw double, ptr %7, i64 %24, !dbg !279
+  store double %_0.i.i.i.i.i.i, ptr %_3.i.i1.i.i.i.i, align 8, !dbg !290, !noalias !294
+  %25 = add nuw nsw i64 %24, 1, !dbg !304
+  %_28.i.i.i = icmp eq i64 %25, %5, !dbg !238
+  br i1 %_28.i.i.i, label %bb17, label %bb27.i.i.i, !dbg !238, !llvm.loop !310
+FILE arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.11.rcgu.ll
+define hidden void @_RNvXNtNtCs6KVRSXc8uZF_5alloc3vec14spec_from_iterINtB4_3VecdEINtB2_12SpecFromIterdINtNtNtNtCslWxY2MhVcag_4core4iter8adapters3map3MapINtNtNtB1q_5slice4iter4IterdENCINvMs_NtNtCs6AFQLBbsvVR_11arrow_array5array15primitive_arrayINtB2G_14PrimitiveArrayNtNtB2K_5types11Float64TypeE5unaryNCNvMCs4I15memKWBy_15arrow_workloadsNtB4y_7Fixture6native0B3V_E0EE9from_iterB4y_(ptr dead_on_unwind noalias nofree noundef writable writeonly sret([24 x i8]) align 8 captures(none) dereferenceable(24) %_0, ptr dead_on_return noalias nofree noundef readonly align 8 captures(none) dereferenceable(24) %iterator) unnamed_addr #0 personality ptr @rust_eh_personality !dbg !5549 {
+...
+  %niter = phi i64 [ 0, %bb27.i.i.preheader.new ], [ %niter.next.5, %bb27.i.i ]
+  %_45.i.i = getelementptr inbounds nuw double, ptr %iterator.val.i, i64 %14, !dbg !5627
+  %_45.val.i.i = load double, ptr %_45.i.i, align 8, !dbg !5630, !noalias !5631, !noundef !26
+  %_5.val.i.i.i.i = load ptr, ptr %f.i, align 8, !dbg !5634, !noalias !5643, !nonnull !26, !align !1863, !noundef !26
+  %_3.i.i.i.i.i = load double, ptr %_5.val.i.i.i.i, align 8, !dbg !5646, !noalias !5643, !noundef !26
+  %_0.i.i.i.i.i = fmul double %_45.val.i.i, %_3.i.i.i.i.i, !dbg !5650
+  %_3.i.i1.i.i.i = getelementptr inbounds nuw double, ptr %6, i64 %14, !dbg !5651
+  store double %_0.i.i.i.i.i, ptr %_3.i.i1.i.i.i, align 8, !dbg !5658, !noalias !5661
+  %15 = or disjoint i64 %14, 1, !dbg !5666
+  %_45.i.i.1 = getelementptr inbounds nuw double, ptr %iterator.val.i, i64 %15, !dbg !5627
+  %_45.val.i.i.1 = load double, ptr %_45.i.i.1, align 8, !dbg !5630, !noalias !5631, !noundef !26
+  %_5.val.i.i.i.i.1 = load ptr, ptr %f.i, align 8, !dbg !5634, !noalias !5643, !nonnull !26, !align !1863, !noundef !26
+  %_3.i.i.i.i.i.1 = load double, ptr %_5.val.i.i.i.i.1, align 8, !dbg !5646, !noalias !5643, !noundef !26
+  %_0.i.i.i.i.i.1 = fmul double %_45.val.i.i.1, %_3.i.i.i.i.i.1, !dbg !5650
+  %_3.i.i1.i.i.i.1 = getelementptr inbounds nuw double, ptr %6, i64 %15, !dbg !5651
+  store double %_0.i.i.i.i.i.1, ptr %_3.i.i1.i.i.i.1, align 8, !dbg !5658, !noalias !5661
+  %16 = add nuw i64 %14, 2, !dbg !5666
+  %_45.i.i.2 = getelementptr inbounds nuw double, ptr %iterator.val.i, i64 %16, !dbg !5627
+  %_45.val.i.i.2 = load double, ptr %_45.i.i.2, align 8, !dbg !5630, !noalias !5631, !noundef !26
+  %_5.val.i.i.i.i.2 = load ptr, ptr %f.i, align 8, !dbg !5634, !noalias !5643, !nonnull !26, !align !1863, !noundef !26
+  %_3.i.i.i.i.i.2 = load double, ptr %_5.val.i.i.i.i.2, align 8, !dbg !5646, !noalias !5643, !noundef !26
+  %_0.i.i.i.i.i.2 = fmul double %_45.val.i.i.2, %_3.i.i.i.i.i.2, !dbg !5650
+  %_3.i.i1.i.i.i.2 = getelementptr inbounds nuw double, ptr %6, i64 %16, !dbg !5651
+  store double %_0.i.i.i.i.i.2, ptr %_3.i.i1.i.i.i.2, align 8, !dbg !5658, !noalias !5661
+  %17 = add nuw i64 %14, 3, !dbg !5666
+  %_45.i.i.3 = getelementptr inbounds nuw double, ptr %iterator.val.i, i64 %17, !dbg !5627
+  %_45.val.i.i.3 = load double, ptr %_45.i.i.3, align 8, !dbg !5630, !noalias !5631, !noundef !26
+  %_5.val.i.i.i.i.3 = load ptr, ptr %f.i, align 8, !dbg !5634, !noalias !5643, !nonnull !26, !align !1863, !noundef !26
+  %_3.i.i.i.i.i.3 = load double, ptr %_5.val.i.i.i.i.3, align 8, !dbg !5646, !noalias !5643, !noundef !26
+  %_0.i.i.i.i.i.3 = fmul double %_45.val.i.i.3, %_3.i.i.i.i.i.3, !dbg !5650
+  %_3.i.i1.i.i.i.3 = getelementptr inbounds nuw double, ptr %6, i64 %17, !dbg !5651
+  store double %_0.i.i.i.i.i.3, ptr %_3.i.i1.i.i.i.3, align 8, !dbg !5658, !noalias !5661
+  %18 = add nuw i64 %14, 4, !dbg !5666
+  %_45.i.i.4 = getelementptr inbounds nuw double, ptr %iterator.val.i, i64 %18, !dbg !5627
+  %_45.val.i.i.4 = load double, ptr %_45.i.i.4, align 8, !dbg !5630, !noalias !5631, !noundef !26
+  %_5.val.i.i.i.i.4 = load ptr, ptr %f.i, align 8, !dbg !5634, !noalias !5643, !nonnull !26, !align !1863, !noundef !26
+  %_3.i.i.i.i.i.4 = load double, ptr %_5.val.i.i.i.i.4, align 8, !dbg !5646, !noalias !5643, !noundef !26
+  %_0.i.i.i.i.i.4 = fmul double %_45.val.i.i.4, %_3.i.i.i.i.i.4, !dbg !5650
+  %_3.i.i1.i.i.i.4 = getelementptr inbounds nuw double, ptr %6, i64 %18, !dbg !5651
+  store double %_0.i.i.i.i.i.4, ptr %_3.i.i1.i.i.i.4, align 8, !dbg !5658, !noalias !5661
+  %19 = add nuw i64 %14, 5, !dbg !5666
+  %_45.i.i.5 = getelementptr inbounds nuw double, ptr %iterator.val.i, i64 %19, !dbg !5627
+  %_45.val.i.i.5 = load double, ptr %_45.i.i.5, align 8, !dbg !5630, !noalias !5631, !noundef !26
+  %_5.val.i.i.i.i.5 = load ptr, ptr %f.i, align 8, !dbg !5634, !noalias !5643, !nonnull !26, !align !1863, !noundef !26
+  %_3.i.i.i.i.i.5 = load double, ptr %_5.val.i.i.i.i.5, align 8, !dbg !5646, !noalias !5643, !noundef !26
+  %_0.i.i.i.i.i.5 = fmul double %_45.val.i.i.5, %_3.i.i.i.i.i.5, !dbg !5650
+  %_3.i.i1.i.i.i.5 = getelementptr inbounds nuw double, ptr %6, i64 %19, !dbg !5651
+  store double %_0.i.i.i.i.i.5, ptr %_3.i.i1.i.i.i.5, align 8, !dbg !5658, !noalias !5661
+  %20 = add nuw i64 %14, 6, !dbg !5666
+  %niter.next.5 = add i64 %niter, 6, !dbg !5621
+  %niter.ncmp.5 = icmp eq i64 %niter.next.5, %unroll_iter, !dbg !5621
+...
+  %epil.iter = phi i64 [ %epil.iter.next, %bb27.i.i.epil ], [ 0, %bb27.i.i.epil.preheader ]
+  %_45.i.i.epil = getelementptr inbounds nuw double, ptr %iterator.val.i, i64 %21, !dbg !5627
+  %_45.val.i.i.epil = load double, ptr %_45.i.i.epil, align 8, !dbg !5630, !noalias !5631, !noundef !26
+  %_5.val.i.i.i.i.epil = load ptr, ptr %f.i, align 8, !dbg !5634, !noalias !5643, !nonnull !26, !align !1863, !noundef !26
+  %_3.i.i.i.i.i.epil = load double, ptr %_5.val.i.i.i.i.epil, align 8, !dbg !5646, !noalias !5643, !noundef !26
+  %_0.i.i.i.i.i.epil = fmul double %_45.val.i.i.epil, %_3.i.i.i.i.i.epil, !dbg !5650
+  %_3.i.i1.i.i.i.epil = getelementptr inbounds nuw double, ptr %6, i64 %21, !dbg !5651
+  store double %_0.i.i.i.i.i.epil, ptr %_3.i.i1.i.i.i.epil, align 8, !dbg !5658, !noalias !5661
+  %22 = add nuw i64 %21, 1, !dbg !5666
+  %epil.iter.next = add i64 %epil.iter, 1, !dbg !5621
+  %epil.iter.cmp.not = icmp eq i64 %epil.iter.next, %xtraiter, !dbg !5621
+FILE arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.00.rcgu.ll
+define hidden void @_RINvXNtNtCshZi9mpuUhIi_4rofl7execute7visitorINtB5_7ExecuteNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtCs4I15memKWBy_15arrow_workloads9ScaleFourEINtNtB7_7visitor10RowVisitorBU_E19visit_prepared_intoTINtNtB7_5input13FixedSizeListdEdEINtNtNtB7_4sink4list17FixedSizeListSinkBU_dEINtNtCslWxY2MhVcag_4core6option6OptiondENtB3G_14InitializedRowNCINvXs_B1y_B1w_INtB2h_5RowFnBU_E8dispatchBG_E0NCB5n_s_0EB1y_(ptr dead_on_unwind noalias nofree noundef writable writeonly sret([40 x i8]) align 8 captures(none) dereferenceable(40) %_0, ptr dead_on_return noalias nofree noundef align 8 captures(address) dereferenceable(192) %self, i64 noundef %params) unnamed_addr #0 personality ptr @rust_eh_personality !dbg !10152 {
+...
+  call void @llvm.experimental.noalias.scope.decl(metadata !10834), !dbg !10837
+  call void @llvm.experimental.noalias.scope.decl(metadata !10839), !dbg !10837
+  %108 = load <2 x double>, ptr %.pn6.i.i, align 8, !dbg !10841, !alias.scope !10839, !noalias !10850
+  %109 = insertelement <2 x double> poison, double %storemerge.i.i, i64 0, !dbg !10841
+  %110 = shufflevector <2 x double> %109, <2 x double> poison, <2 x i32> zeroinitializer, !dbg !10841
+  %111 = fmul <2 x double> %110, %108, !dbg !10841
+  store <2 x double> %111, ptr %_12.i48.i, align 8, !dbg !10852, !alias.scope !10834, !noalias !10855
+  %_17.i.i.1.i = getelementptr inbounds nuw i8, ptr %_12.i48.i, i64 16, !dbg !10856
+  %112 = getelementptr inbounds nuw i8, ptr %.pn6.i.i, i64 16, !dbg !10841
+  %113 = load <2 x double>, ptr %112, align 8, !dbg !10841, !alias.scope !10839, !noalias !10850
+  %114 = fmul <2 x double> %110, %113, !dbg !10841
+  store <2 x double> %114, ptr %_17.i.i.1.i, align 8, !dbg !10852, !alias.scope !10834, !noalias !10855
+  %exitcond.not.i = icmp eq i64 %100, %iter15.i, !dbg !10718
+  br i1 %exitcond.not.i, label %bb30.i, label %bb75.i, !dbg !10733
+
+bb27.i:                                           ; preds = %bb16.i, %_RNvXs_NtNtCshZi9mpuUhIi_4rofl4sink4listINtB4_17FixedSizeListSinkNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostdEINtB6_10OutputSinkB10_E10initializeCs4I15memKWBy_15arrow_workloads.exit
+FILE arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.00.rcgu.ll
+define hidden void @_RINvXNtNtCshZi9mpuUhIi_4rofl7execute7visitorINtB5_7ExecuteNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtCs6mBffczUiYQ_13rofl_examples9functions5ScaleEINtNtB7_7visitor10RowVisitorBU_E19visit_prepared_intoTINtNtB7_5input13FixedSizeListdEdEINtNtNtB7_4sink4list17FixedSizeListSinkBU_dEINtNtCslWxY2MhVcag_4core6option6OptiondENtB3M_14InitializedRowNCINvXs3_B1y_B1w_INtB2n_5RowFnBU_E8dispatchBG_Es0_0NCB5t_s1_0ECs4I15memKWBy_15arrow_workloads(ptr dead_on_unwind noalias nofree noundef writable writeonly sret([40 x i8]) align 8 captures(none) dereferenceable(40) %_0, ptr dead_on_return noalias nofree noundef align 8 captures(address) dereferenceable(192) %self, i64 noundef %params) unnamed_addr #0 personality ptr @rust_eh_personality !dbg !11896 {
+...
+  %115 = getelementptr inbounds nuw i8, ptr %112, i64 48, !dbg !12467
+  %wide.load = load <2 x double>, ptr %112, align 8, !dbg !12467, !noalias !12475
+  %wide.load117 = load <2 x double>, ptr %113, align 8, !dbg !12467, !noalias !12475
+  %wide.load118 = load <2 x double>, ptr %114, align 8, !dbg !12467, !noalias !12475
+  %wide.load119 = load <2 x double>, ptr %115, align 8, !dbg !12467, !noalias !12475
+  %116 = fmul <2 x double> %broadcast.splat, %wide.load, !dbg !12467
+  %117 = fmul <2 x double> %broadcast.splat, %wide.load117, !dbg !12467
+  %118 = fmul <2 x double> %broadcast.splat, %wide.load118, !dbg !12467
+  %119 = fmul <2 x double> %broadcast.splat, %wide.load119, !dbg !12467
+  %120 = getelementptr i8, ptr %next.gep, i64 16, !dbg !12479
+  %121 = getelementptr i8, ptr %next.gep, i64 32, !dbg !12479
+  %122 = getelementptr i8, ptr %next.gep, i64 48, !dbg !12479
+  store <2 x double> %116, ptr %next.gep, align 8, !dbg !12479, !alias.scope !12444, !noalias !12482
+  store <2 x double> %117, ptr %120, align 8, !dbg !12479, !alias.scope !12444, !noalias !12482
+...
+_RNCNCINvXs3_NtCs6mBffczUiYQ_13rofl_examples9functionsNtBa_5ScaleINtNtCshZi9mpuUhIi_4rofl7visitor5RowFnNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostE8dispatchINtNtB15_7execute7ExecuteB1C_BP_EEs1_00Cs4I15memKWBy_15arrow_workloads.exit.i: ; preds = %bb4.i75
+  %_9.0.i.i = add nuw nsw i64 %iter.sroa.7.09.i, 1, !dbg !12472
+  %_17.i.i.i = getelementptr inbounds nuw i8, ptr %iter.sroa.0.010.i, i64 8, !dbg !12486
+  %124 = getelementptr inbounds nuw double, ptr %.pn6.i.i, i64 %iter.sroa.7.09.i, !dbg !12467
+  %_3.i.i77 = load double, ptr %124, align 8, !dbg !12467, !noalias !12475, !noundef !33
+  %_0.i.i = fmul double %storemerge.i.i, %_3.i.i77, !dbg !12467
+  store double %_0.i.i, ptr %iter.sroa.0.010.i, align 8, !dbg !12479, !alias.scope !12444, !noalias !12482
+  %_7.i.i.i79 = icmp eq ptr %_17.i.i.i, %104, !dbg !12460
+  br i1 %_7.i.i.i79, label %bb78.i, label %bb4.i75, !dbg !12466, !llvm.loop !12488
+
+cleanup16.i:                                      ; preds = %panic.i.i
+FILE arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.00.rcgu.ll
+define hidden void @_RINvXNtNtCshZi9mpuUhIi_4rofl7execute7visitorINtB5_7ExecuteNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostNtNtCs6mBffczUiYQ_13rofl_examples9functions5ScaleEINtNtB7_7visitor10RowVisitorBU_E19visit_prepared_intoTINtNtB7_5input13FixedSizeListfEfEINtNtNtB7_4sink4list17FixedSizeListSinkBU_fEINtNtCslWxY2MhVcag_4core6option6OptionfENtB3M_14InitializedRowNCINvXs3_B1y_B1w_INtB2n_5RowFnBU_E8dispatchBG_E0NCB5t_s_0ECs4I15memKWBy_15arrow_workloads(ptr dead_on_unwind noalias nofree noundef writable writeonly sret([40 x i8]) align 8 captures(none) dereferenceable(40) %_0, ptr dead_on_return noalias nofree noundef align 8 captures(address) dereferenceable(192) %self, i64 noundef %params) unnamed_addr #0 personality ptr @rust_eh_personality !dbg !12720 {
+...
+  %115 = getelementptr inbounds nuw i8, ptr %112, i64 48, !dbg !13353
+  %wide.load = load <4 x float>, ptr %112, align 4, !dbg !13353, !noalias !13361
+  %wide.load117 = load <4 x float>, ptr %113, align 4, !dbg !13353, !noalias !13361
+  %wide.load118 = load <4 x float>, ptr %114, align 4, !dbg !13353, !noalias !13361
+  %wide.load119 = load <4 x float>, ptr %115, align 4, !dbg !13353, !noalias !13361
+  %116 = fmul <4 x float> %broadcast.splat, %wide.load, !dbg !13353
+  %117 = fmul <4 x float> %broadcast.splat, %wide.load117, !dbg !13353
+  %118 = fmul <4 x float> %broadcast.splat, %wide.load118, !dbg !13353
+  %119 = fmul <4 x float> %broadcast.splat, %wide.load119, !dbg !13353
+  %120 = getelementptr i8, ptr %next.gep, i64 16, !dbg !13365
+  %121 = getelementptr i8, ptr %next.gep, i64 32, !dbg !13365
+  %122 = getelementptr i8, ptr %next.gep, i64 48, !dbg !13365
+  store <4 x float> %116, ptr %next.gep, align 4, !dbg !13365, !alias.scope !13326, !noalias !13368
+  store <4 x float> %117, ptr %120, align 4, !dbg !13365, !alias.scope !13326, !noalias !13368
+...
+_RNCNCINvXs3_NtCs6mBffczUiYQ_13rofl_examples9functionsNtBa_5ScaleINtNtCshZi9mpuUhIi_4rofl7visitor5RowFnNtCs7Kazvvc7DnG_10rofl_arrow9ArrowHostE8dispatchINtNtB15_7execute7ExecuteB1C_BP_EEs_00Cs4I15memKWBy_15arrow_workloads.exit.i: ; preds = %bb4.i75
+  %_9.0.i.i = add nuw nsw i64 %iter.sroa.7.09.i, 1, !dbg !13358
+  %_17.i.i.i = getelementptr inbounds nuw i8, ptr %iter.sroa.0.010.i, i64 4, !dbg !13370
+  %124 = getelementptr inbounds nuw float, ptr %.pn6.i.i, i64 %iter.sroa.7.09.i, !dbg !13353
+  %_3.i.i77 = load float, ptr %124, align 4, !dbg !13353, !noalias !13361, !noundef !33
+  %_0.i.i = fmul float %storemerge.i.i, %_3.i.i77, !dbg !13353
+  store float %_0.i.i, ptr %iter.sroa.0.010.i, align 4, !dbg !13365, !alias.scope !13326, !noalias !13368
+  %_7.i.i.i79 = icmp eq ptr %_17.i.i.i, %104, !dbg !13342
+  br i1 %_7.i.i.i79, label %bb78.i, label %bb4.i75, !dbg !13352, !llvm.loop !13373
+
+cleanup16.i:                                      ; preds = %panic.i.i
+FILE arrow_workloads-c6ec49480bb17fe7.arrow_workloads.36dc1d058439ec32-cgu.03.rcgu.ll
+define hidden void @_RINvXs0_NtNtNtCslWxY2MhVcag_4core4iter8adapters3mapINtB6_3MapINtNtNtBc_5slice4iter4IterdENCINvMs_NtNtCs6AFQLBbsvVR_11arrow_array5array15primitive_arrayINtB1x_14PrimitiveArrayNtNtB1B_5types11Float64TypeE5unaryNCNvMCs4I15memKWBy_15arrow_workloadsNtB3p_7Fixture6native0B2M_E0ENtNtNtBa_6traits8iterator8Iterator4folduNCINvNvB4n_8for_each4calldNCINvMsj_NtCs6KVRSXc8uZF_5alloc3vecINtB5A_3VecdE14extend_trustedBN_E0E0EB3p_(ptr dead_on_return noalias nofree noundef readonly align 8 captures(none) dereferenceable(24) %self, ptr dead_on_return noalias nofree noundef readonly align 8 captures(none) dereferenceable(24) %g) unnamed_addr #4 personality ptr @rust_eh_personality !dbg !2678 {
+...
+  %niter = phi i64 [ 0, %bb5.i.new ], [ %niter.next.4, %bb27.i ]
+  %_45.i = getelementptr inbounds nuw double, ptr %_4.0, i64 %i.sroa.0.0.i, !dbg !2705
+  %_45.val.i = load double, ptr %_45.i, align 8, !dbg !2710, !noalias !2711, !noundef !24
+  %_5.val.i.i.i = load ptr, ptr %f, align 8, !dbg !2714, !noalias !2721, !nonnull !24, !align !78, !noundef !24
+  %_3.i.i.i.i = load double, ptr %_5.val.i.i.i, align 8, !dbg !2724, !noalias !2721, !noundef !24
+  %_0.i.i.i.i = fmul double %_45.val.i, %_3.i.i.i.i, !dbg !2728
+  %_3.i.i1.i.i = getelementptr inbounds nuw double, ptr %_5.sroa.7.0.copyload, i64 %12, !dbg !2729
+  store double %_0.i.i.i.i, ptr %_3.i.i1.i.i, align 8, !dbg !2736, !noalias !2739
+  %13 = getelementptr inbounds nuw double, ptr %_4.0, i64 %i.sroa.0.0.i, !dbg !2705
+  %_45.i.1 = getelementptr inbounds nuw i8, ptr %13, i64 8, !dbg !2705
+  %_45.val.i.1 = load double, ptr %_45.i.1, align 8, !dbg !2710, !noalias !2711, !noundef !24
+  %_5.val.i.i.i.1 = load ptr, ptr %f, align 8, !dbg !2714, !noalias !2721, !nonnull !24, !align !78, !noundef !24
+  %_3.i.i.i.i.1 = load double, ptr %_5.val.i.i.i.1, align 8, !dbg !2724, !noalias !2721, !noundef !24
+  %_0.i.i.i.i.1 = fmul double %_45.val.i.1, %_3.i.i.i.i.1, !dbg !2728
+  %14 = getelementptr double, ptr %_5.sroa.7.0.copyload, i64 %12, !dbg !2729
+  %_3.i.i1.i.i.1 = getelementptr i8, ptr %14, i64 8, !dbg !2729
+  store double %_0.i.i.i.i.1, ptr %_3.i.i1.i.i.1, align 8, !dbg !2736, !noalias !2739
+  %15 = getelementptr inbounds nuw double, ptr %_4.0, i64 %i.sroa.0.0.i, !dbg !2705
+  %_45.i.2 = getelementptr inbounds nuw i8, ptr %15, i64 16, !dbg !2705
+  %_45.val.i.2 = load double, ptr %_45.i.2, align 8, !dbg !2710, !noalias !2711, !noundef !24
+  %_5.val.i.i.i.2 = load ptr, ptr %f, align 8, !dbg !2714, !noalias !2721, !nonnull !24, !align !78, !noundef !24
+  %_3.i.i.i.i.2 = load double, ptr %_5.val.i.i.i.2, align 8, !dbg !2724, !noalias !2721, !noundef !24
+  %_0.i.i.i.i.2 = fmul double %_45.val.i.2, %_3.i.i.i.i.2, !dbg !2728
+  %16 = getelementptr double, ptr %_5.sroa.7.0.copyload, i64 %12, !dbg !2729
+  %_3.i.i1.i.i.2 = getelementptr i8, ptr %16, i64 16, !dbg !2729
+  store double %_0.i.i.i.i.2, ptr %_3.i.i1.i.i.2, align 8, !dbg !2736, !noalias !2739
+  %17 = getelementptr inbounds nuw double, ptr %_4.0, i64 %i.sroa.0.0.i, !dbg !2705
+  %_45.i.3 = getelementptr inbounds nuw i8, ptr %17, i64 24, !dbg !2705
+  %_45.val.i.3 = load double, ptr %_45.i.3, align 8, !dbg !2710, !noalias !2711, !noundef !24
+  %_5.val.i.i.i.3 = load ptr, ptr %f, align 8, !dbg !2714, !noalias !2721, !nonnull !24, !align !78, !noundef !24
+  %_3.i.i.i.i.3 = load double, ptr %_5.val.i.i.i.3, align 8, !dbg !2724, !noalias !2721, !noundef !24
+  %_0.i.i.i.i.3 = fmul double %_45.val.i.3, %_3.i.i.i.i.3, !dbg !2728
+  %18 = getelementptr double, ptr %_5.sroa.7.0.copyload, i64 %12, !dbg !2729
+  %_3.i.i1.i.i.3 = getelementptr i8, ptr %18, i64 24, !dbg !2729
+  store double %_0.i.i.i.i.3, ptr %_3.i.i1.i.i.3, align 8, !dbg !2736, !noalias !2739
+  %19 = getelementptr inbounds nuw double, ptr %_4.0, i64 %i.sroa.0.0.i, !dbg !2705
+  %_45.i.4 = getelementptr inbounds nuw i8, ptr %19, i64 32, !dbg !2705
+  %_45.val.i.4 = load double, ptr %_45.i.4, align 8, !dbg !2710, !noalias !2711, !noundef !24
+  %_5.val.i.i.i.4 = load ptr, ptr %f, align 8, !dbg !2714, !noalias !2721, !nonnull !24, !align !78, !noundef !24
+  %_3.i.i.i.i.4 = load double, ptr %_5.val.i.i.i.4, align 8, !dbg !2724, !noalias !2721, !noundef !24
+  %_0.i.i.i.i.4 = fmul double %_45.val.i.4, %_3.i.i.i.i.4, !dbg !2728
+  %20 = getelementptr double, ptr %_5.sroa.7.0.copyload, i64 %12, !dbg !2729
+  %_3.i.i1.i.i.4 = getelementptr i8, ptr %20, i64 32, !dbg !2729
+  store double %_0.i.i.i.i.4, ptr %_3.i.i1.i.i.4, align 8, !dbg !2736, !noalias !2739
+  %21 = add i64 %12, 5, !dbg !2744
+  %_27.i.4 = add nuw i64 %i.sroa.0.0.i, 5, !dbg !2747
+...
+  %epil.iter = phi i64 [ 0, %bb27.i.epil.preheader ], [ %epil.iter.next, %bb27.i.epil ]
+  %_45.i.epil = getelementptr inbounds nuw double, ptr %_4.0, i64 %i.sroa.0.0.i.epil, !dbg !2705
+  %_45.val.i.epil = load double, ptr %_45.i.epil, align 8, !dbg !2710, !noalias !2711, !noundef !24
+  %_5.val.i.i.i.epil = load ptr, ptr %f, align 8, !dbg !2714, !noalias !2721, !nonnull !24, !align !78, !noundef !24
+  %_3.i.i.i.i.epil = load double, ptr %_5.val.i.i.i.epil, align 8, !dbg !2724, !noalias !2721, !noundef !24
+  %_0.i.i.i.i.epil = fmul double %_45.val.i.epil, %_3.i.i.i.i.epil, !dbg !2728
+  %_3.i.i1.i.i.epil = getelementptr inbounds nuw double, ptr %_5.sroa.7.0.copyload, i64 %22, !dbg !2729
+  store double %_0.i.i.i.i.epil, ptr %_3.i.i1.i.i.epil, align 8, !dbg !2736, !noalias !2739
+  %23 = add i64 %22, 1, !dbg !2744
+  %_27.i.epil = add nuw i64 %i.sroa.0.0.i.epil, 1, !dbg !2747
+  %epil.iter.next = add i64 %epil.iter, 1, !dbg !2750

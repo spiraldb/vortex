@@ -1,0 +1,141 @@
+Timer precision: 41 ns
+arrow_workloads              fastest       │ slowest       │ median        │ mean          │ samples │ iters
+├─ arrow_rofl                              │               │               │               │         │
+│  ├─ 16384                                │               │               │               │         │
+│  │  ├─ TrimViewShort       234 µs        │ 401.3 µs      │ 270.5 µs      │ 288.5 µs      │ 952     │ 952
+│  │  ├─ TrimViewLong        386.4 µs      │ 448.2 µs      │ 418.8 µs      │ 417.5 µs      │ 718     │ 718
+│  │  ├─ TrimUtf8            389.5 µs      │ 474.9 µs      │ 417.8 µs      │ 417 µs        │ 719     │ 719
+│  │  ├─ TrimLargeUtf8       383.7 µs      │ 502.7 µs      │ 415.4 µs      │ 416.9 µs      │ 720     │ 720
+│  │  ├─ Timestamp           4.79 µs       │ 12.66 µs      │ 5.457 µs      │ 5.51 µs       │ 17573   │ 17573
+│  │  ├─ ScaleList4          60.33 µs      │ 94.99 µs      │ 68.16 µs      │ 66.91 µs      │ 1490    │ 1490
+│  │  ├─ ScaleList0          8.374 µs      │ 30.74 µs      │ 9.957 µs      │ 9.903 µs      │ 9968    │ 9968
+│  │  ├─ ScalarOnly          6.165 µs      │ 26.24 µs      │ 7.082 µs      │ 6.989 µs      │ 13904   │ 13904
+│  │  ├─ Nullary             1.853 µs      │ 6.76 µs       │ 2.104 µs      │ 2.044 µs      │ 11755   │ 47020
+│  │  ├─ DivideNullable      32.29 µs      │ 46.24 µs      │ 36.2 µs       │ 36.16 µs      │ 2752    │ 2752
+│  │  ├─ DictionaryString    405 µs        │ 471.9 µs      │ 437.9 µs      │ 436.7 µs      │ 687     │ 687
+│  │  ├─ DictionaryInteger   24.2 µs       │ 57.87 µs      │ 35.95 µs      │ 35.54 µs      │ 2798    │ 2798
+│  │  ├─ CheckedAddNullable  4.708 µs      │ 26.04 µs      │ 5.374 µs      │ 5.395 µs      │ 17929   │ 17929
+│  │  ├─ CheckedAdd          3.02 µs       │ 11.89 µs      │ 3.52 µs       │ 3.523 µs      │ 13708   │ 27416
+│  │  ├─ BooleanSlice        4.207 µs      │ 21.24 µs      │ 4.79 µs       │ 4.775 µs      │ 20413   │ 20413
+│  │  ╰─ AllNull             874.7 ns      │ 6.145 µs      │ 999.7 ns      │ 999.9 ns      │ 23107   │ 92428
+│  ├─ 1024                                 │               │               │               │         │
+│  │  ├─ TrimViewShort       15.41 µs      │ 39.2 µs       │ 17.24 µs      │ 16.74 µs      │ 5929    │ 5929
+│  │  ├─ TrimViewLong        25.08 µs      │ 49.58 µs      │ 27.83 µs      │ 27.73 µs      │ 3577    │ 3577
+│  │  ├─ TrimUtf8            24.99 µs      │ 131.9 µs      │ 26.58 µs      │ 26.91 µs      │ 3685    │ 3685
+│  │  ├─ TrimLargeUtf8       24.83 µs      │ 55.87 µs      │ 27.83 µs      │ 27.06 µs      │ 3665    │ 3665
+│  │  ├─ Timestamp           916.2 ns      │ 7.374 µs      │ 1.062 µs      │ 1.053 µs      │ 22601   │ 90404
+│  │  ├─ ScaleList4          4.415 µs      │ 21.58 µs      │ 5.374 µs      │ 5.646 µs      │ 17237   │ 17237
+│  │  ├─ ScaleList0          1.406 µs      │ 7.51 µs       │ 1.614 µs      │ 1.657 µs      │ 14634   │ 58536
+│  │  ├─ ScalarOnly          989.2 ns      │ 3.635 µs      │ 1.145 µs      │ 1.132 µs      │ 21103   │ 84412
+│  │  ├─ Nullary             395.6 ns      │ 3.229 µs      │ 463.2 ns      │ 454.8 ns      │ 25197   │ 201576
+│  │  ├─ DivideNullable      2.562 µs      │ 7.937 µs      │ 2.916 µs      │ 2.898 µs      │ 16850   │ 33700
+│  │  ├─ DictionaryString    26.33 µs      │ 47.91 µs      │ 29.54 µs      │ 28.63 µs      │ 3471    │ 3471
+│  │  ├─ DictionaryInteger   2.27 µs       │ 12.93 µs      │ 2.624 µs      │ 2.59 µs       │ 18672   │ 37344
+│  │  ├─ CheckedAddNullable  801.7 ns      │ 3.702 µs      │ 921.6 ns      │ 909.5 ns      │ 13142   │ 105136
+│  │  ├─ CheckedAdd          682 ns        │ 3.489 µs      │ 786.1 ns      │ 778.8 ns      │ 15229   │ 121832
+│  │  ├─ BooleanSlice        708 ns        │ 2.426 µs      │ 807 ns        │ 809.3 ns      │ 14771   │ 118168
+│  │  ╰─ AllNull             426.7 ns      │ 5.604 µs      │ 510 ns        │ 500.7 ns      │ 44158   │ 176632
+│  ├─ 64                                   │               │               │               │         │
+│  │  ├─ TrimViewShort       1.489 µs      │ 3.812 µs      │ 1.697 µs      │ 1.675 µs      │ 14416   │ 57664
+│  │  ├─ TrimViewLong        2.291 µs      │ 14.18 µs      │ 2.624 µs      │ 2.561 µs      │ 18825   │ 37650
+│  │  ├─ TrimUtf8            2.291 µs      │ 12.81 µs      │ 2.624 µs      │ 2.571 µs      │ 18771   │ 37542
+│  │  ├─ TrimLargeUtf8       2.27 µs       │ 13.18 µs      │ 2.624 µs      │ 2.571 µs      │ 18753   │ 37506
+│  │  ├─ Timestamp           697.6 ns      │ 3.505 µs      │ 801.9 ns      │ 794.4 ns      │ 15033   │ 120264
+│  │  ├─ ScaleList4          1.187 µs      │ 5.916 µs      │ 1.395 µs      │ 1.403 µs      │ 17089   │ 68356
+│  │  ├─ ScaleList0          968.5 ns      │ 13.6 µs       │ 1.135 µs      │ 1.136 µs      │ 20934   │ 83736
+│  │  ├─ ScalarOnly          676.7 ns      │ 5.447 µs      │ 791.2 ns      │ 785.8 ns      │ 29922   │ 119688
+│  │  ├─ Nullary             335.7 ns      │ 1.835 µs      │ 387.7 ns      │ 384.8 ns      │ 15026   │ 240416
+│  │  ├─ DivideNullable      718.5 ns      │ 3.978 µs      │ 822.6 ns      │ 814.4 ns      │ 14645   │ 117160
+│  │  ├─ DictionaryString    2.707 µs      │ 24.49 µs      │ 3.166 µs      │ 3.133 µs      │ 30444   │ 30444
+│  │  ├─ DictionaryInteger   958.2 ns      │ 7.239 µs      │ 1.124 µs      │ 1.108 µs      │ 21382   │ 85528
+│  │  ├─ CheckedAddNullable  567.5 ns      │ 3.254 µs      │ 666.5 ns      │ 661.3 ns      │ 17894   │ 143152
+│  │  ├─ CheckedAdd          551.7 ns      │ 1.885 µs      │ 635.2 ns      │ 632 ns        │ 18651   │ 149208
+│  │  ├─ BooleanSlice        478.9 ns      │ 2.833 µs      │ 557 ns        │ 550.6 ns      │ 21337   │ 170696
+│  │  ╰─ AllNull             377.4 ns      │ 1.687 µs      │ 434.6 ns      │ 429.4 ns      │ 13229   │ 211664
+│  ╰─ 0                                    │               │               │               │         │
+│     ├─ TrimViewShort       531 ns        │ 1.791 µs      │ 614.2 ns      │ 608 ns        │ 19382   │ 155056
+│     ├─ TrimViewLong        531 ns        │ 2.947 µs      │ 614.4 ns      │ 606.8 ns      │ 19446   │ 155568
+│     ├─ TrimUtf8            515.4 ns      │ 2.952 µs      │ 603.9 ns      │ 597.9 ns      │ 19701   │ 157608
+│     ├─ TrimLargeUtf8       525.7 ns      │ 2.411 µs      │ 604 ns        │ 599.9 ns      │ 19658   │ 157264
+│     ├─ Timestamp           661.2 ns      │ 1.958 µs      │ 765.4 ns      │ 762.2 ns      │ 15790   │ 126320
+│     ├─ ScaleList4          895.5 ns      │ 6.145 µs      │ 1.051 µs      │ 1.039 µs      │ 22923   │ 91692
+│     ├─ ScaleList0          906 ns        │ 3.906 µs      │ 1.041 µs      │ 1.03 µs       │ 11675   │ 93400
+│     ├─ ScalarOnly          525.9 ns      │ 3.114 µs      │ 604 ns        │ 600.4 ns      │ 19914   │ 159312
+│     ├─ Nullary             317.4 ns      │ 1.395 µs      │ 364.3 ns      │ 361.3 ns      │ 16263   │ 260208
+│     ├─ DivideNullable      541.4 ns      │ 2.353 µs      │ 624.7 ns      │ 622.7 ns      │ 19156   │ 153248
+│     ├─ DictionaryString    817.4 ns      │ 3.51 µs       │ 942.5 ns      │ 938.2 ns      │ 12822   │ 102576
+│     ├─ DictionaryInteger   796.6 ns      │ 3.114 µs      │ 916.5 ns      │ 915.1 ns      │ 13247   │ 105976
+│     ├─ CheckedAddNullable  531 ns        │ 3.463 µs      │ 614.4 ns      │ 608.5 ns      │ 19645   │ 157160
+│     ├─ CheckedAdd          536.1 ns      │ 3.479 µs      │ 614.4 ns      │ 610.2 ns      │ 19568   │ 156544
+│     ├─ BooleanSlice        429.4 ns      │ 1.945 µs      │ 494.5 ns      │ 489.9 ns      │ 12196   │ 195136
+│     ╰─ AllNull             531 ns        │ 3.005 µs      │ 609.1 ns      │ 602.6 ns      │ 19823   │ 158584
+╰─ arrow_native                            │               │               │               │         │
+   ├─ 16384                                │               │               │               │         │
+   │  ├─ TrimViewShort       143.9 µs      │ 240.3 µs      │ 175.8 µs      │ 176.8 µs      │ 1000    │ 1000
+   │  ├─ TrimViewLong        187.1 µs      │ 261.6 µs      │ 208.9 µs      │ 209.3 µs      │ 1000    │ 1000
+   │  ├─ TrimUtf8            183.2 µs      │ 223.9 µs      │ 199.4 µs      │ 198 µs        │ 1000    │ 1000
+   │  ├─ TrimLargeUtf8       170 µs        │ 239.7 µs      │ 194.6 µs      │ 195.4 µs      │ 1000    │ 1000
+   │  ├─ Timestamp           10.74 µs      │ 34.87 µs      │ 13.79 µs      │ 13.81 µs      │ 7161    │ 7161
+   │  ├─ ScaleList4          7.79 µs       │ 18.16 µs      │ 8.749 µs      │ 8.415 µs      │ 11666   │ 11666
+   │  ├─ ScaleList0          58.04 ns      │ 199.9 ns      │ 66.18 ns      │ 65.94 ns      │ 7202    │ 921856
+   │  ├─ ScalarOnly          958 ns        │ 5.416 µs      │ 1.041 µs      │ 1.085 µs      │ 21814   │ 87256
+   │  ├─ Nullary             968.5 ns      │ 5.01 µs       │ 1.02 µs       │ 1.087 µs      │ 21589   │ 86356
+   │  ├─ DivideNullable      10.24 µs      │ 28.58 µs      │ 11.99 µs      │ 11.75 µs      │ 8388    │ 8388
+   │  ├─ DictionaryString    249.6 µs      │ 336 µs        │ 277.3 µs      │ 277.4 µs      │ 1000    │ 1000
+   │  ├─ DictionaryInteger   28.83 µs      │ 126.2 µs      │ 41.74 µs      │ 40.1 µs       │ 2482    │ 2482
+   │  ├─ CheckedAddNullable  9.582 µs      │ 28.12 µs      │ 11.2 µs       │ 10.93 µs      │ 8993    │ 8993
+   │  ├─ CheckedAdd          6.999 µs      │ 30.74 µs      │ 8.166 µs      │ 7.971 µs      │ 12312   │ 12312
+   │  ├─ BooleanSlice        51.78 ns      │ 2.619 µs      │ 67.53 ns      │ 68.81 ns      │ 121895  │ 975160
+   │  ╰─ AllNull             541.4 ns      │ 3.249 µs      │ 577.9 ns      │ 586 ns        │ 19455   │ 155640
+   ├─ 1024                                 │               │               │               │         │
+   │  ├─ TrimViewShort       9.915 µs      │ 33.66 µs      │ 11.12 µs      │ 10.85 µs      │ 9110    │ 9110
+   │  ├─ TrimViewLong        11.91 µs      │ 34.54 µs      │ 13.41 µs      │ 13.13 µs      │ 7465    │ 7465
+   │  ├─ TrimUtf8            11.7 µs       │ 23.49 µs      │ 13.2 µs       │ 12.83 µs      │ 7637    │ 7637
+   │  ├─ TrimLargeUtf8       11.7 µs       │ 23.58 µs      │ 13.2 µs       │ 12.88 µs      │ 7605    │ 7605
+   │  ├─ Timestamp           666.5 ns      │ 3.473 µs      │ 958 ns        │ 965.3 ns      │ 12363   │ 98904
+   │  ├─ ScaleList4          322.5 ns      │ 4.416 µs      │ 416.5 ns      │ 441.2 ns      │ 47892   │ 191568
+   │  ├─ ScaleList0          57.07 ns      │ 325.2 ns      │ 66.18 ns      │ 65.96 ns      │ 14268   │ 913152
+   │  ├─ ScalarOnly          72.53 ns      │ 2.416 µs      │ 104 ns        │ 108.3 ns      │ 163222  │ 652888
+   │  ├─ Nullary             85.71 ns      │ 1.249 µs      │ 98.78 ns      │ 98.04 ns      │ 48182   │ 770912
+   │  ├─ DivideNullable      687.2 ns      │ 2.025 µs      │ 786.1 ns      │ 775.9 ns      │ 15310   │ 122480
+   │  ├─ DictionaryString    15.33 µs      │ 38.66 µs      │ 18.74 µs      │ 18.18 µs      │ 5443    │ 5443
+   │  ├─ DictionaryInteger   2.062 µs      │ 8.958 µs      │ 2.353 µs      │ 2.307 µs      │ 20858   │ 41716
+   │  ├─ CheckedAddNullable  635.1 ns      │ 3.385 µs      │ 723.6 ns      │ 713.3 ns      │ 16582   │ 132656
+   │  ├─ CheckedAdd          476.3 ns      │ 1.179 µs      │ 541.4 ns      │ 530.1 ns      │ 11088   │ 177408
+   │  ├─ BooleanSlice        36.56 ns      │ 206.4 ns      │ 42.09 ns      │ 41.55 ns      │ 11912   │ 1524736
+   │  ╰─ AllNull             127.3 ns      │ 658.6 ns      │ 148.2 ns      │ 145.2 ns      │ 17912   │ 573184
+   ├─ 64                                   │               │               │               │         │
+   │  ├─ TrimViewShort       671.6 ns      │ 2.937 µs      │ 760.2 ns      │ 746.4 ns      │ 15522   │ 124176
+   │  ├─ TrimViewLong        770.5 ns      │ 6.114 µs      │ 937.2 ns      │ 921.1 ns      │ 24786   │ 99144
+   │  ├─ TrimUtf8            765.4 ns      │ 3.447 µs      │ 926.7 ns      │ 891.6 ns      │ 12881   │ 103048
+   │  ├─ TrimLargeUtf8       822.6 ns      │ 3.442 µs      │ 932 ns        │ 919.2 ns      │ 12524   │ 100192
+   │  ├─ Timestamp           99.38 ns      │ 362.4 ns      │ 119.5 ns      │ 121.9 ns      │ 10040   │ 642560
+   │  ├─ ScaleList4          85.71 ns      │ 754.9 ns      │ 101.3 ns      │ 101 ns        │ 40173   │ 642768
+   │  ├─ ScaleList0          58.05 ns      │ 238 ns        │ 66.18 ns      │ 65.69 ns      │ 7054    │ 902912
+   │  ├─ ScalarOnly          32.98 ns      │ 199.6 ns      │ 38.84 ns      │ 38.25 ns      │ 23756   │ 1520384
+   │  ├─ Nullary             30.37 ns      │ 124.1 ns      │ 35.58 ns      │ 35.08 ns      │ 12614   │ 1614592
+   │  ├─ DivideNullable      92.23 ns      │ 424.2 ns      │ 106.5 ns      │ 105.2 ns      │ 11796   │ 754944
+   │  ├─ DictionaryString    1.364 µs      │ 8.114 µs      │ 1.583 µs      │ 1.55 µs       │ 15212   │ 60848
+   │  ├─ DictionaryInteger   408.6 ns      │ 1.348 µs      │ 473.7 ns      │ 469.1 ns      │ 12153   │ 194448
+   │  ├─ CheckedAddNullable  87.67 ns      │ 365.6 ns      │ 100.7 ns      │ 100.5 ns      │ 12158   │ 778112
+   │  ├─ CheckedAdd          73.99 ns      │ 244.5 ns      │ 85.07 ns      │ 84.61 ns      │ 14049   │ 899136
+   │  ├─ BooleanSlice        34.61 ns      │ 155 ns        │ 40.14 ns      │ 40.04 ns      │ 12353   │ 1581184
+   │  ╰─ AllNull             52.18 ns      │ 130.3 ns      │ 59.67 ns      │ 59.1 ns       │ 9144    │ 1170432
+   ╰─ 0                                    │               │               │               │         │
+      ├─ TrimViewShort       34.28 ns      │ 194.7 ns      │ 38.84 ns      │ 38.87 ns      │ 12246   │ 1567488
+      ├─ TrimViewLong        34.93 ns      │ 118.2 ns      │ 39.49 ns      │ 39.08 ns      │ 12163   │ 1556864
+      ├─ TrimUtf8            34.6 ns       │ 185.6 ns      │ 39.49 ns      │ 39.35 ns      │ 12049   │ 1542272
+      ├─ TrimLargeUtf8       34.6 ns       │ 164.4 ns      │ 39.49 ns      │ 39.45 ns      │ 12072   │ 1545216
+      ├─ Timestamp           42.42 ns      │ 198.9 ns      │ 48.28 ns      │ 48.48 ns      │ 10481   │ 1341568
+      ├─ ScaleList4          57.06 ns      │ 394.9 ns      │ 65.53 ns      │ 65.59 ns      │ 14318   │ 916352
+      ├─ ScaleList0          57.71 ns      │ 208.7 ns      │ 66.18 ns      │ 66.32 ns      │ 14247   │ 911808
+      ├─ ScalarOnly          21.1 ns       │ 64.55 ns      │ 23.86 ns      │ 23.96 ns      │ 9210    │ 2357760
+      ├─ Nullary             18.33 ns      │ 101.1 ns      │ 21.1 ns       │ 20.94 ns      │ 10038   │ 2569728
+      ├─ DivideNullable      40.46 ns      │ 194.4 ns      │ 46.65 ns      │ 46.45 ns      │ 11864   │ 1518592
+      ├─ DictionaryString    265.4 ns      │ 1.598 µs      │ 304.4 ns      │ 300.8 ns      │ 18864   │ 301824
+      ├─ DictionaryInteger   249.7 ns      │ 856.5 ns      │ 296.6 ns      │ 294.2 ns      │ 19643   │ 314288
+      ├─ CheckedAddNullable  39.81 ns      │ 212.3 ns      │ 45.67 ns      │ 45.39 ns      │ 12157   │ 1556096
+      ├─ CheckedAdd          39.16 ns      │ 199.3 ns      │ 44.7 ns       │ 44.46 ns      │ 12399   │ 1587072
+      ├─ BooleanSlice        34.6 ns       │ 243.2 ns      │ 39.81 ns      │ 39.69 ns      │ 12350   │ 1580800
+      ╰─ AllNull             39.81 ns      │ 199.3 ns      │ 45.35 ns      │ 44.9 ns       │ 12367   │ 1582976
+

@@ -63,31 +63,39 @@ pub struct Utf8Writer<'a> {
 impl Utf8Writer<'_> {
     /// Write a string into this row and consume the row handle.
     pub fn write(self, value: impl AsRef<str>) {
-        let bytes = value.as_ref().as_bytes();
-        if bytes.len() <= BinaryView::MAX_INLINED_SIZE {
-            *self.view = BinaryView::make_view(bytes, 0, 0);
+        self.write_parts(&[value.as_ref()]);
+    }
+
+    /// Concatenate string parts directly into this row's output-owned storage.
+    pub fn write_parts(self, parts: &[&str]) {
+        let len = parts.iter().try_fold(0usize, |len, part| len.checked_add(part.len()))
+            .vortex_expect("Utf8Sink string byte count must fit usize");
+        if len <= BinaryView::MAX_INLINED_SIZE {
+            let mut bytes = [0; BinaryView::MAX_INLINED_SIZE];
+            let mut offset = 0;
+            for part in parts {
+                bytes[offset..offset + part.len()].copy_from_slice(part.as_bytes());
+                offset += part.len();
+            }
+            *self.view = BinaryView::make_view(&bytes[..len], 0, 0);
             return;
         }
 
-        let needs_buffer = self
-            .buffers
-            .last()
-            .is_none_or(|buffer| buffer.len().saturating_add(bytes.len()) > MAX_BUFFER_LEN);
+        let needs_buffer = self.buffers.last()
+            .is_none_or(|buffer| buffer.len().saturating_add(len) > MAX_BUFFER_LEN);
         if needs_buffer {
-            self.buffers.push(self.allocator.with_capacity(bytes.len()));
+            self.buffers.push(self.allocator.with_capacity(len));
         }
-
         let buffer_index = u32::try_from(self.buffers.len() - 1)
             .vortex_expect("Utf8Sink data buffer count must fit in u32");
-        let buffer = self
-            .buffers
-            .last_mut()
+        let buffer = self.buffers.last_mut()
             .vortex_expect("Utf8Sink creates a data buffer before writing");
-        let offset =
-            u32::try_from(buffer.len()).vortex_expect("Utf8Sink buffer offset must fit in u32");
-
-        buffer.extend_from_slice(bytes);
-        *self.view = BinaryView::make_view(bytes, buffer_index, offset);
+        let offset = u32::try_from(buffer.len())
+            .vortex_expect("Utf8Sink buffer offset must fit in u32");
+        for part in parts {
+            buffer.extend_from_slice(part.as_bytes());
+        }
+        *self.view = BinaryView::make_view(&buffer[offset as usize..], buffer_index, offset);
     }
 }
 

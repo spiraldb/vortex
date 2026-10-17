@@ -1,0 +1,162 @@
+   Compiling rofl-examples v0.1.0 (/Users/connor/spiral/vortex-data/vortex4/rofl-examples)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.58s
+     Running unittests src/lib.rs (target/debug/deps/rofl_examples-9729375bd38b8b74)
+
+running 2 tests
+test like::tests::ilike_uses_unicode_regex_when_text_is_not_ascii ... ok
+test like::tests::like_escapes_and_unicode_wildcards ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/arithmetic.rs (target/debug/deps/arithmetic-b65b9cf0f58bff7d)
+
+running 14 tests
+test length_one_array_is_not_a_scalar ... ok
+test externally_registered_nullary_function ... ok
+test checked_add_conformance::case_2_all_null ... ok
+test scalar_representations_and_sliced_primitives_agree ... ok
+test checked_add_conformance::case_1_empty ... ok
+test checked_add_conformance::case_4_all_valid ... ok
+test null_scalar_suppresses_row_errors_without_losing_output_type ... ok
+test errors_on_valid_rows_are_observable_in_both_hosts ... ok
+test division_skips_invalid_payloads ... ok
+test checked_add_conformance::case_3_partial ... ok
+test boolean_retry_suppresses_only_null_payload_overflow ... ok
+test scalar_only_and_zero_logical_rows ... ok
+test dispatch_selects_signed_and_unsigned_widths ... ok
+test deferred_boolean_modes_report_valid_overflow ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/arrow_storage.rs (target/debug/deps/arrow_storage-58964a93cac158db)
+
+running 15 tests
+test unknown_extensions_do_not_become_integers ... ok
+test empty_and_null_strings_keep_planned_view_metadata ... ok
+test dictionary_strings_preserve_value_nulls ... ok
+test dictionary_null_values_and_unused_overflow ... ok
+test masked_vortex_string_constant_retains_value_after_null_first_row ... ok
+test string_layouts_slices_and_output_ownership ... ok
+test boolean_slices_preserve_offsets_and_tails::case_1 ... ok
+test boolean_slices_preserve_offsets_and_tails::case_2 ... ok
+test boolean_slices_preserve_offsets_and_tails::case_3 ... ok
+test boolean_slices_preserve_offsets_and_tails::case_4 ... ok
+test boolean_slices_preserve_offsets_and_tails::case_5 ... ok
+test boolean_slices_preserve_offsets_and_tails::case_6 ... ok
+test boolean_slices_preserve_offsets_and_tails::case_9 ... ok
+test boolean_slices_preserve_offsets_and_tails::case_8 ... ok
+test boolean_slices_preserve_offsets_and_tails::case_7 ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/comparisons.rs (target/debug/deps/comparisons-ad6d40fa63dab0ff)
+
+running 5 tests
+test unknown_float_extensions_and_unsupported_domains_are_rejected ... ok
+test scalar_and_empty_batches_preserve_strict_nulls ... ok
+test six_strict_comparisons_match_on_both_hosts ... ok
+test signed_and_unsigned_widths_use_the_shared_dispatch ... ok
+test floating_total_order_matches_arrow_for_nans_and_signed_zero ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/custom_binding.rs (target/debug/deps/custom_binding-ae1d0e7d0ebe8203)
+
+running 4 tests
+test dense_decoder_failure_cannot_be_suppressed_by_filtering_null_payloads ... ok
+test selected_scalar_uses_ordinary_decoder ... ok
+test decoder_error_is_terminal_on_a_valid_row ... ok
+test custom_decoder_uses_filtered_domain_and_scattered_output ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/float_kernels.rs (target/debug/deps/float_kernels-8638e4c308009e5d)
+
+running 6 tests
+test float_dispatch_rejects_integers_and_mixed_widths ... ok
+test float_kernels_keep_empty_and_all_null_output_types ... ok
+test float_negation_preserves_signed_zero_and_nulls ... ok
+test binary64_arithmetic_uses_native_width_and_scalar_broadcast ... ok
+test zero_division_and_remainder_produce_ieee_values ... ok
+test binary32_arithmetic_matches_strict_null_semantics ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/integer_kernels.rs (target/debug/deps/integer_kernels-11ea30c2459e381b)
+
+running 7 tests
+test empty_and_all_null_batches_preserve_integer_output ... ok
+test shifts_wrap_counts_and_keep_signed_right_shift ... ok
+test integer_errors_only_come_from_valid_rows ... ok
+test integer_arithmetic_preserves_values_and_nulls ... ok
+test negate_matches_signed_and_unsigned_arrow_domains ... ok
+test bitwise_operations_preserve_nulls_and_scalar_broadcast ... ok
+test dispatch_covers_signed_and_unsigned_widths ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/metadata.rs (target/debug/deps/metadata-d5500d9e5a086a32)
+
+running 6 tests
+test list_binding_rejects_nullable_children_and_factor_mismatch ... ok
+test output_field_mismatch_is_rejected_even_when_all_rows_are_null ... ok
+test sliced_float32_lists_share_runtime_dispatch ... ok
+test timestamp_metadata_survives_empty_all_null_and_partial_batches ... ok
+test timestamp_units_and_null_only_overflow_preserve_ticks ... ok
+test list_scaling_preserves_shape_and_prepares_each_constant_factor ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/patterns.rs (target/debug/deps/patterns-f0ecf2ba174d5137)
+
+running 12 tests
+test invalid_regex_on_valid_row_is_an_error ... ok
+test dictionary_value_nulls_and_unused_invalid_patterns_do_not_compile ... ok
+test invalid_scalar_regex_on_all_null_rows_follows_strict_contract ... ok
+test invalid_regex_only_in_null_rows_is_not_an_error ... ok
+test regexp_matches_only_valid_rows ... ok
+test scalar_only_inputs_broadcast_after_one_prepared_row ... ok
+test ilike_follows_unicode_case_folding ... ok
+test empty_and_all_null_batches_keep_boolean_type ... ok
+test scalar_pattern_is_prepared_for_each_invocation ... ok
+test like_wildcards_escapes_negation_and_nulls ... ok
+test like_variants_match_arrow_for_varying_patterns ... ok
+test repeated_and_alternating_patterns_match_arrow ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/scalar_kernels.rs (target/debug/deps/scalar_kernels-2f0c13db25360279)
+
+running 8 tests
+test string_predicates_on_both_hosts::case_1_prefix ... ok
+test concat_owns_strings_and_combines_both_validities ... ok
+test string_predicates_on_both_hosts::case_3_contains ... ok
+test multiply_only_suppresses_null_row_overflow ... ok
+test string_predicates_on_both_hosts::case_4_ascii_case ... ok
+test string_predicates_on_both_hosts::case_2_suffix ... ok
+test contains_reprepares_constants_and_preserves_null_patterns ... ok
+test text_predicates_dispatch_mixed_layouts_and_preserve_byte_boundaries ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/substring.rs (target/debug/deps/substring-23e2f7276a1dce80)
+
+running 6 tests
+test substring_rejects_bounds_that_arrow_would_narrow ... ok
+test substring_by_char_keeps_sliced_output_after_inputs_are_dropped ... ok
+test substring_ignores_invalid_boundaries_in_null_payloads ... ok
+test substring_reports_invalid_boundary_on_valid_rows ... ok
+test substring_matches_arrow_for_supported_byte_bounds ... ok
+test substring_by_char_matches_arrow_on_ascii_and_unicode ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/text_length.rs (target/debug/deps/text_length-b6398e6484fc14f1)
+
+running 3 tests
+test scalar_string_length_broadcasts_to_logical_rows ... ok
+test byte_and_bit_lengths_preserve_sliced_validity ... ok
+test byte_and_bit_lengths_match_arrow_on_all_string_layouts ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+

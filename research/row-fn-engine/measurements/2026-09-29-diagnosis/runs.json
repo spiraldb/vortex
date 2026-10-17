@@ -1,0 +1,140 @@
+[
+  {
+    "command": [
+      "target/rofl-diagnosis/baseline",
+      "16384",
+      "--bench",
+      "--timer",
+      "os",
+      "--color",
+      "never",
+      "--sample-count",
+      "1000",
+      "--min-time",
+      "0.1",
+      "--max-time",
+      "0.3",
+      "--sort",
+      "name"
+    ],
+    "start_unix": 1790689988.335886,
+    "seconds": 13.993115901947021,
+    "output": "baseline-1.txt",
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "target/rofl-diagnosis/inline",
+      "16384",
+      "--bench",
+      "--timer",
+      "os",
+      "--color",
+      "never",
+      "--sample-count",
+      "1000",
+      "--min-time",
+      "0.1",
+      "--max-time",
+      "0.3",
+      "--sort",
+      "name"
+    ],
+    "start_unix": 1790690002.32926,
+    "seconds": 13.92433786392212,
+    "output": "inline-1.txt",
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "target/rofl-diagnosis/inline",
+      "16384",
+      "--bench",
+      "--timer",
+      "os",
+      "--color",
+      "never",
+      "--sample-count",
+      "1000",
+      "--min-time",
+      "0.1",
+      "--max-time",
+      "0.3",
+      "--sortr",
+      "name"
+    ],
+    "start_unix": 1790690016.253928,
+    "seconds": 13.972981929779053,
+    "output": "inline-2.txt",
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "target/rofl-diagnosis/baseline",
+      "16384",
+      "--bench",
+      "--timer",
+      "os",
+      "--color",
+      "never",
+      "--sample-count",
+      "1000",
+      "--min-time",
+      "0.1",
+      "--max-time",
+      "0.3",
+      "--sortr",
+      "name"
+    ],
+    "start_unix": 1790690030.227233,
+    "seconds": 13.964461088180542,
+    "output": "baseline-2.txt",
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "target/rofl-diagnosis/baseline",
+      "16384",
+      "--bench",
+      "--timer",
+      "os",
+      "--color",
+      "never",
+      "--sample-count",
+      "1000",
+      "--min-time",
+      "0.1",
+      "--max-time",
+      "0.3",
+      "--sort",
+      "name"
+    ],
+    "start_unix": 1790690044.1919749,
+    "seconds": 13.957881212234497,
+    "output": "baseline-3.txt",
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "target/rofl-diagnosis/inline",
+      "16384",
+      "--bench",
+      "--timer",
+      "os",
+      "--color",
+      "never",
+      "--sample-count",
+      "1000",
+      "--min-time",
+      "0.1",
+      "--max-time",
+      "0.3",
+      "--sort",
+      "name"
+    ],
+    "start_unix": 1790690058.150146,
+    "seconds": 13.957949876785278,
+    "output": "inline-3.txt",
+    "exit_code": 0
+  }
+]

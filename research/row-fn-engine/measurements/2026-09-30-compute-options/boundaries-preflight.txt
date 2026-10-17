@@ -1,0 +1,79 @@
+boundaries
+├─ arrow_invocation
+│  ├─ 0
+│  │  ├─ false
+│  │  ╰─ true
+│  ├─ 1
+│  │  ├─ false
+│  │  ╰─ true
+│  ├─ 64
+│  │  ├─ false
+│  │  ╰─ true
+│  ├─ 1024
+│  │  ├─ false
+│  │  ╰─ true
+│  ╰─ 16384
+│     ├─ false
+│     ╰─ true
+├─ arrow_native_wrapping_add
+│  ├─ 0
+│  │  ├─ false
+│  │  ╰─ true
+│  ├─ 1
+│  │  ├─ false
+│  │  ╰─ true
+│  ├─ 64
+│  │  ├─ false
+│  │  ╰─ true
+│  ├─ 1024
+│  │  ├─ false
+│  │  ╰─ true
+│  ╰─ 16384
+│     ├─ false
+│     ╰─ true
+├─ direct_typed_collection
+│  ├─ 0
+│  ├─ 1
+│  ├─ 64
+│  ├─ 1024
+│  ╰─ 16384
+├─ nullable_bool
+│  ├─ false
+│  │  ├─ Arrow
+│  │  ├─ ArrowBaseline
+│  │  ├─ ExtractedVortex
+│  │  ╰─ LegacyVortex
+│  ╰─ true
+│     ├─ Arrow
+│     ├─ ArrowBaseline
+│     ├─ ExtractedVortex
+│     ╰─ LegacyVortex
+├─ shared_collection
+│  ├─ 0
+│  ├─ 1
+│  ├─ 64
+│  ├─ 1024
+│  ╰─ 16384
+├─ shared_executor
+│  ├─ 0
+│  ├─ 1
+│  ├─ 64
+│  ├─ 1024
+│  ╰─ 16384
+╰─ vortex_add
+   ├─ 0
+   │  ├─ false
+   │  ╰─ true
+   ├─ 1
+   │  ├─ false
+   │  ╰─ true
+   ├─ 64
+   │  ├─ false
+   │  ╰─ true
+   ├─ 1024
+   │  ├─ false
+   │  ╰─ true
+   ╰─ 16384
+      ├─ false
+      ╰─ true
+
