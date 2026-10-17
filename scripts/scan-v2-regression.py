@@ -84,6 +84,8 @@ def measure(
     row["vs_old_v2_pct"] = change(row["new_v2_ms"], row["old_v2_ms"])
     if "v1" in versions:
         row["vs_v1_pct"] = change(row["new_v2_ms"], row["v1_ms"])
+    if "old_v1" in versions:
+        row["v1_change_pct"] = change(row["v1_ms"], row["old_v1_ms"])
     print(json.dumps({k: v for k, v in row.items() if k != "seeds"}), flush=True)
     return row
 
@@ -304,6 +306,7 @@ def main():
         "list-64KiB": args.list_dir / "elements-64k.vortex",
     }
     versions = {
+        "old_v1": (args.baseline.resolve(), "0"),
         "v1": (args.candidate.resolve(), "0"),
         "old_v2": (args.baseline.resolve(), "1"),
         "new_v2": (args.candidate.resolve(), "1"),
@@ -330,6 +333,44 @@ def main():
         versions={k: dict(binary=str(p), sha256=digest(p), scan_v2=f) for k, (p, f) in versions.items()},
     )
     (args.output / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    checks = args.output / "correctness"
+    checks.mkdir(exist_ok=True)
+    check_env = {k: v for k, v in os.environ.items() if not k.startswith(("VORTEX_", "TOKIO_"))}
+    check_env.update(VORTEX_SCAN_V2="1", RUST_LOG="warn")
+    check_commands = []
+    for cores, (name, file), (count, selector) in itertools.product(
+        [1, 30],
+        files.items(),
+        [(0, "uniform"), (1, "uniform"), (100, "uniform"), (100, "clustered"), (4096, "uniform"), (0, "all")],
+    ):
+        command = [
+            "taskset",
+            "-c",
+            ",".join(map(str, cpus[:cores])),
+            str(args.candidate.resolve()),
+            str(file),
+            "1",
+            str(count),
+            selector,
+            "cached",
+            "disk",
+            "check",
+            "42",
+        ]
+        result = subprocess.run(
+            command,
+            env=check_env,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=180,
+        )
+        if not json.loads(result.stdout)["correct"]:
+            raise RuntimeError(f"Wrong selected output: {name}, {selector}")
+        (checks / f"{name}-{cores}-{count}-{selector}.json").write_text(result.stdout)
+        check_commands.append(command)
+    (checks / "commands.json").write_text(json.dumps(check_commands, indent=2) + "\n")
+    print(f"PASS: {len(check_commands)} original-fixture correctness checks", flush=True)
     summary = []
     confirmations = []
     for cores, dataset, pattern, mode in itertools.product(
@@ -344,9 +385,7 @@ def main():
         if row["vs_old_v2_pct"] <= 2 and all(change(s["new_v2"], s["old_v2"]) <= 3 for s in row["seeds"]):
             continue
         case = {k: row[k] for k in ["dataset", "cores", "pattern", "mode"]}
-        confirmations.append(
-            measure(case, {k: v for k, v in versions.items() if k != "v1"}, files, cpus, reruns, 128, 4)
-        )
+        confirmations.append(measure(case, versions, files, cpus, reruns, 128, 4))
         save(args.output, metadata, summary, confirmations)
     report(args.output, metadata, summary, confirmations)
     if args.standard_benchmark:

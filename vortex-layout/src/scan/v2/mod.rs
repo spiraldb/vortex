@@ -54,6 +54,7 @@ use crate::plan::physical::plan_row_idx_expression;
 use crate::scan::arrow::to_record_batch;
 use crate::scan::execution::ScanPlans;
 pub use crate::scan::execution::SegmentLocation;
+use crate::scan::execution::child_executor;
 use crate::scan::execution::plan_projection;
 use crate::scan::v2::io::SegmentScanIo;
 use crate::scan::v2::io::segment_ranges;
@@ -291,10 +292,15 @@ impl<A: 'static + Send> PreparedScan<A> {
             MAX_ROWS_PER_CHUNK
         };
         let splits = row_chunks(builder.row_range.unwrap_or(0..row_count), chunk_rows);
-        let io = Arc::new(SegmentScanIo::new(
+        let io: Arc<dyn IoService> = Arc::new(SegmentScanIo::new(
             file.segments,
             segment_ranges(Arc::clone(&file.locations)),
         ));
+        let children = child_executor(
+            builder.session.clone(),
+            Arc::clone(&file.locations),
+            Arc::clone(&io),
+        );
         Ok(Self {
             session: builder.session.clone(),
             plans: ScanPlans {
@@ -303,6 +309,7 @@ impl<A: 'static + Send> PreparedScan<A> {
                 projection,
                 row_offset: builder.row_offset,
                 values: Default::default(),
+                children,
             },
             io,
             splits,

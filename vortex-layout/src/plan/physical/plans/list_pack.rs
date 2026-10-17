@@ -155,7 +155,12 @@ impl PlanVTable for ListPack {
                     .ok_or_else(|| vortex_err!("Selected list validity produced no rows"))?,
             );
         }
-        let source = ListSource::new(plan.clone(), mask.clone(), compiler.values().clone());
+        let source = ListSource::new(
+            plan.clone(),
+            mask.clone(),
+            compiler.values().clone(),
+            compiler.children(),
+        );
         Ok(Some(compiler.join_with(chains, |_| UNBOUNDED, source)))
     }
 

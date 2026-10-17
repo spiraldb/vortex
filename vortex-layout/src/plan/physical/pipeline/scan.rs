@@ -7,7 +7,11 @@
 use std::collections::VecDeque;
 use std::fmt;
 use std::ops::Range;
+use std::sync::Arc;
 
+use futures::FutureExt;
+use futures::future::AbortHandle;
+use futures::future::Abortable;
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 use vortex_array::ArrayRef;
@@ -19,8 +23,10 @@ use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
+use vortex_scan::planning::planner::WorkFuture;
 use vortex_session::VortexSession;
 
+use super::ChildExecutor;
 use super::DEFAULT_CAPACITY;
 use super::compile::Chain;
 use super::compile::Shares;
@@ -39,6 +45,7 @@ use crate::plan::physical::operator::Source;
 use crate::plan::physical::operator::SourceBlocked;
 use crate::plan::physical::operator::SourceReady;
 use crate::plan::physical::operator::Step;
+use crate::plan::physical::operator::TaskInbox;
 use crate::segments::SegmentId;
 
 #[cfg(debug_assertions)]
@@ -82,9 +89,11 @@ impl Split {
 pub enum Turn {
     /// Read this segment and [`deliver`](Scan::deliver) its bytes.
     Read(ReadRequest),
+    /// Await this work, then call [`Scan::complete_task`] with its identifier.
+    Task(WorkFuture),
     /// The next rows of split `split`, in row order within the split.
     Output(usize, ArrayRef),
-    /// Nothing can run until a read is delivered.
+    /// Nothing can run until a read or asynchronous task completes.
     Waiting,
     /// Every split has produced all its rows.
     Done,
@@ -111,6 +120,7 @@ pub(crate) struct Pipeline {
     /// Reads it asked for that have not arrived, so retiring it cancels them only when any
     /// are left.
     pending: usize,
+    task_inbox: Option<Box<TaskInbox>>,
     /// Once its source has finished, the next stage to finish: stages are finished one at a
     /// time, each when the outlets have room for what it flushes.
     finishing: Option<usize>,
@@ -141,6 +151,7 @@ fn drive(
     session: &VortexSession,
     exec: &mut ExecutionCtx,
     reads: &mut SmallVec<[SegmentId; 1]>,
+    tasks: &mut Vec<WorkFuture>,
 ) -> VortexResult<Progress> {
     let Pipeline {
         source,
@@ -153,6 +164,7 @@ fn drive(
         source_more,
         touched,
         changed,
+        task_inbox,
         ..
     } = pipe;
     let mut cx = Cx {
@@ -164,6 +176,8 @@ fn drive(
         exec,
         touched,
         changed,
+        tasks,
+        task_inbox,
     };
     loop {
         // Closing needs no room, so a pipeline with nothing left to flush closes at once.
@@ -191,8 +205,16 @@ fn drive(
             let ready = source.ready(&mut cx)?;
             cx.changed.clear();
             vortex_ensure!(
-                cx.reads.is_empty() || ready == SourceReady::Blocked(SourceBlocked::Io),
+                cx.reads.is_empty()
+                    || matches!(
+                        ready,
+                        SourceReady::Blocked(SourceBlocked::Io | SourceBlocked::Task)
+                    ),
                 "A source that queues reads must block on IO"
+            );
+            vortex_ensure!(
+                cx.tasks.is_empty() || ready == SourceReady::Blocked(SourceBlocked::Task),
+                "A source that queues asynchronous work must block on its completion"
             );
             match ready {
                 SourceReady::Ready => {}
@@ -281,6 +303,9 @@ pub(crate) struct Core {
     reads: FxHashMap<ReadId, (Option<PipelineId>, SegmentId)>,
     next_read: u64,
     new_reads: VecDeque<ReadRequest>,
+    tasks: FxHashMap<u64, PendingTask>,
+    next_task: u64,
+    new_tasks: VecDeque<WorkFuture>,
     /// Split slots whose stage output has something new, with a flag per slot so a slot is
     /// queued once.
     dirty: Vec<usize>,
@@ -291,6 +316,21 @@ pub(crate) struct Core {
     pub(crate) split: usize,
     /// Whole values kept for later scans of the same split.
     pub(crate) values: ValueCache,
+    pub(crate) children: Option<Arc<dyn ChildExecutor>>,
+}
+
+struct PendingTask {
+    owner: Option<PipelineId>,
+    local_id: u64,
+    abort: AbortHandle,
+}
+
+impl Drop for Core {
+    fn drop(&mut self) {
+        for task in self.tasks.values() {
+            task.abort.abort();
+        }
+    }
 }
 
 impl Core {
@@ -306,11 +346,15 @@ impl Core {
             reads: FxHashMap::default(),
             next_read: 0,
             new_reads: VecDeque::new(),
+            tasks: FxHashMap::default(),
+            next_task: 0,
+            new_tasks: VecDeque::new(),
             dirty: Vec::new(),
             dirty_flags: Vec::new(),
             shares: Shares::new(splits),
             split: usize::MAX,
             values: ValueCache::default(),
+            children: None,
         }
     }
 
@@ -331,6 +375,7 @@ impl Core {
             outlets,
             bytes: VecDeque::new(),
             pending: 0,
+            task_inbox: None,
             finishing: None,
             touched,
             changed,
@@ -405,21 +450,36 @@ impl Core {
             .ok_or_else(|| vortex_err!("Pipeline {id} is not live"))?;
         pipe.queued = false;
         let mut reads = SmallVec::new();
+        let mut tasks = Vec::new();
         let progress = drive(
             pipe,
             &mut self.arena,
             &self.session,
             &mut self.exec,
             &mut reads,
+            &mut tasks,
         )?;
         for segment_id in reads {
             self.ask(id, segment_id);
+        }
+        for task in tasks {
+            self.ask_task(id, task)?;
         }
         #[cfg(debug_assertions)]
         self.validate_progress(id, &progress);
         match &progress {
             // A read-ahead source can still have delivered bytes to consume.
             Progress::Blocked(SourceBlocked::Io) if !self.pipeline(id).bytes.is_empty() => {
+                self.make_runnable(id);
+            }
+            Progress::Blocked(SourceBlocked::Task)
+                if !self.pipeline(id).bytes.is_empty()
+                    || self
+                        .pipeline(id)
+                        .task_inbox
+                        .as_ref()
+                        .is_some_and(|inbox| !inbox.completed.is_empty()) =>
+            {
                 self.make_runnable(id);
             }
             // Nothing changes a port while its source's pipeline runs, so the condition the run reported
@@ -439,6 +499,59 @@ impl Core {
     fn ask(&mut self, id: PipelineId, segment_id: SegmentId) {
         self.read(id, segment_id);
         self.pipeline_mut(id).pending += 1;
+    }
+
+    fn ask_task(&mut self, owner: PipelineId, task: WorkFuture) -> VortexResult<()> {
+        vortex_ensure!(
+            !self
+                .tasks
+                .values()
+                .any(|pending| pending.owner == Some(owner) && pending.local_id == task.id),
+            "A source published task {} twice",
+            task.id
+        );
+        let id = self.next_task;
+        self.next_task = id
+            .checked_add(1)
+            .ok_or_else(|| vortex_err!("Scan task identifiers exhausted"))?;
+        let (abort, registration) = AbortHandle::new_pair();
+        self.tasks.insert(
+            id,
+            PendingTask {
+                owner: Some(owner),
+                local_id: task.id,
+                abort,
+            },
+        );
+        self.pipeline_mut(owner)
+            .task_inbox
+            .get_or_insert_with(Default::default)
+            .pending += 1;
+        self.new_tasks.push_back(WorkFuture {
+            id,
+            future: Abortable::new(task.future, registration)
+                .map(|result| result.unwrap_or(Ok(())))
+                .boxed(),
+        });
+        Ok(())
+    }
+
+    fn complete_task(&mut self, id: u64) -> VortexResult<()> {
+        let task = self
+            .tasks
+            .remove(&id)
+            .ok_or_else(|| vortex_err!("Unknown scan task {id}"))?;
+        if let Some(owner) = task.owner {
+            let inbox = self
+                .pipeline_mut(owner)
+                .task_inbox
+                .as_mut()
+                .ok_or_else(|| vortex_err!("Task completed for a source with no task inbox"))?;
+            inbox.pending -= 1;
+            inbox.completed.push_back(task.local_id);
+            self.make_runnable(owner);
+        }
+        Ok(())
     }
 
     /// Wakes the sources of what pipeline `id` pushed and the sinks of what it took.
@@ -528,6 +641,14 @@ impl Core {
             }
             if pipe.pending > 0 {
                 self.cancel_reads(id);
+            }
+            if pipe.task_inbox.is_some_and(|inbox| inbox.pending > 0) {
+                for task in self.tasks.values_mut() {
+                    if task.owner == Some(id) {
+                        task.owner = None;
+                        task.abort.abort();
+                    }
+                }
             }
             self.free_pipelines.push(id);
         }
@@ -739,6 +860,11 @@ impl Scan {
         self
     }
 
+    pub(crate) fn with_child_executor(mut self, children: Option<Arc<dyn ChildExecutor>>) -> Self {
+        self.core.children = children;
+        self
+    }
+
     /// Runs pipelines until the owner has something to do.
     pub fn step(&mut self) -> VortexResult<Turn> {
         loop {
@@ -747,6 +873,9 @@ impl Scan {
             }
             if let Some(read) = self.core.new_reads.pop_front() {
                 return Ok(Turn::Read(read));
+            }
+            if let Some(task) = self.core.new_tasks.pop_front() {
+                return Ok(Turn::Task(task));
             }
             if let Some(slot) = self.core.dirty.pop() {
                 self.core.dirty_flags[slot] = false;
@@ -766,7 +895,7 @@ impl Scan {
             if self.live == 0 {
                 return Ok(Turn::Done);
             }
-            if !self.core.reads.is_empty() {
+            if !self.core.reads.is_empty() || !self.core.tasks.is_empty() {
                 return Ok(Turn::Waiting);
             }
             vortex_bail!(
@@ -779,6 +908,11 @@ impl Scan {
     /// Delivers the bytes of a read [`step`](Self::step) returned.
     pub fn deliver(&mut self, read: ReadId, bytes: BufferHandle) -> VortexResult<()> {
         self.core.deliver(read, bytes)
+    }
+
+    /// Wakes the source whose asynchronous task completed successfully.
+    pub fn complete_task(&mut self, id: u64) -> VortexResult<()> {
+        self.core.complete_task(id)
     }
 
     /// Starts the next split in a free slot.

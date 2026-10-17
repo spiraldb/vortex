@@ -7,6 +7,7 @@ use vortex_array::dtype::DType;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
+use vortex_error::vortex_err;
 use vortex_io::request::IoConsumer;
 use vortex_io::request::IoRequestId;
 use vortex_io::request::IoResult;
@@ -115,6 +116,13 @@ impl IoConsumer for ProjectionMorsel {
 }
 
 impl Morsel for ProjectionMorsel {
+    fn task_complete(&mut self, id: u64) -> VortexResult<()> {
+        self.adaptor
+            .as_mut()
+            .ok_or_else(|| vortex_err!("Task completed before the projection started"))?
+            .task_complete(id)
+    }
+
     fn state(&self) -> State {
         match &self.adaptor {
             _ if self.done => State::Done,
@@ -144,7 +152,8 @@ impl Morsel for ProjectionMorsel {
                 }],
             )?
             .with_row_offset(plans.row_offset)
-            .with_value_cache(plans.values);
+            .with_value_cache(plans.values)
+            .with_child_executor(plans.children);
             self.adaptor = Some(ScanAdaptor::new(scan, plans.locations));
             return Ok(MorselOutput::Continue);
         };
@@ -154,6 +163,7 @@ impl Morsel for ProjectionMorsel {
         Ok(match adaptor.compute()? {
             AdaptorStep::Yield => MorselOutput::Continue,
             AdaptorStep::NeedsIO(batch) => MorselOutput::NeedsIO(batch),
+            AdaptorStep::Task(task) => MorselOutput::Await(task),
             AdaptorStep::Piece(piece) => {
                 self.pieces.push(piece);
                 MorselOutput::Continue

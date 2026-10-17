@@ -10,6 +10,7 @@ use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::buffer::BufferHandle;
 use vortex_error::VortexResult;
+use vortex_scan::planning::planner::WorkFuture;
 use vortex_session::VortexSession;
 
 use super::pipeline::Arena;
@@ -43,6 +44,8 @@ pub enum SourceReady {
 pub enum SourceBlocked {
     /// Wait for bytes from newly queued or outstanding reads.
     Io,
+    /// Wait for an asynchronous task, possibly alongside pending reads.
+    Task,
     /// The inlet needs more batches or its sink to close it. It must be open and have room
     /// for its sink to push; debug builds check that the sink can still wake this source.
     Inlet(usize),
@@ -157,9 +160,28 @@ pub struct Cx<'a> {
     pub(super) exec: &'a mut ExecutionCtx,
     pub(super) touched: &'a mut InletSet,
     pub(super) changed: &'a mut InletSet,
+    pub(super) tasks: &'a mut Vec<WorkFuture>,
+    pub(super) task_inbox: &'a mut Option<Box<TaskInbox>>,
+}
+
+#[derive(Default)]
+pub(super) struct TaskInbox {
+    pub(super) pending: usize,
+    pub(super) completed: VecDeque<u64>,
 }
 
 impl Cx<'_> {
+    /// Queues asynchronous work. Return [`SourceBlocked::Task`] while awaiting its completion.
+    /// Identifiers need only be unique among this source's outstanding tasks.
+    pub fn request_task(&mut self, task: WorkFuture) {
+        self.tasks.push(task);
+    }
+
+    /// Takes the identifier of a successfully completed task, oldest completion first.
+    pub fn take_task(&mut self) -> Option<u64> {
+        self.task_inbox.as_mut()?.completed.pop_front()
+    }
+
     /// Takes an inlet index whose sink appended data or closed since the last readiness
     /// check. Each index is reported once, and all inlets are reported on the first check.
     /// Remaining notifications are cleared after [`Source::ready`] returns. A source must

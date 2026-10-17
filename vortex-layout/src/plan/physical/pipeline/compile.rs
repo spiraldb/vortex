@@ -5,6 +5,7 @@
 //! more than once are decoded once.
 
 use std::ops::Range;
+use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
@@ -13,6 +14,7 @@ use vortex_error::VortexResult;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
 
+use super::ChildExecutor;
 use super::DEFAULT_CAPACITY;
 use super::port::PortId;
 use super::port::SourceEnd;
@@ -142,6 +144,10 @@ impl Compiler<'_> {
     /// Whole values kept between the scans of the split compiling.
     pub(crate) fn values(&self) -> &ValueCache {
         &self.core.values
+    }
+
+    pub(crate) fn children(&self) -> Option<Arc<dyn ChildExecutor>> {
+        self.core.children.as_ref().map(Arc::clone)
     }
 
     /// The rows `rows` of `scan`'s segment, filtered by `filter`, read by the split compiling.

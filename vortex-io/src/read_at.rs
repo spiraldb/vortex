@@ -69,7 +69,9 @@ impl CoalesceConfig {
 
     /// Configuration appropriate for local filesystem access.
     pub const fn file() -> Self {
-        Self::new(1 << 20, 4 << 20) // 1MB distance, 4MB max
+        // Large gaps amplify sparse reads when concurrent consumers register their chunks in
+        // separate waves: each wave can read and retain payload requested again by the next.
+        Self::new(8 << 10, 4 << 20) // 8KB distance, 4MB max
     }
 
     /// Configuration appropriate for object storage (S3, GCS, etc.).
@@ -439,7 +441,7 @@ mod tests {
     #[test]
     fn test_coalesce_config_file() {
         let config = CoalesceConfig::file();
-        assert_eq!(config.distance, 1 << 20); // 1MB
+        assert_eq!(config.distance, 8 << 10); // 8KB
         assert_eq!(config.max_size, 4 << 20); // 4MB
     }
 

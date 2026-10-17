@@ -6,7 +6,9 @@
 use std::fmt;
 use std::ops::Range;
 
+use futures::future::BoxFuture;
 use vortex_error::VortexResult;
+use vortex_error::vortex_bail;
 use vortex_io::request::IoBatch;
 use vortex_io::request::IoConsumer;
 
@@ -32,9 +34,29 @@ pub enum State {
     Done,
     /// The object can make progress on the CPU.
     NeedsCompute,
-    /// The object waits for a delivery of one of the `Fetch` requests it published; any delivery
-    /// may make it runnable. Waiting with no fetch outstanding is a protocol error.
+    /// The object waits for a fetch or asynchronous task it published. Any completion may make
+    /// it runnable. Waiting without an outstanding fetch or task is a protocol error.
     Waiting,
+}
+
+/// An asynchronous completion owned by one planner or morsel.
+///
+/// The driver polls the future and calls the owner's `task_complete` method after success.
+/// Errors fail the run. Cancelling the owner drops the future, so it must own any child task
+/// handles whose execution should be cancelled with it.
+pub struct WorkFuture {
+    /// Identifies this task among the owner's outstanding tasks.
+    pub id: u64,
+    /// Waits for work whose result the owner retains through its own completion channel.
+    pub future: BoxFuture<'static, VortexResult<()>>,
+}
+
+impl fmt::Debug for WorkFuture {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WorkFuture")
+            .field("id", &self.id)
+            .finish_non_exhaustive()
+    }
 }
 
 /// What one `compute()` produced.
@@ -49,6 +71,8 @@ pub enum PlannerOutput {
     Continue,
     /// Requests the planner publishes: fetches it needs, and optional hints.
     NeedsIO(IoBatch),
+    /// A completion to await without blocking other work in the run.
+    Await(WorkFuture),
     /// A child planner, with the scope it is responsible for.
     Planner(WorkScope, Box<dyn Planner>),
     /// A morsel authorised to produce arrays for the scope.
@@ -66,6 +90,11 @@ pub trait Planner: IoConsumer + Send {
 
     /// Advances CPU work. Only called when [`state`](Self::state) is `NeedsCompute`.
     fn compute(&mut self) -> VortexResult<PlannerOutput>;
+
+    /// Receives successful completion of a task returned by [`PlannerOutput::Await`].
+    fn task_complete(&mut self, _id: u64) -> VortexResult<()> {
+        vortex_bail!("planner did not implement task completion")
+    }
 }
 
 impl fmt::Debug for PlannerOutput {
@@ -74,6 +103,7 @@ impl fmt::Debug for PlannerOutput {
             Self::Done => f.write_str("Done"),
             Self::Continue => f.write_str("Continue"),
             Self::NeedsIO(batch) => f.debug_tuple("NeedsIO").field(batch).finish(),
+            Self::Await(task) => f.debug_tuple("Await").field(task).finish(),
             Self::Planner(scope, _) => f.debug_tuple("Planner").field(scope).finish(),
             Self::Morsel(scope, _) => f.debug_tuple("Morsel").field(scope).finish(),
         }

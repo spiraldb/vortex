@@ -9,10 +9,12 @@
 //! through a `ScanAdaptor`, so the planning driver can advance other work while reads wait.
 
 mod adaptor;
+mod children;
 mod projection;
 
 use std::sync::Arc;
 
+pub(super) use children::child_executor;
 use vortex_buffer::Alignment;
 use vortex_io::request::IoTarget;
 use vortex_scan::planning::next::next_fn;
@@ -25,6 +27,7 @@ use vortex_session::VortexSession;
 
 use self::projection::ProjectionPlanner;
 use crate::plan::physical::PlanRef;
+use crate::plan::physical::pipeline::ChildExecutor;
 use crate::plan::physical::pipeline::ValueCache;
 
 /// Where a segment's bytes live in its source.
@@ -63,6 +66,7 @@ pub(super) struct ScanPlans {
     /// Whole values, such as dictionary values, shared by the splits of this scan. Their plans
     /// always read the same complete row domain, independently of a split's selection.
     pub(super) values: ValueCache,
+    pub(super) children: Option<Arc<dyn ChildExecutor>>,
 }
 
 /// Selects the rows of a fixed work chunk before handing them to its projection planner.

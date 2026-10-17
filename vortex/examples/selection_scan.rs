@@ -9,6 +9,8 @@
 //! builder here only. `check` compares against a full V1 scan followed by a take.
 //! `decode` consumes the selected rows in all columns as Arrow record batches; `decode-metrics`
 //! measures allocations while doing the same work.
+//! Instrumented disk runs also report physical reads/bytes after coalescing, summed over all
+//! iterations and excluding the initial file open (reopen-mode opens are included).
 //! Build with `VORTEX_SELECTION_METRICS=1` for the separate allocation-instrumented executable.
 //! Use `indices:16,32` in place of the pattern to select exact, strictly increasing row indices;
 //! ROWS must match the number supplied. This supports targeted large-row and null-row checks.
@@ -35,17 +37,23 @@ use vortex::array::ArrayRef;
 use vortex::array::Canonical;
 use vortex::array::IntoArray;
 use vortex::array::VortexSessionExecute;
+use vortex::array::memory::MemorySessionExt;
 use vortex::array::stream::ArrayStreamAdapter;
 use vortex::array::stream::ArrayStreamExt;
 use vortex::buffer::Buffer;
 use vortex::buffer::ByteBuffer;
 use vortex::file::OpenOptionsSessionExt;
 use vortex::file::VortexFile;
+use vortex::io::InstrumentedReadAt;
 use vortex::io::session::RuntimeSessionExt;
+use vortex::io::std_file::FileReadAt;
 use vortex::layout::scan::v2::ScanBuilder as V2ScanBuilder;
 use vortex::layout::segments::SegmentFuture;
 use vortex::layout::segments::SegmentId;
 use vortex::layout::segments::SegmentSource;
+use vortex::metrics::DefaultMetricsRegistry;
+use vortex::metrics::MetricValue;
+use vortex::metrics::MetricsRegistry;
 use vortex::scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex::session::VortexSession;
 use vortex_arrow::ArrowSessionExt;
@@ -123,12 +131,46 @@ async fn open(
     session: &VortexSession,
     path: &Path,
     bytes: Option<&ByteBuffer>,
+    metrics: Option<&Arc<DefaultMetricsRegistry>>,
 ) -> Result<VortexFile> {
     let options = session.open_options().with_layout_reader_cache();
-    Ok(match bytes {
-        Some(bytes) => options.open_buffer(bytes.clone())?,
-        None => options.open_path(path).await?,
+    Ok(match (bytes, metrics) {
+        (Some(bytes), _) => options.open_buffer(bytes.clone())?,
+        (None, Some(metrics)) => {
+            let read = Arc::new(FileReadAt::open_with_allocator(
+                path,
+                session.handle(),
+                session.allocator(),
+            )?);
+            options
+                .with_metrics_registry(metrics.clone())
+                .open_read(InstrumentedReadAt::new(read, metrics.as_ref()))
+                .await?
+        }
+        (None, None) => options.open_path(path).await?,
     })
+}
+
+fn physical_io(metrics: &DefaultMetricsRegistry) -> [u64; 4] {
+    let mut totals = [0; 4];
+    for metric in metrics.snapshot() {
+        match (metric.name().as_ref(), metric.value()) {
+            ("vortex.io.read.total_size", MetricValue::Counter(value)) => {
+                totals[0] += value.value();
+            }
+            ("vortex.io.read.size", MetricValue::Histogram(value)) => {
+                totals[1] += value.count() as u64;
+            }
+            ("io.requests.individual", MetricValue::Counter(value)) => {
+                totals[2] += value.value();
+            }
+            ("io.requests.coalesced", MetricValue::Counter(value)) => {
+                totals[3] += value.value();
+            }
+            _ => {}
+        }
+    }
+    totals
 }
 
 fn v2() -> bool {
@@ -301,7 +343,8 @@ async fn main() -> Result<()> {
         "disk" => None,
         other => bail!("Unknown storage mode {other}"),
     };
-    let file = open(&session, path, bytes.as_ref()).await?;
+    let io_metrics = metrics.then(|| Arc::new(DefaultMetricsRegistry::default()));
+    let file = open(&session, path, bytes.as_ref(), io_metrics.as_ref()).await?;
     let seed = args
         .get(7)
         .map(|seed| seed.parse::<u64>())
@@ -357,6 +400,7 @@ async fn main() -> Result<()> {
         }
     };
     let file = instrument(file);
+    let initial_io = io_metrics.as_ref().map(|metrics| physical_io(metrics));
     let mut runs = Vec::with_capacity(iterations);
     for _ in 0..iterations {
         for calls in calls.iter() {
@@ -370,7 +414,9 @@ async fn main() -> Result<()> {
         let reopened = if cached {
             None
         } else {
-            Some(instrument(open(&session, path, bytes.as_ref()).await?))
+            Some(instrument(
+                open(&session, path, bytes.as_ref(), io_metrics.as_ref()).await?,
+            ))
         };
         let input = reopened.as_ref().unwrap_or(&file);
         let (array, actual_rows) = if decode_rows {
@@ -402,9 +448,21 @@ async fn main() -> Result<()> {
             "unique_bytes": calls.iter().zip(locations.iter()).filter(|(n, _)| n.load(Ordering::Relaxed) != 0).map(|(_, l)| u64::from(l.length)).sum::<u64>(),
         }));
     }
+    let physical_io = io_metrics
+        .as_ref()
+        .zip(initial_io)
+        .map(|(metrics, before)| {
+            let after = physical_io(metrics);
+            serde_json::json!({
+                "bytes": after[0] - before[0],
+                "reads": after[1] - before[1],
+                "individual_requests": after[2] - before[2],
+                "coalesced_requests": after[3] - before[3],
+            })
+        });
     println!(
         "{}",
-        serde_json::json!({"args": args, "indices": selected.as_slice(), "runs": runs, "rss": rss()?, "v2": std::env::var("VORTEX_SCAN_V2").ok()})
+        serde_json::json!({"args": args, "indices": selected.as_slice(), "runs": runs, "physical_io": physical_io, "rss": rss()?, "v2": std::env::var("VORTEX_SCAN_V2").ok()})
     );
     Ok(())
 }

@@ -6,7 +6,7 @@ run-name: Scan V2 regression comparison on ${{ github.ref_name }}
 
 on:
   push:
-    branches: ["ji/scan-v2-list-null-spans-ci"]
+    branches: ["ji/scan-v2-child-coalescing-ci"]
   workflow_dispatch: { }
 
 permissions:
@@ -23,8 +23,8 @@ jobs:
     runs-on: >-
       runs-on=${{ github.run_id }}/runner=bench-dedicated/family=c8gd.8xlarge/image=ubuntu24-full-arm64-pre-v2/extras=s3-cache/tag=scan-v2-regression
     env:
-      # List-mask checkpoint, before retaining dense null-row payload.
-      BASELINE_COMMIT: "e3d88b5abbb23e63183e89ff008ae742fd583900"
+      # Null-payload checkpoint, before independent child projection work.
+      BASELINE_COMMIT: "a9771f9f7f0ac968643cae2020e7e2427126de45"
       CARGO_BUILD_JOBS: "8"
       CARGO_TARGET_DIR: ${{ github.workspace }}/target
       RUSTFLAGS: "-C target-cpu=native -C force-frame-pointers=yes"

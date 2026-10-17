@@ -7,10 +7,12 @@ use std::fmt;
 
 use vortex_array::ArrayRef;
 use vortex_error::VortexResult;
+use vortex_error::vortex_bail;
 use vortex_io::request::IoBatch;
 use vortex_io::request::IoConsumer;
 
 pub use crate::planning::planner::State;
+use crate::planning::planner::WorkFuture;
 
 /// What one morsel `compute()` produced.
 ///
@@ -25,6 +27,8 @@ pub enum MorselOutput {
     Continue,
     /// Requests the morsel publishes: fetches it needs, and optional hints.
     NeedsIO(IoBatch),
+    /// A completion to await without blocking other work in the run.
+    Await(WorkFuture),
     /// One non-empty array of selected rows, in input-row order.
     Batch(ArrayRef),
 }
@@ -40,6 +44,11 @@ pub trait Morsel: IoConsumer + Send {
 
     /// Advances CPU work. Only called when [`state`](Self::state) is `NeedsCompute`.
     fn compute(&mut self) -> VortexResult<MorselOutput>;
+
+    /// Receives successful completion of a task returned by [`MorselOutput::Await`].
+    fn task_complete(&mut self, _id: u64) -> VortexResult<()> {
+        vortex_bail!("morsel did not implement task completion")
+    }
 }
 
 impl fmt::Debug for MorselOutput {
@@ -48,6 +57,7 @@ impl fmt::Debug for MorselOutput {
             Self::Done => f.write_str("Done"),
             Self::Continue => f.write_str("Continue"),
             Self::NeedsIO(batch) => f.debug_tuple("NeedsIO").field(batch).finish(),
+            Self::Await(task) => f.debug_tuple("Await").field(task).finish(),
             Self::Batch(array) => f.debug_tuple("Batch").field(&array.len()).finish(),
         }
     }

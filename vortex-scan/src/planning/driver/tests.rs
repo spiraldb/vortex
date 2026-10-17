@@ -22,6 +22,8 @@ use crate::planning::tests::scripted::array_of;
 use crate::planning::tests::scripted::ctx;
 use crate::planning::tests::scripted::scope;
 
+mod tasks;
+
 fn request(id: u32, offset: u64) -> IoRequest {
     IoRequest {
         intent: IoIntent::Fetch,

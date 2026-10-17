@@ -18,6 +18,7 @@ use vortex_io::request::IoBatch;
 use vortex_io::request::IoIntent;
 use vortex_io::request::IoResult;
 use vortex_scan::planning::planner::State;
+use vortex_scan::planning::planner::WorkFuture;
 
 use crate::plan::physical::pipeline::ReadId;
 use crate::plan::physical::pipeline::Scan;
@@ -40,6 +41,8 @@ pub(super) enum AdaptorStep {
     Yield,
     /// Requests to publish, each returned once.
     NeedsIO(IoBatch),
+    /// An independently scheduled computation whose completion must be delivered back.
+    Task(WorkFuture),
     /// Rows the plan produced.
     Piece(Piece),
 }
@@ -97,6 +100,7 @@ impl ScanAdaptor {
         Ok(match self.step()? {
             Turn::Waiting | Turn::Done => AdaptorStep::Yield,
             Turn::Output(_, array) => AdaptorStep::Piece(self.piece(array)),
+            Turn::Task(task) => AdaptorStep::Task(task),
             Turn::Read(read) => {
                 // Publish every read the scan has ready together, so the owner can coalesce them.
                 let mut batch = vec![self.request(read.id, read.segment_id)?];
@@ -125,7 +129,7 @@ impl ScanAdaptor {
         match &turn {
             Turn::Done => self.done = true,
             Turn::Waiting => self.pending = Some(Turn::Waiting),
-            Turn::Read(_) | Turn::Output(..) => {}
+            Turn::Read(_) | Turn::Task(_) | Turn::Output(..) => {}
         }
         Ok(turn)
     }
@@ -137,6 +141,14 @@ impl ScanAdaptor {
             rows: start..start + 1,
             array,
         }
+    }
+
+    pub(super) fn task_complete(&mut self, id: u64) -> VortexResult<()> {
+        self.scan.complete_task(id)?;
+        if matches!(self.pending, Some(Turn::Waiting)) {
+            self.pending = None;
+        }
+        Ok(())
     }
 
     fn request(&mut self, read: ReadId, segment_id: SegmentId) -> VortexResult<request::IoRequest> {

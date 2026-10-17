@@ -88,6 +88,12 @@ impl Core {
                 pipe.pending > 0 || !pipe.bytes.is_empty(),
                 "pipeline {id} waits for a read with none in flight or delivered"
             ),
+            Progress::Blocked(SourceBlocked::Task) => assert!(
+                pipe.task_inbox
+                    .as_ref()
+                    .is_some_and(|inbox| inbox.pending > 0 || !inbox.completed.is_empty()),
+                "pipeline {id} waits for a task with none in flight or completed"
+            ),
             Progress::Done => {
                 for (index, &port) in pipe.inlets.iter().enumerate() {
                     assert!(

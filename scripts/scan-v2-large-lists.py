@@ -68,12 +68,13 @@ def main():
             for k, (binary, flag) in versions.items()
         },
         method=dict(
-            iterations=32,
+            iterations=64,
             rounds=2,
             seeds=[17, 42, 73],
-            warmups=4,
+            warmups=8,
             output="full Arrow decode/drop",
-            confirmation_iterations=128,
+            confirmation_iterations=256,
+            confirmation_warmups=32,
             confirmation_rounds=4,
         ),
     )
@@ -111,7 +112,7 @@ def main():
             raise RuntimeError(f"Wrong selected output: {name}, {selector}")
         # Artifact uploads reject colons, including those in explicit row selectors.
         filename_selector = selector.replace(":", "-")
-        (checks / f"{name}-{cores}-{filename_selector}.json").write_text(result.stdout)
+        (checks / f"{name}-{cores}-{count}-{filename_selector}.json").write_text(result.stdout)
         check_commands.append(command)
     (checks / "commands.json").write_text(json.dumps(check_commands, indent=2) + "\n")
     print(f"PASS: {len(check_commands)} real-file V1 full-scan-plus-take comparisons", flush=True)
@@ -133,7 +134,7 @@ def main():
             rows=1 if pattern == "row16" else 100,
             selector="indices:16" if pattern == "row16" else pattern,
         )
-        summary.append(bench.measure(case, versions, files, cpus, raw, 32, 2))
+        summary.append(bench.measure(case, versions, files, cpus, raw, 64, 2))
         save()
     for row in summary:
         if row["vs_old_v2_pct"] <= 2 and all(
@@ -141,7 +142,7 @@ def main():
         ):
             continue
         case = {k: row[k] for k in ["dataset", "cores", "pattern", "mode", "rows", "selector"]}
-        confirmations.append(bench.measure(case, versions, files, cpus, reruns, 128, 4))
+        confirmations.append(bench.measure(case, versions, files, cpus, reruns, 256, 4))
         save()
 
     def key(row: dict) -> tuple:

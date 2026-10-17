@@ -5,7 +5,10 @@
 
 use std::collections::VecDeque;
 use std::ops::Range;
+use std::sync::Arc;
 
+use futures::FutureExt;
+use futures::channel::oneshot;
 use rustc_hash::FxHashMap;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
@@ -23,6 +26,7 @@ use vortex_error::vortex_ensure;
 use vortex_error::vortex_err;
 use vortex_mask::AllOr;
 use vortex_mask::Mask;
+use vortex_scan::planning::planner::WorkFuture;
 use vortex_utils::parallelism::get_available_parallelism;
 
 use super::join;
@@ -35,6 +39,7 @@ use crate::plan::physical::operator::Source;
 use crate::plan::physical::operator::SourceBlocked;
 use crate::plan::physical::operator::SourceReady;
 use crate::plan::physical::operator::Step;
+use crate::plan::physical::pipeline::ChildExecutor;
 use crate::plan::physical::pipeline::ReadId;
 use crate::plan::physical::pipeline::Scan;
 use crate::plan::physical::pipeline::Turn;
@@ -48,27 +53,38 @@ pub(crate) struct ListSource {
     plan: ListPackPlan,
     mask: Mask,
     values: ValueCache,
+    children: Option<Arc<dyn ChildExecutor>>,
+    result: Option<oneshot::Receiver<Vec<ArrayRef>>>,
     initialized: bool,
     offsets: Option<ArrayRef>,
     validity: Option<Validity>,
     elements: Option<Scan>,
     reads: FxHashMap<SegmentId, VecDeque<ReadId>>,
+    pending_tasks: usize,
     chunks: Vec<(usize, ArrayRef)>,
     output: Option<ArrayRef>,
     done: bool,
 }
 
 impl ListSource {
-    pub(crate) fn new(plan: ListPackPlan, mask: Mask, values: ValueCache) -> Self {
+    pub(crate) fn new(
+        plan: ListPackPlan,
+        mask: Mask,
+        values: ValueCache,
+        children: Option<Arc<dyn ChildExecutor>>,
+    ) -> Self {
         Self {
             plan,
             mask,
             values,
+            children,
+            result: None,
             initialized: false,
             offsets: None,
             validity: None,
             elements: None,
             reads: FxHashMap::default(),
+            pending_tasks: 0,
             chunks: Vec::new(),
             output: None,
             done: false,
@@ -130,8 +146,27 @@ impl ListSource {
             get_available_parallelism().unwrap_or(1),
         )?;
         let splits = work::element_splits(elements.dtype(), ranges)?;
+        if let Some(children) = &self.children
+            && let Some(work) = work::parallel_splits(&elements, &splits)?
+        {
+            let future = Arc::clone(children).execute(elements, work, self.values.clone());
+            let (send, recv) = oneshot::channel();
+            self.result = Some(recv);
+            cx.request_task(WorkFuture {
+                id: 0,
+                future: async move {
+                    let arrays = future.await?;
+                    send.send(arrays)
+                        .map_err(|_| vortex_err!("List source was cancelled"))
+                }
+                .boxed(),
+            });
+            self.initialized = true;
+            return Ok(());
+        }
         let scan = Scan::try_new(cx.session().clone(), elements, splits)?
-            .with_value_cache(self.values.clone());
+            .with_value_cache(self.values.clone())
+            .with_child_executor(self.children.clone());
         self.elements = Some(if overlap {
             scan.with_max_active(2)
         } else {
@@ -179,6 +214,19 @@ impl Source for ListSource {
             }
             self.initialize(cx)?;
         }
+        if let Some(result) = &mut self.result {
+            if cx.take_task().is_none() {
+                return Ok(SourceReady::Blocked(SourceBlocked::Task));
+            }
+            let arrays = result
+                .try_recv()
+                .map_err(|_| vortex_err!("List child work was cancelled"))?
+                .ok_or_else(|| vortex_err!("List child work completed without output"))?;
+            self.chunks.extend(arrays.into_iter().enumerate());
+            self.result = None;
+            self.finish()?;
+            return Ok(SourceReady::Ready);
+        }
         let scan = self
             .elements
             .as_mut()
@@ -191,6 +239,10 @@ impl Source for ListSource {
                 .ok_or_else(|| vortex_err!("Unexpected list element segment {segment}"))?;
             scan.deliver(request, bytes)?;
         }
+        while let Some(id) = cx.take_task() {
+            scan.complete_task(id)?;
+            self.pending_tasks -= 1;
+        }
         loop {
             match scan.step()? {
                 Turn::Read(read) => {
@@ -201,7 +253,17 @@ impl Source for ListSource {
                     cx.request_read(read.segment_id);
                 }
                 Turn::Output(split, array) => self.chunks.push((split, array)),
-                Turn::Waiting => return Ok(SourceReady::Blocked(SourceBlocked::Io)),
+                Turn::Task(task) => {
+                    self.pending_tasks += 1;
+                    cx.request_task(task);
+                }
+                Turn::Waiting => {
+                    return Ok(SourceReady::Blocked(if self.pending_tasks > 0 {
+                        SourceBlocked::Task
+                    } else {
+                        SourceBlocked::Io
+                    }));
+                }
                 Turn::Done => {
                     self.finish()?;
                     return Ok(SourceReady::Ready);

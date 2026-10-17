@@ -233,6 +233,10 @@ fn drive(
                 splits[split].push(array.clone());
                 arrays.push(array);
             }
+            Turn::Task(task) => {
+                futures::executor::block_on(task.future)?;
+                scan.complete_task(task.id)?;
+            }
             Turn::Waiting => {
                 if !batch.is_empty() {
                     events.push(Event::Io(std::mem::take(&mut batch)));
@@ -981,7 +985,11 @@ fn pack_readiness_tracks_changes_and_consumption(
     let mut exec = SESSION.create_execution_ctx();
     let mut touched = InletSet::new(2);
     let mut changed = InletSet::all(2);
+    let mut tasks = Vec::new();
+    let mut task_inbox = None;
     let mut cx = Cx {
+        tasks: &mut tasks,
+        task_inbox: &mut task_inbox,
         arena: &mut arena,
         inlets: &inlets,
         bytes: &mut bytes,
