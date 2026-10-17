@@ -35,7 +35,7 @@ static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     session
 });
 
-const LEN: usize = 65_536;
+const LEN: usize = 16_384;
 
 /// `(average run length, fraction of null runs)`.
 const ARGS: &[(usize, f64)] = &[
