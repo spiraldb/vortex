@@ -109,7 +109,9 @@ def main():
         )
         if not json.loads(result.stdout)["correct"]:
             raise RuntimeError(f"Wrong selected output: {name}, {selector}")
-        (checks / f"{name}-{cores}-{selector}.json").write_text(result.stdout)
+        # Artifact uploads reject colons, including those in explicit row selectors.
+        filename_selector = selector.replace(":", "-")
+        (checks / f"{name}-{cores}-{filename_selector}.json").write_text(result.stdout)
         check_commands.append(command)
     (checks / "commands.json").write_text(json.dumps(check_commands, indent=2) + "\n")
     print(f"PASS: {len(check_commands)} real-file V1 full-scan-plus-take comparisons", flush=True)
