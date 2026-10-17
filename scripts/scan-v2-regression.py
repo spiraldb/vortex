@@ -48,7 +48,7 @@ def measure(
             order = list(versions)[:: 1 if repeat % 2 == 0 else -1]
             for version in order:
                 binary, flag = versions[version]
-                stem = "-".join(str(v) for v in (*case.values(), seed, repeat, version))
+                stem = "-".join(str(v) for v in (*case.values(), seed, repeat, version)).replace(":", "-")
                 command = [
                     "taskset",
                     "-c",
