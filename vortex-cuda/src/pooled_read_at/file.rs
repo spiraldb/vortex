@@ -64,9 +64,14 @@ const FILE_READ_CHUNK_BYTES: usize = 8 << 20;
 /// 32 MiB launches. Larger launches would keep decode kernels off the SMs for longer.
 const MAPPED_COPY_CHUNK_BYTES: usize = 32 << 20;
 
-/// Upper bound on blocks per mapped copy launch: a few per SM saturates host-memory reads.
-const MAPPED_COPY_BLOCKS_MAX: u64 = 1024;
-const MAPPED_COPY_THREADS: u32 = 256;
+/// Upper bound on blocks per mapped copy launch. With each thread keeping several loads in flight,
+/// 16 blocks saturate host-memory reads when copying alone; 32 keep them saturated while decodes
+/// share the SMs. Copies then occupy a quarter of the SMs instead of filling every SM at high
+/// priority, and decodes run on the rest.
+const MAPPED_COPY_BLOCKS_MAX: u64 = 32;
+const MAPPED_COPY_THREADS: u32 = 1024;
+/// 16-byte words each thread copies per pass; must match `MAPPED_COPY_LOADS` in `mapped_copy.cu`.
+const MAPPED_COPY_LOADS: u64 = 8;
 
 /// Serialize page-table fills across all mapped files, releasing the lock after each chunk.
 static MAPPED_FILL: Mutex<()> = Mutex::new(());
@@ -398,7 +403,7 @@ impl MappedFile {
             let target = base + (pad + chunk) as u64;
             let len = size as u64;
             let blocks = len
-                .div_ceil(u64::from(MAPPED_COPY_THREADS) * 16)
+                .div_ceil(u64::from(MAPPED_COPY_THREADS) * 16 * MAPPED_COPY_LOADS)
                 .clamp(1, MAPPED_COPY_BLOCKS_MAX);
             let config = LaunchConfig {
                 grid_dim: (u32::try_from(blocks)?, 1, 1),
