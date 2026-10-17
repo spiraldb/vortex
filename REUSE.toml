@@ -19,6 +19,12 @@ path = "vortex-sqllogictest/slt/clickbench/**/results/*.slt.no"
 SPDX-FileCopyrightText = "Copyright the Vortex contributors"
 SPDX-License-Identifier = "Apache-2.0"
 
+# Research measurements are licensed under CC-BY-4.0.
+[[annotations]]
+path = "research/**/*.jsonl"
+SPDX-FileCopyrightText = "Copyright the Vortex contributors"
+SPDX-License-Identifier = "CC-BY-4.0"
+
 # Golden files are licensed under CC-BY-4.0.
 [[annotations]]
 path = "**/goldenfiles/**"

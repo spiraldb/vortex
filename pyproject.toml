@@ -71,6 +71,8 @@ suppress-none-returning = true
 "scripts/cudf-parquet-read.py" = ["ANN001"]
 "scripts/post-ingest.py" = ["ANN001"]
 "scripts/vortex_gdb.py" = ["ANN001"]
+# One-off research scripts over untyped numpy arrays.
+"research/**/*.py" = ["ANN", "E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = [
