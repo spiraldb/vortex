@@ -15,6 +15,7 @@ how to pick the work up on another machine.
 | Dataset download (`fetch.py`) | Done | 85 series, 37M values, 13 sources, with no API keys. Fetching takes ~20 min (PLAID is a 700 MB zip). |
 | Size model (`lpc_eval.py`) | Done | Every number is in `results.jsonl`. A full run takes ~12 min on 4 vCPUs. |
 | Real Vortex sizes (`export_vortex.py`, `vortex_compare.py`) | Done | Uses `affine_eval` from `ji/affine-encoding` (`ef6e698d6`). Raw output is `vortex_results.tsv`. |
+| LPC vs Delta, both cascaded (`cascade_compare.py`) | Done | Raw output is `vortex_fixed_results.tsv`. |
 | Encoder ablations (`ablate.py`) | Done | Sampled fit, coefficient precision, accumulator range. |
 | Decode kernels (`lpc_kernels.rs`) | Done; re-measure on a better CPU | Serial, autovectorized lanes, AVX-512 lanes, fused unpack + LPC, fused + 16×16 transpose to original order. |
 | pco timings on real data (`pco_speed.py`) | Done for 4 series | |
@@ -38,7 +39,7 @@ python3 -m venv venv && ./venv/bin/pip install numpy scipy pcodec zstandard wfdb
 - For the real Vortex numbers, see the end of the "Reproducing" section in `README.md`. In brief:
   - add a worktree of `ji/affine-encoding`;
   - build `affine_eval` with `--features pco` (~7 min on 4 vCPUs);
-  - run `export_vortex.py`, then `affine_eval`, then `vortex_compare.py`.
+  - run `export_vortex.py`, then `affine_eval`, then `vortex_compare.py` and `cascade_compare.py`.
 
 ## What to re-measure on the stronger CPU
 

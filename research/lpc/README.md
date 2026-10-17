@@ -54,6 +54,11 @@ choosing worse trees than Delta on several originals (see "Real Vortex sizes").
 with default settings (`DeltaSpec::Auto`) on 9 of 14 audio, 5 of 14 seismic and 3 of 5 vibration
 series. pco Auto never picks its LPC mode (Conv1).
 
+**With the same recursive compression on both sides, LPC beats cascaded Delta by** 1.19x on
+vibration, 1.16x on geomagnetic, 1.08x on ECG and tides, and 1.05x on seismic and audio (geo-means;
+up to 1.36x). It is ≥5% smaller than the better of cascaded Delta and delta-of-delta on 34 of 85
+series. See "LPC vs Delta, both with the full Vortex cascade".
+
 **LPC must not be picked blindly.**
 
 - On data with few distinct values or with dictionary/run-length structure, LPC residuals destroy
@@ -257,6 +262,153 @@ LPC compared directly with Delta and with delta-of-delta (model, geo-mean, bit-p
     model's bit-packed delta needs 6.18.
   - A better non-LPC cascade would close part of that gap, so treat the model's ratios as the
     conservative ones.
+
+## LPC vs Delta, both with the full Vortex cascade
+
+This is the like-for-like comparison: every predictor's residual stream goes through the same
+recursive BtrBlocks compression.
+
+- **Inputs:** `export_vortex.py` also writes each series' per-chunk Delta residuals and
+  delta-of-delta residuals.
+- **Compression:** `affine_eval` compresses every residual column with `default` and
+  `affine+varbp+cdelta`, and keeps the better result. The cascade may pick FoR, bit-packing,
+  dict, run-end, RLE, ChunkDelta, Affine and so on, recursively.
+- **Headers:**
+  - Delta pays for the first value of each chunk, FoR-coded across chunks.
+  - Delta-of-delta also pays for its warm-ups.
+  - LPC pays for its coefficients and warm-ups.
+- `cascade_compare.py` builds the tables. The raw output is in `vortex_results.tsv` and
+  `vortex_fixed_results.tsv`.
+
+| category | series | LPC vs Delta | min..max | LPC vs best of Delta, DoD | LPC smaller than both in |
+|---|---|---|---|---|---|
+| vibration | 5 | 1.19x | 1.13..1.23 | 1.18x | 5/5 |
+| geomagnetic | 4 | 1.16x | 1.01..1.27 | 1.06x | 3/4 |
+| ecg | 6 | 1.08x | 1.02..1.22 | 1.03x | 6/6 |
+| tides | 4 | 1.08x | 1.04..1.15 | 1.05x | 4/4 |
+| pcg | 1 | 1.06x | 1.06..1.06 | 1.05x | 1/1 |
+| seismic | 14 | 1.05x | 0.59..1.36 | 1.05x | 11/14 |
+| audio | 14 | 1.05x | 0.99..1.09 | 1.05x | 12/14 |
+| weather | 4 | 1.02x | 1.00..1.04 | 1.02x | 4/4 |
+| power | 3 | 1.01x | 1.00..1.03 | 1.01x | 3/3 |
+| eeg | 4 | 1.01x | 1.00..1.02 | 1.01x | 2/4 |
+| imu | 8 | 0.98x | 0.92..1.17 | 0.98x | 2/8 |
+| timestamp | 2 | 0.96x | 0.94..0.98 | 0.96x | 0/2 |
+| financial | 1 | 0.93x | 0.93..0.93 | 0.93x | 0/1 |
+| grid | 9 | 0.87x | 0.30..1.17 | 0.86x | 5/9 |
+| emg | 2 | 0.80x | 0.79..0.81 | 0.80x | 0/2 |
+| ppg_resp | 4 | 0.80x | 0.66..1.19 | 0.80x | 1/4 |
+
+series 85: LPC >=5% smaller than cascaded Delta in 40, >=10% in 21; than the better of Delta/DoD: >=5% in 34, >=10% in 15.
+
+- **The gap is smaller than in the "best Vortex on the original" comparison.**
+  - That comparison credited LPC for trees where BtrBlocks missed the delta. Example: `tide_seattle`
+    was 8.12 bits/value on the original column, but 6.53 with an explicit Delta + cascade.
+  - Against cascaded Delta, LPC keeps a clear win on vibration (1.19x), geomagnetic (1.16x), ECG
+    and tides (1.08x), and seismic and audio (1.05x geo-mean, up to 1.36x).
+- **LPC loses wherever cascaded deltas find a dictionary.**
+  - Deltas of a quantized or upsampled signal take few distinct values, and `dict(bitpacked, …)`
+    exploits that (PPG, EMG, PLAID, some IMU).
+  - LPC's rounded prediction spreads those values out, so the dictionary no longer applies.
+  - The same happens with run-end structure: `seis_IU_SNZO_HH1_100hz` is a mostly flat channel
+    where `rle` + run-end wins.
+- **Two of the worst grid rows are artifacts:** `grid_plaid_1816_current` (0.30x) and
+  `1005_voltage` (0.59x) are the decimal-scaling artifacts noted in Caveats.
+- **The selection rule is the same as before:** LPC only pays when its own cascaded sample beats
+  cascaded Delta/delta-of-delta. Such a rule would pick LPC for 34 of these 85 series, at a ≥5%
+  gain.
+
+<details><summary>Per-series table</summary>
+
+| series | category | original, best Vortex | Delta + cascade (tree) | DoD + cascade | LPC + cascade (tree) | vs Delta | vs best fixed |
+|---|---|---|---|---|---|---|---|
+| seis_IU_ANMO_LDO_pressure | seismic | 6.15 | 6.15 `zigzag(bitpacked(primitive,primitive,primitive))` | 6.11 | 4.53 lpc8/chunk `zigzag(bitpacked(primitive,primitive,primitive))` | **1.36x** | 1.35x |
+| geomag_BOU_H_1hz | geomagnetic | 3.48 | 4.04 `zigzag(bitpacked(primitive,primitive,primitive))` | 3.07 | 3.17 lpc8/chunk `zigzag(bitpacked(primitive,primitive,primitive))` | **1.27x** | 0.97x |
+| vib_cwru_normal_12khz | vibration | 10.09 | 10.11 `zigzag(bitpacked(primitive,primitive,primitive))` | 10.05 | 8.21 lpc32/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.23x** | 1.22x |
+| ecg_mitdb100_V5 | ecg | 7.03 | 7.06 `zigzag(bitpacked(primitive,primitive,primitive))` | 6.16 | 5.79 lpc16/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.22x** | 1.06x |
+| geomag_FRD_H_1hz | geomagnetic | 4.42 | 4.13 `zigzag(bitpacked(primitive,primitive,primitive))` | 3.87 | 3.39 lpc4/chunk `zigzag(bitpacked(primitive,primitive,primitive))` | **1.22x** | 1.14x |
+| vib_cwru_outerrace007_12khz | vibration | 14.03 | 15.08 `v2(bitpacked,primitive)` | 15.25 | 12.39 lpc16/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.22x** | 1.22x |
+| seis_IU_ANMO_LHZ_1hz | seismic | 12.30 | 12.38 `chunk_delta(varbitpacked,v2(bitpacked(primitive,primitive,primitive)),v2(bitpacked))` | 12.58 | 10.40 lpc32/lanes `chunk_delta(varbitpacked,bitpacked(primitive,primitive,primitive),v2(bitpacked))` | **1.19x** | 1.19x |
+| vib_cwru_outerrace021_12khz | vibration | 14.45 | 15.10 `zigzag(bitpacked(primitive,primitive,primitive))` | 15.59 | 12.71 lpc32/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.19x** | 1.19x |
+| resp_fantasia_RESP | ppg_resp | 6.02 | 6.02 `v2(bitpacked,dict(bitpacked,primitive))` | 6.46 | 5.07 lpc32/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.19x** | 1.19x |
+| seis_IU_ANMO_LH1_1hz | seismic | 12.34 | 12.27 `chunk_delta(varbitpacked,v2(bitpacked(primitive,primitive,primitive)),v2(bitpacked))` | 12.45 | 10.40 lpc32/lanes `chunk_delta(varbitpacked,bitpacked(primitive,primitive,primitive),v2(bitpacked))` | **1.18x** | 1.18x |
+| imu_daphnet_S03R01_trunk_vert_64hz | imu | 9.03 | 10.26 `zigzag(bitpacked(primitive,primitive,primitive))` | 10.48 | 8.74 lpc2/chunk `zigzag(varbitpacked)` | **1.17x** | 1.17x |
+| grid_plaid_1464_current_30khz | grid | 5.27 | 5.04 `zigzag(bitpacked(primitive,primitive,primitive))` | 5.19 | 4.31 lpc16/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.17x** | 1.17x |
+| vib_cwru_ball007_12khz | vibration | 13.06 | 13.09 `zigzag(bitpacked(primitive,primitive,primitive))` | 14.08 | 11.20 lpc32/lanes `v2(bitpacked,primitive)` | **1.17x** | 1.17x |
+| seis_IU_ANMO_BHZ_40hz | seismic | 7.00 | 7.03 `zigzag(bitpacked(primitive,primitive,primitive))` | 7.07 | 6.08 lpc32/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.16x** | 1.16x |
+| seis_IU_ANMO_HHZ_100hz | seismic | 8.18 | 8.29 `zigzag(bitpacked(primitive,primitive,primitive))` | 8.92 | 7.17 lpc32/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.16x** | 1.16x |
+| tide_seattle_6min | tides | 8.12 | 6.53 `chunk_delta(varbitpacked,primitive,primitive)` | 6.18 | 5.67 lpc16/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.15x** | 1.09x |
+| geomag_FRD_Z_1hz | geomagnetic | 4.09 | 3.99 `zigzag(bitpacked(primitive,primitive,primitive))` | 4.27 | 3.53 lpc4/chunk `zigzag(bitpacked(primitive,primitive,primitive))` | **1.13x** | 1.13x |
+| vib_cwru_innerrace007_12khz | vibration | 14.09 | 14.84 `zigzag(bitpacked(primitive,primitive,primitive))` | 15.12 | 13.17 lpc16/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.13x** | 1.13x |
+| seis_IU_COLA_BH1_40hz | seismic | 7.37 | 7.63 `zigzag(bitpacked(primitive,primitive,primitive))` | 7.03 | 6.79 lpc16/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.12x** | 1.03x |
+| ecg_mitdb100_MLII | ecg | 7.59 | 6.64 `chunk_delta(bitpacked(primitive,primitive,primitive),v2(bitpacked(primitive,primitive,primitive)),v2(bitpacked))` | 6.09 | 6.02 lpc4/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.10x** | 1.01x |
+| grid_plaid_1312_current_30khz | grid | 7.64 | 7.79 `zigzag(chunk_delta(bitpacked(primitive,primitive,primitive),bitpacked(primitive,primitive,primitive),v2(bitpacked,primitive)))` | 6.97 | 7.07 lpc4/chunk `zigzag(bitpacked(primitive,primitive,primitive))` | **1.10x** | 0.98x |
+| seis_IU_ANMO_VHZ_0.1hz | seismic | 6.98 | 7.58 `chunk_delta(varbitpacked,bitpacked(primitive,primitive,primitive),zigzag(bitpacked(primitive,primitive,primitive)))` | 8.33 | 6.91 lpc16/chunk `chunk_delta(varbitpacked,bitpacked(primitive,primitive,primitive),zigzag(bitpacked(primitive,primitive,primitive)))` | **1.10x** | 1.10x |
+| audio_gtzan_row60_60 | audio | 14.16 | 14.12 `chunk_delta(varbitpacked,v2(bitpacked),v2(bitpacked))` | 14.14 | 12.99 lpc32/lanes `zigzag(varbitpacked)` | **1.09x** | 1.09x |
+| audio_gtzan_p1_165 | audio | 13.61 | 13.69 `zigzag(varbitpacked)` | 13.92 | 12.60 lpc32/lanes `zigzag(varbitpacked)` | **1.09x** | 1.09x |
+| grid_plaid_1005_current_30khz | grid | 6.48 | 6.01 `chunk_delta(varbitpacked,primitive,primitive)` | 5.94 | 5.53 lpc8/chunk `zigzag(bitpacked(primitive,primitive,primitive))` | **1.09x** | 1.07x |
+| audio_gtzan_classical2_120 | audio | 10.88 | 10.08 `chunk_delta(varbitpacked,v2(bitpacked),v2(bitpacked))` | 9.98 | 9.35 lpc32/lanes `chunk_delta(varbitpacked,v2(bitpacked(primitive,primitive)),v2(bitpacked))` | **1.08x** | 1.07x |
+| tide_thebattery_6min | tides | 7.38 | 6.60 `chunk_delta(varbitpacked,primitive,primitive)` | 6.23 | 6.13 lpc4/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.08x** | 1.02x |
+| audio_esc50_env8clips | audio | 10.29 | 10.16 `chunk_delta(varbitpacked,v2(bitpacked(primitive,primitive,primitive)),v2(bitpacked))` | 10.31 | 9.44 lpc16/chunk `chunk_delta(varbitpacked,bitpacked(primitive,primitive),zigzag(bitpacked(primitive,primitive,primitive)))` | **1.08x** | 1.08x |
+| grid_plaid_788_current_30khz | grid | 6.98 | 6.13 `zigzag(bitpacked(primitive,primitive,primitive))` | 6.08 | 5.70 lpc4/chunk `zigzag(bitpacked(primitive,primitive,primitive))` | **1.08x** | 1.07x |
+| ecg_ptb1khz_v2 | ecg | 9.60 | 8.16 `chunk_delta(bitpacked(primitive,primitive,primitive),primitive,primitive)` | 7.80 | 7.59 lpc32/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.08x** | 1.03x |
+| audio_gtzan_p1_55 | audio | 13.75 | 13.80 `chunk_delta(varbitpacked,v2(bitpacked),v2(bitpacked))` | 14.12 | 12.91 lpc32/lanes `chunk_delta(varbitpacked,v2(bitpacked),v2(bitpacked))` | **1.07x** | 1.07x |
+| audio_gtzan_p1_275 | audio | 15.01 | 15.05 `zigzag(bitpacked(primitive,primitive,primitive))` | 15.27 | 14.08 lpc32/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.07x** | 1.07x |
+| grid_admit_voltage_500khz | grid | 7.70 | 8.04 `v2(bitpacked,dict(primitive,primitive))` | 8.79 | 7.53 lpc32/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.07x** | 1.07x |
+| grid_plaid_759_current_30khz | grid | 3.64 | 3.06 `zigzag(bitpacked(primitive,primitive,primitive))` | 3.07 | 2.87 lpc8/chunk `zigzag(bitpacked(primitive,primitive,primitive))` | **1.07x** | 1.07x |
+| pcg_heartsound_2khz | pcg | 11.09 | 10.49 `chunk_delta(varbitpacked,v2(bitpacked(primitive,primitive)),v2(bitpacked))` | 10.39 | 9.85 lpc8/chunk `zigzag(bitpacked(primitive,primitive,primitive))` | **1.06x** | 1.05x |
+| seis_II_PFO_BHZ_40hz | seismic | 7.09 | 5.59 `chunk_delta(varbitpacked,zigzag(bitpacked(primitive,primitive,primitive)),dict(bitpacked,primitive))` | 5.69 | 5.27 lpc8/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.06x** | 1.06x |
+| audio_gtzan_blues2_30 | audio | 12.59 | 12.63 `chunk_delta(varbitpacked,v2(bitpacked(primitive,primitive)),v2(bitpacked))` | 13.27 | 11.89 lpc16/chunk `chunk_delta(varbitpacked,bitpacked,v2(bitpacked))` | **1.06x** | 1.06x |
+| tide_sanfrancisco_6min | tides | 7.43 | 6.99 `chunk_delta(varbitpacked,primitive,primitive)` | 6.98 | 6.62 lpc16/lanes `zigzag(varbitpacked)` | **1.06x** | 1.05x |
+| audio_librispeech_speech | audio | 12.04 | 12.58 `chunk_delta(varbitpacked,v2(bitpacked),v2(bitpacked))` | 13.36 | 11.92 lpc16/chunk `chunk_delta(varbitpacked,v2(bitpacked(primitive,primitive,primitive)),v2(bitpacked))` | **1.06x** | 1.06x |
+| ecg_apnea100hz_ECG | ecg | 9.22 | 9.58 `zigzag(bitpacked(primitive,primitive,primitive))` | 9.89 | 9.07 lpc32/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.06x** | 1.06x |
+| audio_gtzan_blues_0 | audio | 13.24 | 13.20 `chunk_delta(varbitpacked,v2(bitpacked(primitive,primitive)),v2(bitpacked))` | 13.59 | 12.58 lpc32/lanes `chunk_delta(varbitpacked,bitpacked,v2(bitpacked))` | **1.05x** | 1.05x |
+| weather_jena_pressure_10min | weather | 7.00 | 6.78 `zigzag(bitpacked(primitive,primitive,primitive))` | 6.77 | 6.50 lpc8/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.04x** | 1.04x |
+| audio_gtzan_row90_90 | audio | 12.79 | 12.85 `chunk_delta(varbitpacked,v2(bitpacked(primitive,primitive,primitive)),v2(bitpacked))` | 13.36 | 12.32 lpc16/chunk `chunk_delta(varbitpacked,bitpacked,v2(bitpacked))` | **1.04x** | 1.04x |
+| seis_IU_ANMO_BDF_infrasound | seismic | 14.42 | 14.73 `zigzag(bitpacked(primitive,primitive,primitive))` | 15.35 | 14.18 lpc32/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.04x** | 1.04x |
+| tide_sanfrancisco_1min | tides | 7.77 | 7.79 `zigzag(varbitpacked)` | 9.03 | 7.51 lpc16/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.04x** | 1.04x |
+| audio_gtzan_p1_220 | audio | 13.53 | 13.36 `chunk_delta(varbitpacked,v2(bitpacked(primitive,primitive,primitive)),v2(bitpacked))` | 13.58 | 12.92 lpc8/chunk `chunk_delta(varbitpacked,bitpacked,v2(bitpacked))` | **1.03x** | 1.03x |
+| ecg_mitdb203_MLII | ecg | 7.22 | 6.32 `chunk_delta(varbitpacked,v2(bitpacked(primitive,primitive)),v2(bitpacked))` | 6.35 | 6.14 lpc16/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.03x** | 1.03x |
+| power_household_global_intensity_1min | power | 7.36 | 7.00 `zigzag(bitpacked(primitive,primitive,primitive))` | 7.17 | 6.83 lpc16/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.03x** | 1.03x |
+| eeg_chbmit_256hz_FP1-F7 | eeg | 7.12 | 6.80 `chunk_delta(varbitpacked,v2(bitpacked(primitive,primitive,primitive)),v2(bitpacked))` | 7.37 | 6.66 lpc32/lanes `chunk_delta(varbitpacked,bitpacked(primitive,primitive,primitive),v2(bitpacked))` | **1.02x** | 1.02x |
+| ecg_ptb1khz_i | ecg | 8.42 | 8.28 `zigzag(bitpacked(primitive,primitive,primitive))` | 8.72 | 8.12 lpc32/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.02x** | 1.02x |
+| seis_IU_MAJO_BHZ_quake | seismic | 14.53 | 14.19 `chunk_delta(varbitpacked,primitive,primitive)` | 14.52 | 13.93 lpc16/chunk `chunk_delta(varbitpacked,primitive,primitive)` | **1.02x** | 1.02x |
+| weather_jena_humidity_10min | weather | 11.08 | 10.61 `zigzag(bitpacked(primitive,primitive,primitive))` | 10.70 | 10.45 lpc4/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.02x** | 1.02x |
+| audio_gtzan_p1_0 | audio | 14.29 | 14.41 `chunk_delta(varbitpacked,v2(bitpacked(primitive,primitive)),v2(bitpacked))` | 14.86 | 14.20 lpc8/chunk `zigzag(bitpacked(primitive,primitive,primitive))` | **1.01x** | 1.01x |
+| geomag_BOU_Z_1hz | geomagnetic | 3.42 | 3.15 `zigzag(bitpacked(primitive,primitive,primitive))` | 3.21 | 3.10 lpc2/chunk `zigzag(bitpacked(primitive,primitive,primitive))` | **1.01x** | 1.01x |
+| imu_ltmm_fl001_base_ap-acceleration | imu | 13.38 | 15.24 `chunk_delta(bitpacked(primitive,primitive,primitive),primitive,primitive)` | 15.24 | 15.11 lpc2/chunk `v2(bitpacked,primitive)` | **1.01x** | 1.01x |
+| weather_jena_temp_10min | weather | 8.42 | 8.22 `zigzag(bitpacked(primitive,primitive,primitive))` | 8.28 | 8.15 lpc4/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.01x** | 1.01x |
+| seis_IU_ANMO_LFZ_magnetic | seismic | 4.04 | 4.05 `zigzag(bitpacked(primitive,primitive,primitive))` | 4.80 | 4.03 lpc16/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.01x** | 1.01x |
+| eeg_mmidb_160hz_Fc5 | eeg | 7.44 | 7.28 `zigzag(bitpacked(primitive,primitive,primitive))` | 8.05 | 7.23 lpc8/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.01x** | 1.01x |
+| power_household_global_active_power_1min | power | 11.53 | 11.31 `zigzag(bitpacked(primitive,primitive,primitive))` | 11.86 | 11.25 lpc16/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.01x** | 1.01x |
+| power_household_voltage_1min | power | 9.83 | 9.37 `zigzag(bitpacked(primitive,primitive,primitive))` | 10.03 | 9.33 lpc8/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.00x** | 1.00x |
+| weather_jena_wind_10min | weather | 9.73 | 9.21 `zigzag(bitpacked(primitive,primitive,primitive))` | 10.06 | 9.20 lpc8/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.00x** | 1.00x |
+| eeg_mmidb_160hz_Cz | eeg | 7.23 | 7.10 `zigzag(bitpacked(primitive,primitive,primitive))` | 7.40 | 7.11 lpc4/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **1.00x** | 1.00x |
+| eeg_chbmit_256hz_T7-P7 | eeg | 6.57 | 6.43 `chunk_delta(varbitpacked,v2(bitpacked(primitive,primitive,primitive)),v2(bitpacked))` | 6.89 | 6.45 lpc16/lanes `chunk_delta(varbitpacked,bitpacked(primitive,primitive,primitive),v2(bitpacked))` | **1.00x** | 1.00x |
+| seis_IU_ANMO_LWS_windspeed | seismic | 5.16 | 5.62 `chunk_delta(varbitpacked,bitpacked,v2(bitpacked))` | 6.26 | 5.64 lpc8/lanes `chunk_delta(varbitpacked,bitpacked,v2(bitpacked))` | **1.00x** | 1.00x |
+| imu_ltmm_fl001_base_ml-acceleration | imu | 13.93 | 15.22 `chunk_delta(bitpacked(primitive,primitive,primitive),primitive,primitive)` | 15.22 | 15.29 lpc8/chunk `v2(bitpacked,primitive)` | **1.00x** | 1.00x |
+| audio_gtzan_p1_110 | audio | 12.83 | 12.86 `chunk_delta(varbitpacked,v2(bitpacked),v2(bitpacked))` | 13.35 | 12.91 lpc8/chunk `chunk_delta(varbitpacked,v2(bitpacked),v2(bitpacked))` | **1.00x** | 1.00x |
+| audio_gtzan_classical_150 | audio | 8.21 | 7.54 `chunk_delta(varbitpacked,v2(bitpacked),v2(bitpacked))` | 7.67 | 7.65 lpc16/lanes `chunk_delta(varbitpacked,bitpacked(primitive,primitive,primitive),v2(bitpacked))` | **0.99x** | 0.99x |
+| seis_IU_ANMO_LKO_temp | seismic | 0.51 | 0.39 `runend(delta(chunk_delta(primitive,primitive,primitive),bitpacked(primitive,primitive,primitive)),v2(bitpacked))` | 0.52 | 0.39 lpc4/lanes `runend(delta(chunk_delta(primitive,primitive,primitive),bitpacked(primitive,primitive,primitive)),v2(bitpacked))` | **0.98x** | 0.98x |
+| ts_daphnet_S01R01_ms | timestamp | 0.25 | 1.02 `v2(bitpacked)` | 2.03 | 1.05 lpc2/chunk `v2(bitpacked)` | **0.98x** | 0.98x |
+| imu_daphnet_S01R01_trunk_lat_64hz | imu | 9.10 | 10.11 `dict(bitpacked,v2(bitpacked))` | 10.88 | 10.45 lpc2/chunk `zigzag(bitpacked(primitive,primitive,primitive))` | **0.97x** | 0.97x |
+| imu_daphnet_S01R01_thigh_vert_64hz | imu | 9.09 | 10.10 `dict(bitpacked,v2(bitpacked(primitive,primitive,primitive)))` | 11.21 | 10.52 lpc4/chunk `chunk_delta(varbitpacked,primitive,primitive)` | **0.96x** | 0.96x |
+| grid_plaid_1312_voltage_30khz | grid | 14.91 | 11.14 `dict(bitpacked,zigzag(bitpacked(primitive,primitive,primitive)))` | 11.56 | 11.61 lpc8/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **0.96x** | 0.96x |
+| fin_btcusdt_trade_time | timestamp | 11.20 | 10.99 `bitpacked(primitive,primitive,primitive)` | 11.95 | 11.69 lpc8/chunk `zigzag(bitpacked(primitive,primitive,primitive))` | **0.94x** | 0.94x |
+| imu_daphnet_S02R01_ankle_lat_64hz | imu | 9.22 | 10.17 `affine[gcd](varbitpacked,primitive,dict(runend(primitive,primitive),primitive))` | 10.97 | 10.86 lpc4/chunk `chunk_delta(varbitpacked,primitive,primitive)` | **0.94x** | 0.94x |
+| imu_daphnet_S01R01_ankle_fwd_64hz | imu | 10.10 | 11.22 `dict(bitpacked,v2(bitpacked,primitive))` | 12.43 | 12.03 lpc2/chunk `chunk_delta(varbitpacked,primitive,primitive)` | **0.93x** | 0.93x |
+| fin_btcusdt_trade_price | financial | 7.34 | 7.18 `zigzag(bitpacked(primitive,primitive,primitive))` | 7.69 | 7.70 lpc8/chunk `zigzag(bitpacked(primitive,primitive,primitive))` | **0.93x** | 0.93x |
+| imu_ltmm_fl001_base_v-acceleration | imu | 13.42 | 13.95 `chunk_delta(dict(bitpacked,primitive),primitive,primitive)` | 15.40 | 15.16 lpc4/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **0.92x** | 0.92x |
+| emg_healthy_4khz | emg | 10.29 | 10.30 `dict(bitpacked,v2(bitpacked))` | 11.60 | 12.65 lpc8/chunk `zigzag(bitpacked(primitive,primitive,primitive))` | **0.81x** | 0.81x |
+| emg_neuropathy_4khz | emg | 12.34 | 12.49 `dict(bitpacked,v2(bitpacked,primitive))` | 13.90 | 15.80 lpc8/chunk `zigzag(bitpacked(primitive,primitive,primitive))` | **0.79x** | 0.79x |
+| bidmc01_RESP | ppg_resp | 8.18 | 7.14 `dict(bitpacked,primitive)` | 7.12 | 9.59 lpc4/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **0.75x** | 0.74x |
+| bidmc01_II | ppg_resp | 9.28 | 11.06 `dict(bitpacked(primitive,primitive,primitive),v2(bitpacked,primitive))` | 11.58 | 15.79 lpc32/lanes `v2(bitpacked(primitive,primitive,primitive),primitive)` | **0.70x** | 0.70x |
+| bidmc01_PLETH | ppg_resp | 8.13 | 7.13 `dict(bitpacked,primitive)` | 7.12 | 10.84 lpc4/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **0.66x** | 0.66x |
+| seis_IU_SNZO_HH1_100hz | seismic | 1.43 | 1.48 `rle(chunk_delta(varbitpacked,primitive,primitive),chunk_delta(runend(bitpacked,bitpacked)),primitive)` | 2.38 | 2.48 lpc32/lanes `rle(zigzag(bitpacked(primitive,primitive,primitive)),delta(bitpacked,runend(bitpacked,bitpacked)),primitive)` | **0.59x** | 0.59x |
+| grid_plaid_1005_voltage_30khz | grid | 12.24 | 12.39 `dict(bitpacked(primitive,primitive,primitive),v2(bitpacked,primitive))` | 13.56 | 21.17 lpc4/chunk `zigzag(bitpacked(primitive,primitive,primitive))` | **0.59x** | 0.59x |
+| grid_plaid_1816_current_30khz | grid | 13.72 | 6.19 `dict(bitpacked,primitive)` | 7.27 | 20.64 lpc16/lanes `zigzag(bitpacked(primitive,primitive,primitive))` | **0.30x** | 0.30x |
+
+</details>
 
 ## Encoder ablations
 
