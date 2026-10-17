@@ -1220,7 +1220,10 @@ mod tests {
             (0..20)
                 .rev()
                 .map(|value| Scalar::from(Some(value)))
-                .chain([Scalar::null(DType::Primitive(PType::I32, Nullability::Nullable))])
+                .chain([Scalar::null(DType::Primitive(
+                    PType::I32,
+                    Nullability::Nullable,
+                ))])
                 .collect(),
             Nullability::NonNullable,
         );
