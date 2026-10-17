@@ -200,7 +200,11 @@ fn test_listview_with_constant_arrays(#[case] const_sizes: bool, #[case] const_o
         // All lists are identical [1, 2, 3] (overlapping).
         let expected = PrimitiveArray::from_iter([1i32, 2, 3]);
         for i in 0..3 {
-            assert_arrays_eq!(listview.list_elements_at(i, &mut ctx).unwrap(), expected, &mut ctx);
+            assert_arrays_eq!(
+                listview.list_elements_at(i, &mut ctx).unwrap(),
+                expected,
+                &mut ctx
+            );
         }
     } else if const_sizes {
         // All lists have size 3, different offsets (no overlap).

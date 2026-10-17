@@ -50,10 +50,26 @@ fn test_slice_comprehensive() {
     let sliced = listview.slice(1..3).unwrap();
     let sliced_list = sliced.as_::<ListView>();
     assert_eq!(sliced_list.len(), 2, "Wrong slice length");
-    assert_eq!(sliced_list.offset_at(0, &mut ctx), 3, "Wrong offset for list[1]");
-    assert_eq!(sliced_list.size_at(0, &mut ctx), 2, "Wrong size for list[1]");
-    assert_eq!(sliced_list.offset_at(1, &mut ctx), 5, "Wrong offset for list[2]");
-    assert_eq!(sliced_list.size_at(1, &mut ctx), 3, "Wrong size for list[2]");
+    assert_eq!(
+        sliced_list.offset_at(0, &mut ctx),
+        3,
+        "Wrong offset for list[1]"
+    );
+    assert_eq!(
+        sliced_list.size_at(0, &mut ctx),
+        2,
+        "Wrong size for list[1]"
+    );
+    assert_eq!(
+        sliced_list.offset_at(1, &mut ctx),
+        5,
+        "Wrong offset for list[2]"
+    );
+    assert_eq!(
+        sliced_list.size_at(1, &mut ctx),
+        3,
+        "Wrong size for list[2]"
+    );
 
     // Test full array slice [0..4].
     let full = listview.slice(0..4).unwrap();
@@ -78,8 +94,16 @@ fn test_slice_comprehensive() {
     let single = listview.slice(2..3).unwrap();
     let single_list = single.as_::<ListView>();
     assert_eq!(single_list.len(), 1, "Single element slice failed");
-    assert_eq!(single_list.offset_at(0, &mut ctx), 5, "Wrong offset for single slice");
-    assert_eq!(single_list.size_at(0, &mut ctx), 3, "Wrong size for single slice");
+    assert_eq!(
+        single_list.offset_at(0, &mut ctx),
+        5,
+        "Wrong offset for single slice"
+    );
+    assert_eq!(
+        single_list.size_at(0, &mut ctx),
+        3,
+        "Wrong size for single slice"
+    );
 }
 
 #[test]
@@ -107,19 +131,31 @@ fn test_slice_out_of_order() {
         0,
         "First list should have offset 0 (from original index 1)"
     );
-    assert_eq!(sliced_list.size_at(0, &mut ctx), 3, "First list should have size 3");
+    assert_eq!(
+        sliced_list.size_at(0, &mut ctx),
+        3,
+        "First list should have size 3"
+    );
     assert_eq!(
         sliced_list.offset_at(1, &mut ctx),
         3,
         "Second list should have offset 3 (from original index 2)"
     );
-    assert_eq!(sliced_list.size_at(1, &mut ctx), 3, "Second list should have size 3");
+    assert_eq!(
+        sliced_list.size_at(1, &mut ctx),
+        3,
+        "Second list should have size 3"
+    );
     assert_eq!(
         sliced_list.offset_at(2, &mut ctx),
         8,
         "Third list should have offset 8 (from original index 3)"
     );
-    assert_eq!(sliced_list.size_at(2, &mut ctx), 1, "Third list should have size 1");
+    assert_eq!(
+        sliced_list.size_at(2, &mut ctx),
+        1,
+        "Third list should have size 1"
+    );
 
     // Verify the actual list contents are correct.
     assert_arrays_eq!(

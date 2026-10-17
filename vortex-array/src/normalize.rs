@@ -104,8 +104,8 @@ mod tests {
 
     use super::NormalizeOptions;
     use super::Operation;
-    use crate::Canonical;
     use crate::ArrayRef;
+    use crate::Canonical;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::array::VTable;

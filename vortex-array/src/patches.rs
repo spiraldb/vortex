@@ -724,11 +724,7 @@ impl Patches {
     }
 
     /// Slice the patches by a range of the patched array.
-    pub fn slice(
-        &self,
-        range: Range<usize>,
-        ctx: &mut ExecutionCtx,
-    ) -> VortexResult<Option<Self>> {
+    pub fn slice(&self, range: Range<usize>, ctx: &mut ExecutionCtx) -> VortexResult<Option<Self>> {
         let slice_start_idx = self.search_index(range.start, ctx)?.to_index();
         let slice_end_idx = self.search_index(range.end, ctx)?.to_index();
 

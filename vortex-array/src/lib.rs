@@ -79,7 +79,6 @@
 
 extern crate self as vortex_array;
 
-
 pub use array::*;
 pub use canonical::*;
 pub use columnar::*;

@@ -190,8 +190,16 @@ mod tests {
         );
 
         // Verify offsets are unchanged.
-        assert_eq!(result_list.offset_at(0, &mut ctx), 5, "Wrong offset at index 0");
-        assert_eq!(result_list.offset_at(1, &mut ctx), 0, "Wrong offset at index 3");
+        assert_eq!(
+            result_list.offset_at(0, &mut ctx),
+            5,
+            "Wrong offset at index 0"
+        );
+        assert_eq!(
+            result_list.offset_at(1, &mut ctx),
+            0,
+            "Wrong offset at index 3"
+        );
     }
 
     #[test]

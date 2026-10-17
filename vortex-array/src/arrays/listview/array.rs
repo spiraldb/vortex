@@ -92,7 +92,7 @@ pub struct ListViewSlots {
 /// # use vortex_array::arrays::{ListViewArray, PrimitiveArray};
 /// # use vortex_array::arrays::listview::ListViewArrayExt;
 /// # use vortex_array::validity::Validity;
-/// # use vortex_array::IntoArray;
+/// # use vortex_array::{IntoArray, VortexSessionExecute};
 /// # use vortex_buffer::buffer;
 /// # use std::sync::Arc;
 /// #
@@ -113,12 +113,13 @@ pub struct ListViewSlots {
 /// assert_eq!(list_view.len(), 3);
 ///
 /// // Access individual lists
-/// let first_list = list_view.list_elements_at(0)?;
+/// let mut ctx = vortex_array::array_session().create_execution_ctx();
+/// let first_list = list_view.list_elements_at(0, &mut ctx)?;
 /// assert_eq!(first_list.len(), 2);
 /// // First list contains elements[2..4] = [3, 4]
 ///
-/// let first_offset = list_view.offset_at(0);
-/// let first_size = list_view.size_at(0);
+/// let first_offset = list_view.offset_at(0, &mut ctx);
+/// let first_size = list_view.size_at(0, &mut ctx);
 /// assert_eq!(first_offset, 2);
 /// assert_eq!(first_size, 2);
 /// # Ok(())
@@ -629,7 +630,7 @@ impl Array<ListView> {
                 offsets_primitive.into_owned(),
                 sizes_primitive.into_owned(),
             )
-                .vortex_expect("Failed to validate zero-copy to list flag");
+            .vortex_expect("Failed to validate zero-copy to list flag");
         }
         let dtype = self.dtype().clone();
         let len = self.len();

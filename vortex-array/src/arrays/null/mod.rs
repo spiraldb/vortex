@@ -10,8 +10,8 @@ use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
 
 use crate::ArrayRef;
-use crate::ArrayVTable;
 use crate::ArraySlots;
+use crate::ArrayVTable;
 use crate::ExecutionCtx;
 use crate::ExecutionResult;
 use crate::array::Array;

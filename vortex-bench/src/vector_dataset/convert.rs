@@ -77,8 +77,9 @@ pub fn list_to_vector_ext(input: ArrayRef) -> VortexResult<ArrayRef> {
 
     // `parquet_to_vortex_chunks` produces `ListView` arrays for list columns by default;
     // materialize them into a flat `List` representation before we validate offsets.
+    let mut ctx = SESSION.create_execution_ctx();
     if input.as_opt::<ListView>().is_some() {
-        let flat = recursive_list_from_list_view(input, &mut SESSION.create_execution_ctx())?;
+        let flat = recursive_list_from_list_view(input, &mut ctx)?;
         return list_to_vector_ext(flat);
     }
 
@@ -114,7 +115,7 @@ pub fn list_to_vector_ext(input: ArrayRef) -> VortexResult<ArrayRef> {
 
     // Extract the flat elements buffer up front: the nullable-handling branch below
     // needs to inspect runtime validity before we can decide whether to rewrap it.
-    let raw_elements = list.sliced_elements()?;
+    let raw_elements = list.sliced_elements(&mut ctx)?;
 
     let num_rows = input.len();
     if num_rows == 0 {
@@ -127,8 +128,8 @@ pub fn list_to_vector_ext(input: ArrayRef) -> VortexResult<ArrayRef> {
     // `Primitive` array (direct slice index). That's the common case after
     // `parquet_to_vortex_chunks`, so for a 100K-row column we do ~100K primitive
     // slice indexes rather than 200K. The loop body is O(1) either way.
-    let mut prev_end = list.offset_at(0)?;
-    let first_end = list.offset_at(1)?;
+    let mut prev_end = list.offset_at(0, &mut ctx)?;
+    let first_end = list.offset_at(1, &mut ctx)?;
 
     let dim = first_end.checked_sub(prev_end).ok_or_else(|| {
         vortex_err!("list_to_vector_ext: offsets are not monotonically increasing")
@@ -140,7 +141,7 @@ pub fn list_to_vector_ext(input: ArrayRef) -> VortexResult<ArrayRef> {
     prev_end = first_end;
 
     for i in 1..num_rows {
-        let end = list.offset_at(i + 1)?;
+        let end = list.offset_at(i + 1, &mut ctx)?;
 
         let row_len = end
             .checked_sub(prev_end)

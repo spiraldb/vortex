@@ -666,8 +666,8 @@ mod test {
     use vortex_error::VortexResult;
     use vortex_mask::Mask;
 
-    use crate::Canonical;
     use crate::ArrayRef;
+    use crate::Canonical;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::array_session;

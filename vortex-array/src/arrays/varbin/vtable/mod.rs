@@ -14,10 +14,10 @@ use vortex_session::registry::CachedId;
 
 use crate::ArrayParts;
 use crate::ArrayRef;
-use crate::VortexSessionExecute;
 use crate::ExecutionCtx;
 use crate::ExecutionResult;
 use crate::IntoArray;
+use crate::VortexSessionExecute;
 use crate::array::Array;
 use crate::array::ArrayId;
 use crate::array::ArrayView;

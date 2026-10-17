@@ -16,10 +16,6 @@
 //! The [`ArrowSession`] session variable is created lazily on first use of
 //! [`ArrowSessionExt::arrow`], so no explicit registration is required for plain conversions.
 
-use arrow_array::ArrayRef as ArrowArrayRef;
-use arrow_schema::DataType;
-use vortex_array::ArrayRef;
-use vortex_array::VortexSessionExecute;
 use vortex_error::VortexResult;
 use vortex_session::VortexSession;
 
@@ -88,4 +84,3 @@ pub trait FromArrowArray<A> {
     where
         Self: Sized;
 }
-

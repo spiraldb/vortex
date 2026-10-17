@@ -128,7 +128,10 @@ fn constructs_map_with_listview_entries() -> VortexResult<()> {
     assert!(array.keys_sorted());
     assert_eq!(array.entry_count_at(0, &mut ctx), 3);
     assert_eq!(array.entry_count_at(1, &mut ctx), 0);
-    assert_eq!(array.entries_at(0, &mut ctx)?.dtype(), &map_dtype.entries_dtype());
+    assert_eq!(
+        array.entries_at(0, &mut ctx)?.dtype(),
+        &map_dtype.entries_dtype()
+    );
 
     let mut ctx = array_session().create_execution_ctx();
     assert_eq!(

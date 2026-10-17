@@ -753,7 +753,7 @@ mod tests {
 
         assert_eq!(vortex_array.len(), len);
         assert_arrays_eq!(
-            vortex_array.list_elements_at(0).unwrap(),
+            vortex_array.list_elements_at(0, &mut ctx).unwrap(),
             PrimitiveArray::from_option_iter([Some(1i32), Some(2), Some(3), Some(4)]),
             &mut ctx
         );
@@ -891,7 +891,7 @@ mod tests {
 
         assert_eq!(vortex_array.len(), len);
         assert_arrays_eq!(
-            vortex_array.list_elements_at(0).unwrap(),
+            vortex_array.list_elements_at(0, &mut ctx).unwrap(),
             PrimitiveArray::from_option_iter([Some(1i32), Some(2), Some(3), Some(4)]),
             &mut ctx
         );
@@ -943,12 +943,12 @@ mod tests {
 
         assert_eq!(vortex_array.len(), len);
         assert_arrays_eq!(
-            vortex_array.list_elements_at(0).unwrap(),
+            vortex_array.list_elements_at(0, &mut ctx).unwrap(),
             PrimitiveArray::from_option_iter([Some(3i32), Some(4)]),
             &mut ctx
         );
         assert_arrays_eq!(
-            vortex_array.list_elements_at(1).unwrap(),
+            vortex_array.list_elements_at(1, &mut ctx).unwrap(),
             PrimitiveArray::from_option_iter([Some(1i32), Some(2)]),
             &mut ctx
         );
@@ -1003,12 +1003,12 @@ mod tests {
 
         // Valid entries should work correctly.
         assert_arrays_eq!(
-            vortex_array.list_elements_at(0).unwrap(),
+            vortex_array.list_elements_at(0, &mut ctx).unwrap(),
             PrimitiveArray::from_option_iter([Some(1i32), Some(2)]),
             &mut ctx
         );
         assert_arrays_eq!(
-            vortex_array.list_elements_at(2).unwrap(),
+            vortex_array.list_elements_at(2, &mut ctx).unwrap(),
             PrimitiveArray::from_option_iter([Some(3i32), Some(4)]),
             &mut ctx
         );

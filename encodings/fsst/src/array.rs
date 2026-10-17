@@ -26,7 +26,6 @@ use vortex_array::EqMode;
 use vortex_array::ExecutionCtx;
 use vortex_array::ExecutionResult;
 use vortex_array::TypedArrayRef;
-use vortex_array::VortexSessionExecute;
 use vortex_array::array_slots;
 use vortex_array::arrays::Primitive;
 use vortex_array::arrays::VarBin;

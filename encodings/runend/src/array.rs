@@ -22,7 +22,6 @@ use vortex_array::ExecutionCtx;
 use vortex_array::ExecutionResult;
 use vortex_array::IntoArray;
 use vortex_array::TypedArrayRef;
-use vortex_array::VortexSessionExecute;
 use vortex_array::array_slots;
 use vortex_array::arrays::DecimalArray;
 use vortex_array::arrays::ListViewArray;
