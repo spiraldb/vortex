@@ -1590,10 +1590,10 @@ mod tests {
         Ok(())
     }
 
-    /// A field named [`RESERVED_VALIDITY_FIELD_NAME`] clashes with the validity partition of a
-    /// nullable struct, resolving the integer field as a boolean validity mask.
+    /// A reserved field name can resolve the integer field as a boolean validity mask or the
+    /// validity mask as the integer field, depending on partition order. Both failures mention bool.
     #[test]
-    #[should_panic(expected = "The mask argument to 'mask' must be a non-nullable boolean array")]
+    #[should_panic(expected = "bool")]
     fn test_validity_partition_name_clash() {
         validity_partition_name_clash().unwrap();
     }
