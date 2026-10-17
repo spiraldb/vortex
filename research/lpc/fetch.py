@@ -503,6 +503,78 @@ def waves():
 SOURCES["waves"] = waves
 
 
+def nsynth():
+    """NSynth test set: 4 s single notes, 16 kHz 16-bit PCM. Only acoustically recorded instruments."""
+    import tarfile
+    from collections import defaultdict
+
+    import soundfile as sf
+
+    p = curl(
+        "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-test.jsonwav.tar.gz", "nsynth-test.tar.gz", 3600
+    )
+    notes = defaultdict(list)
+    with tarfile.open(p) as tf:
+        for m in tf:
+            base = os.path.basename(m.name)
+            if not base.endswith(".wav"):
+                continue
+            family, source = base.split("_")[:2]
+            if source != "acoustic":
+                continue
+            data, sr = sf.read(io.BytesIO(tf.extractfile(m).read()), dtype="int16")
+            notes[family].append((base, data))
+    for family, items in sorted(notes.items()):
+        items.sort()
+        pcm = np.concatenate([d for _, d in items[:24]])
+        save(
+            f"audio_nsynth_{family}_acoustic",
+            "audio_notes",
+            pcm,
+            16000,
+            f"NSynth test, {min(24, len(items))} acoustic {family} notes, 16 kHz int16",
+        )
+
+
+SOURCES["nsynth"] = nsynth
+
+
+def nsynth_high():
+    """High-register acoustic NSynth notes, sampled evenly (every k-th note by name) so nothing is
+    cherry-picked: pitch >= 72 (fundamental >= 523 Hz, <= 31 samples/cycle) and pitch >= 96."""
+    import tarfile
+
+    import soundfile as sf
+
+    p = curl(
+        "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-test.jsonwav.tar.gz", "nsynth-test.tar.gz", 3600
+    )
+    notes = []
+    with tarfile.open(p) as tf:
+        for m in tf:
+            base = os.path.basename(m.name)
+            if base.endswith(".wav") and "_acoustic_" in base:
+                pitch = int(base.rsplit("-", 2)[1])
+                if pitch >= 72:
+                    notes.append((base, pitch, sf.read(io.BytesIO(tf.extractfile(m).read()), dtype="int16")[0]))
+    notes.sort()
+    for lo, step, label in [(72, 10, "pitch72plus"), (96, 3, "pitch96plus")]:
+        picked = [n for n in notes if n[1] >= lo][::step]
+        for i in range(0, len(picked) - 15, 16):
+            group = picked[i : i + 16]
+            save(
+                f"audio_nsynth_{label}_{i // 16}",
+                "audio_notes",
+                np.concatenate([g[2] for g in group]),
+                16000,
+                f"NSynth test acoustic notes, pitch >= {lo}, every {step}th by name, notes {i}..{i + 15}: "
+                + " ".join(g[0][:-4] for g in group),
+            )
+
+
+SOURCES["nsynth_high"] = nsynth_high
+
+
 if __name__ == "__main__":
     for s in sys.argv[2:] or SOURCES:
         print("==", s)

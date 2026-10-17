@@ -66,6 +66,15 @@ series. See "LPC vs Delta, both with the full Vortex cascade".
 - In real Vortex those columns get 0.24–0.9x, i.e. LPC is larger.
 - A scheme must compare full cascaded sizes, as `ChunkDeltaScheme` and `AffineScheme` already do.
 
+**The show-stopper dataset is high-pitched real acoustic notes.**
+
+- On NSynth notes at ≥72 MIDI pitch (≤31 samples per cycle), LPC + cascade is up to 1.91x smaller
+  than cascaded Delta on a 1M-value column of evenly sampled notes.
+- On the best single notes it is 2.5–3.4x smaller.
+- Delta and pco there are no better than storing the raw values.
+
+See "The show stopper".
+
 ### Decode speed
 
 **Your hypothesis is right.** The serial dependency makes LPC decoding slow:
@@ -126,6 +135,74 @@ Build `fastlanes.lpc` as a lane-interleaved encoding:
 Gate it on the cascaded sample size against Delta, delta-of-delta and FoR. It belongs in sensor,
 audio, scientific and grid-telemetry workloads, and will rarely fire on TPC-H or ClickBench style
 columns.
+
+## The show stopper: high-pitched acoustic notes (NSynth)
+
+**Physics.** LPC beats Delta by the largest margin on a high-SNR tonal signal with few samples per
+cycle.
+
+- Delta-of-delta leaves `(2 − 2cos ω)·A` of a sinusoid. At 2–8 samples per cycle that is 1–4×
+  the amplitude itself, so Delta does *worse* than storing the raw values.
+- LPC of order 2 already predicts a pure sinusoid exactly.
+
+**Data.** The NSynth test set (Magenta, CC BY 4.0, 4,096 four-second notes, 16 kHz 16-bit PCM,
+`fetch.py nsynth` / `nsynth_high`) matches that. I used only its 1,689 *acoustic* notes: samples
+of real instruments, not synthesizers.
+
+**Gain by pitch, over every acoustic note** (`nsynth_notes.py`). Each note is modelled as in
+`lpc_eval.py`. The gain is against the better of Delta and delta-of-delta.
+
+|---|---|---|---|---|---|---|
+| 12-23 | 23 Hz | 692 | 20 | 1.15x | 1.17x | 0 |
+| 24-35 | 46 Hz | 346 | 200 | 1.11x | 1.13x | 0 |
+| 36-47 | 92 Hz | 173 | 262 | 1.11x | 1.14x | 0 |
+| 48-59 | 185 Hz | 86 | 279 | 1.15x | 1.16x | 0 |
+| 60-71 | 370 Hz | 43 | 314 | 1.19x | 1.22x | 6 |
+| 72-83 | 740 Hz | 22 | 250 | 1.38x | 1.42x | 40 |
+| 84-95 | 1480 Hz | 11 | 193 | 1.38x | 1.39x | 36 |
+| 96-107 | 2960 Hz | 5 | 156 | 1.21x | 1.37x | 26 |
+| 108-119 | 5920 Hz | 3 | 15 | 2.27x | 1.85x | 8 |
+
+**Selection.** To avoid cherry-picking, `nsynth_high` takes every 10th acoustic note at pitch ≥72
+and every 3rd at pitch ≥96 (by file name). It concatenates them into 16-note, 1,024,000-sample
+columns. The real Vortex cascade (`cascade_compare.py`, `vortex_nsynth_results.tsv`) gives these
+sizes in bits/value:
+
+| column | Vortex today (best tree on raw values) | Delta + cascade | DoD + cascade | LPC + cascade | LPC vs cascaded Delta | vs Vortex today |
+|---|---|---|---|---|---|---|
+| `audio_nsynth_pitch72plus_1` | 4.47 | 4.20 | 4.01 | **2.20** | **1.91x** | **2.03x** |
+| `audio_nsynth_pitch96plus_1` | 2.30 | 2.36 | 2.61 | **1.52** | **1.55x** | 1.51x |
+| `audio_nsynth_pitch72plus_2` | 5.64 | 4.48 | 4.68 | **3.05** | **1.47x** | 1.85x |
+| `audio_nsynth_pitch96plus_0` | 14.09 | 14.61 | 14.80 | 11.87 | 1.23x | 1.19x |
+| `audio_nsynth_pitch72plus_0` | 13.42 | 13.61 | 13.82 | 11.27 | 1.21x | 1.19x |
+| `audio_nsynth_pitch96plus_2` | 3.34 | 2.75 | 2.89 | 2.39 | 1.15x | 1.40x |
+| acoustic keyboard, first 24 notes (all pitches) | 9.49 | 6.86 | 5.79 | 5.18 | 1.33x | 1.83x |
+| acoustic flute, first 24 notes | 12.58 | 12.08 | 12.15 | 10.08 | 1.20x | 1.25x |
+| brass / guitar / mallet / vocal / reed / string | 3.9–11.7 | 4.3–11.5 | 4.7–11.6 | 4.0–11.1 | 1.02–1.15x | 1.0–1.5x |
+
+**Best single notes** (picked as the best of 1,689, so read these as the ceiling):
+
+| note | Vortex today | Delta + cascade | LPC + cascade | LPC vs cascaded Delta |
+|---|---|---|---|---|
+| `mallet_acoustic_056-104-127` | 10.39 | 10.79 | **3.18** | **3.39x** |
+| `mallet_acoustic_056-110-050` | 12.68 | 13.39 | **4.56** | **2.94x** |
+| `guitar_acoustic_010-097-025` | 9.49 | 9.39 | **3.58** | **2.62x** |
+| `guitar_acoustic_010-102-100` | 8.91 | 9.15 | **3.64** | **2.51x** |
+
+**Takeaways.**
+
+- **Delta makes these columns bigger than the raw values,** and Vortex today cannot do better
+  than ~raw. LPC of order 8–16 cuts them by 2–3.4x per note, and by up to 2x on a 1M-value column
+  of evenly sampled real high-register notes.
+- **pco is no rescue.** pco Auto is *worse* than bit-packed LPC on every one of these columns,
+  e.g. 11.58 vs 2.88 bits/value on the best mallet note.
+- **The same physics applies outside music:** any high-SNR narrowband signal sampled at a few to
+  a few tens of points per cycle. Examples are gear-mesh and bearing tones in vibration (CWRU,
+  1.2x), undersampled tones, and IF/IQ captures.
+- **Caveat on provenance.** NSynth's acoustic notes come from commercial sample libraries that
+  Magenta resampled to 16 kHz and stored as int16. They are real recordings, not synthesized, but
+  they are curated single notes. A polyphonic mix of the same instruments would gain less (cf.
+  GTZAN, 1.03–1.14x).
 
 ## What was compared
 
