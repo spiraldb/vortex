@@ -73,7 +73,8 @@ series. See "LPC vs Delta, both with the full Vortex cascade".
 - On the best single notes it is 2.5–3.4x smaller.
 - Delta and pco there are no better than storing the raw values.
 
-See "The show stopper".
+See "The show stopper". Real produced music does **not** follow: on 8 MUSDB18-HQ mixes LPC equals
+cascaded Delta (0.99–1.01x), and solo piano and guitar gain 1.00–1.16x (see "Real music").
 
 ### Decode speed
 
@@ -203,6 +204,44 @@ sizes in bits/value:
   Magenta resampled to 16 kHz and stored as int16. They are real recordings, not synthesized, but
   they are curated single notes. A polyphonic mix of the same instruments would gain less (cf.
   GTZAN, 1.03–1.14x).
+
+## Real music (lossless)
+
+**Data.** `fetch.py music_lossless` takes 2^20 samples (~24 s, left channel, from 30 s in) of each
+track, from four lossless sources with fixed selection rules:
+
+- **MUSDB18-HQ** (pop/rock, 44.1 kHz/16-bit): the first 8 test-set mixtures by name, plus the
+  vocals and bass stems of the first.
+- **MAESTRO v3** (concert piano, Yamaha Disklavier, 16-bit): the first recording of 2004, 2009,
+  2015 and 2018.
+- **GuitarSet** (mic recordings): the first solo take of each style.
+- **The Live Music Archive:** 3 of the 4 most-downloaded 16-bit FLAC shows. One returned HTTP 500.
+
+**Results.** Both sides get the real Vortex cascade (`vortex_music_results.tsv`). Sizes are
+bits/value:
+
+| tracks | Vortex today | Delta + cascade | DoD + cascade | LPC + cascade | LPC vs cascaded Delta | vs better of Delta/DoD |
+|---|---|---|---|---|---|---|
+| MUSDB18-HQ mixes (8) | 11.3–13.3 | 11.1–13.7 | 11.6–14.3 | 11.1–13.5 | **0.99–1.01x** | 0.99–1.01x |
+| MUSDB vocals stem | 10.32 | 9.88 | 10.12 | 9.58 | 1.03x | 1.03x |
+| MUSDB bass stem | 4.50 | 4.53 | 4.50 | 2.91 | **1.56x** | 1.55x |
+| MAESTRO piano (4) | 8.0–10.4 | 6.4–8.0 | 6.0–7.3 | 5.6–7.0 | 1.09–1.16x | 1.00–1.08x |
+| GuitarSet (5) | 6.5–9.3 | 5.5–8.2 | 5.9–8.4 | 5.5–8.0 | 1.00–1.03x | 1.00–1.03x |
+| Live Music Archive (3) | 9.9–12.5 | 9.0–11.3 | 8.8–10.9 | 8.5–10.3 | 1.00–1.10x | 1.00–1.06x |
+
+- **On real, produced music LPC buys essentially nothing over a cascaded Delta:** 1.00x on all 8
+  MUSDB mixes.
+- **Mixes are dense, wideband and loud.** The predictable part of a mix is the low-frequency
+  content, and delta / delta-of-delta already remove it. What is left is close to white at 11–13
+  bits/value, and no linear predictor removes white noise.
+- **The size gap to FLAC is entropy coding, not prediction.** FLAC's own `-0` (fixed polynomial
+  predictors) and `-8` (LPC up to order 12) presets famously differ by only a few percent. pco's
+  entropy coder on the same tracks is ~0.5–1 bit/value smaller than any bit-packed predictor.
+- **LPC helps more on sparser material:**
+  - isolated, tonal sources: an isolated bass stem 1.56x, solo piano 1.09–1.16x vs Delta;
+  - and, from the NSynth section, single high-pitched notes.
+- **So music is not the show stopper. Isolated high-register notes are.** A music store holding
+  mixed tracks would see ~0–5%.
 
 ## What was compared
 

@@ -575,6 +575,94 @@ def nsynth_high():
 SOURCES["nsynth_high"] = nsynth_high
 
 
+def music_lossless():
+    """Lossless real music: 2^20 samples (~24 s) of the left channel from 30 s in (earlier for short
+    takes), per track."""
+    import soundfile as sf
+    from remotezip import RemoteZip
+
+    def take(name, data, sr, note):
+        data = data if data.ndim == 1 else data[:, 0]
+        start = min(30 * sr, max(0, len(data) - (1 << 20)))
+        seg = data[start : start + (1 << 20)]
+        save(name, "music", seg, sr, note)
+
+    def from_zip(url, entries, prefix, note):
+        with RemoteZip(url, timeout=300) as z:
+            for name, entry in entries(sorted(z.namelist())):
+                path = os.path.join(RAW, prefix + name + ".wav")
+                if not os.path.exists(path):
+                    with open(path, "wb") as f:
+                        f.write(z.read(entry))
+                data, sr = sf.read(path, dtype="int16")
+                take(prefix + name, data, sr, f"{note} {entry}")
+
+    # MUSDB18-HQ: the first 8 test-set mixtures by name, plus the vocals and bass stems of the first.
+    def musdb(names):
+        mixes = [n for n in names if n.startswith("test/") and n.endswith("/mixture.wav")][:8]
+        out = [(f"mix{i}", n) for i, n in enumerate(mixes)]
+        stem_dir = mixes[0].rsplit("/", 1)[0]
+        return out + [("stem0_vocals", stem_dir + "/vocals.wav"), ("stem0_bass", stem_dir + "/bass.wav")]
+
+    if "musdb" not in os.environ.get("SKIP", ""):
+        from_zip(
+            "https://zenodo.org/api/records/3338373/files/musdb18hq.zip/content", musdb, "music_musdb_", "MUSDB18-HQ"
+        )
+
+    # MAESTRO v3: the first recording (by name) of four different years.
+    def maestro(names):
+        wavs = [n for n in names if n.endswith(".wav")]
+        return [(y, next(n for n in wavs if f"/{y}/" in n)) for y in ("2004", "2009", "2015", "2018")]
+
+    if "maestro" not in os.environ.get("SKIP", ""):
+        from_zip(
+            "https://storage.googleapis.com/magentadata/datasets/maestro/v3.0.0/maestro-v3.0.0.zip",
+            maestro,
+            "music_maestro_",
+            "MAESTRO v3",
+        )
+
+    # GuitarSet mono mic: the first solo take of each style.
+    def guitarset(names):
+        out = []
+        for style in ("BN", "Funk", "Jazz", "Rock", "SS"):
+            out.append((style.lower(), next(n for n in names if f"_{style}" in n and "_solo_" in n)))
+        return out
+
+    from_zip(
+        "https://zenodo.org/api/records/3371780/files/audio_mono-mic.zip/content",
+        guitarset,
+        "music_guitarset_",
+        "GuitarSet mono mic",
+    )
+
+    # Live Music Archive: the four most-downloaded 16-bit FLAC shows; second track of each.
+    for ident in [
+        "oar2006-01-14.mix.flac16",
+        "tlg2006-10-21.mk4v.flac16",
+        "gd1977-05-08.shure57.stevenson.29303.flac16",  # spellchecker:disable-line
+        "pattersonh2006-01-07.184.flac16",
+    ]:
+        try:
+            meta = json.loads(
+                subprocess.run(
+                    ["curl", "-gsSL", "--fail", "-m", "120", f"https://archive.org/metadata/{ident}"],
+                    capture_output=True,
+                    check=True,
+                ).stdout
+            )
+            flacs = sorted(f["name"] for f in meta["files"] if f["name"].lower().endswith(".flac"))
+            track = flacs[1]
+            p = curl(f"https://archive.org/download/{ident}/{track}", "lma_" + os.path.basename(track), 1800)
+            data, sr = sf.read(p, dtype="int16")
+            take("music_lma_" + ident.split(".")[0].replace("-", "_"), data, sr, f"Live Music Archive {ident}/{track}")
+        except Exception as e:  # noqa: BLE001
+            print("FAILED", ident, e)
+
+
+SOURCES["music_lossless"] = music_lossless
+
+
 if __name__ == "__main__":
     for s in sys.argv[2:] or SOURCES:
         print("==", s)
