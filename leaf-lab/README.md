@@ -121,6 +121,34 @@ training. pco runs standalone with 8192-value pages; u8/i8 leaves are widened to
 pco leaf beats tANS on ratio (3.63x vs 3.52x) mainly because it is not capped at 64 bins and has
 no per-block lane overhead; tANS decodes 4x faster.
 
+### Whole columns: BtrBlocks + entropy-bins vs pco
+
+`target/release/columns <out.jsonl> <parquet>...` then `python3 scripts/columns.py <out.jsonl>`.
+Every numeric column (1 MB slices, same batches) through BtrBlocks default, default plus
+`EntropyBinsScheme` (BALANCED / SMALLEST), the compact preset (pco + zstd), compact plus
+entropy-bins, and vortex-pco alone (default level, 8192-value pages). Values are checked against
+the input for every setup.
+
+Columns where pco alone is at most 90% of BtrBlocks default (241 of 340 slices, 31.6M values):
+
+| Setup | Ratio | % of btr | Encode Mv/s | Decode Mv/s | Decode GB/s |
+|---|---|---|---|---|---|
+| BtrBlocks default | 5.43x | 100% | 87 | 1,724 | 6.57 |
+| + entropy-bins BALANCED | 9.16x | 59.3% | 28 | 1,184 | 4.51 |
+| + entropy-bins SMALLEST | 9.40x | 57.8% | 27 | 1,229 | 4.68 |
+| Compact (pco) | 10.15x | 53.5% | 40 | 417 | 1.59 |
+| Compact + entropy-bins | 10.10x | 53.7% | 34 | 430 | 1.64 |
+| pco alone | 9.80x | 55.4% | 66 | 322 | 1.23 |
+
+All 340 numeric slices: default 5.57x, +entropy-bins 8.11x, compact 8.69x, pco 8.42x.
+
+On pco's best columns, entropy-bins closes ~90% of the gap from BtrBlocks to pco (59.3% vs
+55.4% of default bytes) and decodes 3.7x faster than pco, but compresses 2.4x slower. The
+remaining gap is concentrated in hash columns the cascade dictionary-encodes and leaves the
+values uncompressed (`URLHash` 88% vs 77%, `RefererHash` 86% vs 67%), clustered low-cardinality
+i16 columns where compact's pco keeps delta structure (`ClientTimeZone`, `OS`, `Robotness`), and
+tiny constant/sparse columns where only the bytes of a few patches remain.
+
 ### Timing (one core, Xeon 2.1 GHz with AVX-512, best of >= 3 runs)
 
 Only BitPacked and entropy-bins are tuned (entropy-bins uses AVX-512). The other coders are
@@ -165,7 +193,7 @@ The raw leaf values (73 MB) are not committed; `extract` regenerates them.
 - `src/bins.rs`: pco bin training and the id/offset split and merge.
 - `src/huff.rs`, `src/rans.rs`, `src/tunstall.rs`, `src/rc.rs`: id coders behind `SymbolCoder`.
 - `src/golomb.rs`: Rice and Exp-Golomb.
-- `scripts/analyze.py`: tables above; `scripts/versus.py`: BitPacked vs alternatives and pco.
+- `scripts/analyze.py`: tables above; `scripts/versus.py`: BitPacked vs alternatives and pco; `src/bin/columns.rs` + `scripts/columns.py`: whole-column BtrBlocks + entropy-bins vs pco.
 
 ## Caveats
 
