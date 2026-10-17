@@ -31,7 +31,7 @@ impl SliceReduce for Dict {
             let sliced_code = <Primitive as SliceReduce>::slice(codes, range)?
                 .vortex_expect("Primitive SliceReduce should always return Some");
             // Because we specialize the primitive branch here, we have to make sure to handle the stat inheritance
-            inherit_slice_stats(array.codes(), &sliced_code);
+            inherit_selection_stats(array.codes(), &sliced_code);
             sliced_code
         } else {
             array.codes().slice(range)?
@@ -49,15 +49,17 @@ impl SliceReduce for Dict {
     }
 }
 
-fn inherit_slice_stats(source: &ArrayRef, sliced: &ArrayRef) {
+/// Copies the stats of `source` that hold for any order-preserving selection of its rows, such as a
+/// slice or a filter.
+pub(super) fn inherit_selection_stats(source: &ArrayRef, selected: &ArrayRef) {
     source.statistics().with_iter(|iter| {
-        sliced
+        selected
             .statistics()
-            .inherit(iter.filter(|(stat, value)| is_inheritable_true_slice_stat(*stat, value)));
+            .inherit(iter.filter(|(stat, value)| is_inheritable_selection_stat(*stat, value)));
     });
 }
 
-fn is_inheritable_true_slice_stat(stat: Stat, value: &Precision<ScalarValue>) -> bool {
+fn is_inheritable_selection_stat(stat: Stat, value: &Precision<ScalarValue>) -> bool {
     matches!(
         stat,
         Stat::IsConstant | Stat::IsSorted | Stat::IsStrictSorted
@@ -67,7 +69,7 @@ fn is_inheritable_true_slice_stat(stat: Stat, value: &Precision<ScalarValue>) ->
         .is_some_and(|value| matches!(value, ScalarValue::Bool(true)))
 }
 
-fn slice_constant_code(
+pub(super) fn slice_constant_code(
     array: ArrayView<'_, Dict>,
     code: &Scalar,
     len: usize,
