@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <string_view>
 #include <algorithm>
+#include <bit>
 #include <vortex/scalar.hpp>
 
 using namespace vortex;
@@ -35,7 +36,7 @@ TEST_CASE("Integer scalars", "[scalar]") {
 TEST_CASE("Float scalars", "[scalar]") {
     REQUIRE(scalar::of(1.5f).get<float>() == 1.5f);
     REQUIRE(scalar::of(1.5).get<double>() == 1.5);
-    REQUIRE(float(scalar::of(float16_t {0x3C00}).get<float16_t>()) == 1.0f);
+    REQUIRE(float(scalar::of(std::bit_cast<float16_t>(uint16_t {0x3C00})).get<float16_t>()) == 1.0f);
 }
 
 TEST_CASE("Nullable scalars", "[scalar]") {
