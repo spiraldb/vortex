@@ -149,6 +149,54 @@ values uncompressed (`URLHash` 88% vs 77%, `RefererHash` 86% vs 67%), clustered 
 i16 columns where compact's pco keeps delta structure (`ClientTimeZone`, `OS`, `Robotness`), and
 tiny constant/sparse columns where only the bytes of a few patches remain.
 
+### entropy-bins speed work: AVX2 kernels and a faster encoder
+
+Changes to `encodings/entropy-bins` on this branch (the encoding itself is unchanged except
+for which lag the planner picks):
+
+- **Kernel levels.** `x86::Isa` (scalar < AVX2 < AVX-512) is detected once. The
+  `VORTEX_ENTROPY_BINS_ISA=scalar|avx2|avx512` environment variable caps it, so the older paths
+  can be measured on a newer machine. Before, a CPU without the AVX-512 subset fell back to scalar.
+- **AVX2 id decode** (`src/avx2.rs`). The 16 tANS lanes are two 8-lane halves, and each step
+  does one gather per half from a packed `xs | nb << 8 | sym << 16` table (`IdTable::dec32`).
+  AVX2 has no 128-entry byte permute, no `lzcnt` and no expand. Refills expand the next words
+  into the lanes that need them with a 256-entry `vpermd` table. Like the AVX-512 kernel, it
+  decodes four blocks in lockstep.
+- **AVX2 merge** for outputs of ≤ 32 bits with ≤ 32 bins:
+  - bin lookups use 1/2/4 `vpermd` plus blends instead of gathers;
+  - offsets come from a 32-byte window with a funnel shift (widths ≤ 28), or an 8-byte gather;
+  - the lag prefix sum stays in registers.
+  64-bit gathers lost to plain loads here, so wider values use the next item.
+- **Unrolled portable merge** (`decode::merge_unrolled`): unaligned 64-bit loads into the padded
+  buffer and a packed per-bin table, replacing the bounds-checked bit reader. Used for every
+  ISA's fallback, including bins wider than 62 bits that the AVX-512 merge rejects, and on non-x86.
+- **Planner.** It used to run a pco estimate for every lag (6 for BALANCED). Now a cheap
+  bucket-entropy estimate ranks the nonzero lags, and pco scores only lag 0 and the best of
+  them. On the corpus this costs 0.06% of ratio for 2.4× faster planning; trusting the cheap
+  estimate alone would cost 1.4%.
+- **Encoder.** Block-sized scratch instead of 60 KB of fixed buffers per block, a tighter lane
+  packing loop, and the stop-field interleave replays only its last ≤ 7 rounds instead of
+  rebuilding the whole stream. The output bytes are identical.
+
+Corpus leaves, BALANCED, one core, original code vs this branch run back to back
+(`target/release/ebbench <corpus> balanced` with `VORTEX_ENTROPY_BINS_ISA` set):
+
+| | Original | This branch |
+|---|---|---|
+| Decode, AVX-512 | 1,144 Mv/s | 1,210 Mv/s (64-bit leaves 837 → 1,076) |
+| Decode, AVX2-only CPU | 154 Mv/s (scalar fallback) | 584 Mv/s |
+| Decode, no SIMD (portable) | 154 Mv/s | 207 Mv/s |
+| Plan + encode | 17 Mv/s | 24 Mv/s |
+| Ratio | 3.402× | 3.400× |
+
+The AVX2 numbers were measured on this Sapphire Rapids with AVX-512 disabled through the
+environment variable, not on Haswell or Zen hardware. Gathers are much slower on Haswell and
+Zen 1–3, which hits the id kernel (2 gathers per 16 ids); the merge avoids gathers on its common
+path. Rejected along the way: training bins on a ½–⅛ chunk sample and then widening bins to cover
+every value (−1.3% to −3.7% ratio for ≤ 20% faster encode); a branchless or previous-bin bin
+lookup (slower than the predicted binary search); the gather-based 64-bit AVX2 merge (slower
+than scalar).
+
 ### Timing (one core, Xeon 2.1 GHz with AVX-512, best of >= 3 runs)
 
 Only BitPacked and entropy-bins are tuned (entropy-bins uses AVX-512). The other coders are
@@ -193,7 +241,7 @@ The raw leaf values (73 MB) are not committed; `extract` regenerates them.
 - `src/bins.rs`: pco bin training and the id/offset split and merge.
 - `src/huff.rs`, `src/rans.rs`, `src/tunstall.rs`, `src/rc.rs`: id coders behind `SymbolCoder`.
 - `src/golomb.rs`: Rice and Exp-Golomb.
-- `scripts/analyze.py`: tables above; `scripts/versus.py`: BitPacked vs alternatives and pco; `src/bin/columns.rs` + `scripts/columns.py`: whole-column BtrBlocks + entropy-bins vs pco.
+- `scripts/analyze.py`: tables above; `scripts/versus.py`: BitPacked vs alternatives and pco; `src/bin/columns.rs` + `scripts/columns.py`: whole-column BtrBlocks + entropy-bins vs pco; `src/bin/ebbench.rs`: entropy-bins encode/decode speed per kernel level.
 
 ## Caveats
 

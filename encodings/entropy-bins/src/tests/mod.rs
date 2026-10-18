@@ -311,8 +311,11 @@ fn simd_matches_scalar() -> VortexResult<()> {
             let encoded = EntropyBins::from_primitive(array.as_view(), 8, options)?.into_array();
             crate::x86::set_force_scalar(true);
             let scalar = encoded.clone().execute::<PrimitiveArray>(&mut ctx)?;
+            crate::x86::set_isa_cap(crate::x86::Isa::Avx2);
+            let avx2 = encoded.clone().execute::<PrimitiveArray>(&mut ctx)?;
             crate::x86::set_force_scalar(false);
             let simd = encoded.execute::<PrimitiveArray>(&mut ctx)?;
+            assert_arrays_eq!(scalar.clone().into_array(), avx2.into_array(), &mut ctx);
             assert_arrays_eq!(scalar.into_array(), simd.into_array(), &mut ctx);
         }
     }

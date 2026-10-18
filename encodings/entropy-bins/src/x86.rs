@@ -26,29 +26,69 @@ use crate::decode::BlockView;
 use crate::decode::ChunkDecoder;
 use crate::decode::OutInt;
 
-static HAS_AVX512: LazyLock<bool> = LazyLock::new(|| {
-    is_x86_feature_detected!("avx512f")
+/// Instruction set levels with kernels, in increasing order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Isa {
+    Scalar,
+    Avx2,
+    Avx512,
+}
+
+/// The best level this CPU supports, capped by `VORTEX_ENTROPY_BINS_ISA` (`scalar`, `avx2` or
+/// `avx512`) so the older kernels can be measured on newer machines.
+static DETECTED: LazyLock<Isa> = LazyLock::new(|| {
+    let avx512 = is_x86_feature_detected!("avx512f")
         && is_x86_feature_detected!("avx512bw")
         && is_x86_feature_detected!("avx512vl")
         && is_x86_feature_detected!("avx512dq")
         && is_x86_feature_detected!("avx512cd")
         && is_x86_feature_detected!("avx512vbmi")
-        && is_x86_feature_detected!("avx512vbmi2")
+        && is_x86_feature_detected!("avx512vbmi2");
+    let avx2 = is_x86_feature_detected!("avx2") && is_x86_feature_detected!("popcnt");
+    let detected = if avx512 {
+        Isa::Avx512
+    } else if avx2 {
+        Isa::Avx2
+    } else {
+        Isa::Scalar
+    };
+    let cap = match std::env::var("VORTEX_ENTROPY_BINS_ISA").as_deref() {
+        Ok("scalar") => Isa::Scalar,
+        Ok("avx2") => Isa::Avx2,
+        _ => Isa::Avx512,
+    };
+    detected.min(cap)
 });
 
 thread_local! {
-    static FORCE_SCALAR: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static CAP: std::cell::Cell<Isa> = const { std::cell::Cell::new(Isa::Avx512) };
+}
+
+/// The kernel level to use on this thread.
+pub(crate) fn isa() -> Isa {
+    (*DETECTED).min(CAP.with(|c| c.get()))
 }
 
 /// Whether the AVX-512 kernels may run on this CPU (and are not disabled for testing).
 pub(crate) fn has_avx512() -> bool {
-    *HAS_AVX512 && !FORCE_SCALAR.with(|f| f.get())
+    isa() == Isa::Avx512
 }
 
-/// Disable the AVX-512 kernels on this thread (tests compare them with the portable decoder).
+/// Whether the AVX2 kernels may run (the AVX-512 ones take precedence).
+pub(crate) fn has_avx2() -> bool {
+    isa() >= Isa::Avx2
+}
+
+/// Cap the kernel level on this thread (tests compare every level with the portable decoder).
+#[cfg(test)]
+pub(crate) fn set_isa_cap(isa: Isa) {
+    CAP.with(|c| c.set(isa));
+}
+
+/// Disable the vector kernels on this thread.
 #[cfg(test)]
 pub(crate) fn set_force_scalar(v: bool) {
-    FORCE_SCALAR.with(|f| f.set(v));
+    set_isa_cap(if v { Isa::Scalar } else { Isa::Avx512 });
 }
 
 // Variable shifts as inline asm: LLVM otherwise guards them with compares for counts >= the lane

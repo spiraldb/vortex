@@ -179,6 +179,16 @@ pub(crate) struct ChunkDecoder {
     pub(crate) tl32: [u32; 32],
     pub(crate) w32: [u32; 32],
     pub(crate) max_width: u32,
+    /// Per bin: `tl`, the offset mask and the width, together for the unrolled portable merge.
+    pub(crate) packed: Vec<PackedBin>,
+}
+
+/// One bin as the unrolled portable merge reads it.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct PackedBin {
+    pub(crate) tl: u64,
+    pub(crate) mask: u64,
+    pub(crate) width: u32,
 }
 
 impl ChunkDecoder {
@@ -205,7 +215,18 @@ impl ChunkDecoder {
                 mask64[i] = if w >= 64 { u64::MAX } else { (1u64 << w) - 1 };
             }
         }
+        let packed = chunk
+            .widths
+            .iter()
+            .zip(&tl)
+            .map(|(&w, &t)| PackedBin {
+                tl: t,
+                mask: if w >= 64 { u64::MAX } else { (1u64 << w) - 1 },
+                width: w.min(64),
+            })
+            .collect();
         Ok(Self {
+            packed,
             table: IdTable::new(chunk, word_bits)?,
             widths: chunk.widths.clone(),
             max_width: chunk.widths.iter().copied().max().unwrap_or(0),
@@ -233,6 +254,12 @@ impl ChunkDecoder {
                     // SAFETY: the CPU supports the required AVX-512 features, `ids` holds a full
                     // block and the block's words are followed by the buffer's tail padding.
                     unsafe { crate::x86::ids16::<1>(t, [b], [ids.as_mut_ptr()], limit) };
+                    return;
+                }
+                #[cfg(target_arch = "x86_64")]
+                if crate::x86::has_avx2() {
+                    // SAFETY: as above, for the AVX2 kernel.
+                    unsafe { crate::avx2::ids16::<1>(t, [b], [ids.as_mut_ptr()], limit) };
                     return;
                 }
                 ids_scalar(t, b, ids, limit);
@@ -308,25 +335,86 @@ pub(crate) fn merge_scalar<T: OutInt>(
     }
 }
 
+/// [`merge_scalar`] with unaligned 64-bit loads instead of a bounds-checked bit reader, for
+/// blocks whose offsets are followed by at least 16 readable bytes. Returns `false` otherwise.
+pub(crate) fn merge_unrolled<T: OutInt>(
+    d: &ChunkDecoder,
+    b: &BlockView<'_>,
+    ids: &[u8],
+    out: &mut [T],
+    seeds: &[u64],
+) -> bool {
+    let n = b.n;
+    let lag = seeds.len();
+    if out.len() < n
+        || ids.len() < n
+        || lag > MAX_LAG
+        || b.offsets.len() < 16 + offset_bytes_portable(d, &ids[..n], b.offsets.len())
+    {
+        return false;
+    }
+    let bp = b.offsets.as_ptr();
+    let read = |byte: usize| -> u64 {
+        // SAFETY: `byte` is at most the offsets' byte length, and 16 more bytes follow it.
+        unsafe { std::ptr::read_unaligned(bp.add(byte).cast::<u64>()) }.to_le()
+    };
+    let wide = d.max_width > 56;
+    let mut ring = [0u64; MAX_LAG];
+    ring[..lag].copy_from_slice(seeds);
+    let mut slot = 0;
+    let mut pos = 0usize;
+    for (i, (o, &id)) in out[..n].iter_mut().zip(&ids[..n]).enumerate() {
+        let bin = d.packed[usize::from(id)];
+        // The bit within a byte, below 8.
+        #[allow(clippy::cast_possible_truncation)]
+        let sh = (pos & 7) as u32;
+        let mut v = read(pos >> 3) >> sh;
+        if wide && sh > 0 {
+            v |= read((pos >> 3) + 8) << (64 - sh);
+        }
+        let v = bin.tl.wrapping_add(v & bin.mask);
+        pos += bin.width as usize;
+        *o = T::truncate_from(if lag == 0 {
+            v
+        } else if i < lag {
+            seeds[i]
+        } else {
+            let r = &mut ring[slot];
+            *r = r.wrapping_add(v);
+            slot = if slot + 1 == lag { 0 } else { slot + 1 };
+            *r
+        });
+        if lag > 0 && i < lag {
+            slot = if slot + 1 == lag { 0 } else { slot + 1 };
+        }
+    }
+    true
+}
+
 /// Decode the ids of `views` (one to four blocks of one chunk) into consecutive `slot`-byte
 /// slots of `ids` (see [`ids_slot`]). Four coded blocks of equal length decode in lockstep.
 pub(crate) fn decode_ids(d: &ChunkDecoder, views: &[BlockView<'_>], ids: &mut [u8], slot: usize) {
     #[cfg(target_arch = "x86_64")]
     if let (Some(t), [b0, b1, b2, b3]) = (&d.table, views)
-        && crate::x86::has_avx512()
+        && crate::x86::has_avx2()
         && views.iter().all(|v| v.uniform.is_none() && v.n == b0.n)
     {
         let p = ids.as_mut_ptr();
-        // SAFETY: AVX-512 is available, `ids` holds four block-sized slots, the blocks are coded
-        // and full, and their words come from a padded buffer.
+        let outs = [
+            p,
+            p.wrapping_add(slot),
+            p.wrapping_add(2 * slot),
+            p.wrapping_add(3 * slot),
+        ];
+        // SAFETY: the kernel's ISA is available, `ids` holds four block-sized slots, the blocks
+        // are coded and full, and their words come from a padded buffer.
         unsafe {
-            crate::x86::ids16::<4>(
-                t,
-                [b0, b1, b2, b3],
-                [p, p.add(slot), p.add(2 * slot), p.add(3 * slot)],
-                usize::MAX,
-            )
-        };
+            if crate::x86::has_avx512() {
+                crate::x86::ids16::<4>(t, [b0, b1, b2, b3], outs, usize::MAX);
+            } else {
+                crate::avx2::ids16::<4>(t, [b0, b1, b2, b3], outs, usize::MAX);
+            }
+        }
         return;
     }
     for (k, v) in views.iter().enumerate() {
@@ -346,7 +434,31 @@ pub(crate) fn merge_block<T: OutInt>(
     if crate::x86::has_avx512() && crate::x86::merge(d, b, ids, out, seeds) {
         return;
     }
+    #[cfg(target_arch = "x86_64")]
+    if !crate::x86::has_avx512()
+        && crate::x86::has_avx2()
+        && crate::avx2::merge(d, b, ids, out, seeds)
+    {
+        return;
+    }
+    if merge_unrolled(d, b, ids, out, seeds) {
+        return;
+    }
     merge_scalar(d, b, ids, out, seeds);
+}
+
+/// Bytes of offsets the block's `ids` read, or `limit` when that is not cheap to bound below it:
+/// `n * max_width` usually settles it, else the widths are summed.
+pub(crate) fn offset_bytes_portable(d: &ChunkDecoder, ids: &[u8], limit: usize) -> usize {
+    let bound = ids.len() as u64 * u64::from(d.max_width);
+    if bound.div_ceil(8) + 64 <= limit as u64 {
+        return 0;
+    }
+    let bits: u64 = ids
+        .iter()
+        .map(|&id| u64::from(d.widths[usize::from(id)]))
+        .sum();
+    usize::try_from(bits.div_ceil(8)).unwrap_or(limit)
 }
 
 /// Bytes of id scratch space for one block of `block_values`: the ids rounded up to whole lane

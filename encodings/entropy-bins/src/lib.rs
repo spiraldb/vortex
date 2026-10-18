@@ -31,6 +31,8 @@ use vortex_array::session::ArraySessionExt;
 use vortex_session::VortexSession;
 
 mod array;
+#[cfg(target_arch = "x86_64")]
+mod avx2;
 mod cast;
 mod coder;
 mod compare;

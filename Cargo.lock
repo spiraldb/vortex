@@ -6133,6 +6133,7 @@ dependencies = [
  "vortex-error",
  "vortex-fastlanes",
  "vortex-file",
+ "vortex-pco",
  "vortex-session",
 ]
 
