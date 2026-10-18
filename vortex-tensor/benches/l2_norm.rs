@@ -17,6 +17,7 @@ use mimalloc::MiMalloc;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
+use vortex_array::array_session;
 use vortex_array::arrays::FixedSizeListArray;
 use vortex_array::arrays::MaskedArray;
 use vortex_array::arrays::PrimitiveArray;
@@ -55,7 +56,7 @@ fn vectors(width: usize) -> ArrayRef {
 }
 
 fn bench_l2_norm(bencher: Bencher, input: ArrayRef) {
-    let session = vortex_array::array_session();
+    let session = array_session();
     bencher
         .counter(ItemsCount::new(input.len()))
         .with_inputs(|| {
@@ -74,8 +75,9 @@ fn non_nullable(bencher: Bencher, width: usize) {
 
 #[divan::bench(args = WIDTHS)]
 fn nullable(bencher: Bencher, width: usize) {
+    let mut ctx = array_session().create_execution_ctx();
     let validity = Validity::from_iter((0..ELEMENTS / width).map(|i| i % 8 != 0));
-    let input = MaskedArray::try_new(vectors(width), validity)
+    let input = MaskedArray::try_new(vectors(width), validity, &mut ctx)
         .unwrap()
         .into_array();
     bench_l2_norm(bencher, input);

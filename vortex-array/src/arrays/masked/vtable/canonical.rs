@@ -16,17 +16,21 @@ mod tests {
     use crate::validity::Validity;
 
     fn masked_all_valid() -> MaskedArray {
+        let mut ctx = array_session().create_execution_ctx();
         MaskedArray::try_new(
             PrimitiveArray::from_iter([1i32, 2, 3]).into_array(),
             Validity::AllValid,
+            &mut ctx,
         )
         .expect("valid masked array")
     }
 
     fn masked_with_nulls() -> MaskedArray {
+        let mut ctx = array_session().create_execution_ctx();
         MaskedArray::try_new(
             PrimitiveArray::from_iter([1i32, 2, 3]).into_array(),
             Validity::from_iter([true, false, true]),
+            &mut ctx,
         )
         .expect("valid masked array")
     }
@@ -49,9 +53,11 @@ mod tests {
 
     #[test]
     fn test_canonical_with_nulls() -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
         let array = MaskedArray::try_new(
             PrimitiveArray::from_iter([1i32, 2, 3, 4, 5]).into_array(),
             Validity::from_iter([true, false, true, false, true]),
+            &mut ctx,
         )?;
 
         let canonical = array
@@ -72,9 +78,11 @@ mod tests {
 
     #[test]
     fn test_canonical_all_valid() -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
         let array = MaskedArray::try_new(
             PrimitiveArray::from_iter([10i32, 20, 30]).into_array(),
             Validity::AllValid,
+            &mut ctx,
         )?;
 
         let canonical = array
