@@ -8,7 +8,8 @@
 //! cargo run --release -p vortex-pco --example pco2_report -- [FILE.parquet[:COL,COL,...]]...
 //! ```
 //!
-//! `FILE.parquet:?` lists a file's columns instead.
+//! `FILE.parquet:?` lists a file's columns instead. Set `PCO2_SIZES=1` to print only the
+//! compression ratio of more Pco page sizes and Pco2 checkpoint intervals.
 //!
 //! Every operation runs through the same session, so Pco measures what Vortex does today
 //! (decompress, then operate) and Pco2 measures its block-pruning kernels. Results of every
@@ -79,8 +80,13 @@ const TAKE_ROWS: usize = 100;
 
 #[derive(Clone, Copy)]
 enum Variant {
-    Pco { values_per_page: usize },
-    Pco2,
+    Pco {
+        values_per_page: usize,
+    },
+    Pco2 {
+        checkpoint_interval: usize,
+        block_stats: bool,
+    },
 }
 
 const VARIANTS: [(&str, Variant); 4] = [
@@ -97,7 +103,83 @@ const VARIANTS: [(&str, Variant); 4] = [
             values_per_page: 1024,
         },
     ),
-    ("pco2 1k checkpoints", Variant::Pco2),
+    (
+        "pco2 1k checkpoints",
+        Variant::Pco2 {
+            checkpoint_interval: 1024,
+            block_stats: true,
+        },
+    ),
+];
+
+/// Pco page sizes and Pco2 checkpoint intervals compared by the `PCO2_SIZES` sweep.
+const SWEEP: [(&str, Variant); 11] = [
+    (
+        "v1 256",
+        Variant::Pco {
+            values_per_page: 256,
+        },
+    ),
+    (
+        "v1 1k",
+        Variant::Pco {
+            values_per_page: 1024,
+        },
+    ),
+    (
+        "v1 4k",
+        Variant::Pco {
+            values_per_page: 4096,
+        },
+    ),
+    (
+        "v1 8k",
+        Variant::Pco {
+            values_per_page: 8192,
+        },
+    ),
+    (
+        "v1 64k",
+        Variant::Pco {
+            values_per_page: 65_536,
+        },
+    ),
+    ("v1 262k", Variant::Pco { values_per_page: 0 }),
+    (
+        "v2 256",
+        Variant::Pco2 {
+            checkpoint_interval: 256,
+            block_stats: true,
+        },
+    ),
+    (
+        "v2 1k",
+        Variant::Pco2 {
+            checkpoint_interval: 1024,
+            block_stats: true,
+        },
+    ),
+    (
+        "v2 1k no stats",
+        Variant::Pco2 {
+            checkpoint_interval: 1024,
+            block_stats: false,
+        },
+    ),
+    (
+        "v2 4k",
+        Variant::Pco2 {
+            checkpoint_interval: 4096,
+            block_stats: true,
+        },
+    ),
+    (
+        "v2 8k",
+        Variant::Pco2 {
+            checkpoint_interval: 8192,
+            block_stats: true,
+        },
+    ),
 ];
 
 impl Variant {
@@ -106,9 +188,19 @@ impl Variant {
             Self::Pco { values_per_page } => {
                 Pco::from_primitive(array.as_view(), LEVEL, values_per_page, ctx)?.into_array()
             }
-            Self::Pco2 => {
-                Pco2::from_primitive(array.as_view(), &Pco2Options::default(), ctx)?.into_array()
-            }
+            Self::Pco2 {
+                checkpoint_interval,
+                block_stats,
+            } => Pco2::from_primitive(
+                array.as_view(),
+                &Pco2Options {
+                    checkpoint_interval,
+                    block_stats,
+                    ..Pco2Options::default()
+                },
+                ctx,
+            )?
+            .into_array(),
         })
     }
 }
@@ -511,6 +603,27 @@ fn report(column: &Column, session: &VortexSession) -> VortexResult<()> {
     Ok(())
 }
 
+/// Prints the compression ratio (raw bytes over serialized bytes) of every [`SWEEP`] variant.
+fn size_sweep(columns: &[Column], session: &VortexSession) -> VortexResult<()> {
+    let mut ctx = session.create_execution_ctx();
+    print!("| column | raw MB |");
+    for (name, _) in SWEEP {
+        print!(" {name} |");
+    }
+    println!("\n|---|---|{}", "---|".repeat(SWEEP.len()));
+    for column in columns {
+        let raw_bytes = column.array.len() * column.array.ptype().byte_width();
+        print!("| {} | {:.1} |", column.name, raw_bytes as f64 / 1e6);
+        for (_, variant) in SWEEP {
+            let encoded = variant.compress(&column.array, &mut ctx)?;
+            let bytes = serialized_bytes(&encoded, session)?;
+            print!(" {:.2} |", raw_bytes as f64 / bytes as f64);
+        }
+        println!();
+    }
+    Ok(())
+}
+
 fn main() -> VortexResult<()> {
     let session = vortex_array::array_session();
     session.arrays().register(Pco);
@@ -523,6 +636,9 @@ fn main() -> VortexResult<()> {
     };
     for spec in std::env::args().skip(1) {
         columns.extend(load_parquet(&spec)?);
+    }
+    if std::env::var_os("PCO2_SIZES").is_some() {
+        return size_sweep(&columns, &session);
     }
     for column in &columns {
         report(column, &session)?;
