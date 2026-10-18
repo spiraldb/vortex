@@ -50,6 +50,8 @@ use crate::scalar_fn::fns::is_null::IsNull;
 use crate::scalar_fn::fns::like::Like;
 use crate::scalar_fn::fns::like::LikeVariant;
 use crate::scalar_fn::fns::list_contains::ListContains;
+use crate::scalar_fn::fns::list_contains::PreparedSet;
+use crate::scalar_fn::fns::list_contains::PreparedSetData;
 use crate::scalar_fn::fns::literal::Literal;
 use crate::scalar_fn::fns::operators::CompareOperator;
 use crate::scalar_fn::fns::operators::Operator;
@@ -622,12 +624,11 @@ fn list_contains_falsify<P: NonNanProof>(
     let list = expr.child(0);
     let needle = expr.child(1);
 
-    let Some(list_scalar) = literal_stat(list, Stat::Min) else {
-        return Ok(None);
-    };
-    let elements = list_scalar
+    // Reduction replaces a literal list with a set prepared from it.
+    let elements = list
         .as_opt::<Literal>()
-        .and_then(|literal| literal.as_list_opt())
+        .or_else(|| list.as_opt::<PreparedSet>().map(PreparedSetData::list))
+        .and_then(|list| list.as_list_opt())
         .and_then(|list| list.elements());
     let Some(elements) = elements else {
         return Ok(None);
@@ -964,6 +965,10 @@ mod tests {
     use crate::scalar_fn::fns::binary::Binary;
     use crate::scalar_fn::fns::dynamic::DynamicComparison;
     use crate::scalar_fn::fns::dynamic::DynamicComparisonExpr;
+    use crate::scalar_fn::fns::list_contains::ListContains;
+    use crate::scalar_fn::fns::list_contains::ListContainsOptions;
+    use crate::scalar_fn::fns::list_contains::PreparedSet;
+    use crate::scalar_fn::fns::list_contains::PreparedSetData;
     use crate::scalar_fn::fns::operators::CompareOperator;
     use crate::scalar_fn::internal::row_count::RowCount;
     use crate::stats::expr::StatFn;
@@ -1281,6 +1286,32 @@ mod tests {
                 or(
                     lt(stat(col("a"), Stat::Max), lit(3i32)),
                     gt(stat(col("a"), Stat::Min), lit(3i32)),
+                ),
+            ))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn rewrites_prepared_set_list_contains_falsifier() -> VortexResult<()> {
+        let list = Scalar::list(
+            Arc::new(DType::Primitive(PType::I32, Nullability::NonNullable)),
+            vec![1.into(), 2.into()],
+            Nullability::NonNullable,
+        );
+        let set = PreparedSet.new_expr(PreparedSetData::try_new(list)?, Vec::<Expression>::new());
+        let expr = ListContains.new_expr(ListContainsOptions::default(), [set, col("a")]);
+
+        assert_rewrite_eq!(
+            falsify(&expr)?,
+            Some(and(
+                or(
+                    lt(stat(col("a"), Stat::Max), lit(1i32)),
+                    gt(stat(col("a"), Stat::Min), lit(1i32)),
+                ),
+                or(
+                    lt(stat(col("a"), Stat::Max), lit(2i32)),
+                    gt(stat(col("a"), Stat::Min), lit(2i32)),
                 ),
             ))
         );
