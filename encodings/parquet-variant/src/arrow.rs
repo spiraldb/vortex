@@ -377,19 +377,6 @@ mod tests {
     }
 
     #[rstest]
-    fn import_parquet_variant_extension_array(session: VortexSession) -> VortexResult<()> {
-        let storage = arrow_variant_storage();
-        let field = arrow_variant_field(&storage);
-        let imported = session
-            .arrow()
-            .from_arrow_array(Arc::new(storage) as ArrowArrayRef, &field)?;
-
-        assert_eq!(imported.dtype(), &DType::Variant(Nullability::NonNullable));
-        assert!(imported.as_opt::<ParquetVariant>().is_some());
-        Ok(())
-    }
-
-    #[rstest]
     fn roundtrip_parquet_variant_extension_array_from_arrow(
         session: VortexSession,
     ) -> VortexResult<()> {
@@ -398,6 +385,9 @@ mod tests {
         let imported = session
             .arrow()
             .from_arrow_array(Arc::new(storage.clone()) as ArrowArrayRef, &field)?;
+
+        assert_eq!(imported.dtype(), &DType::Variant(Nullability::NonNullable));
+        assert!(imported.as_opt::<ParquetVariant>().is_some());
 
         let mut ctx = session.create_execution_ctx();
         let exported = session

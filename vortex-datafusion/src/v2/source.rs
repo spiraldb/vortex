@@ -769,7 +769,16 @@ mod tests {
             })
             .collect::<Vec<_>>();
         assert_eq!(values.len(), 5);
-        assert!(values.iter().all(|value| *value >= 4));
+        assert!(values.iter().all(|value| (4..12).contains(value)));
+        let mut unique = values;
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), 5);
+        assert!(
+            batches
+                .iter()
+                .all(|batch| batch.column(0).null_count() == 0)
+        );
         Ok(())
     }
 }

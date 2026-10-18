@@ -169,8 +169,11 @@ mod tests {
     use crate::CanonicalCudaExt;
     use crate::session::CudaSession;
 
-    /// Decodes `array` on the GPU and asserts it matches the CPU canonical form.
-    async fn assert_gpu_matches_cpu(delta: DeltaArray) -> VortexResult<()> {
+    /// Decodes on the GPU and compares against the independent uncompressed fixture.
+    async fn assert_gpu_matches_expected(
+        delta: DeltaArray,
+        expected: ArrayRef,
+    ) -> VortexResult<()> {
         let mut ctx = vortex_array::array_session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
@@ -183,7 +186,7 @@ mod tests {
             .await?
             .into_array();
 
-        assert_arrays_eq!(delta, gpu, &mut ctx);
+        assert_arrays_eq!(gpu, expected, &mut ctx);
         Ok(())
     }
 
@@ -200,7 +203,7 @@ mod tests {
         );
 
         let delta = Delta::try_from_primitive_array(&primitive, &mut ctx)?;
-        assert_gpu_matches_cpu(delta).await
+        assert_gpu_matches_expected(delta, primitive.into_array()).await
     }
 
     #[crate::test]
@@ -209,7 +212,7 @@ mod tests {
         let primitive = PrimitiveArray::new(Buffer::from_iter(0u16..3000), Validity::NonNullable);
 
         let delta = Delta::try_from_primitive_array(&primitive, &mut ctx)?;
-        assert_gpu_matches_cpu(delta).await
+        assert_gpu_matches_expected(delta, primitive.into_array()).await
     }
 
     #[crate::test]
@@ -221,7 +224,7 @@ mod tests {
         );
 
         let delta = Delta::try_from_primitive_array(&primitive, &mut ctx)?;
-        assert_gpu_matches_cpu(delta).await
+        assert_gpu_matches_expected(delta, primitive.into_array()).await
     }
 
     #[crate::test]
@@ -233,7 +236,7 @@ mod tests {
         );
 
         let delta = Delta::try_from_primitive_array(&primitive, &mut ctx)?;
-        assert_gpu_matches_cpu(delta).await
+        assert_gpu_matches_expected(delta, primitive.into_array()).await
     }
 
     /// Deltas across negative values wrap at compress time, so signed input must decode
@@ -247,7 +250,7 @@ mod tests {
         );
 
         let delta = Delta::try_from_primitive_array(&primitive, &mut ctx)?;
-        assert_gpu_matches_cpu(delta).await
+        assert_gpu_matches_expected(delta, primitive.into_array()).await
     }
 
     /// A sliced Delta keeps whole chunks and carries a nonzero offset, which the decode
@@ -266,11 +269,11 @@ mod tests {
         let delta = Delta::try_from_primitive_array(&primitive, &mut ctx)?
             .into_array()
             .slice(start..end)?;
-        let Ok(delta) = delta.try_downcast::<Delta>() else {
-            // A slice that the encoding chose to canonicalise is not this test's concern.
-            return Ok(());
-        };
-        assert_gpu_matches_cpu(delta).await
+        let delta = delta
+            .try_downcast::<Delta>()
+            .ok()
+            .vortex_expect("slice fixture must exercise the Delta GPU decoder");
+        assert_gpu_matches_expected(delta, primitive.slice(start..end)?).await
     }
 
     /// Nulls ride alongside the values, and the validity is narrowed to the logical slice.
@@ -282,6 +285,6 @@ mod tests {
         );
 
         let delta = Delta::try_from_primitive_array(&primitive, &mut ctx)?;
-        assert_gpu_matches_cpu(delta).await
+        assert_gpu_matches_expected(delta, primitive.into_array()).await
     }
 }

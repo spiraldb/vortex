@@ -49,18 +49,14 @@ mod tests {
         assert_eq!(sliced_arr.len(), 8);
         assert_eq!(sliced_arr.to_bit_buffer().len(), 8);
         assert_eq!(sliced_arr.to_bit_buffer().offset(), 0);
+        assert_arrays_eq!(sliced_arr, BoolArray::from_iter([Some(true); 8]), &mut ctx);
     }
 
     #[test]
     fn test_slice() {
         let mut ctx = array_session().create_execution_ctx();
         let arr = BoolArray::from_iter([Some(true), Some(true), None, Some(false), None]);
-        let sliced_arr = arr
-            .into_array()
-            .slice(1..4)
-            .unwrap()
-            .execute::<BoolArray>(&mut ctx)
-            .unwrap();
+        let sliced_arr = arr.into_array().slice(1..4).unwrap();
 
         assert_arrays_eq!(
             sliced_arr,

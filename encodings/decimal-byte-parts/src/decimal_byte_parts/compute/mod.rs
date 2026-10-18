@@ -104,7 +104,9 @@ mod tests {
     #[case::decimal_i256_nullable(i256_parts(wide_i256(), Validity::from_iter([false, true, true, false, true])))]
 
     fn test_decimal_byte_parts_consistency(#[case] array: DecimalBytePartsArray) {
-        let ctx = &mut array_session().create_execution_ctx();
+        let session = array_session();
+        crate::initialize(&session);
+        let ctx = &mut session.create_execution_ctx();
         test_array_consistency(&array.into_array(), ctx);
     }
 
@@ -124,7 +126,9 @@ mod tests {
     #[case::decimal_i128_one_lower_part(i128_parts(wide_i128(), Validity::NonNullable))]
     #[case::decimal_i256_three_lower_parts(i256_parts(wide_i256(), Validity::NonNullable))]
     fn test_decimal_byte_parts_binary_numeric(#[case] array: DecimalBytePartsArray) {
-        let ctx = &mut array_session().create_execution_ctx();
+        let session = array_session();
+        crate::initialize(&session);
+        let ctx = &mut session.create_execution_ctx();
         test_binary_numeric_array(&array.into_array(), ctx);
     }
 }

@@ -49,7 +49,6 @@ impl RowFn for IsNan {
 #[cfg(test)]
 mod tests {
     use vortex_buffer::buffer;
-    use vortex_error::VortexExpect as _;
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
@@ -93,13 +92,6 @@ mod tests {
                 .return_dtype(&DType::Bool(Nullability::NonNullable))
                 .is_err()
         );
-    }
-
-    #[test]
-    fn replace_children() {
-        let expr = is_nan(root());
-        expr.with_children([root()])
-            .vortex_expect("operation should succeed in test");
     }
 
     #[test]

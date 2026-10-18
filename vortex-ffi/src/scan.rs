@@ -448,7 +448,12 @@ mod tests {
     use std::ptr;
 
     use vortex::VortexSessionDefault;
+    use vortex::array::IntoArray;
+    use vortex::array::arrays::PrimitiveArray;
     use vortex::array::arrays::StructArray;
+    use vortex::array::arrays::VarBinView;
+    use vortex::array::arrays::VarBinViewArray;
+    use vortex::array::validity::Validity;
     use vortex::session::VortexSession;
     use vortex_array::VortexSessionExecute;
     use vortex_array::array_session;
@@ -470,6 +475,7 @@ mod tests {
     use crate::scalar::vx_scalar_new_u64;
     use crate::scan::vx_data_source_scan;
     use crate::scan::vx_estimate;
+    use crate::scan::vx_estimate_type;
     use crate::scan::vx_partition_free;
     use crate::scan::vx_partition_next;
     use crate::scan::vx_partition_row_count;
@@ -527,6 +533,29 @@ mod tests {
 
             (array, struct_array)
         }
+    }
+
+    fn expected_rows(source: &StructArray, indices: &[usize]) -> StructArray {
+        let names = source.unmasked_field_by_name("name").unwrap();
+        let names = names.as_::<VarBinView>();
+        StructArray::try_new(
+            ["age", "height", "name"].into(),
+            vec![
+                PrimitiveArray::from_option_iter(indices.iter().map(|&i| Some(i as u64)))
+                    .into_array(),
+                PrimitiveArray::from_option_iter(indices.iter().map(|&i| Some(200 * i as u64)))
+                    .into_array(),
+                VarBinViewArray::from_iter_str(
+                    indices
+                        .iter()
+                        .map(|&i| String::from_utf8(names.bytes_at(i).to_vec()).unwrap()),
+                )
+                .into_array(),
+            ],
+            indices.len(),
+            Validity::NonNullable,
+        )
+        .unwrap()
     }
 
     #[test]
@@ -589,6 +618,9 @@ mod tests {
 
             opts.projection = expr_sum;
             let (array, _) = scan(&raw const opts);
+            let expected =
+                PrimitiveArray::from_option_iter((0..SAMPLE_ROWS as u64).map(|i| Some(201 * i)));
+            assert_arrays_eq!(vx_array::as_ref(array), expected, &mut ctx);
             {
                 let array = vx_array::as_ref(array);
                 let stats = array.statistics();
@@ -626,8 +658,10 @@ mod tests {
                 filter,
                 ..Default::default()
             };
-            let (array, _) = scan(&raw const opts);
-            assert_eq!(vx_array::as_ref(array).len(), 100);
+            let (array, source) = scan(&raw const opts);
+            let mut ctx = array_session().create_execution_ctx();
+            let expected = expected_rows(&source, &(100..200).collect::<Vec<_>>());
+            assert_arrays_eq!(vx_array::as_ref(array), expected, &mut ctx);
 
             vx_array_free(array);
             vx_expression_free(filter);
@@ -658,7 +692,9 @@ mod tests {
                 ..Default::default()
             };
             let (array, _) = scan(&raw const opts);
-            assert_eq!(vx_array::as_ref(array).len(), 100);
+            let mut ctx = array_session().create_execution_ctx();
+            let expected = PrimitiveArray::from_option_iter((100u64..200).map(Some));
+            assert_arrays_eq!(vx_array::as_ref(array), expected, &mut ctx);
 
             vx_array_free(array);
             vx_expression_free(filter);
@@ -677,8 +713,10 @@ mod tests {
             row_range_end: 100,
             ..Default::default()
         };
-        let (array, _) = scan(&raw const opts);
-        assert_eq!(vx_array::as_ref(array).len(), 50);
+        let (array, source) = scan(&raw const opts);
+        let mut ctx = array_session().create_execution_ctx();
+        let expected = expected_rows(&source, &(50..100).collect::<Vec<_>>());
+        assert_arrays_eq!(vx_array::as_ref(array), expected, &mut ctx);
         unsafe { vx_array_free(array) };
     }
 
@@ -694,8 +732,10 @@ mod tests {
             },
             ..Default::default()
         };
-        let (array, _) = scan(&raw const opts);
-        assert_eq!(vx_array::as_ref(array).len(), indices.len());
+        let (array, source) = scan(&raw const opts);
+        let mut ctx = array_session().create_execution_ctx();
+        let expected = expected_rows(&source, &[0, 50, 100, 150, 199]);
+        assert_arrays_eq!(vx_array::as_ref(array), expected, &mut ctx);
         unsafe { vx_array_free(array) };
     }
 
@@ -753,6 +793,8 @@ mod tests {
             let result = vx_partition_row_count(partition, &raw mut count, &raw mut error);
             assert_no_error(error);
             assert_eq!(result, 0);
+            assert!(matches!(count.r#type, vx_estimate_type::VX_ESTIMATE_EXACT));
+            assert_eq!(count.estimate, SAMPLE_ROWS as u64);
 
             vx_partition_free(partition);
             vx_scan_free(scan_ptr);

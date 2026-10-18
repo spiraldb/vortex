@@ -73,6 +73,11 @@ mod tests {
         let trimmed = Canonical::Bool(array).compact(&mut ctx)?.into_bool();
 
         assert_eq!(trimmed.bits.len(), 3);
+        let expected = BoolArray::new(
+            BitBuffer::new_with_offset((0..64u8).collect(), 20, 0),
+            Validity::NonNullable,
+        );
+        assert_arrays_eq!(trimmed, expected, &mut ctx);
         Ok(())
     }
 }

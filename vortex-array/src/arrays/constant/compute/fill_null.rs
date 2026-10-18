@@ -51,7 +51,7 @@ mod test {
         let mut ctx = array_session().create_execution_ctx();
         let actual = ConstantArray::new(Scalar::from(Some(1)), 3)
             .into_array()
-            .fill_null(Scalar::from(1))
+            .fill_null(Scalar::from(2))
             .unwrap();
         let expected = ConstantArray::new(Scalar::from(1), 3).into_array();
 
@@ -67,7 +67,7 @@ mod test {
             .into_array()
             .fill_null(Scalar::new(
                 DType::Primitive(PType::I32, Nullability::Nullable),
-                Some(1.into()),
+                Some(2.into()),
             ))
             .unwrap();
         let expected = ConstantArray::new(

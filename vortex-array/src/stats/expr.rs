@@ -229,10 +229,7 @@ mod tests {
             Precision::exact(sum_scalar.into_value().vortex_expect("non-null sum")),
         );
 
-        let result = array
-            .apply(&sum(root()))?
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
+        let result = array.apply(&sum(root()))?;
 
         let expected =
             ConstantArray::new(Scalar::primitive(6i64, Nullability::Nullable), 3).into_array();
@@ -245,10 +242,7 @@ mod tests {
     fn stat_expr_returns_null_when_sum_is_missing() -> VortexResult<()> {
         let array = buffer![1i32, 2, 3].into_array();
 
-        let result = array
-            .apply(&sum(root()))?
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
+        let result = array.apply(&sum(root()))?;
 
         let expected = ConstantArray::new(
             Scalar::null(DType::Primitive(PType::I64, Nullability::Nullable)),
@@ -282,9 +276,6 @@ mod tests {
             .vortex_expect("stat expression should preserve chunked alignment");
         assert_eq!(chunked_result.nchunks(), 2);
 
-        let result = result
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
         let expected = PrimitiveArray::new(
             buffer![3i64, 3, 0, 0, 0],
             Validity::from_iter([true, true, false, false, false]),
@@ -309,10 +300,7 @@ mod tests {
             ),
         );
 
-        let result = array
-            .apply(&null_count(root()))?
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
+        let result = array.apply(&null_count(root()))?;
 
         let expected =
             ConstantArray::new(Scalar::primitive(2u64, Nullability::Nullable), 4).into_array();
@@ -328,10 +316,7 @@ mod tests {
             .statistics()
             .set(Stat::NullCount, Precision::exact(ScalarValue::from(3u64)));
 
-        let result = array
-            .apply(&all_null(root()))?
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
+        let result = array.apply(&all_null(root()))?;
 
         let expected =
             ConstantArray::new(Scalar::bool(true, Nullability::Nullable), 3).into_array();
@@ -347,10 +332,7 @@ mod tests {
             .statistics()
             .set(Stat::NullCount, Precision::inexact(ScalarValue::from(2u64)));
 
-        let result = array
-            .apply(&all_null(root()))?
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
+        let result = array.apply(&all_null(root()))?;
 
         let expected =
             ConstantArray::new(Scalar::bool(false, Nullability::Nullable), 3).into_array();
@@ -366,10 +348,7 @@ mod tests {
             .statistics()
             .set(Stat::NullCount, Precision::inexact(ScalarValue::from(3u64)));
 
-        let result = array
-            .apply(&all_null(root()))?
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
+        let result = array.apply(&all_null(root()))?;
 
         let expected =
             ConstantArray::new(Scalar::null(DType::Bool(Nullability::Nullable)), 3).into_array();
@@ -385,10 +364,7 @@ mod tests {
             .statistics()
             .set(Stat::NullCount, Precision::exact(ScalarValue::from(0u64)));
 
-        let result = array
-            .apply(&all_non_null(root()))?
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
+        let result = array.apply(&all_non_null(root()))?;
 
         let expected =
             ConstantArray::new(Scalar::bool(true, Nullability::Nullable), 3).into_array();
@@ -404,10 +380,7 @@ mod tests {
             .statistics()
             .set(Stat::NullCount, Precision::inexact(ScalarValue::from(0u64)));
 
-        let result = array
-            .apply(&all_non_null(root()))?
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
+        let result = array.apply(&all_non_null(root()))?;
 
         let expected =
             ConstantArray::new(Scalar::bool(true, Nullability::Nullable), 3).into_array();
@@ -424,10 +397,7 @@ mod tests {
             .statistics()
             .set(Stat::NullCount, Precision::inexact(ScalarValue::from(2u64)));
 
-        let result = array
-            .apply(&all_non_null(root()))?
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
+        let result = array.apply(&all_non_null(root()))?;
 
         let expected =
             ConstantArray::new(Scalar::null(DType::Bool(Nullability::Nullable)), 4).into_array();
@@ -458,10 +428,7 @@ mod tests {
             .statistics()
             .set(Stat::NaNCount, Precision::exact(ScalarValue::from(3u64)));
 
-        let result = array
-            .apply(&all_nan(root()))?
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
+        let result = array.apply(&all_nan(root()))?;
 
         let expected =
             ConstantArray::new(Scalar::bool(true, Nullability::Nullable), 3).into_array();
@@ -479,10 +446,7 @@ mod tests {
             .statistics()
             .set(Stat::NaNCount, Precision::inexact(ScalarValue::from(2u64)));
 
-        let result = array
-            .apply(&all_nan(root()))?
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
+        let result = array.apply(&all_nan(root()))?;
 
         let expected =
             ConstantArray::new(Scalar::bool(false, Nullability::Nullable), 3).into_array();
@@ -500,10 +464,7 @@ mod tests {
             .statistics()
             .set(Stat::NaNCount, Precision::inexact(ScalarValue::from(3u64)));
 
-        let result = array
-            .apply(&all_nan(root()))?
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
+        let result = array.apply(&all_nan(root()))?;
 
         let expected =
             ConstantArray::new(Scalar::null(DType::Bool(Nullability::Nullable)), 3).into_array();
@@ -519,10 +480,7 @@ mod tests {
             .statistics()
             .set(Stat::NaNCount, Precision::inexact(ScalarValue::from(0u64)));
 
-        let result = array
-            .apply(&all_non_nan(root()))?
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
+        let result = array.apply(&all_non_nan(root()))?;
 
         let expected =
             ConstantArray::new(Scalar::bool(true, Nullability::Nullable), 3).into_array();
@@ -539,10 +497,7 @@ mod tests {
             .statistics()
             .set(Stat::NaNCount, Precision::inexact(ScalarValue::from(1u64)));
 
-        let result = array
-            .apply(&all_non_nan(root()))?
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
+        let result = array.apply(&all_non_nan(root()))?;
 
         let expected =
             ConstantArray::new(Scalar::null(DType::Bool(Nullability::Nullable)), 3).into_array();
@@ -561,16 +516,12 @@ mod tests {
             .statistics()
             .set(Stat::Max, Precision::exact(ScalarValue::from(3i32)));
 
-        let min_result = array
-            .clone()
-            .apply(&stat(
-                root(),
-                Stat::Min
-                    .aggregate_fn()
-                    .vortex_expect("min should have an aggregate function"),
-            ))?
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
+        let min_result = array.clone().apply(&stat(
+            root(),
+            Stat::Min
+                .aggregate_fn()
+                .vortex_expect("min should have an aggregate function"),
+        ))?;
         let expected_min =
             ConstantArray::new(Scalar::primitive(1i32, Nullability::Nullable), 3).into_array();
         assert_arrays_eq!(
@@ -579,15 +530,12 @@ mod tests {
             &mut SESSION.create_execution_ctx()
         );
 
-        let max_result = array
-            .apply(&stat(
-                root(),
-                Stat::Max
-                    .aggregate_fn()
-                    .vortex_expect("max should have an aggregate function"),
-            ))?
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
+        let max_result = array.apply(&stat(
+            root(),
+            Stat::Max
+                .aggregate_fn()
+                .vortex_expect("max should have an aggregate function"),
+        ))?;
         let expected_max =
             ConstantArray::new(Scalar::primitive(3i32, Nullability::Nullable), 3).into_array();
         assert_arrays_eq!(

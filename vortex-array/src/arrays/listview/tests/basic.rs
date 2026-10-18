@@ -196,42 +196,21 @@ fn test_listview_with_constant_arrays(#[case] const_sizes: bool, #[case] const_o
     };
     assert_eq!(listview.len(), 3);
 
-    if const_sizes && const_offsets {
-        // All lists are identical [1, 2, 3] (overlapping).
-        let expected = PrimitiveArray::from_iter([1i32, 2, 3]);
-        for i in 0..3 {
-            assert_arrays_eq!(listview.list_elements_at(i).unwrap(), expected, &mut ctx);
+    let expected_lists: &[&[i32]] = match (const_sizes, const_offsets) {
+        (true, true) => &[&[1, 2, 3], &[1, 2, 3], &[1, 2, 3]],
+        (true, false) => &[&[1, 2, 3], &[4, 5, 6], &[7, 8, 9]],
+        (false, true) => &[&[1, 2, 3], &[1, 2], &[1]],
+        (false, false) => unreachable!(),
+    };
+    for (i, expected) in expected_lists.iter().enumerate() {
+        let actual = listview.list_elements_at(i).unwrap();
+        if const_offsets && !const_sizes {
+            assert_eq!(actual.execute_scalar(0, &mut ctx).unwrap(), 1i32.into());
         }
-    } else if const_sizes {
-        // All lists have size 3, different offsets (no overlap).
-        assert_eq!(listview.list_elements_at(0).unwrap().len(), 3);
-        assert_eq!(listview.list_elements_at(1).unwrap().len(), 3);
-        assert_eq!(listview.list_elements_at(2).unwrap().len(), 3);
-    } else if const_offsets {
-        // All lists start at offset 0, different sizes (overlapping).
-        assert_eq!(
-            listview
-                .list_elements_at(0)
-                .unwrap()
-                .execute_scalar(0, &mut array_session().create_execution_ctx())
-                .unwrap(),
-            1i32.into()
-        );
-        assert_eq!(
-            listview
-                .list_elements_at(1)
-                .unwrap()
-                .execute_scalar(0, &mut array_session().create_execution_ctx())
-                .unwrap(),
-            1i32.into()
-        );
-        assert_eq!(
-            listview
-                .list_elements_at(2)
-                .unwrap()
-                .execute_scalar(0, &mut array_session().create_execution_ctx())
-                .unwrap(),
-            1i32.into()
+        assert_arrays_eq!(
+            actual,
+            PrimitiveArray::from_iter(expected.iter().copied()),
+            &mut ctx
         );
     }
 }

@@ -794,11 +794,13 @@ mod tests {
     }
 
     #[test]
-    fn test_not_skipping_shortcircuits_on_exact_nan_count_stat() -> VortexResult<()> {
-        // The array has no NaNs; a planted exact NaNCount stat proves the poisoning came from
-        // the stat rather than a scan.
-        let array =
-            PrimitiveArray::new(buffer![1.0f64, 2.0, 3.0], Validity::NonNullable).into_array();
+    fn test_not_skipping_with_exact_nan_count_stat() -> VortexResult<()> {
+        // The exact NaN count agrees with the batch; including NaNs must poison both extrema.
+        let array = PrimitiveArray::new(
+            buffer![1.0f64, 2.0, 3.0, f64::NAN, f64::NAN],
+            Validity::NonNullable,
+        )
+        .into_array();
         array
             .statistics()
             .set(Stat::NaNCount, Precision::Exact(ScalarValue::from(2u64)));
@@ -807,8 +809,8 @@ mod tests {
     }
 
     #[test]
-    fn test_not_skipping_uses_cached_stats_when_nan_free() -> VortexResult<()> {
-        // With an exact NaNCount of zero, the planted exact Min/Max stats are usable as-is.
+    fn test_not_skipping_with_exact_stats_when_nan_free() -> VortexResult<()> {
+        // With an exact NaNCount of zero, the exact Min/Max stats are usable as-is.
         let array =
             PrimitiveArray::new(buffer![1.0f64, 2.0, 3.0], Validity::NonNullable).into_array();
         array
@@ -816,14 +818,14 @@ mod tests {
             .set(Stat::NaNCount, Precision::Exact(ScalarValue::from(0u64)));
         array
             .statistics()
-            .set(Stat::Min, Precision::Exact(ScalarValue::from(-10.0f64)));
+            .set(Stat::Min, Precision::Exact(ScalarValue::from(1.0f64)));
         array
             .statistics()
-            .set(Stat::Max, Precision::Exact(ScalarValue::from(10.0f64)));
+            .set(Stat::Max, Precision::Exact(ScalarValue::from(3.0f64)));
         let mut ctx = SESSION.create_execution_ctx();
         let result = min_max(&array, &mut ctx, KEEP_NANS)?.vortex_expect("should have result");
-        assert_eq!(f64::try_from(&result.min)?, -10.0);
-        assert_eq!(f64::try_from(&result.max)?, 10.0);
+        assert_eq!(f64::try_from(&result.min)?, 1.0);
+        assert_eq!(f64::try_from(&result.max)?, 3.0);
         Ok(())
     }
 

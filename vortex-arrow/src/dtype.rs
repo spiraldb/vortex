@@ -703,15 +703,26 @@ mod test {
                 .map(|s| s.as_str()),
             Some("arrow.parquet.variant")
         );
-        assert!(matches!(field.data_type(), DataType::Struct(_)));
+        assert_eq!(field.name(), "v");
+        assert_eq!(
+            field.data_type(),
+            &DataType::Struct(Fields::from(vec![
+                Field::new("metadata", DataType::Binary, false),
+                Field::new("value", DataType::Binary, true)
+            ]))
+        );
         assert!(!field.is_nullable());
     }
 
     #[rstest]
-    #[should_panic]
-    fn test_schema_conversion_panics(the_struct: StructFields) {
+    fn test_schema_conversion_rejects_nullable_struct(the_struct: StructFields) {
         let schema_null = DType::Struct(the_struct, Nullability::Nullable);
-        schema_null.to_arrow_schema().unwrap();
+        let error = schema_null.to_arrow_schema().unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("top-level struct in Schema must be NonNullable")
+        );
     }
 
     #[test]
@@ -730,6 +741,14 @@ mod test {
         );
 
         let arrow_dtype = original_dtype.to_arrow_dtype().unwrap();
+        assert_eq!(
+            arrow_dtype,
+            DataType::Struct(Fields::from(vec![Field::new(
+                "\u{5}=A",
+                DataType::Int8,
+                true
+            )]))
+        );
         let roundtripped_dtype = DType::from_arrow((&arrow_dtype, Nullability::NonNullable));
 
         assert_eq!(original_dtype, roundtripped_dtype);
@@ -751,6 +770,18 @@ mod test {
             DType::struct_([("\u{7}=outer", inner_struct)], Nullability::NonNullable);
 
         let arrow_dtype = original_dtype.to_arrow_dtype().unwrap();
+        assert_eq!(
+            arrow_dtype,
+            DataType::Struct(Fields::from(vec![Field::new(
+                "\u{7}=outer",
+                DataType::Struct(Fields::from(vec![Field::new(
+                    "\u{6}=inner",
+                    DataType::Int32,
+                    true
+                )])),
+                true
+            )]))
+        );
         let roundtripped_dtype = DType::from_arrow((&arrow_dtype, Nullability::NonNullable));
 
         assert_eq!(original_dtype, roundtripped_dtype);

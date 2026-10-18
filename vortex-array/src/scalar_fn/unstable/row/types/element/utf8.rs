@@ -349,6 +349,7 @@ mod tests {
     use crate::scalar_fn::unstable::row::InputElement;
     use crate::scalar_fn::unstable::row::RowFn;
     use crate::scalar_fn::unstable::row::RowVisitor;
+    use crate::scalar_fn::unstable::row::ViewLen;
     use crate::scalar_fn::unstable::row::execute_rows;
     use crate::validity::Validity;
 
@@ -538,6 +539,7 @@ mod tests {
         let mut ctx = VortexSession::empty().create_execution_ctx();
         for _ in 0..2 {
             let column = Utf8Column::decode(array.clone(), &mut ctx)?;
+            assert_eq!(Utf8Column::view(&column).len(), len);
             for index in 0..len {
                 assert_eq!(
                     Utf8Column::get(&column, index),

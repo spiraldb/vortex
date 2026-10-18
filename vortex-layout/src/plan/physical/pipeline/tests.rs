@@ -530,13 +530,20 @@ fn pack_emits_when_every_field_has_data() -> VortexResult<()> {
     let plan = lower(&layout)?;
     let mask = Mask::new_true(ROWS as usize);
 
-    let run = run(
-        &store,
-        &plan,
-        0..ROWS,
-        mask.clone(),
-        delivery(Delivery::Fifo),
-    )?;
+    let order = std::iter::once(ROWS as u32)
+        .chain(0..ROWS as u32)
+        .collect::<Vec<_>>();
+    let run = run(&store, &plan, 0..ROWS, mask.clone(), scripted(&order))?;
+    let delivered_before_output = run
+        .events
+        .iter()
+        .take_while(|event| !matches!(event, Event::Piece(_)))
+        .filter_map(|event| match event {
+            Event::Delivered(id) => Some(*id),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(delivered_before_output, [ROWS as u32, 0]);
     assert_eq!(pieces(&run.events), vec![1; ROWS as usize]);
     assert_view(&expected, &(0..ROWS), &mask, run.arrays)
 }
@@ -618,12 +625,16 @@ fn take_waits_for_whole_values_and_keeps_them(#[case] predicate: bool) -> Vortex
     let codes = PrimitiveArray::from_iter((0..ROWS).map(|v| (v % 3) as u8)).into_array();
     let layout = DictLayout::new(store.flat(&values)?, store.flat(&codes)?).into_layout();
     let mut plan = lower(&layout)?;
-    let mut expected = values.take(codes)?;
+    let expected = if predicate {
+        BoolArray::from_iter((0..ROWS).map(|row| row % 3 != 0)).into_array()
+    } else {
+        VarBinViewArray::from_iter_str((0..ROWS).map(|row| ["a", "b", "c"][(row % 3) as usize]))
+            .into_array()
+    };
     if predicate {
         let expression = gt(root(), lit("a"))
             .bind(plan.dtype())?
             .optimize_recursive()?;
-        expected = expected.apply_bound(&expression)?;
         plan = optimize(EvalPlan::try_new(expression, plan)?.into_plan())?;
     }
     assert!(plan.is::<Take>());
@@ -683,21 +694,24 @@ fn take_waits_for_whole_values_and_keeps_them(#[case] predicate: bool) -> Vortex
 #[test]
 fn eval_applies_expression_to_selected_rows() -> VortexResult<()> {
     let mut store = Store::default();
-    let (plan, expected) = two_columns(&mut store)?;
+    let (plan, _) = two_columns(&mut store)?;
     let expression = gt(get_item("a", root()), lit(4_i32)).bind(plan.dtype())?;
-    let expected = expected.apply_bound(&expression)?;
+    let expected = BoolArray::from_iter((0..ROWS).map(|row| row > 4)).into_array();
     let plan = EvalPlan::try_new(expression, plan)?.into_plan();
 
     let rows = 2..18;
     let mask = Sel::EveryOther.mask(16);
-    let run = run(
-        &store,
-        &plan,
-        rows.clone(),
-        mask.clone(),
-        delivery(Delivery::Lifo),
-    )?;
-    assert_view(&expected, &rows, &mask, run.arrays)
+    for plan in [plan.clone(), optimize(plan)?] {
+        let run = run(
+            &store,
+            &plan,
+            rows.clone(),
+            mask.clone(),
+            delivery(Delivery::Lifo),
+        )?;
+        assert_view(&expected, &rows, &mask, run.arrays)?;
+    }
+    Ok(())
 }
 
 /// A column read by two fields of one struct is read and decoded once, and both fields get it.

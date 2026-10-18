@@ -248,7 +248,7 @@ mod tests {
             .into_host(cuda_ctx.execution_ctx())
             .await?;
 
-        assert_arrays_eq!(compressed, gpu_result.into_array(), &mut ctx);
+        assert_arrays_eq!(gpu_result.into_array(), input, &mut ctx);
         Ok(())
     }
 
@@ -275,7 +275,7 @@ mod tests {
             .into_host(cuda_ctx.execution_ctx())
             .await?;
 
-        assert_arrays_eq!(compressed, gpu_result.into_array(), &mut ctx);
+        assert_arrays_eq!(gpu_result.into_array(), input, &mut ctx);
         Ok(())
     }
 }

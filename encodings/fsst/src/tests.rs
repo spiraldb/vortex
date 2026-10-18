@@ -119,14 +119,23 @@ fn test_fsst_array_ops() {
         &mut ctx
     );
 
-    // test to_canonical
-    let canonical_array = fsst_array
-        .clone()
-        .execute::<VarBinViewArray>(&mut ctx)
-        .unwrap()
-        .into_array();
-
-    assert_arrays_eq!(fsst_array, canonical_array, &mut ctx);
+    assert_arrays_eq!(
+        fsst_array,
+        VarBinViewArray::from_iter_str([
+            "The Greeks never said that the limit could not be overstepped",
+            "They said it existed and that whoever dared to exceed it was mercilessly struck down",
+            "Nothing in present history can contradict them",
+        ]),
+        &mut ctx
+    );
+    assert_arrays_eq!(
+        fsst_filtered,
+        VarBinViewArray::from_iter_str([
+            "They said it existed and that whoever dared to exceed it was mercilessly struck down",
+            "Nothing in present history can contradict them",
+        ]),
+        &mut ctx
+    );
 }
 
 // TODO(someone): ideally CI would run this in release mode as well since debug builds make the

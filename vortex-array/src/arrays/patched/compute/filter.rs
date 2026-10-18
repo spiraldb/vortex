@@ -89,15 +89,12 @@ mod tests {
         let array = Patched::from_array_and_patches(array, &patches, &mut ctx)?.into_array();
 
         let mask = Mask::from_iter([true, false, false, false, true]);
-        let filtered = array
-            .filter(mask)?
-            .optimize()?
-            .execute::<PrimitiveArray>(&mut ctx)?;
+        let filtered = array.filter(mask)?.optimize()?;
 
         // Values at indices 0 and 4: MIN and MAX.
         let expected = PrimitiveArray::from_iter([u16::MIN, u16::MAX]);
 
-        assert_arrays_eq!(expected, filtered, &mut ctx);
+        assert_arrays_eq!(filtered, expected, &mut ctx);
 
         Ok(())
     }
@@ -119,13 +116,10 @@ mod tests {
 
         // Filter that touches only the first 2 chunks.
         let mask = Mask::from_indices(4091, vec![0, 1, 2, 1025]);
-        let filtered = sliced
-            .filter(mask)?
-            .optimize()?
-            .execute::<PrimitiveArray>(&mut ctx)?;
+        let filtered = sliced.filter(mask)?.optimize()?;
 
         let expected = PrimitiveArray::from_iter([u16::MAX, u16::MIN, u16::MIN, u16::MAX]);
-        assert_arrays_eq!(expected, filtered, &mut ctx);
+        assert_arrays_eq!(filtered, expected, &mut ctx);
 
         Ok(())
     }
@@ -145,14 +139,11 @@ mod tests {
 
         // Filter that only touches the middle 2 chunks.
         let mask = Mask::from_indices(4096, vec![1024, 1025, 3000]);
-        let filtered = array
-            .filter(mask)?
-            .optimize()?
-            .execute::<PrimitiveArray>(&mut ctx)?;
+        let filtered = array.filter(mask)?.optimize()?;
 
         let expected = PrimitiveArray::from_iter([u16::MAX, u16::MAX, u16::MIN]);
 
-        assert_arrays_eq!(expected, filtered, &mut ctx);
+        assert_arrays_eq!(filtered, expected, &mut ctx);
 
         Ok(())
     }
@@ -172,14 +163,11 @@ mod tests {
 
         // Filter that only touches the middle 2 chunks.
         let mask = Mask::from_indices(4096, vec![1024, 1025, 3000]);
-        let filtered = array
-            .filter(mask)?
-            .optimize()?
-            .execute::<PrimitiveArray>(&mut ctx)?;
+        let filtered = array.filter(mask)?.optimize()?;
 
         let expected = PrimitiveArray::from_iter([u16::MAX, u16::MIN, u16::MIN]);
 
-        assert_arrays_eq!(expected, filtered, &mut ctx);
+        assert_arrays_eq!(filtered, expected, &mut ctx);
 
         Ok(())
     }
@@ -209,14 +197,11 @@ mod tests {
         // Indices 1024 and 1025 fall in chunk 1, and 3000 falls in chunk 2.
         let mask = Mask::from_indices(4096, vec![1024, 1025, 3000]);
 
-        let filtered = sliced
-            .filter(mask)?
-            .optimize()?
-            .execute::<PrimitiveArray>(&mut ctx)?;
+        let filtered = sliced.filter(mask)?.optimize()?;
 
         let expected = PrimitiveArray::from_iter([u16::MAX, u16::MAX, u16::MIN]);
 
-        assert_arrays_eq!(expected, filtered, &mut ctx);
+        assert_arrays_eq!(filtered, expected, &mut ctx);
 
         Ok(())
     }
@@ -246,14 +231,11 @@ mod tests {
         // Filter that touches the first 2 chunks.
         // Logical indices: 0 (was 5, patched), 1 (was 6, value 6), 1025 (was 1030, patched).
         let mask = Mask::from_indices(4091, vec![0, 1, 1025]);
-        let filtered = sliced
-            .filter(mask)?
-            .optimize()?
-            .execute::<PrimitiveArray>(&mut ctx)?;
+        let filtered = sliced.filter(mask)?.optimize()?;
 
         // Expected: 9999 (patched at logical 0), 6 (original at logical 1), 8888 (patched at logical 1025).
         let expected = PrimitiveArray::from_iter([9999u16, 6, 8888]);
-        assert_arrays_eq!(expected, filtered, &mut ctx);
+        assert_arrays_eq!(filtered, expected, &mut ctx);
 
         Ok(())
     }
@@ -285,15 +267,12 @@ mod tests {
         // Patch at 3976 is in chunk 3, patch at 4976 is in chunk 4.
         let mask = Mask::from_indices(5120, vec![3976, 4976, 5119]);
 
-        let filtered = sliced
-            .filter(mask)?
-            .optimize()?
-            .execute::<PrimitiveArray>(&mut ctx)?;
+        let filtered = sliced.filter(mask)?.optimize()?;
 
         // Expected: patch at 3976 (was 5000), patch at 4976 (was 6000), and MIN at 5119.
         let expected = PrimitiveArray::from_iter([u16::MAX, u16::MAX, u16::MIN]);
 
-        assert_arrays_eq!(expected, filtered, &mut ctx);
+        assert_arrays_eq!(filtered, expected, &mut ctx);
 
         Ok(())
     }

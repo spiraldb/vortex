@@ -242,7 +242,7 @@ mod tests {
         // Test creating patches with pre-computed chunk_offsets
         let indices = PrimitiveArray::from_iter([0u32, 500, 1024, 2000]);
         let values = PrimitiveArray::from_iter([10u32, 20, 30, 40]);
-        let chunk_offsets = PrimitiveArray::from_iter([0u32, 2, 3, 4]);
+        let chunk_offsets = PrimitiveArray::from_iter([0u32, 2, 4]);
 
         let patches = Patches::new(
             3072,
@@ -254,7 +254,7 @@ mod tests {
         assert!(patches.chunk_offsets().is_some());
         assert_eq!(patches.chunk_offset_at(0)?, 0);
         assert_eq!(patches.chunk_offset_at(1)?, 2);
-        assert_eq!(patches.chunk_offset_at(2)?, 3);
+        assert_eq!(patches.chunk_offset_at(2)?, 4);
 
         Ok(())
     }
@@ -339,7 +339,7 @@ mod tests {
             NonNullable,
         )
         .into_array();
-        assert_arrays_eq!(expected, actual, &mut ctx);
+        assert_arrays_eq!(actual, expected, &mut ctx);
         assert_eq!(device_patches.n_chunks, 3);
         assert_eq!(device_patches.offset, 1024);
         assert_eq!(device_patches.offset_within_chunk, 0);

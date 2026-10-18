@@ -1012,8 +1012,7 @@ mod test {
                 true, true, false, true, false, true, false, true, true, false, true, false,
             ])
         );
-        let sparse_primitive = sparse.execute::<PrimitiveArray>(&mut ctx).unwrap();
-        assert_arrays_eq!(sparse_primitive, original, &mut ctx);
+        assert_arrays_eq!(sparse, original, &mut ctx);
     }
 
     #[test]

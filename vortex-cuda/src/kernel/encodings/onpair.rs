@@ -1006,7 +1006,7 @@ mod tests {
             .into_host(cuda_ctx.execution_ctx())
             .await?
             .into_array();
-        assert_arrays_eq!(expected, host_result, &mut ctx);
+        assert_arrays_eq!(host_result, expected, &mut ctx);
         Ok(())
     }
 

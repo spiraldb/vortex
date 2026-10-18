@@ -102,16 +102,11 @@ mod tests {
     fn test_canonical_varbin_unsliced(#[case] dtype: DType) {
         let mut ctx = array_session().create_execution_ctx();
         let varbin = VarBinArray::from_iter_nonnull(["foo", "bar", "baz"], dtype.clone());
-        let canonical = varbin
-            .as_array()
-            .clone()
-            .execute::<VarBinViewArray>(&mut ctx)
-            .unwrap();
         let expected = match dtype {
             DType::Utf8(_) => VarBinViewArray::from_iter_str(["foo", "bar", "baz"]),
             _ => VarBinViewArray::from_iter_bin(["foo", "bar", "baz"]),
         };
-        assert_arrays_eq!(canonical, expected, &mut ctx);
+        assert_arrays_eq!(varbin, expected, &mut ctx);
     }
 
     /// Appending a `VarBin` array to a `VarBinViewBuilder` builds views over its bytes directly
@@ -204,11 +199,10 @@ mod tests {
         let varbin =
             VarBinArray::from_iter_nonnull([] as [&str; 0], DType::Utf8(Nullability::NonNullable));
         let mut ctx = array_session().create_execution_ctx();
-        let canonical = varbin
-            .as_array()
-            .clone()
-            .execute::<VarBinViewArray>(&mut ctx)
-            .unwrap();
-        assert_eq!(canonical.len(), 0);
+        assert_arrays_eq!(
+            varbin,
+            VarBinViewArray::from_iter_str([] as [&str; 0]),
+            &mut ctx
+        );
     }
 }

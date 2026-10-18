@@ -946,11 +946,8 @@ mod tests {
             collected.push((idx, is_set));
         });
 
-        assert_eq!(collected.len(), len);
-
-        for (idx, is_set) in collected {
-            assert_eq!(is_set, idx % 2 == 0);
-        }
+        let expected: Vec<_> = (0..len).map(|idx| (idx, idx % 2 == 0)).collect();
+        assert_eq!(collected, expected);
     }
 
     #[rstest]
@@ -971,12 +968,10 @@ mod tests {
             collected.push((idx, is_set));
         });
 
-        assert_eq!(collected.len(), len);
-
-        for (idx, is_set) in collected {
-            // The bits should match the original buffer at positions offset + idx
-            assert_eq!(is_set, (offset + idx).is_multiple_of(2));
-        }
+        let expected: Vec<_> = (0..len)
+            .map(|idx| (idx, (offset + idx).is_multiple_of(2)))
+            .collect();
+        assert_eq!(collected, expected);
     }
 
     #[rstest]
@@ -996,19 +991,10 @@ mod tests {
             collected.push((idx, is_set));
         });
 
-        assert_eq!(collected.len(), len);
-
-        for (idx, is_set) in collected {
-            let bit_position = offset + idx;
-            let byte_index = bit_position / 8;
-            let expected_is_set = byte_index.is_multiple_of(2);
-
-            assert_eq!(
-                is_set, expected_is_set,
-                "Bit mismatch at index {}: expected {} got {}",
-                bit_position, expected_is_set, is_set
-            );
-        }
+        let expected: Vec<_> = (0..len)
+            .map(|idx| (idx, ((offset + idx) / 8).is_multiple_of(2)))
+            .collect();
+        assert_eq!(collected, expected);
     }
 
     #[rstest]

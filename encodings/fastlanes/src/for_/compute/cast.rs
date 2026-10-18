@@ -102,6 +102,11 @@ mod tests {
             casted.dtype(),
             &DType::Primitive(PType::I64, Nullability::Nullable)
         );
+        assert_arrays_eq!(
+            casted,
+            PrimitiveArray::from_option_iter([Some(50i64), None, Some(70), Some(80), None]),
+            &mut SESSION.create_execution_ctx()
+        );
     }
 
     #[rstest]

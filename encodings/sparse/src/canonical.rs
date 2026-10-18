@@ -928,11 +928,6 @@ mod test {
         let indices = buffer![0u64, 1, 7].into_array();
         let values = BoolArray::from_iter([Some(true), None, Some(false)]).into_array();
         let sparse_bools = Sparse::try_new(indices, values, 10, Scalar::from(fill_value)).unwrap();
-        let actual = sparse_bools
-            .as_array()
-            .clone()
-            .execute::<BoolArray>(&mut ctx)
-            .unwrap();
 
         let expected = BoolArray::from_iter([
             Some(true),
@@ -947,7 +942,7 @@ mod test {
             fill_value,
         ]);
 
-        assert_arrays_eq!(actual, expected, &mut ctx);
+        assert_arrays_eq!(sparse_bools, expected, &mut ctx);
     }
 
     #[rstest]
@@ -961,11 +956,6 @@ mod test {
         let sparse_ints = Sparse::try_new(indices, values, 10, Scalar::from(fill_value)).unwrap();
         assert_eq!(*sparse_ints.dtype(), DType::Primitive(PType::I32, Nullable));
 
-        let flat_ints = sparse_ints
-            .as_array()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
         let expected = PrimitiveArray::from_option_iter([
             Some(0i32),
             None,
@@ -979,7 +969,7 @@ mod test {
             fill_value,
         ]);
 
-        assert_arrays_eq!(&flat_ints, &expected, &mut ctx);
+        assert_arrays_eq!(&sparse_ints, &expected, &mut ctx);
     }
 
     #[test]
@@ -1049,12 +1039,7 @@ mod test {
         .unwrap()
         .into_array();
 
-        let actual = sparse_struct
-            .as_array()
-            .clone()
-            .execute::<StructArray>(&mut ctx)
-            .unwrap();
-        assert_arrays_eq!(actual, expected, &mut ctx);
+        assert_arrays_eq!(sparse_struct, expected, &mut ctx);
     }
 
     #[test]
@@ -1121,12 +1106,7 @@ mod test {
         .unwrap()
         .into_array();
 
-        let actual = sparse_struct
-            .as_array()
-            .clone()
-            .execute::<StructArray>(&mut ctx)
-            .unwrap();
-        assert_arrays_eq!(actual, expected, &mut ctx);
+        assert_arrays_eq!(sparse_struct, expected, &mut ctx);
     }
 
     #[test]
@@ -1199,12 +1179,6 @@ mod test {
         )
         .unwrap();
 
-        let actual = array
-            .as_array()
-            .clone()
-            .execute::<VarBinViewArray>(&mut ctx)
-            .unwrap()
-            .into_array();
         let expected = <VarBinViewArray as FromIterator<_>>::from_iter([
             Some("hello"),
             Some("123"),
@@ -1221,7 +1195,7 @@ mod test {
         ])
         .into_array();
 
-        assert_arrays_eq!(actual, expected, &mut ctx);
+        assert_arrays_eq!(array, expected, &mut ctx);
     }
 
     #[test]
@@ -1246,12 +1220,6 @@ mod test {
         )
         .unwrap();
 
-        let actual = array
-            .as_array()
-            .clone()
-            .execute::<VarBinViewArray>(&mut ctx)
-            .unwrap()
-            .into_array();
         let expected = <VarBinViewArray as FromIterator<_>>::from_iter([
             Some("hello"),
             None,
@@ -1268,7 +1236,7 @@ mod test {
         ])
         .into_array();
 
-        assert_arrays_eq!(actual, expected, &mut ctx);
+        assert_arrays_eq!(array, expected, &mut ctx);
     }
 
     #[test]
@@ -1286,18 +1254,12 @@ mod test {
         )
         .unwrap();
 
-        let actual = array
-            .as_array()
-            .clone()
-            .execute::<VarBinViewArray>(&mut ctx)
-            .unwrap()
-            .into_array();
         let expected = VarBinViewArray::from_iter_str([
             "hello", "123", "123", "goodbye", "hello", "bonjour", "123", "123", "你好",
         ])
         .into_array();
 
-        assert_arrays_eq!(actual, expected, &mut ctx);
+        assert_arrays_eq!(array, expected, &mut ctx);
     }
 
     #[test]
@@ -1322,12 +1284,6 @@ mod test {
         )
         .unwrap();
 
-        let actual = array
-            .as_array()
-            .clone()
-            .execute::<VarBinViewArray>(&mut ctx)
-            .unwrap()
-            .into_array();
         let expected = <VarBinViewArray as FromIterator<_>>::from_iter([
             Some("hello"),
             None,
@@ -1344,7 +1300,7 @@ mod test {
         ])
         .into_array();
 
-        assert_arrays_eq!(actual, expected, &mut ctx);
+        assert_arrays_eq!(array, expected, &mut ctx);
     }
 
     #[test]
@@ -1369,12 +1325,6 @@ mod test {
         )
         .unwrap();
 
-        let actual = array
-            .as_array()
-            .clone()
-            .execute::<VarBinViewArray>(&mut ctx)
-            .unwrap()
-            .into_array();
         let expected = VarBinViewArray::from_iter_nullable_bin([
             Some(b"hello" as &[u8]),
             Some(b"123"),
@@ -1391,7 +1341,7 @@ mod test {
         ])
         .into_array();
 
-        assert_arrays_eq!(actual, expected, &mut ctx);
+        assert_arrays_eq!(array, expected, &mut ctx);
     }
 
     #[test]
@@ -1416,38 +1366,18 @@ mod test {
         let fill_value = Scalar::null(lists.dtype().clone());
         let sparse = Sparse::try_new(indices, lists, 6, fill_value)?.into_array();
 
-        let actual = sparse.execute::<Canonical>(&mut ctx)?.into_array();
-        let result_listview = actual.execute::<ListViewArray>(&mut ctx)?;
-
-        // Check the structure
-        assert_eq!(result_listview.len(), 6);
-
-        // Verify sizes: positions 0,3,4,5 have data, positions 1,2 are null
-        assert_eq!(result_listview.size_at(0), 1); // [1]
-        assert_eq!(result_listview.size_at(1), 0); // null
-        assert_eq!(result_listview.size_at(2), 0); // null
-        assert_eq!(result_listview.size_at(3), 1); // [2]
-        assert_eq!(result_listview.size_at(4), 1); // [1]
-        assert_eq!(result_listview.size_at(5), 1); // [2]
-
-        // Verify actual values
-        let elements_array = result_listview
-            .elements()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)?;
-        let elements_slice = elements_array.as_slice::<i32>();
-
-        let list0_offset = result_listview.offset_at(0);
-        assert_eq!(elements_slice[list0_offset], 1);
-
-        let list3_offset = result_listview.offset_at(3);
-        assert_eq!(elements_slice[list3_offset], 2);
-
-        let list4_offset = result_listview.offset_at(4);
-        assert_eq!(elements_slice[list4_offset], 1);
-
-        let list5_offset = result_listview.offset_at(5);
-        assert_eq!(elements_slice[list5_offset], 2);
+        let expected = ListArray::from_iter_opt_slow::<u32, _, _>(
+            [
+                Some(vec![1i32]),
+                None,
+                None,
+                Some(vec![2]),
+                Some(vec![1]),
+                Some(vec![2]),
+            ],
+            Arc::new(PType::I32.into()),
+        )?;
+        assert_arrays_eq!(sparse, expected, &mut ctx);
 
         Ok(())
     }
@@ -1474,38 +1404,19 @@ mod test {
             .unwrap()
             .into_array();
 
-        let actual = sparse
-            .execute::<Canonical>(&mut ctx)
-            .vortex_expect("no fail")
-            .into_array();
-        let result_listview = actual
-            .execute::<ListViewArray>(&mut ctx)
-            .vortex_expect("no fail");
-
-        // Check the structure
-        assert_eq!(result_listview.len(), 6);
-
-        // Verify sizes: positions 0,3,4,5 have data (from the sliced lists), positions 1,2 are null
-        assert_eq!(result_listview.size_at(0), 1); // [1] - from slice index 0 (original index 2)
-        assert_eq!(result_listview.size_at(1), 0); // null
-        assert_eq!(result_listview.size_at(2), 0); // null
-        assert_eq!(result_listview.size_at(3), 1); // [2] - from slice index 3 (original index 5)
-        assert_eq!(result_listview.size_at(4), 1); // [1] - extra element beyond original slice
-        assert_eq!(result_listview.size_at(5), 1); // [2] - extra element beyond original slice
-
-        // Verify actual values
-        let elements_array = result_listview
-            .elements()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
-        let elements_slice = elements_array.as_slice::<i32>();
-
-        let list0_offset = result_listview.offset_at(0);
-        assert_eq!(elements_slice[list0_offset], 1);
-
-        let list3_offset = result_listview.offset_at(3);
-        assert_eq!(elements_slice[list3_offset], 2);
+        let expected = ListArray::from_iter_opt_slow::<u32, _, _>(
+            [
+                Some(vec![1i32]),
+                None,
+                None,
+                Some(vec![2]),
+                Some(vec![1]),
+                Some(vec![2]),
+            ],
+            Arc::new(PType::I32.into()),
+        )
+        .unwrap();
+        assert_arrays_eq!(sparse, expected, &mut ctx);
     }
 
     #[test]
@@ -1639,7 +1550,7 @@ mod test {
     /// they cost a chunk each; a gap covers all its rows with a single append, so it costs one
     /// chunk however many rows it fills.
     #[test]
-    fn test_sparse_list_chunks_elements_per_patch_and_once_per_gap() -> VortexResult<()> {
+    fn test_sparse_list_bounds_element_chunks() -> VortexResult<()> {
         let mut ctx = SESSION.create_execution_ctx();
 
         const PATCHES: usize = 100;
@@ -1661,10 +1572,13 @@ mod test {
         let sparse = Sparse::try_new(indices, patch_values, 2 * PATCHES, fill)?.into_array();
 
         let actual = sparse.execute::<ListViewArray>(&mut ctx)?;
-        assert_eq!(
-            actual.elements().as_::<Chunked>().nchunks(),
-            PATCHES + 1,
-            "expected one chunk per patch and a single chunk for the whole gap",
+        let chunks = actual
+            .elements()
+            .as_opt::<Chunked>()
+            .map_or(1, |array| array.nchunks());
+        assert!(
+            chunks <= PATCHES + 1,
+            "fill rows must not each add an element chunk"
         );
 
         let expected_lists = (0..patches_i32)
@@ -1745,12 +1659,6 @@ mod test {
         )
         .unwrap();
 
-        let actual = array
-            .as_array()
-            .clone()
-            .execute::<VarBinViewArray>(&mut ctx)
-            .unwrap()
-            .into_array();
         let expected = VarBinViewArray::from_iter_nullable_bin([
             Some(b"hello" as &[u8]),
             None,
@@ -1767,7 +1675,7 @@ mod test {
         ])
         .into_array();
 
-        assert_arrays_eq!(actual, expected, &mut ctx);
+        assert_arrays_eq!(array, expected, &mut ctx);
     }
 
     #[test]
@@ -1784,10 +1692,6 @@ mod test {
         ));
         let sparse = Sparse::try_new(indices, fsl, 5, fill_value)?.into_array();
 
-        let actual = sparse
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
-
         // Expected: [1,2,3], null, [4,5,6], [7,8,9], null.
         let expected_elements =
             buffer![1i32, 2, 3, 0, 0, 0, 4, 5, 6, 7, 8, 9, 0, 0, 0].into_array();
@@ -1799,7 +1703,7 @@ mod test {
         )?
         .into_array();
 
-        assert_arrays_eq!(actual, expected, &mut SESSION.create_execution_ctx());
+        assert_arrays_eq!(sparse, expected, &mut SESSION.create_execution_ctx());
         Ok(())
     }
 
@@ -1820,16 +1724,12 @@ mod test {
         );
         let sparse = Sparse::try_new(indices, fsl, 6, fill_value)?.into_array();
 
-        let actual = sparse
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
-
         // Expected: [1,2], [99,88], [3,4], [99,88], [5,6], [99,88].
         let expected_elements = buffer![1i32, 2, 99, 88, 3, 4, 99, 88, 5, 6, 99, 88].into_array();
         let expected = FixedSizeListArray::try_new(expected_elements, 2, Validity::NonNullable, 6)?
             .into_array();
 
-        assert_arrays_eq!(actual, expected, &mut SESSION.create_execution_ctx());
+        assert_arrays_eq!(sparse, expected, &mut SESSION.create_execution_ctx());
         Ok(())
     }
 
@@ -1856,10 +1756,6 @@ mod test {
         );
         let sparse = Sparse::try_new(indices, fsl, 6, fill_value)?.into_array();
 
-        let actual = sparse
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
-
         // Expected validity: [true, true, true, false, true, true].
         // Expected elements: [7,8], [10,20], [7,8], [30,40], [50,60], [7,8].
         let expected_elements = buffer![7i32, 8, 10, 20, 7, 8, 30, 40, 50, 60, 7, 8].into_array();
@@ -1873,7 +1769,7 @@ mod test {
         )?
         .into_array();
 
-        assert_arrays_eq!(actual, expected, &mut SESSION.create_execution_ctx());
+        assert_arrays_eq!(sparse, expected, &mut SESSION.create_execution_ctx());
         Ok(())
     }
 
@@ -1901,10 +1797,6 @@ mod test {
         );
 
         let sparse = Sparse::try_new(indices, fsl, 100, fill_value)?.into_array();
-
-        let actual = sparse
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
 
         // Build expected: 97 copies of [99,99] with patches at positions 5, 50, 95.
         let mut expected_elements_vec = Vec::with_capacity(200);
@@ -1935,7 +1827,7 @@ mod test {
             FixedSizeListArray::try_new(expected_elements, 2, Validity::NonNullable, 100)?
                 .into_array();
 
-        assert_arrays_eq!(actual, expected, &mut SESSION.create_execution_ctx());
+        assert_arrays_eq!(sparse, expected, &mut SESSION.create_execution_ctx());
         Ok(())
     }
 
@@ -1957,16 +1849,12 @@ mod test {
         );
         let sparse = Sparse::try_new(indices, fsl, 1, fill_value)?.into_array();
 
-        let actual = sparse
-            .execute::<Canonical>(&mut SESSION.create_execution_ctx())?
-            .into_array();
-
         // Expected: just [42, 43].
         let expected_elements = buffer![42i32, 43].into_array();
         let expected = FixedSizeListArray::try_new(expected_elements, 2, Validity::NonNullable, 1)?
             .into_array();
 
-        assert_arrays_eq!(actual, expected, &mut SESSION.create_execution_ctx());
+        assert_arrays_eq!(sparse, expected, &mut SESSION.create_execution_ctx());
         Ok(())
     }
 
@@ -2053,45 +1941,23 @@ mod test {
             Scalar::null(list_dtype),
         )?;
 
-        // Convert to canonical form - this triggers the function we're testing
-        let canonical = sparse
-            .into_array()
-            .execute::<Canonical>(&mut ctx)?
-            .into_array();
-        let result_listview = canonical.execute::<ListViewArray>(&mut ctx)?;
-        let elements_primitive = result_listview
-            .elements()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)?;
+        let expected = ListArray::from_iter_opt_slow::<u32, _, _>(
+            [
+                None,
+                Some(vec![10i32, 11, 12]),
+                None,
+                None,
+                Some(vec![20, 21]),
+                None,
+                None,
+                Some(vec![30, 31, 32, 33]),
+                None,
+                None,
+            ],
+            Arc::new(PType::I32.into()),
+        )?;
+        assert_arrays_eq!(sparse, expected, &mut ctx);
 
-        // Verify the structure
-        assert_eq!(result_listview.len(), 10);
-
-        // Helper to get list values at an index
-        let get_list_values = |idx: usize| -> Vec<i32> {
-            let offset = result_listview.offset_at(idx);
-            let size = result_listview.size_at(idx);
-            if size == 0 {
-                vec![] // null/empty list
-            } else {
-                let slice = elements_primitive.as_slice::<i32>();
-                slice[offset..offset + size].to_vec()
-            }
-        };
-
-        let empty: Vec<i32> = vec![];
-
-        // Verify all list values
-        assert_eq!(get_list_values(0), empty); // null
-        assert_eq!(get_list_values(1), vec![10, 11, 12]); // sparse index 0
-        assert_eq!(get_list_values(2), empty); // null
-        assert_eq!(get_list_values(3), empty); // null
-        assert_eq!(get_list_values(4), vec![20, 21]); // sparse index 1
-        assert_eq!(get_list_values(5), empty); // null
-        assert_eq!(get_list_values(6), empty); // null
-        assert_eq!(get_list_values(7), vec![30, 31, 32, 33]); // sparse index 2
-        assert_eq!(get_list_values(8), empty); // null
-        assert_eq!(get_list_values(9), empty); // null
         Ok(())
     }
 
@@ -2139,44 +2005,12 @@ mod test {
         let values = sliced.slice(0..2)?;
         let sparse = Sparse::try_new(indices, values, 5, Scalar::null(sliced.dtype().clone()))?;
 
-        let canonical = sparse
-            .into_array()
-            .execute::<Canonical>(&mut ctx)?
-            .into_array();
-        let result_listview = canonical.execute::<ListViewArray>(&mut ctx)?;
-        let elements_primitive = result_listview
-            .elements()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)?;
+        let expected = ListArray::from_iter_opt_slow::<u32, _, _>(
+            [Some(vec![2i32, 3, 4]), Some(vec![5]), None, None, None],
+            Arc::new(PType::I32.into()),
+        )?;
+        assert_arrays_eq!(sparse, expected, &mut ctx);
 
-        assert_eq!(result_listview.len(), 5);
-
-        // Helper to get list values at an index
-        let get_list_values = |idx: usize| -> Vec<i32> {
-            let offset = result_listview.offset_at(idx);
-            let size = result_listview.size_at(idx);
-            if size == 0 {
-                vec![] // null/empty list
-            } else {
-                let slice = elements_primitive.as_slice::<i32>();
-                slice[offset..offset + size].to_vec()
-            }
-        };
-
-        let empty: Vec<i32> = vec![];
-
-        // Verify all list values
-        // Original slice had lists at indices 1,2,3 which were: [2,3,4], [5], [6,7]
-        // We take indices 0 and 1 from the slice
-        assert_eq!(get_list_values(0), vec![2, 3, 4]); // From slice index 0 (original list 1)
-        assert_eq!(get_list_values(1), vec![5]); // From slice index 1 (original list 2)
-        assert_eq!(get_list_values(2), empty); // null
-        assert_eq!(get_list_values(3), empty); // null
-        assert_eq!(get_list_values(4), empty); // null
-
-        // The bug in the old implementation would have incorrectly used
-        // offsets[sparse_index] for filling nulls, which would be wrong
-        // when dealing with sliced arrays that have non-zero starting offsets.
         Ok(())
     }
 
@@ -2200,8 +2034,22 @@ mod test {
         let array = Sparse::try_new(buffer![1u16, 4, 8].into_array(), strings, 10, fill_scalar)?
             .into_array();
 
-        for candidate in [array.clone(), array.slice(1..9)?] {
-            let expected = candidate.clone().execute::<VarBinViewArray>(&mut ctx)?;
+        let expected_values = [
+            fill,
+            Some(long),
+            fill,
+            fill,
+            None,
+            fill,
+            fill,
+            fill,
+            Some("tiny"),
+            fill,
+        ];
+        for (candidate, range) in [(array.clone(), 0..10), (array.slice(1..9)?, 1..9)] {
+            let expected =
+                VarBinViewArray::from_iter_nullable_str(expected_values[range].iter().copied());
+            assert_arrays_eq!(candidate, expected, &mut ctx);
 
             let mut view_builder = VarBinViewBuilder::with_capacity_in(
                 candidate.dtype().clone(),

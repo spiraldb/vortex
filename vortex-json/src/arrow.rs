@@ -190,14 +190,13 @@ mod tests {
         .into_array();
         let ext_dtype = ExtDType::<Json>::try_new(EmptyMetadata, storage.dtype().clone())?.erased();
 
-        dbg!(&ext_dtype);
         let array = ExtensionArray::new(ext_dtype, storage).into_array();
 
         let field = session.arrow().to_arrow_field("data", array.dtype())?;
         assert_eq!(field.extension_type_name(), Some(ArrowJson::NAME));
+        assert_eq!(field.name(), "data");
+        assert!(!field.is_nullable());
         ArrowJson::try_new_from_field_metadata(field.data_type(), field.metadata())?;
-
-        dbg!(&field);
 
         let exported = session.arrow().execute_arrow(
             array,
@@ -207,11 +206,11 @@ mod tests {
 
         assert!(exported.data_type().is_string());
 
-        dbg!(exported.data_type());
-
         let strings = exported.as_string_view();
-        assert_eq!(strings.value(0), "{\"id\":1}");
-        assert_eq!(strings.value(1), "{\"id\":2}");
+        assert_eq!(
+            strings.iter().collect::<Vec<_>>(),
+            [Some("{\"id\":1}"), Some("{\"id\":2}")]
+        );
         Ok(())
     }
 
@@ -231,6 +230,10 @@ mod tests {
             .as_extension_opt()
             .vortex_expect("expected JSON extension dtype");
         assert!(ext_dtype.is::<Json>());
+        assert_eq!(
+            ext_dtype.storage_dtype(),
+            &vortex_array::dtype::DType::Utf8(Nullability::NonNullable)
+        );
 
         let exported = session.arrow().execute_arrow(
             imported,
@@ -238,8 +241,10 @@ mod tests {
             &mut session.create_execution_ctx(),
         )?;
         let strings = exported.as_string::<i32>();
-        assert_eq!(strings.value(0), "{\"id\":1}");
-        assert_eq!(strings.value(1), "{\"id\":2}");
+        assert_eq!(
+            strings.iter().collect::<Vec<_>>(),
+            [Some("{\"id\":1}"), Some("{\"id\":2}")]
+        );
         Ok(())
     }
 
@@ -268,6 +273,17 @@ mod tests {
                 Some(&field),
                 ctx,
             )?;
+            assert_eq!(
+                exported
+                    .as_string_view()
+                    .iter()
+                    .map(|v| v.map(str::to_owned))
+                    .collect::<Vec<_>>(),
+                [
+                    Some(format!("{{\"id\":{:>32}}}", 0)),
+                    Some(format!("{{\"id\":{:>32}}}", 48))
+                ]
+            );
             Ok(exported
                 .as_string_view()
                 .data_buffers()

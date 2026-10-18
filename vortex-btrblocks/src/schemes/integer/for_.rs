@@ -265,7 +265,11 @@ mod tests {
             |id: &ArrayId| (allow_v1 && *id == for_v1_id()) || (allow_v2 && *id == for_v2_id());
         let refined = scheme.refine(&allowed);
         assert_eq!(refined.id(), scheme.id());
-        let expected: &dyn Scheme = if expect_v2 { &FOR_V2 } else { &FOR_V1 };
-        assert_eq!(refined.produced_encodings(), expected.produced_encodings());
+        let expected = if expect_v2 {
+            vec![for_v1_id(), for_v2_id()]
+        } else {
+            vec![for_v1_id()]
+        };
+        assert_eq!(refined.produced_encodings(), expected);
     }
 }

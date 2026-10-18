@@ -1651,19 +1651,19 @@ fn expression_pushes_onto_values_less_nullable_than_the_take() -> VortexResult<(
 fn zoned_pruning_plan_with_new_zones_proves_them_again() -> VortexResult<()> {
     let dtype = primitive(PType::I32, Nullability::NonNullable);
     let (max, zones_dtype) = max_zones_dtype(&dtype)?;
-    let zones = make_plan(flat(2, zones_dtype, 1))?;
+    let zones = make_plan(flat(2, zones_dtype.clone(), 1))?;
     let source = ZonedPlan::new(
         make_plan(flat(5, dtype.clone(), 0))?,
-        zones.clone(),
+        zones,
         3,
-        vec![max].into(),
+        vec![max.clone()].into(),
     )
     .into_plan();
     let falsifier = gt(root(), lit(5_i32))
         .bind(&dtype)?
         .falsify(&SESSION)?
         .ok_or_else(|| vortex_err!("filter has no falsifier"))?;
-    let pruning = optimize(EvalPlan::try_new(falsifier, source)?.into_plan())?;
+    let pruning = optimize(EvalPlan::try_new(falsifier.clone(), source)?.into_plan())?;
     let pruning = pruning
         .as_opt::<Zoned>()
         .ok_or_else(|| vortex_err!("predicate did not become a pruning plan"))?;
@@ -1671,11 +1671,32 @@ fn zoned_pruning_plan_with_new_zones_proves_them_again() -> VortexResult<()> {
         .pruned_zones()
         .ok_or_else(|| vortex_err!("pruning plan has no proof"))?;
 
-    let rebuilt = pruning.clone().into_plan().with_children(vec![zones])?;
+    let zone_map = |bounds: [i32; 2]| {
+        let table = StructArray::from_fields(&[(
+            max.to_string().as_str(),
+            PrimitiveArray::from_option_iter(bounds.map(Some)).into_array(),
+        )])?;
+        ZoneMap::try_new(dtype.clone(), table, vec![max.clone()].into(), 3, 5)
+    };
+    let original = Mask::from_iter([true, false]);
+    assert_eq!(
+        proof.init(zone_map([3, 9])?, &falsifier, &SESSION)?,
+        original
+    );
+
+    let new_zones = make_plan(flat(2, zones_dtype, 2))?;
+    let rebuilt = pruning.clone().into_plan().with_children(vec![new_zones])?;
     let rebuilt_proof = rebuilt
         .as_opt::<Zoned>()
         .and_then(|zoned| zoned.pruned_zones())
         .ok_or_else(|| vortex_err!("rebuilt plan has no proof"))?;
-    assert!(!Arc::ptr_eq(proof, rebuilt_proof));
+    assert!(rebuilt_proof.get(&falsifier, &SESSION)?.is_none());
+    let updated = Mask::from_iter([false, true]);
+    assert_eq!(
+        rebuilt_proof.init(zone_map([9, 3])?, &falsifier, &SESSION)?,
+        updated
+    );
+    assert_eq!(rebuilt_proof.get(&falsifier, &SESSION)?, Some(updated));
+    assert_eq!(proof.get(&falsifier, &SESSION)?, Some(original));
     Ok(())
 }

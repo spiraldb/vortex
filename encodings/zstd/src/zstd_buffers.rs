@@ -637,9 +637,8 @@ mod tests {
         assert_eq!(compressed.dtype(), input.dtype());
 
         let mut ctx = array_session().create_execution_ctx();
-        let decompressed = compressed.into_array().execute::<ArrayRef>(&mut ctx)?;
 
-        assert_arrays_eq!(input, decompressed, &mut ctx);
+        assert_arrays_eq!(compressed, input, &mut ctx);
         Ok(())
     }
 
@@ -670,8 +669,7 @@ mod tests {
         let decoded = parts.decode(&dtype, len, &ReadContext::new(array_ctx.to_ids()), &session)?;
 
         let mut ctx = session.create_execution_ctx();
-        let decoded = decoded.execute::<ArrayRef>(&mut ctx)?;
-        assert_arrays_eq!(input, decoded, &mut ctx);
+        assert_arrays_eq!(decoded, input, &mut ctx);
         Ok(())
     }
 
@@ -682,7 +680,10 @@ mod tests {
 
         let compressed = ZstdBuffers::compress(&input, 3, &array_session())?;
 
-        assert!(!compressed.statistics().get(Stat::Min).is_absent());
+        assert_eq!(
+            compressed.statistics().get(Stat::Min),
+            Precision::exact(0i32)
+        );
         Ok(())
     }
 

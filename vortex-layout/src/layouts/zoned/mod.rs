@@ -507,8 +507,6 @@ impl SerializeMetadata for LegacyStatsMetadata {
 
 #[cfg(test)]
 mod tests {
-    use std::panic;
-
     use rstest::rstest;
     use vortex_array::aggregate_fn::AggregateFnRef;
     use vortex_array::aggregate_fn::AggregateFnVTableExt;
@@ -609,16 +607,6 @@ mod tests {
     #[case::malformed_proto(vec![ZONED_METADATA_PROTO_VERSION, 0])]
     fn test_deserialize_short_metadata_errors(#[case] metadata: Vec<u8>) {
         assert!(ZonedMetadata::deserialize(&metadata).is_err());
-    }
-
-    #[test]
-    fn test_deserialize_short_metadata_returns_error_not_panic() {
-        let result = panic::catch_unwind(|| ZonedMetadata::deserialize(&[]));
-        assert!(
-            result.is_ok(),
-            "deserialize should return an error, not panic"
-        );
-        assert!(result.unwrap().is_err());
     }
 
     #[test]

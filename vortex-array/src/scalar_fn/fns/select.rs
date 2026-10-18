@@ -356,7 +356,7 @@ mod tests {
     use crate::arrays::Constant;
     use crate::arrays::ConstantArray;
     use crate::arrays::ScalarFnArray;
-    use crate::arrays::struct_::StructArrayExt;
+    use crate::assert_arrays_eq;
     use crate::dtype::DType;
     use crate::dtype::FieldName;
     use crate::dtype::FieldNames;
@@ -387,14 +387,14 @@ mod tests {
         let mut ctx = array_session().create_execution_ctx();
         let st = test_array();
         let select = select(vec![FieldName::from("a")], root());
-        let selected = st
-            .into_array()
-            .apply(&select)
-            .unwrap()
-            .execute::<StructArray>(&mut ctx)
-            .unwrap();
-        let selected_names = selected.names().clone();
+        let selected = st.into_array().apply(&select).unwrap();
+        let selected_names = selected.dtype().as_struct_fields().names();
         assert_eq!(selected_names.as_ref(), &["a"]);
+        assert_arrays_eq!(
+            selected,
+            StructArray::from_fields(&[("a", buffer![0i32, 1, 2].into_array())]).unwrap(),
+            &mut ctx
+        );
     }
 
     #[test]
@@ -402,14 +402,14 @@ mod tests {
         let mut ctx = array_session().create_execution_ctx();
         let st = test_array();
         let select = select_exclude(vec![FieldName::from("a")], root());
-        let selected = st
-            .into_array()
-            .apply(&select)
-            .unwrap()
-            .execute::<StructArray>(&mut ctx)
-            .unwrap();
-        let selected_names = selected.names().clone();
+        let selected = st.into_array().apply(&select).unwrap();
+        let selected_names = selected.dtype().as_struct_fields().names();
         assert_eq!(selected_names.as_ref(), &["b"]);
+        assert_arrays_eq!(
+            selected,
+            StructArray::from_fields(&[("b", buffer![4i32, 5, 6].into_array())]).unwrap(),
+            &mut ctx
+        );
     }
 
     #[test]
@@ -461,18 +461,14 @@ mod tests {
     #[test]
     fn test_as_include_names() {
         let field_names = FieldNames::from(["a", "b", "c"]);
-        let include = select(["a"], root());
-        let exclude = select_exclude(["b", "c"], root());
-        assert_eq!(
-            &include
-                .as_::<Select>()
-                .normalize_to_included_fields(&field_names)
-                .unwrap(),
-            &exclude
-                .as_::<Select>()
-                .normalize_to_included_fields(&field_names)
-                .unwrap()
-        );
+        for expr in [select(["a"], root()), select_exclude(["b", "c"], root())] {
+            assert_eq!(
+                expr.as_::<Select>()
+                    .normalize_to_included_fields(&field_names)
+                    .unwrap(),
+                FieldNames::from(["a"])
+            );
+        }
     }
 
     #[test]
@@ -525,7 +521,7 @@ mod tests {
 
         let result = e.bind(&dtype).unwrap().optimize_recursive().unwrap();
 
-        assert!(result.dtype().is_nullable());
+        assert_eq!(result.dtype(), &dtype);
     }
 
     #[test]
@@ -548,5 +544,9 @@ mod tests {
         assert!(result_dtype.is_nullable());
         let fields = result_dtype.as_struct_fields_opt().unwrap();
         assert_eq!(fields.names().as_ref(), &["a", "b"]);
+        assert_eq!(
+            result_dtype,
+            &DType::struct_([("a", I32), ("b", I32)], Nullable)
+        );
     }
 }
