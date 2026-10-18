@@ -296,7 +296,7 @@ pub(crate) fn number_type_from_ptype(ptype: PType) -> NumberType {
     }
 }
 
-fn collect_valid(
+pub(crate) fn collect_valid(
     parray: ArrayView<'_, Primitive>,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<PrimitiveArray> {

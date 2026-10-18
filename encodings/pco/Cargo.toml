@@ -25,12 +25,19 @@ vortex-mask = { workspace = true }
 vortex-session = { workspace = true }
 
 [dev-dependencies]
+arrow-array = { workspace = true }
+arrow-schema = { workspace = true }
 divan = { workspace = true }
 mimalloc = { workspace = true }
+parquet = { workspace = true }
 rstest = { workspace = true }
 vortex-array = { workspace = true, features = ["_test-harness"] }
 vortex-arrow = { workspace = true }
 
 [[bench]]
 name = "scalar"
+harness = false
+
+[[bench]]
+name = "pco2"
 harness = false

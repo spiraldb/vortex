@@ -20,6 +20,7 @@
 
 mod array;
 mod compute;
+pub mod pco2;
 mod probe;
 mod rules;
 mod slice;
