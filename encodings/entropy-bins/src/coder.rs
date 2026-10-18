@@ -39,7 +39,7 @@ pub const BLOCK_VALUES: usize = 1024;
 /// use larger blocks, up to this.
 pub const MAX_BLOCK_VALUES: usize = 16384;
 /// Values per chunk sharing one set of bins.
-pub const CHUNK_VALUES: usize = 1 << 18;
+pub const CHUNK_VALUES: usize = 1 << 16;
 /// Interleaved tANS lanes.
 pub(crate) const LANES: usize = 16;
 /// Largest row distance a block may code differences against.
@@ -566,9 +566,13 @@ fn encode_ids(t: &IdTable, ids: &[u8], out: &mut Vec<u8>) -> VortexResult<()> {
 /// Estimated bits per value when bins trained on `train` encode `test`. A test value outside
 /// every trained bin costs a full-range escape, so data whose support drifts (sorted, trending)
 /// is not mistaken for data that compresses.
-pub(crate) fn held_out_bits(train: &[u64], test: &[u64], level: usize) -> VortexResult<f64> {
+pub(crate) fn held_out_bits(
+    train: &[u64],
+    test: &[u64],
+    level: usize,
+) -> VortexResult<(f64, usize)> {
     if test.is_empty() {
-        return Ok(0.0);
+        return Ok((0.0, 1));
     }
     let chunk = train_bins(train, level)?;
     let total_weight = f64::from(chunk.weights.iter().sum::<u32>().max(1));
@@ -588,5 +592,5 @@ pub(crate) fn held_out_bits(train: &[u64], test: &[u64], level: usize) -> Vortex
             None => escape,
         })
         .sum();
-    Ok(bits / test.len() as f64)
+    Ok((bits / test.len() as f64, n_bins))
 }

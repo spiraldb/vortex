@@ -1,7 +1,7 @@
 # Vortex EntropyBins
 
 A leaf encoding for integers. Each value is split into a bin id and an offset inside that bin,
-using the bins pco's optimizer trains for every chunk of 2^18 values. Ids are entropy-coded with
+using the bins pco's optimizer trains for every chunk of 2^16 values. Ids are entropy-coded with
 16-lane interleaved tANS; offsets are bit-packed in row order at their bin's width. Values are
 stored in independently decodable blocks of 1K to 16K rows.
 
@@ -48,8 +48,8 @@ dominated by sparse access.
 | Dial | Trade-off measured | FAST | BALANCED | SMALLEST |
 |---|---|---|---|---|
 | `max_block_values` | Each doubling halves the remaining per-block bytes and doubles one-off random access. Dumped columns, all blocks forced: 1K → 4K → 16K is −1.35% / −1.69% bytes (64-bit) and −9.7% / −12.2% (narrow); random access 0.7 → 2.4 → 9.4 µs. Decode speed is flat. | 1K | 4K | 16K |
-| `larger_block_gain_percent` | How much smaller the largest allowed block must make an array before the planner leaves 1K blocks. | 0 | 15 | 1 |
-| `narrow_word_gain_percent` | 8-bit refill words save ~8 B per block (−0.42% 64-bit, −1.9% narrow) for a 2–5% slower decode. | never | ≥ 1% | always |
+| `larger_block_gain_percent` | How much smaller the largest allowed block must make an array before the planner leaves 1K blocks. Corpus leaves, BALANCED at 15% (mostly 1K–2K blocks) vs 0% (4K): 4K is 1.7% smaller overall and 6.1% on low-entropy leaves, and scans 14% faster; an isolated row costs 2.1 µs instead of 0.8. | 0 | 0 | 0 |
+| `narrow_word_gain_percent` | 8-bit refill words save ~8 B per block; at 4K–16K blocks that is ~0.5% of bytes for 6–9% slower scans. | never | never | always |
 | `lags` | Each lag tried costs one estimate when compressing. Lag 0 and 1 cover most columns; lags 2–8 serve interleaved series. | 0, 1 | 0–4, 8 | 0–4, 8 |
 | `level` | pco level used to train bins. Level 4: +8.7% / +12% bytes for 5–14% faster encodes; level 10: −0.2% (64-bit), +1.4% (narrow). | 8 | 8 | 8 |
 | `min_gain_percent` (scheme) | How much the scheme must beat the cascade's other choices. 10 / 25 / 40%: 64-bit 6.32 / 6.11 / 5.98x at 7.6 / 8.1 / 8.4 GB/s decode. | 25 | 10 | 0 |
@@ -65,7 +65,7 @@ Kept, with what each was measured against:
 | Choice | Alternatives measured |
 |---|---|
 | pco's bins, at most 64 per chunk | 32 bins: +2.3% bytes. 128 bins: −0.43% (almost all one Dict-shaped column) but ids no longer fit the 64-entry vector tables. |
-| 2^18 values per chunk | 2^16: −0.4% (64-bit), flat on narrow; 2^20: +0.9% / +2.6%. Not worth a per-array setting. |
+| 2^16 values per chunk | Against 2^18 on the corpus leaves: −0.3% overall and −2.5% on low-entropy leaves (more local bins), scans unchanged. 2^14 gains a little more but leaves 16K-value blocks alone in their chunk, which stops the four-block lockstep decode (−22% scan). Not worth a per-array setting. |
 | tANS with 16 lanes and state log ≤ 7 | Decode tables fit two registers. A per-chunk state log saves 0.02% / 0.19%. |
 | Free initial lane state (FSE_initCState2) | −0.28% / −0.48%, no decode cost. |
 | 3-bit per-lane stop field | A wider field saves at most 0.04% / 0.45%. |

@@ -373,7 +373,7 @@ impl EntropyBins {
         vortex_ensure!(ptype.is_int(), "entropy bins encode integers, got {ptype}");
         let n = parray.len();
         let units = sample_units(parray);
-        let mut best: Option<(usize, usize)> = None;
+        let mut best: Option<(usize, usize, usize)> = None;
         // A pco estimate per lag dominated planning. A cheap bucket-entropy estimate ranks the
         // nonzero lags; pco then scores lag 0 and the best of them. On the corpus this keeps the
         // chosen sizes within 0.06% of scoring every lag, for 2.4x faster planning; ranking alone
@@ -391,13 +391,14 @@ impl EntropyBins {
             if lag != 0 && Some(lag) != best_lag {
                 continue;
             }
-            let coded = estimate_coded(&units, n, ptype, config.level, lag)?;
-            if best.is_none_or(|(_, b)| coded < b) {
-                best = Some((lag, coded));
+            let (coded, n_bins) = estimate_coded(&units, n, ptype, config.level, lag)?;
+            if best.is_none_or(|(_, b, _)| coded < b) {
+                best = Some((lag, coded, n_bins));
             }
         }
-        let (lag, coded) = best.ok_or_else(|| vortex_err!("no lags to plan"))?;
-        let fixed = TAIL_PADDING + CHUNK_METADATA_BYTES * n.div_ceil(CHUNK_VALUES);
+        let (lag, coded, n_bins) = best.ok_or_else(|| vortex_err!("no lags to plan"))?;
+        let fixed = TAIL_PADDING
+            + (CHUNK_FIXED_BYTES + n_bins * BIN_METADATA_BYTES) * n.div_ceil(CHUNK_VALUES);
         let total = |block_values: usize| {
             let n_blocks = n.div_ceil(block_values);
             coded + fixed + n_blocks * (PER_BLOCK_BYTES + lag * ptype.byte_width())
@@ -455,13 +456,16 @@ pub struct EntropyBinsConfig {
 }
 
 impl EntropyBinsConfig {
-    /// The default: blocks up to 4096 values and 8-bit words only where they clearly pay off.
+    /// The default: 4096-value blocks and 16-bit words. Over the corpus leaves this scans 9-12%
+    /// faster than 1024-value blocks and is smaller (per-block overhead is up to 15% of a
+    /// low-entropy array's bytes), for ~2 us instead of ~0.7 us per isolated row. 8-bit words
+    /// would save another ~0.5% for 6-9% slower scans.
     pub const BALANCED: Self = Self {
         level: 8,
         lags: &[0, 1, 2, 3, 4, 8],
         max_block_values: 4 * BLOCK_VALUES,
-        larger_block_gain_percent: 15,
-        narrow_word_gain_percent: Some(1),
+        larger_block_gain_percent: 0,
+        narrow_word_gain_percent: None,
     };
 
     /// Fastest decode and random access: 1024-value blocks, 16-bit words, lag 0 or 1 only.
@@ -473,13 +477,14 @@ impl EntropyBinsConfig {
         narrow_word_gain_percent: None,
     };
 
-    /// Smallest output: blocks up to [`MAX_BLOCK_VALUES`] and 8-bit words wherever they save
-    /// anything, at up to 16x the random-access cost of 1024-value blocks.
+    /// Smallest output: [`MAX_BLOCK_VALUES`]-value blocks and 8-bit words wherever they save
+    /// anything. Scans as fast as BALANCED with 16-bit words (6-9% slower with 8-bit ones);
+    /// an isolated row costs ~7 us.
     pub const SMALLEST: Self = Self {
         level: 8,
         lags: &[0, 1, 2, 3, 4, 8],
         max_block_values: MAX_BLOCK_VALUES,
-        larger_block_gain_percent: 1,
+        larger_block_gain_percent: 0,
         narrow_word_gain_percent: Some(0),
     };
 }
@@ -532,8 +537,10 @@ pub struct EntropyBinsPlan {
 /// field, part-filled lane words and the block's offset.
 const PER_BLOCK_BYTES: usize = 37;
 
-/// Bytes budgeted for one chunk's serialized bins: up to 64 bins at about 14 bytes each.
-const CHUNK_METADATA_BYTES: usize = 64 * 14;
+/// Serialized bytes per chunk besides its bins (counts and the table log).
+const CHUNK_FIXED_BYTES: usize = 8;
+/// Serialized bytes per bin, generously: a lower-bound gap, a width and a weight.
+const BIN_METADATA_BYTES: usize = 8;
 
 /// Measured bytes per block that 8-bit refill words save over 16-bit ones.
 const NARROW_WORD_SAVING_BYTES: usize = 8;
@@ -566,14 +573,14 @@ fn sample_units(parray: ArrayView<'_, Primitive>) -> Vec<Vec<u64>> {
     })
 }
 
-/// The estimated bytes of the coded ids and offsets alone.
+/// The estimated bytes of the coded ids and offsets alone, and the number of bins trained.
 fn estimate_coded(
     units: &[Vec<u64>],
     n: usize,
     ptype: PType,
     level: usize,
     lag: usize,
-) -> VortexResult<usize> {
+) -> VortexResult<(usize, usize)> {
     let transform = Transform::new(ptype.is_signed_int(), lag)?;
     let (mut train, mut test) = (Vec::new(), Vec::new());
     for (i, unit) in units.iter().enumerate() {
@@ -583,10 +590,10 @@ fn estimate_coded(
     if test.is_empty() {
         test.clone_from(&train);
     }
-    let bits = held_out_bits(&train, &test, level)?;
+    let (bits, n_bins) = held_out_bits(&train, &test, level)?;
     // A size estimate: rounding the fractional bytes down is fine.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    Ok((bits * n as f64 / 8.0) as usize)
+    Ok(((bits * n as f64 / 8.0) as usize, n_bins))
 }
 
 /// A cheap order-0 estimate of bits per value for ranking lags: the entropy of each latent's

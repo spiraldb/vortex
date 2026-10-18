@@ -1,0 +1,20 @@
+all leaves: 22.6M values, chunk 2^14
+   1024 values, 16-bit words     22.390 MB  100.9%  scan  1235 Mv/s  lookup   0.71 us
+   1024 values,  8-bit words     22.204 MB  100.0%  scan  1158 Mv/s  lookup   0.71 us
+   2048 values, 16-bit words     22.039 MB   99.3%  scan  1316 Mv/s  lookup   1.23 us
+   2048 values,  8-bit words     21.945 MB   98.9%  scan  1215 Mv/s  lookup   1.26 us
+   4096 values, 16-bit words     21.862 MB   98.5%  scan  1338 Mv/s  lookup   2.18 us
+   4096 values,  8-bit words     21.815 MB   98.3%  scan  1256 Mv/s  lookup   2.22 us
+  16384 values, 16-bit words     21.729 MB   97.9%  scan  1095 Mv/s  lookup   6.38 us
+  16384 values,  8-bit words     21.716 MB   97.8%  scan  1049 Mv/s  lookup   6.74 us
+  BALANCED planner               22.200 MB  100.0%  scan  1211 Mv/s  lookup   0.77 us
+low-entropy leaves (bound < 2 bits/value): 8.6M values, chunk 2^14
+   1024 values, 16-bit words      1.199 MB  114.8%  scan  1388 Mv/s  lookup   0.67 us
+   1024 values,  8-bit words      1.118 MB  107.1%  scan  1282 Mv/s  lookup   0.69 us
+   2048 values, 16-bit words      1.053 MB  100.8%  scan  1465 Mv/s  lookup   1.21 us
+   2048 values,  8-bit words      1.012 MB   96.9%  scan  1342 Mv/s  lookup   1.23 us
+   4096 values, 16-bit words      0.978 MB   93.7%  scan  1508 Mv/s  lookup   2.13 us
+   4096 values,  8-bit words      0.957 MB   91.7%  scan  1418 Mv/s  lookup   2.14 us
+  16384 values, 16-bit words      0.921 MB   88.2%  scan  1188 Mv/s  lookup   7.18 us
+  16384 values,  8-bit words      0.916 MB   87.7%  scan  1138 Mv/s  lookup   7.67 us
+  BALANCED planner                1.044 MB  100.0%  scan  1344 Mv/s  lookup   1.00 us

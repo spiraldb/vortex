@@ -1,0 +1,19 @@
+column                             n  unique |      dict  dict+mtf  lookback       pco dict vals
+hits_0.URLHash.0              131072   24726 |      305K      269K      277K      348K      198K
+hits_0.RefererHash.0          131072   23100 |      291K      247K      255K      300K      185K
+hits_0.UserID.0               131072    9440 |       83K       83K       83K       66K       76K
+hits_0.FUniqID.0              131072    8478 |       79K       77K       77K       81K       68K
+hits_0.URLHash.4              131072   61466 |      610K      549K      552K      572K      492K
+hits_0.RefererHash.4          131072   28741 |      342K      283K      292K      308K      230K
+hits_0.UserID.4               131072   13920 |      121K      121K      121K       97K      111K
+hits_0.FUniqID.4              131072   13254 |      119K      117K      117K      119K      106K
+hits_1.URLHash.0              131072   63741 |      656K      570K      573K      595K      510K
+hits_1.RefererHash.0          131072   50875 |      547K      469K      474K      493K      407K
+hits_1.UserID.0               131072   10938 |       96K       96K       96K       75K       88K
+hits_1.FUniqID.0              131072   10557 |       95K       94K       94K       95K       84K
+hits_1.URLHash.4              131072   42270 |      544K      475K      483K      696K      338K
+hits_1.RefererHash.4          131072   62840 |      659K      587K      591K      689K      503K
+hits_1.UserID.4               131072   43185 |      362K      362K      362K      277K      345K
+hits_1.FUniqID.4              131072   38925 |      346K      333K      334K      355K      311K
+TOTAL                        2097152  506456 |     5255K     4731K     4781K     5165K
+dict values raw 4052K -> sorted + entropy-bins gaps 3153K; decode lookback 2.6 ns/value, move-to-front 1401.6 ns/value

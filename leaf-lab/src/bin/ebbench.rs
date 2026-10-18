@@ -53,6 +53,10 @@ fn main() {
     let (mut n, mut raw, mut bytes) = (0usize, 0usize, 0usize);
     let (mut plan_t, mut enc_t, mut dec_t) = (Duration::ZERO, Duration::ZERO, Duration::ZERO);
     let (mut n64, mut dec64) = (0usize, Duration::ZERO);
+    // On the leaves FastLanes BitPacked can encode: [values, raw, eb bytes, bp bytes] and
+    // [eb encode, eb decode, bp encode, bp decode].
+    let mut sub = [0usize; 4];
+    let mut sub_t = [Duration::ZERO; 4];
     let manifest = fs::File::open(dir.join("manifest.jsonl")).unwrap();
     for line in std::io::BufReader::new(manifest).lines() {
         let m: Value = serde_json::from_str(&line.unwrap()).unwrap();
@@ -90,6 +94,7 @@ fn main() {
                 assert_eq!(back.as_slice::<T>(), prim.as_slice::<T>(), "{id} roundtrip");
             }
         });
+        let eb_enc_before = plan_t + enc_t;
         plan_t += best_of(|| {
             black_box(EntropyBins::plan(prim.as_view(), &config).unwrap());
         });
@@ -100,6 +105,26 @@ fn main() {
             black_box(eb.clone().execute::<PrimitiveArray>(&mut ctx).unwrap());
         });
         dec_t += d;
+        let e = plan_t + enc_t;
+        if let Ok(bp) = vortex_fastlanes::bitpack_compress::bitpack_to_best_bit_width(&prim, &mut ctx) {
+            let bp = bp.into_array();
+            let back = bp.clone().execute::<PrimitiveArray>(&mut ctx).unwrap();
+            match_each_integer_ptype!(prim.ptype(), |T| {
+                assert_eq!(back.as_slice::<T>(), prim.as_slice::<T>(), "{id} bitpacked roundtrip");
+            });
+            sub_t[0] += e - eb_enc_before;
+            sub_t[1] += d;
+            sub_t[2] += best_of(|| {
+                black_box(vortex_fastlanes::bitpack_compress::bitpack_to_best_bit_width(&prim, &mut ctx).unwrap());
+            });
+            sub_t[3] += best_of(|| {
+                black_box(bp.clone().execute::<PrimitiveArray>(&mut ctx).unwrap());
+            });
+            sub[0] += prim.len();
+            sub[1] += prim.nbytes() as usize;
+            sub[2] += eb.nbytes() as usize;
+            sub[3] += bp.nbytes() as usize;
+        }
         n += prim.len();
         raw += prim.nbytes() as usize;
         bytes += eb.nbytes() as usize;
@@ -121,5 +146,17 @@ fn main() {
         raw as f64 / dec_t.as_secs_f64() / 1e9,
         mvs(n64, dec64),
         mvs(n - n64, dec_t - dec64),
+    );
+    println!(
+        "  bitpackable leaves {:.1}M values: eb ratio={:.3} enc={:.0}Mv/s dec={:.0}Mv/s ({:.2} GB/s) | fastlanes ratio={:.3} enc={:.0}Mv/s dec={:.0}Mv/s ({:.2} GB/s)",
+        sub[0] as f64 / 1e6,
+        sub[1] as f64 / sub[2] as f64,
+        mvs(sub[0], sub_t[0]),
+        mvs(sub[0], sub_t[1]),
+        sub[1] as f64 / sub_t[1].as_secs_f64() / 1e9,
+        sub[1] as f64 / sub[3] as f64,
+        mvs(sub[0], sub_t[2]),
+        mvs(sub[0], sub_t[3]),
+        sub[1] as f64 / sub_t[3].as_secs_f64() / 1e9,
     );
 }

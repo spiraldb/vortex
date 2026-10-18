@@ -197,6 +197,80 @@ every value (−1.3% to −3.7% ratio for ≤ 20% faster encode); a branchless o
 lookup (slower than the predicted binary search); the gather-based 64-bit AVX2 merge (slower
 than scalar).
 
+### Layout defaults, model chunks, compact preset and the cascade's misses
+
+Each change below was measured before keeping it. The tools are `src/bin/blocksweep.rs`,
+`lowent.rs`, `pcoexplain.rs`, `hashexp.rs`, `tree.rs` and `columns.rs`; their outputs are in
+`results/`.
+
+**Where the gap to pco comes from.** `pcoexplain` switches each pco feature off per column.
+Delta is worth about 15 MB to pco, but entropy-bins' fused lag already captures it. pco's
+multiplier modes win nothing on this corpus. The rest of pco's edge is:
+- lookback on hash columns (~0.59 MB);
+- per-block overhead on very compressible columns;
+- a few cascade misses.
+
+Standalone pco also retrains every 8,192-value page. Vortex's pco array does not, and on
+low-entropy columns lands at the same order-0 bound as entropy-bins.
+
+**Block size, refill words and model chunk** (`blocksweep`: 399 leaves, plus 86 low-entropy
+leaves whose entropy bound is under 2 bits per value, listed in `results/lowent_ids.txt`):
+
+| Layout | All leaves | Low-entropy | Scan | Isolated row |
+|---|---|---|---|---|
+| Old BALANCED (15% rule, mostly 1K–2K blocks, chunk 2^18) | 22.298 MB | 1.038 MB | 1,187 Mv/s | 0.79 µs |
+| **New BALANCED (4K, 16-bit words, chunk 2^16)** | **21.925 MB (−1.7%)** | **0.975 MB (−6.1%)** | **1,355** | **2.10 µs** |
+| 16K, 16-bit words, chunk 2^16 | 21.792 MB (−2.3%) | 0.918 MB (−11.6%) | 1,291 | 6.5 µs |
+| 16K, 8-bit words, chunk 2^18 | 21.850 MB | 0.938 MB | 1,206 | 6.7 µs |
+| 16K, 16-bit words, chunk 2^14 | 21.729 MB | 0.921 MB | 1,095 | 6.4 µs |
+
+- Bigger blocks cost nothing in scan speed. They cost isolated-row latency, roughly in
+  proportion to block size.
+- 8-bit words are not free: about 0.5% smaller for 6–9% slower scans.
+- 2^14-value chunks stop the four-block lockstep decode when blocks are 16K values.
+- Changes made: BALANCED now uses 4K blocks and 16-bit words; SMALLEST uses 16K blocks
+  (8-bit words kept); chunks are 2^16 values. The planner now estimates chunk metadata from
+  the bins it trains, instead of budgeting 896 B per chunk.
+
+**Whole numeric columns** (340 slices, 162.5 MB uncompressed, `results/columns_v3.jsonl`):
+
+| Setup | Size | Decode |
+|---|---|---|
+| BtrBlocks default | 29.20 MB | 1,918 Mv/s |
+| + entropy-bins BALANCED (before this round) | 20.05 MB | — |
+| **+ entropy-bins BALANCED (now)** | **19.64 MB** | **1,434 Mv/s** |
+| + entropy-bins SMALLEST | 19.49 MB | 1,355 Mv/s |
+| Compact with entropy-bins instead of pco | 19.49 MB | 1,385 Mv/s |
+| pco alone | 19.30 MB | 357 Mv/s |
+| Compact (pco) | 18.70 MB | 506 Mv/s |
+
+Compact with entropy-bins instead of pco is 4.2% larger and decodes 2.7× faster. At the leaf,
+BALANCED against FastLanes on the 355 leaves BitPacked can encode is 4.22× vs 2.70×.
+entropy-bins decodes at 1,357 vs 6,483 Mv/s with AVX-512, and 576 vs 6,105 with AVX2.
+
+**Hash columns** (`hashexp`: 16 `URLHash` / `RefererHash` / `UserID` / `FUniqID` slices):
+
+| Setup | Size |
+|---|---|
+| Dict (entropy-bins codes, raw values) | 5,255 KB |
+| Dict with move-to-front recency codes | 4,731 KB (decodes at ~1,450 ns/value: unusable) |
+| Dict codes as distance to previous occurrence (lookback) | 4,781 KB (−9%; decodes at ~2.6 ns/value) |
+| pco | 5,165 KB |
+
+Sorting the dictionary values saves 0.9 MB on the values, but codes for first occurrences then
+cost the same again. The recommended follow-up is a lookback-codes child for Dict (a separate
+encoding, not part of entropy-bins). It keeps Dict's value pushdown and decodes codes in one
+O(1)-per-row pass.
+
+**Cascade misses** (`tree`):
+- `MobilePhone`: BtrBlocks keeps BitPacked at width 0 with 4,086 raw patches (24.8 KB, against
+  2.7 KB for entropy-bins and 1.4 KB for pco). BitPacked's sampled estimate misses clustered
+  patches, and the patch children are never compressed. This is a BitPacked estimator issue.
+- `DeltaScheme` sizes residuals by their full range (max − min), so one outlier delta (a clock
+  jump in `ClientEventTime`) makes it skip. entropy-bins' lag codes the residual distribution,
+  outliers included: 101 KB against 508 KB for BitPacked. This is why the fused lag earns its
+  place in the leaf.
+
 ### Timing (one core, Xeon 2.1 GHz with AVX-512, best of >= 3 runs)
 
 Only BitPacked and entropy-bins are tuned (entropy-bins uses AVX-512). The other coders are

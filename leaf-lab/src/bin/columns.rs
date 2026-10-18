@@ -27,6 +27,9 @@ use vortex_array::dtype::DType;
 use vortex_array::dtype::PType;
 use vortex_btrblocks::BtrBlocksCompressor;
 use vortex_btrblocks::BtrBlocksCompressorBuilder;
+use vortex_btrblocks::SchemeExt;
+use vortex_btrblocks::schemes::float;
+use vortex_btrblocks::schemes::integer;
 use vortex_btrblocks::schemes::integer::EntropyBinsScheme;
 
 const BATCH: usize = 131072;
@@ -68,6 +71,14 @@ fn main() {
         ("btr+eb-smallest", base().with_new_scheme(&EntropyBinsScheme::SMALLEST).build()),
         ("compact", base().with_compact().build()),
         ("compact+eb", base().with_compact().with_new_scheme(&EntropyBinsScheme::BALANCED).build()),
+        (
+            "compact-pco+eb",
+            base()
+                .with_compact()
+                .exclude_schemes([integer::PcoScheme.id(), float::PcoScheme.id()])
+                .with_new_scheme(&EntropyBinsScheme::SMALLEST)
+                .build(),
+        ),
     ];
 
     for file in &args[2..] {
