@@ -25,6 +25,7 @@ use crate::arrays::ScalarFnArray;
 use crate::arrays::VarBinView;
 use crate::dtype::DType;
 use crate::expr::BoundExpression;
+use crate::optimizer::ArrayOptimizer;
 use crate::scalar::Scalar;
 use crate::scalar_fn::Arity;
 use crate::scalar_fn::ChildName;
@@ -123,10 +124,11 @@ impl ScalarFnVTable for FillNull {
         let fill_value = args.get(1)?;
         // Parent kernels decline a fill that is not already constant. Materialize it here so a
         // lazy scalar, such as a literal `ScalarFnArray`, can still fill nulls.
-        let fill_value = if fill_value.is::<Constant>() {
-            fill_value
-        } else {
+        let fill_was_lazy = !fill_value.is::<Constant>();
+        let fill_value = if fill_was_lazy {
             fill_value.execute_until::<Constant>(ctx)?
+        } else {
+            fill_value
         };
 
         let fill_scalar = fill_value
@@ -139,6 +141,13 @@ impl ScalarFnVTable for FillNull {
         );
 
         let Some(columnar) = input.as_opt::<AnyColumnar>() else {
+            if fill_was_lazy {
+                // Hand the rebuilt node back with a constant fill so the input's FillNull
+                // kernels get a chance before we decode the input.
+                return FillNull::try_new(input, fill_value)?
+                    .into_array()
+                    .optimize_ctx(ctx.session());
+            }
             let input = input.execute::<ArrayRef>(ctx)?;
             return Ok(FillNull::try_new(input, fill_value)?.into_array());
         };
@@ -227,6 +236,8 @@ mod tests {
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::array_session;
+    use crate::arrays::Chunked;
+    use crate::arrays::ChunkedArray;
     use crate::arrays::Constant;
     use crate::arrays::ConstantArray;
     use crate::arrays::Primitive;
@@ -315,6 +326,37 @@ mod tests {
             &DType::Primitive(PType::I32, Nullability::NonNullable)
         );
         assert_arrays_eq!(result, PrimitiveArray::from_iter([1i32, 42, 3]), &mut ctx);
+        Ok(())
+    }
+
+    #[test]
+    fn evaluate_lazy_fill_preserves_chunked_input() -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let input = ChunkedArray::try_new(
+            vec![
+                PrimitiveArray::from_option_iter([Some(1i32), None]).into_array(),
+                PrimitiveArray::from_option_iter([Some(3), None]).into_array(),
+            ],
+            DType::Primitive(PType::I32, Nullability::Nullable),
+        )?
+        .into_array();
+        let fill = ScalarFnArray::try_new_with_len(
+            Literal.bind(Scalar::from(42i32)),
+            vec![],
+            input.len(),
+        )?
+        .into_array();
+
+        let result = FillNull::try_new(input, fill)?
+            .into_array()
+            .execute::<ArrayRef>(&mut ctx)?;
+
+        assert!(result.is::<Chunked>());
+        assert_arrays_eq!(
+            result,
+            PrimitiveArray::from_iter([1i32, 42, 3, 42]),
+            &mut ctx
+        );
         Ok(())
     }
 
