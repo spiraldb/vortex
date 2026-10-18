@@ -195,7 +195,8 @@ fn every_checkpoint_resumes_decoding(
                         let blocks = start..(start + run).min(n_blocks);
                         let values = entry.values.start + blocks.start * interval
                             ..(entry.values.start + blocks.end * interval).min(entry.values.end);
-                        let decoded = decoder.decode_page_blocks_scratch(page, blocks.clone())?;
+                        let mut decoded = BufferMut::<T>::empty();
+                        decoder.append_page_blocks(page, blocks.clone(), &mut decoded)?;
                         assert!(
                             decoded
                                 .iter()

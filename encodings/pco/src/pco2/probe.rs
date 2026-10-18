@@ -14,7 +14,7 @@ use vortex_array::dtype::half;
 use vortex_array::match_each_native_ptype;
 use vortex_array::scalar::Scalar;
 use vortex_array::validity::Validity;
-use vortex_buffer::Buffer;
+use vortex_buffer::BufferMut;
 use vortex_error::VortexResult;
 use vortex_mask::Mask;
 
@@ -94,9 +94,10 @@ pub(crate) fn scalar_at(
         let decoded = match_number_enum!(
             number_type_from_ptype(array.ptype()),
             NumberType<T> => {
-                let mut decoder = BlockDecoder::<T>::new(array.data())?;
-                let decoded = decoder.decode_page_blocks_scratch(page, local..local + 1)?;
-                PrimitiveArray::new(Buffer::<T>::copy_from(decoded), Validity::NonNullable)
+                let mut decoded = BufferMut::<T>::with_capacity(values.len());
+                BlockDecoder::<T>::new(array.data())?
+                    .append_page_blocks(page, local..local + 1, &mut decoded)?;
+                PrimitiveArray::new(decoded.freeze(), Validity::NonNullable)
             }
         );
         state.block = Some(DecodedBlock {

@@ -729,7 +729,6 @@ pub(crate) struct BlockDecoder<'a, T: Number> {
     file: FileDecompressor,
     chunk: Option<(usize, ChunkDecompressor<T>)>,
     page_scratch: Vec<u8>,
-    values_scratch: Vec<T>,
 }
 
 impl<'a, T: Number> BlockDecoder<'a, T> {
@@ -741,7 +740,6 @@ impl<'a, T: Number> BlockDecoder<'a, T> {
             file,
             chunk: None,
             page_scratch: Vec::new(),
-            values_scratch: Vec::new(),
         })
     }
 
@@ -780,21 +778,26 @@ impl<'a, T: Number> BlockDecoder<'a, T> {
         )
     }
 
-    /// Decodes checkpoint blocks `blocks` of page `page` into a scratch buffer and returns it.
-    pub(crate) fn decode_page_blocks_scratch(
+    /// Appends the numbers of checkpoint blocks `blocks` of page `page` to `out`.
+    pub(crate) fn append_page_blocks(
         &mut self,
         page: usize,
         blocks: Range<usize>,
-    ) -> VortexResult<&[T]> {
+        out: &mut BufferMut<T>,
+    ) -> VortexResult<()> {
         let interval = self.data.interval();
         let page_n = self.data.index[page].values.len();
         let n = (blocks.end * interval).min(page_n) - blocks.start * interval;
-        let mut values = std::mem::take(&mut self.values_scratch);
-        values.resize(n, T::default());
-        let result = self.decode_page_blocks(page, blocks, &mut values);
-        self.values_scratch = values;
-        result?;
-        Ok(&self.values_scratch)
+        let old_len = out.len();
+        out.reserve(n);
+        // SAFETY: pco either writes every element of the new tail or returns an error, in which
+        // case the length is restored before anything observes the tail.
+        unsafe { out.set_len(old_len + n) };
+        if let Err(err) = self.decode_page_blocks(page, blocks, &mut out[old_len..]) {
+            unsafe { out.set_len(old_len) };
+            return Err(err);
+        }
+        Ok(())
     }
 
     /// Appends valid values `values` to `out`, decoding only the blocks they touch.
@@ -817,18 +820,10 @@ impl<'a, T: Number> BlockDecoder<'a, T> {
             let local = values.start.max(entry.values.start) - entry.values.start
                 ..values.end.min(entry.values.end) - entry.values.start;
             let blocks = local.start / interval..local.end.div_ceil(interval);
-            let decoded = blocks.start * interval..(blocks.end * interval).min(entry.values.len());
             let old_len = out.len();
-            out.reserve(decoded.len());
-            // SAFETY: pco either writes every element of the new tail or returns an error, in
-            // which case the length is restored before anything observes the tail.
-            unsafe { out.set_len(old_len + decoded.len()) };
-            if let Err(err) = self.decode_page_blocks(page, blocks, &mut out[old_len..]) {
-                unsafe { out.set_len(old_len) };
-                return Err(err);
-            }
             // Blocks are decoded whole, so drop the values before and after the requested range.
-            let skip = local.start - decoded.start;
+            let skip = local.start - blocks.start * interval;
+            self.append_page_blocks(page, blocks, out)?;
             if skip > 0 {
                 out.copy_within(old_len + skip..old_len + skip + local.len(), old_len);
             }

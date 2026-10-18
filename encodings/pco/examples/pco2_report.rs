@@ -371,31 +371,12 @@ fn serialized_bytes(array: &ArrayRef, session: &VortexSession) -> VortexResult<u
         .sum())
 }
 
-/// How [`time`] summarizes repeated runs.
+/// How [`measure`] summarizes repeated runs.
 #[derive(Clone, Copy)]
 enum Stat {
     Median,
     /// The fastest run, which is the most robust statistic on a noisy machine.
     Fastest,
-}
-
-/// Wall time of `reps` runs, summarized by `stat`.
-fn time(
-    reps: usize,
-    stat: Stat,
-    mut f: impl FnMut() -> VortexResult<()>,
-) -> VortexResult<Duration> {
-    let mut times = Vec::with_capacity(reps);
-    for _ in 0..reps {
-        let start = Instant::now();
-        f()?;
-        times.push(start.elapsed());
-    }
-    times.sort();
-    Ok(match stat {
-        Stat::Median => times[reps / 2],
-        Stat::Fastest => times[0],
-    })
 }
 
 fn micros(duration: Duration) -> String {
@@ -407,12 +388,16 @@ fn micros(duration: Duration) -> String {
     }
 }
 
+/// Positions at which slices and clustered filters are timed, so no single position's alignment
+/// with page or block boundaries decides the result.
+const POSITIONS: usize = 16;
+
 /// The operations each encoding is timed on, built once per column.
 struct Workload {
     probe_indices: Vec<usize>,
     take_indices: ArrayRef,
-    slice: std::ops::Range<usize>,
-    clustered: Mask,
+    slices: Vec<std::ops::Range<usize>>,
+    clustered: Vec<Mask>,
     scattered: Mask,
     lt_constant: Scalar,
     eq_constant: Scalar,
@@ -424,9 +409,18 @@ fn workload(array: &PrimitiveArray, ctx: &mut ExecutionCtx) -> VortexResult<Work
     let probe_indices = (0..SCALAR_PROBES).map(|_| rng.below(n)).collect();
     let take_indices =
         PrimitiveArray::from_iter((0..TAKE_ROWS).map(|_| rng.below(n) as u64)).into_array();
-    let slice_start = rng.below(n - 1024);
-    let clustered_start = rng.below(n - n / 1000);
-    let clustered = Mask::from_slices(n, vec![(clustered_start, clustered_start + n / 1000)]);
+    let slices = (0..POSITIONS)
+        .map(|_| {
+            let start = rng.below(n - 1024);
+            start..start + 1024
+        })
+        .collect();
+    let clustered = (0..POSITIONS)
+        .map(|_| {
+            let start = rng.below(n - n / 1000);
+            Mask::from_slices(n, vec![(start, start + n / 1000)])
+        })
+        .collect();
     let mut scattered_indices = (0..n / 10_000).map(|_| rng.below(n)).collect::<Vec<_>>();
     scattered_indices.sort_unstable();
     scattered_indices.dedup();
@@ -452,7 +446,7 @@ fn workload(array: &PrimitiveArray, ctx: &mut ExecutionCtx) -> VortexResult<Work
     Ok(Workload {
         probe_indices,
         take_indices,
-        slice: slice_start..slice_start + 1024,
+        slices,
         clustered,
         scattered,
         lt_constant,
@@ -463,8 +457,8 @@ fn workload(array: &PrimitiveArray, ctx: &mut ExecutionCtx) -> VortexResult<Work
 struct Results {
     decoded: PrimitiveArray,
     taken: PrimitiveArray,
-    sliced: PrimitiveArray,
-    clustered: PrimitiveArray,
+    sliced: Vec<PrimitiveArray>,
+    clustered: Vec<PrimitiveArray>,
     scattered: PrimitiveArray,
     lt: BoolArray,
     eq: BoolArray,
@@ -477,12 +471,16 @@ fn run(array: &ArrayRef, workload: &Workload, ctx: &mut ExecutionCtx) -> VortexR
         taken: array
             .take(workload.take_indices.clone())?
             .execute::<PrimitiveArray>(ctx)?,
-        sliced: array
-            .slice(workload.slice.clone())?
-            .execute::<PrimitiveArray>(ctx)?,
-        clustered: array
-            .filter(workload.clustered.clone())?
-            .execute::<PrimitiveArray>(ctx)?,
+        sliced: workload
+            .slices
+            .iter()
+            .map(|range| array.slice(range.clone())?.execute::<PrimitiveArray>(ctx))
+            .collect::<VortexResult<_>>()?,
+        clustered: workload
+            .clustered
+            .iter()
+            .map(|mask| array.filter(mask.clone())?.execute::<PrimitiveArray>(ctx))
+            .collect::<VortexResult<_>>()?,
         scattered: array
             .filter(workload.scattered.clone())?
             .execute::<PrimitiveArray>(ctx)?,
@@ -498,82 +496,127 @@ fn run(array: &ArrayRef, workload: &Workload, ctx: &mut ExecutionCtx) -> VortexR
 fn check(results: &Results, expected: &Results, ctx: &mut ExecutionCtx) {
     assert_arrays_eq!(results.decoded, expected.decoded, ctx);
     assert_arrays_eq!(results.taken, expected.taken, ctx);
-    assert_arrays_eq!(results.sliced, expected.sliced, ctx);
-    assert_arrays_eq!(results.clustered, expected.clustered, ctx);
+    for (sliced, expected) in results.sliced.iter().zip(&expected.sliced) {
+        assert_arrays_eq!(sliced, expected, ctx);
+    }
+    for (clustered, expected) in results.clustered.iter().zip(&expected.clustered) {
+        assert_arrays_eq!(clustered, expected, ctx);
+    }
     assert_arrays_eq!(results.scattered, expected.scattered, ctx);
     assert_arrays_eq!(results.lt, expected.lt, ctx);
     assert_arrays_eq!(results.eq, expected.eq, ctx);
 }
 
-/// Median latency of every operation in a [`Workload`].
-struct Metrics {
-    decode: Duration,
-    scalar_at: Duration,
-    slice: Duration,
-    take: Duration,
-    clustered: Duration,
-    scattered: Duration,
-    lt: Duration,
-    eq: Duration,
+/// The timed operations, in the order [`Metrics`] holds them.
+const OPS: [&str; 8] = [
+    "decode",
+    "scalar_at",
+    "slice 1k",
+    "take 100",
+    "filter clustered",
+    "filter scattered",
+    "`< p1`",
+    "`== v`",
+];
+
+/// Latency of every one of [`OPS`], per single operation.
+type Metrics = [Duration; OPS.len()];
+
+/// Runs operation `op` of the workload once and returns how many operations that was.
+fn run_op(
+    op: usize,
+    encoded: &ArrayRef,
+    workload: &Workload,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<u32> {
+    let constant = |scalar: &Scalar| ConstantArray::new(scalar.clone(), encoded.len()).into_array();
+    match op {
+        0 => {
+            encoded.clone().execute::<PrimitiveArray>(ctx)?;
+            Ok(1)
+        }
+        1 => {
+            for &index in &workload.probe_indices {
+                encoded.execute_scalar(index, ctx)?;
+            }
+            Ok(SCALAR_PROBES as u32)
+        }
+        2 => {
+            for range in &workload.slices {
+                encoded
+                    .slice(range.clone())?
+                    .execute::<PrimitiveArray>(ctx)?;
+            }
+            Ok(POSITIONS as u32)
+        }
+        3 => {
+            encoded
+                .take(workload.take_indices.clone())?
+                .execute::<PrimitiveArray>(ctx)?;
+            Ok(1)
+        }
+        4 => {
+            for mask in &workload.clustered {
+                encoded
+                    .filter(mask.clone())?
+                    .execute::<PrimitiveArray>(ctx)?;
+            }
+            Ok(POSITIONS as u32)
+        }
+        5 => {
+            encoded
+                .filter(workload.scattered.clone())?
+                .execute::<PrimitiveArray>(ctx)?;
+            Ok(1)
+        }
+        6 => {
+            encoded
+                .binary(constant(&workload.lt_constant), Operator::Lt)?
+                .execute::<BoolArray>(ctx)?;
+            Ok(1)
+        }
+        _ => {
+            encoded
+                .binary(constant(&workload.eq_constant), Operator::Eq)?
+                .execute::<BoolArray>(ctx)?;
+            Ok(1)
+        }
+    }
 }
 
+/// Times every operation on every encoding `reps` times. Encodings take turns on each repetition
+/// of each operation, so a machine slowing down mid-run penalizes them alike.
 fn measure(
-    encoded: &ArrayRef,
+    encodings: &[&ArrayRef],
     workload: &Workload,
     reps: usize,
     stat: Stat,
     ctx: &mut ExecutionCtx,
-) -> VortexResult<Metrics> {
-    let n = encoded.len();
-    let constant = |scalar: &Scalar| ConstantArray::new(scalar.clone(), n).into_array();
-    Ok(Metrics {
-        decode: time(reps, stat, || {
-            encoded.clone().execute::<PrimitiveArray>(ctx)?;
-            Ok(())
-        })?,
-        scalar_at: time(reps, stat, || {
-            for &index in &workload.probe_indices {
-                encoded.execute_scalar(index, ctx)?;
+) -> VortexResult<Vec<Metrics>> {
+    let mut times = vec![vec![Vec::with_capacity(reps); OPS.len()]; encodings.len()];
+    for op in 0..OPS.len() {
+        for _ in 0..reps {
+            for (encoding, encoded) in encodings.iter().enumerate() {
+                let start = Instant::now();
+                let n_ops = run_op(op, encoded, workload, ctx)?;
+                times[encoding][op].push(start.elapsed() / n_ops);
             }
-            Ok(())
-        })? / SCALAR_PROBES as u32,
-        slice: time(reps, stat, || {
-            encoded
-                .slice(workload.slice.clone())?
-                .execute::<PrimitiveArray>(ctx)?;
-            Ok(())
-        })?,
-        take: time(reps, stat, || {
-            encoded
-                .take(workload.take_indices.clone())?
-                .execute::<PrimitiveArray>(ctx)?;
-            Ok(())
-        })?,
-        clustered: time(reps, stat, || {
-            encoded
-                .filter(workload.clustered.clone())?
-                .execute::<PrimitiveArray>(ctx)?;
-            Ok(())
-        })?,
-        scattered: time(reps, stat, || {
-            encoded
-                .filter(workload.scattered.clone())?
-                .execute::<PrimitiveArray>(ctx)?;
-            Ok(())
-        })?,
-        lt: time(reps, stat, || {
-            encoded
-                .binary(constant(&workload.lt_constant), Operator::Lt)?
-                .execute::<BoolArray>(ctx)?;
-            Ok(())
-        })?,
-        eq: time(reps, stat, || {
-            encoded
-                .binary(constant(&workload.eq_constant), Operator::Eq)?
-                .execute::<BoolArray>(ctx)?;
-            Ok(())
-        })?,
-    })
+        }
+    }
+    Ok(times
+        .into_iter()
+        .map(|per_op| {
+            let mut metrics = [Duration::ZERO; OPS.len()];
+            for (metric, mut samples) in metrics.iter_mut().zip(per_op) {
+                samples.sort();
+                *metric = match stat {
+                    Stat::Median => samples[samples.len() / 2],
+                    Stat::Fastest => samples[0],
+                };
+            }
+            metrics
+        })
+        .collect())
 }
 
 fn report(column: &Column, session: &VortexSession) -> VortexResult<()> {
@@ -620,21 +663,22 @@ fn report(column: &Column, session: &VortexSession) -> VortexResult<()> {
             }
             Some(expected) => check(&results, expected, &mut ctx),
         }
-        let metrics = measure(&encoded, &workload, reps, Stat::Median, &mut ctx)?;
+        let [decode, scalar_at, slice, take, clustered, scattered, lt, eq] =
+            measure(&[&encoded], &workload, reps, Stat::Median, &mut ctx)?[0];
 
         println!(
             "| {name} | {:.2} | {:+.2}% | {index} | {:.0} | {:.2} | {} | {} | {} | {} | {} | {} | {} |",
             8.0 * bytes as f64 / n as f64,
             100.0 * (bytes as f64 / baseline as f64 - 1.0),
             compress.as_secs_f64() * 1e3,
-            metrics.decode.as_secs_f64() * 1e3,
-            micros(metrics.scalar_at),
-            micros(metrics.slice),
-            micros(metrics.take),
-            micros(metrics.clustered),
-            micros(metrics.scattered),
-            micros(metrics.lt),
-            micros(metrics.eq),
+            decode.as_secs_f64() * 1e3,
+            micros(scalar_at),
+            micros(slice),
+            micros(take),
+            micros(clustered),
+            micros(scattered),
+            micros(lt),
+            micros(eq),
         );
     }
     println!(
@@ -675,20 +719,8 @@ const TIME_TIE: f64 = 1.15;
 /// Relative size differences within this fraction count as ties.
 const RATIO_TIE: f64 = 0.001;
 
-const VERDICT_METRICS: [&str; 9] = [
-    "ratio",
-    "decode",
-    "scalar_at",
-    "slice 1k",
-    "take 100",
-    "filter clustered",
-    "filter scattered",
-    "`< p1`",
-    "`== v`",
-];
-
-/// Win, tie, and loss counts of Pco2 against Pco for each of [`VERDICT_METRICS`].
-type Tally = [[usize; 3]; VERDICT_METRICS.len()];
+/// Win, tie, and loss counts of Pco2 against Pco for the ratio and then each of [`OPS`].
+type Tally = [[usize; 3]; 1 + OPS.len()];
 
 /// Scores `v2 / v1` for a higher-is-better quantity: 0 win, 1 tie, 2 loss.
 fn score(improvement: f64, tie: f64) -> usize {
@@ -705,7 +737,7 @@ fn score(improvement: f64, tie: f64) -> usize {
 /// the uncompressed array.
 fn verdict(columns: &[Column], session: &VortexSession) -> VortexResult<()> {
     let mut ctx = session.create_execution_ctx();
-    let mut tallies = [[[0usize; 3]; VERDICT_METRICS.len()]; VERDICT_BLOCKS.len()];
+    let mut tallies = [[[0usize; 3]; 1 + OPS.len()]; VERDICT_BLOCKS.len()];
     let mut rows = vec![Vec::new(); VERDICT_BLOCKS.len()];
     for column in columns {
         let array = &column.array;
@@ -721,7 +753,8 @@ fn verdict(columns: &[Column], session: &VortexSession) -> VortexResult<()> {
         let reps = if n > 2_000_000 { 5 } else { 9 };
 
         for (block_idx, &block) in VERDICT_BLOCKS.iter().enumerate() {
-            let mut measured = Vec::new();
+            let mut encodings = Vec::new();
+            let mut ratios = Vec::new();
             for variant in [
                 Variant::Pco {
                     values_per_page: block,
@@ -733,25 +766,25 @@ fn verdict(columns: &[Column], session: &VortexSession) -> VortexResult<()> {
             ] {
                 let encoded = variant.compress(array, &mut ctx)?;
                 check(&run(&encoded, &workload, &mut ctx)?, &expected, &mut ctx);
-                let ratio = raw_bytes as f64 / serialized_bytes(&encoded, session)? as f64;
-                measured.push((
-                    ratio,
-                    measure(&encoded, &workload, reps, Stat::Fastest, &mut ctx)?,
-                ));
+                ratios.push(raw_bytes as f64 / serialized_bytes(&encoded, session)? as f64);
+                encodings.push(encoded);
             }
-            let [(v1_ratio, v1), (v2_ratio, v2)] = [&measured[0], &measured[1]];
-            let speedup = |a: Duration, b: Duration| a.as_secs_f64() / b.as_secs_f64();
-            let improvements = [
-                v2_ratio / v1_ratio,
-                speedup(v1.decode, v2.decode),
-                speedup(v1.scalar_at, v2.scalar_at),
-                speedup(v1.slice, v2.slice),
-                speedup(v1.take, v2.take),
-                speedup(v1.clustered, v2.clustered),
-                speedup(v1.scattered, v2.scattered),
-                speedup(v1.lt, v2.lt),
-                speedup(v1.eq, v2.eq),
-            ];
+            let (v1_ratio, v2_ratio) = (ratios[0], ratios[1]);
+            let metrics = measure(
+                &[&encodings[0], &encodings[1]],
+                &workload,
+                reps,
+                Stat::Fastest,
+                &mut ctx,
+            )?;
+            let improvements = std::iter::once(v2_ratio / v1_ratio)
+                .chain(
+                    metrics[0]
+                        .iter()
+                        .zip(&metrics[1])
+                        .map(|(v1, v2)| v1.as_secs_f64() / v2.as_secs_f64()),
+                )
+                .collect::<Vec<_>>();
             let mut row = format!("| {} | {v1_ratio:.2} | {v2_ratio:.2} |", column.name);
             for (metric, &improvement) in improvements.iter().enumerate() {
                 let tie = if metric == 0 {
@@ -772,13 +805,10 @@ fn verdict(columns: &[Column], session: &VortexSession) -> VortexResult<()> {
     for (block_idx, block) in VERDICT_BLOCKS.iter().enumerate() {
         println!("\n### {block}-value blocks: speedup of v2 over v1 (higher is better)\n");
         print!("| column | v1 ratio | v2 ratio |");
-        for metric in &VERDICT_METRICS[1..] {
-            print!(" {metric} |");
+        for op in OPS {
+            print!(" {op} |");
         }
-        println!(
-            "\n|---|---|---|{}",
-            "---|".repeat(VERDICT_METRICS.len() - 1)
-        );
+        println!("\n|---|---|---|{}", "---|".repeat(OPS.len()));
         for row in &rows[block_idx] {
             println!("{row}");
         }
@@ -795,7 +825,7 @@ fn print_tally(block: usize, tally: &Tally) {
     );
     println!("| metric | v2 wins | tie | v2 loses |");
     println!("|---|---|---|---|");
-    for (metric, [wins, ties, losses]) in VERDICT_METRICS.iter().zip(tally) {
+    for (metric, [wins, ties, losses]) in std::iter::once("ratio").chain(OPS).zip(tally) {
         println!("| {metric} | {wins} | {ties} | {losses} |");
     }
 }

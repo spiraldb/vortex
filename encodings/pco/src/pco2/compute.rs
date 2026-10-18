@@ -173,13 +173,7 @@ fn gather<T: Number + NativePType>(
             decoded_starts.push(decoded.len() + offset * interval);
             value_starts.push(entry.values.start + block * interval);
         }
-        let n = (blocks.end * interval).min(entry.values.len()) - blocks.start * interval;
-        let old_len = decoded.len();
-        decoded.reserve(n);
-        // SAFETY: pco either writes every element of the new tail or returns an error, in which
-        // case `decoded` is dropped unread.
-        unsafe { decoded.set_len(old_len + n) };
-        decoder.decode_page_blocks(page, blocks, &mut decoded[old_len..])?;
+        decoder.append_page_blocks(page, blocks, &mut decoded)?;
         run_start = run_end;
     }
 
@@ -506,6 +500,7 @@ fn compare_constant<T: Number + NativePType>(
 
     let mut value_bits = BitBufferMut::with_capacity(values.len());
     let mut decoder = BlockDecoder::<T>::new(data)?;
+    let mut decoded = BufferMut::<T>::empty();
     for (page, entry) in data
         .index
         .iter()
@@ -534,7 +529,8 @@ fn compare_constant<T: Number + NativePType>(
             }
             let segment = (block * interval).max(local.start)..(run_end * interval).min(local.end);
             let decoded_start = block * interval;
-            let decoded = decoder.decode_page_blocks_scratch(page, block..run_end)?;
+            decoded.clear();
+            decoder.append_page_blocks(page, block..run_end, &mut decoded)?;
             let bits = compare_values(
                 &decoded[segment.start - decoded_start..segment.end - decoded_start],
                 value,
