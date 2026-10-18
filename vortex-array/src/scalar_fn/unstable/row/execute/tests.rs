@@ -332,6 +332,7 @@ fn primitive_finish_reuses_allocation() {
     // SAFETY: all three slots were initialized above.
     let output = unsafe { values.finish(3, &allocator) };
     assert_eq!(output.as_::<Primitive>().as_slice::<i64>().as_ptr(), ptr);
+    assert_eq!(output.as_::<Primitive>().as_slice::<i64>(), &[1, 2, 3]);
     tracker.assert_owns(output.as_::<Primitive>().as_slice::<i64>());
 }
 

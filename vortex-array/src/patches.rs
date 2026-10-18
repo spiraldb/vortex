@@ -1431,19 +1431,11 @@ mod test {
             )
             .unwrap()
             .unwrap();
-        let primitive_values = taken
-            .values()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
-        let primitive_indices = taken
-            .indices()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
+        let values = taken.values();
+        let primitive_indices = taken.indices();
         assert_eq!(taken.array_len(), 2);
         assert_arrays_eq!(
-            primitive_values,
+            values,
             PrimitiveArray::from_option_iter([Some(44i32)]),
             &mut ctx
         );
@@ -1453,11 +1445,10 @@ mod test {
             &mut ctx
         );
         assert_eq!(
-            primitive_values
-                .as_ref()
+            values
                 .validity()
                 .unwrap()
-                .execute_mask(primitive_values.as_ref().len(), &mut ctx)
+                .execute_mask(values.len(), &mut ctx)
                 .unwrap(),
             Mask::from_iter(vec![true])
         );
@@ -1484,14 +1475,10 @@ mod test {
             .unwrap()
             .unwrap();
 
-        let primitive_values = taken
-            .values()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
+        let values = taken.values();
         assert_eq!(taken.array_len(), 2);
         assert_arrays_eq!(
-            primitive_values,
+            values,
             PrimitiveArray::from_option_iter([Some(44i32), None]),
             &mut ctx
         );
@@ -1502,11 +1489,10 @@ mod test {
         );
 
         assert_eq!(
-            primitive_values
-                .as_ref()
+            values
                 .validity()
                 .unwrap()
-                .execute_mask(primitive_values.as_ref().len(), &mut ctx)
+                .execute_mask(values.len(), &mut ctx)
                 .unwrap(),
             Mask::from_iter([true, false])
         );
@@ -1537,6 +1523,11 @@ mod test {
         assert_arrays_eq!(
             taken.values(),
             PrimitiveArray::from_option_iter([Some(20i32), Some(30)]),
+            &mut ctx
+        );
+        assert_arrays_eq!(
+            taken.indices(),
+            PrimitiveArray::from_iter([0u64, 1]),
             &mut ctx
         );
     }
@@ -1591,6 +1582,11 @@ mod test {
             PrimitiveArray::from_option_iter([Some(200i32), Some(300)]),
             &mut ctx
         );
+        assert_arrays_eq!(
+            taken.indices(),
+            PrimitiveArray::from_iter([0u64, 2]),
+            &mut ctx
+        );
     }
 
     #[test]
@@ -1615,21 +1611,14 @@ mod test {
             .unwrap();
 
         assert_eq!(taken.array_len(), 1500);
-    }
-
-    #[test]
-    fn test_slice() {
-        let mut ctx = array_session().create_execution_ctx();
-        let values = buffer![15_u32, 135, 13531, 42].into_array();
-        let indices = buffer![10_u64, 11, 50, 100].into_array();
-
-        let patches = Patches::new(101, 0, indices, values, None).unwrap();
-
-        let sliced = patches.slice(15..100).unwrap().unwrap();
-        assert_eq!(sliced.array_len(), 100 - 15);
         assert_arrays_eq!(
-            sliced.values(),
-            PrimitiveArray::from_iter([13531u32]),
+            taken.indices(),
+            PrimitiveArray::from_iter(0..1500u64),
+            &mut ctx
+        );
+        assert_arrays_eq!(
+            taken.values(),
+            PrimitiveArray::from_option_iter((0..1500i32).map(Some)),
             &mut ctx
         );
     }
@@ -1650,7 +1639,19 @@ mod test {
             &mut ctx
         );
 
+        assert_eq!(sliced.offset(), 15);
+        assert_arrays_eq!(
+            sliced.indices(),
+            PrimitiveArray::from_iter([50u64]),
+            &mut ctx
+        );
         let doubly_sliced = sliced.slice(35..36).unwrap().unwrap();
+        assert_eq!(doubly_sliced.array_len(), 1);
+        assert_eq!(doubly_sliced.offset(), 50);
+        assert_eq!(
+            doubly_sliced.search_index(0, &mut ctx).unwrap(),
+            SearchResult::Found(0)
+        );
         assert_arrays_eq!(
             doubly_sliced.values(),
             PrimitiveArray::from_iter([13531u32]),
@@ -2098,37 +2099,6 @@ mod test {
     }
 
     #[test]
-    fn test_patch_values() {
-        let mut ctx = array_session().create_execution_ctx();
-        let patches = Patches::new(
-            10,
-            0,
-            buffer![2u64, 5, 8].into_array(),
-            buffer![100i32, 200, 300].into_array(),
-            None,
-        )
-        .unwrap();
-
-        let values = patches
-            .values()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
-        assert_eq!(
-            i32::try_from(&values.execute_scalar(0, &mut ctx).unwrap()).unwrap(),
-            100i32
-        );
-        assert_eq!(
-            i32::try_from(&values.execute_scalar(1, &mut ctx).unwrap()).unwrap(),
-            200i32
-        );
-        assert_eq!(
-            i32::try_from(&values.execute_scalar(2, &mut ctx).unwrap()).unwrap(),
-            300i32
-        );
-    }
-
-    #[test]
     fn test_indices_range() {
         let patches = Patches::new(
             10,
@@ -2297,6 +2267,11 @@ mod test {
             PrimitiveArray::from_iter([2u64]),
             &mut ctx
         );
+        assert_arrays_eq!(
+            masked.values(),
+            PrimitiveArray::from_option_iter([Some(42i32)]),
+            &mut ctx
+        );
     }
 
     #[test]
@@ -2400,7 +2375,7 @@ mod test {
             SearchResult::Found(1)
         );
 
-        // chunks 1, 2: no patches
+        // Chunk 1 has no patches; 2000 is before the first patch in chunk 2.
         assert_eq!(
             patches.search_index(1500, &mut ctx).unwrap(),
             SearchResult::NotFound(2)
@@ -2410,7 +2385,7 @@ mod test {
             SearchResult::NotFound(2)
         );
 
-        // chunk 3: patches at 3000, 3100
+        // The patches at 3000 and 3100 straddle chunks 2 and 3.
         assert_eq!(
             patches.search_index(3000, &mut ctx).unwrap(),
             SearchResult::Found(2)
@@ -2456,6 +2431,11 @@ mod test {
             sliced.search_index(250, &mut ctx).unwrap(),
             SearchResult::NotFound(1)
         );
+        assert_arrays_eq!(
+            sliced.values(),
+            PrimitiveArray::from_iter([30i32, 35, 40, 45, 50]),
+            &mut ctx
+        );
     }
 
     #[test]
@@ -2491,13 +2471,18 @@ mod test {
             sliced.search_index(900, &mut ctx).unwrap(),
             SearchResult::NotFound(4)
         );
+        assert_arrays_eq!(
+            sliced.values(),
+            PrimitiveArray::from_iter([35i32, 40, 45, 50]),
+            &mut ctx
+        );
     }
 
     #[test]
     fn test_chunk_offsets_slice_empty_result() {
         let indices = buffer![100u64, 200, 3000, 3100].into_array();
         let values = buffer![10i32, 20, 30, 40].into_array();
-        let chunk_offsets = buffer![0u64, 2].into_array();
+        let chunk_offsets = buffer![0u64, 2, 2, 3].into_array();
         let patches = Patches::new(4000, 0, indices, values, Some(chunk_offsets)).unwrap();
 
         let sliced = patches.slice(1000..2000).unwrap();
@@ -2527,6 +2512,11 @@ mod test {
         assert_eq!(
             sliced.search_index(150, &mut ctx).unwrap(),
             SearchResult::NotFound(1)
+        );
+        assert_arrays_eq!(
+            sliced.values(),
+            PrimitiveArray::from_iter([20i32]),
+            &mut ctx
         );
     }
 
@@ -2559,6 +2549,11 @@ mod test {
             sliced.search_index(1950, &mut ctx).unwrap(),
             SearchResult::Found(3)
         ); // 2100 - 150 = 1950
+        assert_arrays_eq!(
+            sliced.values(),
+            PrimitiveArray::from_iter([20i32, 30, 40, 50]),
+            &mut ctx
+        );
     }
 
     #[test]
@@ -2620,6 +2615,12 @@ mod test {
             SearchResult::Found(1)
         );
 
+        assert_arrays_eq!(
+            sliced.values(),
+            PrimitiveArray::from_iter([10i32, 20]),
+            &mut ctx
+        );
+
         // Slice at the very end
         let sliced = patches.slice(2040..3000).unwrap().unwrap();
         assert_eq!(sliced.num_patches(), 2); // patches at 2047 and 2048
@@ -2631,6 +2632,11 @@ mod test {
             sliced.search_index(8, &mut ctx).unwrap(),
             SearchResult::Found(1)
         ); // 2048 - 2040
+        assert_arrays_eq!(
+            sliced.values(),
+            PrimitiveArray::from_iter([50i32, 60]),
+            &mut ctx
+        );
     }
 
     #[test]
@@ -2656,10 +2662,21 @@ mod test {
             sliced2.search_index(150, &mut ctx).unwrap(),
             SearchResult::NotFound(1)
         );
+        assert_arrays_eq!(
+            sliced1.values(),
+            PrimitiveArray::from_iter([20i32, 30, 40, 50]),
+            &mut ctx
+        );
+        assert_arrays_eq!(
+            sliced2.values(),
+            PrimitiveArray::from_iter([30i32]),
+            &mut ctx
+        );
     }
 
     #[test]
     fn test_nested_slice_with_dropped_first_chunk() {
+        let mut ctx = array_session().create_execution_ctx();
         // PATCH_CHUNK_SIZE = 1024, so the two patches land in different chunks.
         let indices = buffer![0u64, 1024].into_array();
         let values = buffer![1i32, 2].into_array();
@@ -2670,6 +2687,17 @@ mod test {
         let dropped_first = patches.slice(1024..2048).unwrap().unwrap();
         let resliced = dropped_first.slice(0..1024).unwrap().unwrap();
         assert_eq!(resliced.num_patches(), 1);
+        assert_eq!(resliced.array_len(), 1024);
+        assert_eq!(resliced.offset(), 1024);
+        assert_eq!(
+            resliced.search_index(0, &mut ctx).unwrap(),
+            SearchResult::Found(0)
+        );
+        assert_arrays_eq!(
+            resliced.values(),
+            PrimitiveArray::from_iter([2i32]),
+            &mut ctx
+        );
     }
 
     #[test]

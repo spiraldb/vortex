@@ -192,7 +192,7 @@ mod tests {
         .into_array()
     }
 
-    fn primitive_field(array: &ArrayRef, field_path: &[&str]) -> VortexResult<PrimitiveArray> {
+    fn field_array(array: &ArrayRef, field_path: &[&str]) -> VortexResult<ArrayRef> {
         let mut ctx = array_session().create_execution_ctx();
         let mut field_path = field_path.iter();
 
@@ -213,8 +213,7 @@ mod tests {
                 .clone();
             array = next;
         }
-        let result = array.execute::<PrimitiveArray>(&mut ctx)?;
-        Ok(result)
+        Ok(array)
     }
 
     #[test]
@@ -260,17 +259,17 @@ mod tests {
         assert!(matches!(actual_array.validity(), Ok(Validity::NonNullable)));
 
         assert_arrays_eq!(
-            primitive_field(&actual_array.clone().into_array(), &["one"]).unwrap(),
+            field_array(&actual_array.clone().into_array(), &["one"]).unwrap(),
             PrimitiveArray::from_iter([0i32, 1, 2]),
             &mut ctx
         );
         assert_arrays_eq!(
-            primitive_field(&actual_array.clone().into_array(), &["two"]).unwrap(),
+            field_array(&actual_array.clone().into_array(), &["two"]).unwrap(),
             PrimitiveArray::from_iter([4i32, 5, 6]),
             &mut ctx
         );
         assert_arrays_eq!(
-            primitive_field(&actual_array.into_array(), &["three"]).unwrap(),
+            field_array(&actual_array.into_array(), &["three"]).unwrap(),
             PrimitiveArray::from_iter([0i32, 1, 2]),
             &mut ctx
         );
@@ -306,22 +305,22 @@ mod tests {
         assert_eq!(actual_array.names(), ["one", "two", "three"]);
 
         assert_arrays_eq!(
-            primitive_field(&actual_array.clone().into_array(), &["one"]).unwrap(),
+            field_array(&actual_array.clone().into_array(), &["one"]).unwrap(),
             PrimitiveArray::from_iter([0i32, 1, 2]),
             &mut ctx
         );
         assert_arrays_eq!(
-            primitive_field(&actual_array.clone().into_array(), &["two", "two_one"]).unwrap(),
+            field_array(&actual_array.clone().into_array(), &["two", "two_one"]).unwrap(),
             PrimitiveArray::from_iter([4i32, 5, 6]),
             &mut ctx
         );
         assert_arrays_eq!(
-            primitive_field(&actual_array.clone().into_array(), &["two", "two_two"]).unwrap(),
+            field_array(&actual_array.clone().into_array(), &["two", "two_two"]).unwrap(),
             PrimitiveArray::from_iter([4i32, 5, 6]),
             &mut ctx
         );
         assert_arrays_eq!(
-            primitive_field(&actual_array.into_array(), &["three"]).unwrap(),
+            field_array(&actual_array.into_array(), &["three"]).unwrap(),
             PrimitiveArray::from_iter([0i32, 1, 2]),
             &mut ctx
         );
@@ -346,6 +345,18 @@ mod tests {
 
         assert_eq!(actual_array.names(), ["one", "two", "three"]);
         assert!(matches!(actual_array.validity(), Ok(Validity::AllValid)));
+        let expected = StructArray::try_new(
+            ["one", "two", "three"].into(),
+            vec![
+                buffer![0i32, 1, 2].into_array(),
+                buffer![4i32, 5, 6].into_array(),
+                buffer![0i32, 1, 2].into_array(),
+            ],
+            3,
+            Validity::AllValid,
+        )
+        .unwrap();
+        assert_arrays_eq!(actual_array, expected, &mut ctx);
     }
 
     #[test]

@@ -12,7 +12,6 @@ use vortex_mask::Mask;
 use vortex_session::VortexSession;
 
 use super::*;
-use crate::Canonical;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
 use crate::array_session;
@@ -109,7 +108,16 @@ fn test_simple_list_filter() {
 
     let filtered = list.filter(Mask::from(BitBuffer::from(vec![false, true, true])));
 
-    assert!(filtered.is_ok())
+    let expected = ListArray::new(
+        PrimitiveArray::from_option_iter([Some(3i32), Some(4), Some(5)]).into_array(),
+        buffer![0u32, 2, 3].into_array(),
+        Validity::AllValid,
+    );
+    assert_arrays_eq!(
+        filtered.unwrap(),
+        expected,
+        &mut SESSION.create_execution_ctx()
+    );
 }
 
 #[test]
@@ -233,6 +241,12 @@ fn test_list_filter_with_nulls() {
     assert!(!filtered.execute_scalar(1, &mut ctx).unwrap().is_valid()); // Was null.
     assert!(!filtered.execute_scalar(2, &mut ctx).unwrap().is_valid()); // Was null.
     assert!(filtered.execute_scalar(3, &mut ctx).unwrap().is_valid());
+    let expected = ListArray::new(
+        PrimitiveArray::from_iter((0i32..3).chain(12..15)).into_array(),
+        buffer![0u32, 3, 3, 3, 6].into_array(),
+        Validity::from_iter([true, false, false, true]),
+    );
+    assert_arrays_eq!(filtered, expected, &mut ctx);
 }
 
 #[test]
@@ -276,6 +290,12 @@ fn test_list_filter_all_false() {
     // When mask is AllFalse, filter returns a canonical empty array (ListViewArray).
     // We need to check the length directly without casting to a specific type.
     assert_eq!(filtered.len(), 0);
+    let expected = ListArray::new(
+        PrimitiveArray::empty::<i32>(Nullability::NonNullable).into_array(),
+        buffer![0u32].into_array(),
+        Validity::AllValid,
+    );
+    assert_arrays_eq!(filtered, expected, &mut SESSION.create_execution_ctx());
 }
 
 #[test]
@@ -458,6 +478,16 @@ fn test_offset_to_0() {
     // Each list has 3 elements
     assert_eq!(list_array.list_elements_at(0).unwrap().len(), 3);
     assert_eq!(list_array.list_elements_at(1).unwrap().len(), 3);
+    assert_arrays_eq!(
+        list_array.list_elements_at(0).unwrap(),
+        buffer![7i32, 8, 9].into_array(),
+        &mut SESSION.create_execution_ctx()
+    );
+    assert_arrays_eq!(
+        list_array.list_elements_at(1).unwrap(),
+        buffer![10i32, 11, 12].into_array(),
+        &mut SESSION.create_execution_ctx()
+    );
 }
 
 type OptVec<T> = Vec<Option<T>>;
@@ -712,6 +742,12 @@ fn test_list_of_lists_nullable_outer() {
     let fourth = list_of_lists.list_elements_at(3).unwrap();
     let fourth_list = fourth.as_::<List>();
     assert_eq!(fourth_list.len(), 1);
+    assert_arrays_eq!(inner, buffer![4i32, 5, 6].into_array(), &mut ctx);
+    assert_arrays_eq!(
+        fourth_list.list_elements_at(0).unwrap(),
+        buffer![7i32].into_array(),
+        &mut ctx
+    );
 }
 
 #[test]
@@ -756,6 +792,12 @@ fn test_list_of_lists_nullable_inner() {
         .execute_scalar(1, &mut SESSION.create_execution_ctx())
         .unwrap();
     assert!(second_inner.is_null());
+    let last = list_of_lists.list_elements_at(3).unwrap();
+    assert_arrays_eq!(
+        last.as_::<List>().list_elements_at(0).unwrap(),
+        PrimitiveArray::from_option_iter([None, Some(7i32)]),
+        &mut SESSION.create_execution_ctx()
+    );
 }
 
 #[test]
@@ -814,6 +856,7 @@ fn test_list_of_lists_both_nullable() {
     assert_eq!(fourth_list.len(), 1);
     let inner = fourth_list.array().execute_scalar(0, &mut ctx).unwrap();
     assert!(inner.is_null());
+    assert_arrays_eq!(first_inner, buffer![1i32, 2].into_array(), &mut ctx);
 }
 
 #[test]
@@ -948,6 +991,16 @@ fn test_recursive_compact_list_of_lists() {
         non_recursive_array.execute_scalar(0, &mut ctx).unwrap(),
         recursive_array.execute_scalar(0, &mut ctx).unwrap()
     );
+    assert_eq!(
+        non_recursive_array.execute_scalar(0, &mut ctx).unwrap(),
+        sliced.execute_scalar(0, &mut ctx).unwrap()
+    );
+    assert_eq!(
+        recursive_array.execute_scalar(0, &mut ctx).unwrap(),
+        sliced.execute_scalar(0, &mut ctx).unwrap()
+    );
+    assert_arrays_eq!(non_recursive_array, sliced, &mut ctx);
+    assert_arrays_eq!(recursive_array, sliced, &mut ctx);
 }
 
 #[test]
@@ -963,8 +1016,14 @@ fn test_filter_sliced_list_array() -> VortexResult<()> {
     let mask = Mask::from(BitBuffer::from(vec![true, false, true]));
     let filter_array = FilterArray::new(list, mask).into_array();
     let mut ctx = SESSION.create_execution_ctx();
-    let result = filter_array.execute::<Canonical>(&mut ctx)?;
+    let result = filter_array;
 
     assert_eq!(result.len(), 2);
+    let expected = ListArray::new(
+        PrimitiveArray::from_iter((20i32..30).chain(40..50)).into_array(),
+        buffer![0u32, 10, 20].into_array(),
+        Validity::AllValid,
+    );
+    assert_arrays_eq!(result, expected, &mut ctx);
     Ok(())
 }

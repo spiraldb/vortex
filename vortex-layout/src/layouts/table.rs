@@ -340,7 +340,9 @@ mod tests {
 
     use crate::LayoutRef;
     use crate::LayoutStrategy;
+    use crate::layouts::chunked::Chunked;
     use crate::layouts::chunked::writer::ChunkedLayoutStrategy;
+    use crate::layouts::flat::Flat;
     use crate::layouts::flat::writer::FlatLayoutStrategy;
     use crate::layouts::list::List;
     use crate::layouts::repartition::RepartitionStrategy;
@@ -612,14 +614,35 @@ mod tests {
         )?
         .into_array();
 
-        let strategy =
-            flat_table().with_field_writer(field_path!(a), Arc::new(FlatLayoutStrategy::default()));
+        let strategy = flat_table().with_field_writer(
+            field_path!(a),
+            Arc::new(RepartitionStrategy::new(
+                ChunkedLayoutStrategy::new(FlatLayoutStrategy::default()),
+                RepartitionWriterOptions {
+                    block_size_minimum: 0,
+                    block_len_multiple: 2,
+                    block_size_target: None,
+                    canonicalize: false,
+                },
+            )),
+        );
         let layout = write(&strategy, struct_array).await?;
-        insta::assert_snapshot!(layout.display_tree(), @r"
-        vortex.struct, dtype: {a=i32, b=i32}, children: 2
-        ├── a: vortex.flat, dtype: i32, segment: 0
-        └── b: vortex.flat, dtype: i32, segment: 1
-        ");
+        assert_eq!(layout.nchildren(), 2);
+        let overridden = layout.slot(1)?.vortex_expect("field a");
+        assert!(overridden.is::<Chunked>());
+        assert_eq!(overridden.nchildren(), 2);
+        assert_eq!(
+            overridden.slot(0)?.vortex_expect("first chunk").row_count(),
+            2
+        );
+        assert_eq!(
+            overridden
+                .slot(1)?
+                .vortex_expect("second chunk")
+                .row_count(),
+            1
+        );
+        assert!(layout.slot(2)?.vortex_expect("field b").is::<Flat>());
         Ok(())
     }
 

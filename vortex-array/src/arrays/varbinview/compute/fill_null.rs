@@ -151,8 +151,7 @@ mod tests {
 
         let filled = array
             .into_array()
-            .fill_null(Scalar::utf8("fill", Nullability::NonNullable))?
-            .execute::<VarBinViewArray>(&mut ctx)?;
+            .fill_null(Scalar::utf8("fill", Nullability::NonNullable))?;
 
         assert_arrays_eq!(
             filled,

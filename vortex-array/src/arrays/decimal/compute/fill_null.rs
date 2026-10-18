@@ -86,6 +86,7 @@ fn fill_buffer<T: NativeDecimalType>(
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
     use vortex_buffer::buffer;
 
     use crate::IntoArray;
@@ -95,6 +96,7 @@ mod tests {
     use crate::assert_arrays_eq;
     use crate::builtins::ArrayBuiltins;
     use crate::dtype::DecimalDType;
+    use crate::dtype::DecimalType;
     use crate::dtype::Nullability;
     use crate::scalar::DecimalValue;
     use crate::scalar::Scalar;
@@ -157,8 +159,6 @@ mod tests {
                 DecimalDType::new(19, 2),
                 Nullability::NonNullable,
             ))
-            .unwrap()
-            .execute::<DecimalArray>(&mut ctx)
             .unwrap();
         assert_arrays_eq!(
             p,
@@ -168,22 +168,25 @@ mod tests {
     }
 
     /// fill_null with a value that overflows the array's storage type should upcast the array.
-    #[test]
-    fn fill_null_overflow_upcasts() {
+    #[rstest]
+    #[case(DecimalValue::I16(200), DecimalType::I16)]
+    #[case(DecimalValue::I128(200), DecimalType::I128)]
+    fn fill_null_overflow_upcasts(#[case] fill: DecimalValue, #[case] expected_type: DecimalType) {
         let mut ctx = array_session().create_execution_ctx();
         let decimal_dtype = DecimalDType::new(3, 0);
         let arr = DecimalArray::from_option_iter([None, Some(10i8), None], decimal_dtype);
-        // i8 max is 127, so 200 doesn't fit — the array should be widened to i16.
+        // i8 max is 127, so 200 requires widening to the fill value's storage type.
         let result = arr
             .into_array()
             .fill_null(Scalar::decimal(
-                DecimalValue::I128(200i128),
+                fill,
                 DecimalDType::new(3, 0),
                 Nullability::NonNullable,
             ))
             .unwrap()
             .execute::<DecimalArray>(&mut ctx)
             .unwrap();
+        assert_eq!(result.values_type(), expected_type);
         assert_arrays_eq!(
             result,
             DecimalArray::from_iter([200i16, 10, 200], decimal_dtype),
@@ -208,8 +211,6 @@ mod tests {
                 DecimalDType::new(19, 2),
                 Nullability::NonNullable,
             ))
-            .unwrap()
-            .execute::<DecimalArray>(&mut ctx)
             .unwrap();
         assert_arrays_eq!(
             p,

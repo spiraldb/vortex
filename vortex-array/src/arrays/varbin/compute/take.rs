@@ -839,16 +839,19 @@ mod tests {
 
         let idx1: PrimitiveArray = (0..1).collect();
 
-        assert_eq!(
-            arr.take(idx1.into_array()).unwrap().dtype(),
-            &DType::Utf8(Nullability::NonNullable)
+        let mut ctx = array_session().create_execution_ctx();
+        assert_arrays_eq!(
+            arr.take(idx1.into_array()).unwrap(),
+            VarBinViewArray::from_iter_str(["h"]),
+            &mut ctx
         );
 
         let idx2: PrimitiveArray = PrimitiveArray::from_option_iter(vec![Some(0)]);
 
-        assert_eq!(
-            arr.take(idx2.into_array()).unwrap().dtype(),
-            &DType::Utf8(Nullability::Nullable)
+        assert_arrays_eq!(
+            arr.take(idx2.into_array()).unwrap(),
+            VarBinViewArray::from_iter_nullable_str([Some("h")]),
+            &mut ctx
         );
     }
 
@@ -894,7 +897,7 @@ mod tests {
             [Some(scream.clone()), Some(scream.clone()), Some(scream)],
             DType::Utf8(Nullability::NonNullable),
         );
-        assert_arrays_eq!(expected, taken, &mut ctx);
+        assert_arrays_eq!(taken, expected, &mut ctx);
     }
 
     #[rstest]
@@ -912,10 +915,23 @@ mod tests {
         let mut sink = super::Offsets::with_capacity(out_offset_ptype, 2);
         sink.push(0);
         sink.push(max_offset);
+        let array = sink.into_array();
         assert_eq!(
-            PType::try_from(sink.into_array().dtype()).unwrap(),
-            expected
+            array.dtype(),
+            &DType::Primitive(expected, Nullability::NonNullable)
         );
+        assert_eq!(array.len(), 2);
+        let mut ctx = array_session().create_execution_ctx();
+        for (index, value) in [0, max_offset as u64].into_iter().enumerate() {
+            assert_eq!(
+                array
+                    .execute_scalar(index, &mut ctx)
+                    .unwrap()
+                    .as_primitive()
+                    .as_::<u64>(),
+                Some(value)
+            );
+        }
     }
 
     #[test]
@@ -948,6 +964,6 @@ mod tests {
             [Some("world"), Some("hello")],
             DType::Utf8(Nullability::NonNullable),
         );
-        assert_arrays_eq!(expected, taken, &mut ctx);
+        assert_arrays_eq!(taken, expected, &mut ctx);
     }
 }

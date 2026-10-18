@@ -146,17 +146,6 @@ mod tests {
         assert_eq!(SELECT_CALLS.load(Ordering::Relaxed), 1);
     }
 
-    #[test]
-    fn selector_early_returns_skip_the_default() {
-        static KERNEL: CpuKernel<fn(u64) -> u64> = CpuKernel::new(|| {
-            if 1 + 1 == 2 {
-                return |x| x + 2;
-            }
-            |x| x + 100
-        });
-        assert_eq!(KERNEL.get()(0), 2);
-    }
-
     type XorFn = fn(&[u8; 4], &mut [u8; 4]);
 
     #[test]

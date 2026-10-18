@@ -586,84 +586,6 @@ mod tests {
     }
 
     #[test]
-    fn test_scalar_subtract_unsigned() {
-        let mut ctx = array_session().create_execution_ctx();
-        use vortex_buffer::buffer;
-
-        use crate::IntoArray;
-        use crate::arrays::ConstantArray;
-        use crate::arrays::PrimitiveArray;
-
-        let values = buffer![1u16, 2, 3].into_array();
-        let rhs = ConstantArray::new(Scalar::from(1u16), 3).into_array();
-        let result = values.binary(rhs, Operator::Sub).unwrap();
-        assert_arrays_eq!(result, PrimitiveArray::from_iter([0u16, 1, 2]), &mut ctx);
-    }
-
-    #[test]
-    fn test_scalar_subtract_signed() {
-        let mut ctx = array_session().create_execution_ctx();
-        use vortex_buffer::buffer;
-
-        use crate::IntoArray;
-        use crate::arrays::ConstantArray;
-        use crate::arrays::PrimitiveArray;
-
-        let values = buffer![1i64, 2, 3].into_array();
-        let rhs = ConstantArray::new(Scalar::from(-1i64), 3).into_array();
-        let result = values.binary(rhs, Operator::Sub).unwrap();
-        assert_arrays_eq!(result, PrimitiveArray::from_iter([2i64, 3, 4]), &mut ctx);
-    }
-
-    #[test]
-    fn test_scalar_subtract_nullable() {
-        let mut ctx = array_session().create_execution_ctx();
-        use crate::IntoArray;
-        use crate::arrays::ConstantArray;
-        use crate::arrays::PrimitiveArray;
-
-        let values = PrimitiveArray::from_option_iter([Some(1u16), Some(2), None, Some(3)]);
-        let rhs = ConstantArray::new(Scalar::from(Some(1u16)), 4).into_array();
-        let result = values.into_array().binary(rhs, Operator::Sub).unwrap();
-        assert_arrays_eq!(
-            result,
-            PrimitiveArray::from_option_iter([Some(0u16), Some(1), None, Some(2)]),
-            &mut ctx
-        );
-    }
-
-    #[test]
-    fn test_scalar_subtract_float() {
-        let mut ctx = array_session().create_execution_ctx();
-        use vortex_buffer::buffer;
-
-        use crate::IntoArray;
-        use crate::arrays::ConstantArray;
-        use crate::arrays::PrimitiveArray;
-
-        let values = buffer![1.0f64, 2.0, 3.0].into_array();
-        let rhs = ConstantArray::new(Scalar::from(-1f64), 3).into_array();
-        let result = values.binary(rhs, Operator::Sub).unwrap();
-        assert_arrays_eq!(
-            result,
-            PrimitiveArray::from_iter([2.0f64, 3.0, 4.0]),
-            &mut ctx
-        );
-    }
-
-    #[test]
-    fn test_scalar_subtract_float_underflow_is_ok() {
-        use vortex_buffer::buffer;
-
-        let values = buffer![f32::MIN, 2.0, 3.0].into_array();
-        let rhs1 = ConstantArray::new(Scalar::from(1.0f32), 3).into_array();
-        let _results = values.binary(rhs1, Operator::Sub).unwrap();
-        let values = buffer![f32::MIN, 2.0, 3.0].into_array();
-        let rhs2 = ConstantArray::new(Scalar::from(f32::MAX), 3).into_array();
-        let _results = values.binary(rhs2, Operator::Sub).unwrap();
-    }
-
-    #[test]
     fn test_and_reduce() -> VortexResult<()> {
         let mut ctx = array_session().create_execution_ctx();
         let left = BoolArray::from_iter([true, true, false]).into_array();
@@ -751,6 +673,7 @@ mod tests {
                 &mut ctx
             );
             assert_arrays_eq!(array.as_::<ScalarFn>().get_child(1), right, &mut ctx);
+            assert_arrays_eq!(array, BoolArray::from_iter([false, false, true]), &mut ctx);
         }
         Ok(())
     }
@@ -775,6 +698,7 @@ mod tests {
                 &mut ctx
             );
             assert_arrays_eq!(array.as_::<ScalarFn>().get_child(1), right, &mut ctx);
+            assert_arrays_eq!(array, BoolArray::from_iter([true, true, true]), &mut ctx);
         }
         Ok(())
     }

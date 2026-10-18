@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
-mod canonical;
 mod operations;
 mod validity;
 
@@ -232,6 +231,7 @@ mod tests {
     use crate::arrays::Masked;
     use crate::arrays::MaskedArray;
     use crate::arrays::PrimitiveArray;
+    use crate::assert_arrays_eq;
     use crate::dtype::Nullability;
     use crate::serde::SerializeOptions;
     use crate::serde::SerializedArray;
@@ -285,11 +285,7 @@ mod tests {
             .unwrap();
 
         assert!(decoded.is::<Masked>());
-        let exec_ctx = array_session().create_execution_ctx();
-        assert_eq!(
-            array.as_ref().display_values(&exec_ctx).to_string(),
-            decoded.display_values(&exec_ctx).to_string()
-        );
+        assert_arrays_eq!(decoded, array, &mut array_session().create_execution_ctx());
     }
 
     /// Regression test for issue #5989: execute_fast_path returns child with wrong dtype.

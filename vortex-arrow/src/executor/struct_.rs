@@ -217,6 +217,7 @@ mod tests {
     use arrays::varbinview::VarBinViewArray;
     use arrow_array::Array;
     use arrow_array::ArrayRef;
+    use arrow_array::Int64Array;
     use arrow_array::PrimitiveArray as ArrowPrimitiveArray;
     use arrow_array::StringViewArray;
     use arrow_array::StructArray as ArrowStructArray;
@@ -231,6 +232,7 @@ mod tests {
     use vortex_array::arrays::BoolArray;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::arrays::StructArray;
+    use vortex_array::assert_arrays_eq;
     use vortex_array::dtype::FieldNames;
     use vortex_array::scalar_fn::fns::mask::Mask;
     use vortex_array::validity::Validity;
@@ -256,9 +258,15 @@ mod tests {
         let fields = vec![Field::new("xs", DataType::Int64, false)];
         let arrow_dt = DataType::Struct(fields.into());
 
-        struct_a
+        let actual = struct_a
             .into_array()
             .execute_arrow(Some(&arrow_dt), &mut ctx)?;
+        let expected = ArrowStructArray::new(
+            vec![Field::new("xs", DataType::Int64, false)].into(),
+            vec![Arc::new(Int64Array::from(vec![0, 1, 2, 3, 4]))],
+            None,
+        );
+        assert_eq!(actual.to_data(), expected.to_data());
         Ok(())
     }
 
@@ -278,11 +286,14 @@ mod tests {
         let fields = vec![Field::new("xs", DataType::Int64, false)];
         let arrow_dt = DataType::Struct(fields.into());
 
+        let error = struct_a
+            .into_array()
+            .execute_arrow(Some(&arrow_dt), &mut ctx)
+            .unwrap_err();
         assert!(
-            struct_a
-                .into_array()
-                .execute_arrow(Some(&arrow_dt), &mut ctx)
-                .is_err()
+            error
+                .to_string()
+                .contains("non-nullable Arrow field because it contains nulls")
         );
         Ok(())
     }
@@ -410,10 +421,12 @@ mod tests {
             ]
             .as_slice(),
         )?;
+        let original = array.clone();
         let orig_dtype = array.dtype().clone();
         let arrow_array = array.into_array().execute_arrow(None, &mut ctx)?;
         let from_arrow = from_arrow_dyn(arrow_array.as_ref(), false)?;
         assert_eq!(&orig_dtype, from_arrow.dtype());
+        assert_arrays_eq!(from_arrow, original, &mut ctx);
         Ok(())
     }
 }

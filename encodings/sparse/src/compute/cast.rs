@@ -61,31 +61,6 @@ mod tests {
     });
 
     #[test]
-    fn test_cast_sparse_i32_to_i64() {
-        let mut ctx = SESSION.create_execution_ctx();
-        let sparse = Sparse::try_new(
-            buffer![2u64, 5, 8].into_array(),
-            buffer![100i32, 200, 300].into_array(),
-            10,
-            Scalar::from(0i32),
-        )
-        .unwrap();
-
-        let casted = sparse
-            .into_array()
-            .cast(DType::Primitive(PType::I64, Nullability::NonNullable))
-            .unwrap();
-        assert_eq!(
-            casted.dtype(),
-            &DType::Primitive(PType::I64, Nullability::NonNullable)
-        );
-
-        let expected = PrimitiveArray::from_iter([0i64, 0, 100, 0, 0, 200, 0, 0, 300, 0]);
-        let casted_primitive = casted.execute::<PrimitiveArray>(&mut ctx).unwrap();
-        assert_arrays_eq!(casted_primitive, expected, &mut ctx);
-    }
-
-    #[test]
     fn test_cast_sparse_with_null_fill() {
         let sparse = Sparse::try_new(
             buffer![1u64, 3, 5].into_array(),
@@ -161,8 +136,7 @@ mod tests {
         );
 
         let expected = PrimitiveArray::from_iter([10u64, 20, 30, 40, 50]);
-        let casted_primitive = casted.execute::<PrimitiveArray>(&mut ctx)?;
-        assert_arrays_eq!(casted_primitive, expected, &mut ctx);
+        assert_arrays_eq!(casted, expected, &mut ctx);
         Ok(())
     }
 

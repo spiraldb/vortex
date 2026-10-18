@@ -294,11 +294,12 @@ async fn test_resolved_key_reaches_the_object(
         panic!("the payload is not a Vortex file, so opening it must fail")
     };
     assert!(
-        !matches!(
-            err,
-            VortexError::ObjectStore(object_store::Error::NotFound { .. }, _)
+        matches!(
+            &err,
+            VortexError::Other(message, _)
+                if message.as_ref() == "Malformed file, invalid magic bytes, got [0, 0, 0, 0]"
         ),
-        "opening {key:?} requested a key the store does not have: {err}"
+        "opening {key:?} must read the stored payload and reject its footer: {err}"
     );
     Ok(())
 }

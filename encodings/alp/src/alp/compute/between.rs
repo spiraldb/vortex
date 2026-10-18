@@ -171,7 +171,7 @@ mod tests {
             between_impl(arr.as_view(), lower, upper, Nullability::Nullable, options).unwrap();
         assert_arrays_eq!(
             res,
-            ConstantArray::new(Scalar::bool(expected, res.dtype().nullability()), arr.len())
+            ConstantArray::new(Scalar::bool(expected, Nullability::Nullable), arr.len())
                 .into_array(),
             &mut SESSION.create_execution_ctx()
         );

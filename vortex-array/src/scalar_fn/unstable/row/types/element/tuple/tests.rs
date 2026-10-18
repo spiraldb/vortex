@@ -25,6 +25,7 @@ use crate::dtype::DType;
 use crate::dtype::Nullability;
 use crate::extension::datetime::TimeUnit;
 use crate::extension::datetime::Timestamp;
+use crate::scalar::Scalar;
 use crate::scalar_fn::VecExecutionArgs;
 use crate::scalar_fn::unstable::row::InputElement;
 use crate::validity::Validity;
@@ -154,6 +155,7 @@ fn test_batch_const_unwraps_filtered_masked_constant() -> VortexResult<()> {
     };
 
     assert!(const_array.is::<Constant>());
+    assert_eq!(const_array.as_::<Constant>().scalar(), &Scalar::from(7_i64));
     Ok(())
 }
 
@@ -169,5 +171,11 @@ fn test_batch_const_preserves_filtered_extension() -> VortexResult<()> {
     };
 
     assert_eq!(const_array.dtype(), extension.dtype());
+    let mut ctx = array_session().create_execution_ctx();
+    let scalar = const_array.execute_scalar(0, &mut ctx)?;
+    assert_eq!(
+        scalar.as_extension().to_storage_scalar(),
+        Scalar::from(7_i64)
+    );
     Ok(())
 }

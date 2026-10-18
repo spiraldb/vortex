@@ -161,7 +161,11 @@ mod tests {
             .await?
             .into_array();
 
-        assert_arrays_eq!(zigzag_array, gpu_result, &mut ctx);
+        assert_arrays_eq!(
+            gpu_result,
+            PrimitiveArray::from_iter([0i32, 1, 2, -1, -2]),
+            &mut ctx
+        );
 
         Ok(())
     }

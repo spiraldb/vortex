@@ -262,6 +262,11 @@ mod tests {
             .decode(&dtype, 5, &ReadContext::new(array_ctx.to_ids()), &session)
             .unwrap();
         assert!(decoded.is::<Decimal>());
+        assert_arrays_eq!(
+            decoded,
+            DecimalArray::from_iter([100i128, 200, 300, 400, 500], DecimalDType::new(10, 2)),
+            &mut session.create_execution_ctx()
+        );
     }
 
     #[test]

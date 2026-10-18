@@ -169,6 +169,12 @@ mod tests {
             array.is::<Chunked>(),
             "the runs should have been concatenated, not copied into one buffer",
         );
+        assert_eq!(
+            Validity::Array(array)
+                .execute_mask(2 * RUN_LEN, &mut array_session().create_execution_ctx())
+                .unwrap(),
+            Mask::from_iter((0..2 * RUN_LEN).map(|i| i % 2 == 0)),
+        );
     }
 
     /// Uniform runs collapse instead of becoming a bool array.
@@ -246,7 +252,10 @@ mod tests {
         let mut builder = ValidityBuilder::new(0, BufferAllocatorRef::static_ref());
 
         builder.append_validity(Validity::AllInvalid, RUN_LEN);
-        assert_eq!(builder.finish_with_nullability(Nullable).maybe_len(), None);
+        assert!(matches!(
+            builder.finish_with_nullability(Nullable),
+            Validity::AllInvalid
+        ));
 
         assert_eq!(builder.len(), 0);
         builder.append_n_nulls(1);

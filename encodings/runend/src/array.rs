@@ -837,12 +837,11 @@ mod tests {
             &mut ctx,
         )?;
 
-        let decoded = arr.into_array().execute::<DecimalArray>(&mut ctx)?;
         let expected = DecimalArray::from_iter(
             [12_345i128, 12_345, -67_890, -67_890, -67_890, 100],
             decimal_dtype,
         );
-        assert_arrays_eq!(decoded, expected, &mut ctx);
+        assert_arrays_eq!(arr, expected, &mut ctx);
         Ok(())
     }
 
@@ -858,7 +857,6 @@ mod tests {
             &mut ctx,
         )?;
 
-        let decoded = arr.into_array().execute::<DecimalArray>(&mut ctx)?;
         let expected = DecimalArray::from_option_iter(
             [
                 Some(12_345i128),
@@ -871,7 +869,7 @@ mod tests {
             ],
             decimal_dtype,
         );
-        assert_arrays_eq!(decoded, expected, &mut ctx);
+        assert_arrays_eq!(arr, expected, &mut ctx);
         Ok(())
     }
 
@@ -887,9 +885,8 @@ mod tests {
         )?;
 
         let sliced = arr.slice(2..8)?;
-        let decoded = sliced.execute::<DecimalArray>(&mut ctx)?;
         let expected = DecimalArray::from_iter([100i128, 200, 200, 300, 300, 300], decimal_dtype);
-        assert_arrays_eq!(decoded, expected, &mut ctx);
+        assert_arrays_eq!(sliced, expected, &mut ctx);
         Ok(())
     }
 
@@ -902,10 +899,9 @@ mod tests {
         let values = DecimalArray::from_iter([first, second], decimal_dtype);
         let arr = RunEnd::try_new(buffer![2u32, 5].into_array(), values.into_array(), &mut ctx)?;
 
-        let decoded = arr.into_array().execute::<DecimalArray>(&mut ctx)?;
         let expected =
             DecimalArray::from_iter([first, first, second, second, second], decimal_dtype);
-        assert_arrays_eq!(decoded, expected, &mut ctx);
+        assert_arrays_eq!(arr, expected, &mut ctx);
         Ok(())
     }
 }

@@ -255,9 +255,9 @@ mod tests {
         Ok(())
     }
 
-    /// ALP with patches — plan builder rejects it, falls back to ALPExecutor.
+    /// ALP with patches retains exception values through automatic GPU dispatch.
     #[crate::test]
-    async fn test_fallback() -> VortexResult<()> {
+    async fn test_alp_patches_auto_dispatch() -> VortexResult<()> {
         let mut cpu_ctx = array_session().create_execution_ctx();
         use vortex::array::patches::Patches;
         use vortex::array::validity::Validity::NonNullable as NN;
@@ -356,7 +356,7 @@ mod tests {
             .into_host()
             .await?
             .into_array();
-        assert_arrays_eq!(cpu, gpu, &mut cpu_ctx);
+        assert_arrays_eq!(gpu, cpu, &mut cpu_ctx);
         Ok(())
     }
 
@@ -389,7 +389,7 @@ mod tests {
             .into_host()
             .await?
             .into_array();
-        assert_arrays_eq!(cpu, gpu, &mut cpu_ctx);
+        assert_arrays_eq!(gpu, cpu, &mut cpu_ctx);
         Ok(())
     }
 
@@ -424,7 +424,7 @@ mod tests {
         assert!(!storage.is_host(), "storage was not decoded on the device");
 
         let actual = actual.into_host().await?.into_array();
-        assert_arrays_eq!(expected, actual, &mut cpu_ctx);
+        assert_arrays_eq!(actual, expected, &mut cpu_ctx);
         Ok(())
     }
 

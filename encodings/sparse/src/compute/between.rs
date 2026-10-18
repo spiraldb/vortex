@@ -119,17 +119,11 @@ mod tests {
         let kernel = array
             .clone()
             .between(lower.clone(), upper.clone(), options.clone())
-            .unwrap()
-            .execute::<Canonical>(&mut ctx)
             .unwrap();
 
         // Baseline: canonicalize the input first so between runs on a PrimitiveArray.
         let canonical_input = array.execute::<Canonical>(&mut ctx).unwrap().into_array();
-        let baseline = canonical_input
-            .between(lower, upper, options)
-            .unwrap()
-            .execute::<Canonical>(&mut ctx)
-            .unwrap();
+        let baseline = canonical_input.between(lower, upper, options).unwrap();
 
         assert_arrays_eq!(kernel, baseline, &mut ctx);
     }

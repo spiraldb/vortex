@@ -166,8 +166,7 @@ mod test {
 
         let primitive_values = decode_to_temporal(parts, &dtype, &mut ctx)?
             .temporal_values()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)?;
+            .clone();
 
         assert_arrays_eq!(primitive_values, milliseconds, &mut ctx);
         Ok(())

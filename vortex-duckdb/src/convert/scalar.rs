@@ -446,23 +446,15 @@ mod tests {
 
     #[test]
     fn test_scalar_round_trip() {
-        let value = Scalar::from(32i32);
-        assert_eq!(
-            value,
-            value.try_to_duckdb_scalar().unwrap().try_into().unwrap()
-        );
-
-        let value = Scalar::from("hello");
-        assert_eq!(
-            value,
-            value.try_to_duckdb_scalar().unwrap().try_into().unwrap()
-        );
-
-        let value = Scalar::from(1.0f64);
-        assert_eq!(
-            value,
-            value.try_to_duckdb_scalar().unwrap().try_into().unwrap()
-        );
+        for value in [
+            Scalar::from(32i32),
+            Scalar::from("hello"),
+            Scalar::from(1.0f64),
+        ] {
+            let restored: Scalar = value.try_to_duckdb_scalar().unwrap().try_into().unwrap();
+            assert_eq!(restored.dtype(), &value.dtype().as_nullable());
+            assert_eq!(restored, value);
+        }
     }
 
     #[test]
@@ -491,6 +483,10 @@ mod tests {
             let duckdb_value = original_scalar.try_to_duckdb_scalar().unwrap();
             let roundtrip_scalar: Scalar = duckdb_value.try_into().unwrap();
 
+            assert_eq!(
+                roundtrip_scalar.dtype(),
+                &original_scalar.dtype().as_nullable()
+            );
             assert_eq!(original_scalar, roundtrip_scalar);
         }
     }
@@ -552,6 +548,7 @@ mod tests {
         let duckdb_value = original.try_to_duckdb_scalar().unwrap();
         let roundtrip: Scalar = duckdb_value.try_into().unwrap();
 
+        assert_eq!(roundtrip.dtype(), original.dtype());
         assert_eq!(original, roundtrip);
     }
 
@@ -725,6 +722,10 @@ mod tests {
             value.logical_type().as_type_id(),
             DUCKDB_TYPE::DUCKDB_TYPE_BIGINT
         );
+        let ExtractedValue::BigInt(value) = value.extract() else {
+            panic!("expected bigint")
+        };
+        assert_eq!(value, 1_372_723_200_000_000);
     }
 
     #[test]
