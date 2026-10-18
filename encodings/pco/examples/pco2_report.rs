@@ -9,7 +9,8 @@
 //! ```
 //!
 //! `FILE.parquet:?` lists a file's columns instead. Set `PCO2_SIZES=1` to print only the
-//! compression ratio of more Pco page sizes and Pco2 checkpoint intervals.
+//! compression ratio of more Pco page sizes and Pco2 checkpoint intervals, or `PCO2_VERDICT=1`
+//! to compare Pco and Pco2 at equal block sizes on every column and tally wins and losses.
 //!
 //! Every operation runs through the same session, so Pco measures what Vortex does today
 //! (decompress, then operate) and Pco2 measures its block-pruning kernels. Results of every
@@ -479,6 +480,86 @@ fn run(array: &ArrayRef, workload: &Workload, ctx: &mut ExecutionCtx) -> VortexR
     })
 }
 
+fn check(results: &Results, expected: &Results, ctx: &mut ExecutionCtx) {
+    assert_arrays_eq!(results.decoded, expected.decoded, ctx);
+    assert_arrays_eq!(results.taken, expected.taken, ctx);
+    assert_arrays_eq!(results.sliced, expected.sliced, ctx);
+    assert_arrays_eq!(results.clustered, expected.clustered, ctx);
+    assert_arrays_eq!(results.scattered, expected.scattered, ctx);
+    assert_arrays_eq!(results.lt, expected.lt, ctx);
+    assert_arrays_eq!(results.eq, expected.eq, ctx);
+}
+
+/// Median latency of every operation in a [`Workload`].
+struct Metrics {
+    decode: Duration,
+    scalar_at: Duration,
+    slice: Duration,
+    take: Duration,
+    clustered: Duration,
+    scattered: Duration,
+    lt: Duration,
+    eq: Duration,
+}
+
+fn measure(
+    encoded: &ArrayRef,
+    workload: &Workload,
+    reps: usize,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<Metrics> {
+    let n = encoded.len();
+    let constant = |scalar: &Scalar| ConstantArray::new(scalar.clone(), n).into_array();
+    Ok(Metrics {
+        decode: time(reps, || {
+            encoded.clone().execute::<PrimitiveArray>(ctx)?;
+            Ok(())
+        })?,
+        scalar_at: time(reps, || {
+            for &index in &workload.probe_indices {
+                encoded.execute_scalar(index, ctx)?;
+            }
+            Ok(())
+        })? / SCALAR_PROBES as u32,
+        slice: time(reps, || {
+            encoded
+                .slice(workload.slice.clone())?
+                .execute::<PrimitiveArray>(ctx)?;
+            Ok(())
+        })?,
+        take: time(reps, || {
+            encoded
+                .take(workload.take_indices.clone())?
+                .execute::<PrimitiveArray>(ctx)?;
+            Ok(())
+        })?,
+        clustered: time(reps, || {
+            encoded
+                .filter(workload.clustered.clone())?
+                .execute::<PrimitiveArray>(ctx)?;
+            Ok(())
+        })?,
+        scattered: time(reps, || {
+            encoded
+                .filter(workload.scattered.clone())?
+                .execute::<PrimitiveArray>(ctx)?;
+            Ok(())
+        })?,
+        lt: time(reps, || {
+            encoded
+                .binary(constant(&workload.lt_constant), Operator::Lt)?
+                .execute::<BoolArray>(ctx)?;
+            Ok(())
+        })?,
+        eq: time(reps, || {
+            encoded
+                .binary(constant(&workload.eq_constant), Operator::Eq)?
+                .execute::<BoolArray>(ctx)?;
+            Ok(())
+        })?,
+    })
+}
+
 fn report(column: &Column, session: &VortexSession) -> VortexResult<()> {
     let mut ctx = session.create_execution_ctx();
     let array = &column.array;
@@ -521,78 +602,23 @@ fn report(column: &Column, session: &VortexSession) -> VortexResult<()> {
                 assert_arrays_eq!(results.decoded, array, &mut ctx);
                 reference = Some(results);
             }
-            Some(expected) => {
-                assert_arrays_eq!(results.decoded, expected.decoded, &mut ctx);
-                assert_arrays_eq!(results.taken, expected.taken, &mut ctx);
-                assert_arrays_eq!(results.sliced, expected.sliced, &mut ctx);
-                assert_arrays_eq!(results.clustered, expected.clustered, &mut ctx);
-                assert_arrays_eq!(results.scattered, expected.scattered, &mut ctx);
-                assert_arrays_eq!(results.lt, expected.lt, &mut ctx);
-                assert_arrays_eq!(results.eq, expected.eq, &mut ctx);
-            }
+            Some(expected) => check(&results, expected, &mut ctx),
         }
-
-        let constant = |scalar: &Scalar| ConstantArray::new(scalar.clone(), n).into_array();
-        let decode = time(reps, || {
-            encoded.clone().execute::<PrimitiveArray>(&mut ctx)?;
-            Ok(())
-        })?;
-        let scalar_at = time(reps, || {
-            for &index in &workload.probe_indices {
-                encoded.execute_scalar(index, &mut ctx)?;
-            }
-            Ok(())
-        })? / SCALAR_PROBES as u32;
-        let slice = time(reps, || {
-            encoded
-                .slice(workload.slice.clone())?
-                .execute::<PrimitiveArray>(&mut ctx)?;
-            Ok(())
-        })?;
-        let take = time(reps, || {
-            encoded
-                .take(workload.take_indices.clone())?
-                .execute::<PrimitiveArray>(&mut ctx)?;
-            Ok(())
-        })?;
-        let clustered = time(reps, || {
-            encoded
-                .filter(workload.clustered.clone())?
-                .execute::<PrimitiveArray>(&mut ctx)?;
-            Ok(())
-        })?;
-        let scattered = time(reps, || {
-            encoded
-                .filter(workload.scattered.clone())?
-                .execute::<PrimitiveArray>(&mut ctx)?;
-            Ok(())
-        })?;
-        let lt = time(reps, || {
-            encoded
-                .binary(constant(&workload.lt_constant), Operator::Lt)?
-                .execute::<BoolArray>(&mut ctx)?;
-            Ok(())
-        })?;
-        let eq = time(reps, || {
-            encoded
-                .binary(constant(&workload.eq_constant), Operator::Eq)?
-                .execute::<BoolArray>(&mut ctx)?;
-            Ok(())
-        })?;
+        let metrics = measure(&encoded, &workload, reps, &mut ctx)?;
 
         println!(
             "| {name} | {:.2} | {:+.2}% | {index} | {:.0} | {:.2} | {} | {} | {} | {} | {} | {} | {} |",
             8.0 * bytes as f64 / n as f64,
             100.0 * (bytes as f64 / baseline as f64 - 1.0),
             compress.as_secs_f64() * 1e3,
-            decode.as_secs_f64() * 1e3,
-            micros(scalar_at),
-            micros(slice),
-            micros(take),
-            micros(clustered),
-            micros(scattered),
-            micros(lt),
-            micros(eq),
+            metrics.decode.as_secs_f64() * 1e3,
+            micros(metrics.scalar_at),
+            micros(metrics.slice),
+            micros(metrics.take),
+            micros(metrics.clustered),
+            micros(metrics.scattered),
+            micros(metrics.lt),
+            micros(metrics.eq),
         );
     }
     println!(
@@ -624,6 +650,137 @@ fn size_sweep(columns: &[Column], session: &VortexSession) -> VortexResult<()> {
     Ok(())
 }
 
+/// Block sizes at which the `PCO2_VERDICT` mode compares Pco against Pco2.
+const VERDICT_BLOCKS: [usize; 2] = [1024, 8192];
+
+/// Speedups within this factor of 1 count as ties, since wall-clock timings here are noisy.
+const TIME_TIE: f64 = 1.15;
+
+/// Relative size differences within this fraction count as ties.
+const RATIO_TIE: f64 = 0.001;
+
+const VERDICT_METRICS: [&str; 9] = [
+    "ratio",
+    "decode",
+    "scalar_at",
+    "slice 1k",
+    "take 100",
+    "filter clustered",
+    "filter scattered",
+    "`< p1`",
+    "`== v`",
+];
+
+/// Win, tie, and loss counts of Pco2 against Pco for each of [`VERDICT_METRICS`].
+type Tally = [[usize; 3]; VERDICT_METRICS.len()];
+
+/// Scores `v2 / v1` for a higher-is-better quantity: 0 win, 1 tie, 2 loss.
+fn score(improvement: f64, tie: f64) -> usize {
+    if improvement > tie {
+        0
+    } else if improvement >= 1.0 / tie {
+        1
+    } else {
+        2
+    }
+}
+
+/// Compares Pco and Pco2 at equal block sizes on every column, checking every result against
+/// the uncompressed array.
+fn verdict(columns: &[Column], session: &VortexSession) -> VortexResult<()> {
+    let mut ctx = session.create_execution_ctx();
+    let mut tallies = [[[0usize; 3]; VERDICT_METRICS.len()]; VERDICT_BLOCKS.len()];
+    let mut rows = vec![Vec::new(); VERDICT_BLOCKS.len()];
+    for column in columns {
+        let array = &column.array;
+        let n = array.len();
+        let valid = array.validity()?.execute_mask(n, &mut ctx)?.true_count();
+        if n < 4096 || valid < 4096 {
+            println!("skipping {}: too few valid values", column.name);
+            continue;
+        }
+        let raw_bytes = n * array.ptype().byte_width();
+        let workload = workload(array, &mut ctx)?;
+        let expected = run(&array.clone().into_array(), &workload, &mut ctx)?;
+        let reps = if n > 2_000_000 { 3 } else { 5 };
+
+        for (block_idx, &block) in VERDICT_BLOCKS.iter().enumerate() {
+            let mut measured = Vec::new();
+            for variant in [
+                Variant::Pco {
+                    values_per_page: block,
+                },
+                Variant::Pco2 {
+                    checkpoint_interval: block,
+                    block_stats: true,
+                },
+            ] {
+                let encoded = variant.compress(array, &mut ctx)?;
+                check(&run(&encoded, &workload, &mut ctx)?, &expected, &mut ctx);
+                let ratio = raw_bytes as f64 / serialized_bytes(&encoded, session)? as f64;
+                measured.push((ratio, measure(&encoded, &workload, reps, &mut ctx)?));
+            }
+            let [(v1_ratio, v1), (v2_ratio, v2)] = [&measured[0], &measured[1]];
+            let speedup = |a: Duration, b: Duration| a.as_secs_f64() / b.as_secs_f64();
+            let improvements = [
+                v2_ratio / v1_ratio,
+                speedup(v1.decode, v2.decode),
+                speedup(v1.scalar_at, v2.scalar_at),
+                speedup(v1.slice, v2.slice),
+                speedup(v1.take, v2.take),
+                speedup(v1.clustered, v2.clustered),
+                speedup(v1.scattered, v2.scattered),
+                speedup(v1.lt, v2.lt),
+                speedup(v1.eq, v2.eq),
+            ];
+            let mut row = format!("| {} | {v1_ratio:.2} | {v2_ratio:.2} |", column.name);
+            for (metric, &improvement) in improvements.iter().enumerate() {
+                let tie = if metric == 0 {
+                    1.0 + RATIO_TIE
+                } else {
+                    TIME_TIE
+                };
+                tallies[block_idx][metric][score(improvement, tie)] += 1;
+                if metric > 0 {
+                    row.push_str(&format!(" {improvement:.1}× |"));
+                }
+            }
+            rows[block_idx].push(row);
+        }
+        println!("checked {}", column.name);
+    }
+
+    for (block_idx, block) in VERDICT_BLOCKS.iter().enumerate() {
+        println!("\n### {block}-value blocks: speedup of v2 over v1 (higher is better)\n");
+        print!("| column | v1 ratio | v2 ratio |");
+        for metric in &VERDICT_METRICS[1..] {
+            print!(" {metric} |");
+        }
+        println!(
+            "\n|---|---|---|{}",
+            "---|".repeat(VERDICT_METRICS.len() - 1)
+        );
+        for row in &rows[block_idx] {
+            println!("{row}");
+        }
+        print_tally(*block, &tallies[block_idx]);
+    }
+    Ok(())
+}
+
+fn print_tally(block: usize, tally: &Tally) {
+    println!(
+        "\n{block}-value blocks, v2 against v1 (ties: ratio within {:.1}%, time within {:.0}%)\n",
+        100.0 * RATIO_TIE,
+        100.0 * (TIME_TIE - 1.0)
+    );
+    println!("| metric | v2 wins | tie | v2 loses |");
+    println!("|---|---|---|---|");
+    for (metric, [wins, ties, losses]) in VERDICT_METRICS.iter().zip(tally) {
+        println!("| {metric} | {wins} | {ties} | {losses} |");
+    }
+}
+
 fn main() -> VortexResult<()> {
     let session = vortex_array::array_session();
     session.arrays().register(Pco);
@@ -639,6 +796,9 @@ fn main() -> VortexResult<()> {
     }
     if std::env::var_os("PCO2_SIZES").is_some() {
         return size_sweep(&columns, &session);
+    }
+    if std::env::var_os("PCO2_VERDICT").is_some() {
+        return verdict(&columns, &session);
     }
     for column in &columns {
         report(column, &session)?;
