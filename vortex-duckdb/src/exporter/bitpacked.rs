@@ -204,7 +204,7 @@ mod tests {
             .collect();
         assert_eq!(exported(&packed, offset, len)?, expected);
 
-        let sliced = packed.execute_slice(300..5000, &mut ctx)?;
+        let sliced = packed.slice(300..5000)?;
         let expected: Vec<i64> = ((offset + 300) as i64
             ..(offset + 300 + len.min(4700 - offset)) as i64)
             .map(|i| (i * 7) % 1000)
