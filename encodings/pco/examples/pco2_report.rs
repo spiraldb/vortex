@@ -371,8 +371,20 @@ fn serialized_bytes(array: &ArrayRef, session: &VortexSession) -> VortexResult<u
         .sum())
 }
 
-/// Median wall time of `reps` runs.
-fn time(reps: usize, mut f: impl FnMut() -> VortexResult<()>) -> VortexResult<Duration> {
+/// How [`time`] summarizes repeated runs.
+#[derive(Clone, Copy)]
+enum Stat {
+    Median,
+    /// The fastest run, which is the most robust statistic on a noisy machine.
+    Fastest,
+}
+
+/// Wall time of `reps` runs, summarized by `stat`.
+fn time(
+    reps: usize,
+    stat: Stat,
+    mut f: impl FnMut() -> VortexResult<()>,
+) -> VortexResult<Duration> {
     let mut times = Vec::with_capacity(reps);
     for _ in 0..reps {
         let start = Instant::now();
@@ -380,7 +392,10 @@ fn time(reps: usize, mut f: impl FnMut() -> VortexResult<()>) -> VortexResult<Du
         times.push(start.elapsed());
     }
     times.sort();
-    Ok(times[reps / 2])
+    Ok(match stat {
+        Stat::Median => times[reps / 2],
+        Stat::Fastest => times[0],
+    })
 }
 
 fn micros(duration: Duration) -> String {
@@ -506,52 +521,53 @@ fn measure(
     encoded: &ArrayRef,
     workload: &Workload,
     reps: usize,
+    stat: Stat,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<Metrics> {
     let n = encoded.len();
     let constant = |scalar: &Scalar| ConstantArray::new(scalar.clone(), n).into_array();
     Ok(Metrics {
-        decode: time(reps, || {
+        decode: time(reps, stat, || {
             encoded.clone().execute::<PrimitiveArray>(ctx)?;
             Ok(())
         })?,
-        scalar_at: time(reps, || {
+        scalar_at: time(reps, stat, || {
             for &index in &workload.probe_indices {
                 encoded.execute_scalar(index, ctx)?;
             }
             Ok(())
         })? / SCALAR_PROBES as u32,
-        slice: time(reps, || {
+        slice: time(reps, stat, || {
             encoded
                 .slice(workload.slice.clone())?
                 .execute::<PrimitiveArray>(ctx)?;
             Ok(())
         })?,
-        take: time(reps, || {
+        take: time(reps, stat, || {
             encoded
                 .take(workload.take_indices.clone())?
                 .execute::<PrimitiveArray>(ctx)?;
             Ok(())
         })?,
-        clustered: time(reps, || {
+        clustered: time(reps, stat, || {
             encoded
                 .filter(workload.clustered.clone())?
                 .execute::<PrimitiveArray>(ctx)?;
             Ok(())
         })?,
-        scattered: time(reps, || {
+        scattered: time(reps, stat, || {
             encoded
                 .filter(workload.scattered.clone())?
                 .execute::<PrimitiveArray>(ctx)?;
             Ok(())
         })?,
-        lt: time(reps, || {
+        lt: time(reps, stat, || {
             encoded
                 .binary(constant(&workload.lt_constant), Operator::Lt)?
                 .execute::<BoolArray>(ctx)?;
             Ok(())
         })?,
-        eq: time(reps, || {
+        eq: time(reps, stat, || {
             encoded
                 .binary(constant(&workload.eq_constant), Operator::Eq)?
                 .execute::<BoolArray>(ctx)?;
@@ -604,7 +620,7 @@ fn report(column: &Column, session: &VortexSession) -> VortexResult<()> {
             }
             Some(expected) => check(&results, expected, &mut ctx),
         }
-        let metrics = measure(&encoded, &workload, reps, &mut ctx)?;
+        let metrics = measure(&encoded, &workload, reps, Stat::Median, &mut ctx)?;
 
         println!(
             "| {name} | {:.2} | {:+.2}% | {index} | {:.0} | {:.2} | {} | {} | {} | {} | {} | {} | {} |",
@@ -702,7 +718,7 @@ fn verdict(columns: &[Column], session: &VortexSession) -> VortexResult<()> {
         let raw_bytes = n * array.ptype().byte_width();
         let workload = workload(array, &mut ctx)?;
         let expected = run(&array.clone().into_array(), &workload, &mut ctx)?;
-        let reps = if n > 2_000_000 { 3 } else { 5 };
+        let reps = if n > 2_000_000 { 5 } else { 9 };
 
         for (block_idx, &block) in VERDICT_BLOCKS.iter().enumerate() {
             let mut measured = Vec::new();
@@ -718,7 +734,10 @@ fn verdict(columns: &[Column], session: &VortexSession) -> VortexResult<()> {
                 let encoded = variant.compress(array, &mut ctx)?;
                 check(&run(&encoded, &workload, &mut ctx)?, &expected, &mut ctx);
                 let ratio = raw_bytes as f64 / serialized_bytes(&encoded, session)? as f64;
-                measured.push((ratio, measure(&encoded, &workload, reps, &mut ctx)?));
+                measured.push((
+                    ratio,
+                    measure(&encoded, &workload, reps, Stat::Fastest, &mut ctx)?,
+                ));
             }
             let [(v1_ratio, v1), (v2_ratio, v2)] = [&measured[0], &measured[1]];
             let speedup = |a: Duration, b: Duration| a.as_secs_f64() / b.as_secs_f64();

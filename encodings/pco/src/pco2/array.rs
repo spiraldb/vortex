@@ -818,22 +818,21 @@ impl<'a, T: Number> BlockDecoder<'a, T> {
                 ..values.end.min(entry.values.end) - entry.values.start;
             let blocks = local.start / interval..local.end.div_ceil(interval);
             let decoded = blocks.start * interval..(blocks.end * interval).min(entry.values.len());
-            if decoded == local {
-                let old_len = out.len();
-                out.reserve(local.len());
-                // SAFETY: pco either writes every element of the new tail or returns an error, in
-                // which case the length is restored before anything observes the tail.
-                unsafe { out.set_len(old_len + local.len()) };
-                if let Err(err) = self.decode_page_blocks(page, blocks, &mut out[old_len..]) {
-                    unsafe { out.set_len(old_len) };
-                    return Err(err);
-                }
-            } else {
-                let decoded_values = self.decode_page_blocks_scratch(page, blocks)?;
-                out.extend_from_slice(
-                    &decoded_values[local.start - decoded.start..local.end - decoded.start],
-                );
+            let old_len = out.len();
+            out.reserve(decoded.len());
+            // SAFETY: pco either writes every element of the new tail or returns an error, in
+            // which case the length is restored before anything observes the tail.
+            unsafe { out.set_len(old_len + decoded.len()) };
+            if let Err(err) = self.decode_page_blocks(page, blocks, &mut out[old_len..]) {
+                unsafe { out.set_len(old_len) };
+                return Err(err);
             }
+            // Blocks are decoded whole, so drop the values before and after the requested range.
+            let skip = local.start - decoded.start;
+            if skip > 0 {
+                out.copy_within(old_len + skip..old_len + skip + local.len(), old_len);
+            }
+            out.truncate(old_len + local.len());
         }
         Ok(())
     }

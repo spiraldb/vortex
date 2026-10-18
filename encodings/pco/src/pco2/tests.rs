@@ -326,11 +326,19 @@ fn filter_decodes_touched_blocks(#[case] nullable: bool) -> VortexResult<()> {
         let expected_sliced = array.slice(300..N)?;
         let len = sliced.len();
 
-        // A clustered selection touches few blocks, so the kernel gathers.
+        // Clustered runs touch few blocks, so the kernel decodes each run as a range.
         let clustered = Mask::from_iter((0..len).map(|i| (4000..4100).contains(&i) || i == 9000));
         let filtered = <Pco2 as FilterKernel>::filter(sliced.as_::<Pco2>(), &clustered, &mut ctx)?
             .expect("Pco2 filter kernel applies to clustered masks");
         assert_arrays_eq!(filtered, expected_sliced.filter(clustered)?, &mut ctx);
+
+        // Many short runs inside few blocks, so the kernel gathers value by value.
+        let interleaved =
+            Mask::from_iter((0..len).map(|i| (6000..6900).contains(&i) && i % 3 == 0));
+        let filtered =
+            <Pco2 as FilterKernel>::filter(sliced.as_::<Pco2>(), &interleaved, &mut ctx)?
+                .expect("Pco2 filter kernel applies to interleaved masks");
+        assert_arrays_eq!(filtered, expected_sliced.filter(interleaved)?, &mut ctx);
 
         // A scattered selection touches every block, so the kernel declines.
         let scattered = Mask::from_iter((0..len).map(|_| rng.below(100) == 0));

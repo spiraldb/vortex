@@ -16,6 +16,7 @@ use vortex_array::scalar::Scalar;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
+use vortex_mask::Mask;
 
 use super::BlockDecoder;
 use super::Pco2;
@@ -45,18 +46,36 @@ pub(crate) fn scalar_at(
     state: Option<&mut Pco2ProbeState>,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<Scalar> {
+    let row = array.slice_start() + index;
     let mut once = Pco2ProbeState::default();
-    let state = state.unwrap_or(&mut once);
-
-    let rows = match &mut state.rows {
-        Some(rows) => rows,
-        slot @ None => slot.insert(RowValues::new(
-            array
+    let (value, state) = match state {
+        Some(state) => {
+            let rows = match &mut state.rows {
+                Some(rows) => rows,
+                slot @ None => slot.insert(RowValues::new(
+                    array
+                        .unsliced_validity()
+                        .execute_mask(array.unsliced_n_rows(), ctx)?,
+                )),
+            };
+            (rows.value_index(row), state)
+        }
+        // A one-off read needs only this row's rank, not a rank index over every row.
+        None => {
+            let value = match array
                 .unsliced_validity()
-                .execute_mask(array.unsliced_n_rows(), ctx)?,
-        )),
+                .execute_mask(array.unsliced_n_rows(), ctx)?
+            {
+                Mask::AllTrue(_) => Some(row),
+                Mask::AllFalse(_) => None,
+                Mask::Values(values) => values
+                    .value(row)
+                    .then(|| values.bit_buffer().count_range(0, row)),
+            };
+            (value, &mut once)
+        }
     };
-    let Some(value) = rows.value_index(array.slice_start() + index) else {
+    let Some(value) = value else {
         return Ok(Scalar::null(array.dtype().clone()));
     };
 

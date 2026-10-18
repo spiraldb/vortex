@@ -214,6 +214,62 @@ fn gather_array(
     ))
 }
 
+/// Decodes each selected run of rows as one contiguous range of values, or `T::default()` for
+/// null rows.
+fn decode_runs<T: Number + NativePType>(
+    data: &Pco2Data,
+    rows: &RowValues,
+    slice_start: usize,
+    runs: &[(usize, usize)],
+    true_count: usize,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<Buffer<T>> {
+    let mut decoder = BlockDecoder::<T>::new(data)?;
+    let mut out = BufferMut::<T>::with_capacity_in(true_count, ctx.allocator().clone());
+    let mut run_values = BufferMut::<T>::empty();
+    for &(start, end) in runs {
+        let (start, end) = (slice_start + start, slice_start + end);
+        let values = rows.rank(start)..rows.rank(end);
+        match rows {
+            RowValues::AllValid => decoder.decode_values(values, &mut out)?,
+            RowValues::AllNull => out.push_n(T::default(), end - start),
+            RowValues::Ranked { bits, .. } => {
+                run_values.clear();
+                decoder.decode_values(values, &mut run_values)?;
+                let mut next_value = 0;
+                for row in start..end {
+                    if bits.value(row) {
+                        out.push(run_values[next_value]);
+                        next_value += 1;
+                    } else {
+                        out.push(T::default());
+                    }
+                }
+            }
+        }
+    }
+    Ok(out.freeze())
+}
+
+/// Filters by decoding each selected run of rows as one contiguous range of values.
+fn filter_runs(
+    data: &Pco2Data,
+    rows: &RowValues,
+    slice_start: usize,
+    runs: &[(usize, usize)],
+    true_count: usize,
+    validity: Validity,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<ArrayRef> {
+    Ok(match_number_enum!(
+        number_type_from_ptype(data.ptype()),
+        NumberType<T> => {
+            let values = decode_runs::<T>(data, rows, slice_start, runs, true_count, ctx)?;
+            PrimitiveArray::new(values, validity).into_array()
+        }
+    ))
+}
+
 impl TakeExecute for Pco2 {
     fn take(
         array: ArrayView<'_, Self>,
@@ -283,13 +339,27 @@ impl FilterKernel for Pco2 {
         if 2 * touched_blocks > n_blocks {
             return Ok(None);
         }
+        let validity = array.validity()?.filter(mask)?;
+
+        // Runs that rarely share a block decode fastest as contiguous ranges.
+        if mask_values.slices().len() <= touched_blocks {
+            return filter_runs(
+                array.data(),
+                &rows,
+                slice_start,
+                mask_values.slices(),
+                mask_values.true_count(),
+                validity,
+                ctx,
+            )
+            .map(Some);
+        }
 
         let positions = mask_values
             .indices()
             .iter()
             .map(|&index| rows.value_index(slice_start + index).unwrap_or(NO_VALUE))
             .collect::<Vec<_>>();
-        let validity = array.validity()?.filter(mask)?;
         gather_array(array.data(), &positions, validity, ctx).map(Some)
     }
 }
