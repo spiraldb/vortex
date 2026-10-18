@@ -5,23 +5,23 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 
 use crate::ArrayRef;
-use crate::ExecutionCtx;
 use crate::IntoArray;
+use crate::VortexSessionExecute;
 use crate::array::ArrayView;
 use crate::arrays::Null;
 use crate::arrays::NullArray;
 use crate::arrays::PrimitiveArray;
-use crate::arrays::dict::TakeExecute;
+use crate::arrays::dict::TakeReduce;
+use crate::arrays::dict::TakeReduceAdaptor;
 use crate::match_each_integer_ptype;
+use crate::optimizer::rules::ParentRuleSet;
 
-impl TakeExecute for Null {
+impl TakeReduce for Null {
     #[expect(clippy::cast_possible_truncation)]
-    fn take(
-        array: ArrayView<'_, Null>,
-        indices: &ArrayRef,
-        ctx: &mut ExecutionCtx,
-    ) -> VortexResult<Option<ArrayRef>> {
-        let indices = indices.clone().execute::<PrimitiveArray>(ctx)?;
+    fn take(array: ArrayView<'_, Null>, indices: &ArrayRef) -> VortexResult<Option<ArrayRef>> {
+        #[allow(clippy::disallowed_methods)]
+        let mut ctx = crate::legacy_session().create_execution_ctx();
+        let indices = indices.clone().execute::<PrimitiveArray>(&mut ctx)?;
 
         // Enforce all indices are valid
         match_each_integer_ptype!(indices.ptype(), |T| {
@@ -34,4 +34,9 @@ impl TakeExecute for Null {
 
         Ok(Some(NullArray::new(indices.len()).into_array()))
     }
+}
+
+impl Null {
+    pub const TAKE_RULES: ParentRuleSet<Self> =
+        ParentRuleSet::new(&[ParentRuleSet::lift(&TakeReduceAdaptor::<Self>(Self))]);
 }

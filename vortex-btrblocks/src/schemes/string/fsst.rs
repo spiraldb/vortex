@@ -122,6 +122,7 @@ impl Scheme for FSSTScheme {
             )?),
             compressed_codes,
             compressed_original_lengths,
+            exec_ctx,
         )?;
 
         Ok(fsst.into_array())
