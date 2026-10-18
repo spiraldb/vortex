@@ -8,6 +8,7 @@ use crate::IntoArray;
 use crate::array::ArrayView;
 use crate::arrays::Constant;
 use crate::arrays::ConstantArray;
+use crate::dtype::DType;
 use crate::scalar::Scalar;
 use crate::scalar_fn::fns::between::BetweenOptions;
 use crate::scalar_fn::fns::between::BetweenReduce;
@@ -24,6 +25,15 @@ impl BetweenReduce for Constant {
             .zip(lower.as_constant())
             .zip(upper.as_constant())
         {
+            let nullability = array.dtype().nullability()
+                | lower.dtype().nullability()
+                | upper.dtype().nullability();
+            // The bounds are non-null here, so a null value makes both comparisons null.
+            if constant.is_null() {
+                let scalar = Scalar::null(DType::Bool(nullability));
+                return Ok(Some(ConstantArray::new(scalar, array.len()).into_array()));
+            }
+
             let BetweenOptions {
                 lower_strict,
                 upper_strict,
@@ -43,12 +53,7 @@ impl BetweenReduce for Constant {
 
             let result = lower_result && upper_result;
 
-            let scalar = Scalar::bool(
-                result,
-                array.dtype().nullability()
-                    | lower.dtype().nullability()
-                    | upper.dtype().nullability(),
-            );
+            let scalar = Scalar::bool(result, nullability);
             return Ok(Some(ConstantArray::new(scalar, array.len()).into_array()));
         }
 
