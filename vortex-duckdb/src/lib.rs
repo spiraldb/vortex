@@ -9,6 +9,8 @@ use std::sync::LazyLock;
 use std::sync::OnceLock;
 
 use vortex::VortexSessionDefault;
+use vortex::array::memory::MemorySessionExt;
+use vortex::buffer::BufferAllocatorRef;
 use vortex::cloud::Registry;
 use vortex::editions::CORE_2026_08_3;
 use vortex::editions::EditionSessionExt;
@@ -20,9 +22,11 @@ use vortex::io::runtime::current::CurrentThreadRuntime;
 use vortex::io::session::RuntimeSessionExt;
 use vortex::session::VortexSession;
 
+use crate::buffer_pool::BufferPool;
 use crate::duckdb::Database;
 use crate::duckdb::DatabaseRef;
 
+mod buffer_pool;
 mod column_statistics;
 mod convert;
 pub mod duckdb;
@@ -48,7 +52,9 @@ static RUNTIME: LazyLock<CurrentThreadRuntime> = LazyLock::new(CurrentThreadRunt
 /// Process-wide registry, so repeated scans against the same bucket share one client.
 static REGISTRY: LazyLock<Registry> = LazyLock::new(Registry::new);
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-    let session = VortexSession::default().with_handle(RUNTIME.handle());
+    let session = VortexSession::default()
+        .with_handle(RUNTIME.handle())
+        .with_allocator(BufferAllocatorRef::new(BufferPool::default()));
     session
         .enable_edition(CORE_2026_08_3)
         .map_err(|error| vortex_err!("{error}"))
