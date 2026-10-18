@@ -11,6 +11,10 @@ use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
+use vortex_array::aggregate_fn::Accumulator;
+use vortex_array::aggregate_fn::DynAccumulator;
+use vortex_array::aggregate_fn::EmptyOptions;
+use vortex_array::aggregate_fn::fns::is_constant::IsConstant;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::PrimitiveArray;
@@ -22,6 +26,9 @@ use vortex_array::compute::conformance::consistency::test_array_consistency;
 use vortex_array::dtype::NativePType;
 use vortex_array::dtype::half::f16;
 use vortex_array::scalar::Scalar;
+use vortex_array::scalar_fn::fns::between::BetweenKernel;
+use vortex_array::scalar_fn::fns::between::BetweenOptions;
+use vortex_array::scalar_fn::fns::between::StrictComparison;
 use vortex_array::scalar_fn::fns::binary::CompareKernel;
 use vortex_array::scalar_fn::fns::operators::CompareOperator;
 use vortex_array::scalar_fn::fns::operators::Operator;
@@ -479,6 +486,149 @@ fn compare_prunes_blocks(#[case] nullable: bool) -> VortexResult<()> {
                     sliced.binary(rhs.clone(), Operator::from(op))?,
                     expected,
                     &mut ctx
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+const STRICTNESS: [StrictComparison; 2] = [StrictComparison::Strict, StrictComparison::NonStrict];
+
+#[rstest]
+#[case::non_null(false)]
+#[case::nullable(true)]
+fn between_prunes_blocks(#[case] nullable: bool) -> VortexResult<()> {
+    let mut ctx = SESSION.create_execution_ctx();
+    let mut rng = Rng(15);
+    for (seed, (name, array)) in datasets().into_iter().enumerate() {
+        let array = if nullable {
+            with_nulls(array, seed as u64)
+        } else {
+            array
+        };
+        let pco2 = compress(&array, &mut ctx)?;
+        let sliced = pco2.slice(123..N - 77)?;
+        let expected_sliced = array.slice(123..N - 77)?;
+        let len = sliced.len();
+        let ptype = array.ptype();
+        let sorted = matches!(name, "timestamps" | "arithmetic" | "sorted_i16");
+        for _ in 0..3 {
+            let a = array.execute_scalar(rng.below(N as u64) as usize, &mut ctx)?;
+            let b = array.execute_scalar(rng.below(N as u64) as usize, &mut ctx)?;
+            if a.is_null() || b.is_null() {
+                continue;
+            }
+            // Both orders, so one range is usually empty.
+            for (lo, hi) in [(&a, &b), (&b, &a)] {
+                let lower = ConstantArray::new(lo.cast(&ptype.into())?, len).into_array();
+                let upper = ConstantArray::new(hi.cast(&ptype.into())?, len).into_array();
+                for (lower_strict, upper_strict) in STRICTNESS
+                    .into_iter()
+                    .flat_map(|l| STRICTNESS.map(|u| (l, u)))
+                {
+                    let options = BetweenOptions {
+                        lower_strict,
+                        upper_strict,
+                    };
+                    let expected = expected_sliced.clone().between(
+                        lower.clone(),
+                        upper.clone(),
+                        options.clone(),
+                    )?;
+                    let result = <Pco as BetweenKernel>::between(
+                        sliced.as_::<Pco>(),
+                        &lower,
+                        &upper,
+                        &options,
+                        &mut ctx,
+                    )?;
+                    // Sorted data leaves at most a block or two straddling each bound.
+                    assert!(
+                        result.is_some() || !sorted,
+                        "{name}: between kernel declined"
+                    );
+                    if let Some(result) = result {
+                        assert_arrays_eq!(result, expected.clone(), &mut ctx);
+                    }
+                    assert_arrays_eq!(
+                        sliced
+                            .clone()
+                            .between(lower.clone(), upper.clone(), options)?,
+                        expected,
+                        &mut ctx
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Accumulates `is_constant` as chunked arrays do, which hands every batch to the kernels.
+fn accumulate_is_constant(array: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<Scalar> {
+    let mut accumulator = Accumulator::try_new(IsConstant, EmptyOptions, array.dtype().clone())?;
+    accumulator.accumulate(array, ctx)?;
+    accumulator.finish()
+}
+
+/// `values` with `values[i]` replaced by `other` at each of `positions`.
+fn with_values_at<T: NativePType>(values: &[T], other: T, positions: &[usize]) -> PrimitiveArray {
+    let mut values = values.to_vec();
+    for &position in positions {
+        values[position] = other;
+    }
+    PrimitiveArray::new(Buffer::from(values), Validity::NonNullable)
+}
+
+#[test]
+fn is_constant_matches() -> VortexResult<()> {
+    let mut ctx = SESSION.create_execution_ctx();
+    let constant = vec![5i64; N];
+    let zeros = vec![0.0f64; N];
+    let mut arrays = vec![
+        PrimitiveArray::new(Buffer::from(constant.clone()), Validity::NonNullable),
+        with_values_at(&constant, 6, &[0]),
+        with_values_at(&constant, 6, &[1500]),
+        with_values_at(&constant, 6, &[N - 1]),
+        with_values_at(&constant, 6, &[1500, 9000]),
+        // Bitwise distinct, though equal as numbers.
+        with_values_at(&zeros, -0.0, &[3000]),
+        with_nulls(
+            PrimitiveArray::new(Buffer::from(constant), Validity::NonNullable),
+            3,
+        ),
+        PrimitiveArray::new(Buffer::from(vec![7u16; N]), Validity::AllInvalid),
+    ];
+    arrays.extend(datasets().into_iter().map(|(_, array)| array));
+    // Whole arrays, slices cutting through blocks around the odd values, and slices short enough
+    // to be all null.
+    let slices = [
+        0..N,
+        0..1500,
+        1501..N,
+        1400..1600,
+        1024..2048,
+        1000..3000,
+        2999..3001,
+        123..N - 77,
+        N - 2..N,
+        4000..4001,
+        4000..4003,
+    ];
+    for array in &arrays {
+        let encodings = [
+            compress(array, &mut ctx)?.into_array(),
+            Pco::from_primitive(array.as_view(), 8, 1024, &mut ctx)?.into_array(),
+        ];
+        for range in slices.clone() {
+            let expected = accumulate_is_constant(&array.slice(range.clone())?, &mut ctx)?;
+            for encoded in &encodings {
+                assert_eq!(
+                    accumulate_is_constant(&encoded.slice(range.clone())?, &mut ctx)?,
+                    expected,
+                    "{} {range:?}",
+                    encoded.encoding_id(),
                 );
             }
         }

@@ -1387,6 +1387,10 @@ impl<'a, T: Number> BlockDecoder<'a, T> {
         })
     }
 
+    pub(crate) fn data(&self) -> &'a PcoData {
+        self.data
+    }
+
     fn release(&mut self) {
         if let Some((chunk, cd)) = self.chunk.take()
             && self.retain

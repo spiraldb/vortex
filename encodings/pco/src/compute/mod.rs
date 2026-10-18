@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+mod between;
 mod cast;
 mod compare;
 mod filter;
+mod is_constant;
 mod rows;
 mod take;
 
+pub(crate) use is_constant::PcoIsConstantKernel;
 pub(crate) use rows::RowValues;
 
 #[cfg(test)]

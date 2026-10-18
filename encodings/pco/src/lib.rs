@@ -43,12 +43,17 @@ pub use plugin::PcoPlugin;
 pub use plugin::pco_v1_id;
 pub use plugin::pco_v2_id;
 use vortex_array::ArrayVTable;
+use vortex_array::aggregate_fn::AggregateFnVTable;
+use vortex_array::aggregate_fn::fns::is_constant::IsConstant;
+use vortex_array::aggregate_fn::session::AggregateFnSessionExt;
 use vortex_array::arrays::Dict;
 use vortex_array::arrays::Filter;
 use vortex_array::arrays::dict::TakeExecuteAdaptor;
 use vortex_array::arrays::filter::FilterExecuteAdaptor;
 use vortex_array::optimizer::kernels::ArrayKernelsExt;
 use vortex_array::scalar_fn::ScalarFnVTable;
+use vortex_array::scalar_fn::fns::between::Between;
+use vortex_array::scalar_fn::fns::between::BetweenExecuteAdaptor;
 use vortex_array::scalar_fn::fns::binary::Binary;
 use vortex_array::scalar_fn::fns::binary::CompareExecuteAdaptor;
 use vortex_array::session::ArraySessionExt;
@@ -63,9 +68,15 @@ use vortex_session::VortexSession;
 pub fn initialize(session: &VortexSession) {
     session.arrays().register(PcoPlugin);
     let kernels = session.kernels();
+    kernels.register_execute_parent_kernel(Between.id(), Pco, BetweenExecuteAdaptor(Pco));
     kernels.register_execute_parent_kernel(Binary.id(), Pco, CompareExecuteAdaptor(Pco));
     kernels.register_execute_parent_kernel(Filter.id(), Pco, FilterExecuteAdaptor(Pco));
     kernels.register_execute_parent_kernel(Dict.id(), Pco, TakeExecuteAdaptor(Pco));
+    session.aggregate_fns().register_aggregate_kernel(
+        Pco.id(),
+        Some(IsConstant.id()),
+        &compute::PcoIsConstantKernel,
+    );
 
     if session.editions().find(&editions::PCO_2026_10).is_none() {
         session

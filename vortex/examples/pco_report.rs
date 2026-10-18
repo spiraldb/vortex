@@ -23,6 +23,11 @@
 //!   `pco` edition.
 //! - `pco v2`: Pco v2 with one page per chunk, checkpoints every 1,024 values and block stats.
 //!
+//! Each encoding is timed on a full decode and on every compute function FastLanes bit-packing has
+//! a kernel for: `scalar_at`, slice, take, filter, the six comparisons against a constant,
+//! between, a widening cast, and `is_constant`. `is_constant` runs with cached statistics cleared,
+//! so it is computed every time.
+//!
 //! By default the report prints one table per column. Set `PCO_VERDICT=1` to instead tally how
 //! `pco v2` fares against every other encoding on the ratio and on every operation, or
 //! `PCO_SIZES=1` to print the compression ratio of more Pco page sizes and checkpoint intervals.
@@ -71,18 +76,25 @@ use vortex::compressor::CompressionSessionExt;
 use vortex::editions::EditionSessionExt;
 use vortex_array::ArrayContext;
 use vortex_array::ArrayRef;
+use vortex_array::Canonical;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
+use vortex_array::aggregate_fn::fns::is_constant::is_constant;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::assert_arrays_eq;
 use vortex_array::builtins::ArrayBuiltins;
+use vortex_array::dtype::DType;
 use vortex_array::dtype::NativePType;
+use vortex_array::dtype::PType;
+use vortex_array::expr::stats::Stat;
 use vortex_array::match_each_native_ptype;
 use vortex_array::scalar::Scalar;
+use vortex_array::scalar_fn::fns::between::BetweenOptions;
+use vortex_array::scalar_fn::fns::between::StrictComparison;
 use vortex_array::scalar_fn::fns::operators::Operator;
 use vortex_array::serde::SerializeOptions;
 use vortex_array::validity::Validity;
@@ -476,8 +488,15 @@ struct Workload {
     slices: Vec<Range<usize>>,
     clustered: Vec<Mask>,
     scattered: Mask,
-    lt_constant: Scalar,
-    eq_constant: Scalar,
+    /// The 1st, 50th, 51st and 99th percentiles of the valid values.
+    p1: Scalar,
+    p50: Scalar,
+    p51: Scalar,
+    p99: Scalar,
+    /// A stored value.
+    existing: Scalar,
+    /// The 64-bit type of the same kind, if the column is narrower.
+    widened: Option<DType>,
 }
 
 fn workload(array: &PrimitiveArray, ctx: &mut ExecutionCtx) -> VortexResult<Workload> {
@@ -503,9 +522,9 @@ fn workload(array: &PrimitiveArray, ctx: &mut ExecutionCtx) -> VortexResult<Work
     scattered_indices.dedup();
     let scattered = Mask::from_indices(n, scattered_indices);
 
-    // Compare against the 1st percentile (1% selectivity) and an existing value.
     let mask = array.validity()?.execute_mask(n, ctx)?;
-    let (lt_constant, eq_constant) = match_each_native_ptype!(array.ptype(), |T| {
+    let nullability = array.dtype().nullability();
+    let ([p1, p50, p51, p99], existing) = match_each_native_ptype!(array.ptype(), |T| {
         let mut valid = array
             .as_slice::<T>()
             .iter()
@@ -516,87 +535,48 @@ fn workload(array: &PrimitiveArray, ctx: &mut ExecutionCtx) -> VortexResult<Work
         let existing = valid[rng.below(valid.len())];
         valid.sort_unstable_by(|a, b| a.total_compare(*b));
         (
-            Scalar::primitive(valid[valid.len() / 100], array.dtype().nullability()),
-            Scalar::primitive(existing, array.dtype().nullability()),
+            [1, 50, 51, 99]
+                .map(|percent| Scalar::primitive(valid[valid.len() * percent / 100], nullability)),
+            Scalar::primitive(existing, nullability),
         )
     });
+    let ptype = array.ptype();
+    let widened = match ptype {
+        PType::I8 | PType::I16 | PType::I32 => Some(PType::I64),
+        PType::U8 | PType::U16 | PType::U32 => Some(PType::U64),
+        PType::F16 | PType::F32 => Some(PType::F64),
+        PType::I64 | PType::U64 | PType::F64 => None,
+    }
+    .map(|ptype| DType::Primitive(ptype, nullability));
     Ok(Workload {
         probe_indices,
         take_indices,
         slices,
         clustered,
         scattered,
-        lt_constant,
-        eq_constant,
+        p1,
+        p50,
+        p51,
+        p99,
+        existing,
+        widened,
     })
-}
-
-struct Results {
-    decoded: PrimitiveArray,
-    probed: Vec<Scalar>,
-    taken: PrimitiveArray,
-    sliced: Vec<PrimitiveArray>,
-    clustered: Vec<PrimitiveArray>,
-    scattered: PrimitiveArray,
-    lt: BoolArray,
-    eq: BoolArray,
 }
 
 fn constant(scalar: &Scalar, len: usize) -> ArrayRef {
     ConstantArray::new(scalar.clone(), len).into_array()
 }
 
-fn run(array: &ArrayRef, workload: &Workload, ctx: &mut ExecutionCtx) -> VortexResult<Results> {
-    let n = array.len();
-    Ok(Results {
-        decoded: array.clone().execute::<PrimitiveArray>(ctx)?,
-        probed: workload
-            .probe_indices
-            .iter()
-            .map(|&index| array.execute_scalar(index, ctx))
-            .collect::<VortexResult<_>>()?,
-        taken: array
-            .take(workload.take_indices.clone())?
-            .execute::<PrimitiveArray>(ctx)?,
-        sliced: workload
-            .slices
-            .iter()
-            .map(|range| array.slice(range.clone())?.execute::<PrimitiveArray>(ctx))
-            .collect::<VortexResult<_>>()?,
-        clustered: workload
-            .clustered
-            .iter()
-            .map(|mask| array.filter(mask.clone())?.execute::<PrimitiveArray>(ctx))
-            .collect::<VortexResult<_>>()?,
-        scattered: array
-            .filter(workload.scattered.clone())?
-            .execute::<PrimitiveArray>(ctx)?,
-        lt: array
-            .binary(constant(&workload.lt_constant, n), Operator::Lt)?
-            .execute::<BoolArray>(ctx)?,
-        eq: array
-            .binary(constant(&workload.eq_constant, n), Operator::Eq)?
-            .execute::<BoolArray>(ctx)?,
-    })
+/// The result of one operation of the workload.
+enum Output {
+    Array(ArrayRef),
+    Scalar(Scalar),
+    Flag(bool),
 }
 
-fn check(results: &Results, expected: &Results, ctx: &mut ExecutionCtx) {
-    assert_arrays_eq!(results.decoded, expected.decoded, ctx);
-    assert_eq!(results.probed, expected.probed);
-    assert_arrays_eq!(results.taken, expected.taken, ctx);
-    for (sliced, expected) in results.sliced.iter().zip(&expected.sliced) {
-        assert_arrays_eq!(sliced, expected, ctx);
-    }
-    for (clustered, expected) in results.clustered.iter().zip(&expected.clustered) {
-        assert_arrays_eq!(clustered, expected, ctx);
-    }
-    assert_arrays_eq!(results.scattered, expected.scattered, ctx);
-    assert_arrays_eq!(results.lt, expected.lt, ctx);
-    assert_arrays_eq!(results.eq, expected.eq, ctx);
-}
-
-/// The timed operations, in the order [`Metrics`] holds them.
-const OPS: [&str; 8] = [
+/// The timed operations: every compute function FastLanes bit-packing has a kernel for, plus a
+/// full decode. Every comparison is against a constant.
+const OPS: [&str; 15] = [
     "decode",
     "scalar_at",
     "slice 1k",
@@ -604,72 +584,125 @@ const OPS: [&str; 8] = [
     "filter clustered",
     "filter scattered",
     "`< p1`",
+    "`<= p1`",
+    "`> p99`",
+    "`>= p99`",
     "`== v`",
+    "`!= v`",
+    "between p50–p51",
+    "cast to 64-bit",
+    "is_constant",
 ];
 
-/// Latency of every one of [`OPS`], per single operation.
-type Metrics = [Duration; OPS.len()];
+const IS_CONSTANT: usize = OPS.len() - 1;
 
-/// Runs operation `op` of the workload once and returns how many operations that was.
+/// Latency of every one of [`OPS`], per single operation, or `None` where it does not apply.
+type Metrics = [Option<Duration>; OPS.len()];
+
+/// Clears the statistics `is_constant` reads and caches, throughout `array`'s tree, so that every
+/// run computes it.
+fn clear_stats(array: &ArrayRef) {
+    for stat in [Stat::IsConstant, Stat::Min, Stat::Max] {
+        array.statistics().clear(stat);
+    }
+    for child in array.children() {
+        clear_stats(&child);
+    }
+}
+
+/// Runs operation `op` of the workload once and returns its results, one per operation run.
 fn run_op(
     op: usize,
     encoded: &ArrayRef,
     workload: &Workload,
     ctx: &mut ExecutionCtx,
-) -> VortexResult<u32> {
+) -> VortexResult<Vec<Output>> {
     let n = encoded.len();
-    match op {
-        0 => {
-            encoded.clone().execute::<PrimitiveArray>(ctx)?;
-            Ok(1)
+    let execute = |array: VortexResult<ArrayRef>, ctx: &mut ExecutionCtx| {
+        VortexResult::Ok(Output::Array(
+            array?.execute::<Canonical>(ctx)?.into_array(),
+        ))
+    };
+    let compare = |scalar: &Scalar, operator: Operator, ctx: &mut ExecutionCtx| {
+        execute(encoded.binary(constant(scalar, n), operator), ctx)
+    };
+    Ok(match op {
+        0 => vec![execute(Ok(encoded.clone()), ctx)?],
+        1 => workload
+            .probe_indices
+            .iter()
+            .map(|&index| Ok(Output::Scalar(encoded.execute_scalar(index, ctx)?)))
+            .collect::<VortexResult<_>>()?,
+        2 => workload
+            .slices
+            .iter()
+            .map(|range| execute(encoded.slice(range.clone()), ctx))
+            .collect::<VortexResult<_>>()?,
+        3 => vec![execute(encoded.take(workload.take_indices.clone()), ctx)?],
+        4 => workload
+            .clustered
+            .iter()
+            .map(|mask| execute(encoded.filter(mask.clone()), ctx))
+            .collect::<VortexResult<_>>()?,
+        5 => vec![execute(encoded.filter(workload.scattered.clone()), ctx)?],
+        6 => vec![compare(&workload.p1, Operator::Lt, ctx)?],
+        7 => vec![compare(&workload.p1, Operator::Lte, ctx)?],
+        8 => vec![compare(&workload.p99, Operator::Gt, ctx)?],
+        9 => vec![compare(&workload.p99, Operator::Gte, ctx)?],
+        10 => vec![compare(&workload.existing, Operator::Eq, ctx)?],
+        11 => vec![compare(&workload.existing, Operator::NotEq, ctx)?],
+        12 => vec![execute(
+            encoded.clone().between(
+                constant(&workload.p50, n),
+                constant(&workload.p51, n),
+                BetweenOptions {
+                    lower_strict: StrictComparison::NonStrict,
+                    upper_strict: StrictComparison::NonStrict,
+                },
+            ),
+            ctx,
+        )?],
+        13 => match &workload.widened {
+            Some(dtype) => vec![execute(encoded.cast(dtype.clone()), ctx)?],
+            None => Vec::new(),
+        },
+        _ => vec![Output::Flag(is_constant(encoded, ctx)?)],
+    })
+}
+
+/// Runs every operation on `array` and checks each result against `expected`, if given.
+fn run_all(
+    array: &ArrayRef,
+    workload: &Workload,
+    expected: Option<&[Vec<Output>]>,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<Vec<Vec<Output>>> {
+    let mut all = Vec::with_capacity(OPS.len());
+    for op in 0..OPS.len() {
+        if op == IS_CONSTANT {
+            clear_stats(array);
         }
-        1 => {
-            for &index in &workload.probe_indices {
-                encoded.execute_scalar(index, ctx)?;
+        let outputs = run_op(op, array, workload, ctx)?;
+        if let Some(expected) = expected {
+            assert_eq!(outputs.len(), expected[op].len(), "{}", OPS[op]);
+            for (output, expected) in outputs.iter().zip(&expected[op]) {
+                match (output, expected) {
+                    (Output::Array(output), Output::Array(expected)) => {
+                        assert_arrays_eq!(output, expected, ctx);
+                    }
+                    (Output::Scalar(output), Output::Scalar(expected)) => {
+                        assert_eq!(output, expected, "{}", OPS[op]);
+                    }
+                    (Output::Flag(output), Output::Flag(expected)) => {
+                        assert_eq!(output, expected, "{}", OPS[op]);
+                    }
+                    _ => unreachable!("{} returned a different kind of result", OPS[op]),
+                }
             }
-            Ok(SCALAR_PROBES as u32)
         }
-        2 => {
-            for range in &workload.slices {
-                encoded
-                    .slice(range.clone())?
-                    .execute::<PrimitiveArray>(ctx)?;
-            }
-            Ok(POSITIONS as u32)
-        }
-        3 => {
-            encoded
-                .take(workload.take_indices.clone())?
-                .execute::<PrimitiveArray>(ctx)?;
-            Ok(1)
-        }
-        4 => {
-            for mask in &workload.clustered {
-                encoded
-                    .filter(mask.clone())?
-                    .execute::<PrimitiveArray>(ctx)?;
-            }
-            Ok(POSITIONS as u32)
-        }
-        5 => {
-            encoded
-                .filter(workload.scattered.clone())?
-                .execute::<PrimitiveArray>(ctx)?;
-            Ok(1)
-        }
-        6 => {
-            encoded
-                .binary(constant(&workload.lt_constant, n), Operator::Lt)?
-                .execute::<BoolArray>(ctx)?;
-            Ok(1)
-        }
-        _ => {
-            encoded
-                .binary(constant(&workload.eq_constant, n), Operator::Eq)?
-                .execute::<BoolArray>(ctx)?;
-            Ok(1)
-        }
+        all.push(outputs);
     }
+    Ok(all)
 }
 
 /// Times every operation on every encoding `reps` times and keeps the fastest run, the most
@@ -681,14 +714,23 @@ fn measure(
     reps: usize,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<Vec<Metrics>> {
-    let mut fastest = vec![[Duration::MAX; OPS.len()]; encodings.len()];
+    let mut fastest: Vec<Metrics> = vec![[None; OPS.len()]; encodings.len()];
     for op in 0..OPS.len() {
         for _ in 0..reps {
             for (encoding, encoded) in encodings.iter().enumerate() {
+                if op == IS_CONSTANT {
+                    clear_stats(encoded);
+                }
                 let start = Instant::now();
-                let n_ops = run_op(op, encoded, workload, ctx)?;
-                let elapsed = start.elapsed() / n_ops;
-                fastest[encoding][op] = fastest[encoding][op].min(elapsed);
+                let outputs = run_op(op, encoded, workload, ctx)?;
+                let elapsed = start.elapsed();
+                // Operations that do not apply to the column return no results.
+                let Ok(n_ops @ 1..) = u32::try_from(outputs.len()) else {
+                    continue;
+                };
+                let per_op = elapsed / n_ops;
+                let fastest = &mut fastest[encoding][op];
+                *fastest = Some(fastest.map_or(per_op, |fastest| fastest.min(per_op)));
             }
         }
     }
@@ -713,7 +755,7 @@ fn measure_column(
     let array = &column.array;
     let n = array.len();
     let workload = workload(array, ctx)?;
-    let expected = run(&array.clone().into_array(), &workload, ctx)?;
+    let expected = run_all(&array.clone().into_array(), &workload, None, ctx)?;
     let mut encoded = Vec::new();
     let mut bytes = Vec::new();
     let mut compress_times = Vec::new();
@@ -721,7 +763,7 @@ fn measure_column(
         let start = Instant::now();
         let result = compress(array, encoding, compressors, ctx)?;
         compress_times.push(start.elapsed());
-        check(&run(&result.array, &workload, ctx)?, &expected, ctx);
+        run_all(&result.array, &workload, Some(&expected), ctx)?;
         bytes.push(serialized_bytes(&result, session)?);
         encoded.push(result);
     }
@@ -747,31 +789,24 @@ fn report(column: &Column, measured: &Measured) {
         column.name,
         rows_per_chunk(&column.array)
     );
-    println!(
-        "| encoding | ratio | bits/value | chunk encodings | compress ms | decode µs | \
-         scalar_at µs | slice 1k µs | take {TAKE_ROWS} µs | filter 0.1% clustered µs | \
-         filter 0.01% scattered µs | `< p1` µs | `== v` µs |"
-    );
-    println!("|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+    print!("| encoding | ratio | bits/value | chunk encodings | compress ms |");
+    for op in OPS {
+        print!(" {op} µs |");
+    }
+    println!("\n|---|---|---|---|---|{}", "---|".repeat(OPS.len()));
     for (index, (name, _)) in ENCODINGS.iter().enumerate() {
         let bytes = measured.bytes[index];
-        let [decode, scalar_at, slice, take, clustered, scattered, lt, eq] =
-            measured.metrics[index];
-        println!(
-            "| {name} | {:.2} | {:.2} | {} | {:.0} | {} | {} | {} | {} | {} | {} | {} | {} |",
+        print!(
+            "| {name} | {:.2} | {:.2} | {} | {:.0} |",
             raw_bytes as f64 / bytes as f64,
             8.0 * bytes as f64 / n as f64,
             chunk_encodings(&measured.encoded[index]),
             measured.compress[index].as_secs_f64() * 1e3,
-            micros(decode),
-            micros(scalar_at),
-            micros(slice),
-            micros(take),
-            micros(clustered),
-            micros(scattered),
-            micros(lt),
-            micros(eq),
         );
+        for metric in measured.metrics[index] {
+            print!(" {} |", metric.map_or_else(|| "n/a".to_string(), micros));
+        }
+        println!();
     }
     if std::env::var_os("PCO_TREE").is_some() {
         for ((name, _), encoded) in ENCODINGS.iter().zip(&measured.encoded) {
@@ -832,12 +867,16 @@ struct Tally {
     scores: [[usize; 3]; METRICS],
     /// Sum of the logarithms of the improvements, for the geometric mean.
     log_sum: [f64; METRICS],
-    columns: usize,
+    /// Columns each metric applies to.
+    columns: [usize; METRICS],
 }
 
 impl Tally {
-    fn add(&mut self, improvements: &[f64; METRICS]) {
+    fn add(&mut self, improvements: &[Option<f64>; METRICS]) {
         for (metric, &improvement) in improvements.iter().enumerate() {
+            let Some(improvement) = improvement else {
+                continue;
+            };
             let tie = if metric == 0 {
                 1.0 + RATIO_TIE
             } else {
@@ -852,23 +891,25 @@ impl Tally {
             };
             self.scores[metric][score] += 1;
             self.log_sum[metric] += improvement.ln();
+            self.columns[metric] += 1;
         }
-        self.columns += 1;
     }
 
     fn geomean(&self, metric: usize) -> f64 {
-        (self.log_sum[metric] / self.columns as f64).exp()
+        (self.log_sum[metric] / self.columns[metric] as f64).exp()
     }
 }
 
-/// The improvement of `pco v2` over encoding `other` on every metric, higher is better.
-fn improvements(measured: &Measured, other: usize) -> [f64; METRICS] {
+/// The improvement of `pco v2` over encoding `other` on every metric that applies, higher is
+/// better.
+fn improvements(measured: &Measured, other: usize) -> [Option<f64>; METRICS] {
     let v2 = ENCODINGS.len() - 1;
-    let mut out = [0.0; METRICS];
-    out[0] = measured.bytes[other] as f64 / measured.bytes[v2] as f64;
+    let mut out = [None; METRICS];
+    out[0] = Some(measured.bytes[other] as f64 / measured.bytes[v2] as f64);
     for op in 0..OPS.len() {
-        out[1 + op] = measured.metrics[other][op].as_secs_f64()
-            / measured.metrics[v2][op].as_secs_f64().max(1e-9);
+        out[1 + op] = measured.metrics[other][op]
+            .zip(measured.metrics[v2][op])
+            .map(|(other, v2)| other.as_secs_f64() / v2.as_secs_f64().max(1e-9));
     }
     out
 }
@@ -903,7 +944,10 @@ fn verdict(
             tally.add(&improvements);
             if other == 2 {
                 for improvement in &improvements[1..] {
-                    row.push_str(&format!(" {improvement:.1}× |"));
+                    match improvement {
+                        Some(improvement) => row.push_str(&format!(" {improvement:.1}× |")),
+                        None => row.push_str(" n/a |"),
+                    }
                 }
             }
         }

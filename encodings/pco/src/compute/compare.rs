@@ -58,7 +58,13 @@ impl CompareKernel for Pco {
                 let Some(value) = constant.typed_value::<T>() else {
                     return Ok(None);
                 };
-                compare_constant::<T>(lhs, value, operator, nullable, ctx)
+                evaluate_by_block::<T>(
+                    lhs,
+                    |min, max| decide(min, max, value, operator),
+                    |values| compare_values(values, value, operator),
+                    nullable,
+                    ctx,
+                )
             }
         )
     }
@@ -66,7 +72,12 @@ impl CompareKernel for Pco {
 
 /// Decides a whole block from its `[min, max]` under Vortex's total order, or `None` if the
 /// block straddles `value`.
-fn decide<T: NativePType>(min: T, max: T, value: T, op: CompareOperator) -> Option<bool> {
+pub(super) fn decide<T: NativePType>(
+    min: T,
+    max: T,
+    value: T,
+    op: CompareOperator,
+) -> Option<bool> {
     match op {
         CompareOperator::Eq => {
             if value.is_lt(min) || value.is_gt(max) {
@@ -135,15 +146,16 @@ fn compare_values<T: NativePType>(values: &[T], value: T, op: CompareOperator) -
     }
 }
 
-/// Compares against a constant block by block: blocks whose `[min, max]` decide the predicate
-/// are filled without decoding, and only runs of straddling blocks are decoded.
+/// Evaluates a predicate block by block: blocks that `decide_block` settles from their
+/// `[min, max]` are filled without decoding, and only runs of undecided blocks are decoded and
+/// passed to `evaluate`.
 ///
-/// Declines when most blocks straddle the constant, since decoding everything and running the
-/// vectorized primitive comparison is then faster.
-fn compare_constant<T: Number + NativePType>(
+/// Declines when most blocks are undecided, since decoding everything and running the vectorized
+/// primitive kernel is then faster.
+pub(super) fn evaluate_by_block<T: Number + NativePType>(
     array: ArrayView<'_, Pco>,
-    value: T,
-    op: CompareOperator,
+    decide_block: impl Fn(T, T) -> Option<bool>,
+    evaluate: impl Fn(&[T]) -> BitBufferMut,
     nullable: bool,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<Option<ArrayRef>> {
@@ -154,8 +166,8 @@ fn compare_constant<T: Number + NativePType>(
     let values = data.value_range(&unsliced_mask);
     let (mins, maxes) = data
         .block_stats::<T>()?
-        .ok_or_else(|| vortex_err!("Pco compare requires block stats"))?;
-    let block_decision = |block: usize| decide(mins[block], maxes[block], value, op);
+        .ok_or_else(|| vortex_err!("Pco block predicates require block stats"))?;
+    let block_decision = |block: usize| decide_block(mins[block], maxes[block]);
     if !values.is_empty() {
         let first_page = data.page_of(values.start);
         let last_page = data.page_of(values.end - 1);
@@ -205,11 +217,8 @@ fn compare_constant<T: Number + NativePType>(
             let decoded_start = block * block_len;
             decoded.clear();
             decoder.append_page_blocks(page, block..run_end, &mut decoded)?;
-            let bits = compare_values(
-                &decoded[segment.start - decoded_start..segment.end - decoded_start],
-                value,
-                op,
-            );
+            let bits =
+                evaluate(&decoded[segment.start - decoded_start..segment.end - decoded_start]);
             value_bits.append_buffer(&bits.freeze());
             block = run_end;
         }
