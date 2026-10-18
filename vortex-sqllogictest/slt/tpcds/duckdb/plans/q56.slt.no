@@ -1208,7 +1208,7 @@ logical_opt [
                                                                                                         "name": "READ_VORTEX",
                                                                                                         "children": [],
                                                                                                         "extra_info": {
-                                                                                                            "Filters": "vortex.list.contains([\"slate\", \"blanched\", \"burnished\"], $.i_color)",
+                                                                                                            "Filters": "vortex.list.contains([\"slate\", \"blanched\", \"burnished\"], $.i_color, opts=sql_null_semantics)",
                                                                                                             "Function": "Vortex Scan",
                                                                                                             "Estimated Cardinality": "360"
                                                                                                         }
@@ -1405,7 +1405,7 @@ logical_opt [
                                                                                                         "name": "READ_VORTEX",
                                                                                                         "children": [],
                                                                                                         "extra_info": {
-                                                                                                            "Filters": "vortex.list.contains([\"slate\", \"blanched\", \"burnished\"], $.i_color)",
+                                                                                                            "Filters": "vortex.list.contains([\"slate\", \"blanched\", \"burnished\"], $.i_color, opts=sql_null_semantics)",
                                                                                                             "Function": "Vortex Scan",
                                                                                                             "Estimated Cardinality": "360"
                                                                                                         }
@@ -1602,7 +1602,7 @@ logical_opt [
                                                                                                         "name": "READ_VORTEX",
                                                                                                         "children": [],
                                                                                                         "extra_info": {
-                                                                                                            "Filters": "vortex.list.contains([\"slate\", \"blanched\", \"burnished\"], $.i_color)",
+                                                                                                            "Filters": "vortex.list.contains([\"slate\", \"blanched\", \"burnished\"], $.i_color, opts=sql_null_semantics)",
                                                                                                             "Function": "Vortex Scan",
                                                                                                             "Estimated Cardinality": "360"
                                                                                                         }
@@ -1795,7 +1795,7 @@ physical_plan [
                                                                         "children": [],
                                                                         "extra_info": {
                                                                             "Function": "Vortex Scan",
-                                                                            "Filters": "vortex.list.contains([\"slate\", \"blanched\", \"burnished\"], $.i_color)",
+                                                                            "Filters": "vortex.list.contains([\"slate\", \"blanched\", \"burnished\"], $.i_color, opts=sql_null_semantics)",
                                                                             "Projections": "i_item_id",
                                                                             "Estimated Cardinality": "360"
                                                                         }
@@ -1916,7 +1916,7 @@ physical_plan [
                                                                         "children": [],
                                                                         "extra_info": {
                                                                             "Function": "Vortex Scan",
-                                                                            "Filters": "vortex.list.contains([\"slate\", \"blanched\", \"burnished\"], $.i_color)",
+                                                                            "Filters": "vortex.list.contains([\"slate\", \"blanched\", \"burnished\"], $.i_color, opts=sql_null_semantics)",
                                                                             "Projections": "i_item_id",
                                                                             "Estimated Cardinality": "360"
                                                                         }
@@ -2037,7 +2037,7 @@ physical_plan [
                                                                         "children": [],
                                                                         "extra_info": {
                                                                             "Function": "Vortex Scan",
-                                                                            "Filters": "vortex.list.contains([\"slate\", \"blanched\", \"burnished\"], $.i_color)",
+                                                                            "Filters": "vortex.list.contains([\"slate\", \"blanched\", \"burnished\"], $.i_color, opts=sql_null_semantics)",
                                                                             "Projections": "i_item_id",
                                                                             "Estimated Cardinality": "360"
                                                                         }

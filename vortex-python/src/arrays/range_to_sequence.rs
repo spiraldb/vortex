@@ -119,8 +119,9 @@ mod test {
         #[case] step: isize,
     ) -> VortexResult<()> {
         let dtype = DType::Primitive(PType::I64, Nullability::NonNullable);
-        let arr = sequence_array_from_range::<i64>(start, stop, step, dtype)?;
+        let arr = sequence_array_from_range::<i64>(start, stop, step, dtype.clone())?;
         assert_eq!(arr.len(), 0);
+        assert_eq!(arr.dtype(), &dtype);
         Ok(())
     }
 

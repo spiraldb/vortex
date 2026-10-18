@@ -41,6 +41,7 @@ def open(
     without_segment_cache: bool = False,
     segment_cache: SegmentCache | None = None,
     cache_key: str | None = None,
+    memory_map: bool = False,
 ) -> VortexFile:
     """
     Lazily open a Vortex file located at the given path or URL.
@@ -64,6 +65,12 @@ def open(
     cache_key : :class:`str` | None
         Identifies this file's contents within ``segment_cache``. Files opened with the same key
         share cached segments, so the key must change whenever the file does.
+    memory_map : :class:`bool`
+        If true, map a local file into memory and read segments as slices of the map. Reads then
+        need no IO threads, IO requests or copies, and the page cache takes the place of the
+        segment cache, so this cannot be combined with ``store``, ``segment_cache`` or
+        ``cache_key``. The file must not change while it is open: a truncated file can crash the
+        process with ``SIGBUS``. With ``footer`` set, the open reads nothing.
 
     Examples
     --------
@@ -84,6 +91,7 @@ def open(
             without_segment_cache=without_segment_cache,
             segment_cache=segment_cache,
             cache_key=cache_key,
+            memory_map=memory_map,
         )
     )
 

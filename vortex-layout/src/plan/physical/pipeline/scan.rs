@@ -29,6 +29,7 @@ use super::port::PipelineId;
 use super::port::PortId;
 use super::port::Slab;
 use super::port::SourceEnd;
+use super::values::ValueCache;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::operator::Cx;
 use crate::plan::physical::operator::InletSet;
@@ -288,6 +289,8 @@ pub(crate) struct Core {
     /// The split being compiled, whose shared ports a compile claims. `usize::MAX` when no
     /// split is, as while the pipeline a share decodes with is built: it reads for no split.
     pub(crate) split: usize,
+    /// Whole values kept for later scans of the same split.
+    pub(crate) values: ValueCache,
 }
 
 impl Core {
@@ -307,6 +310,7 @@ impl Core {
             dirty_flags: Vec::new(),
             shares: Shares::new(splits),
             split: usize::MAX,
+            values: ValueCache::default(),
         }
     }
 
@@ -622,7 +626,7 @@ struct Active {
 /// reads of later splits are in flight while earlier ones compute.
 pub struct Scan {
     core: Core,
-    root: Root,
+    root: Option<Root>,
     splits: Vec<Split>,
     next: usize,
     active: Vec<Option<Active>>,
@@ -667,14 +671,21 @@ impl Scan {
             0,
             splits.iter().map(|split| split.rows.clone()).collect(),
         );
+        // Only the rows some split reads can share a segment between readers.
+        let start = splits
+            .iter()
+            .map(|split| split.rows.start)
+            .min()
+            .unwrap_or(0);
+        let end = splits.iter().map(|split| split.rows.end).max().unwrap_or(0);
         match &root {
-            Root::Plan(plan) => core.shares.add(plan, 0..plan.row_count())?,
+            Root::Plan(plan) => core.shares.add(plan, start..end)?,
         }
         core.shares.retain_shared();
         core.dirty_flags = vec![false; 1];
         Ok(Self {
             core,
-            root,
+            root: Some(root),
             splits,
             next: 0,
             active: vec![None],
@@ -694,6 +705,12 @@ impl Scan {
     /// Sets the global row index of plan row zero, which row-index plans add to their rows.
     pub fn with_row_offset(mut self, row_offset: u64) -> Self {
         self.core.row_offset = row_offset;
+        self
+    }
+
+    /// Shares whole values, such as dictionary values, with the other scans given `values`.
+    pub fn with_value_cache(mut self, values: ValueCache) -> Self {
+        self.core.values = values;
         self
     }
 
@@ -749,12 +766,21 @@ impl Scan {
         let index = self.next;
         self.next += 1;
         let split = self.splits[index].clone();
-        let output = match &self.root {
+        let output = match self
+            .root
+            .as_ref()
+            .ok_or_else(|| vortex_err!("Scan has no plan for its next split"))?
+        {
             Root::Plan(plan) => {
                 self.core
                     .compile_stage(plan, split.rows.clone(), &split.mask, (slot, index))?
             }
         };
+        if self.next == self.splits.len() {
+            // Compiled operators own what they need. The last split no longer needs the
+            // lowering tree or the source layouts retained by its lazy children.
+            self.root = None;
+        }
         if output.is_none() {
             self.core.finish_split(index);
         } else {

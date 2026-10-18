@@ -15,7 +15,6 @@ use vortex_array::IntoArray;
 use vortex_array::MaskFuture;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::DictArray;
-use vortex_array::arrays::SharedArray;
 use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldMask;
@@ -41,6 +40,7 @@ use crate::LayoutReader;
 use crate::LayoutReaderRef;
 use crate::RowSplits;
 use crate::SplitRange;
+use crate::arrays::shared::Shared;
 use crate::layouts::SharedArrayFuture;
 use crate::segments::SegmentSource;
 
@@ -94,7 +94,7 @@ impl DictReader {
             session,
             values_len,
             values_array: Default::default(),
-            values_evals: Default::default(),
+            values_evals: DashMap::with_hasher_and_shard_amount(Default::default(), 8),
             values,
             codes,
         })
@@ -117,7 +117,7 @@ impl DictReader {
                     )
                     .vortex_expect("must construct dict values array evaluation")
                     .map_err(Arc::new)
-                    .map(move |array| Ok(SharedArray::new(array?).into_array()))
+                    .map(move |array| Ok(Shared::new(array?).into_array()))
                     .boxed()
                     .shared()
             })
@@ -165,7 +165,7 @@ impl DictReader {
                 self.values_array_uncanonical()
                     .map(move |array| {
                         let array = array?.apply_bound(&expr)?;
-                        Ok(SharedArray::new(array).into_array())
+                        Ok(Shared::new(array).into_array())
                     })
                     .boxed()
                     .shared()
@@ -321,7 +321,7 @@ impl LayoutReader for DictReader {
                 )
                 .vortex_expect("must construct dict values array evaluation")
                 .map_err(Arc::new)
-                .map(move |array| Ok(SharedArray::new(array?.apply_bound(&inner)?).into_array()))
+                .map(move |array| Ok(Shared::new(array?.apply_bound(&inner)?).into_array()))
                 .boxed()
                 .shared()
         } else {
@@ -360,7 +360,6 @@ mod tests {
     use rstest::rstest;
     use vortex_array::ArrayContext;
     use vortex_array::ArrayRef;
-    use vortex_array::Canonical;
     use vortex_array::IntoArray as _;
     use vortex_array::MaskFuture;
     use vortex_array::VortexSessionExecute;
@@ -389,7 +388,6 @@ mod tests {
     use vortex_array::expr::root;
     use vortex_array::validity::Validity;
     use vortex_btrblocks::BtrBlocksCompressorBuilder;
-    use vortex_error::VortexExpect;
     use vortex_error::VortexResult;
     use vortex_io::runtime::Handle;
     use vortex_io::runtime::single::block_on;
@@ -693,11 +691,7 @@ mod tests {
                 .execute_mask(array.len(), &mut ctx)
                 .unwrap()
                 .into_array();
-            let actual_canonical = actual
-                .execute::<Canonical>(&mut ctx)
-                .vortex_expect("to_canonical failed")
-                .into_array();
-            assert_arrays_eq!(actual_canonical, expected, &mut ctx);
+            assert_arrays_eq!(actual, expected, &mut ctx);
         })
     }
 

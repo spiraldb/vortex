@@ -32,15 +32,6 @@ use crate::expr::traversal::TraversalOrder;
 /// Partition an expression into sub-expressions that are uniquely associated with an annotation.
 /// A root expression is also returned that can be used to recombine the results of the partitions
 /// into the result of the original expression.
-///
-/// ## Note
-///
-/// This function currently respects the validity of each field in the scope, but the not validity
-/// of the scope itself. The fix would be for the returned `BoundPartitionedExpr` to include a
-/// partition expression for computing the validity, or to include that expression as part of the
-/// root.
-///
-/// See <https://github.com/vortex-data/vortex/issues/1907>.
 pub fn partition_bound<A: AnnotationFn<BoundExpression>>(
     expr: BoundExpression,
     annotate_fn: A,
@@ -363,6 +354,12 @@ mod tests {
         let partitioned = partition_by_field(expr.bind(&dtype).unwrap(), &dtype).unwrap();
 
         assert_eq!(partitioned.partitions.len(), fields.names().len());
+        for name in fields.names().iter() {
+            let expected = pack([(format!("{name}_0"), col(name.clone()))], NonNullable)
+                .bind(&dtype)
+                .unwrap();
+            assert_eq!(partitioned.find_partition(name), Some(&expected));
+        }
     }
 
     #[rstest]
@@ -414,6 +411,14 @@ mod tests {
 
         // Whole expr is a single split
         assert_eq!(partitioned.partitions.len(), 1);
+        let expected = pack([("a_0", expr)], NonNullable).bind(&dtype).unwrap();
+        assert_eq!(partitioned.find_partition(&"a".into()), Some(&expected));
+        let root_dtype =
+            partition_root_dtype(&partitioned.partition_names, &partitioned.partitions);
+        assert_eq!(
+            partitioned.root,
+            get_item("a_0", col("a")).bind(&root_dtype).unwrap()
+        );
     }
 
     #[rstest]
@@ -423,6 +428,18 @@ mod tests {
 
         // One for id.a and id.b
         assert_eq!(partitioned.partitions.len(), 2);
+        let expected_a = pack([("a_0", get_item("y", col("a")))], NonNullable)
+            .bind(&dtype)
+            .unwrap();
+        let expected_b = pack([("b_0", col("b"))], NonNullable).bind(&dtype).unwrap();
+        assert_eq!(partitioned.find_partition(&"a".into()), Some(&expected_a));
+        assert_eq!(partitioned.find_partition(&"b".into()), Some(&expected_b));
+        let root_dtype =
+            partition_root_dtype(&partitioned.partition_names, &partitioned.partitions);
+        let expected_root = checked_add(get_item("a_0", col("a")), get_item("b_0", col("b")))
+            .bind(&root_dtype)
+            .unwrap();
+        assert_eq!(partitioned.root, expected_root);
     }
 
     #[rstest]

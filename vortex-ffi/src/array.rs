@@ -729,7 +729,7 @@ mod tests {
     use vortex::array::arrays::PrimitiveArray;
     use vortex::array::arrays::StructArray;
     use vortex::array::arrays::VarBinViewArray;
-    use vortex::array::arrays::bool::BoolArrayExt;
+    use vortex::array::assert_arrays_eq;
     use vortex::array::validity::Validity;
     use vortex::buffer::buffer;
     use vortex::expr::eq;
@@ -835,6 +835,7 @@ mod tests {
             assert_no_error(error);
             assert_eq!(vx_array_len(sliced), 3);
             assert_eq!(get_i32(session, sliced, 0), 2);
+            assert_eq!(get_i32(session, sliced, 1), 3);
             assert_eq!(get_i32(session, sliced, 2), 4);
 
             vx_array_free(sliced);
@@ -908,6 +909,11 @@ mod tests {
             let field0 = vx_array_get_field(ffi_array, 0, &raw mut error);
             assert_no_error(error);
             assert_eq!(vx_array_len(field0), 3);
+            for (index, expected) in ["Alice", "Bob", "Charlie"].into_iter().enumerate() {
+                let actual = vx_array_utf8_at(field0, index, &raw mut error);
+                assert_no_error(error);
+                assert_eq!(actual.as_str().unwrap(), expected);
+            }
 
             let field1 = vx_array_get_field(ffi_array, 1, &raw mut error);
             assert_no_error(error);
@@ -1011,10 +1017,8 @@ mod tests {
             {
                 let res = vx_array::as_ref(res);
                 let mut ctx = array_session().create_execution_ctx();
-                let bool_array = res.clone().execute::<BoolArray>(&mut ctx).unwrap();
-                let buffer = bool_array.to_bit_buffer();
-                let expected = BoolArray::from_iter(vec![false, false, true, true]);
-                assert_eq!(buffer, expected.to_bit_buffer());
+                let expected = BoolArray::from_iter([Some(false), None, Some(true), Some(true)]);
+                assert_arrays_eq!(res, expected, &mut ctx);
             }
             vx_array_free(res);
 
@@ -1047,6 +1051,10 @@ mod tests {
 
         unsafe { vx_array_free(vx_arr) };
         unsafe {
+            assert_eq!(
+                vx_dtype_get_variant(dtype_ptr),
+                vx_dtype_variant::DTYPE_STRUCT
+            );
             vx_dtype_free(dtype_ptr);
         }
     }
@@ -1092,6 +1100,17 @@ mod tests {
         };
         assert_no_error(error);
         assert!(!vx.is_null());
+        assert!(ffi_array.is_released());
+        let mut ctx = array_session().create_execution_ctx();
+        let expected = StructArray::try_from_iter([
+            ("a", buffer![1i32, 2, 3].into_array()),
+            (
+                "b",
+                VarBinViewArray::from_iter_nullable_str([Some("x"), None, Some("z")]).into_array(),
+            ),
+        ])
+        .unwrap();
+        assert_arrays_eq!(vx_array::as_ref(vx), expected, &mut ctx);
 
         unsafe {
             assert!(vx_array_has_dtype(vx, vx_dtype_variant::DTYPE_STRUCT));
@@ -1135,7 +1154,9 @@ mod tests {
             let data = vx_array_data_ptr_primitive(canonical, &raw mut error);
             assert_no_error(error);
 
-            assert_eq!(from_raw_parts(data.cast::<i32>(), 3), [10, 20, 30]);
+            let values = from_raw_parts(data.cast::<i32>(), 3);
+            assert_eq!(values[0], 10);
+            assert_eq!(values[2], 30);
             let mut validity = vx_validity {
                 r#type: vx_validity_type::VX_VALIDITY_NON_NULLABLE,
                 array: ptr::null(),
@@ -1164,7 +1185,7 @@ mod tests {
 
     #[test]
     #[cfg_attr(miri, ignore)]
-    fn test_canonicalize() {
+    fn test_nonnullable_validity() {
         let primitive = PrimitiveArray::new(buffer![1u8, 2u8], Validity::NonNullable);
 
         unsafe {

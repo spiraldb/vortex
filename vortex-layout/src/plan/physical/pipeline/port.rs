@@ -34,9 +34,10 @@ pub(crate) enum SourceEnd {
 
 /// A queue of batches with one sink and one source.
 ///
-/// Its buffer is allocated once, for the capacity. Only an unbounded port, a share's waiting for a
-/// source compiled later, grows past the default.
+/// The first batch is inline: a segment scan commonly emits only one batch. Additional batches
+/// use a deque, whose buffer is retained when the port is reused.
 pub(crate) struct Queue {
+    front: Option<ArrayRef>,
     batches: VecDeque<ArrayRef>,
     /// Batches the queue may hold before its sink is blocked.
     capacity: usize,
@@ -57,7 +58,8 @@ pub(crate) struct Queue {
 impl Queue {
     fn new(capacity: usize, sink: Option<PipelineId>, source: SourceEnd) -> Self {
         Self {
-            batches: VecDeque::with_capacity(capacity.clamp(1, DEFAULT_CAPACITY)),
+            front: None,
+            batches: VecDeque::new(),
             capacity: capacity.max(1),
             closed: false,
             changed: false,
@@ -69,7 +71,7 @@ impl Queue {
     }
 
     pub(crate) fn has_room(&self) -> bool {
-        self.batches.len() < self.capacity
+        self.len() < self.capacity
     }
 
     pub(crate) fn closed(&self) -> bool {
@@ -83,7 +85,7 @@ impl Queue {
     }
 
     pub(crate) fn len(&self) -> usize {
-        self.batches.len()
+        usize::from(self.front.is_some()) + self.batches.len()
     }
 
     #[cfg(debug_assertions)]
@@ -96,7 +98,7 @@ impl Queue {
     }
 
     pub(crate) fn pop(&mut self) -> Option<ArrayRef> {
-        self.batches.pop_front()
+        std::mem::replace(&mut self.front, self.batches.pop_front())
     }
 }
 
@@ -108,12 +110,12 @@ pub struct Inlet<'a> {
 impl Inlet<'_> {
     /// The oldest batch, in place, so the source can slice it down without removing it.
     pub fn peek_mut(&mut self) -> Option<&mut ArrayRef> {
-        self.queue.batches.front_mut()
+        self.queue.front.as_mut()
     }
 
     /// The oldest batch, removed. Removing a batch is what frees its slot.
     pub fn take(&mut self) -> Option<ArrayRef> {
-        self.queue.batches.pop_front()
+        self.queue.pop()
     }
 
     /// Whether the sink has finished. Closed and empty is the end of the inlet.
@@ -123,23 +125,28 @@ impl Inlet<'_> {
 
     /// Whether no batch is queued.
     pub fn is_empty(&self) -> bool {
-        self.queue.batches.is_empty()
+        self.queue.front.is_none()
     }
 
     /// Batches queued.
     pub fn len(&self) -> usize {
-        self.queue.batches.len()
+        self.queue.len()
     }
 
     /// Whether the sink can push no more until the source takes a batch. An unbounded inlet
     /// counts as full at the default capacity, so a source waiting for it to fill still runs.
     pub fn full(&self) -> bool {
-        self.queue.batches.len() >= self.queue.capacity.min(DEFAULT_CAPACITY)
+        self.queue.len() >= self.queue.capacity.min(DEFAULT_CAPACITY)
     }
 
     /// Rows queued, over every batch.
     pub fn rows(&self) -> usize {
-        self.queue.batches.iter().map(|batch| batch.len()).sum()
+        self.queue
+            .front
+            .iter()
+            .chain(self.queue.batches.iter())
+            .map(|batch| batch.len())
+            .sum()
     }
 }
 
@@ -214,10 +221,9 @@ impl Arena {
     ) -> PortId {
         match self.free.pop() {
             Some(id) => {
-                // A freed slot keeps its buffer, so reusing it allocates only for a larger port.
+                // A freed slot keeps any overflow buffer for reuse.
                 let queue = &mut self.queues[id];
                 let capacity = capacity.max(1);
-                queue.batches.reserve_exact(capacity.min(DEFAULT_CAPACITY));
                 queue.capacity = capacity;
                 queue.closed = false;
                 queue.changed = false;
@@ -257,7 +263,11 @@ impl Arena {
             "push into port {id} with no consumer"
         );
         if !batch.is_empty() {
-            queue.batches.push_back(batch);
+            if queue.front.is_none() {
+                queue.front = Some(batch);
+            } else {
+                queue.batches.push_back(batch);
+            }
             queue.changed = true;
         }
     }
@@ -278,6 +288,7 @@ impl Arena {
         let queue = &mut self.queues[id];
         queue.source_gone = true;
         queue.source = SourceEnd::Unclaimed;
+        queue.front = None;
         queue.batches.clear();
         self.maybe_free(id);
     }
@@ -292,6 +303,7 @@ impl Arena {
         );
         queue.closed = true;
         queue.source_gone = true;
+        queue.front = None;
         queue.batches.clear();
         self.maybe_free(id);
     }
@@ -300,6 +312,7 @@ impl Arena {
         let queue = &mut self.queues[id];
         if queue.closed && queue.source_gone && !queue.free {
             queue.free = true;
+            queue.front = None;
             queue.batches.clear();
             self.free.push(id);
         }
@@ -315,5 +328,45 @@ impl Arena {
     #[cfg(test)]
     pub(crate) fn live(&self) -> usize {
         self.queues.len() - self.free.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+    use vortex_array::ArrayRef;
+    use vortex_array::IntoArray;
+    use vortex_buffer::buffer;
+
+    use super::Arena;
+    use super::SourceEnd;
+
+    #[rstest]
+    #[case::single(1)]
+    #[case::bounded(4)]
+    #[case::unbounded(usize::MAX)]
+    fn queued_batches_keep_order_and_reused_ports_are_empty(#[case] capacity: usize) {
+        let mut arena = Arena::default();
+        let port = arena.create(capacity, None, SourceEnd::Scan(0));
+        let arrays: Vec<_> = (0..capacity.min(4))
+            .map(|i| buffer![i as u64].into_array())
+            .collect();
+        for array in &arrays {
+            assert!(arena.has_room(port));
+            arena.push(port, array.clone());
+        }
+        assert_eq!(arena.inlet(port).len(), arrays.len());
+        assert_eq!(arena.inlet(port).rows(), arrays.len());
+        arena.close(port);
+        for expected in arrays {
+            let actual = arena.inlet(port).take().expect("queued batch");
+            assert!(ArrayRef::ptr_eq(&actual, &expected));
+        }
+        assert!(arena.inlet(port).is_empty());
+        arena.drop_source(port);
+        let reused = arena.create(1, None, SourceEnd::Scan(0));
+        assert_eq!(reused, port);
+        assert!(arena.inlet(reused).is_empty());
+        assert!(arena.has_room(reused));
     }
 }

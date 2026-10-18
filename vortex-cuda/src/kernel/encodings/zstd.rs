@@ -380,13 +380,11 @@ mod tests {
 
         let zstd_array = Zstd::from_var_bin_view(&strings, 3, 0, cuda_ctx.execution_ctx())?;
 
-        let cpu_result = Zstd::decompress(&zstd_array, cuda_ctx.execution_ctx())?
-            .execute::<Canonical>(cuda_ctx.execution_ctx())?;
         let gpu_result = ZstdExecutor
             .execute(zstd_array.into_array(), &mut cuda_ctx)
             .await?;
 
-        assert_arrays_eq!(cpu_result.into_array(), gpu_result.into_array(), &mut ctx);
+        assert_arrays_eq!(gpu_result.into_array(), strings, &mut ctx);
         Ok(())
     }
 
@@ -417,13 +415,11 @@ mod tests {
         // 14 strings and 3 values per frame = ceil(14/3) = 5 frames.
         let zstd_array = Zstd::from_var_bin_view(&strings, 3, 3, cuda_ctx.execution_ctx())?;
 
-        let cpu_result = Zstd::decompress(&zstd_array, cuda_ctx.execution_ctx())?
-            .execute::<Canonical>(cuda_ctx.execution_ctx())?;
         let gpu_result = ZstdExecutor
             .execute(zstd_array.into_array(), &mut cuda_ctx)
             .await?;
 
-        assert_arrays_eq!(cpu_result.into_array(), gpu_result.into_array(), &mut ctx);
+        assert_arrays_eq!(gpu_result.into_array(), strings, &mut ctx);
         Ok(())
     }
 
@@ -455,7 +451,11 @@ mod tests {
             .execute(sliced_zstd.clone(), &mut cuda_ctx)
             .await?;
 
-        assert_arrays_eq!(sliced_zstd, gpu_result.into_array(), &mut ctx);
+        assert_arrays_eq!(
+            gpu_result.into_array(),
+            strings.into_array().slice(2..7)?,
+            &mut ctx
+        );
         Ok(())
     }
 
@@ -489,7 +489,7 @@ mod tests {
             .await?
             .into_array();
 
-        assert_arrays_eq!(zstd_array, gpu_result, &mut ctx);
+        assert_arrays_eq!(gpu_result, strings, &mut ctx);
         Ok(())
     }
 }

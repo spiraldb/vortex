@@ -484,7 +484,19 @@ mod tests {
             .await?;
 
         let table = ctx.session.table("my_tbl").await?;
-        assert_eq!(table.count().await?, 3);
+        let batches = table.select_columns(&["c1", "c2"])?.collect().await?;
+        assert_batches_sorted_eq!(
+            [
+                "+-------+----+",
+                "| c1    | c2 |",
+                "+-------+----+",
+                "| hello | 42 |",
+                "| world | 24 |",
+                "| world | 25 |",
+                "+-------+----+",
+            ],
+            &batches
+        );
 
         let location = Path::parse("table/")?;
         let file_metas = ctx

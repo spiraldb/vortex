@@ -353,6 +353,6 @@ mod tests {
 
         drop(expr);
 
-        assert_eq!(shared.children().len(), 1);
+        assert_eq!(shared.children(), &[lit(true)]);
     }
 }

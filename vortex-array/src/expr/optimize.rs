@@ -4,7 +4,6 @@
 use vortex_error::VortexResult;
 
 use crate::expr::BoundExpression;
-use crate::expr::transform::match_between::find_between;
 use crate::scalar_fn::ExpressionReduceNode;
 
 impl BoundExpression {
@@ -92,15 +91,6 @@ impl BoundExpression {
 
     /// Try to optimize the entire expression tree recursively.
     pub fn try_optimize_recursive(&self) -> VortexResult<Option<BoundExpression>> {
-        let result = self.try_optimize_recursive_inner()?;
-
-        // Apply the between optimization once at the top level only.
-        // TODO(ngates): remove the "between" optimization, or rewrite it to not always convert
-        //  to CNF?
-        Ok(Some(find_between(result.unwrap_or_else(|| self.clone()))))
-    }
-
-    fn try_optimize_recursive_inner(&self) -> VortexResult<Option<BoundExpression>> {
         // First optimize the root
         let mut current = self.try_optimize()?;
 
@@ -110,7 +100,7 @@ impl BoundExpression {
         let children = expr.children();
         let mut new_children: Option<Vec<BoundExpression>> = None;
         for (idx, child) in children.iter().enumerate() {
-            if let Some(optimized) = child.try_optimize_recursive_inner()? {
+            if let Some(optimized) = child.try_optimize_recursive()? {
                 new_children
                     .get_or_insert_with(|| children[..idx].to_vec())
                     .push(optimized);
@@ -133,9 +123,16 @@ impl BoundExpression {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
+    use vortex_buffer::buffer;
     use vortex_error::VortexResult;
     use vortex_error::vortex_err;
 
+    use crate::IntoArray;
+    use crate::VortexSessionExecute;
+    use crate::array_session;
+    use crate::arrays::BoolArray;
+    use crate::arrays::StructArray;
+    use crate::assert_arrays_eq;
     use crate::dtype::DType;
     use crate::dtype::FieldName;
     use crate::dtype::Nullability;
@@ -173,10 +170,14 @@ mod tests {
         );
         let optimized = expr.bind(&scope)?.optimize_recursive()?;
 
-        let s = optimized.to_string();
-        assert!(s.contains("$.x"), "expected $.x in {s}");
-        assert!(s.contains("1i32") || s.contains('1'), "expected 1 in {s}");
-        assert!(s.contains("2i32") || s.contains('2'), "expected 2 in {s}");
+        let data =
+            StructArray::from_fields(&[("x", buffer![0i32, 1, 2, 3].into_array())])?.into_array();
+        let actual = data.apply_bound(&optimized)?;
+        assert_arrays_eq!(
+            actual,
+            BoolArray::from_iter([false, true, true, false]),
+            &mut array_session().create_execution_ctx()
+        );
         Ok(())
     }
 

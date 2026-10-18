@@ -272,7 +272,12 @@ mod tests {
         let replacement = BufferHandle::new_host(buffer![1i32, 2, 3, 4].into_byte_buffer());
         // SAFETY: the replacement buffer contains the same logical values as the original array;
         // only the buffer handle changes.
+        let replacement_ptr = replacement.as_host().as_ptr();
         let rewritten = unsafe { array.with_buffers([replacement]) }?;
+        assert_eq!(
+            rewritten.buffer_handles()[0].as_host().as_ptr(),
+            replacement_ptr
+        );
         let expected = PrimitiveArray::from_iter([1i32, 2, 3, 4]);
 
         assert_arrays_eq!(rewritten, expected, &mut ctx);

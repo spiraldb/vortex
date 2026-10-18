@@ -60,7 +60,7 @@ impl RowIdxLayoutReader {
             name: Arc::clone(child.name()),
             row_offset,
             child,
-            partition_cache: DashMap::with_hasher(Default::default()),
+            partition_cache: DashMap::with_hasher_and_shard_amount(Default::default(), 8),
             session,
         }
     }
@@ -541,7 +541,11 @@ mod tests {
             .unwrap();
 
             assert!(result.is::<Sequence>());
-            assert_eq!(result.len(), 5);
+            assert_arrays_eq!(
+                result,
+                buffer![12u64, 13, 14, 15, 16].into_array(),
+                &mut new_session().create_execution_ctx()
+            );
         })
     }
 

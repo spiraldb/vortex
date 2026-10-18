@@ -11,11 +11,13 @@ use futures::pin_mut;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::BoolArray;
+use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::DictArray;
 use vortex_array::arrays::ListViewArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::struct_::StructArrayExt;
+use vortex_array::assert_arrays_eq;
 use vortex_array::dtype::FieldNames;
 use vortex_array::field_path;
 use vortex_array::validity::Validity;
@@ -102,8 +104,10 @@ async fn test_file_roundtrip() {
 
     pin_mut!(stream);
 
+    let mut chunks = Vec::new();
     while let Some(next) = stream.next().await {
         let next = next.expect("next");
+        chunks.push(next.clone());
         let next = next.execute::<StructArray>(&mut ctx).unwrap();
         let a = next
             .unmasked_field_by_name("a")
@@ -122,6 +126,8 @@ async fn test_file_roundtrip() {
         assert!(b.is_canonical());
         assert!(raw.nbytes() > compressed.nbytes());
     }
+    let result = ChunkedArray::try_new(chunks, data.dtype().clone()).unwrap();
+    assert_arrays_eq!(result, data, &mut ctx);
 }
 
 /// Regression test: writing a Dict<ListView> where the list has

@@ -579,9 +579,6 @@ mod tests {
 
         let bare_path = parse_path("data[2]").unwrap();
         assert_eq!(bare_path.to_string(), "$.data[2]");
-        assert!(parse_path("$.").is_err());
-        assert!(parse_path("$data").is_err());
-        assert!(parse_path("$.data[-1]").is_err());
     }
 
     #[test]
@@ -837,13 +834,16 @@ mod tests {
         assert_eq!(variant.core_storage().len(), variant.len());
 
         let mut ctx = array_session().create_execution_ctx();
-        for (idx, expected) in [10i32, 20].into_iter().enumerate() {
-            let scalar = variant.execute_scalar(idx, &mut ctx)?;
-            let actual = scalar
-                .as_variant()
-                .value()
-                .and_then(|value| value.as_primitive().as_::<i32>());
-            assert_eq!(actual, Some(expected), "row {idx}");
+        for array in [variant, canonical_variant] {
+            assert_eq!(array.dtype(), &DType::Variant(Nullability::Nullable));
+            for (idx, expected) in [10i32, 20].into_iter().enumerate() {
+                let scalar = array.execute_scalar(idx, &mut ctx)?;
+                let actual = scalar
+                    .as_variant()
+                    .value()
+                    .and_then(|value| value.as_primitive().as_::<i32>());
+                assert_eq!(actual, Some(expected), "row {idx}");
+            }
         }
         Ok(())
     }

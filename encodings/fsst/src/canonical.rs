@@ -332,7 +332,17 @@ mod tests {
         .into_array();
         fsst_array.append_to_builder(&mut builder, &mut ctx)?;
 
-        let _result = builder.finish_into_varbinview();
+        assert_arrays_eq!(
+            builder.finish_into_varbinview(),
+            VarBinViewArray::from_iter(
+                [
+                    Some(b"long enough!!!".as_slice()),
+                    Some(b"long enough too".as_slice())
+                ],
+                DType::Binary(Nullability::NonNullable),
+            ),
+            &mut ctx
+        );
         Ok(())
     }
 

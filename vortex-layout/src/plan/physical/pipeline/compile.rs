@@ -16,6 +16,7 @@ use super::DEFAULT_CAPACITY;
 use super::port::PortId;
 use super::port::SourceEnd;
 use super::scan::Core;
+use super::values::ValueCache;
 use crate::plan::physical::ConcatPlan;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::SegmentScanPlan;
@@ -137,6 +138,11 @@ impl Compiler<'_> {
         &self.core.session
     }
 
+    /// Whole values kept between the scans of the split compiling.
+    pub(crate) fn values(&self) -> &ValueCache {
+        &self.core.values
+    }
+
     /// The rows `rows` of `scan`'s segment, filtered by `filter`, read by the split compiling.
     /// A segment several readers read is decoded once and shared.
     pub(crate) fn scan(
@@ -186,7 +192,7 @@ impl Compiler<'_> {
             }
             return port;
         }
-        let ranges = std::mem::take(shares.reaches.get_mut(*segment as usize)?);
+        let ranges = shares.shared.remove(&segment)?;
         let mut claimants: SmallVec<[usize; 4]> = SmallVec::new();
         for rows in &ranges {
             claimants.extend(
@@ -234,10 +240,11 @@ pub(crate) struct Shares {
     ordered: bool,
     /// Splits that have finished, and so will claim nothing.
     finished: Vec<bool>,
-    /// By segment id, which a file numbers densely: for each segment more than one reader will
-    /// read and whose decoding pipeline is not built yet, the range of plan rows each of its
-    /// readers reads it for. Every split overlapping a range reads it once for that range.
-    reaches: Vec<SmallVec<[Range<u64>; 1]>>,
+    /// Segment readers collected before the scan starts. A split may read only a few of a
+    /// file's segments, so recording a reader must not allocate by the file-wide segment id.
+    reaches: Vec<(SegmentId, Range<u64>)>,
+    /// The row ranges of segments read more than once, until their decoding pipeline is built.
+    shared: FxHashMap<SegmentId, SmallVec<[Range<u64>; 1]>>,
     /// By split: the unclaimed ports of each shared segment the split reads.
     ports: Vec<FxHashMap<SegmentId, SmallVec<[PortId; 1]>>>,
 }
@@ -251,6 +258,7 @@ impl Shares {
             splits,
             ordered,
             reaches: Vec::new(),
+            shared: FxHashMap::default(),
         }
     }
 
@@ -284,7 +292,7 @@ impl Shares {
     pub(crate) fn add(&mut self, plan: &PlanRef, rows: Range<u64>) -> VortexResult<()> {
         let reaches = &mut self.reaches;
         plan.reach(rows, &Reach::Offset(0), &mut |segment, rows| {
-            record(reaches, segment, rows)
+            reaches.push((segment, rows))
         })
     }
 
@@ -292,23 +300,25 @@ impl Shares {
     /// pipeline that needs them.
     pub(crate) fn retain_shared(&mut self) {
         let mut reaches = std::mem::take(&mut self.reaches);
-        for ranges in &mut reaches {
-            let shared = match ranges.as_slice() {
-                [] => false,
-                // One reader per split overlapping the range: shared when the range crosses a
-                // split boundary.
-                [rows] => self
+        reaches.sort_unstable_by_key(|(segment, _)| *segment);
+        for readers in reaches.chunk_by(|(left, _), (right, _)| left == right) {
+            let (segment, rows) = &readers[0];
+            // One reader per split overlapping the range: shared when the range crosses a
+            // split boundary, or when multiple plan nodes read the segment.
+            if readers.len() == 1
+                && self
                     .overlapping(rows)
                     .filter(|&split| self.overlaps(split, rows))
                     .nth(1)
-                    .is_some(),
-                _ => true,
-            };
-            if !shared {
-                *ranges = SmallVec::new();
+                    .is_none()
+            {
+                continue;
             }
+            self.shared.insert(
+                *segment,
+                readers.iter().map(|(_, rows)| rows.clone()).collect(),
+            );
         }
-        self.reaches = reaches;
     }
 
     /// Every port made for a reader that has not claimed it yet.
@@ -363,15 +373,6 @@ impl Reach {
     pub fn fixed(&self, rows: &Range<u64>) -> Self {
         Reach::Fixed(self.root(rows))
     }
-}
-
-/// Adds a reader of `segment` reading it for `rows`.
-fn record(reaches: &mut Vec<SmallVec<[Range<u64>; 1]>>, segment: SegmentId, rows: Range<u64>) {
-    let index = *segment as usize;
-    if index >= reaches.len() {
-        reaches.resize_with(index + 1, SmallVec::new);
-    }
-    reaches[index].push(rows);
 }
 
 /// The chunks of `concat` overlapping `rows`: each chunk's index, where it starts, and the rows

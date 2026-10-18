@@ -8,19 +8,24 @@ use hegel::generators as gs;
 use num_traits::PrimInt;
 use num_traits::WrappingAdd;
 use rstest::rstest;
+use vortex_array::Array;
+use vortex_array::ArrayParts;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::Constant;
+use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::assert_arrays_eq;
 use vortex_array::compute::conformance::consistency::test_array_consistency;
 use vortex_array::dtype::NativePType;
 use vortex_array::scalar::Scalar;
 use vortex_array::session::ArraySessionExt;
+use vortex_array::smallvec::smallvec;
 use vortex_buffer::Buffer;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
+use vortex_error::vortex_bail;
 use vortex_session::VortexSession;
 
 use crate::BitPacked;
@@ -30,12 +35,30 @@ use crate::FoR;
 use crate::FoRArray;
 use crate::FoRArrayExt;
 use crate::FoRArraySlotsExt;
+use crate::FoRData;
+use crate::FoRReferences;
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     let session = vortex_array::array_session();
     crate::initialize(&session);
     session
 });
+
+/// The global reference of `array`.
+pub(crate) fn global(array: &FoRArray) -> VortexResult<Scalar> {
+    match array.references() {
+        FoRReferences::Global(reference) => Ok(reference.clone()),
+        FoRReferences::Blocked(_) => vortex_bail!("expected a global reference"),
+    }
+}
+
+/// The blocked references of `array`.
+pub(crate) fn blocked(array: &FoRArray) -> VortexResult<ArrayRef> {
+    match array.references() {
+        FoRReferences::Global(_) => vortex_bail!("expected blocked references"),
+        FoRReferences::Blocked(references) => Ok(references.clone()),
+    }
+}
 
 /// Builds a FoR array over `encoded` with the given per-chunk references, and the values it
 /// should decode to.
@@ -92,7 +115,7 @@ fn nullable() -> VortexResult<(FoRArray, PrimitiveArray)> {
 #[case::nullable(nullable())]
 fn decodes_per_chunk(#[case] arrays: VortexResult<(FoRArray, PrimitiveArray)>) -> VortexResult<()> {
     let (array, expected) = arrays?;
-    assert!(array.constant_reference().is_none());
+    blocked(&array)?;
     assert_arrays_eq!(array, expected, &mut SESSION.create_execution_ctx());
     Ok(())
 }
@@ -131,16 +154,60 @@ fn slice_keeps_chunk_alignment(#[case] start: usize, #[case] end: usize) -> Vort
 }
 
 #[test]
-fn constant_references_keep_the_scalar_reference() -> VortexResult<()> {
+fn global_reference_survives_slicing() -> VortexResult<()> {
     let array = FoR::try_new(
         PrimitiveArray::from_iter(0..3000u32).into_array(),
         7u32.into(),
     )?;
-    assert_eq!(array.references().len(), 3);
-    assert_eq!(array.constant_reference(), Some(7u32.into()));
+    assert_eq!(global(&array)?, 7u32.into());
+    assert!(array.blocked_references().is_none());
     let sliced = array.into_array().slice(1500..1600)?;
-    assert_eq!(sliced.as_::<FoR>().constant_reference(), Some(7u32.into()));
+    assert_eq!(global(&sliced.as_::<FoR>().into_owned())?, 7u32.into());
     Ok(())
+}
+
+#[test]
+fn constant_blocked_references_become_global() -> VortexResult<()> {
+    let array = FoR::try_new_chunked(
+        PrimitiveArray::from_iter(0..3000u32).into_array(),
+        ConstantArray::new(7u32, 3).into_array(),
+        0,
+    )?;
+    assert_eq!(global(&array)?, 7u32.into());
+    Ok(())
+}
+
+#[test]
+fn encode_chunked_equal_minimums_are_global() -> VortexResult<()> {
+    let mut ctx = SESSION.create_execution_ctx();
+    let values = PrimitiveArray::from_iter((0..3000u32).map(|i| 1_000 + i % 100));
+    let encoded = FoR::encode_chunked(values.clone(), &mut ctx)?;
+    assert_eq!(global(&encoded)?, 1_000u32.into());
+    assert_arrays_eq!(encoded, values, &mut ctx);
+    Ok(())
+}
+
+#[rstest]
+#[case::both(Some(7u32.into()), Some(PrimitiveArray::from_iter([7u32, 8, 9]).into_array()), 0)]
+#[case::neither(None, None, 0)]
+#[case::global_with_offset(Some(7u32.into()), None, 5)]
+fn rejects_invalid_references(
+    #[case] global_reference: Option<Scalar>,
+    #[case] blocked_references: Option<ArrayRef>,
+    #[case] offset: u16,
+) {
+    let encoded = PrimitiveArray::from_iter(0..3000u32).into_array();
+    let data = FoRData::try_new(offset, global_reference);
+    let array = data.and_then(|data| {
+        Array::try_from_parts(ArrayParts::new(
+            FoR,
+            encoded.dtype().clone(),
+            encoded.len(),
+            data,
+            smallvec![Some(encoded), blocked_references],
+        ))
+    });
+    assert!(array.is_err());
 }
 
 fn drifting_u32(len: u32) -> PrimitiveArray {
@@ -199,7 +266,7 @@ fn encode_chunked_uses_chunk_minimums() -> VortexResult<()> {
     let encoded = FoR::encode_chunked(values, &mut ctx)?;
     // The all-null chunk 1 reuses chunk 0's reference.
     assert_arrays_eq!(
-        encoded.references(),
+        blocked(&encoded)?,
         PrimitiveArray::from_iter([500u32, 500, 9_000, 3]),
         &mut ctx
     );
@@ -212,8 +279,8 @@ fn encode_chunked_all_null_is_constant() -> VortexResult<()> {
     let values = PrimitiveArray::from_option_iter((0..2000).map(|_| None::<u64>));
     let encoded = FoR::encode_chunked(values.clone(), &mut ctx)?;
     assert!(encoded.encoded().is::<Constant>());
-    assert!(encoded.constant_reference().is_some());
-    // A constant reference serializes in the single-reference format.
+    global(&encoded)?;
+    // A global reference serializes in the single-reference format.
     assert!(SESSION.array_serialize(encoded.as_array()).is_ok());
     assert_arrays_eq!(encoded, values, &mut ctx);
     Ok(())
@@ -233,7 +300,7 @@ fn fused(bit_width: u8, signed: bool) -> VortexResult<(FoRArray, PrimitiveArray)
     };
     let for_array = FoR::encode_chunked(values.clone(), &mut ctx)?;
     let bp = BitPacked::encode(for_array.encoded(), bit_width, &mut ctx)?;
-    let array = FoR::try_new_chunked(bp.into_array(), for_array.references().clone(), 0)?;
+    let array = FoR::try_new_chunked(bp.into_array(), blocked(&for_array)?, 0)?;
     Ok((array, values))
 }
 
@@ -351,11 +418,16 @@ where
         // Each block draws its own width, from zero to the native width, so values wider than
         // their block's width become patches.
         let num_blocks = len.div_ceil(FL_CHUNK_SIZE);
-        let bit_widths: Vec<u8> = tc.draw(
-            gs::vecs(gs::integers().max_value(T::PTYPE.bit_width() as u8))
+        let native = T::PTYPE.bit_width() as u8;
+        let mut bit_widths: Vec<u8> = tc.draw(
+            gs::vecs(gs::integers().max_value(native))
                 .min_size(num_blocks)
                 .max_size(num_blocks),
         );
+        // `encode_blocked` rejects all blocks at the native width; keep one block packed.
+        if bit_widths.iter().all(|&w| w == native) {
+            bit_widths[0] = native - 1;
+        }
         BitPackedData::encode_blocked(&encoded_array.into_array(), &bit_widths, &mut ctx)?
     } else {
         BitPacked::encode(&encoded_array.into_array(), bit_width, &mut ctx)?

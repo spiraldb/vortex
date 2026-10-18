@@ -347,83 +347,125 @@ mod tests {
         let tuple = |values: Vec<Option<ScalarValue>>| Some(ScalarValue::Tuple(values));
 
         let cases = [
-            (DType::Null, None),
-            (DType::Null, Some(ScalarValue::Bool(true))),
-            (DType::Bool(Nullable), None),
-            (DType::Bool(NonNullable), None),
-            (DType::Bool(NonNullable), Some(ScalarValue::Bool(true))),
-            (DType::Bool(NonNullable), i32_value()),
-            (i32_dtype.clone(), i32_value()),
-            (i32_dtype, Some(ScalarValue::Primitive(PValue::I64(1)))),
+            (DType::Null, None, true),
+            (DType::Null, Some(ScalarValue::Bool(true)), false),
+            (DType::Bool(Nullable), None, true),
+            (DType::Bool(NonNullable), None, false),
+            (
+                DType::Bool(NonNullable),
+                Some(ScalarValue::Bool(true)),
+                true,
+            ),
+            (DType::Bool(NonNullable), i32_value(), false),
+            (i32_dtype.clone(), i32_value(), true),
+            (
+                i32_dtype,
+                Some(ScalarValue::Primitive(PValue::I64(1))),
+                false,
+            ),
             (
                 DType::Primitive(PType::F16, NonNullable),
                 Some(ScalarValue::Primitive(PValue::U64(1))),
+                true,
             ),
             (
                 decimal_dtype.clone(),
                 Some(ScalarValue::Decimal(DecimalValue::I32(999))),
+                true,
             ),
             (
                 decimal_dtype,
                 Some(ScalarValue::Decimal(DecimalValue::I32(1000))),
+                false,
             ),
             (
                 DType::Utf8(NonNullable),
                 Some(ScalarValue::Utf8("a".into())),
+                true,
             ),
-            (DType::Utf8(NonNullable), Some(ScalarValue::Bool(true))),
+            (
+                DType::Utf8(NonNullable),
+                Some(ScalarValue::Bool(true)),
+                false,
+            ),
             (
                 DType::Binary(NonNullable),
                 Some(ScalarValue::Utf8("a".into())),
+                false,
             ),
-            (list_dtype.clone(), tuple(vec![i32_value(), i32_value()])),
-            (list_dtype.clone(), tuple(vec![i32_value(), None])),
-            (list_dtype, i32_value()),
-            (fsl_dtype.clone(), tuple(vec![i32_value(), i32_value()])),
-            (fsl_dtype, tuple(vec![i32_value()])),
+            (
+                list_dtype.clone(),
+                tuple(vec![i32_value(), i32_value()]),
+                true,
+            ),
+            (list_dtype.clone(), tuple(vec![i32_value(), None]), false),
+            (list_dtype, i32_value(), false),
+            (
+                fsl_dtype.clone(),
+                tuple(vec![i32_value(), i32_value()]),
+                true,
+            ),
+            (fsl_dtype, tuple(vec![i32_value()]), false),
             (
                 map_dtype.clone(),
                 tuple(vec![tuple(vec![i32_value(), None])]),
+                true,
             ),
-            (map_dtype.clone(), tuple(vec![None])),
-            (map_dtype.clone(), tuple(vec![tuple(vec![None, None])])),
-            (map_dtype, tuple(vec![tuple(vec![i32_value()])])),
+            (map_dtype.clone(), tuple(vec![None]), false),
+            (
+                map_dtype.clone(),
+                tuple(vec![tuple(vec![None, None])]),
+                false,
+            ),
+            (map_dtype, tuple(vec![tuple(vec![i32_value()])]), false),
             (
                 struct_dtype.clone(),
                 tuple(vec![i32_value(), Some(ScalarValue::Utf8("a".into()))]),
+                true,
             ),
-            (struct_dtype.clone(), tuple(vec![i32_value(), None])),
-            (struct_dtype.clone(), tuple(vec![None, None])),
-            (struct_dtype, tuple(vec![i32_value()])),
+            (struct_dtype.clone(), tuple(vec![i32_value(), None]), true),
+            (struct_dtype.clone(), tuple(vec![None, None]), false),
+            (struct_dtype, tuple(vec![i32_value()]), false),
             (
                 union_dtype.clone(),
                 Some(ScalarValue::Union(UnionValue::new(3, i32_value()))),
+                true,
             ),
             (
                 union_dtype.clone(),
                 Some(ScalarValue::Union(UnionValue::new(4, i32_value()))),
+                false,
             ),
             (
                 union_dtype,
                 Some(ScalarValue::Union(UnionValue::new(3, None))),
+                false,
             ),
             (
                 DType::Variant(NonNullable),
                 Some(ScalarValue::Variant(Box::new(Scalar::null(DType::Null)))),
+                true,
             ),
             (
                 DType::Variant(NonNullable),
                 Some(ScalarValue::Variant(Box::new(Scalar::null(DType::Bool(
                     Nullable,
                 ))))),
+                false,
             ),
             (
                 DType::Variant(NonNullable),
                 Some(ScalarValue::Variant(Box::new(Scalar::from(true)))),
+                true,
             ),
         ];
 
-        for (dtype, value) in &cases {
+        for (dtype, value, expected) in &cases {
+            assert_eq!(
+                Scalar::is_compatible(dtype, value.as_ref()),
+                *expected,
+                "unexpected validity for {dtype} and {value:?}"
+            );
             assert_eq!(
                 Scalar::is_compatible(dtype, value.as_ref()),
                 Scalar::validate_detailed(dtype, value.as_ref()).is_ok(),

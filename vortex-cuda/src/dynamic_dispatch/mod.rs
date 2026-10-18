@@ -147,20 +147,6 @@ impl MaterializedStage {
     }
 }
 
-/// Read-only view of a parsed stage from a [`CudaDispatchPlan`].
-///
-/// Returned by [`CudaDispatchPlan::stage`] for test inspection.
-#[derive(Clone)]
-pub struct ParsedStage {
-    pub input_ptr: u64,
-    pub smem_byte_offset: u32,
-    pub len: u32,
-    pub source_ptype: PTypeTag,
-    pub source: SourceOp,
-    pub num_scalar_ops: u8,
-    pub scalar_ops: Vec<ScalarOp>,
-}
-
 /// A dispatch plan serialized as a packed byte buffer.
 ///
 /// Matching the C-side `PlanHeader` + `PackedStage` ABI in `dynamic_dispatch.h`:
@@ -255,48 +241,6 @@ impl CudaDispatchPlan {
 
     fn header(&self) -> PlanHeader {
         unsafe { *self.buffer.as_ptr().cast() }
-    }
-
-    /// Parse and return a read-only view of the stage at `index`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `index >= num_stages()`.
-    pub fn stage(&self, index: usize) -> ParsedStage {
-        let header_size = size_of::<PlanHeader>();
-        let stage_header_size = size_of::<PackedStage>();
-        let scalar_op_size = size_of::<ScalarOp>();
-
-        let mut offset = header_size;
-
-        // Skip past stages before `index`.
-        for _ in 0..index {
-            assert!(offset + stage_header_size <= self.buffer.len());
-            let ps: PackedStage = unsafe { *self.buffer.as_ptr().add(offset).cast() };
-            offset += stage_header_size + ps.num_scalar_ops as usize * scalar_op_size;
-        }
-
-        assert!(offset + stage_header_size <= self.buffer.len());
-        let ps: PackedStage = unsafe { *self.buffer.as_ptr().add(offset).cast() };
-        offset += stage_header_size;
-
-        let mut scalar_ops = Vec::with_capacity(ps.num_scalar_ops as usize);
-        for _ in 0..ps.num_scalar_ops {
-            assert!(offset + scalar_op_size <= self.buffer.len());
-            let op: ScalarOp = unsafe { *self.buffer.as_ptr().add(offset).cast() };
-            scalar_ops.push(op);
-            offset += scalar_op_size;
-        }
-
-        ParsedStage {
-            input_ptr: ps.input_ptr,
-            smem_byte_offset: ps.smem_byte_offset,
-            len: ps.len,
-            source_ptype: ps.source_ptype,
-            source: ps.source,
-            num_scalar_ops: ps.num_scalar_ops,
-            scalar_ops,
-        }
     }
 }
 
@@ -559,13 +503,16 @@ mod tests {
     use vortex::encodings::fastlanes::BitPackedArray;
     use vortex::encodings::fastlanes::BitPackedArrayExt;
     use vortex::encodings::fastlanes::FoR;
+    use vortex::encodings::fastlanes::FoRArray;
     use vortex::encodings::fastlanes::FoRArrayExt;
     use vortex::encodings::fastlanes::FoRArraySlotsExt;
+    use vortex::encodings::fastlanes::FoRReferences;
     use vortex::encodings::runend::RunEnd;
     use vortex::encodings::sequence::Sequence;
     use vortex::encodings::zigzag::ZigZag;
     use vortex::error::VortexExpect;
     use vortex::error::VortexResult;
+    use vortex::error::vortex_bail;
     use vortex::mask::Mask;
     use vortex_array::ExecutionCtx;
     use vortex_array::VortexSessionExecute;
@@ -583,6 +530,14 @@ mod tests {
     use crate::executor::CudaDispatchMode;
     use crate::hybrid_dispatch::try_gpu_dispatch;
     use crate::session::CudaSession;
+
+    /// The reference of a FoR array built by `FoR::encode`, which is always global.
+    fn global_reference(array: &FoRArray) -> VortexResult<Scalar> {
+        match array.references() {
+            FoRReferences::Global(reference) => Ok(reference.clone()),
+            FoRReferences::Blocked(_) => vortex_bail!("FoR::encode uses a global reference"),
+        }
+    }
 
     fn bitpacked_array_u32(bit_width: u8, len: usize, ctx: &mut ExecutionCtx) -> BitPackedArray {
         let max_val = (1u64 << bit_width).saturating_sub(1);
@@ -604,7 +559,7 @@ mod tests {
         }
     }
 
-    #[crate::test]
+    #[test]
     fn test_cast_u64_to_i64_is_not_fused() -> VortexResult<()> {
         let supported = PrimitiveArray::from_iter([0u32, 1])
             .into_array()
@@ -660,64 +615,11 @@ mod tests {
             )],
             PTypeTag_PTYPE_U32,
         );
-        assert_eq!(plan.stage(0).num_scalar_ops, 4);
 
         let actual = run_dynamic_dispatch_plan(&cuda_ctx, len, &plan, SMEM_TILE_SIZE * 4)?;
         assert_eq!(actual, expected);
 
         Ok(())
-    }
-
-    #[crate::test]
-    fn test_plan_structure() {
-        // Stage 0: input dict values (BP→FoR), 256 u32 elements → smem bytes [0..1024)
-        // Stage 1: output codes (BP→FoR→DICT), 1024 elements, gather from smem byte 0
-        let values_smem_bytes: u32 = 256 * 4; // 256 u32 elements × 4 bytes
-        let plan = CudaDispatchPlan::new(
-            [
-                MaterializedStage::new(
-                    0xAAAA,
-                    0,
-                    256,
-                    PTypeTag_PTYPE_U32,
-                    SourceOp::bitunpack(4, 0),
-                    &[ScalarOp::frame_of_ref(10, PTypeTag_PTYPE_U32)],
-                ),
-                MaterializedStage::new(
-                    0xBBBB,
-                    values_smem_bytes,
-                    1024,
-                    PTypeTag_PTYPE_U32,
-                    SourceOp::bitunpack(6, 0),
-                    &[
-                        ScalarOp::frame_of_ref(42, PTypeTag_PTYPE_U32),
-                        ScalarOp::dict(0, PTypeTag_PTYPE_U32),
-                    ],
-                ),
-            ],
-            PTypeTag_PTYPE_U32,
-        );
-
-        assert_eq!(plan.num_stages(), 2);
-
-        // Input stage
-        let s0 = plan.stage(0);
-        assert_eq!(s0.smem_byte_offset, 0);
-        assert_eq!(s0.len, 256);
-        assert_eq!(s0.source_ptype, PTypeTag_PTYPE_U32);
-        assert_eq!(s0.input_ptr, 0xAAAA);
-
-        // Output stage
-        let s1 = plan.stage(1);
-        assert_eq!(s1.smem_byte_offset, values_smem_bytes);
-        assert_eq!(s1.len, SMEM_TILE_SIZE);
-        assert_eq!(s1.source_ptype, PTypeTag_PTYPE_U32);
-        assert_eq!(s1.input_ptr, 0xBBBB);
-        assert_eq!(s1.num_scalar_ops, 2);
-        assert_eq!(
-            unsafe { s1.scalar_ops[1].params.dict.values_smem_byte_offset },
-            0
-        );
     }
 
     /// Copy a raw u32 slice to device memory and return (device_ptr, handle).
@@ -971,13 +873,7 @@ mod tests {
         let bp = BitPacked::encode(for_arr.encoded(), 6, &mut ctx)?;
 
         let tree = ALP::new(
-            FoR::try_new(
-                bp.into_array(),
-                for_arr
-                    .constant_reference()
-                    .vortex_expect("constant reference"),
-            )?
-            .into_array(),
+            FoR::try_new(bp.into_array(), global_reference(&for_arr)?)?.into_array(),
             exponents,
             None,
         );
@@ -1163,7 +1059,7 @@ mod tests {
 
         let expected: Vec<u32> = codes.iter().map(|&c| dict_values[c as usize]).collect();
         let expected_arr = PrimitiveArray::new(Buffer::from(expected), NonNullable).into_array();
-        assert_arrays_eq!(expected_arr, result, &mut ctx);
+        assert_arrays_eq!(result, expected_arr, &mut ctx);
 
         Ok(())
     }
@@ -1196,7 +1092,7 @@ mod tests {
 
         let expected: Vec<u32> = codes.iter().map(|&c| dict_values[c as usize]).collect();
         let expected_arr = PrimitiveArray::new(Buffer::from(expected), NonNullable).into_array();
-        assert_arrays_eq!(expected_arr, result, &mut cpu_ctx);
+        assert_arrays_eq!(result, expected_arr, &mut cpu_ctx);
 
         Ok(())
     }
@@ -1238,7 +1134,7 @@ mod tests {
             })
             .collect();
         let expected_arr = PrimitiveArray::new(Buffer::from(expected), NonNullable).into_array();
-        assert_arrays_eq!(expected_arr, result, &mut cpu_ctx);
+        assert_arrays_eq!(result, expected_arr, &mut cpu_ctx);
 
         Ok(())
     }
@@ -1635,7 +1531,7 @@ mod tests {
         let result = CanonicalCudaExt::into_host(canonical).await?.into_array();
 
         let expected_arr = PrimitiveArray::new(Buffer::from(expected), NonNullable).into_array();
-        assert_arrays_eq!(expected_arr, result, &mut cpu_ctx);
+        assert_arrays_eq!(result, expected_arr, &mut cpu_ctx);
         Ok(())
     }
 
@@ -1668,7 +1564,7 @@ mod tests {
         let result = CanonicalCudaExt::into_host(canonical).await?.into_array();
 
         let expected_arr = PrimitiveArray::new(Buffer::from(expected), NonNullable).into_array();
-        assert_arrays_eq!(expected_arr, result, &mut cpu_ctx);
+        assert_arrays_eq!(result, expected_arr, &mut cpu_ctx);
         Ok(())
     }
 
@@ -1699,7 +1595,7 @@ mod tests {
         let result = CanonicalCudaExt::into_host(canonical).await?.into_array();
 
         let expected_arr = PrimitiveArray::new(Buffer::from(expected), NonNullable).into_array();
-        assert_arrays_eq!(expected_arr, result, &mut cpu_ctx);
+        assert_arrays_eq!(result, expected_arr, &mut cpu_ctx);
         Ok(())
     }
 
@@ -1711,6 +1607,10 @@ mod tests {
         let canonical = try_gpu_dispatch(&primitive.into_array(), &mut cuda_ctx).await?;
         let result = CanonicalCudaExt::into_host(canonical).await?.into_array();
         assert_eq!(result.len(), 0);
+        assert_eq!(
+            result.dtype(),
+            &DType::Primitive(PType::U32, Nullability::NonNullable)
+        );
         Ok(())
     }
 
@@ -1732,7 +1632,7 @@ mod tests {
         let result = CanonicalCudaExt::into_host(canonical).await?.into_array();
 
         let expected = PrimitiveArray::new(Buffer::from(values), NonNullable).into_array();
-        assert_arrays_eq!(expected, result, &mut cpu_ctx);
+        assert_arrays_eq!(result, expected, &mut cpu_ctx);
         Ok(())
     }
 
@@ -1763,7 +1663,7 @@ mod tests {
         let result = CanonicalCudaExt::into_host(canonical).await?.into_array();
 
         let expected_arr = PrimitiveArray::new(Buffer::from(expected), NonNullable).into_array();
-        assert_arrays_eq!(expected_arr, result, &mut ctx);
+        assert_arrays_eq!(result, expected_arr, &mut ctx);
         Ok(())
     }
 
@@ -1771,7 +1671,7 @@ mod tests {
     // has_standalone_kernel classification tests
     // ---------------------------------------------------------------
 
-    #[crate::test]
+    #[test]
     fn test_has_standalone_kernel_true_cases() -> VortexResult<()> {
         let mut ctx = array_session().create_execution_ctx();
         // BitPacked — leaf encoding, no children.
@@ -1799,7 +1699,7 @@ mod tests {
         Ok(())
     }
 
-    #[crate::test]
+    #[test]
     fn test_has_standalone_kernel_false_cases() -> VortexResult<()> {
         // ALP(Primitive) — ALP always calls execute_cuda on its encoded child.
         let encoded =
@@ -1876,7 +1776,7 @@ mod tests {
         Ok(())
     }
 
-    #[crate::test]
+    #[test]
     fn test_f64_primitive_fuses() {
         // Raw F64 primitives are now accepted — the kernel operates on uint64_t
         // (same bit width), so LOAD correctly preserves the f64 bit pattern.
@@ -1910,30 +1810,18 @@ mod tests {
         let bp = BitPacked::encode(for_arr.encoded(), 6, &mut ctx)?;
 
         let tree = ALP::new(
-            FoR::try_new(
-                bp.into_array(),
-                for_arr
-                    .constant_reference()
-                    .vortex_expect("constant reference"),
-            )?
-            .into_array(),
+            FoR::try_new(bp.into_array(), global_reference(&for_arr)?)?.into_array(),
             exponents,
             None,
         );
         let array = tree.into_array();
-
-        // CPU decode as ground truth.
-        let cpu = array
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)?
-            .into_array();
 
         // GPU decode.
         let mut cuda_ctx = CudaSession::create_execution_ctx(&cuda_session())?;
         let canonical = try_gpu_dispatch(&array, &mut cuda_ctx).await?;
         let gpu = CanonicalCudaExt::into_host(canonical).await?.into_array();
 
-        assert_arrays_eq!(cpu, gpu, &mut ctx);
+        assert_arrays_eq!(gpu, array, &mut ctx);
 
         Ok(())
     }
@@ -1976,7 +1864,12 @@ mod tests {
         let canonical = try_gpu_dispatch(&array, &mut cuda_ctx).await?;
         let result = CanonicalCudaExt::into_host(canonical).await?;
         let result_prim = result.as_primitive();
+        assert_eq!(
+            result_prim.dtype(),
+            &DType::Primitive(PType::F64, Nullability::NonNullable)
+        );
         let actual: Vec<f64> = result_prim.as_slice::<f64>().to_vec();
+        assert_eq!(actual.len(), expected.len());
         for (i, (&a, &e)) in actual.iter().zip(expected.iter()).enumerate() {
             assert!(
                 a.to_bits() == e.to_bits(),
@@ -2047,7 +1940,7 @@ mod tests {
         expected[2048 - 100] = std::f64::consts::LN_2;
         let expected = PrimitiveArray::new(Buffer::from(expected), NonNullable).into_array();
 
-        assert_arrays_eq!(expected, gpu, &mut cpu_ctx);
+        assert_arrays_eq!(gpu, expected, &mut cpu_ctx);
 
         Ok(())
     }
@@ -2092,7 +1985,7 @@ mod tests {
             })
             .collect();
         let expected_arr = PrimitiveArray::new(Buffer::from(expected), NonNullable).into_array();
-        assert_arrays_eq!(expected_arr, result, &mut cpu_ctx);
+        assert_arrays_eq!(result, expected_arr, &mut cpu_ctx);
 
         Ok(())
     }
@@ -2127,7 +2020,7 @@ mod tests {
 
         let expected: Vec<u32> = codes.iter().map(|&c| dict_values[c as usize]).collect();
         let expected_arr = PrimitiveArray::new(Buffer::from(expected), NonNullable).into_array();
-        assert_arrays_eq!(expected_arr, result, &mut cpu_ctx);
+        assert_arrays_eq!(result, expected_arr, &mut cpu_ctx);
 
         Ok(())
     }
@@ -2136,11 +2029,13 @@ mod tests {
     /// code/value widths. These fuse into a single kernel because
     /// bitunpack_typed decodes at the source's native width and widens to T.
     #[rstest]
-    #[case::bp_u8_codes_u16_values(2u8, 3000usize, vec![100u16, 200, 300, 400])]
-    #[case::bp_u8_codes_u32_values(2u8, 3000usize, vec![100_000u32, 200_000, 300_000, 400_000])]
-    #[case::bp_u16_codes_u32_values(4u8, 2048usize, vec![1_000_000u32, 2_000_000, 3_000_000, 4_000_000, 5_000_000, 6_000_000, 7_000_000, 8_000_000])]
+    #[case::bp_u8_codes_u16_values(PType::U8, 2u8, 3000usize, vec![100u16, 200, 300, 400])]
+    #[case::bp_u8_codes_u32_values(PType::U8, 2u8, 3000usize, vec![100_000u32, 200_000, 300_000, 400_000])]
+    #[case::bp_u8_codes_8_values_u32_values(PType::U8, 4u8, 2048usize, vec![1_000_000u32, 2_000_000, 3_000_000, 4_000_000, 5_000_000, 6_000_000, 7_000_000, 8_000_000])]
+    #[case::bp_u16_codes_u32_values(PType::U16, 4u8, 2048usize, vec![1_000_000u32, 2_000_000, 3_000_000, 4_000_000, 5_000_000, 6_000_000, 7_000_000, 8_000_000])]
     #[crate::test]
     async fn test_dict_mixed_width_bitpacked_codes<V: NativePType>(
+        #[case] codes_ptype: PType,
         #[case] bit_width: u8,
         #[case] len: usize,
         #[case] dict_values: Vec<V>,
@@ -2149,7 +2044,11 @@ mod tests {
         let dict_size = dict_values.len();
         let codes: Vec<u8> = (0..len).map(|i| (i % dict_size) as u8).collect();
 
-        let codes_prim = PrimitiveArray::new(Buffer::from(codes.clone()), NonNullable);
+        let codes_prim = match codes_ptype {
+            PType::U8 => PrimitiveArray::from_iter(codes.iter().copied()),
+            PType::U16 => PrimitiveArray::from_iter(codes.iter().copied().map(u16::from)),
+            _ => unreachable!("fixture only uses U8/U16 dictionary codes"),
+        };
         let codes_bp = BitPacked::encode(&codes_prim.into_array(), bit_width, &mut cpu_ctx)
             .vortex_expect("bitpack codes");
         let values_prim = PrimitiveArray::new(Buffer::from(dict_values.clone()), NonNullable);
@@ -2168,7 +2067,7 @@ mod tests {
 
         let expected: Vec<V> = codes.iter().map(|&c| dict_values[c as usize]).collect();
         let expected_arr = PrimitiveArray::new(Buffer::from(expected), NonNullable).into_array();
-        assert_arrays_eq!(expected_arr, result, &mut cpu_ctx);
+        assert_arrays_eq!(result, expected_arr, &mut cpu_ctx);
 
         Ok(())
     }
@@ -2177,10 +2076,12 @@ mod tests {
     /// The entire codes decode chain runs at the narrower width; the kernel
     /// decodes at native width and widens to T, fusing everything.
     #[rstest]
-    #[case::for_bp_u8_codes_u32_values(3u8, 3000usize, vec![100u32, 200, 300, 400, 500, 600, 700, 800])]
-    #[case::for_bp_u16_codes_u32_values(4u8, 2048usize, vec![10_000u32, 20_000, 30_000, 40_000, 50_000, 60_000, 70_000, 80_000])]
+    #[case::for_bp_u8_codes_u32_values(PType::U8, 3u8, 3000usize, vec![100u32, 200, 300, 400, 500, 600, 700, 800])]
+    #[case::for_bp_u8_codes_8_values_u32_values(PType::U8, 4u8, 2048usize, vec![10_000u32, 20_000, 30_000, 40_000, 50_000, 60_000, 70_000, 80_000])]
+    #[case::for_bp_u16_codes_u32_values(PType::U16, 4u8, 2048usize, vec![10_000u32, 20_000, 30_000, 40_000, 50_000, 60_000, 70_000, 80_000])]
     #[crate::test]
     async fn test_dict_mixed_width_for_bp_codes<V: NativePType>(
+        #[case] codes_ptype: PType,
         #[case] bit_width: u8,
         #[case] len: usize,
         #[case] dict_values: Vec<V>,
@@ -2189,10 +2090,19 @@ mod tests {
         let dict_size = dict_values.len();
         let codes: Vec<u8> = (0..len).map(|i| (i % dict_size) as u8).collect();
 
-        let codes_prim = PrimitiveArray::new(Buffer::from(codes.clone()), NonNullable);
+        let codes_prim = match codes_ptype {
+            PType::U8 => PrimitiveArray::from_iter(codes.iter().copied()),
+            PType::U16 => PrimitiveArray::from_iter(codes.iter().copied().map(u16::from)),
+            _ => unreachable!("fixture only uses U8/U16 dictionary codes"),
+        };
         let codes_bp = BitPacked::encode(&codes_prim.into_array(), bit_width, &mut cpu_ctx)
             .vortex_expect("bitpack codes");
-        let codes_for = FoR::try_new(codes_bp.into_array(), Scalar::from(0u8))?;
+        let reference = match codes_ptype {
+            PType::U8 => Scalar::from(0u8),
+            PType::U16 => Scalar::from(0u16),
+            _ => unreachable!("fixture only uses U8/U16 dictionary codes"),
+        };
+        let codes_for = FoR::try_new(codes_bp.into_array(), reference)?;
         let values_prim = PrimitiveArray::new(Buffer::from(dict_values.clone()), NonNullable);
         let dict = DictArray::try_new(codes_for.into_array(), values_prim.into_array())?;
         let array = dict.into_array();
@@ -2209,7 +2119,7 @@ mod tests {
 
         let expected: Vec<V> = codes.iter().map(|&c| dict_values[c as usize]).collect();
         let expected_arr = PrimitiveArray::new(Buffer::from(expected), NonNullable).into_array();
-        assert_arrays_eq!(expected_arr, result, &mut cpu_ctx);
+        assert_arrays_eq!(result, expected_arr, &mut cpu_ctx);
 
         Ok(())
     }
@@ -2265,7 +2175,7 @@ mod tests {
             prev = *end;
         }
         let expected_arr = PrimitiveArray::new(Buffer::from(expected), NonNullable).into_array();
-        assert_arrays_eq!(expected_arr, result, &mut ctx);
+        assert_arrays_eq!(result, expected_arr, &mut ctx);
 
         Ok(())
     }
@@ -2306,7 +2216,7 @@ mod tests {
             prev = end;
         }
         let expected_arr = PrimitiveArray::new(Buffer::from(expected), NonNullable).into_array();
-        assert_arrays_eq!(expected_arr, result, &mut ctx);
+        assert_arrays_eq!(result, expected_arr, &mut ctx);
 
         Ok(())
     }
@@ -2337,7 +2247,7 @@ mod tests {
             .map(|&c| dict_values[c as usize])
             .collect();
         let expected_arr = PrimitiveArray::new(Buffer::from(expected), NonNullable).into_array();
-        assert_arrays_eq!(expected_arr, result, &mut ctx);
+        assert_arrays_eq!(result, expected_arr, &mut ctx);
 
         Ok(())
     }
@@ -2437,7 +2347,7 @@ mod tests {
             .await?
             .into_array();
 
-        assert_arrays_eq!(array, gpu, &mut cpu_ctx);
+        assert_arrays_eq!(gpu, array, &mut cpu_ctx);
         Ok(())
     }
 
@@ -2494,9 +2404,9 @@ mod tests {
         Ok(())
     }
 
-    /// AllInvalid array — kernel should be skipped entirely.
+    /// AllInvalid array preserves its logical nulls and dtype.
     #[crate::test]
-    async fn test_all_invalid_skips_kernel() -> VortexResult<()> {
+    async fn test_all_invalid_preserves_nulls() -> VortexResult<()> {
         let mut cuda_ctx = CudaSession::create_execution_ctx(&cuda_session())?;
 
         let array = PrimitiveArray::new(Buffer::from(vec![0u32; 2048]), Validity::AllInvalid);
@@ -2509,6 +2419,10 @@ mod tests {
         let prim = result.into_primitive();
         assert_eq!(prim.len(), 2048);
         assert!(matches!(prim.validity()?, Validity::AllInvalid));
+        assert_eq!(
+            prim.dtype(),
+            &DType::Primitive(PType::U32, Nullability::Nullable)
+        );
         Ok(())
     }
 
@@ -2527,12 +2441,12 @@ mod tests {
             .await?
             .into_array();
 
-        assert_arrays_eq!(array, gpu, &mut cpu_ctx);
+        assert_arrays_eq!(gpu, array, &mut cpu_ctx);
         Ok(())
     }
 
     /// Dict with nullable codes must fall back to Unfused (not fused).
-    #[crate::test]
+    #[test]
     fn test_dict_nullable_codes_rejected() -> VortexResult<()> {
         use vortex::buffer::buffer;
 
@@ -2573,8 +2487,11 @@ mod tests {
 
     /// Nullable FoR(BitPacked) through CUB filter — the original bug scenario.
     /// Validity must survive through fused dispatch and into the filter.
+    #[rstest]
+    #[case::primitive(false)]
+    #[case::for_bitpacked(true)]
     #[crate::test]
-    async fn test_nullable_fused_then_filter() -> VortexResult<()> {
+    async fn test_nullable_fused_then_filter(#[case] compressed: bool) -> VortexResult<()> {
         let mut cpu_ctx = array_session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&cuda_session())?;
 
@@ -2592,7 +2509,13 @@ mod tests {
 
         // Keep every other element.
         let mask = Mask::from_iter((0..len).map(|i| i % 2 == 0));
-        let filter_array = FilterArray::try_new(prim.into_array(), mask)?;
+        let child = if compressed {
+            let bp = BitPacked::encode(&prim.into_array(), 6, &mut cpu_ctx)?;
+            FoR::try_new(bp.into_array(), 0u32.into())?.into_array()
+        } else {
+            prim.into_array()
+        };
+        let filter_array = FilterArray::try_new(child, mask)?;
 
         let gpu = filter_array
             .clone()
@@ -2603,7 +2526,8 @@ mod tests {
             .await?
             .into_array();
 
-        assert_arrays_eq!(filter_array, gpu, &mut cpu_ctx);
+        let expected = PrimitiveArray::from_option_iter(values.into_iter().step_by(2));
+        assert_arrays_eq!(gpu, expected, &mut cpu_ctx);
         Ok(())
     }
 
@@ -2617,6 +2541,10 @@ mod tests {
         let prim = result.into_primitive();
         assert_eq!(prim.len(), 0);
         assert_eq!(prim.validity()?.nullability(), Nullability::Nullable);
+        assert_eq!(
+            prim.dtype(),
+            &DType::Primitive(PType::U32, Nullability::Nullable)
+        );
         Ok(())
     }
 
@@ -2864,7 +2792,7 @@ mod tests {
         let result = CanonicalCudaExt::into_host(canonical).await?.into_array();
 
         let expected_arr = PrimitiveArray::new(Buffer::from(values), NonNullable).into_array();
-        assert_arrays_eq!(expected_arr, result, &mut ctx);
+        assert_arrays_eq!(result, expected_arr, &mut ctx);
         Ok(())
     }
 
@@ -2894,7 +2822,7 @@ mod tests {
         let result = CanonicalCudaExt::into_host(canonical).await?.into_array();
 
         let expected_arr = PrimitiveArray::new(Buffer::from(values), NonNullable).into_array();
-        assert_arrays_eq!(expected_arr, result, &mut cpu_ctx);
+        assert_arrays_eq!(result, expected_arr, &mut cpu_ctx);
         Ok(())
     }
 
@@ -2924,7 +2852,7 @@ mod tests {
         let result = CanonicalCudaExt::into_host(canonical).await?.into_array();
 
         let expected_arr = PrimitiveArray::new(Buffer::from(values), NonNullable).into_array();
-        assert_arrays_eq!(expected_arr, result, &mut cpu_ctx);
+        assert_arrays_eq!(result, expected_arr, &mut cpu_ctx);
         Ok(())
     }
 

@@ -2190,6 +2190,7 @@ dependencies = [
  "arrow-array 59.3.0",
  "arrow-ipc 59.3.0",
  "arrow-schema 59.3.0",
+ "arrow-select 59.3.0",
  "async-trait",
  "bytes",
  "clap",
@@ -9618,9 +9619,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.45"
+version = "0.23.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634"
+checksum = "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf"
 dependencies = [
  "aws-lc-rs",
  "once_cell",
@@ -10998,6 +10999,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8df9b6e13f2d32c91b9bd719c00d1958837bc7dec474d94952798cc8e69eeec3"
 
 [[package]]
+name = "tpcdsgen"
+version = "0.1.0-alpha.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07cae4643a0296068b425716c22e16e5b639ef8c7f7717a513436b20b0a7924a"
+
+[[package]]
+name = "tpcdsgen-arrow"
+version = "0.1.0-alpha.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "153b9330d250e11eefbd79e6eed198ee8693e25019fd9299d0570bfd89201b29"
+dependencies = [
+ "arrow 59.3.0",
+ "tpcdsgen",
+]
+
+[[package]]
 name = "tpchgen"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11374,7 +11391,6 @@ dependencies = [
  "arbitrary",
  "arcref",
  "arrow-buffer 59.3.0",
- "async-lock",
  "bytes",
  "cfg-if",
  "codspeed-divan-compat",
@@ -11471,6 +11487,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arrow-array 59.3.0",
+ "arrow-cast 59.3.0",
  "arrow-ipc 59.3.0",
  "arrow-schema 59.3.0",
  "arrow-select 59.3.0",
@@ -11512,6 +11529,8 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-util",
+ "tpcdsgen",
+ "tpcdsgen-arrow",
  "tpchgen",
  "tpchgen-arrow",
  "tracing",
@@ -12140,6 +12159,7 @@ dependencies = [
  "arcref",
  "arrow-array 59.3.0",
  "arrow-schema 59.3.0",
+ "async-lock",
  "async-stream",
  "async-trait",
  "bit-vec 0.10.1",
@@ -12291,6 +12311,7 @@ dependencies = [
  "futures",
  "itertools 0.14.0",
  "log",
+ "memmap2",
  "object_store 0.13.2",
  "parking_lot",
  "prost 0.14.4",
@@ -12372,7 +12393,9 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "futures",
+ "parking_lot",
  "roaring",
+ "rstest",
  "tracing",
  "vortex-array",
  "vortex-buffer",
@@ -12380,6 +12403,7 @@ dependencies = [
  "vortex-io",
  "vortex-mask",
  "vortex-session",
+ "vortex-utils",
 ]
 
 [[package]]

@@ -921,7 +921,7 @@ logical_opt [
                                                                                                         "name": "READ_VORTEX",
                                                                                                         "children": [],
                                                                                                         "extra_info": {
-                                                                                                            "Filters": "vortex.list.contains([\"Rush County\", \"Toole County\", \"Jefferson County\", \"Dona Ana County\", \"La Porte County\"], $.ca_county)",
+                                                                                                            "Filters": "vortex.list.contains([\"Rush County\", \"Toole County\", \"Jefferson County\", \"Dona Ana County\", \"La Porte County\"], $.ca_county, opts=sql_null_semantics)",
                                                                                                             "Function": "Vortex Scan",
                                                                                                             "Estimated Cardinality": "1000"
                                                                                                         }
@@ -1365,7 +1365,7 @@ physical_plan [
                                                                                                                 "children": [],
                                                                                                                 "extra_info": {
                                                                                                                     "Function": "Vortex Scan",
-                                                                                                                    "Filters": "vortex.list.contains([\"Rush County\", \"Toole County\", \"Jefferson County\", \"Dona Ana County\", \"La Porte County\"], $.ca_county)",
+                                                                                                                    "Filters": "vortex.list.contains([\"Rush County\", \"Toole County\", \"Jefferson County\", \"Dona Ana County\", \"La Porte County\"], $.ca_county, opts=sql_null_semantics)",
                                                                                                                     "Projections": "ca_address_sk",
                                                                                                                     "Estimated Cardinality": "1000"
                                                                                                                 }

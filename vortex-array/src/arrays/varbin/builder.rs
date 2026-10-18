@@ -734,7 +734,6 @@ mod tests {
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::array_session;
-    use crate::arrays::ChunkedArray;
     use crate::arrays::ConstantArray;
     use crate::arrays::VarBinArray;
     use crate::arrays::VarBinViewArray;
@@ -775,6 +774,11 @@ mod tests {
                 .unwrap()
                 .is_null()
         );
+        assert_arrays_eq!(
+            array,
+            VarBinViewArray::from_iter_nullable_str([Some("hello"), None, Some("world")]),
+            &mut array_session().create_execution_ctx()
+        );
     }
 
     #[rstest]
@@ -799,7 +803,11 @@ mod tests {
             source.append_to_builder(builder, &mut ctx)
         })?;
 
-        assert_arrays_eq!(actual, source, &mut ctx);
+        assert_arrays_eq!(
+            actual,
+            VarBinViewArray::from_iter_nullable_str([Some("hello"), None, Some("world")]),
+            &mut ctx
+        );
         Ok(())
     }
 
@@ -994,6 +1002,11 @@ mod tests {
             result.validity()?.execute_mask(3, &mut ctx)?,
             Mask::from_iter([true, true, false])
         );
+        assert_arrays_eq!(
+            result,
+            VarBinViewArray::from_iter_nullable_str([Some(""), Some("hello"), None]),
+            &mut ctx
+        );
         Ok(())
     }
 
@@ -1048,7 +1061,18 @@ mod tests {
             chunk.append_to_builder(&mut builder, &mut ctx)?;
         }
 
-        let expected = ChunkedArray::try_new(vec![view, varbin, constant], DType::Utf8(Nullable))?;
+        let expected = VarBinViewArray::from_iter_nullable_str([
+            Some("hello"),
+            None,
+            Some(long),
+            Some(""),
+            Some("hello"),
+            None,
+            Some(long),
+            Some(""),
+            Some("hello"),
+            Some("hello"),
+        ]);
         assert_arrays_eq!(builder.finish(), expected, &mut ctx);
         Ok(())
     }

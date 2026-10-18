@@ -133,7 +133,10 @@ def test_variant_get_rejects_bad_path() -> None:
 
 
 def test_ext_storage_returns_expr() -> None:
-    assert isinstance(ve.ext_storage(ve.column("ts")), Expr)
+    expr = ve.ext_storage(ve.column("ts"))
+    assert isinstance(expr, Expr)
+    source = vx.array(pa.table({"ts": pa.array([42, None, -1], type=pa.timestamp("us"))}))
+    assert source.apply(expr).to_arrow_array(combine_chunks=True) == pa.array([42, None, -1], type=pa.int64())
 
 
 def test_merge_rejects_unknown_duplicate_handling() -> None:
@@ -217,6 +220,12 @@ def test_case_when_semantics(people: vx.VortexFile) -> None:
 def test_select_exclude(people: vx.VortexFile) -> None:
     table = people.scan(ve.select_exclude(["scores", "nested"])).read_all().to_arrow_table()
     assert table.column_names == ["name", "age"]
+    assert table.to_pylist() == [
+        {"name": "Alice", "age": 30},
+        {"name": "Bob", "age": 25},
+        {"name": "alfred", "age": None},
+        {"name": "Charlie", "age": 57},
+    ]
 
 
 # --------------------------------------------------------------------------------------

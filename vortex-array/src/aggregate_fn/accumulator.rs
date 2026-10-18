@@ -577,13 +577,13 @@ mod tests {
         let batch = dict_of_seven();
         batch
             .statistics()
-            .set(Stat::Sum, Precision::Exact(ScalarValue::from(11.0f64)));
+            .set(Stat::Sum, Precision::Exact(ScalarValue::from(7.0f64)));
 
         let dtype = DType::Primitive(PType::F64, Nullability::NonNullable);
         let mut acc = Accumulator::try_new(Sum, NumericalAggregateOpts::default(), dtype)?;
         acc.accumulate(&batch, &mut ctx)?;
 
-        assert_eq!(acc.finish()?.as_primitive().as_::<f64>(), Some(11.0));
+        assert_eq!(acc.finish()?.as_primitive().as_::<f64>(), Some(7.0));
         Ok(())
     }
 

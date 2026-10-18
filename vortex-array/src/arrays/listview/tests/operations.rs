@@ -205,11 +205,16 @@ fn test_slice_edge_cases(
             assert_eq!(sliced.len(), len);
         }
         None => {
-            // slice will panic or return empty for invalid ranges
-            if start < stop && stop <= listview.len() {
-                let sliced = listview.slice(start..stop).unwrap();
-                assert_eq!(sliced.len(), 0);
-            }
+            let error = listview.slice(start..stop).unwrap_err();
+            let expected = if start > stop {
+                "start (3) must be <= stop (1)"
+            } else {
+                "OutOfBounds: start 10 > length 3"
+            };
+            assert!(
+                error.to_string().contains(expected),
+                "unexpected error: {error}"
+            );
         }
     }
 }
@@ -261,8 +266,8 @@ fn test_cast_numeric_types(#[case] from_ptype: PType, #[case] to_ptype: PType) {
         .execute::<ListViewArray>(&mut array_session().create_execution_ctx())
         .unwrap();
     assert!(
-        result_list.len() == 3 || result_list.len() == 2,
-        "Expected 2 or 3 lists"
+        result_list.len() == if from_ptype == PType::F32 { 2 } else { 3 },
+        "Unexpected list count"
     );
 
     // Check that elements were properly cast.
@@ -270,6 +275,35 @@ fn test_cast_numeric_types(#[case] from_ptype: PType, #[case] to_ptype: PType) {
     assert_eq!(
         elements.dtype(),
         &DType::Primitive(to_ptype, Nullability::NonNullable)
+    );
+    let expected = match to_ptype {
+        PType::I64 => buffer![1i64, 2, 3, 4, 5, 6].into_array(),
+        PType::F64 => buffer![1f64, 2., 3., 4.].into_array(),
+        PType::U16 => buffer![1u16, 2, 3, 4, 5, 6, 7, 8].into_array(),
+        _ => unreachable!(),
+    };
+    let (expected_offsets, expected_sizes) = match to_ptype {
+        PType::I64 => (
+            buffer![0u32, 2, 4].into_array(),
+            buffer![2u32, 2, 2].into_array(),
+        ),
+        PType::F64 => (buffer![0u32, 2].into_array(), buffer![2u32, 2].into_array()),
+        PType::U16 => (
+            buffer![0u32, 3, 5].into_array(),
+            buffer![3u32, 2, 3].into_array(),
+        ),
+        _ => unreachable!(),
+    };
+    let expected = ListViewArray::new(
+        expected,
+        expected_offsets,
+        expected_sizes,
+        Validity::NonNullable,
+    );
+    assert_arrays_eq!(
+        result_list,
+        expected,
+        &mut array_session().create_execution_ctx()
     );
 }
 
@@ -307,6 +341,11 @@ fn test_cast_with_nulls() {
         result_list
             .is_invalid(1, &mut array_session().create_execution_ctx())
             .unwrap()
+    );
+    assert_arrays_eq!(
+        result_list.list_elements_at(0).unwrap(),
+        buffer![10i64, 20].into_array(),
+        &mut array_session().create_execution_ctx()
     );
 }
 
@@ -356,6 +395,33 @@ fn test_cast_special_patterns(#[case] expected_sizes: Vec<usize>, #[case] list_c
     for (i, expected_size) in expected_sizes.iter().enumerate() {
         assert_eq!(result_list.size_at(i), *expected_size);
     }
+    let expected_elements = if is_empty_case {
+        buffer![42i64, 43].into_array()
+    } else {
+        buffer![1f64, 2., 3., 4., 5.].into_array()
+    };
+    let (expected_offsets, expected_sizes) = if is_empty_case {
+        (
+            buffer![0u32, 0, 1, 1].into_array(),
+            buffer![0u32, 1, 0, 1].into_array(),
+        )
+    } else {
+        (
+            buffer![0u32, 1, 0].into_array(),
+            buffer![3u32, 3, 5].into_array(),
+        )
+    };
+    let expected = ListViewArray::new(
+        expected_elements,
+        expected_offsets,
+        expected_sizes,
+        Validity::NonNullable,
+    );
+    assert_arrays_eq!(
+        result_list,
+        expected,
+        &mut array_session().create_execution_ctx()
+    );
 }
 
 #[test]
@@ -389,6 +455,17 @@ fn test_cast_large_dataset() {
     for i in 0..20 {
         assert_eq!(result_list.size_at(i), 4);
     }
+    let expected = ListViewArray::new(
+        buffer![0u32..80].into_array(),
+        PrimitiveArray::from_iter((0u32..80).step_by(4)).into_array(),
+        buffer![4u32; 20].into_array(),
+        Validity::NonNullable,
+    );
+    assert_arrays_eq!(
+        result_list,
+        expected,
+        &mut array_session().create_execution_ctx()
+    );
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -703,7 +780,7 @@ fn test_mask_with_existing_nulls() {
     .into_array();
 
     // Mask additional elements.
-    let selection = Mask::from_iter([false, true, true]);
+    let selection = Mask::from_iter([false, false, true]);
     let result = listview.mask((!&selection).into_array()).unwrap();
     let result_list = result
         .execute::<ListViewArray>(&mut array_session().create_execution_ctx())
@@ -719,7 +796,7 @@ fn test_mask_with_existing_nulls() {
         !result_list
             .is_valid(1, &mut array_session().create_execution_ctx())
             .unwrap()
-    ); // Was invalid, mask is true -> invalid.
+    ); // Existing null survives even where the mask retains the row.
     assert!(
         !result_list
             .is_valid(2, &mut array_session().create_execution_ctx())

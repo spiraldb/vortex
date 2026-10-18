@@ -17,6 +17,7 @@ use crate::arrays::varbin::offsets_tile_utf8;
 use crate::assert_arrays_eq;
 use crate::dtype::DType;
 use crate::dtype::Nullability;
+use crate::scalar::Scalar;
 use crate::validity::Validity;
 
 #[fixture]
@@ -37,6 +38,15 @@ fn binary_array() -> ArrayRef {
 #[rstest]
 pub fn test_scalar_at(binary_array: ArrayRef) {
     let mut ctx = array_session().create_execution_ctx();
+    for (index, value) in ["hello world", "hello world this is a long string"]
+        .into_iter()
+        .enumerate()
+    {
+        assert_eq!(
+            binary_array.execute_scalar(index, &mut ctx).unwrap(),
+            Scalar::from(value)
+        );
+    }
     assert_arrays_eq!(
         binary_array,
         VarBinViewArray::from_iter_str(["hello world", "hello world this is a long string"]),
@@ -101,7 +111,11 @@ fn try_new_allows_nonzero_first_offset() -> VortexResult<()> {
         Validity::NonNullable,
     )?;
 
-    assert_eq!(array.len(), 2);
+    assert_arrays_eq!(
+        array,
+        VarBinViewArray::from_iter_bin([b"el", b"lo"]),
+        &mut array_session().create_execution_ctx()
+    );
     Ok(())
 }
 

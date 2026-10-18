@@ -442,18 +442,12 @@ mod tests {
             .patches()
             .ok_or_else(|| vortex_err!("expected patches"))?;
         assert_arrays_eq!(
-            patches
-                .indices()
-                .clone()
-                .execute::<PrimitiveArray>(&mut ctx)?,
+            patches.indices().clone(),
             PrimitiveArray::from_iter([10u16, 20, 1029]),
             &mut ctx
         );
         assert_arrays_eq!(
-            patches
-                .values()
-                .clone()
-                .execute::<PrimitiveArray>(&mut ctx)?,
+            patches.values().clone(),
             PrimitiveArray::from_iter([1i32 << 19, (1 << 20) + 1, (1 << 20) + 1]),
             &mut ctx
         );
@@ -461,8 +455,7 @@ mod tests {
             .chunk_offsets()
             .as_ref()
             .ok_or_else(|| vortex_err!("expected chunk offsets"))?
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)?;
+            .clone();
         assert_arrays_eq!(
             chunk_offsets,
             PrimitiveArray::from_iter([0u64, 2]),

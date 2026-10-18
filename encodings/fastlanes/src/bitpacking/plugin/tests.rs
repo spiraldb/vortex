@@ -88,6 +88,8 @@ fn test_decode_bitpacked_patches() -> VortexResult<()> {
         &SESSION,
     )?;
 
+    assert_arrays_eq!(deserialized, parray, &mut ctx);
+
     let patched: PatchedArray = deserialized
         .try_downcast()
         .map_err(|a| vortex_err!("Expected Patched, got {}", a.encoding_id()))?;
@@ -140,6 +142,8 @@ fn bitpacked_without_patches_stays_bitpacked() -> VortexResult<()> {
         ),
         &SESSION,
     )?;
+
+    assert_arrays_eq!(deserialized, parray, &mut ctx);
 
     let result = deserialized
         .try_downcast::<BitPacked>()
