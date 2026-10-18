@@ -1,53 +1,44 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! PCO probes retain every decoded page and index the compacted, non-null value positions.
+//! Pco probes decode only the block holding the requested row: a checkpoint block in v2, or a
+//! page in v1.
 
 use std::ops::Range;
 
-use pco::data_types::Number;
 use pco::data_types::NumberType;
 use pco::match_number_enum;
-use pco::wrapped::FileDecompressor;
 use vortex_array::ArrayView;
 use vortex_array::ExecutionCtx;
-use vortex_array::IntoArray;
 use vortex_array::arrays::PrimitiveArray;
-use vortex_array::dtype::NativePType;
 use vortex_array::dtype::half;
 use vortex_array::match_each_native_ptype;
 use vortex_array::scalar::Scalar;
 use vortex_array::validity::Validity;
 use vortex_buffer::BufferMut;
-use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_mask::Mask;
 
 use crate::Pco;
 use crate::PcoArrayExt;
+use crate::array::BlockDecoder;
 use crate::array::number_type_from_ptype;
-use crate::array::vortex_err_from_pco;
+use crate::compute::RowValues;
 
-const RANK_STRIDE: usize = 512;
-
-/// State retained by repeated PCO probes. Construction performs no allocation.
-///
-/// The mask and rank index use unsliced logical rows; page boundaries use compacted value
-/// positions. Every page decoded so far is retained, so the state grows with the pages touched
-/// and never beyond the decompressed array.
+/// State retained by repeated Pco probes: the row-to-value mapping and the most recently decoded
+/// block. Construction performs no allocation.
 #[derive(Default)]
 pub struct PcoProbeState {
-    validity: Option<Mask>,
-    rank: Vec<usize>,
-    pages: Vec<Page>,
-    /// The page the previous probe landed in, `None` until the first probe resolves one.
-    last_page: Option<usize>,
+    rows: Option<RowValues>,
+    block: Option<DecodedBlock>,
 }
 
-struct Page {
+struct DecodedBlock {
+    /// Array-wide index of the block.
+    index: usize,
+    /// Positions among the valid values that the block covers.
     values: Range<usize>,
-    chunk: usize,
-    decoded: Option<PrimitiveArray>,
+    decoded: PrimitiveArray,
 }
 
 pub(crate) fn scalar_at(
@@ -56,111 +47,80 @@ pub(crate) fn scalar_at(
     state: Option<&mut PcoProbeState>,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<Scalar> {
-    let Some(state) = state else {
-        let validity = array.unsliced_validity();
-        return array
-            ._slice(index, index + 1)
-            .decompress(&validity, ctx)?
-            .into_array()
-            .execute_scalar(0, ctx);
-    };
-    let mask = match &mut state.validity {
-        Some(mask) => mask,
-        slot @ None => slot.insert(
-            array
+    let row = array.slice_start() + index;
+    let mut once = PcoProbeState::default();
+    let retained = state.is_some();
+    let (value, state) = match state {
+        Some(state) => {
+            let rows = match &mut state.rows {
+                Some(rows) => rows,
+                slot @ None => slot.insert(RowValues::new(
+                    array
+                        .unsliced_validity()
+                        .execute_mask(array.unsliced_n_rows(), ctx)?,
+                )),
+            };
+            (rows.value_index(row), state)
+        }
+        // A one-off read needs only this row's rank, not a rank index over every row.
+        None => {
+            let value = match array
                 .unsliced_validity()
-                .execute_mask(array.unsliced_n_rows(), ctx)?,
-        ),
-    };
-    let logical_index = array.slice_start() + index;
-
-    let value_index = match mask {
-        Mask::AllTrue(_) => logical_index,
-        Mask::AllFalse(_) => return Ok(Scalar::null(array.dtype().clone())),
-        Mask::Values(values) => {
-            let bits = values.bit_buffer();
-            if !bits.value(logical_index) {
-                return Ok(Scalar::null(array.dtype().clone()));
-            }
-            if state.rank.is_empty() {
-                state.rank.reserve(bits.len().div_ceil(RANK_STRIDE));
-                let mut count = 0;
-                for start in (0..bits.len()).step_by(RANK_STRIDE) {
-                    state.rank.push(count);
-                    count += bits.count_range(start, (start + RANK_STRIDE).min(bits.len()));
-                }
-            }
-            let block = logical_index / RANK_STRIDE;
-            state.rank[block] + bits.count_range(block * RANK_STRIDE, logical_index)
+                .execute_mask(array.unsliced_n_rows(), ctx)?
+            {
+                Mask::AllTrue(_) => Some(row),
+                Mask::AllFalse(_) => None,
+                Mask::Values(values) => values
+                    .value(row)
+                    .then(|| values.bit_buffer().count_range(0, row)),
+            };
+            (value, &mut once)
         }
     };
+    let Some(value) = value else {
+        return Ok(Scalar::null(array.dtype().clone()));
+    };
 
-    if state.pages.is_empty() {
-        let mut start = 0;
-        for (chunk, metadata) in array.metadata.chunks.iter().enumerate() {
-            for page in &metadata.pages {
-                let end = start + page.n_values as usize;
-                state.pages.push(Page {
-                    values: start..end,
-                    chunk,
-                    decoded: None,
-                });
-                start = end;
-            }
+    let page = array.page_of(value);
+    let block = array.block_of(page, value);
+    if state
+        .block
+        .as_ref()
+        .is_none_or(|cached| cached.index != block)
+    {
+        let entry = &array.entries[page];
+        let local = block - entry.first_block;
+        let mut page_values = entry.block_values(local..local + 1);
+        if !retained {
+            // A one-off read never reuses the block, so stop at the requested value.
+            page_values.end = value - entry.values.start + 1;
         }
+        let values = entry.values.start + page_values.start..entry.values.start + page_values.end;
+        let decoded = match_number_enum!(
+            number_type_from_ptype(array.ptype()),
+            NumberType<T> => {
+                let mut decoded = BufferMut::<T>::with_capacity(values.len());
+                BlockDecoder::<T>::new(array.data(), true)?
+                    .append_page_values(page, page_values, &mut decoded)?;
+                PrimitiveArray::new(decoded.freeze(), Validity::NonNullable)
+            }
+        );
+        state.block = Some(DecodedBlock {
+            index: block,
+            values,
+            decoded,
+        });
     }
-    let page_index = match state.last_page {
-        Some(last) if state.pages[last].values.contains(&value_index) => last,
-        _ => state
-            .pages
-            .partition_point(|page| page.values.end <= value_index),
+
+    let Some(cached) = &state.block else {
+        unreachable!("the block was just decoded");
     };
-    state.last_page = Some(page_index);
-    let page = state
-        .pages
-        .get_mut(page_index)
-        .vortex_expect("PCO pages cover every valid value index");
-    let values = match &mut page.decoded {
-        Some(decoded) => decoded,
-        slot @ None => {
-            let decoded = match_number_enum!(
-                number_type_from_ptype(array.dtype().as_ptype()),
-                NumberType<T> => {
-                    decode_page::<T>(array, page.chunk, page.values.len(), array.pages[page_index].as_slice(), ctx)?
-                }
-            );
-            slot.insert(decoded)
-        }
-    };
-    Ok(match_each_native_ptype!(values.ptype(), |T| {
+    Ok(match_each_native_ptype!(cached.decoded.ptype(), |T| {
         Scalar::primitive(
-            values.as_slice::<T>()[value_index - page.values.start],
+            cached.decoded.as_slice::<T>()[value - cached.values.start],
             array.dtype().nullability(),
         )
     }))
-}
-
-fn decode_page<T: Number + NativePType>(
-    array: ArrayView<'_, Pco>,
-    chunk: usize,
-    n_values: usize,
-    buffer: &[u8],
-    ctx: &mut ExecutionCtx,
-) -> VortexResult<PrimitiveArray> {
-    let (file, _) =
-        FileDecompressor::new(array.metadata.header.as_slice()).map_err(vortex_err_from_pco)?;
-    let (mut chunk, _) = file
-        .chunk_decompressor::<T, _>(array.chunk_metas[chunk].as_ref())
-        .map_err(vortex_err_from_pco)?;
-    let mut decoder = chunk
-        .page_decompressor(buffer, n_values)
-        .map_err(vortex_err_from_pco)?;
-    let mut values = BufferMut::<T>::with_capacity_in(n_values, ctx.allocator().clone());
-    // SAFETY: the buffer reserves `n_values` elements, and the page decompressor was built for
-    // exactly that count, so `read` writes every element before anything observes it.
-    unsafe { values.set_len(n_values) };
-    decoder.read(&mut values).map_err(vortex_err_from_pco)?;
-    Ok(PrimitiveArray::new(values.freeze(), Validity::NonNullable))
 }
 
 #[cfg(test)]

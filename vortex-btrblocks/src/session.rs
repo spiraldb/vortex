@@ -56,7 +56,7 @@ impl Default for CompressionSession {
                 &integer::IntRLEScheme,
                 &DELTA_SCHEME,
                 #[cfg(feature = "pco")]
-                &integer::PcoScheme,
+                &integer::PCO_V1,
                 ////////////////////////////////////////////////////////////////////////////////////
                 // Float schemes.
                 ////////////////////////////////////////////////////////////////////////////////////
@@ -66,7 +66,7 @@ impl Default for CompressionSession {
                 &float::NullDominatedSparseScheme,
                 &float::FloatRLEScheme,
                 #[cfg(feature = "pco")]
-                &float::PcoScheme,
+                &float::PCO_V1,
                 ////////////////////////////////////////////////////////////////////////////////////
                 // String schemes.
                 ////////////////////////////////////////////////////////////////////////////////////

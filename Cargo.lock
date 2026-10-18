@@ -12272,17 +12272,16 @@ dependencies = [
 name = "vortex-pco"
 version = "0.1.0"
 dependencies = [
- "arrow-array 59.3.0",
- "arrow-schema 59.3.0",
  "codspeed-divan-compat",
  "mimalloc",
- "parquet 59.3.0",
+ "parking_lot",
  "pco",
  "prost 0.14.4",
  "rstest",
  "vortex-array",
  "vortex-arrow",
  "vortex-buffer",
+ "vortex-edition",
  "vortex-error",
  "vortex-mask",
  "vortex-session",
@@ -13144,6 +13143,7 @@ dependencies = [
  "toml 1.1.8+spec-1.1.0",
  "vortex-edition",
  "vortex-json",
+ "vortex-pco",
  "vortex-spatial",
  "vortex-tensor",
  "vortex-zstd",

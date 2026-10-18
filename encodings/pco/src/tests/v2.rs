@@ -27,6 +27,7 @@ use vortex_array::scalar_fn::fns::operators::CompareOperator;
 use vortex_array::scalar_fn::fns::operators::Operator;
 use vortex_array::serde::SerializeOptions;
 use vortex_array::serde::SerializedArray;
+use vortex_array::session::ArraySessionExt;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
 use vortex_buffer::BufferMut;
@@ -35,14 +36,18 @@ use vortex_mask::Mask;
 use vortex_session::VortexSession;
 use vortex_session::registry::ReadContext;
 
-use super::BlockDecoder;
-use super::Pco2;
-use super::Pco2Array;
-use super::Pco2Options;
+use crate::Pco;
+use crate::PcoArray;
+use crate::PcoArrayExt;
+use crate::PcoData;
+use crate::PcoOptions;
+use crate::array::BlockDecoder;
+use crate::pco_v1_id;
+use crate::pco_v2_id;
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     let session = vortex_array::array_session();
-    super::initialize(&session);
+    crate::initialize(&session);
     session
 });
 
@@ -140,16 +145,26 @@ fn with_nulls(array: PrimitiveArray, seed: u64) -> PrimitiveArray {
     )
 }
 
-fn options() -> Pco2Options {
-    // Small chunks so every dataset spans several chunks and partial blocks.
-    Pco2Options {
-        values_per_chunk: 7_000,
-        ..Pco2Options::default()
+/// v2 with checkpoints every 1,024 values in every chunk, so the tests see small blocks.
+fn options() -> PcoOptions {
+    PcoOptions {
+        max_checkpoint_interval: 1024,
+        ..PcoOptions::v2()
     }
 }
 
-fn compress(array: &PrimitiveArray, ctx: &mut ExecutionCtx) -> VortexResult<Pco2Array> {
-    Pco2::from_primitive(array.as_view(), &options(), ctx)
+/// Compresses with small chunks, so every dataset spans several chunks and partial blocks.
+fn compress_with(
+    array: &PrimitiveArray,
+    options: &PcoOptions,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<PcoArray> {
+    let data = PcoData::compress_with_values_per_chunk(array.as_view(), options, 7_000, ctx)?;
+    Pco::try_new(array.dtype().clone(), data, array.validity()?)
+}
+
+fn compress(array: &PrimitiveArray, ctx: &mut ExecutionCtx) -> VortexResult<PcoArray> {
+    compress_with(array, &options(), ctx)
 }
 
 fn datasets() -> Vec<(&'static str, PrimitiveArray)> {
@@ -175,26 +190,27 @@ fn every_checkpoint_resumes_decoding(
     #[values(256, 1024, 4096)] checkpoint_interval: usize,
 ) -> VortexResult<()> {
     let mut ctx = SESSION.create_execution_ctx();
-    let options = Pco2Options {
-        checkpoint_interval,
+    let options = PcoOptions {
+        checkpoint_interval: Some(checkpoint_interval),
+        max_checkpoint_interval: checkpoint_interval,
         ..options()
     };
     for (name, array) in datasets() {
-        let pco2 = Pco2::from_primitive(array.as_view(), &options, &mut ctx)?;
+        let pco2 = compress_with(&array, &options, &mut ctx)?;
         let data = pco2.data();
-        let interval = data.interval();
         let mut n_checkpoints = 0;
         vortex_array::match_each_native_ptype!(array.ptype(), |T| {
             let expected = array.as_slice::<T>();
-            let mut decoder = BlockDecoder::<T>::new(data)?;
-            for (page, entry) in data.index.iter().enumerate() {
-                let n_blocks = data.blocks_in_page(entry);
+            let mut decoder = BlockDecoder::<T>::new(data, false)?;
+            for (page, entry) in data.entries.iter().enumerate() {
+                let n_blocks = entry.n_blocks();
                 n_checkpoints += n_blocks - 1;
                 for start in 0..n_blocks {
                     for run in [1, 3] {
                         let blocks = start..(start + run).min(n_blocks);
-                        let values = entry.values.start + blocks.start * interval
-                            ..(entry.values.start + blocks.end * interval).min(entry.values.end);
+                        let page_values = entry.block_values(blocks.clone());
+                        let values = entry.values.start + page_values.start
+                            ..entry.values.start + page_values.end;
                         let mut decoded = BufferMut::<T>::empty();
                         decoder.append_page_blocks(page, blocks.clone(), &mut decoded)?;
                         assert!(
@@ -209,10 +225,52 @@ fn every_checkpoint_resumes_decoding(
             }
         });
         if name == "repeating_u32" {
-            // Lookback chunks fall back to pages no longer than the checkpoint interval.
+            // Lookback chunks fall back to pages of the longest block, which need no checkpoints.
             assert_eq!(n_checkpoints, 0, "{name} should not be checkpointed");
         } else {
             assert!(n_checkpoints > 0, "{name} should be checkpointed");
+        }
+    }
+    Ok(())
+}
+
+/// Reads that start and stop anywhere in a page, including mid-block and mid-batch, decode only
+/// the values asked for.
+#[test]
+fn partial_reads_match() -> VortexResult<()> {
+    let mut ctx = SESSION.create_execution_ctx();
+    for (name, array) in datasets() {
+        let pco2 = compress(&array, &mut ctx)?;
+        vortex_array::match_each_native_ptype!(array.ptype(), |T| {
+            check_partial_reads::<T>(pco2.data(), array.as_slice::<T>(), name)?;
+        });
+    }
+    Ok(())
+}
+
+fn check_partial_reads<T: pco::data_types::Number + NativePType>(
+    data: &PcoData,
+    expected: &[T],
+    name: &str,
+) -> VortexResult<()> {
+    let mut decoder = BlockDecoder::<T>::new(data, true)?;
+    for (page, entry) in data.entries.iter().enumerate() {
+        let page_n = entry.values.len();
+        for start in (0..page_n).step_by(997) {
+            for len in [1, 255, 256, 257, 1500] {
+                let local = start..(start + len).min(page_n);
+                let mut decoded = BufferMut::<T>::empty();
+                decoder.append_page_values(page, local.clone(), &mut decoded)?;
+                let values = entry.values.start + local.start..entry.values.start + local.end;
+                assert!(
+                    decoded.len() == values.len()
+                        && decoded
+                            .iter()
+                            .zip(&expected[values])
+                            .all(|(a, b)| a.is_eq(*b)),
+                    "{name}: page {page} values {local:?} decoded incorrectly"
+                );
+            }
         }
     }
     Ok(())
@@ -294,8 +352,8 @@ fn take_decodes_touched_blocks(#[case] nullable: bool) -> VortexResult<()> {
         let expected_sliced = array.slice(500..19_000)?;
         for n in [1, 17, 3000] {
             let indices = random_indices(&mut rng, n, sliced.len()).into_array();
-            let taken = <Pco2 as TakeExecute>::take(sliced.as_::<Pco2>(), &indices, &mut ctx)?
-                .expect("Pco2 take kernel applies");
+            let taken = <Pco as TakeExecute>::take(sliced.as_::<Pco>(), &indices, &mut ctx)?
+                .expect("Pco take kernel applies");
             assert_arrays_eq!(taken, expected_sliced.take(indices.clone())?, &mut ctx);
         }
         let nullable_indices =
@@ -329,22 +387,21 @@ fn filter_decodes_touched_blocks(#[case] nullable: bool) -> VortexResult<()> {
 
         // Clustered runs touch few blocks, so the kernel decodes each run as a range.
         let clustered = Mask::from_iter((0..len).map(|i| (4000..4100).contains(&i) || i == 9000));
-        let filtered = <Pco2 as FilterKernel>::filter(sliced.as_::<Pco2>(), &clustered, &mut ctx)?
-            .expect("Pco2 filter kernel applies to clustered masks");
+        let filtered = <Pco as FilterKernel>::filter(sliced.as_::<Pco>(), &clustered, &mut ctx)?
+            .expect("Pco filter kernel applies to clustered masks");
         assert_arrays_eq!(filtered, expected_sliced.filter(clustered)?, &mut ctx);
 
         // Many short runs inside few blocks, so the kernel gathers value by value.
         let interleaved =
             Mask::from_iter((0..len).map(|i| (6000..6900).contains(&i) && i % 3 == 0));
-        let filtered =
-            <Pco2 as FilterKernel>::filter(sliced.as_::<Pco2>(), &interleaved, &mut ctx)?
-                .expect("Pco2 filter kernel applies to interleaved masks");
+        let filtered = <Pco as FilterKernel>::filter(sliced.as_::<Pco>(), &interleaved, &mut ctx)?
+            .expect("Pco filter kernel applies to interleaved masks");
         assert_arrays_eq!(filtered, expected_sliced.filter(interleaved)?, &mut ctx);
 
         // A scattered selection touches every block, so the kernel declines.
         let scattered = Mask::from_iter((0..len).map(|_| rng.below(100) == 0));
         assert!(
-            <Pco2 as FilterKernel>::filter(sliced.as_::<Pco2>(), &scattered, &mut ctx)?.is_none()
+            <Pco as FilterKernel>::filter(sliced.as_::<Pco>(), &scattered, &mut ctx)?.is_none()
         );
         assert_arrays_eq!(
             sliced.filter(scattered.clone())?,
@@ -409,7 +466,7 @@ fn compare_prunes_blocks(#[case] nullable: bool) -> VortexResult<()> {
             for op in OPERATORS {
                 let expected = expected_sliced.binary(rhs.clone(), Operator::from(op))?;
                 let compared =
-                    <Pco2 as CompareKernel>::compare(sliced.as_::<Pco2>(), &rhs, op, &mut ctx)?;
+                    <Pco as CompareKernel>::compare(sliced.as_::<Pco>(), &rhs, op, &mut ctx)?;
                 // Sorted data leaves at most a block or two straddling any constant.
                 assert!(
                     compared.is_some() || !sorted,
@@ -470,9 +527,9 @@ fn serialize_round_trip(array: ArrayRef) -> VortexResult<ArrayRef> {
 #[case(uniform_u32(), false)]
 fn serde_round_trip(#[case] array: PrimitiveArray, #[case] block_stats: bool) -> VortexResult<()> {
     let mut ctx = SESSION.create_execution_ctx();
-    let pco2 = Pco2::from_primitive(
-        array.as_view(),
-        &Pco2Options {
+    let pco2 = compress_with(
+        &array,
+        &PcoOptions {
             block_stats,
             ..options()
         },
@@ -480,7 +537,7 @@ fn serde_round_trip(#[case] array: PrimitiveArray, #[case] block_stats: bool) ->
     )?
     .into_array();
     let decoded = serialize_round_trip(pco2)?;
-    assert!(decoded.is::<Pco2>());
+    assert!(decoded.as_::<Pco>().has_index());
     assert_arrays_eq!(decoded, array, &mut ctx);
     assert_arrays_eq!(
         decoded.slice(5000..5100)?,
@@ -490,11 +547,57 @@ fn serde_round_trip(#[case] array: PrimitiveArray, #[case] block_stats: bool) ->
     Ok(())
 }
 
+/// Stats are kept where blocks narrow the value range and left out where every block spans it.
+#[test]
+fn block_stats_only_where_they_prune() -> VortexResult<()> {
+    let mut ctx = SESSION.create_execution_ctx();
+    let has_stats = |array: &PrimitiveArray, ctx: &mut ExecutionCtx| -> VortexResult<bool> {
+        Ok(compress(array, ctx)?
+            .data()
+            .index
+            .as_ref()
+            .is_some_and(|index| index.block_stats.is_some()))
+    };
+    assert!(has_stats(&timestamps(), &mut ctx)?);
+    assert!(has_stats(&sorted_i16(), &mut ctx)?);
+    assert!(has_stats(
+        &PrimitiveArray::from_iter([7u32; 5000]),
+        &mut ctx
+    )?);
+    assert!(!has_stats(&uniform_u32(), &mut ctx)?);
+    assert!(!has_stats(&prices_f64(), &mut ctx)?);
+    Ok(())
+}
+
+/// Near-constant chunks space their checkpoints out up to the maximum interval, while chunks of
+/// varied values keep the requested one.
+#[test]
+fn intervals_adapt_to_index_cost() -> VortexResult<()> {
+    let mut ctx = SESSION.create_execution_ctx();
+    let intervals = |array: &PrimitiveArray, ctx: &mut ExecutionCtx| -> VortexResult<Vec<u32>> {
+        let pco2 = Pco::compress(array.as_view(), &PcoOptions::v2(), ctx)?;
+        assert_arrays_eq!(pco2, array, ctx);
+        Ok(pco2
+            .data()
+            .index
+            .as_ref()
+            .map(|index| index.checkpoint_intervals.clone())
+            .unwrap_or_default())
+    };
+    let mut rng = Rng(21);
+    let varied = PrimitiveArray::from_iter((0..100_000).map(|_| rng.below(1 << 20) as u32));
+    assert_eq!(intervals(&varied, &mut ctx)?, vec![1024]);
+    let near_constant =
+        PrimitiveArray::from_iter((0..100_000u32).map(|i| u32::from(i % 50_000 == 7)));
+    assert_eq!(intervals(&near_constant, &mut ctx)?, vec![8192]);
+    Ok(())
+}
+
 #[test]
 fn default_options_use_one_page_per_chunk() -> VortexResult<()> {
     let mut ctx = SESSION.create_execution_ctx();
     let array = PrimitiveArray::from_iter((0..600_000u64).map(|i| i * i % 1_000_003));
-    let pco2 = Pco2::from_primitive(array.as_view(), &Pco2Options::default(), &mut ctx)?;
+    let pco2 = Pco::compress(array.as_view(), &PcoOptions::v2(), &mut ctx)?;
     let chunks = &pco2.metadata.chunks;
     assert_eq!(chunks.len(), 3);
     assert!(chunks.iter().all(|chunk| chunk.pages.len() == 1));
@@ -529,11 +632,108 @@ fn empty_and_all_null() -> VortexResult<()> {
 fn rejects_invalid_interval() {
     let mut ctx = SESSION.create_execution_ctx();
     let array = timestamps();
-    for checkpoint_interval in [0, 100, 1000] {
-        let options = Pco2Options {
-            checkpoint_interval,
+    for checkpoint_interval in [0, 100, 1000, 2048] {
+        let options = PcoOptions {
+            checkpoint_interval: Some(checkpoint_interval),
             ..options()
         };
-        assert!(Pco2::from_primitive(array.as_view(), &options, &mut ctx).is_err());
+        assert!(Pco::compress(array.as_view(), &options, &mut ctx).is_err());
     }
+    let stats_without_checkpoints = PcoOptions {
+        block_stats: true,
+        ..PcoOptions::v1(8, 0)
+    };
+    assert!(Pco::compress(array.as_view(), &stats_without_checkpoints, &mut ctx).is_err());
+}
+
+fn serialized_id(array: &ArrayRef) -> VortexResult<vortex_array::ArrayId> {
+    let context = ArrayContext::empty();
+    array.serialize(&context, &SESSION, &SerializeOptions::default())?;
+    let ids = context.to_ids();
+    Ok(ids[0])
+}
+
+/// Indexed arrays write v2; arrays without an index, including an indexed array whose index is
+/// dropped, write the frozen v1 format.
+#[test]
+fn writer_picks_wire_format() -> VortexResult<()> {
+    let mut ctx = SESSION.create_execution_ctx();
+    let array = timestamps();
+    let v1 = Pco::from_primitive(array.as_view(), 8, 0, &mut ctx)?;
+    let v2 = compress(&array, &mut ctx)?;
+    assert_eq!(serialized_id(&v1.into_array())?, pco_v1_id());
+    assert_eq!(serialized_id(&v2.clone().into_array())?, pco_v2_id());
+
+    let downgraded = Pco::try_new(
+        v2.dtype().clone(),
+        v2.data().without_index(),
+        v2.unsliced_validity(),
+    )?
+    .into_array();
+    assert_eq!(serialized_id(&downgraded)?, pco_v1_id());
+    assert_arrays_eq!(serialize_round_trip(downgraded)?, array, &mut ctx);
+    Ok(())
+}
+
+/// A reader that registers only the frozen v1 format reads downgraded v2 data and rejects v2.
+#[test]
+fn v1_reader_reads_downgraded_v2() -> VortexResult<()> {
+    let mut ctx = SESSION.create_execution_ctx();
+    let array = with_nulls(prices_f64(), 3);
+    let v2 = compress(&array, &mut ctx)?;
+    let v1_session = vortex_array::array_session();
+    v1_session.arrays().register(Pco);
+
+    let read_with = |array: ArrayRef, session: &VortexSession| -> VortexResult<ArrayRef> {
+        let context = ArrayContext::empty();
+        let bytes = array
+            .serialize(&context, &SESSION, &SerializeOptions::default())?
+            .into_iter()
+            .flat_map(|buffer| buffer.into_iter())
+            .collect::<BufferMut<u8>>()
+            .freeze();
+        SerializedArray::try_from(bytes)?.decode(
+            array.dtype(),
+            array.len(),
+            &ReadContext::new(context.to_ids()),
+            session,
+        )
+    };
+    let downgraded = Pco::try_new(
+        v2.dtype().clone(),
+        v2.data().without_index(),
+        v2.unsliced_validity(),
+    )?;
+    assert_arrays_eq!(
+        read_with(downgraded.into_array(), &v1_session)?,
+        array,
+        &mut ctx
+    );
+    assert!(read_with(v2.into_array(), &v1_session).is_err());
+    Ok(())
+}
+
+/// v1 arrays have no checkpoints, so their pages are their blocks; the kernels still decode
+/// only the pages an operation touches.
+#[test]
+fn v1_pages_are_blocks() -> VortexResult<()> {
+    let mut ctx = SESSION.create_execution_ctx();
+    let array = timestamps();
+    let v1 = Pco::from_primitive(array.as_view(), 8, 1024, &mut ctx)?;
+    let len = array.len();
+    let mask = Mask::from_iter((0..len).map(|i| (5000..5300).contains(&i)));
+    let filtered = <Pco as FilterKernel>::filter(v1.as_view(), &mask, &mut ctx)?
+        .expect("filter kernel applies to v1 pages");
+    assert_arrays_eq!(filtered, array.filter(mask)?, &mut ctx);
+    let indices = PrimitiveArray::from_iter([3u32, 19_999, 7000, 7001]).into_array();
+    let taken = <Pco as TakeExecute>::take(v1.as_view(), &indices, &mut ctx)?
+        .expect("take kernel applies to v1 pages");
+    assert_arrays_eq!(taken, array.take(indices)?, &mut ctx);
+    // Without block stats, compare falls back to decoding.
+    let rhs = ConstantArray::new(Scalar::primitive(0i64, false.into()), len).into_array();
+    assert!(
+        <Pco as CompareKernel>::compare(v1.as_view(), &rhs, CompareOperator::Lt, &mut ctx)?
+            .is_none()
+    );
+    Ok(())
 }

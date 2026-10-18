@@ -92,6 +92,10 @@ This edition currently adds no components.
 
 - `dtype`: `vortex.json`
 
+### `pco2026.10.0`
+
+- `array`: `vortex.pco.v2`
+
 ## Component checks
 
 The writer checks the formats it actually serializes against the selected editions. The checks cover

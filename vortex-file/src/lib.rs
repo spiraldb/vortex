@@ -129,7 +129,6 @@ pub use strategy::*;
 use vortex_array::arrays::Patched;
 use vortex_array::arrays::patched::use_experimental_patches;
 use vortex_array::session::ArraySessionExt;
-use vortex_pco::Pco;
 use vortex_session::VortexSession;
 pub use writer::*;
 
@@ -176,12 +175,9 @@ pub fn register_default_encodings(session: &VortexSession) {
     #[cfg(feature = "zstd")]
     vortex_zstd::initialize(session);
 
-    {
-        let arrays = session.arrays();
-        arrays.register(Pco);
-        if use_experimental_patches() {
-            arrays.register(Patched);
-        }
+    vortex_pco::initialize(session);
+    if use_experimental_patches() {
+        session.arrays().register(Patched);
     }
 
     vortex_alp::initialize(session);

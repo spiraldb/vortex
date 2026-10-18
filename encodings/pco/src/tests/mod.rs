@@ -16,7 +16,6 @@ use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
 use vortex_array::serde::SerializeOptions;
 use vortex_array::serde::SerializedArray;
-use vortex_array::session::ArraySessionExt;
 use vortex_array::validity::Validity;
 use vortex_arrow::ArrowSessionExt;
 use vortex_buffer::Buffer;
@@ -32,7 +31,7 @@ use crate::PcoData;
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     let session = vortex_array::array_session();
-    session.arrays().register(Pco);
+    crate::initialize(&session);
     session
 });
 
@@ -222,3 +221,5 @@ fn test_serde() -> VortexResult<()> {
     assert_eq!(decoded_arrow.as_ref(), expected_arrow.as_ref());
     Ok(())
 }
+
+mod v2;

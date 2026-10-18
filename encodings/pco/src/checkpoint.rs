@@ -20,11 +20,14 @@
 //! synthetic page: the recorded state, serialized in pco's own page-header layout, followed by the
 //! original bitstream from the recorded bit position, shifted onto a byte boundary.
 //!
+//! A chunk's records are stored as a [`CheckpointTable`]: one column per field (the bit position,
+//! each delta moment, each tANS state), each holding bit-packed residuals from a line through its
+//! values. Bit positions and moments grow steadily from block to block, so their residuals need
+//! far fewer bits than the values, and any record still decodes in constant time.
+//!
 //! Lookback and convolution delta encodings carry state proportional to their window, so chunks
 //! using them are not walkable; [`PageWalker::try_new`] returns `None` and the caller falls back
 //! to short pages.
-
-use std::ops::Range;
 
 use pco::FULL_BATCH_N;
 use pco::data_types::Latent;
@@ -51,8 +54,9 @@ const ANS_INTERLEAVING: usize = 4;
 /// in place instead of copying the tail of the page into a scratch buffer.
 const READ_PADDING: usize = FULL_BATCH_N * (16 + 2) + 9;
 
-/// Size of the bit position stored at the front of each checkpoint record.
-const BIT_POSITION_BYTES: usize = size_of::<u32>();
+/// Bits of the bit position column of a checkpoint table. Pages hold at most 2^24 numbers of at
+/// most 64 bits per latent, so positions fit.
+const POSITION_BITS: u32 = 32;
 
 /// Least-significant-bit-first reader matching pco's bit order.
 struct BitReader<'a> {
@@ -163,12 +167,12 @@ struct Node {
 /// The decoder of one latent variable: the tANS table and offsets of its bins, plus the state
 /// that pco carries between batches.
 trait LatentVarWalker {
-    /// Bits this variable occupies in a page header.
-    fn state_bits(&self) -> usize;
+    /// Appends the bits of each field of this variable's page header state, in header order.
+    fn state_bits(&self, out: &mut Vec<u32>);
     /// Reads this variable's state from a page header.
     fn read_state(&mut self, reader: &mut BitReader<'_>);
-    /// Writes this variable's current state in page header layout.
-    fn write_state(&self, writer: &mut BitWriter);
+    /// Appends each field of this variable's current state, in header order.
+    fn state_values(&self, out: &mut Vec<u64>);
     /// Consumes one batch, given the count of numbers left in the page at its start.
     fn read_batch(&mut self, reader: &mut BitReader<'_>, n_remaining: usize) -> VortexResult<()>;
     /// Whether every tANS lane is back in the encoder's initial state.
@@ -266,8 +270,9 @@ impl<L: Latent> VarWalker<L> {
 }
 
 impl<L: Latent> LatentVarWalker for VarWalker<L> {
-    fn state_bits(&self) -> usize {
-        self.delta_order * L::BITS as usize + ANS_INTERLEAVING * self.ans_size_log as usize
+    fn state_bits(&self, out: &mut Vec<u32>) {
+        out.extend(std::iter::repeat_n(L::BITS, self.delta_order));
+        out.extend([self.ans_size_log; ANS_INTERLEAVING]);
     }
 
     fn read_state(&mut self, reader: &mut BitReader<'_>) {
@@ -280,13 +285,9 @@ impl<L: Latent> LatentVarWalker for VarWalker<L> {
         }
     }
 
-    fn write_state(&self, writer: &mut BitWriter) {
-        for &moment in &self.moments {
-            writer.write(moment.to_u64(), L::BITS);
-        }
-        for &state in &self.ans_states {
-            writer.write(u64::from(state), self.ans_size_log);
-        }
+    fn state_values(&self, out: &mut Vec<u64>) {
+        out.extend(self.moments.iter().map(|moment| moment.to_u64()));
+        out.extend(self.ans_states.iter().map(|&state| u64::from(state)));
     }
 
     fn read_batch(&mut self, reader: &mut BitReader<'_>, n_remaining: usize) -> VortexResult<()> {
@@ -375,10 +376,17 @@ impl PageWalker {
         Ok(Some(Self { vars }))
     }
 
-    /// Bytes of one checkpoint record: the bit position followed by a pco page header.
-    pub(crate) fn record_bytes(&self) -> usize {
-        let header_bits = self.vars.iter().map(|var| var.state_bits()).sum::<usize>();
-        BIT_POSITION_BYTES + header_bits.div_ceil(8)
+    /// An empty set of records for this chunk.
+    pub(crate) fn new_records(&self) -> Records {
+        let mut bits = vec![POSITION_BITS];
+        for var in &self.vars {
+            var.state_bits(&mut bits);
+        }
+        Records {
+            columns: vec![Vec::new(); bits.len()],
+            bits,
+            page_records: Vec::new(),
+        }
     }
 
     /// Walks one page and appends a checkpoint record for every `interval` numbers after the
@@ -388,13 +396,12 @@ impl PageWalker {
         page: &[u8],
         page_n: usize,
         interval: usize,
-        out: &mut Vec<u8>,
+        records: &mut Records,
     ) -> VortexResult<()> {
         vortex_ensure!(
             interval > 0 && interval.is_multiple_of(FULL_BATCH_N),
             "checkpoint interval {interval} must be a positive multiple of {FULL_BATCH_N}"
         );
-        let record_bytes = self.record_bytes();
         let batches_per_checkpoint = interval / FULL_BATCH_N;
 
         let mut reader = BitReader::new(page);
@@ -403,16 +410,19 @@ impl PageWalker {
         }
         reader.align_to_byte();
 
+        let mut record = Vec::with_capacity(records.bits.len());
+        records.page_records.push((page_n - 1) / interval);
         for batch_idx in 0..page_n.div_ceil(FULL_BATCH_N) {
             if batch_idx > 0 && batch_idx.is_multiple_of(batches_per_checkpoint) {
-                let record_start = out.len();
-                out.extend_from_slice(&u32::try_from(reader.bit_idx)?.to_le_bytes());
-                let mut writer = BitWriter::default();
+                record.clear();
+                record.push(u64::try_from(reader.bit_idx)?);
                 for var in &self.vars {
-                    var.write_state(&mut writer);
+                    var.state_values(&mut record);
                 }
-                out.extend_from_slice(&writer.bytes);
-                vortex_ensure_eq!(out.len() - record_start, record_bytes);
+                vortex_ensure_eq!(record.len(), records.columns.len());
+                for (column, &value) in records.columns.iter_mut().zip(&record) {
+                    column.push(value);
+                }
             }
             let n_remaining = page_n - batch_idx * FULL_BATCH_N;
             for var in &mut self.vars {
@@ -432,6 +442,273 @@ impl PageWalker {
             "pco page walk ended with undrained tANS states"
         );
         Ok(())
+    }
+}
+
+/// The checkpoint records of one chunk, gathered field by field.
+pub(crate) struct Records {
+    /// Bits of each field: the bit position, then the page header fields in header order.
+    bits: Vec<u32>,
+    columns: Vec<Vec<u64>>,
+    /// The number of records of each checkpointed page, in order.
+    page_records: Vec<usize>,
+}
+
+impl Records {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.columns[0].is_empty()
+    }
+
+    /// The records of an interval `factor` times longer: every `factor`-th record of each page.
+    pub(crate) fn coarsen(&self, factor: usize) -> Self {
+        let mut columns = vec![Vec::new(); self.columns.len()];
+        let mut page_records = Vec::with_capacity(self.page_records.len());
+        let mut start = 0;
+        for &n in &self.page_records {
+            let kept = (start + factor - 1..start + n).step_by(factor);
+            for (coarse, column) in columns.iter_mut().zip(&self.columns) {
+                coarse.extend(kept.clone().map(|record| column[record]));
+            }
+            page_records.push(kept.len());
+            start += n;
+        }
+        Self {
+            bits: self.bits.clone(),
+            columns,
+            page_records,
+        }
+    }
+
+    /// Serializes the records as a [`CheckpointTable`].
+    pub(crate) fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        write_varint(&mut out, self.columns.len() as u64);
+        let columns = self
+            .columns
+            .iter()
+            .zip(&self.bits)
+            .map(|(values, &bits)| fit_column(values, bits))
+            .collect::<Vec<_>>();
+        for (column, &value_bits) in columns.iter().zip(&self.bits) {
+            write_varint(&mut out, u64::from(value_bits));
+            write_varint(&mut out, u64::from(column.width));
+            write_varint(&mut out, column.base);
+            write_varint(&mut out, zigzag(column.slope));
+            write_varint(&mut out, zigzag(column.offset));
+        }
+        let mut writer = BitWriter::default();
+        for column in &columns {
+            for &residual in &column.residuals {
+                writer.write(residual, column.width);
+            }
+        }
+        out.extend_from_slice(&writer.bytes);
+        out
+    }
+}
+
+/// A column's values as residuals from the line `base + slope * record`, offset to be
+/// non-negative. Arithmetic wraps at the column's bit width.
+struct FittedColumn {
+    width: u32,
+    base: u64,
+    slope: u64,
+    offset: u64,
+    residuals: Vec<u64>,
+}
+
+/// Fits whichever of a flat line and the line through the first and last values packs into
+/// fewer bits.
+fn fit_column(values: &[u64], bits: u32) -> FittedColumn {
+    let mask = bit_mask(bits);
+    let base = values.first().map_or(0, |&value| value & mask);
+    let through_ends = match values {
+        [_, .., last] => {
+            let rise = sign_extend(last.wrapping_sub(base) & mask, bits);
+            // `values` has at least two elements here.
+            (rise / (values.len() as i64 - 1)) as u64
+        }
+        _ => 0,
+    };
+    let fit = |slope: u64| {
+        let signed = values
+            .iter()
+            .zip(0u64..)
+            .map(|(&value, record)| {
+                let predicted = base.wrapping_add(slope.wrapping_mul(record));
+                sign_extend(value.wrapping_sub(predicted) & mask, bits)
+            })
+            .collect::<Vec<_>>();
+        let offset = signed.iter().copied().min().unwrap_or(0);
+        let residuals = signed
+            .iter()
+            .map(|&residual| residual.wrapping_sub(offset) as u64)
+            .collect::<Vec<_>>();
+        let max = residuals.iter().copied().max().unwrap_or(0);
+        FittedColumn {
+            width: u64::BITS - max.leading_zeros(),
+            base,
+            slope,
+            offset: offset as u64,
+            residuals,
+        }
+    };
+    let flat = fit(0);
+    if through_ends == 0 {
+        return flat;
+    }
+    let sloped = fit(through_ends);
+    if sloped.width < flat.width {
+        sloped
+    } else {
+        flat
+    }
+}
+
+/// The low `bits` bits set.
+fn bit_mask(bits: u32) -> u64 {
+    u64::MAX.checked_shr(u64::BITS - bits).unwrap_or(0)
+}
+
+/// Interprets the low `bits` bits of `value` as a two's complement integer.
+fn sign_extend(value: u64, bits: u32) -> i64 {
+    if bits == 0 {
+        return 0;
+    }
+    let shift = u64::BITS - bits;
+    ((value << shift) as i64) >> shift
+}
+
+fn zigzag(value: u64) -> u64 {
+    let value = value as i64;
+    ((value << 1) ^ (value >> 63)) as u64
+}
+
+fn unzigzag(value: u64) -> u64 {
+    (value >> 1) ^ (value & 1).wrapping_neg()
+}
+
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "each byte takes at most the low 7 bits"
+)]
+fn write_varint(out: &mut Vec<u8>, mut value: u64) {
+    while value >= 0x80 {
+        out.push((value & 0x7f) as u8 | 0x80);
+        value >>= 7;
+    }
+    out.push(value as u8);
+}
+
+fn read_varint(src: &[u8], pos: &mut usize) -> VortexResult<u64> {
+    let mut value = 0u64;
+    for shift in (0..64).step_by(7) {
+        let byte = *src
+            .get(*pos)
+            .ok_or_else(|| vortex_err!("Pco checkpoint table is truncated"))?;
+        *pos += 1;
+        value |= u64::from(byte & 0x7f) << shift;
+        if byte < 0x80 {
+            return Ok(value);
+        }
+    }
+    Err(vortex_err!("Pco checkpoint table has an overlong varint"))
+}
+
+/// One field of a [`CheckpointTable`].
+#[derive(Clone, Debug)]
+struct TableColumn {
+    value_bits: u32,
+    width: u32,
+    base: u64,
+    slope: u64,
+    offset: u64,
+    /// Bit offset of the column's first residual in the packed data.
+    start_bit: usize,
+}
+
+/// The layout of one chunk's checkpoint buffer.
+///
+/// The buffer starts with a varint column count and, for each column, varints of its value bits,
+/// residual width, base, zigzagged slope and zigzagged offset. The packed residuals follow, column
+/// after column, least significant bit first. Record `k` of a column is
+/// `base + slope * k + offset + residual[k]`, wrapping at the value bits. Column 0 is the bit
+/// position in the page; the others are the fields of the pco page header that resumes there.
+#[derive(Clone, Debug)]
+pub(crate) struct CheckpointTable {
+    columns: Vec<TableColumn>,
+    data_start: usize,
+}
+
+impl CheckpointTable {
+    /// Parses a checkpoint buffer of `n_records` records, checking its size.
+    pub(crate) fn parse(buffer: &[u8], n_records: usize) -> VortexResult<Self> {
+        let mut pos = 0;
+        let n_columns = read_varint(buffer, &mut pos)?;
+        vortex_ensure!(
+            n_columns >= 1 && n_columns <= buffer.len() as u64,
+            "Pco checkpoint table has an invalid column count {n_columns}"
+        );
+        let mut columns = Vec::with_capacity(usize::try_from(n_columns)?);
+        let mut start_bit = 0usize;
+        for _ in 0..n_columns {
+            let value_bits = read_varint(buffer, &mut pos)?;
+            let width = read_varint(buffer, &mut pos)?;
+            vortex_ensure!(
+                value_bits <= 64 && width <= value_bits,
+                "Pco checkpoint column of {value_bits} bits has an invalid width {width}"
+            );
+            let column = TableColumn {
+                value_bits: u32::try_from(value_bits)?,
+                width: u32::try_from(width)?,
+                base: read_varint(buffer, &mut pos)?,
+                slope: unzigzag(read_varint(buffer, &mut pos)?),
+                offset: unzigzag(read_varint(buffer, &mut pos)?),
+                start_bit,
+            };
+            start_bit = n_records
+                .checked_mul(column.width as usize)
+                .and_then(|bits| bits.checked_add(start_bit))
+                .ok_or_else(|| vortex_err!("Pco checkpoint table size overflows usize"))?;
+            columns.push(column);
+        }
+        vortex_ensure_eq!(
+            buffer.len() - pos,
+            start_bit.div_ceil(8),
+            "Pco checkpoint table does not match its {n_records} records"
+        );
+        Ok(Self {
+            columns,
+            data_start: pos,
+        })
+    }
+
+    fn value(&self, buffer: &[u8], column: usize, record: usize) -> u64 {
+        let column = &self.columns[column];
+        let mut reader = BitReader::new(&buffer[self.data_start..]);
+        reader.bit_idx = column.start_bit + record * column.width as usize;
+        let residual = reader.read(column.width);
+        column
+            .base
+            .wrapping_add(column.slope.wrapping_mul(record as u64))
+            .wrapping_add(column.offset)
+            .wrapping_add(residual)
+            & bit_mask(column.value_bits)
+    }
+
+    /// The bit position in the page where record `record` resumes decoding.
+    fn bit_position(&self, buffer: &[u8], record: usize) -> usize {
+        // The value has at most 64 bits, and a bad one fails the page bounds check.
+        usize::try_from(self.value(buffer, 0, record)).unwrap_or(usize::MAX)
+    }
+
+    /// Appends the pco page header that resumes decoding at record `record`.
+    fn append_page_header(&self, buffer: &[u8], record: usize, out: &mut Vec<u8>) {
+        let mut writer = BitWriter::default();
+        for (idx, column) in self.columns.iter().enumerate().skip(1) {
+            writer.write(self.value(buffer, idx, record), column.value_bits);
+        }
+        out.extend_from_slice(&writer.bytes);
     }
 }
 
@@ -465,52 +742,61 @@ fn append_shifted_bits(dst: &mut Vec<u8>, src: &[u8], start_bit: usize, end_bit:
 /// The checkpoint records of one page.
 #[derive(Clone, Copy)]
 pub(crate) struct PageCheckpoints<'a> {
-    pub(crate) records: &'a [u8],
-    pub(crate) record_bytes: usize,
-    pub(crate) interval: usize,
+    /// The chunk's checkpoint table and buffer, if the page has checkpoints.
+    pub(crate) table: Option<(&'a CheckpointTable, &'a [u8])>,
+    /// The record of the page's block 1 in the chunk's table.
+    pub(crate) first_record: usize,
+    /// Values per block: the checkpoint interval, or the whole page without checkpoints.
+    pub(crate) block_len: usize,
 }
 
 impl PageCheckpoints<'_> {
-    /// The bit position in the page where block `block` (`>= 1`) begins.
-    fn bit_position(&self, block: usize) -> usize {
-        let start = (block - 1) * self.record_bytes;
-        let mut bytes = [0u8; BIT_POSITION_BYTES];
-        bytes.copy_from_slice(&self.records[start..start + BIT_POSITION_BYTES]);
-        u32::from_le_bytes(bytes) as usize
+    fn table(&self) -> VortexResult<(&CheckpointTable, &[u8])> {
+        self.table
+            .ok_or_else(|| vortex_err!("Pco page has no checkpoints"))
     }
 
-    /// The pco page header that resumes decoding at block `block` (`>= 1`).
-    fn page_header(&self, block: usize) -> &[u8] {
-        let start = (block - 1) * self.record_bytes;
-        &self.records[start + BIT_POSITION_BYTES..start + self.record_bytes]
+    /// The bit position in the page where block `block` (`>= 1`) begins.
+    fn bit_position(&self, block: usize) -> VortexResult<usize> {
+        let (table, buffer) = self.table()?;
+        Ok(table.bit_position(buffer, self.first_record + block - 1))
+    }
+
+    /// Appends the pco page header that resumes decoding at block `block` (`>= 1`).
+    fn append_page_header(&self, block: usize, out: &mut Vec<u8>) -> VortexResult<()> {
+        let (table, buffer) = self.table()?;
+        table.append_page_header(buffer, self.first_record + block - 1, out);
+        Ok(())
     }
 }
 
-/// Decodes the numbers of checkpoint blocks `blocks` of one page into `dst`.
+/// Decodes `dst.len()` numbers of one page into `dst`, starting at the first number of block
+/// `start_block`.
 ///
-/// Block `b` holds numbers `b * interval..min((b + 1) * interval, page_n)`; `dst` must hold
-/// exactly the numbers of `blocks`. Block 0 decodes from the page itself; any other start
-/// decodes from a synthetic page built from its checkpoint, using `scratch` for the bytes.
-#[allow(clippy::too_many_arguments)]
+/// Block `b` holds numbers `b * block_len..min((b + 1) * block_len, page_n)`. `dst` must end on a
+/// batch boundary or at the end of the page, so a read can stop early. Block 0 decodes from the
+/// page itself; any other start decodes from a synthetic page built from its checkpoint, using
+/// `scratch` for the bytes.
 pub(crate) fn decode_blocks<T: Number>(
     cd: &mut ChunkDecompressor<T>,
     page: &[u8],
     page_n: usize,
     checkpoints: PageCheckpoints<'_>,
-    blocks: Range<usize>,
+    start_block: usize,
     dst: &mut [T],
     scratch: &mut Vec<u8>,
 ) -> VortexResult<()> {
-    let interval = checkpoints.interval;
-    let value_start = blocks.start * interval;
-    let value_end = (blocks.end * interval).min(page_n);
+    let block_len = checkpoints.block_len;
+    let value_start = start_block * block_len;
+    let value_end = value_start + dst.len();
     vortex_ensure!(
-        value_start < value_end,
-        "empty checkpoint block range {blocks:?} for a page of {page_n} numbers"
+        value_start < value_end
+            && value_end <= page_n
+            && (value_end == page_n || dst.len().is_multiple_of(FULL_BATCH_N)),
+        "invalid decode of numbers {value_start}..{value_end} of a page of {page_n} numbers"
     );
-    vortex_ensure_eq!(dst.len(), value_end - value_start);
 
-    if blocks.start == 0 {
+    if start_block == 0 {
         let mut pd = cd
             .page_decompressor(page, page_n)
             .map_err(vortex_err_from_pco)?;
@@ -518,9 +804,10 @@ pub(crate) fn decode_blocks<T: Number>(
         return Ok(());
     }
 
-    let start_bit = checkpoints.bit_position(blocks.start);
-    let end_bit = if value_end < page_n {
-        checkpoints.bit_position(blocks.end)
+    let start_bit = checkpoints.bit_position(start_block)?;
+    let end_block = (value_end - 1) / block_len + 1;
+    let end_bit = if end_block * block_len < page_n {
+        checkpoints.bit_position(end_block)?
     } else {
         page.len() * 8
     };
@@ -531,7 +818,7 @@ pub(crate) fn decode_blocks<T: Number>(
     );
 
     scratch.clear();
-    scratch.extend_from_slice(checkpoints.page_header(blocks.start));
+    checkpoints.append_page_header(start_block, scratch)?;
     append_shifted_bits(scratch, page, start_bit, end_bit);
     scratch.resize(scratch.len() + READ_PADDING, 0);
 
@@ -564,6 +851,68 @@ mod tests {
         assert_eq!(reader.read(lead_bits), 0b101 & ((1 << lead_bits) - 1));
         assert_eq!(reader.read(width), value);
         assert_eq!(reader.read(1), 1);
+    }
+
+    /// Every record of a table decodes back to its values, whatever their shape.
+    #[rstest]
+    #[case::steady(32, (0..300u64).map(|k| 1000 + 97 * k + (k * 7919) % 13).collect())]
+    #[case::wrapping(64, (0..50u64).map(|k| (u64::MAX - 3).wrapping_add(k << 40)).collect())]
+    #[case::falling(64, (0..80u64).map(|k| 5_000_000u64.wrapping_sub(k * 33)).collect())]
+    #[case::random(11, (0..64u64).map(|k| k.wrapping_mul(0x9e37_79b9) % 2048).collect())]
+    #[case::constant(16, vec![7; 40])]
+    #[case::zero_bits(0, vec![0; 9])]
+    #[case::single(64, vec![u64::MAX])]
+    fn checkpoint_table_round_trips(
+        #[case] bits: u32,
+        #[case] values: Vec<u64>,
+    ) -> VortexResult<()> {
+        let records = Records {
+            bits: vec![POSITION_BITS, bits],
+            columns: vec![(0..values.len() as u64).collect(), values.clone()],
+            page_records: vec![values.len()],
+        };
+        let buffer = records.encode();
+        let table = CheckpointTable::parse(&buffer, values.len())?;
+        for (record, &value) in values.iter().enumerate() {
+            assert_eq!(table.bit_position(&buffer, record), record);
+            assert_eq!(table.value(&buffer, 1, record), value);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn checkpoint_table_rejects_wrong_sizes() {
+        let records = Records {
+            bits: vec![POSITION_BITS, 64],
+            columns: vec![vec![0, 5000, 9000], vec![1, u64::MAX, 77]],
+            page_records: vec![3],
+        };
+        let buffer = records.encode();
+        assert!(CheckpointTable::parse(&buffer, 3).is_ok());
+        assert!(CheckpointTable::parse(&buffer, 4).is_err());
+        assert!(CheckpointTable::parse(&buffer[..buffer.len() - 1], 3).is_err());
+        assert!(CheckpointTable::parse(&[], 3).is_err());
+    }
+
+    #[test]
+    fn coarsen_keeps_every_nth_record_per_page() {
+        let records = Records {
+            bits: vec![POSITION_BITS],
+            columns: vec![vec![10, 20, 30, 40, 50, 1, 2, 3]],
+            page_records: vec![5, 3],
+        };
+        let coarse = records.coarsen(2);
+        assert_eq!(coarse.columns, vec![vec![20, 40, 2]]);
+        assert_eq!(coarse.page_records, vec![2, 1]);
+    }
+
+    #[test]
+    fn steady_columns_pack_small() {
+        let positions = (0..255u64)
+            .map(|k| 4096 + 3000 * k + (k * 31) % 17)
+            .collect::<Vec<_>>();
+        assert!(fit_column(&positions, POSITION_BITS).width <= 5);
+        assert_eq!(fit_column(&[9; 100], 64).width, 0);
     }
 
     #[rstest]

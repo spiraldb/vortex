@@ -2,6 +2,12 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 mod cast;
+mod compare;
+mod filter;
+mod rows;
+mod take;
+
+pub(crate) use rows::RowValues;
 
 #[cfg(test)]
 mod tests {

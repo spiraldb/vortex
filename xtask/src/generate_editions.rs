@@ -49,6 +49,7 @@ const DRAFT_NOTE: &str = "\
 /// Edition families owned by optional Vortex crates rather than the default facade.
 static OPTIONAL_EDITION_FAMILIES: &[&EditionFamily] = &[
     &vortex_json::editions::FAMILY,
+    &vortex_pco::editions::FAMILY,
     &vortex_spatial::editions::FAMILY,
     &vortex_tensor::editions::FAMILY,
     &vortex_zstd::editions::FAMILY,
@@ -57,6 +58,7 @@ static OPTIONAL_EDITION_FAMILIES: &[&EditionFamily] = &[
 /// Edition declarations owned by optional Vortex crates rather than the default facade.
 static OPTIONAL_EDITION_DECLARATIONS: &[&EditionDeclaration] = &[
     &vortex_json::editions::DECLARATION,
+    &vortex_pco::editions::DECLARATION,
     &vortex_spatial::editions::DECLARATION,
     &vortex_tensor::editions::DECLARATION,
     &vortex_zstd::editions::DECLARATION,

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Pco at several page sizes against Pco2 (one 262k-value page per chunk with checkpoints every
-//! 1,024 values) on a sorted and a random column of 2^20 values. Cases are `dataset/encoding`.
+//! Pco v1 at several page sizes against Pco v2 (one 262k-value page per chunk with checkpoints
+//! every 1,024 values) on a sorted and a random column of 2^20 values. Cases are
+//! `dataset/encoding`.
 
 #![expect(clippy::cast_possible_truncation)]
 #![expect(clippy::cast_precision_loss)]
@@ -20,12 +21,10 @@ use vortex_array::arrays::PrimitiveArray;
 use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::scalar::Scalar;
 use vortex_array::scalar_fn::fns::operators::Operator;
-use vortex_array::session::ArraySessionExt;
 use vortex_error::VortexExpect;
 use vortex_mask::Mask;
 use vortex_pco::Pco;
-use vortex_pco::pco2::Pco2;
-use vortex_pco::pco2::Pco2Options;
+use vortex_pco::PcoOptions;
 use vortex_session::VortexSession;
 
 #[global_allocator]
@@ -50,8 +49,7 @@ const CASES: &[&str] = &[
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     let session = vortex_array::array_session();
-    session.arrays().register(Pco);
-    vortex_pco::pco2::initialize(&session);
+    vortex_pco::initialize(&session);
     session
 });
 
@@ -132,8 +130,9 @@ static ENCODED: LazyLock<Vec<(&'static str, ArrayRef)>> = LazyLock::new(|| {
                 "pco-1k" => {
                     Pco::from_primitive(array, 8, 1024, &mut ctx).map(IntoArray::into_array)
                 }
-                "pco2" => Pco2::from_primitive(array, &Pco2Options::default(), &mut ctx)
-                    .map(IntoArray::into_array),
+                "pco2" => {
+                    Pco::compress(array, &PcoOptions::v2(), &mut ctx).map(IntoArray::into_array)
+                }
                 _ => unreachable!("unknown encoding {encoding}"),
             };
             (case, encoded.vortex_expect("compression"))

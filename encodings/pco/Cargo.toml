@@ -16,20 +16,19 @@ version = { workspace = true }
 workspace = true
 
 [dependencies]
+parking_lot = { workspace = true }
 pco = { workspace = true }
 prost = { workspace = true }
 vortex-array = { workspace = true }
 vortex-buffer = { workspace = true }
+vortex-edition = { workspace = true }
 vortex-error = { workspace = true }
 vortex-mask = { workspace = true }
 vortex-session = { workspace = true }
 
 [dev-dependencies]
-arrow-array = { workspace = true }
-arrow-schema = { workspace = true }
 divan = { workspace = true }
 mimalloc = { workspace = true }
-parquet = { workspace = true }
 rstest = { workspace = true }
 vortex-array = { workspace = true, features = ["_test-harness"] }
 vortex-arrow = { workspace = true }
@@ -39,5 +38,5 @@ name = "scalar"
 harness = false
 
 [[bench]]
-name = "pco2"
+name = "pco_v2"
 harness = false

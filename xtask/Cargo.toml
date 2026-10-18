@@ -26,6 +26,7 @@ protox = { workspace = true }
 toml = { workspace = true }
 vortex-edition = { workspace = true, optional = true }
 vortex-json = { workspace = true, optional = true }
+vortex-pco = { workspace = true, optional = true }
 vortex-spatial = { workspace = true, optional = true }
 vortex-tensor = { workspace = true, optional = true }
 vortex-zstd = { workspace = true, optional = true }
@@ -38,6 +39,7 @@ default = ["editions"]
 editions = [
     "dep:vortex-edition",
     "dep:vortex-json",
+    "dep:vortex-pco",
     "dep:vortex-spatial",
     "dep:vortex-tensor",
     "dep:vortex-zstd",
