@@ -468,7 +468,15 @@ mod tests {
         acc.accumulate(&column, &mut ctx)?;
 
         let (xmin, ymin, xmax, ymax) = aabb(&acc.finish()?)?;
-        assert!(xmin <= xmax && ymin <= ymax);
+        assert_eq!(
+            (xmin, ymin, xmax, ymax),
+            (
+                f64::NEG_INFINITY,
+                f64::NEG_INFINITY,
+                f64::INFINITY,
+                f64::INFINITY
+            )
+        );
         Ok(())
     }
 

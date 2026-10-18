@@ -84,12 +84,13 @@ mod tests {
     fn take_empty_primitive_with_nullable_indices() {
         let arr = PrimitiveArray::from_iter(Vec::<u64>::new());
         let indices = PrimitiveArray::from_option_iter([Option::<u64>::None]);
-        let taken = arr
-            .take(indices.into_array())
-            .unwrap()
-            .execute::<Canonical>(&mut array_session().create_execution_ctx())
-            .unwrap();
+        let taken = arr.take(indices.into_array()).unwrap();
         assert_eq!(taken.len(), 1);
+        assert_arrays_eq!(
+            taken,
+            PrimitiveArray::from_option_iter([None::<u64>]),
+            &mut array_session().create_execution_ctx()
+        );
     }
 
     #[test]
@@ -167,11 +168,18 @@ mod tests {
         );
         let casted = array.cast(non_nullable_dtype.clone()).unwrap();
         assert_eq!(casted.dtype(), &non_nullable_dtype);
+        assert_arrays_eq!(casted, array, &mut array_session().create_execution_ctx());
 
         let nullable_dtype =
             DType::Struct(StructFields::new(FieldNames::default(), vec![]), Nullable);
         let casted = array.cast(nullable_dtype.clone()).unwrap();
         assert_eq!(casted.dtype(), &nullable_dtype);
+        let expected = StructArray::new(FieldNames::empty(), vec![], 5, Validity::AllValid);
+        assert_arrays_eq!(
+            casted,
+            expected,
+            &mut array_session().create_execution_ctx()
+        );
     }
 
     #[test]
@@ -202,11 +210,58 @@ mod tests {
         .unwrap()
         .into_array();
 
+        let expected = |outer_validity, inner_validity, left_nullable| {
+            let left = if left_nullable {
+                PrimitiveArray::from_option_iter([Some(0i64), Some(1), Some(2), Some(3), Some(4)])
+            } else {
+                PrimitiveArray::from_iter([0i64, 1, 2, 3, 4])
+            };
+            StructArray::new(
+                ["xs", "ys", "zs"].into(),
+                vec![
+                    StructArray::new(
+                        ["left", "right"].into(),
+                        vec![
+                            left.into_array(),
+                            PrimitiveArray::from_option_iter([
+                                Some(0i64),
+                                Some(1),
+                                Some(2),
+                                Some(3),
+                                Some(4),
+                            ])
+                            .into_array(),
+                        ],
+                        5,
+                        inner_validity,
+                    )
+                    .into_array(),
+                    VarBinArray::from_vec(vec!["a", "b", "c", "d", "e"], DType::Utf8(Nullable))
+                        .into_array(),
+                    BoolArray::from_iter([
+                        Some(true),
+                        Some(true),
+                        Some(false),
+                        Some(false),
+                        Some(true),
+                    ])
+                    .into_array(),
+                ],
+                5,
+                outer_validity,
+            )
+        };
+        let mut ctx = array_session().create_execution_ctx();
         let top_level_non_nullable = fully_nullable_array.dtype().as_nonnullable();
         let casted = fully_nullable_array
             .cast(top_level_non_nullable.clone())
             .unwrap();
         assert_eq!(casted.dtype(), &top_level_non_nullable);
+        assert_arrays_eq!(
+            casted,
+            expected(Validity::NonNullable, Validity::AllValid, true),
+            &mut ctx
+        );
 
         let non_null_xs_right = DType::Struct(
             StructFields::new(
@@ -232,6 +287,11 @@ mod tests {
             .cast(non_null_xs_right.clone())
             .unwrap();
         assert_eq!(casted.dtype(), &non_null_xs_right);
+        assert_arrays_eq!(
+            casted,
+            expected(Validity::AllValid, Validity::AllValid, false),
+            &mut ctx
+        );
 
         let non_null_xs = DType::Struct(
             StructFields::new(
@@ -255,6 +315,11 @@ mod tests {
         );
         let casted = fully_nullable_array.cast(non_null_xs.clone()).unwrap();
         assert_eq!(casted.dtype(), &non_null_xs);
+        assert_arrays_eq!(
+            casted,
+            expected(Validity::AllValid, Validity::NonNullable, true),
+            &mut ctx
+        );
     }
 
     #[test]

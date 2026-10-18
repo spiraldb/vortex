@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 #include <cstdint>
+#include <algorithm>
 #include <vortex/error.hpp>
 #include <vortex/array.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -135,7 +136,8 @@ TEST_CASE("make_struct and fields", "[array]") {
     Array by_name = s.field(session, "height");
     REQUIRE(by_name.is_primitive(U16));
     auto view = by_name.values<uint16_t>(session);
-    REQUIRE(view.values()[2] == 170);
+    REQUIRE(std::ranges::equal(view.values(), heights));
+    REQUIRE(std::ranges::equal(by_index.values<uint8_t>(session).values(), ages));
 
     REQUIRE_THROWS_AS(s.field(session, 2), VortexException);
     REQUIRE_THROWS_AS(s.field(session, "nope"), VortexException);
@@ -145,6 +147,7 @@ TEST_CASE("make_struct and fields", "[array]") {
     Array other = make_struct(fields_vec);
     REQUIRE(other.size() == 3);
     REQUIRE(other.has_dtype(DataTypeVariant::Struct));
+    REQUIRE(std::ranges::equal(other.field(session, "age").values<uint8_t>(session).values(), ages));
 }
 
 TEST_CASE("Mismatched field length", "[array]") {
@@ -164,8 +167,8 @@ TEST_CASE("Slice", "[array]") {
     Array sliced = a.slice(2, 5);
     REQUIRE(sliced.size() == 3);
     auto view = sliced.values<int16_t>(session);
-    REQUIRE(view.values()[0] == 2);
-    REQUIRE(view.values()[2] == 4);
+    const std::array<int16_t, 3> expected = {2, 3, 4};
+    REQUIRE(std::ranges::equal(view.values(), expected));
 
     REQUIRE_THROWS_AS(a.slice(2, 100), VortexException);
 }
@@ -214,11 +217,11 @@ TEST_CASE("Error with a code", "[array]") {
     std::vector<int16_t> data = {0};
     Array a = Array::primitive<int16_t>(data);
     try {
-        (void)a.slice(2, 100);
+        (void)a.scalar_at(Session {}, 2);
         FAIL("expected exception");
     } catch (const VortexException &e) {
         REQUIRE_FALSE(std::string(e.what()).empty());
-        (void)e.code();
+        REQUIRE(e.code() == ErrorCode::OutOfBounds);
     }
 }
 } // namespace

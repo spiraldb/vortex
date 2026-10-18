@@ -703,7 +703,8 @@ mod tests {
         let source = sort_test_source(Arc::clone(&schema));
         let filter = octet_length_filter(&schema);
 
-        let result = source.try_pushdown_filters(vec![filter], &ConfigOptions::new())?;
+        let result =
+            source.try_pushdown_filters(vec![Arc::clone(&filter)], &ConfigOptions::new())?;
 
         assert!(matches!(result.filters.as_slice(), [PushedDown::Yes]));
         let updated_source = result
@@ -712,7 +713,8 @@ mod tests {
             .downcast_ref::<VortexSource>()
             .ok_or_else(|| anyhow::anyhow!("expected VortexSource"))?
             .clone();
-        assert!(updated_source.vortex_predicate.is_some());
+        assert_eq!(updated_source.vortex_predicate.as_ref(), Some(&filter));
+        assert_eq!(updated_source.full_predicate.as_ref(), Some(&filter));
         Ok(())
     }
 
@@ -722,7 +724,8 @@ mod tests {
         let source = sort_test_source(Arc::clone(&schema)).with_predicate_pushdown(false);
         let filter = octet_length_filter(&schema);
 
-        let result = source.try_pushdown_filters(vec![filter], &ConfigOptions::new())?;
+        let result =
+            source.try_pushdown_filters(vec![Arc::clone(&filter)], &ConfigOptions::new())?;
 
         assert!(matches!(result.filters.as_slice(), [PushedDown::No]));
         let updated_source = result
@@ -731,7 +734,7 @@ mod tests {
             .downcast_ref::<VortexSource>()
             .ok_or_else(|| anyhow::anyhow!("expected VortexSource"))?
             .clone();
-        assert!(updated_source.full_predicate.is_some());
+        assert_eq!(updated_source.full_predicate.as_ref(), Some(&filter));
         assert!(updated_source.vortex_predicate.is_none());
         Ok(())
     }

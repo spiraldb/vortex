@@ -982,7 +982,7 @@ mod tests {
             .await?;
         assert_device_resident(&gpu_result);
         let host_result = gpu_result.into_host().await?.into_array();
-        assert_arrays_eq!(expected, host_result, &mut ctx);
+        assert_arrays_eq!(host_result, expected, &mut ctx);
         Ok(())
     }
 

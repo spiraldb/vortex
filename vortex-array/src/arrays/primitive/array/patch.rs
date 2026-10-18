@@ -164,11 +164,18 @@ mod tests {
             3,
         );
 
-        // Spot-check: patch index 4 (first in range) should be applied.
-        assert_ne!(
-            decoded_values[usize::try_from(patches_indices[4]).unwrap() - PATCH_CHUNK_SIZE],
-            0.0
-        );
+        let mut expected = vec![0.0; PATCH_CHUNK_SIZE];
+        for (index, value) in [
+            (40, 500.0),
+            (50, 600.0),
+            (60, 700.0),
+            (70, 800.0),
+            (80, 900.0),
+            (90, 1_000.0),
+        ] {
+            expected[index] = value;
+        }
+        assert_eq!(decoded_values, expected);
     }
 
     #[test]
@@ -176,9 +183,8 @@ mod tests {
         let mut ctx = array_session().create_execution_ctx();
         let input = PrimitiveArray::new(buffer![2u32; 10], Validity::AllValid);
         let sliced = input.slice(2..8).unwrap();
-        let sliced_primitive = sliced.execute::<PrimitiveArray>(&mut ctx).unwrap();
         assert_arrays_eq!(
-            sliced_primitive,
+            sliced,
             PrimitiveArray::new(buffer![2u32; 6], Validity::AllValid),
             &mut ctx
         );

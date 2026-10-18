@@ -72,13 +72,13 @@ mod tests {
 
     use crate::ArrayRef;
     use crate::ArraySlots;
-    use crate::Canonical;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::array::Array;
     use crate::array::ArrayParts;
     use crate::array_session;
     use crate::arrays::BoolArray;
+    use crate::arrays::ConstantArray;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::ScalarFnArray;
     use crate::arrays::scalar_fn::ScalarFnArrayExt;
@@ -103,12 +103,8 @@ mod tests {
 
         assert_eq!(scalar_fn_array.len(), 3);
 
-        let result = scalar_fn_array
-            .into_array()
-            .execute::<Canonical>(&mut array_session().create_execution_ctx())?
-            .into_array();
         let expected = buffer![11i32, 22, 33].into_array();
-        assert_arrays_eq!(result, expected, &mut ctx);
+        assert_arrays_eq!(scalar_fn_array, expected, &mut ctx);
 
         Ok(())
     }
@@ -187,6 +183,11 @@ mod tests {
         let scalar_fn_array = ScalarFnArray::try_new_with_len(scalar_fn, vec![], 3)?;
         assert_eq!(scalar_fn_array.len(), 3);
         assert_eq!(scalar_fn_array.child_count(), 0);
+        assert_arrays_eq!(
+            scalar_fn_array,
+            ConstantArray::new(1i32, 3),
+            &mut array_session().create_execution_ctx()
+        );
 
         Ok(())
     }
@@ -200,12 +201,8 @@ mod tests {
         let scalar_fn = TypedScalarFnInstance::new(Binary, Operator::Mul).erased();
         let scalar_fn_array = ScalarFnArray::try_new(scalar_fn, vec![lhs, rhs])?;
 
-        let result = scalar_fn_array
-            .into_array()
-            .execute::<Canonical>(&mut array_session().create_execution_ctx())?
-            .into_array();
         let expected = buffer![10i32, 18, 28].into_array();
-        assert_arrays_eq!(result, expected, &mut ctx);
+        assert_arrays_eq!(scalar_fn_array, expected, &mut ctx);
 
         Ok(())
     }
@@ -223,16 +220,12 @@ mod tests {
         let scalar_fn = TypedScalarFnInstance::new(Binary, Operator::Add).erased();
         let scalar_fn_array = ScalarFnArray::try_new(scalar_fn, vec![lhs, rhs])?;
 
-        let result = scalar_fn_array
-            .into_array()
-            .execute::<Canonical>(&mut array_session().create_execution_ctx())?
-            .into_array();
         let expected = PrimitiveArray::new(
             buffer![11i32, 0, 33],
             Validity::from_iter([true, false, true]),
         )
         .into_array();
-        assert_arrays_eq!(result, expected, &mut ctx);
+        assert_arrays_eq!(scalar_fn_array, expected, &mut ctx);
 
         Ok(())
     }
@@ -246,12 +239,8 @@ mod tests {
         let scalar_fn = TypedScalarFnInstance::new(Binary, Operator::Eq).erased();
         let scalar_fn_array = ScalarFnArray::try_new(scalar_fn, vec![lhs, rhs])?;
 
-        let result = scalar_fn_array
-            .into_array()
-            .execute::<Canonical>(&mut array_session().create_execution_ctx())?
-            .into_array();
         let expected = BoolArray::from_iter([false, true, false]).into_array();
-        assert_arrays_eq!(result, expected, &mut ctx);
+        assert_arrays_eq!(scalar_fn_array, expected, &mut ctx);
 
         Ok(())
     }

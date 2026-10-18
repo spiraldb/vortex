@@ -365,12 +365,12 @@ mod tests {
     use crate::array::FSSTArrayExt;
 
     /// Regression for #7833: the i32-vs-i64 codes-offsets decision must cross at
-    /// `i32::MAX` against the worst-case bound `2 * total + 7 * non_null`.
+    /// `i32::MAX` against the worst-case bound `2 * total`.
     #[test]
     fn offset_width_boundary() {
         let m = i32::MAX as usize;
-        assert!(fsst_output_fits_in_i32_offsets(m / 2 - 7));
         assert!(fsst_output_fits_in_i32_offsets(m / 2));
+        assert!(!fsst_output_fits_in_i32_offsets(m / 2 + 1));
         assert!(fsst_output_fits_in_i32_offsets(0));
         assert!(!fsst_output_fits_in_i32_offsets(usize::MAX));
     }

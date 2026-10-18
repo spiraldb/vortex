@@ -1042,6 +1042,11 @@ mod tests {
         let joined =
             tokio::time::timeout(std::time::Duration::from_secs(5), future::join_all(tasks)).await;
 
-        assert!(joined.is_ok(), "concurrent reads stalled before completing");
+        let results = joined.expect("concurrent reads stalled before completing");
+        assert_eq!(results.len(), n as usize);
+        for result in results {
+            let err = result.expect_err("reader must forward the I/O error");
+            assert!(err.to_string().contains("slow read done"), "{err}");
+        }
     }
 }

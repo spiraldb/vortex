@@ -228,6 +228,17 @@ mod tests {
             casted.dtype(),
             &DType::Primitive(PType::U32, Nullability::Nullable)
         );
+        assert_arrays_eq!(
+            casted,
+            PrimitiveArray::from_option_iter([
+                Some(100u32),
+                Some(0),
+                Some(200),
+                Some(300),
+                Some(0)
+            ]),
+            &mut SESSION.create_execution_ctx()
+        );
     }
 
     #[rstest]

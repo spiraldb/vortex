@@ -64,25 +64,16 @@ mod test {
     fn fill_null_leading_none() {
         let mut ctx = array_session().create_execution_ctx();
         let arr = PrimitiveArray::from_option_iter([None, Some(8u8), None, Some(10), None]);
-        let p = arr
-            .into_array()
-            .fill_null(Scalar::from(42u8))
-            .unwrap()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
+        let p = arr.into_array().fill_null(Scalar::from(42u8)).unwrap();
         assert_arrays_eq!(
             p,
             PrimitiveArray::from_iter([42u8, 8, 42, 10, 42]),
             &mut ctx
         );
         assert!(
-            p.as_ref()
-                .validity()
+            p.validity()
                 .unwrap()
-                .execute_mask(
-                    p.as_ref().len(),
-                    &mut array_session().create_execution_ctx()
-                )
+                .execute_mask(p.len(), &mut array_session().create_execution_ctx())
                 .unwrap()
                 .all_true()
         );
@@ -93,25 +84,16 @@ mod test {
         let mut ctx = array_session().create_execution_ctx();
         let arr = PrimitiveArray::from_option_iter([Option::<u8>::None, None, None, None, None]);
 
-        let p = arr
-            .into_array()
-            .fill_null(Scalar::from(255u8))
-            .unwrap()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
+        let p = arr.into_array().fill_null(Scalar::from(255u8)).unwrap();
         assert_arrays_eq!(
             p,
             PrimitiveArray::from_iter([255u8, 255, 255, 255, 255]),
             &mut ctx
         );
         assert!(
-            p.as_ref()
-                .validity()
+            p.validity()
                 .unwrap()
-                .execute_mask(
-                    p.as_ref().len(),
-                    &mut array_session().create_execution_ctx()
-                )
+                .execute_mask(p.len(), &mut array_session().create_execution_ctx())
                 .unwrap()
                 .all_true()
         );
@@ -124,25 +106,16 @@ mod test {
             buffer![8u8, 10, 12, 14, 16],
             Validity::Array(BoolArray::from_iter([true, true, true, true, true]).into_array()),
         );
-        let p = arr
-            .into_array()
-            .fill_null(Scalar::from(255u8))
-            .unwrap()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
+        let p = arr.into_array().fill_null(Scalar::from(255u8)).unwrap();
         assert_arrays_eq!(
             p,
             PrimitiveArray::from_iter([8u8, 10, 12, 14, 16]),
             &mut ctx
         );
         assert!(
-            p.as_ref()
-                .validity()
+            p.validity()
                 .unwrap()
-                .execute_mask(
-                    p.as_ref().len(),
-                    &mut array_session().create_execution_ctx()
-                )
+                .execute_mask(p.len(), &mut array_session().create_execution_ctx())
                 .unwrap()
                 .all_true()
         );
@@ -152,24 +125,16 @@ mod test {
     fn fill_null_non_nullable() {
         let mut ctx = array_session().create_execution_ctx();
         let arr = buffer![8u8, 10, 12, 14, 16].into_array();
-        let p = arr
-            .fill_null(Scalar::from(255u8))
-            .unwrap()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
+        let p = arr.fill_null(Scalar::from(255u8)).unwrap();
         assert_arrays_eq!(
             p,
             PrimitiveArray::from_iter([8u8, 10, 12, 14, 16]),
             &mut ctx
         );
         assert!(
-            p.as_ref()
-                .validity()
+            p.validity()
                 .unwrap()
-                .execute_mask(
-                    p.as_ref().len(),
-                    &mut array_session().create_execution_ctx()
-                )
+                .execute_mask(p.len(), &mut array_session().create_execution_ctx())
                 .unwrap()
                 .all_true()
         );

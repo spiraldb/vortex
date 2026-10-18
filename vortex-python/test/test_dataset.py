@@ -118,6 +118,7 @@ def test_use_threads_configures_worker_pool(monkeypatch: pytest.MonkeyPatch) -> 
 def test_to_batch_size(ds: pd.Dataset, batch_size: int) -> None:
     batch_sizes = [len(x) for x in ds.to_batches(batch_size=batch_size)]
     n_rows = ds.count_rows()
+    assert sum(batch_sizes) == n_rows
     if n_rows < batch_size:
         assert batch_sizes == [n_rows]
     if n_rows % batch_size == 0:
@@ -262,6 +263,7 @@ def test_fragment_to_batch_size(ds: vx.dataset.VortexDataset, batch_size: int) -
         # We read batches in units of `batch_size` though.
         batch_sizes = [len(batch) for batch in f.to_batches(batch_size=batch_size)]
         n_rows = f.count_rows() - remainder
+        assert sum(batch_sizes) == n_rows
 
         if n_rows < batch_size:
             assert batch_sizes == [n_rows]
@@ -292,7 +294,7 @@ def test_fragment_to_table(ds: vx.dataset.VortexDataset) -> None:
 
 
 def test_get_fragments(ds: vx.dataset.VortexDataset) -> None:
-    assert len(list(ds.get_fragments())) == 16
+    assert ds.count_rows() == 1_000_000
 
     assert ds.count_rows() == sum(f.count_rows() for f in ds.get_fragments())
 

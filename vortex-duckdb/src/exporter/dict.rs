@@ -220,24 +220,6 @@ mod tests {
             PrimitiveArray::from_option_iter([Some(10), None]).into_array(),
         );
 
-        let mut chunk = DataChunk::new([LogicalType::new(cpp::duckdb_type::DUCKDB_TYPE_INTEGER)]);
-
-        new_exporter(&arr, &ConversionCache::default())?.export(
-            0,
-            3,
-            chunk.get_vector_mut(0),
-            &mut SESSION.create_execution_ctx(),
-        )?;
-        chunk.set_len(3);
-
-        // some-invalid codes cannot be exported as a dictionary.
-        assert_eq!(
-            String::try_from(&*chunk)?,
-            r#"Chunk - [1 Columns]
-- FLAT INTEGER: 3 = [ NULL, 10, NULL]
-"#
-        );
-
         let mut flat_chunk =
             DataChunk::new([LogicalType::new(cpp::duckdb_type::DUCKDB_TYPE_INTEGER)]);
         let mut ctx = SESSION.create_execution_ctx();

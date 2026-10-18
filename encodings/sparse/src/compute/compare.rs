@@ -99,16 +99,12 @@ mod tests {
         // Kernel path: compare pushes through the Sparse encoding.
         let kernel_bool = arr
             .binary(ConstantArray::new(rhs.clone(), len).into_array(), op)
-            .unwrap()
-            .execute::<Canonical>(&mut ctx)
             .unwrap();
 
         // Baseline: canonicalize first, then compare on the PrimitiveArray.
         let canonical_input = arr.execute::<Canonical>(&mut ctx).unwrap().into_array();
         let canonical_bool = canonical_input
             .binary(ConstantArray::new(rhs, len).into_array(), op)
-            .unwrap()
-            .execute::<Canonical>(&mut ctx)
             .unwrap();
 
         assert_arrays_eq!(kernel_bool, canonical_bool, &mut ctx);

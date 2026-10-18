@@ -330,10 +330,7 @@ mod tests {
         // true -> if_true, false -> if_false
         let mask = Mask::from_iter([false, true, true]);
 
-        let result = mask
-            .into_array()
-            .zip(if_true, if_false)?
-            .execute::<ArrayRef>(&mut ctx)?;
+        let result = mask.into_array().zip(if_true, if_false)?;
 
         // Row 0 -> if_false[0] = [10]; row 1 -> if_true[1] = null; row 2 -> if_true[2] = [2]
         let expected = list_view(

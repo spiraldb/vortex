@@ -974,7 +974,7 @@ mod test {
             buffer![0u32, 2, 2, 4].into_array(),
             Validity::from_iter([true, false, true]),
         );
-        assert_arrays_eq!(expected, result, &mut ctx);
+        assert_arrays_eq!(result, expected, &mut ctx);
     }
 
     #[test]
@@ -995,7 +995,7 @@ mod test {
             buffer![0u32, 2, 2].into_array(),
             Validity::from_iter([true, false]),
         );
-        assert_arrays_eq!(expected, result, &mut ctx);
+        assert_arrays_eq!(result, expected, &mut ctx);
     }
 
     #[test]
@@ -1018,6 +1018,16 @@ mod test {
                 Arc::new(DType::Primitive(I32, Nullability::NonNullable)),
                 Nullability::Nullable
             )
+        );
+        let expected = ListArray::new(
+            buffer![0i32, 5, 3].into_array(),
+            buffer![0u32, 2, 3, 3].into_array(),
+            Validity::from_iter([true, true, false]),
+        );
+        assert_arrays_eq!(
+            result,
+            expected,
+            &mut array_session().create_execution_ctx()
         );
     }
 
@@ -1336,6 +1346,12 @@ mod test {
                 .is_valid(1, &mut array_session().create_execution_ctx())
                 .unwrap()
         );
+        let expected = ListArray::new(
+            buffer![0i32; 400].into_array(),
+            buffer![0u32, 200, 400].into_array(),
+            Validity::NonNullable,
+        );
+        assert_arrays_eq!(result_view, expected, &mut ctx);
     }
 
     #[test]
@@ -1371,6 +1387,12 @@ mod test {
                 .is_valid(2, &mut array_session().create_execution_ctx())
                 .unwrap()
         );
+        let expected = ListArray::new(
+            buffer![0i32; 300].into_array(),
+            buffer![0u32, 150, 150, 300].into_array(),
+            Validity::from_iter([true, false, true]),
+        );
+        assert_arrays_eq!(result_view, expected, &mut ctx);
     }
 
     /// Regression test for validity length mismatch bug.
@@ -1394,5 +1416,15 @@ mod test {
         // This should not panic - result should have length 4.
         let result = list.take(idx).unwrap();
         assert_eq!(result.len(), 4);
+        let expected = ListArray::new(
+            buffer![1i32, 2, 3, 4, 1, 2, 3, 4].into_array(),
+            buffer![0u32, 2, 4, 6, 8].into_array(),
+            Validity::AllValid,
+        );
+        assert_arrays_eq!(
+            result,
+            expected,
+            &mut array_session().create_execution_ctx()
+        );
     }
 }

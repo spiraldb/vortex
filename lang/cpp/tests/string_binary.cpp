@@ -117,7 +117,7 @@ TEST_CASE("Strings roundtrip", "[strings]") {
     auto batch = partition->next();
     REQUIRE(batch.has_value());
 
-    StringView view = batch->field(0).strings(session);
+    StringView view = batch->field(session, 0).strings(session);
     REQUIRE(view.size() == 2);
     REQUIRE(view[0] == "inlined"sv);
     REQUIRE(view[1] == long1);

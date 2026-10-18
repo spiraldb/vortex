@@ -228,6 +228,11 @@ mod tests {
             result.execute_scalar(2, &mut array_session().create_execution_ctx())?,
             Scalar::primitive(18u64, Nullability::Nullable),
         );
+        assert_arrays_eq!(
+            result,
+            PrimitiveArray::from_option_iter([Some(5u64), None, Some(18)]),
+            &mut ctx
+        );
         Ok(())
     }
 
@@ -239,6 +244,11 @@ mod tests {
         let mut ctx = array_session().create_execution_ctx();
         assert!(!result.is_valid(0, &mut ctx)?);
         assert!(!result.is_valid(1, &mut ctx)?);
+        assert_arrays_eq!(
+            result,
+            PrimitiveArray::from_option_iter([None::<u64>, None]),
+            &mut ctx
+        );
         Ok(())
     }
 

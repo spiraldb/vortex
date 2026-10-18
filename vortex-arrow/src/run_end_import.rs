@@ -257,6 +257,11 @@ mod tests {
             vortex_array.dtype(),
             &DType::Primitive(PType::I64, Nullability::Nullable)
         );
+        assert_arrays_eq!(
+            vortex_array,
+            PrimitiveArray::from_option_iter([] as [Option<i64>; 0]),
+            &mut SESSION.create_execution_ctx()
+        );
         Ok(())
     }
 

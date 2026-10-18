@@ -908,6 +908,10 @@ mod tests {
         let error = validate_dtype_editions(&session, &time)
             .expect_err("vortex.time is not in the enabled edition");
         assert!(error.to_string().contains("vortex.time"));
+        let nested_time = DType::struct_([("time", time)], Nullability::NonNullable);
+        let error = validate_dtype_editions(&session, &nested_time)
+            .expect_err("nested vortex.time is not in the enabled edition");
+        assert!(error.to_string().contains("vortex.time"));
         Ok(())
     }
 

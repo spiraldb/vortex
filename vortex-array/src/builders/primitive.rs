@@ -477,6 +477,11 @@ mod tests {
                 .unwrap()
                 .is_null()
         );
+        assert_arrays_eq!(
+            array,
+            PrimitiveArray::from_option_iter([Some(10i32), None, Some(30)]),
+            &mut array_session().create_execution_ctx()
+        );
     }
 
     /// REGRESSION TEST: This test verifies that `append_mask` validates the mask length.
@@ -686,6 +691,11 @@ mod tests {
         let array = builder.finish_into_primitive();
         assert_eq!(array.len(), 3);
         assert_eq!(array.as_slice::<i32>(), &[10, 20, 30]);
+        assert_arrays_eq!(
+            array,
+            PrimitiveArray::from_option_iter([Some(10i32), Some(20), None]),
+            &mut array_session().create_execution_ctx()
+        );
     }
 
     #[test]

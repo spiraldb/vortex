@@ -96,7 +96,7 @@ mod tests {
             taken.dtype()
         );
         assert_arrays_eq!(
-            taken.clone().execute::<PrimitiveArray>(&mut ctx).unwrap(),
+            taken,
             PrimitiveArray::new(
                 buffer![42i32, 42, 42],
                 Validity::from_iter([false, true, false])
@@ -126,7 +126,7 @@ mod tests {
             taken.dtype()
         );
         assert_arrays_eq!(
-            taken.clone().execute::<PrimitiveArray>(&mut ctx).unwrap(),
+            taken,
             PrimitiveArray::new(buffer![42i32, 42, 42], Validity::AllValid),
             &mut ctx
         );

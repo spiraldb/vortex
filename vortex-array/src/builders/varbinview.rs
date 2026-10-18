@@ -1414,6 +1414,7 @@ mod tests {
     use crate::builders::varbinview::VarBinViewArray;
     use crate::dtype::DType;
     use crate::dtype::Nullability;
+    use crate::scalar::Scalar;
 
     /// A long-enough value that a view over it must reference a data buffer.
     const LONG: &str = "a value that is far too long to inline";
@@ -1867,6 +1868,25 @@ mod tests {
             Some(""),
             Some("test"),
         ]);
+        for (index, value) in [
+            Some("Hello"),
+            None,
+            Some("World"),
+            None,
+            None,
+            Some(""),
+            Some(""),
+            Some("test"),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let expected = value.map_or_else(
+                || Scalar::null(DType::Utf8(Nullability::Nullable)),
+                |value| Scalar::utf8(value, Nullability::Nullable),
+            );
+            assert_eq!(actual.execute_scalar(index, &mut ctx).unwrap(), expected);
+        }
         assert_arrays_eq!(actual, expected, &mut ctx);
     }
 
@@ -1903,7 +1923,25 @@ mod tests {
             None,
             Some("Hello3"),
         ]);
-        assert_arrays_eq!(actual.into_array(), expected.into_array(), &mut ctx);
+        let actual = actual.into_array();
+        for (index, value) in [
+            Some("Hello1"),
+            None,
+            Some("Hello2"),
+            None,
+            None,
+            Some("Hello3"),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let expected = value.map_or_else(
+                || Scalar::null(DType::Utf8(Nullability::Nullable)),
+                |value| Scalar::utf8(value, Nullability::Nullable),
+            );
+            assert_eq!(actual.execute_scalar(index, &mut ctx).unwrap(), expected);
+        }
+        assert_arrays_eq!(actual, expected.into_array(), &mut ctx);
     }
 
     #[test]
@@ -1959,6 +1997,19 @@ mod tests {
             .slice(0..1)?
             .append_to_builder(&mut builder, &mut ctx)?;
         assert_eq!(builder.completed_block_count(), 2);
+        let actual = builder.finish_into_varbinview();
+        let long = "This is a long string that should not be inlined";
+        assert_eq!(actual.dtype(), &DType::Utf8(Nullability::Nullable));
+        assert_eq!(actual.len(), 7);
+        for (index, value) in [long, "short string", "short string", long, long, long, long]
+            .into_iter()
+            .enumerate()
+        {
+            assert_eq!(
+                actual.execute_scalar(index, &mut ctx)?,
+                Scalar::utf8(value, Nullability::Nullable)
+            );
+        }
         Ok(())
     }
 

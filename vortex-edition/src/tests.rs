@@ -298,10 +298,17 @@ fn validate_rejects_inconsistent_declarations() -> VortexResult<()> {
     // An inclusion referencing an undeclared edition.
     let editions = EditionSession::empty();
     editions.declare_inclusion(EditionInclusion::array("test.alpha", FIRST))?;
-    assert!(editions.validate().is_err());
+    assert!(
+        editions
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("included in undeclared edition")
+    );
 
     // A member requiring a release newer than its edition declares.
     let editions = EditionSession::empty();
+    editions.declare_family(&TEST_FAMILY)?;
     editions.declare_edition(Edition {
         id: FIRST,
         min_library_version: Some("0.70.0"),
@@ -310,10 +317,17 @@ fn validate_rejects_inconsistent_declarations() -> VortexResult<()> {
         required_vortex_release: Some("0.80.0"),
         ..EditionInclusion::array("test.alpha", FIRST)
     })?;
-    assert!(editions.validate().is_err());
+    assert!(
+        editions
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("requires release 0.80.0")
+    );
 
     // A frozen edition following a draft within the same family.
     let editions = EditionSession::empty();
+    editions.declare_family(&TEST_FAMILY)?;
     editions.declare_edition(Edition {
         id: FIRST,
         min_library_version: None,
@@ -322,24 +336,43 @@ fn validate_rejects_inconsistent_declarations() -> VortexResult<()> {
         id: SECOND,
         min_library_version: Some("0.70.0"),
     })?;
-    assert!(editions.validate().is_err());
+    assert!(
+        editions
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("follows draft")
+    );
 
-    // A malformed edition id (family not lowercase, month out of range).
-    let editions = EditionSession::empty();
-    editions.declare_edition(Edition {
-        id: EditionId::new("Test", 2026, 13, 0),
-        min_library_version: None,
-    })?;
-    assert!(editions.validate().is_err());
+    for (id, expected) in [
+        (EditionId::new("Test", 2026, 1, 0), "lowercase family"),
+        (EditionId::new("test", 2026, 13, 0), "month in 01-12"),
+    ] {
+        let editions = EditionSession::empty();
+        editions.declare_family(&TEST_FAMILY)?;
+        editions.declare_edition(Edition {
+            id,
+            min_library_version: None,
+        })?;
+        let error = editions.validate().unwrap_err().to_string();
+        assert!(error.contains(expected), "{id}: {error}");
+    }
 
     // A malformed encoding id.
     let editions = EditionSession::empty();
+    editions.declare_family(&TEST_FAMILY)?;
     editions.declare_edition(Edition {
         id: FIRST,
         min_library_version: None,
     })?;
     editions.declare_inclusion(EditionInclusion::array("Test.ALPHA", FIRST))?;
-    assert!(editions.validate().is_err());
+    assert!(
+        editions
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("expected lowercase `namespace.name`")
+    );
 
     Ok(())
 }

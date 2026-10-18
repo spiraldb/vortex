@@ -173,7 +173,6 @@ fn value_cmp(bytes: &[u8], start: usize, end: usize, constant: &[u8]) -> Orderin
 
 #[cfg(test)]
 mod test {
-    use vortex_buffer::BitBuffer;
     use vortex_buffer::ByteBuffer;
 
     use crate::IntoArray;
@@ -183,7 +182,7 @@ mod test {
     use crate::arrays::ConstantArray;
     use crate::arrays::VarBinArray;
     use crate::arrays::VarBinViewArray;
-    use crate::arrays::bool::BoolArrayExt;
+    use crate::assert_arrays_eq;
     use crate::builtins::ArrayBuiltins;
     use crate::dtype::DType;
     use crate::dtype::Nullability;
@@ -207,23 +206,12 @@ mod test {
                 .into_array(),
                 Operator::Eq,
             )
-            .unwrap()
-            .execute::<BoolArray>(&mut ctx)
             .unwrap();
 
-        assert_eq!(
-            &result
-                .as_ref()
-                .validity()
-                .unwrap()
-                .execute_mask(result.as_ref().len(), &mut ctx)
-                .unwrap()
-                .to_bit_buffer(),
-            &BitBuffer::from_iter([true, false, true])
-        );
-        assert_eq!(
-            result.to_bit_buffer(),
-            BitBuffer::from_iter([true, false, false])
+        assert_arrays_eq!(
+            result,
+            BoolArray::from_iter([Some(true), None, Some(false)]),
+            &mut ctx
         );
     }
 
@@ -241,23 +229,12 @@ mod test {
         let result = array
             .into_array()
             .binary(vbv.into_array(), Operator::Eq)
-            .unwrap()
-            .execute::<BoolArray>(&mut ctx)
             .unwrap();
 
-        assert_eq!(
-            result
-                .as_ref()
-                .validity()
-                .unwrap()
-                .execute_mask(result.as_ref().len(), &mut ctx)
-                .unwrap()
-                .to_bit_buffer(),
-            BitBuffer::from_iter([false, false, true])
-        );
-        assert_eq!(
-            result.to_bit_buffer(),
-            BitBuffer::from_iter([false, true, true])
+        assert_arrays_eq!(
+            result,
+            BoolArray::from_iter([None, None, Some(true)]),
+            &mut ctx
         );
     }
 }
@@ -286,12 +263,14 @@ mod tests {
 
         let const_ = ConstantArray::new(Scalar::utf8("", Nullability::Nullable), 1);
 
-        assert_eq!(
-            arr.into_array()
-                .binary(const_.into_array(), Operator::Eq)
-                .unwrap()
-                .dtype(),
-            &DType::Bool(Nullability::Nullable)
+        let result = arr
+            .into_array()
+            .binary(const_.into_array(), Operator::Eq)
+            .unwrap();
+        assert_arrays_eq!(
+            result,
+            BoolArray::from_iter([Some(false)]),
+            &mut array_session().create_execution_ctx()
         );
     }
 

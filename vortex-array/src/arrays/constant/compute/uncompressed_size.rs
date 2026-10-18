@@ -47,6 +47,7 @@ mod tests {
             PrimitiveArray::new(Buffer::full(5i32, 10), Validity::NonNullable).into_array();
 
         assert_eq!(aggregate(&constant)?, aggregate(&primitive)?);
+        assert_eq!(aggregate(&constant)?, 40);
         Ok(())
     }
 
@@ -58,6 +59,7 @@ mod tests {
             PrimitiveArray::new(Buffer::full(5i32, 10), Validity::AllValid).into_array();
 
         assert_eq!(aggregate(&constant)?, aggregate(&primitive)?);
+        assert_eq!(aggregate(&constant)?, 40);
         Ok(())
     }
 
@@ -69,6 +71,8 @@ mod tests {
             PrimitiveArray::new(Buffer::<i32>::zeroed(10), Validity::AllInvalid).into_array();
 
         assert_eq!(aggregate(&constant)?, aggregate(&primitive)?);
+        // 40 value bytes plus the serialized false validity scalar.
+        assert_eq!(aggregate(&constant)?, 40 + 2);
         Ok(())
     }
 
@@ -94,6 +98,7 @@ mod tests {
         )?;
 
         assert_eq!(aggregate(&constant)?, expected);
+        assert_eq!(aggregate(&constant)?, 160);
         Ok(())
     }
 
@@ -105,6 +110,10 @@ mod tests {
         assert_eq!(
             aggregate_with(&constant, UncompressedSizeOpts::exact())?,
             aggregate_with(&constant, UncompressedSizeOpts::inexact())?
+        );
+        assert_eq!(
+            aggregate_with(&constant, UncompressedSizeOpts::exact())?,
+            160
         );
         Ok(())
     }

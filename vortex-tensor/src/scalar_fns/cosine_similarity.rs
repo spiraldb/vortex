@@ -148,7 +148,10 @@ mod tests {
     use vortex_array::arrays::MaskedArray;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::arrays::scalar_fn::plugin::ScalarFnArrayPlugin;
+    use vortex_array::dtype::DType;
     use vortex_array::dtype::NativePType;
+    use vortex_array::dtype::Nullability;
+    use vortex_array::dtype::PType;
     use vortex_array::validity::Validity;
     use vortex_error::VortexResult;
 
@@ -170,6 +173,10 @@ mod tests {
         let mut ctx = SESSION.create_execution_ctx();
         let output: PrimitiveArray = result.into_array().execute(&mut ctx)?;
 
+        assert_eq!(
+            output.dtype(),
+            &DType::Primitive(T::PTYPE, Nullability::NonNullable)
+        );
         Ok(output.as_slice::<T>().to_vec())
     }
 
@@ -403,6 +410,11 @@ mod tests {
         let result = CosineSimilarity::try_new(lhs, rhs)?;
         let prim: PrimitiveArray = result.into_array().execute(&mut ctx)?;
 
+        assert_eq!(prim.len(), 2);
+        assert_eq!(
+            prim.dtype(),
+            &DType::Primitive(PType::F64, Nullability::Nullable)
+        );
         // Row 0: self-similarity = 1.0, row 1: null.
         assert!(prim.is_valid(0, &mut ctx)?);
         assert!(!prim.is_valid(1, &mut ctx)?);
@@ -536,6 +548,11 @@ mod tests {
         assert_eq!(recovered.dtype(), original.dtype());
         assert_eq!(recovered.len(), original.len());
         assert_eq!(recovered.encoding_id(), original.encoding_id());
+        vortex_array::assert_arrays_eq!(
+            recovered,
+            PrimitiveArray::from_iter([0.0f64, 1.0]),
+            &mut SESSION.create_execution_ctx()
+        );
         Ok(())
     }
 

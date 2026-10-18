@@ -4,18 +4,21 @@
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
+use vortex_array::VortexSessionExecute;
 use vortex_array::array_session;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::ExtensionArray;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
+use vortex_array::assert_arrays_eq;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
 use vortex_array::extension::datetime::Date;
 use vortex_array::extension::datetime::TimeUnit;
 use vortex_array::session::ArraySessionExt;
+use vortex_array::stream::ArrayStreamExt;
 use vortex_array::validity::Validity;
 use vortex_btrblocks::BtrBlocksCompressorBuilder;
 use vortex_buffer::ByteBufferMut;
@@ -424,9 +427,9 @@ async fn disabling_editions_allows_uneditioned_components() -> VortexResult<()> 
     uneditioned_session
         .write_options()
         .disable_editions()
-        .write(&mut buffer, array.to_array_stream())
+        .write(&mut buffer, array.clone().to_array_stream())
         .await?;
-    assert!(!buffer.is_empty());
+    assert_written_values(&uneditioned_session, buffer, array).await?;
     Ok(())
 }
 
@@ -438,6 +441,22 @@ async fn write_with(session: &VortexSession, array: ArrayRef) -> VortexResult<By
         .write(&mut buffer, array.to_array_stream())
         .await?;
     Ok(buffer)
+}
+
+async fn assert_written_values(
+    session: &VortexSession,
+    buffer: ByteBufferMut,
+    expected: ArrayRef,
+) -> VortexResult<()> {
+    let actual = session
+        .open_options()
+        .open_buffer(buffer)?
+        .scan()?
+        .into_array_stream()?
+        .read_all()
+        .await?;
+    assert_arrays_eq!(actual, expected, &mut session.create_execution_ctx());
+    Ok(())
 }
 
 /// The layout encodings a written file actually contains, depth first.
@@ -529,7 +548,8 @@ async fn writer_restricts_layouts_to_the_enabled_editions() -> VortexResult<()> 
         .map(|id| (ComponentKind::Layout, *id))
         .collect();
     let session = session_declaring(&members)?;
-    write_with(&session, array.clone()).await?;
+    let buffer = write_with(&session, array.clone()).await?;
+    assert_written_values(&session, buffer, array.clone()).await?;
 
     // Dropping one of them fails the write at the layout it may not emit.
     let session = session_declaring(&members[1..])?;
@@ -538,7 +558,10 @@ async fn writer_restricts_layouts_to_the_enabled_editions() -> VortexResult<()> 
         .err()
         .ok_or_else(|| vortex_err!("write emitted layout {} outside its edition", written[0]))?;
     assert!(
-        error.to_string().contains("not permitted by ctx"),
+        error.to_string().contains(&format!(
+            "Layout encoding {} not permitted by ctx",
+            written[0]
+        )),
         "unexpected error: {error}"
     );
     Ok(())
@@ -599,7 +622,9 @@ fn forbidden_sequence_compressor(
 #[tokio::test]
 async fn btrblocks_respects_enabled_array_encodings() -> VortexResult<()> {
     let session = writer_test_session()?;
-    write_with(&session, sequential_integers().into_array()).await?;
+    let array = sequential_integers().into_array();
+    let buffer = write_with(&session, array.clone()).await?;
+    assert_written_values(&session, buffer, array).await?;
     Ok(())
 }
 
@@ -685,5 +710,6 @@ async fn serialization_context_accepts_supported_compressor_output() -> VortexRe
         )
         .await?;
 
+    assert_written_values(&session, buffer, sequential_integers().into_array()).await?;
     Ok(())
 }
