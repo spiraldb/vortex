@@ -285,9 +285,10 @@ mod tests {
             .unwrap();
 
         assert!(decoded.is::<Masked>());
+        let exec_ctx = array_session().create_execution_ctx();
         assert_eq!(
-            array.as_ref().display_values().to_string(),
-            decoded.display_values().to_string()
+            array.as_ref().display_values(&exec_ctx).to_string(),
+            decoded.display_values(&exec_ctx).to_string()
         );
     }
 

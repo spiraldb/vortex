@@ -629,9 +629,10 @@ mod tests {
             .unwrap();
 
         assert!(decoded.is::<Patched>());
+        let exec_ctx = session.create_execution_ctx();
         assert_eq!(
-            array.display_values().to_string(),
-            decoded.display_values().to_string()
+            array.display_values(&exec_ctx).to_string(),
+            decoded.display_values(&exec_ctx).to_string()
         );
     }
 
