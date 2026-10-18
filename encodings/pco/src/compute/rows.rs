@@ -3,6 +3,7 @@
 
 //! Shared machinery for kernels that decode only the blocks an operation touches.
 
+use pco::FULL_BATCH_N;
 use pco::data_types::Number;
 use pco::data_types::NumberType;
 use pco::match_number_enum;
@@ -97,8 +98,8 @@ pub(crate) fn row_values(
 pub(crate) const NO_VALUE: usize = usize::MAX;
 
 /// Reads the valid values at `positions`, or `T::default()` for [`NO_VALUE`], decoding every
-/// touched block once. Runs of adjacent blocks decode together, through the batch holding the
-/// last value read from them.
+/// touched block once, through the batch holding the last value read from it. A block whose last
+/// batch is read decodes together with the next touched block when that one follows it.
 fn gather<T: Number + NativePType>(
     data: &PcoData,
     positions: &[usize],
@@ -142,10 +143,18 @@ fn gather<T: Number + NativePType>(
         let page = data.page_of_block(touched[run_start]);
         let entry = &data.entries[page];
         let page_blocks = entry.first_block..entry.first_block + entry.n_blocks();
+        // Joining a block to the run decodes the previous block to its end, which is free only
+        // when its last batch is read anyway.
+        let reads_to_end = |idx: usize| {
+            let block = touched[idx] - entry.first_block;
+            let block_end = entry.values.start + entry.block_values(block..block + 1).end;
+            last_read[idx] + FULL_BATCH_N >= block_end
+        };
         let mut run_end = run_start + 1;
         while run_end < touched.len()
             && touched[run_end] == touched[run_end - 1] + 1
             && page_blocks.contains(&touched[run_end])
+            && reads_to_end(run_end - 1)
         {
             run_end += 1;
         }
