@@ -151,7 +151,7 @@ mod tests {
             .execute(array.clone(), &mut cuda_ctx)
             .await
             .unwrap()
-            .into_host()
+            .into_host(cuda_ctx.execution_ctx())
             .await
             .unwrap()
             .into_array();
@@ -171,7 +171,7 @@ mod tests {
         let gpu_result = SequenceExecutor
             .execute(array.clone(), &mut cuda_ctx)
             .await?
-            .into_host()
+            .into_host(cuda_ctx.execution_ctx())
             .await?
             .into_array();
 

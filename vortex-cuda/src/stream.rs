@@ -362,7 +362,7 @@ mod tests {
         let mut cpu_ctx = vortex_array::array_session().create_execution_ctx();
         let host = sliced
             .execute::<Canonical>(&mut cpu_ctx)?
-            .into_host()
+            .into_host(&mut cpu_ctx)
             .await?;
         assert_arrays_eq!(
             host.into_array(),
