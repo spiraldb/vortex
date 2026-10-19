@@ -254,6 +254,7 @@ mod tests {
     use vortex_array::ArrayRef;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
+    use vortex_array::array_session;
     use vortex_array::arrays::ExtensionArray;
     use vortex_array::arrays::FixedSizeListArray;
     use vortex_array::arrays::MaskedArray;
@@ -388,6 +389,7 @@ mod tests {
 
     #[test]
     fn test_input_nulls_produce_null_struct_rows() -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
         let input = vector_array(
             2,
             &[
@@ -395,9 +397,9 @@ mod tests {
                 1.0, 0.0, // The null row's placeholder values.
             ],
         )?;
-        let input = MaskedArray::try_new(input, Validity::from_iter([true, false]))?.into_array();
+        let input =
+            MaskedArray::try_new(input, Validity::from_iter([true, false]), &mut ctx)?.into_array();
         let output = evaluate(input)?;
-        let mut ctx = SESSION.create_execution_ctx();
 
         assert!(output.is_valid(0, &mut ctx)?);
         assert!(!output.is_valid(1, &mut ctx)?);
@@ -484,8 +486,9 @@ mod tests {
 
     #[test]
     fn test_return_dtype_has_nonnullable_fields() -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
         let input = vector_array(2, &[3.0f64, 4.0])?;
-        let input = MaskedArray::try_new(input, Validity::AllValid)?.into_array();
+        let input = MaskedArray::try_new(input, Validity::AllValid, &mut ctx)?.into_array();
         let output = L2Normalize::try_new(input)?.into_array();
 
         let DType::Struct(fields, Nullability::Nullable) = output.dtype() else {

@@ -27,6 +27,7 @@ fn test_repeated_probe_preserves_masked_nulls() -> VortexResult<()> {
     let array = MaskedArray::try_new(
         PrimitiveArray::from_iter([1i32, 2, 3]).into_array(),
         Validity::from_iter([true, false, true]),
+        &mut ctx,
     )?
     .into_array();
     let expected = [Some(1i32), None, Some(3)];
@@ -48,8 +49,9 @@ fn test_repeated_probe_preserves_masked_nulls() -> VortexResult<()> {
 #[case(Validity::AllValid, Nullability::Nullable)]
 #[case(Validity::from_iter([true, false, true]), Nullability::Nullable)]
 fn test_dtype_nullability(#[case] validity: Validity, #[case] expected: Nullability) {
+    let mut ctx = array_session().create_execution_ctx();
     let child = PrimitiveArray::from_iter([1i32, 2, 3]).into_array();
-    let array = MaskedArray::try_new(child, validity).unwrap();
+    let array = MaskedArray::try_new(child, validity, &mut ctx).unwrap();
 
     assert_eq!(
         array.dtype(),
@@ -61,11 +63,12 @@ fn test_dtype_nullability(#[case] validity: Validity, #[case] expected: Nullabil
 fn test_dtype_nullability_with_nullable_child() -> VortexResult<()> {
     let child =
         PrimitiveArray::new(vortex_buffer::buffer![1i32, 2, 3], Validity::AllValid).into_array();
-    let array = MaskedArray::try_new(child, Validity::from_iter([true, false, true]))?;
+    let mut ctx = array_session().create_execution_ctx();
+    let array = MaskedArray::try_new(child, Validity::from_iter([true, false, true]), &mut ctx)?;
     assert_arrays_eq!(
         array,
         PrimitiveArray::from_option_iter([Some(1i32), None, Some(3)]),
-        &mut array_session().create_execution_ctx()
+        &mut ctx
     );
     Ok(())
 }
@@ -82,7 +85,7 @@ fn test_empty_child_with_array_validity() -> VortexResult<()> {
     assert!(child.all_valid(&mut ctx)?);
     assert!(child.all_invalid(&mut ctx)?);
 
-    let array = MaskedArray::try_new(child, validity)?;
+    let array = MaskedArray::try_new(child, validity, &mut ctx)?;
 
     assert!(array.is_empty());
     Ok(())
@@ -91,7 +94,11 @@ fn test_empty_child_with_array_validity() -> VortexResult<()> {
 #[test]
 fn test_masked_child_with_validity() -> VortexResult<()> {
     let child = PrimitiveArray::from_iter([1i32, 2, 3, 4, 5]).into_array();
-    let array = MaskedArray::try_new(child, Validity::from_iter([true, false, true, false, true]))?;
+    let array = MaskedArray::try_new(
+        child,
+        Validity::from_iter([true, false, true, false, true]),
+        &mut array_session().create_execution_ctx(),
+    )?;
     assert_arrays_eq!(
         array,
         PrimitiveArray::from_option_iter([Some(1i32), None, Some(3), None, Some(5)]),
@@ -104,7 +111,7 @@ fn test_masked_child_with_validity() -> VortexResult<()> {
 fn test_masked_child_all_valid() {
     let mut ctx = array_session().create_execution_ctx();
     let child = PrimitiveArray::from_iter([10i32, 20, 30]).into_array();
-    let array = MaskedArray::try_new(child, Validity::AllValid).unwrap();
+    let array = MaskedArray::try_new(child, Validity::AllValid, &mut ctx).unwrap();
 
     assert_eq!(array.len(), 3);
     assert_eq!(
@@ -126,6 +133,7 @@ fn test_masked_child_all_valid() {
 #[case(Validity::from_iter([false, false, false]))]
 #[case(Validity::from_iter([true, false, true, false]))]
 fn test_masked_child_preserves_length(#[case] validity: Validity) {
+    let mut ctx = array_session().create_execution_ctx();
     let len = match &validity {
         Validity::Array(arr) => arr.len(),
         _ => 3,
@@ -133,7 +141,7 @@ fn test_masked_child_preserves_length(#[case] validity: Validity) {
 
     #[expect(clippy::cast_possible_truncation)]
     let child = PrimitiveArray::from_iter(0..len as i32).into_array();
-    let array = MaskedArray::try_new(child, validity.clone()).unwrap();
+    let array = MaskedArray::try_new(child, validity.clone(), &mut ctx).unwrap();
 
     assert_eq!(array.len(), len);
 
@@ -149,6 +157,7 @@ fn test_masked_child_preserves_length(#[case] validity: Validity) {
 
 #[test]
 fn masked_listview_execute_preserves_zctl_true() -> VortexResult<()> {
+    let mut ctx = array_session().create_execution_ctx();
     // Masking only intersects validity, so the zero-copy-to-list survives
     // execution.
     let elements = PrimitiveArray::from_iter([1i32, 2, 3]).into_array();
@@ -159,7 +168,11 @@ fn masked_listview_execute_preserves_zctl_true() -> VortexResult<()> {
             .with_zero_copy_to_list(true)
     };
 
-    let masked = MaskedArray::try_new(list_view.into_array(), Validity::from_iter([true, false]))?;
+    let masked = MaskedArray::try_new(
+        list_view.into_array(),
+        Validity::from_iter([true, false]),
+        &mut ctx,
+    )?;
     let canonical = masked
         .into_array()
         .execute::<Canonical>(&mut array_session().create_execution_ctx())?;
