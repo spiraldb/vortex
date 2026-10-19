@@ -193,9 +193,13 @@ mod tests {
             &original_children[1],
             &normalized_children[1]
         ));
+        assert!(normalized_children[1].is::<Primitive>());
         assert_arrays_eq!(
-            normalized_children[1],
-            PrimitiveArray::from_iter(12i32..16),
+            normalized,
+            StructArray::try_from_iter([
+                ("lhs", PrimitiveArray::from_iter(0i32..4).into_array()),
+                ("rhs", PrimitiveArray::from_iter(12i32..16).into_array()),
+            ])?,
             &mut ctx
         );
 

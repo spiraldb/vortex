@@ -365,4 +365,20 @@ fn test_mixed_nullability_patterns() {
         .execute_scalar(4, &mut array_session().create_execution_ctx())
         .unwrap();
     assert!(!list4.is_null());
+    let element_dtype = Arc::new(DType::Primitive(PType::I16, Nullability::Nullable));
+    for (actual, expected) in [
+        (list0, [Some(1i16), None]),
+        (list2, [Some(5i16), Some(6)]),
+        (list3, [Some(7i16), None]),
+        (list4, [None, Some(10i16)]),
+    ] {
+        assert_eq!(
+            actual,
+            Scalar::fixed_size_list(
+                Arc::clone(&element_dtype),
+                expected.into_iter().map(Scalar::from).collect(),
+                Nullability::Nullable
+            )
+        );
+    }
 }

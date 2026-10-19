@@ -502,7 +502,6 @@ mod test {
             .collect::<Vec<_>>();
         let chunked = ChunkedArray::from_iter(chunks).into_array();
 
-        let into_ca = chunked.clone().execute::<PrimitiveArray>(&mut ctx)?;
         let mut primitive_builder = PrimitiveBuilder::<i32>::with_capacity_in(
             chunked.dtype().nullability(),
             10 * 100,
@@ -511,17 +510,7 @@ mod test {
         chunked.append_to_builder(&mut primitive_builder, &mut ctx)?;
         let ca_into = primitive_builder.finish();
 
-        assert_arrays_eq!(into_ca, ca_into, &mut ctx);
-
-        let mut primitive_builder = PrimitiveBuilder::<i32>::with_capacity_in(
-            chunked.dtype().nullability(),
-            10 * 100,
-            vortex_buffer::BufferAllocatorRef::static_ref(),
-        );
-        chunked.append_to_builder(&mut primitive_builder, &mut ctx)?;
-        let ca_into = primitive_builder.finish();
-
-        assert_arrays_eq!(into_ca, ca_into, &mut ctx);
+        assert_arrays_eq!(chunked, ca_into, &mut ctx);
 
         Ok(())
     }
@@ -547,8 +536,7 @@ mod test {
             .chunk_offsets()
             .as_ref()
             .ok_or_else(|| vortex_err!("expected chunk offsets"))?
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)?;
+            .clone();
 
         // chunk 0 (0-1023): patches at 100, 200 -> starts at patch index 0
         // chunk 1 (1024-2047): no patches -> points to patch index 2
@@ -583,8 +571,7 @@ mod test {
             .chunk_offsets()
             .as_ref()
             .ok_or_else(|| vortex_err!("expected chunk offsets"))?
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)?;
+            .clone();
 
         assert_arrays_eq!(
             chunk_offsets,
@@ -615,8 +602,7 @@ mod test {
             .chunk_offsets()
             .as_ref()
             .ok_or_else(|| vortex_err!("expected chunk offsets"))?
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)?;
+            .clone();
 
         // chunk 0 (0-1023): patches at 100, 200 -> starts at patch index 0
         // chunk 1 (1024-2047): patch at 1500 -> starts at patch index 2
@@ -652,8 +638,7 @@ mod test {
             .chunk_offsets()
             .as_ref()
             .ok_or_else(|| vortex_err!("expected chunk offsets"))?
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)?;
+            .clone();
 
         // Single chunk starting at patch index 0.
         assert_arrays_eq!(chunk_offsets, PrimitiveArray::from_iter([0u64]), &mut ctx);

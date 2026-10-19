@@ -829,7 +829,7 @@ mod test {
         let mut values = Vec::new();
         for chunk in &mut iter {
             let prim = chunk?.execute::<PrimitiveArray>(&mut ctx)?;
-            values.push(prim.into_buffer::<i32>()[0]);
+            values.extend(prim.into_buffer::<i32>().iter().copied());
         }
 
         assert_eq!(calls.load(Ordering::Relaxed), 1);

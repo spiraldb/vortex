@@ -10,6 +10,7 @@ use crate::EqMode;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
 use crate::array_session;
+use crate::arrays::BoolArray;
 use crate::arrays::PrimitiveArray;
 use crate::arrays::datetime::TemporalData;
 use crate::assert_arrays_eq;
@@ -213,13 +214,11 @@ fn test_validity_preservation(#[case] validity: Validity) {
 }
 
 #[test]
-fn test222() -> VortexResult<()> {
-    // Write file with MILLISECONDS timestamps
+fn comparison_rejects_mismatched_timestamp_units() -> VortexResult<()> {
     let ts_array = PrimitiveArray::from_iter(vec![1704067200000i64, 1704153600000, 1704240000000])
         .into_array();
     let temporal = TemporalData::new_timestamp(ts_array, TimeUnit::Milliseconds, None);
 
-    // Read with SECONDS filter scalar
     let filter_expr = gt(
         root(),
         lit(Scalar::extension::<Timestamp>(
@@ -231,10 +230,16 @@ fn test222() -> VortexResult<()> {
         )),
     );
 
-    let _result = temporal.into_array().apply(&filter_expr);
-
-    // let err = result.is_err().unwrap();
-    // println!("Expected error: {}", err);
+    let error = temporal
+        .into_array()
+        .apply(&filter_expr)?
+        .execute::<BoolArray>(&mut array_session().create_execution_ctx())
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("Cannot compare extension dtypes")
+    );
 
     Ok(())
 }

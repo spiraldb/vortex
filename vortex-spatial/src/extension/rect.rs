@@ -415,7 +415,10 @@ mod tests {
             .clone();
 
         let geometries = rect_geometries(&storage, &mut ctx)?;
-        assert!(matches!(geometries.as_slice(), [Geometry::Rect(_)]));
+        assert_eq!(
+            geometries,
+            vec![Geometry::Rect(geo_types::Rect::new((0.0, 0.0), (2.0, 3.0)))]
+        );
         Ok(())
     }
 }

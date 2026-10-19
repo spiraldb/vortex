@@ -251,6 +251,7 @@ mod tests {
         // All-null batch must not clobber the previously-stored value.
         let batch2 = PrimitiveArray::from_option_iter::<i32, _>([None, None]).into_array();
         acc.accumulate(&batch2, &mut ctx)?;
+        assert_eq!(acc.final_scalar()?, Scalar::primitive(2i32, Nullable));
 
         let batch3 = PrimitiveArray::from_option_iter([Some(99i32), None]).into_array();
         acc.accumulate(&batch3, &mut ctx)?;
@@ -272,6 +273,10 @@ mod tests {
         let batch1 = PrimitiveArray::new(buffer![10i32, 20], Validity::NonNullable).into_array();
         acc.accumulate(&batch1, &mut ctx)?;
         assert_eq!(acc.finish()?, Scalar::primitive(20i32, Nullable));
+        assert_eq!(
+            acc.final_scalar()?,
+            Scalar::null(DType::Primitive(PType::I32, Nullable))
+        );
 
         let batch2 = PrimitiveArray::new(buffer![3i32, 6, 9], Validity::NonNullable).into_array();
         acc.accumulate(&batch2, &mut ctx)?;

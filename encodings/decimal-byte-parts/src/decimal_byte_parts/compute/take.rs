@@ -91,18 +91,13 @@ mod tests {
         let mut ctx = session.create_execution_ctx();
 
         let indices = PrimitiveArray::from_option_iter([Some(0u64), None, Some(2u64)]).into_array();
-        let expected = decimal
-            .clone()
-            .into_array()
-            .take(indices.clone())?
-            .execute::<DecimalArray>(&mut ctx)?;
+        let expected = decimal.clone().into_array().take(indices.clone())?;
 
         let taken = DecimalByteParts::encode(&decimal, &mut ctx)?
             .into_array()
             .take(indices)?;
-        let actual = taken.execute::<DecimalArray>(&mut ctx)?;
 
-        assert_arrays_eq!(expected, actual, &mut ctx);
+        assert_arrays_eq!(taken, expected, &mut ctx);
         Ok(())
     }
 }

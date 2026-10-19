@@ -327,8 +327,8 @@ mod tests {
     #[test]
     fn filter_bool_sparse_index_mask() {
         let mut ctx = array_session().create_execution_ctx();
-        let arr = BoolArray::from_iter([true, true, false]);
-        let mask = Mask::from_indices(3, [0, 2]);
+        let arr = BoolArray::from_iter((0..100).map(|i| i % 2 == 0));
+        let mask = Mask::from_indices(100, [0, 99]);
 
         let filtered = arr.filter(mask).unwrap();
         assert_arrays_eq!(filtered, BoolArray::from_iter([true, false]), &mut ctx);
@@ -337,8 +337,8 @@ mod tests {
     #[test]
     fn filter_bool_sparse_slice_mask() {
         let mut ctx = array_session().create_execution_ctx();
-        let arr = BoolArray::from_iter([true, true, false]);
-        let mask = Mask::from_slices(3, vec![(0, 1), (2, 3)]);
+        let arr = BoolArray::from_iter((0..100).map(|i| i % 2 == 0));
+        let mask = Mask::from_slices(100, vec![(0, 1), (99, 100)]);
 
         let filtered = arr.filter(mask).unwrap();
         assert_arrays_eq!(filtered, BoolArray::from_iter([true, false]), &mut ctx);
@@ -347,8 +347,8 @@ mod tests {
     #[test]
     fn filter_bool_sparse_buffer_mask() {
         let mut ctx = array_session().create_execution_ctx();
-        let arr = BoolArray::from_iter([true, true, false]);
-        let mask = Mask::from_buffer(BitBuffer::from_iter([true, false, true]));
+        let arr = BoolArray::from_iter((0..100).map(|i| i % 2 == 0));
+        let mask = Mask::from_buffer(BitBuffer::from_iter((0..100).map(|i| i == 0 || i == 99)));
 
         let filtered = arr.filter(mask).unwrap();
         assert_arrays_eq!(filtered, BoolArray::from_iter([true, false]), &mut ctx);

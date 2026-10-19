@@ -247,6 +247,16 @@ fn test_push_validity_into_children_preserves_struct_validity() -> VortexResult<
     )?;
 
     assert!(pushed.dtype().is_nullable());
+    assert_arrays_eq!(
+        pushed.unmasked_field(0),
+        expected.unmasked_field(0),
+        &mut ctx
+    );
+    assert_arrays_eq!(
+        pushed.unmasked_field(1),
+        expected.unmasked_field(1),
+        &mut ctx
+    );
     assert_arrays_eq!(pushed, expected, &mut ctx);
     Ok(())
 }

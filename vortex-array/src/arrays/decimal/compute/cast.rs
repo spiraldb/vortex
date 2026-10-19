@@ -540,10 +540,7 @@ mod tests {
             Validity::NonNullable,
         );
         let target = DType::Primitive(PType::I64, Nullability::NonNullable);
-        let casted = array
-            .into_array()
-            .cast(target.clone())?
-            .execute::<PrimitiveArray>(&mut ctx)?;
+        let casted = array.into_array().cast(target.clone())?;
         assert_arrays_eq!(
             casted,
             PrimitiveArray::from_iter(expected.iter().copied()),
@@ -587,6 +584,8 @@ mod tests {
             .cast(target.clone())?
             .execute::<PrimitiveArray>(&mut ctx)?;
 
+        assert_eq!(casted.len(), values.len());
+        assert_eq!(casted.dtype(), &target);
         for (value, array_value) in values.into_iter().zip(casted.as_slice::<f64>()) {
             let scalar = Scalar::decimal(value.into(), decimal_dtype, Nullability::NonNullable);
             let scalar_value = f64::try_from(&scalar.cast(&target)?)?;
@@ -630,10 +629,7 @@ mod tests {
             )
         });
         let dtype = DType::Primitive(target, Nullability::Nullable);
-        let casted = array
-            .into_array()
-            .cast(dtype.clone())?
-            .execute::<PrimitiveArray>(&mut ctx)?;
+        let casted = array.into_array().cast(dtype.clone())?;
         match_each_integer_ptype!(target, |T| {
             assert_arrays_eq!(
                 casted,
@@ -671,10 +667,7 @@ mod tests {
                 decimal_dtype,
                 Validity::NonNullable,
             );
-            let casted = array
-                .into_array()
-                .cast(dtype.clone())?
-                .execute::<PrimitiveArray>(&mut ctx)?;
+            let casted = array.into_array().cast(dtype.clone())?;
             assert_arrays_eq!(
                 casted,
                 PrimitiveArray::from_iter([T::MIN, T::MAX]),
@@ -720,10 +713,7 @@ mod tests {
         for validity in [Validity::from_iter([false, true]), Validity::AllInvalid] {
             let expected = PrimitiveArray::new(buffer![0i8, 12], validity.clone());
             let array = DecimalArray::new(buffer![999i128, 12], decimal_dtype, validity);
-            let casted = array
-                .into_array()
-                .cast(target.clone())?
-                .execute::<PrimitiveArray>(&mut ctx)?;
+            let casted = array.into_array().cast(target.clone())?;
             assert_arrays_eq!(casted, expected, &mut ctx);
         }
         let array = DecimalArray::new(
@@ -739,10 +729,7 @@ mod tests {
                 .is_err()
         );
         let empty = DecimalArray::from_option_iter([] as [Option<i128>; 0], decimal_dtype);
-        let casted = empty
-            .into_array()
-            .cast(target.as_nonnullable())?
-            .execute::<PrimitiveArray>(&mut ctx)?;
+        let casted = empty.into_array().cast(target.as_nonnullable())?;
         assert_arrays_eq!(casted, PrimitiveArray::from_iter([] as [i8; 0]), &mut ctx);
         Ok(())
     }
@@ -755,10 +742,7 @@ mod tests {
         let decimal_dtype = DecimalDType::new(76, 40);
         let target = DType::Primitive(PType::I64, Nullability::NonNullable);
         let array = DecimalArray::new(buffer![value, -value], decimal_dtype, Validity::NonNullable);
-        let casted = array
-            .into_array()
-            .cast(target.clone())?
-            .execute::<PrimitiveArray>(&mut ctx)?;
+        let casted = array.into_array().cast(target.clone())?;
         assert_arrays_eq!(casted, PrimitiveArray::from_iter([123i64, -123]), &mut ctx);
         for (value, expected) in [(value, 123i64), (-value, -123)] {
             let scalar = Scalar::decimal(value.into(), decimal_dtype, Nullability::NonNullable);
@@ -800,6 +784,11 @@ mod tests {
         assert_eq!(casted.dtype(), &nullable_dtype);
         assert!(matches!(casted.validity(), Ok(Validity::AllValid)));
         assert_eq!(casted.len(), 3);
+        assert_arrays_eq!(
+            casted,
+            DecimalArray::new(buffer![100i32, 200, 300], decimal_dtype, Validity::AllValid),
+            &mut ctx
+        );
     }
 
     #[test]
@@ -821,6 +810,15 @@ mod tests {
 
         assert_eq!(casted.dtype(), &non_nullable_dtype);
         assert!(matches!(casted.validity(), Ok(Validity::NonNullable)));
+        assert_arrays_eq!(
+            casted,
+            DecimalArray::new(
+                buffer![100i32, 200, 300],
+                decimal_dtype,
+                Validity::NonNullable
+            ),
+            &mut ctx
+        );
     }
 
     #[test]
@@ -990,6 +988,11 @@ mod tests {
         assert_eq!(casted.len(), 3);
         // Should be stored in i128 now (precision 38 requires i128)
         assert_eq!(casted.values_type(), DecimalType::I128);
+        assert_arrays_eq!(
+            casted,
+            DecimalArray::from_iter([100i128, 200, 300], DecimalDType::new(38, 2)),
+            &mut ctx
+        );
     }
 
     #[test]
@@ -1116,6 +1119,11 @@ mod tests {
 
         assert_eq!(casted.values_type(), DecimalType::I32);
         assert_eq!(casted.decimal_dtype(), decimal_dtype);
+        assert_arrays_eq!(
+            casted,
+            DecimalArray::from_iter([100i32, 200, 300], decimal_dtype),
+            &mut array_session().create_execution_ctx()
+        );
     }
 
     #[test]
@@ -1223,14 +1231,11 @@ mod tests {
         let casted = array.into_array().cast(target.clone()).unwrap();
         assert_eq!(casted.dtype(), &target);
 
-        let primitive = casted
-            .execute::<Canonical>(&mut array_session().create_execution_ctx())
-            .unwrap()
-            .into_primitive();
         let mut ctx = array_session().create_execution_ctx();
-        for i in 0..2 {
-            assert!(!primitive.is_valid(i, &mut ctx).unwrap());
-        }
-        assert_eq!(primitive.to_buffer::<f64>().as_ref(), &[0.0, 0.0, 0.0]);
+        assert_arrays_eq!(
+            casted,
+            PrimitiveArray::from_option_iter([None::<f64>; 3]),
+            &mut ctx
+        );
     }
 }

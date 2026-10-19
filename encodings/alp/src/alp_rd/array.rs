@@ -607,13 +607,7 @@ mod test {
 
         let rd_array = encoder.encode(real_array.as_view());
 
-        let decoded = rd_array
-            .as_array()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
-
-        assert_arrays_eq!(decoded, PrimitiveArray::from_option_iter(reals), &mut ctx);
+        assert_arrays_eq!(rd_array, PrimitiveArray::from_option_iter(reals), &mut ctx);
     }
 
     #[cfg_attr(miri, ignore)]

@@ -72,6 +72,7 @@ fn test_canonicalize_dict_with_all_null_array_validity_codes() -> vortex_error::
 
 #[test]
 fn test_dict_display() {
+    let ctx = array_session().create_execution_ctx();
     let x = DictArray::try_new(
         buffer![0u8, 0, 0, 1, 0, 3].into_array(),
         VarBinArray::from(vec!["Hello", "你好", "Bonjour", "Hola"]).into_array(),
@@ -80,13 +81,14 @@ fn test_dict_display() {
     .into_array();
 
     assert_eq!(
-        x.display_values().to_string(),
+        x.display_values(&ctx).to_string(),
         "[\"Hello\", \"Hello\", \"Hello\", \"你好\", \"Hello\", \"Hola\"]"
     )
 }
 
 #[test]
 fn test_dict_list_dict_display() {
+    let ctx = array_session().create_execution_ctx();
     let elements = DictArray::try_new(
         buffer![0u8, 0, 0, 1, 0, 3, 3, 2].into_array(),
         <VarBinArray as FromIterator<_>>::from_iter([
@@ -102,7 +104,7 @@ fn test_dict_list_dict_display() {
     .into_array();
 
     assert_eq!(
-        elements.display_values().to_string(),
+        elements.display_values(&ctx).to_string(),
         "[\"Hello\", \"Hello\", \"Hello\", \"你好\", \"Hello\", \"Bonjour\", \"Bonjour\", null]"
     );
 
@@ -117,7 +119,7 @@ fn test_dict_list_dict_display() {
     .into_array();
 
     assert_eq!(
-        lists.display_values().to_string(),
+        lists.display_values(&ctx).to_string(),
         "[[\"Hello\"], [], null, [\"Hello\", \"Hello\"], null, [\"你好\", \"Hello\"], [\"Bonjour\", \"Bonjour\", null]]"
     );
 
@@ -126,7 +128,7 @@ fn test_dict_list_dict_display() {
         .into_array();
 
     assert_eq!(
-        x.display_values().to_string(),
+        x.display_values(&ctx).to_string(),
         "[[\"Bonjour\", \"Bonjour\", null], [\"你好\", \"Hello\"], null, [\"Hello\", \"Hello\"], null, []]"
     )
 }

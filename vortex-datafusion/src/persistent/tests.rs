@@ -138,15 +138,32 @@ async fn test_query_file(#[values(Some(1), None)] limit: Option<usize>) -> anyho
 
     assert_eq!(summary.row_count(), 8);
 
-    let read_row_count = ctx
+    let batches = ctx
         .session
         .sql("SELECT * from '/test.vortex'")
         .await?
         .limit(0, limit)?
-        .count()
+        .collect()
         .await?;
 
-    assert_eq!(read_row_count, limit.unwrap_or(8));
+    let mut seen = std::collections::BTreeSet::new();
+    for batch in &batches {
+        assert_eq!(batch.num_columns(), 2);
+        for row in 0..batch.num_rows() {
+            let number = datafusion_common::ScalarValue::try_from_array(batch.column(1), row)?;
+            let datafusion_common::ScalarValue::UInt32(Some(number)) = number else {
+                panic!("expected non-null UInt32");
+            };
+            assert!((1..=8).contains(&number));
+            assert!(seen.insert(number), "duplicate row {number}");
+            let expected = ["ab", "foo", "bar", "baz"][(number as usize - 1) % 4];
+            assert_eq!(
+                datafusion_common::ScalarValue::try_from_array(batch.column(0), row)?,
+                datafusion_common::ScalarValue::Utf8View(Some(expected.to_owned()))
+            );
+        }
+    }
+    assert_eq!(seen.len(), limit.unwrap_or(8));
 
     Ok(())
 }

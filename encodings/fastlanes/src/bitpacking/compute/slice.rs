@@ -84,6 +84,7 @@ mod tests {
     use vortex_array::array_session;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::arrays::SliceArray;
+    use vortex_array::assert_arrays_eq;
     use vortex_error::VortexResult;
 
     use crate::BitPacked;
@@ -106,6 +107,7 @@ mod tests {
         let reduced_bp = reduced.as_::<BitPacked>();
         assert_eq!(reduced_bp.offset(), 500);
         assert_eq!(reduced.len(), 1000);
+        assert_arrays_eq!(reduced, PrimitiveArray::from_iter(500u32..1500), &mut ctx);
 
         Ok(())
     }

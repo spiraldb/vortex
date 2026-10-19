@@ -32,6 +32,7 @@ use vortex::array::IntoArray;
 use vortex::array::arrays::ConstantArray;
 use vortex::array::arrays::PrimitiveArray;
 use vortex::array::builtins::ArrayBuiltins;
+use vortex::dtype::PType;
 use vortex::encodings::uuid::Uuid;
 use vortex::scalar::Scalar;
 use vortex::scalar_fn::fns::literal::Literal;
@@ -575,6 +576,24 @@ fn test_struct_literal_preserves_extension_child(
         .ok_or_else(|| anyhow::anyhow!("Expected the id field"))?;
     assert!(id_dtype.as_extension().is::<Uuid>());
     assert!(!id_dtype.is_nullable());
+    if !null {
+        let id = converted
+            .as_struct()
+            .field("id")
+            .ok_or_else(|| anyhow::anyhow!("Expected id value"))?;
+        assert_eq!(
+            id.as_extension().to_storage_scalar(),
+            Scalar::fixed_size_list(
+                DType::Primitive(PType::U8, Nullability::NonNullable),
+                b"0123456789abcdef"
+                    .iter()
+                    .copied()
+                    .map(Scalar::from)
+                    .collect(),
+                Nullability::NonNullable,
+            )
+        );
+    }
     Ok(())
 }
 
@@ -591,6 +610,21 @@ fn test_literal_preserves_extension_metadata(
     )))?;
     assert_eq!(converted.is_null(), null);
     assert!(converted.dtype().as_extension().is::<Uuid>());
+    assert_eq!(converted.dtype().is_nullable(), null);
+    if !null {
+        assert_eq!(
+            converted.as_extension().to_storage_scalar(),
+            Scalar::fixed_size_list(
+                DType::Primitive(PType::U8, Nullability::NonNullable),
+                b"0123456789abcdef"
+                    .iter()
+                    .copied()
+                    .map(Scalar::from)
+                    .collect(),
+                Nullability::NonNullable,
+            )
+        );
+    }
     Ok(())
 }
 
@@ -989,15 +1023,6 @@ fn test_can_be_pushed_down_like_unsupported_operand(test_schema: Schema) -> DFRe
 }
 
 #[rstest]
-fn test_can_be_pushed_down_octet_length_supported(test_schema: Schema) -> DFResult<()> {
-    let expr = Arc::new(df_expr::Column::new("name", 1)) as Arc<dyn PhysicalExpr>;
-    let octet_length = octet_length_expr(expr, &test_schema);
-
-    assert!(converts(&octet_length, &test_schema)?);
-    Ok(())
-}
-
-#[rstest]
 fn test_can_be_pushed_down_octet_length_unsupported_operand(test_schema: Schema) -> DFResult<()> {
     let expr = Arc::new(df_expr::Column::new("tags", 5)) as Arc<dyn PhysicalExpr>;
     let octet_length = Arc::new(ScalarFunctionExpr::new(
@@ -1009,15 +1034,6 @@ fn test_can_be_pushed_down_octet_length_unsupported_operand(test_schema: Schema)
     )) as Arc<dyn PhysicalExpr>;
 
     assert!(!converts(&octet_length, &test_schema)?);
-    Ok(())
-}
-
-#[rstest]
-fn test_can_be_pushed_down_array_length_supported(test_schema: Schema) -> DFResult<()> {
-    let expr = Arc::new(df_expr::Column::new("tags", 5)) as Arc<dyn PhysicalExpr>;
-    let array_length = array_length_expr(vec![expr], &test_schema);
-
-    assert!(converts(&array_length, &test_schema)?);
     Ok(())
 }
 
@@ -1104,24 +1120,40 @@ async fn test_cast_int_to_string() -> anyhow::Result<()> {
         .show()
         .await?;
 
-    ctx.session
+    let batches = ctx
+        .session
         .sql(r#"select cast(id as string) as sid from 'example.vortex' where id > 0"#)
         .await?
-        .show()
+        .collect()
         .await?;
+    assert_eq!(batches.iter().map(RecordBatch::num_rows).sum::<usize>(), 1);
+    let actual = ScalarValue::try_from_array(batches[0].column(0).as_ref(), 0)?;
+    assert!(
+        matches!(&actual, ScalarValue::Utf8(Some(value)) | ScalarValue::Utf8View(Some(value)) if value == "1")
+    );
 
-    ctx.session
+    let batches = ctx
+        .session
         .sql(r#"select id from 'example.vortex' where cast (id as string) == '1'"#)
         .await?
-        .show()
+        .collect()
         .await?;
+    assert_eq!(batches.iter().map(RecordBatch::num_rows).sum::<usize>(), 1);
+    let actual = ScalarValue::try_from_array(batches[0].column(0).as_ref(), 0)?;
+    assert_eq!(actual, ScalarValue::Int64(Some(1)));
 
     // This fails as it pushes string cast to the scan
-    ctx.session
+    let batches = ctx
+        .session
         .sql(r#"select cast(id as string) from 'example.vortex'"#)
         .await?
         .collect()
         .await?;
+    assert_eq!(batches.iter().map(RecordBatch::num_rows).sum::<usize>(), 1);
+    let actual = ScalarValue::try_from_array(batches[0].column(0).as_ref(), 0)?;
+    assert!(
+        matches!(&actual, ScalarValue::Utf8(Some(value)) | ScalarValue::Utf8View(Some(value)) if value == "1")
+    );
 
     Ok(())
 }

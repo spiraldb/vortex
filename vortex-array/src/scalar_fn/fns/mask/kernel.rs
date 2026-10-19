@@ -182,6 +182,12 @@ mod tests {
         };
         assert!(ArrayRef::ptr_eq(&validity, &mask));
 
+        let mut ctx = crate::array_session().create_execution_ctx();
+        assert_arrays_eq!(
+            output,
+            PrimitiveArray::from_option_iter([Some(1i32), None, None]),
+            &mut ctx
+        );
         Ok(())
     }
 
@@ -189,12 +195,18 @@ mod tests {
     #[case::partially_valid(false)]
     #[case::all_true_bitmap(true)]
     fn array_backed_validity_keeps_lazy_mask(#[case] all_true: bool) -> VortexResult<()> {
-        let validity = BoolArray::from_iter([true, all_true, true]).into_array();
+        let validity = BoolArray::from_iter([all_true, true, true]).into_array();
         let input =
             PrimitiveArray::new(buffer![1i32, 2, 3], Validity::Array(validity)).into_array();
         let output = input.mask(lazy_mask()?)?;
         assert!(output.is::<ExactScalarFn<MaskExpr>>());
 
+        let mut ctx = crate::array_session().create_execution_ctx();
+        assert_arrays_eq!(
+            output,
+            PrimitiveArray::from_option_iter([all_true.then_some(1i32), None, None]),
+            &mut ctx
+        );
         Ok(())
     }
 

@@ -347,6 +347,7 @@ mod tests {
     use crate::arrays::PrimitiveArray;
     use crate::arrays::fixed_size_list::FixedSizeListArrayExt;
     use crate::arrays::fixed_size_list::FixedSizeListArraySlotsExt;
+    use crate::assert_arrays_eq;
     use crate::builders::ArrayBuilder;
     use crate::builders::fixed_size_list::FixedSizeListArray;
     use crate::dtype::DType;
@@ -368,6 +369,10 @@ mod tests {
 
         let fsl = builder.finish();
         assert_eq!(fsl.len(), 0);
+        assert_eq!(
+            fsl.dtype(),
+            &DType::FixedSizeList(Arc::new(I32.into()), 3, NonNullable)
+        );
     }
 
     #[test]
@@ -410,6 +415,13 @@ mod tests {
         let fsl_array = fsl.execute::<FixedSizeListArray>(&mut ctx).unwrap();
         assert_eq!(fsl_array.elements().len(), 6);
         assert_eq!(fsl_array.list_size(), 3);
+        let expected = FixedSizeListArray::new(
+            buffer![1i32, 2, 3, 4, 5, 6].into_array(),
+            3,
+            Validity::NonNullable,
+            2,
+        );
+        assert_arrays_eq!(fsl_array, expected, &mut ctx);
     }
 
     #[test]
@@ -440,6 +452,9 @@ mod tests {
         assert_eq!(fsl_array.list_size(), 0);
         // The elements array should be empty since list_size is 0.
         assert_eq!(fsl_array.elements().len(), 0);
+        let expected =
+            FixedSizeListArray::new(buffer![0i32; 0].into_array(), 0, Validity::NonNullable, 100);
+        assert_arrays_eq!(fsl_array, expected, &mut ctx);
     }
 
     #[test]
@@ -474,6 +489,13 @@ mod tests {
         let fsl_array = fsl.execute::<FixedSizeListArray>(&mut ctx).unwrap();
         assert_eq!(fsl_array.list_size(), 0);
         assert_eq!(fsl_array.elements().len(), 0);
+        let expected = FixedSizeListArray::new(
+            PrimitiveArray::from_option_iter([] as [Option<i32>; 0]).into_array(),
+            0,
+            Validity::from_iter((0..100).map(|i| i % 2 == 0)),
+            100,
+        );
+        assert_arrays_eq!(fsl_array, expected, &mut ctx);
     }
 
     #[test]
@@ -508,6 +530,13 @@ mod tests {
         let mut ctx = array_session().create_execution_ctx();
         let fsl_array = fsl.execute::<FixedSizeListArray>(&mut ctx).unwrap();
         assert_eq!(fsl_array.elements().len(), 10);
+        let expected = FixedSizeListArray::new(
+            buffer![0i32, 1, 2, 3, 4, 5, 6, 7, 8, 9].into_array(),
+            2,
+            Validity::NonNullable,
+            5,
+        );
+        assert_arrays_eq!(fsl_array, expected, &mut ctx);
     }
 
     #[test]
@@ -587,6 +616,13 @@ mod tests {
                 .execute_is_valid(2, &mut ctx)
                 .unwrap()
         );
+        let expected = FixedSizeListArray::new(
+            buffer![1i32, 2, 0, 0, 3, 4].into_array(),
+            2,
+            Validity::from_iter([true, false, true]),
+            3,
+        );
+        assert_arrays_eq!(fsl_array, expected, &mut ctx);
     }
 
     #[test]
@@ -636,6 +672,21 @@ mod tests {
         let mut ctx = array_session().create_execution_ctx();
         let fsl_array = fsl.execute::<FixedSizeListArray>(&mut ctx).unwrap();
         assert_eq!(fsl_array.elements().len(), 6);
+        let expected = FixedSizeListArray::new(
+            PrimitiveArray::from_option_iter([
+                Some(1i32),
+                None,
+                Some(3),
+                Some(4),
+                Some(5),
+                Some(6),
+            ])
+            .into_array(),
+            3,
+            Validity::NonNullable,
+            2,
+        );
+        assert_arrays_eq!(fsl_array, expected, &mut ctx);
     }
 
     #[test]
@@ -871,6 +922,13 @@ mod tests {
                 .execute_is_valid(5, &mut ctx)
                 .unwrap()
         );
+        let expected = FixedSizeListArray::new(
+            buffer![1i32, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6].into_array(),
+            2,
+            Validity::from_iter([true, false, true, true, false, true]),
+            6,
+        );
+        assert_arrays_eq!(fsl_array, expected, &mut ctx);
     }
 
     #[test]
@@ -996,6 +1054,13 @@ mod tests {
 
         let fsl = builder.finish();
         assert_eq!(fsl.len(), 1);
+        let expected = FixedSizeListArray::new(
+            buffer![1i32, 2, 3].into_array(),
+            3,
+            Validity::NonNullable,
+            1,
+        );
+        assert_arrays_eq!(fsl, expected, &mut ctx);
     }
 
     #[test]
@@ -1090,6 +1155,27 @@ mod tests {
                 .execute_is_valid(5, &mut ctx)
                 .unwrap()
         );
+        let expected = FixedSizeListArray::new(
+            PrimitiveArray::from_option_iter([
+                Some(1i32),
+                Some(2),
+                None,
+                None,
+                Some(0),
+                Some(0),
+                Some(0),
+                Some(0),
+                None,
+                None,
+                Some(5),
+                Some(6),
+            ])
+            .into_array(),
+            2,
+            Validity::from_iter([true, false, true, true, false, true]),
+            6,
+        );
+        assert_arrays_eq!(fsl_array, expected, &mut ctx);
     }
 
     #[test]

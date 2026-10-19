@@ -186,7 +186,9 @@ mod tests {
 
     #[test]
     fn test_take_null() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let session = array_session();
+        crate::initialize(&session);
+        let mut ctx = session.create_execution_ctx();
         let arr =
             VarBinArray::from_iter([Some("h")], DType::Utf8(Nullability::NonNullable)).into_array();
         let compr = fsst_train_compressor(&arr, &mut ctx)?;
@@ -194,16 +196,14 @@ mod tests {
 
         let idx1: PrimitiveArray = (0..1).collect();
 
-        assert_eq!(
-            fsst.take(idx1.into_array())?.dtype(),
-            &DType::Utf8(Nullability::NonNullable)
-        );
+        assert_arrays_eq!(fsst.take(idx1.into_array())?, arr, &mut ctx);
 
         let idx2: PrimitiveArray = PrimitiveArray::from_option_iter(vec![Some(0)]);
 
-        assert_eq!(
-            fsst.take(idx2.into_array())?.dtype(),
-            &DType::Utf8(Nullability::Nullable)
+        assert_arrays_eq!(
+            fsst.take(idx2.into_array())?,
+            VarBinArray::from_iter([Some("h")], DType::Utf8(Nullability::Nullable)),
+            &mut ctx
         );
         Ok(())
     }
@@ -222,7 +222,9 @@ mod tests {
         DType::Utf8(Nullability::NonNullable),
     ))]
     fn test_take_fsst_conformance(#[case] varbin: VarBinArray) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let session = array_session();
+        crate::initialize(&session);
+        let mut ctx = session.create_execution_ctx();
         let varbin = varbin.into_array();
         let compressor = fsst_train_compressor(&varbin, &mut ctx)?;
         let array = fsst_compress(&varbin, &compressor, &mut ctx)?;
@@ -418,11 +420,10 @@ mod tests {
     })]
 
     fn test_fsst_consistency(#[case] build: FsstBuilder) {
-        let mut ctx = array_session().create_execution_ctx();
+        let session = array_session();
+        crate::initialize(&session);
+        let mut ctx = session.create_execution_ctx();
         let array = build(&mut ctx);
-        test_array_consistency(
-            &array.into_array(),
-            &mut array_session().create_execution_ctx(),
-        );
+        test_array_consistency(&array.into_array(), &mut ctx);
     }
 }

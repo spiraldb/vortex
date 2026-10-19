@@ -88,11 +88,15 @@ mod tests {
             .execute(masked.clone().into_array(), &mut cuda_ctx)
             .await
             .vortex_expect("GPU decompression failed")
-            .into_host()
+            .into_host(cuda_ctx.execution_ctx())
             .await?
             .into_array();
 
-        assert_arrays_eq!(masked, gpu_result, &mut ctx);
+        assert_arrays_eq!(
+            gpu_result,
+            PrimitiveArray::from_option_iter([Some(1i32), None, Some(3), Some(4)]),
+            &mut ctx
+        );
 
         Ok(())
     }

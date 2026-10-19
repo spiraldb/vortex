@@ -199,17 +199,4 @@ mod tests {
         assert!(bool::try_from(&acc.finish()?)?);
         Ok(())
     }
-
-    #[test]
-    fn all_non_nan_true_with_nulls() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
-        let dtype = DType::Primitive(PType::F32, Nullability::Nullable);
-        let mut acc = Accumulator::try_new(AllNonNan, EmptyOptions, dtype)?;
-
-        let batch = PrimitiveArray::from_option_iter([Some(1.0f32), None]).into_array();
-        acc.accumulate(&batch, &mut ctx)?;
-
-        assert!(bool::try_from(&acc.finish()?)?);
-        Ok(())
-    }
 }

@@ -212,10 +212,11 @@ mod tests {
     fn test_optimize_compacts_buffers() {
         let mut ctx = array_session().create_execution_ctx();
         // Create a VarBinViewArray with some long strings that will create multiple buffers
+        let excluded = "unused long string".repeat(100);
         let original = VarBinViewArray::from_iter_nullable_str([
             Some("short"),
             Some("this is a longer string that will be stored in a buffer"),
-            Some("medium length string"),
+            Some(excluded.as_str()),
             Some("another very long string that definitely needs a buffer to store it"),
             Some("tiny"),
         ]);
@@ -234,10 +235,7 @@ mod tests {
         // Now optimize the taken array
         let optimized_array = taken.compact_buffers(&mut ctx).unwrap();
 
-        // The optimized array should have compacted buffers
-        // Since both remaining strings are short, they should be inlined
-        // so we might have 0 buffers, or 1 buffer if any were not inlined
-        assert!(optimized_array.data_buffers().len() <= 1);
+        assert!(optimized_array.data_buffers().is_empty());
 
         // Verify the data is still correct
         assert_arrays_eq!(
@@ -274,6 +272,10 @@ mod tests {
 
         // The optimized array should have exactly 1 buffer (consolidated)
         assert_eq!(optimized_array.data_buffers().len(), 1);
+        assert_eq!(
+            optimized_array.buffer(0).len(),
+            long_string_1.len() + long_string_3.len()
+        );
 
         // Verify the data is still correct
         assert_arrays_eq!(
@@ -372,6 +374,14 @@ mod tests {
 
         // Should have compacted buffers
         assert!(compacted.data_buffers().len() <= original_buffers);
+        assert!(
+            compacted
+                .data_buffers()
+                .iter()
+                .map(|b| b.len())
+                .sum::<usize>()
+                < taken.data_buffers().iter().map(|b| b.len()).sum::<usize>()
+        );
 
         // Verify correctness
         assert_arrays_eq!(compacted, taken, &mut ctx);
@@ -395,6 +405,11 @@ mod tests {
 
         // Well-utilized buffer should be preserved
         assert_eq!(compacted.data_buffers().len(), 1);
+        assert_eq!(compacted.buffer(0).as_ptr(), original.buffer(0).as_ptr());
+        assert_eq!(
+            compacted.buffer(0).as_slice(),
+            original.buffer(0).as_slice()
+        );
 
         // Verify all data is correct
         assert_arrays_eq!(compacted, original, &mut ctx);
@@ -429,7 +444,7 @@ mod tests {
             [0, 2, 4, 6, 8].map(|i| Some(strings[i].as_str())),
             DType::Utf8(Nullability::NonNullable),
         );
-        assert_arrays_eq!(expected, compacted, &mut ctx);
+        assert_arrays_eq!(compacted, expected, &mut ctx);
     }
 
     #[test]
@@ -449,8 +464,7 @@ mod tests {
             .execute::<VarBinViewArray>(&mut array_session().create_execution_ctx())
             .unwrap();
         // Get buffer stats before compaction
-        let utils_before = taken.buffer_utilizations(&mut ctx).unwrap();
-        let original_buffer_count = taken.data_buffers().len();
+        let original_ptr = taken.buffer(0).as_ptr();
 
         // Compact with a threshold that should trigger slicing
         // The range utilization should be high even if overall utilization is low
@@ -465,15 +479,12 @@ mod tests {
         // Verify correctness
         assert_arrays_eq!(&compacted, taken, &mut ctx);
 
-        // Verify that if there was only one buffer, the compacted version also has one
-        // (it was sliced, not rewritten into multiple buffers)
-        if original_buffer_count == 1 && utils_before[0].range_utilization() >= 0.8 {
-            assert_eq!(
-                compacted.data_buffers().len(),
-                1,
-                "Slice strategy should maintain single buffer"
-            );
-        }
+        assert_eq!(compacted.data_buffers().len(), 1);
+        assert_eq!(compacted.buffer(0).as_ptr(), original_ptr);
+        assert_eq!(
+            compacted.buffer(0).len(),
+            strings[..5].iter().map(String::len).sum::<usize>()
+        );
     }
 
     const LONG1: &str = "long string one!";

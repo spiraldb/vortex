@@ -783,9 +783,11 @@ mod tests {
     use crate::ArraySerialization;
     use crate::ArrayVTable;
     use crate::IntoArray;
+    use crate::VortexSessionExecute;
     use crate::array_session;
     use crate::arrays::Primitive;
     use crate::arrays::PrimitiveArray;
+    use crate::assert_arrays_eq;
 
     static SERIALIZER_CALLS: AtomicUsize = AtomicUsize::new(0);
 
@@ -916,7 +918,7 @@ mod tests {
     }
 
     #[test]
-    fn one_serializer_selects_the_earliest_lossless_wire_id() -> VortexResult<()> {
+    fn serialization_preserves_plugin_selected_old_wire_id() -> VortexResult<()> {
         let session = array_session();
         session.arrays().register(CountingVersionedPrimitivePlugin);
         let ctx = restricted_context(&[old_primitive_id(), new_primitive_id()]);
@@ -929,12 +931,22 @@ mod tests {
             ReadContext::new(ctx.to_ids()).resolve(serialized.encoding_id()),
             Some(old_primitive_id())
         );
+        let decoded = serialized.decode(
+            array.dtype(),
+            array.len(),
+            &ReadContext::new(ctx.to_ids()),
+            &session,
+        )?;
+        assert_arrays_eq!(
+            decoded,
+            PrimitiveArray::from_iter([1i32, 2, 3, 4]),
+            &mut session.create_execution_ctx()
+        );
         Ok(())
     }
 
     #[test]
-    fn serializer_uses_a_newer_id_only_when_the_old_variant_cannot_represent_the_value()
-    -> VortexResult<()> {
+    fn serialization_preserves_plugin_selected_new_wire_id() -> VortexResult<()> {
         let session = versioned_primitive_session();
         let ctx = restricted_context(&[old_primitive_id(), new_primitive_id()]);
         let array = PrimitiveArray::from_iter(0..8i32).into_array();
@@ -947,6 +959,11 @@ mod tests {
         );
         let decoded = serialized.decode(array.dtype(), array.len(), &read_ctx, &session)?;
         assert_eq!(decoded.encoding_id(), old_primitive_id());
+        assert_arrays_eq!(
+            decoded,
+            PrimitiveArray::from_iter(0..8i32),
+            &mut session.create_execution_ctx()
+        );
         Ok(())
     }
 

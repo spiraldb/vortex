@@ -59,7 +59,7 @@ impl Debug for Validity {
             Self::NonNullable => write!(f, "NonNullable"),
             Self::AllValid => write!(f, "AllValid"),
             Self::AllInvalid => write!(f, "AllInvalid"),
-            Self::Array(arr) => write!(f, "SomeValid({})", arr.display_values()),
+            Self::Array(arr) => write!(f, "SomeValid({arr})"),
         }
     }
 }
@@ -736,29 +736,43 @@ mod tests {
         );
     }
 
-    #[test]
-    #[should_panic]
-    fn out_of_bounds_patch() {
+    #[rstest]
+    #[case(
+        Validity::NonNullable,
+        1,
+        "Can't patch a non-nullable validity with nullable validity"
+    )]
+    #[case(
+        Validity::AllValid,
+        4,
+        "Patch indices 4, offset 0 are longer than the array length 2"
+    )]
+    fn rejects_invalid_patch(
+        #[case] validity: Validity,
+        #[case] index: u64,
+        #[case] message: &str,
+    ) {
         let mut ctx = array_session().create_execution_ctx();
-        Validity::NonNullable
+        let error = validity
             .patch(
                 2,
                 0,
-                &buffer![4].into_array(),
+                &buffer![index].into_array(),
                 &Validity::AllInvalid,
                 &mut ctx,
             )
-            .unwrap();
+            .unwrap_err();
+        assert!(error.to_string().contains(message), "{error}");
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "NonNullable validity must be AllValid")]
     fn into_validity_nullable() {
         Validity::from_mask(Mask::AllFalse(10), Nullability::NonNullable);
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "NonNullable validity must be AllValid")]
     fn into_validity_nullable_array() {
         Validity::from_mask(Mask::from_iter(vec![true, false]), Nullability::NonNullable);
     }
@@ -792,13 +806,9 @@ mod tests {
         #[case] expected: Validity,
     ) {
         let mut ctx = array_session().create_execution_ctx();
-        assert!(
-            validity
-                .take(&indices)
-                .unwrap()
-                .mask_eq(&expected, indices.len(), &mut ctx)
-                .unwrap()
-        );
+        let taken = validity.take(&indices).unwrap();
+        assert_eq!(taken.nullability(), expected.nullability());
+        assert!(taken.mask_eq(&expected, indices.len(), &mut ctx).unwrap());
     }
 
     #[rstest]

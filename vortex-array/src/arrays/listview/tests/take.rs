@@ -68,6 +68,8 @@ fn test_take_preserves_unreferenced_elements() {
     // Verify offsets are preserved.
     assert_eq!(result_list.offset_at(0), 2); // List 1
     assert_eq!(result_list.offset_at(1), 0); // List 3
+    assert_eq!(result_list.size_at(0), 2);
+    assert_eq!(result_list.size_at(1), 2);
 }
 
 #[test]
@@ -98,6 +100,22 @@ fn test_take_with_gaps() {
     assert_arrays_eq!(
         result_list.list_elements_at(0).unwrap(),
         PrimitiveArray::from_iter([7i32, 8, 9]),
+        &mut ctx
+    );
+    assert_eq!(result_list.len(), 4);
+    assert_arrays_eq!(
+        result_list.list_elements_at(1).unwrap(),
+        buffer![2i32, 3].into_array(),
+        &mut ctx
+    );
+    assert_arrays_eq!(
+        result_list.list_elements_at(2).unwrap(),
+        buffer![8i32, 9].into_array(),
+        &mut ctx
+    );
+    assert_arrays_eq!(
+        result_list.list_elements_at(3).unwrap(),
+        buffer![11i32, 12].into_array(),
         &mut ctx
     );
 }
@@ -156,6 +174,11 @@ fn test_take_constant_arrays() {
     assert_eq!(result2_list.offset_at(1), 1);
     assert_eq!(result2_list.size_at(0), 3);
     assert_eq!(result2_list.size_at(1), 3);
+    assert_arrays_eq!(
+        result2_list.list_elements_at(0).unwrap(),
+        buffer![200i32, 300, 400].into_array(),
+        &mut SESSION.create_execution_ctx()
+    );
 }
 
 #[test]
@@ -205,5 +228,10 @@ fn test_take_extreme_offsets() {
             .as_::<i32>()
             .unwrap(),
         5000
+    );
+    assert_arrays_eq!(
+        result_list.list_elements_at(1).unwrap(),
+        buffer![7500i32..7504].into_array(),
+        &mut SESSION.create_execution_ctx()
     );
 }

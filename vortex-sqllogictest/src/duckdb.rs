@@ -389,7 +389,7 @@ mod tests {
         assert!(duckdb_validator(
             identity,
             &actual,
-            &["<REGEX>:SELECT projections".to_string()]
+            &["<REGEX>:physical_plan.*SELECT projections".to_string()]
         ));
         assert!(!duckdb_validator(
             identity,
@@ -405,7 +405,7 @@ mod tests {
         assert!(!duckdb_validator(
             identity,
             &actual,
-            &["<!REGEX>:SELECT projections".to_string()]
+            &["<!REGEX>:physical_plan.*SELECT projections".to_string()]
         ));
     }
 

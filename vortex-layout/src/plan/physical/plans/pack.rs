@@ -235,10 +235,10 @@ impl PlanVTable for Pack {
             return Ok(None);
         }
         let mut chains = Vec::with_capacity(count);
-        for child in plan.children().iter() {
+        for child in plan.children().iter_refs() {
             chains.push(
                 compiler
-                    .compile(&child?, rows.clone(), mask)?
+                    .compile(child?, rows.clone(), mask)?
                     .ok_or_else(|| vortex_err!("A Pack field produced no rows"))?,
             );
         }
@@ -258,7 +258,7 @@ impl PlanVTable for Pack {
         at: &Reach,
         visit: &mut dyn FnMut(SegmentId, Range<u64>),
     ) -> VortexResult<()> {
-        for child in plan.children().iter() {
+        for child in plan.children().iter_refs() {
             child?.reach(rows.clone(), at, visit)?;
         }
         Ok(())

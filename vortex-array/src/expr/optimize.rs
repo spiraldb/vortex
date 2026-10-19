@@ -123,9 +123,16 @@ impl BoundExpression {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
+    use vortex_buffer::buffer;
     use vortex_error::VortexResult;
     use vortex_error::vortex_err;
 
+    use crate::IntoArray;
+    use crate::VortexSessionExecute;
+    use crate::array_session;
+    use crate::arrays::BoolArray;
+    use crate::arrays::StructArray;
+    use crate::assert_arrays_eq;
     use crate::dtype::DType;
     use crate::dtype::FieldName;
     use crate::dtype::Nullability;
@@ -163,10 +170,14 @@ mod tests {
         );
         let optimized = expr.bind(&scope)?.optimize_recursive()?;
 
-        let s = optimized.to_string();
-        assert!(s.contains("$.x"), "expected $.x in {s}");
-        assert!(s.contains("1i32") || s.contains('1'), "expected 1 in {s}");
-        assert!(s.contains("2i32") || s.contains('2'), "expected 2 in {s}");
+        let data =
+            StructArray::from_fields(&[("x", buffer![0i32, 1, 2, 3].into_array())])?.into_array();
+        let actual = data.apply_bound(&optimized)?;
+        assert_arrays_eq!(
+            actual,
+            BoolArray::from_iter([false, true, true, false]),
+            &mut array_session().create_execution_ctx()
+        );
         Ok(())
     }
 

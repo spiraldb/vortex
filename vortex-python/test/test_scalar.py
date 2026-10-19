@@ -217,7 +217,9 @@ def test_decimal_scalar_infers_precision_and_scale(value: str, precision: int, s
 def test_decimal_scalar_rescales_to_dtype() -> None:
     scalar = vx.scalar(decimal.Decimal("1.5"), dtype=vx.decimal(precision=10, scale=3))
     assert scalar.dtype == vx.decimal(precision=10, scale=3)
-    assert scalar.as_py() == decimal.Decimal("1.500")
+    value = scalar.as_py()
+    assert isinstance(value, decimal.Decimal)
+    assert value.as_tuple() == decimal.Decimal("1.500").as_tuple()
 
 
 def test_decimal_scalar_rejects_precision_loss() -> None:

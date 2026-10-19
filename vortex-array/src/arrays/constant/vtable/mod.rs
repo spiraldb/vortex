@@ -418,6 +418,8 @@ mod tests {
     use rstest::rstest;
     use vortex_error::VortexResult;
 
+    use crate::ArrayRef;
+    use crate::ExecutionCtx;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::arrays::Chunked;
@@ -445,10 +447,26 @@ mod tests {
     use crate::extension::datetime::TimeUnit;
     use crate::scalar::Scalar;
 
-    /// Appends `array` into a fresh builder and asserts the result matches `constant_canonicalize`.
+    fn assert_constant_values(
+        array: &ArrayRef,
+        scalar: &Scalar,
+        len: usize,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<()> {
+        assert_eq!(array.dtype(), scalar.dtype());
+        assert_eq!(array.len(), len);
+        for index in 0..len {
+            assert_eq!(&array.execute_scalar(index, ctx)?, scalar);
+        }
+        Ok(())
+    }
+
+    /// Checks append against both the fixture scalar and the canonicalization path.
     fn assert_append_matches_canonical(array: ConstantArray) -> VortexResult<()> {
         let mut ctx = crate::array_session().create_execution_ctx();
 
+        let scalar = array.scalar().clone();
+        let len = array.len();
         let expected = constant_canonicalize(array.as_view(), &mut ctx)?.into_array();
         let mut builder = builder_with_capacity_in(
             array.dtype(),
@@ -460,6 +478,7 @@ mod tests {
             .append_to_builder(builder.as_mut(), &mut ctx)?;
         let result = builder.finish();
         assert_arrays_eq!(&result, &expected, &mut ctx);
+        assert_constant_values(&result, &scalar, len, &mut ctx)?;
         Ok(())
     }
 
@@ -588,7 +607,7 @@ mod tests {
             vec![Scalar::from(1i32), Scalar::from(2i32), Scalar::from(3i32)],
             Nullability::NonNullable,
         );
-        let array = ConstantArray::new(scalar, 1_000);
+        let array = ConstantArray::new(scalar.clone(), 1_000);
 
         let mut builder = builder_with_capacity_in(
             array.dtype(),
@@ -599,6 +618,7 @@ mod tests {
             .into_array()
             .append_to_builder(builder.as_mut(), &mut ctx)?;
         let result = builder.finish();
+        assert_constant_values(&result, &scalar, 1_000, &mut ctx)?;
 
         assert_eq!(
             result.as_::<ListView>().elements().len(),
@@ -683,7 +703,7 @@ mod tests {
                 Scalar::utf8("hi", Nullability::NonNullable),
             ],
         );
-        let array = ConstantArray::new(scalar, 1_000);
+        let array = ConstantArray::new(scalar.clone(), 1_000);
 
         let mut builder = builder_with_capacity_in(
             array.dtype(),
@@ -694,6 +714,7 @@ mod tests {
             .into_array()
             .append_to_builder(builder.as_mut(), &mut ctx)?;
         let result = builder.finish();
+        assert_constant_values(&result, &scalar, 1_000, &mut ctx)?;
 
         let struct_array = result.as_::<Struct>();
         for field in 0..2 {
@@ -737,7 +758,7 @@ mod tests {
             vec![Scalar::from(7i32), Scalar::from(7i32)],
             Nullability::NonNullable,
         );
-        let array = ConstantArray::new(scalar, 1_000);
+        let array = ConstantArray::new(scalar.clone(), 1_000);
 
         let mut builder = builder_with_capacity_in(
             array.dtype(),
@@ -748,6 +769,7 @@ mod tests {
             .into_array()
             .append_to_builder(builder.as_mut(), &mut ctx)?;
         let result = builder.finish();
+        assert_constant_values(&result, &scalar, 1_000, &mut ctx)?;
 
         let elements = result.as_::<FixedSizeList>().elements().clone();
         assert!(
@@ -772,7 +794,7 @@ mod tests {
     fn test_extension_constant_append_keeps_storage_constant() -> VortexResult<()> {
         let mut ctx = crate::array_session().create_execution_ctx();
         let scalar = Scalar::extension::<Date>(TimeUnit::Days, Scalar::from(Some(42i32)));
-        let array = ConstantArray::new(scalar, 1_000);
+        let array = ConstantArray::new(scalar.clone(), 1_000);
 
         let mut builder = builder_with_capacity_in(
             array.dtype(),
@@ -783,6 +805,7 @@ mod tests {
             .into_array()
             .append_to_builder(builder.as_mut(), &mut ctx)?;
         let result = builder.finish();
+        assert_constant_values(&result, &scalar, 1_000, &mut ctx)?;
 
         assert!(
             result.as_::<Extension>().storage_array().is::<Constant>(),

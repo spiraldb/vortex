@@ -335,6 +335,9 @@ mod tests {
     use crate::builders::DecimalBuilder;
     use crate::builders::decimal::DecimalArray;
     use crate::dtype::DecimalDType;
+    use crate::dtype::Nullability;
+    use crate::scalar::DecimalValue;
+    use crate::scalar::Scalar;
 
     #[test]
     fn test_mixed_extend() {
@@ -368,12 +371,29 @@ mod tests {
                     .unwrap()
             );
         }
+        assert_eq!(i8s.len(), 42);
+        assert_eq!(i128s.len(), 42);
+        let mut ctx = array_session().create_execution_ctx();
+        for value in 0i8..42 {
+            let expected = Scalar::decimal(
+                DecimalValue::I8(value),
+                DecimalDType::new(2, 1),
+                Nullability::NonNullable,
+            );
+            assert_eq!(
+                i8s.execute_scalar(value as usize, &mut ctx).unwrap(),
+                expected
+            );
+            assert_eq!(
+                i128s.execute_scalar(value as usize, &mut ctx).unwrap(),
+                expected
+            );
+        }
     }
 
     #[test]
     fn test_append_scalar() {
         let mut ctx = array_session().create_execution_ctx();
-        use crate::scalar::Scalar;
 
         // Simply test that the builder accepts its own finish output via scalar.
         let mut builder = DecimalBuilder::new_in::<i64>(

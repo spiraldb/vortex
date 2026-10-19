@@ -170,7 +170,7 @@ fn equal_block_offsets_decode() -> VortexResult<()> {
     let mut ctx = SESSION.create_execution_ctx();
     let original = uniform()?;
     let blocked = with_block_offsets(&original, buffer![128u64, 1024, 1920, 2816].into_array())?;
-    assert_arrays_eq!(original, blocked, &mut ctx);
+    assert_arrays_eq!(blocked, original, &mut ctx);
     Ok(())
 }
 

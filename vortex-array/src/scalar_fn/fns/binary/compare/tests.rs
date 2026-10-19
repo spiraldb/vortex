@@ -45,7 +45,6 @@ use crate::scalar::Scalar;
 use crate::scalar_fn::fns::binary::scalar_cmp;
 use crate::scalar_fn::fns::operators::CompareOperator;
 use crate::scalar_fn::fns::operators::Operator;
-use crate::test_harness::to_int_indices;
 use crate::validity::Validity;
 
 #[test]
@@ -60,20 +59,23 @@ fn test_bool_basic_comparisons() {
         .clone()
         .into_array()
         .binary(arr.clone().into_array(), Operator::Eq)
-        .unwrap()
-        .execute::<BoolArray>(ctx)
-        .vortex_expect("must be a bool array");
-    assert_eq!(to_int_indices(matches, ctx).unwrap(), [1u64, 2, 3, 4]);
+        .unwrap();
+    assert_arrays_eq!(
+        matches,
+        BoolArray::from_iter([None, Some(true), Some(true), Some(true), Some(true)]),
+        ctx
+    );
 
     let matches = arr
         .clone()
         .into_array()
         .binary(arr.clone().into_array(), Operator::NotEq)
-        .unwrap()
-        .execute::<BoolArray>(ctx)
-        .vortex_expect("must be a bool array");
-    let empty: [u64; 0] = [];
-    assert_eq!(to_int_indices(matches, ctx).unwrap(), empty);
+        .unwrap();
+    assert_arrays_eq!(
+        matches,
+        BoolArray::from_iter([None, Some(false), Some(false), Some(false), Some(false)]),
+        ctx
+    );
 
     let other = BoolArray::new(
         BitBuffer::from_iter([false, false, false, true, true]),
@@ -84,36 +86,44 @@ fn test_bool_basic_comparisons() {
         .clone()
         .into_array()
         .binary(other.clone().into_array(), Operator::Lte)
-        .unwrap()
-        .execute::<BoolArray>(ctx)
-        .vortex_expect("must be a bool array");
-    assert_eq!(to_int_indices(matches, ctx).unwrap(), [2u64, 3, 4]);
+        .unwrap();
+    assert_arrays_eq!(
+        matches,
+        BoolArray::from_iter([None, Some(false), Some(true), Some(true), Some(true)]),
+        ctx
+    );
 
     let matches = arr
         .clone()
         .into_array()
         .binary(other.clone().into_array(), Operator::Lt)
-        .unwrap()
-        .execute::<BoolArray>(ctx)
-        .vortex_expect("must be a bool array");
-    assert_eq!(to_int_indices(matches, ctx).unwrap(), [4u64]);
+        .unwrap();
+    assert_arrays_eq!(
+        matches,
+        BoolArray::from_iter([None, Some(false), Some(false), Some(false), Some(true)]),
+        ctx
+    );
 
     let matches = other
         .clone()
         .into_array()
         .binary(arr.clone().into_array(), Operator::Gte)
-        .unwrap()
-        .execute::<BoolArray>(ctx)
-        .vortex_expect("must be a bool array");
-    assert_eq!(to_int_indices(matches, ctx).unwrap(), [2u64, 3, 4]);
+        .unwrap();
+    assert_arrays_eq!(
+        matches,
+        BoolArray::from_iter([None, Some(false), Some(true), Some(true), Some(true)]),
+        ctx
+    );
 
     let matches = other
         .into_array()
         .binary(arr.into_array(), Operator::Gt)
-        .unwrap()
-        .execute::<BoolArray>(ctx)
-        .vortex_expect("must be a bool array");
-    assert_eq!(to_int_indices(matches, ctx).unwrap(), [4u64]);
+        .unwrap();
+    assert_arrays_eq!(
+        matches,
+        BoolArray::from_iter([None, Some(false), Some(false), Some(false), Some(true)]),
+        ctx
+    );
 }
 
 #[test]
@@ -130,6 +140,11 @@ fn constant_compare() {
         .execute_scalar(0, &mut array_session().create_execution_ctx())
         .unwrap();
     assert_eq!(scalar.as_bool().value(), Some(false));
+    assert_arrays_eq!(
+        result,
+        BoolArray::from_iter([false; 10]),
+        &mut array_session().create_execution_ctx()
+    );
 }
 
 #[rstest]
@@ -356,6 +371,7 @@ fn test_empty_list() {
     assert!(result.execute_scalar(0, ctx).unwrap().is_valid());
     assert!(result.execute_scalar(1, ctx).unwrap().is_valid());
     assert!(result.execute_scalar(2, ctx).unwrap().is_valid());
+    assert_arrays_eq!(result, BoolArray::from_iter([Some(true); 3]), ctx);
 }
 
 fn execute_compare_test(lhs: ArrayRef, rhs: ArrayRef, op: Operator) -> ArrayRef {
@@ -802,9 +818,7 @@ fn map_compare_nulls() -> VortexResult<()> {
         [None, Some(vec![]), Some(vec![]), Some(vec![(1, Some("a"))])],
     )?;
 
-    let result = execute_compare_test(lhs, rhs, Operator::Eq)
-        .execute::<BoolArray>(&mut ctx)
-        .vortex_expect("bool array");
+    let result = execute_compare_test(lhs, rhs, Operator::Eq);
     let expected = BoolArray::from_iter([None, None, Some(true), Some(true)]);
     assert_arrays_eq!(result, expected, &mut ctx);
 

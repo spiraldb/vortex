@@ -150,7 +150,7 @@ mod tests {
     fn test_with_nulls() -> VortexResult<()> {
         let mut ctx = array_session().create_execution_ctx();
         let array = BoolArray::new(
-            BitBuffer::from(vec![true, false, true]),
+            BitBuffer::from(vec![true, true, true]),
             Validity::from_iter([true, false, true]),
         );
         let stats = BoolStats::generate(&array, &mut ctx)?;

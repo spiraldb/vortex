@@ -96,7 +96,16 @@ mod tests {
     #[case(true)]
     #[case(false)]
     fn falsifies_either_operand_order(#[case] geom_first: bool) -> VortexResult<()> {
-        assert!(falsify_intersects(geom_first)?.is_some());
+        let proof = falsify_intersects(geom_first)?.expect("intersection proof");
+        let dtype = point_column(vec![0.0], vec![0.0])?.dtype().clone();
+        let zones = aabb_zone_map(&dtype, &[[0.0, 0.0, 1.0, 1.0], [3.0, 0.0, 4.0, 1.0]])?;
+        assert_eq!(
+            zones
+                .prune(&proof, &spatial_session())?
+                .iter()
+                .collect::<Vec<_>>(),
+            [false, true]
+        );
         Ok(())
     }
 

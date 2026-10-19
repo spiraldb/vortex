@@ -543,5 +543,8 @@ mod tests {
         assert_eq!(json["name"], "arrow-ipc compress time/demo");
         assert_eq!(json["target"]["format"], "arrow-ipc");
         assert_eq!(json["value"], 42.0);
+        assert_eq!(json["unit"], "ns");
+        assert_eq!(json["time"], 42);
+        assert_eq!(json["target"]["engine"], "vortex");
     }
 }

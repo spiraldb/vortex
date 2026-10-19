@@ -100,14 +100,10 @@ mod test {
             &mut SESSION.create_execution_ctx(),
         )
         .unwrap();
-        let actual = dict
-            .into_array()
-            .execute::<PrimitiveArray>(&mut SESSION.create_execution_ctx())
-            .unwrap();
 
         let expected = PrimitiveArray::from_option_iter(values);
 
-        assert_arrays_eq!(actual, expected, &mut ctx);
+        assert_arrays_eq!(dict, expected, &mut ctx);
     }
 
     #[test]
@@ -123,11 +119,7 @@ mod test {
         .unwrap()
         .into_array();
 
-        let actual = dict
-            .execute::<PrimitiveArray>(&mut SESSION.create_execution_ctx())
-            .unwrap();
-
-        assert_arrays_eq!(actual, expected, &mut ctx);
+        assert_arrays_eq!(dict, expected, &mut ctx);
     }
 
     #[test]
@@ -143,11 +135,7 @@ mod test {
         .unwrap()
         .into_array();
 
-        let actual = dict
-            .execute::<PrimitiveArray>(&mut SESSION.create_execution_ctx())
-            .unwrap();
-
-        assert_arrays_eq!(actual, expected, &mut ctx);
+        assert_arrays_eq!(dict, expected, &mut ctx);
     }
 
     #[test]
@@ -289,12 +277,14 @@ mod test {
         )
         .unwrap();
 
-        assert_eq!(
-            array
-                .take(PrimitiveArray::from_option_iter([Option::<i32>::None]).into_array())
-                .unwrap()
-                .dtype(),
-            &DType::Primitive(I32, Nullability::Nullable)
+        let taken = array
+            .take(PrimitiveArray::from_option_iter([None::<i32>]).into_array())
+            .unwrap();
+        assert_eq!(taken.dtype(), &DType::Primitive(I32, Nullability::Nullable));
+        assert_arrays_eq!(
+            taken,
+            PrimitiveArray::from_option_iter([None::<i32>]),
+            &mut SESSION.create_execution_ctx()
         );
     }
 
