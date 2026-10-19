@@ -840,7 +840,11 @@ mod tests {
     #[case::one_child(&[0x08, 1])]
     #[case::truncated(&[0x08, 0x80])]
     fn test_deserialization_invalid_metadata(#[case] metadata: &[u8]) {
-        assert!(CaseWhen.deserialize(metadata, &VortexSession::empty()).is_err());
+        assert!(
+            CaseWhen
+                .deserialize(metadata, &VortexSession::empty())
+                .is_err()
+        );
     }
 
     #[rstest]
