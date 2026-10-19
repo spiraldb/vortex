@@ -36,6 +36,7 @@ use crate::array::ArrayParts;
 use crate::array::ArrayView;
 use crate::array::VTable;
 use crate::array::with_empty_buffers;
+use crate::arrays::Constant;
 use crate::arrays::ConstantArray;
 use crate::arrays::Primitive;
 use crate::arrays::VarBinView;
@@ -43,6 +44,7 @@ use crate::arrays::dict::DictArrayExt;
 use crate::arrays::dict::DictArraySlotsExt;
 use crate::arrays::dict::compute::rules::PARENT_RULES;
 use crate::arrays::dict::execute::take_canonical;
+use crate::arrays::dict::take::take_constant_code;
 use crate::buffer::BufferHandle;
 use crate::builders::ArrayBuilder;
 use crate::builders::VarBinBuilder;
@@ -201,6 +203,18 @@ impl VTable for Dict {
                 .dtype()
                 .union_nullability(array.codes().dtype().nullability());
             return Ok(ExecutionResult::done(Canonical::empty(&result_dtype)));
+        }
+
+        // A constant code selects a single value, so expand that value rather than materializing
+        // the codes and gathering through them.
+        if let Some(code) = array.codes().as_opt::<Constant>() {
+            return Ok(ExecutionResult::done(take_constant_code(
+                array.values(),
+                code.scalar(),
+                array.dtype(),
+                array.len(),
+                ctx,
+            )?));
         }
 
         let array = require_child!(array, array.codes(), DictSlots::CODES => Primitive);

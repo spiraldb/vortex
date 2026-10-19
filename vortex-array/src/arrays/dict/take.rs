@@ -11,8 +11,10 @@ use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::array::ArrayView;
 use crate::array::VTable;
+use crate::arrays::Constant;
 use crate::arrays::ConstantArray;
 use crate::arrays::dict::DictArraySlotsExt;
+use crate::dtype::DType;
 use crate::expr::stats::Precision;
 use crate::expr::stats::Stat;
 use crate::expr::stats::StatsProvider;
@@ -78,6 +80,22 @@ fn short_circuit<V: VTable>(array: ArrayView<'_, V>, indices: &ArrayRef) -> Opti
     None
 }
 
+/// Takes from `values` with a constant `code` by expanding the one value it selects, rather than
+/// materializing the codes and gathering through them.
+pub(crate) fn take_constant_code(
+    values: &ArrayRef,
+    code: &Scalar,
+    dtype: &DType,
+    len: usize,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<ArrayRef> {
+    let value = match code.as_primitive().as_::<usize>() {
+        Some(code) => values.execute_scalar(code, ctx)?.cast(dtype)?,
+        None => Scalar::null(dtype.as_nullable()),
+    };
+    Ok(ConstantArray::new(value, len).into_array())
+}
+
 #[derive(Default, Debug)]
 pub struct TakeReduceAdaptor<V>(pub V);
 
@@ -130,6 +148,16 @@ where
         }
         if let Some(result) = short_circuit::<V>(array, parent.codes()) {
             return Ok(Some(result));
+        }
+        if let Some(code) = parent.codes().as_opt::<Constant>() {
+            return take_constant_code(
+                array.array(),
+                code.scalar(),
+                parent.dtype(),
+                parent.len(),
+                ctx,
+            )
+            .map(Some);
         }
         let result = <V as TakeExecute>::take(array, parent.codes(), ctx)?;
         if let Some(taken) = &result {
