@@ -85,9 +85,14 @@ mod tests {
     use crate::arrays::scalar_fn::array::ScalarFnData;
     use crate::arrays::scalar_fn::vtable::ScalarFn;
     use crate::assert_arrays_eq;
+    use crate::dtype::DType;
+    use crate::dtype::Nullability;
+    use crate::dtype::PType;
     use crate::scalar::Scalar;
     use crate::scalar_fn::TypedScalarFnInstance;
     use crate::scalar_fn::fns::binary::Binary;
+    use crate::scalar_fn::fns::list_contains::PreparedSet;
+    use crate::scalar_fn::fns::list_contains::PreparedSetData;
     use crate::scalar_fn::fns::literal::Literal;
     use crate::scalar_fn::fns::operators::Operator;
     use crate::validity::Validity;
@@ -170,7 +175,14 @@ mod tests {
 
     #[test]
     fn test_scalar_fn_without_children_requires_explicit_len() -> VortexResult<()> {
-        let scalar_fn = TypedScalarFnInstance::new(Literal, Scalar::from(1i32)).erased();
+        let list = Scalar::list(
+            DType::Primitive(PType::I32, Nullability::NonNullable),
+            vec![Scalar::from(1i32)],
+            Nullability::NonNullable,
+        );
+        let scalar_fn =
+            TypedScalarFnInstance::new(PreparedSet, PreparedSetData::try_new(list.clone())?)
+                .erased();
 
         let Err(err) = ScalarFnArray::try_new(scalar_fn.clone(), vec![]) else {
             panic!("ScalarFnArray::try_new should reject zero children");
@@ -185,11 +197,36 @@ mod tests {
         assert_eq!(scalar_fn_array.child_count(), 0);
         assert_arrays_eq!(
             scalar_fn_array,
-            ConstantArray::new(1i32, 3),
+            ConstantArray::new(list, 3),
             &mut array_session().create_execution_ctx()
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn rejects_literal() {
+        let scalar_fn = TypedScalarFnInstance::new(Literal, Scalar::from(1i32)).erased();
+
+        let Err(err) = ScalarFnArray::try_new_with_len(scalar_fn.clone(), vec![], 3) else {
+            panic!("ScalarFnArray::try_new_with_len must reject a literal");
+        };
+        assert!(
+            err.to_string()
+                .contains("ScalarFnArray cannot wrap a literal")
+        );
+
+        let vtable = ScalarFn { id: scalar_fn.id() };
+        let data = ScalarFnData { scalar_fn };
+        let parts = ArrayParts::new(vtable, PType::I32.into(), 3, data, ArraySlots::new());
+
+        let Err(err) = Array::<ScalarFn>::try_from_parts(parts) else {
+            panic!("ScalarFnArray must reject a literal from parts");
+        };
+        assert!(
+            err.to_string()
+                .contains("ScalarFnArray cannot wrap a literal")
+        );
     }
 
     #[test]

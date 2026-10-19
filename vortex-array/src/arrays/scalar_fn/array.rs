@@ -18,6 +18,7 @@ use crate::array::TypedArrayRef;
 use crate::arrays::ScalarFn;
 use crate::dtype::DType;
 use crate::scalar_fn::ScalarFnRef;
+use crate::scalar_fn::fns::literal::Literal;
 
 // ScalarFnArray has a variable number of slots (one per child)
 
@@ -104,6 +105,7 @@ impl Array<ScalarFn> {
         slots: ArraySlots,
         len: usize,
     ) -> VortexResult<Self> {
+        Self::validate_not_literal(&scalar_fn)?;
         Self::validate_arity(&scalar_fn, slots.len())?;
         Self::validate_children_len(&slots, len)?;
 
@@ -143,6 +145,22 @@ impl Array<ScalarFn> {
             vortex_bail!("ScalarFnArray length cannot be inferred without children");
         };
         Ok(child.len())
+    }
+
+    /// A literal is always a [`ConstantArray`], so a ScalarFnArray must never wrap one.
+    ///
+    /// This is not a correctness requirement: a ScalarFnArray that wraps a literal executes
+    /// correctly. The check finds call sites that make a literal node instead of a constant. You
+    /// can relax it if a valid use for a literal ScalarFnArray occurs.
+    ///
+    /// [`ConstantArray`]: crate::arrays::ConstantArray
+    #[inline]
+    pub(super) fn validate_not_literal(scalar_fn: &ScalarFnRef) -> VortexResult<()> {
+        vortex_ensure!(
+            !scalar_fn.is::<Literal>(),
+            "ScalarFnArray cannot wrap a literal, use ConstantArray instead"
+        );
+        Ok(())
     }
 
     #[inline]

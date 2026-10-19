@@ -34,7 +34,6 @@ use crate::scalar_fn::ReduceNode;
 use crate::scalar_fn::ScalarFnId;
 use crate::scalar_fn::ScalarFnVTable;
 use crate::scalar_fn::ScalarFnVTableExt;
-use crate::scalar_fn::fns::literal::Literal;
 use crate::scalar_fn::fns::mask::Mask;
 use crate::scalar_fn::fns::pack::Pack;
 
@@ -97,10 +96,10 @@ impl GetItem {
         }
 
         // A nullable pack intersects its validity into the field, so mask the field with an
-        // all-true literal to make its dtype nullable.
+        // all-true constant to make its dtype nullable.
         Ok(Some(struct_node.new_node(
             Mask.bind(EmptyOptions),
-            &[field, struct_node.new_node(Literal.bind(true.into()), &[])?],
+            &[field, struct_node.new_constant(true.into())],
         )?))
     }
 }
