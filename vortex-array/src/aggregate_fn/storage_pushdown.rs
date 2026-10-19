@@ -30,31 +30,38 @@ use crate::dtype::DType;
 use crate::dtype::extension::ExtVTable;
 use crate::scalar::Scalar;
 
-/// An opt-in pushdown of aggregate `A` into the storage of extension type `E`.
+/// Runs aggregate `A` on the storage values of extension type `E`.
 ///
-/// Registering a pair declares that `A` over `E`'s storage is correct for `E`. Nothing checks
-/// this, and a wrong registration silently returns wrong answers. Only register a pair when both
-/// of these hold:
+/// The input must have extension type `E`, and `A` must support its storage dtype. Binding fails
+/// for any other input. The wrapper has a separate aggregate ID, `<A>[<E>]`, formed from the IDs
+/// of `A` and `E`. Registering it does not replace `A`.
 ///
-/// - **`E`'s domain supports the aggregation.** The result must mean something for values of `E`.
-///   The minimum of some timestamps is an instant, but their sum is not.
-/// - **The storage computes it soundly.** Every operation `A` uses must give the same answer on
-///   the storage as on `E`:
-///   - comparison (`min`, `max`, `min_max`, `bounded_*`, `is_sorted`): `E` orders like its
-///     storage.
-///   - equality (`is_constant`, `all_non_distinct`): each value of `E` has exactly one storage
-///     value.
-///   - addition (`sum`, `mean`): adding storage values gives the storage of their sum.
-///   - NaN detection (`nan_count`, `all_nan`, `all_non_nan`): a NaN in the storage is a NaN of `E`.
+/// Aggregates that already support extension dtypes directly do not need this wrapper.
 ///
-/// For example, `Date`, `Time` and `Timestamp` pass for comparison but not for `sum`. Aggregates
-/// that already accept any extension dtype, such as `count` and `null_count`, need no pushdown.
+/// # Correctness
 ///
-/// Inputs must be extension dtypes of type `E` whose storage `A` accepts; anything else fails to
-/// bind. Results are `A`'s over the storage and are not converted back to `E`, so the extrema of a
-/// timestamp column are raw `i64` values in the column's unit. Partials are only comparable for
-/// the same extension dtype, including metadata such as a timestamp's unit. The pushdown is an
-/// aggregate of its own, with id `<A>[<E>]`, and never replaces `A`.
+/// A registration **must** satisfy both conditions:
+///
+/// - The aggregation is defined for logical values of `E`.
+/// - For every valid input, aggregating the storage values produces the storage representation
+///   of the logical aggregate result. This requires storage to preserve whichever properties `A`
+///   relies on, such as ordering, equality, arithmetic, or NaN classification.
+///
+/// For example, minimum is defined for timestamps, and their integer storage preserves their
+/// ordering, so both conditions hold. Summing timestamps fails the first condition even though
+/// their storage supports addition.
+///
+/// These conditions are not checked. An invalid registration can silently return incorrect results.
+///
+/// # Results and partials
+///
+/// Results and partial states are those of `A` over the storage dtype. Results are not converted
+/// back to `E`. For example, the minimum and maximum of a timestamp column are raw `i64` values
+/// in the column's time unit.
+///
+/// Partial states can only be combined when the aggregate, options, and full input dtype match.
+/// This includes extension metadata, so timestamp partials with different time units must not be
+/// combined even if their storage dtypes match.
 ///
 /// # Example
 ///
