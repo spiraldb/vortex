@@ -67,6 +67,7 @@ use vortex_array::extension::datetime::TimeUnit;
 use vortex_array::extension::datetime::Timestamp;
 use vortex_array::extension::datetime::TimestampOptions;
 use vortex_array::field_path;
+use vortex_array::flatbuffers::WriteFlatBufferExt;
 use vortex_array::scalar::Scalar;
 use vortex_array::scalar::ScalarValue;
 use vortex_array::scalar_fn::ScalarFnVTableExt;
@@ -1516,7 +1517,7 @@ async fn write_nullable_top_level_struct() -> VortexResult<()> {
 }
 
 #[tokio::test]
-async fn exclude_legacy_statistics_omits_legacy_but_keeps_nested() -> VortexResult<()> {
+async fn exclude_legacy_statistics_empties_legacy_but_keeps_nested() -> VortexResult<()> {
     let inner = StructArray::try_new(
         ["b"].into(),
         vec![PrimitiveArray::from_option_iter([Some(1i32), None, Some(3)]).into_array()],
@@ -1560,6 +1561,15 @@ async fn exclude_legacy_statistics_omits_legacy_but_keeps_nested() -> VortexResu
         stat_value(b_stats, Stat::NullCount),
         Precision::exact(ScalarValue::from(1u64))
     );
+
+    // Readers that predate nested stats reject a file whose `field_stats` doesn't have one entry
+    // per top-level field, so the excluded legacy stats are still written, empty.
+    let bytes = stats.write_flatbuffer_bytes()?;
+    let fb = flatbuffers::root::<fb::FileStatistics>(bytes.as_ref())
+        .vortex_expect("valid flatbuffer");
+    let field_stats = fb.field_stats().vortex_expect("field_stats is written");
+    assert_eq!(field_stats.len(), 2);
+    assert!(field_stats.iter().all(|stats| stats.min().is_none() && stats.null_count().is_none()));
 
     Ok(())
 }

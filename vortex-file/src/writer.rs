@@ -171,10 +171,10 @@ impl VortexWriteOptions {
     /// Exclude legacy top-level-only statistics (`field_stats`) from the file, computing and
     /// writing only the full nested post-order statistics (`entry_sets` and `partials`).
     ///
-    /// Readers built before nested file stats existed only look at `field_stats` and validate its
-    /// length against the number of top-level struct fields; omitting it means those readers find
-    /// no usable statistics in this file (though they can still read the data). Only use this if
-    /// you control every reader of the resulting files and don't need that compatibility.
+    /// Readers built before nested file stats existed only look at `field_stats` and reject a file
+    /// whose `field_stats` doesn't have one entry per top-level struct field. To keep the file
+    /// readable by them, `field_stats` is still written with one entry per field, each empty, so
+    /// those readers find no usable statistics but can still read the data.
     pub fn exclude_legacy_statistics(mut self) -> Self {
         self.write_legacy_statistics = false;
         self

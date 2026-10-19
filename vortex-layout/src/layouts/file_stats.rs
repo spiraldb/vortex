@@ -515,8 +515,8 @@ impl StatsNode {
 /// Alongside `root`'s post-order nested layout, this also maintains a `legacy` accumulation
 /// covering only the top-level struct fields (or the whole array, for a non-struct root),
 /// matching the layout file stats had before nested struct support: one entry per top-level
-/// field, with no recursion into nested structs. `legacy` is empty (and never accumulated into)
-/// when `write_legacy_stats` is `false`.
+/// field, with no recursion into nested structs. When `write_legacy_stats` is `false`, `legacy`
+/// keeps that shape but records nothing, and is never accumulated into.
 #[derive(Clone)]
 pub struct FileStatsAccumulator {
     root: Arc<Mutex<StatsNode>>,
@@ -542,23 +542,25 @@ impl FileStatsAccumulator {
 
         let root = Arc::new(Mutex::new(StatsNode::build(dtype, stats.as_deref())));
 
-        let legacy = Arc::new(Mutex::new(if write_legacy_stats {
-            match dtype.as_struct_fields_opt() {
-                // The fields of a nullable root are recorded empty, like `StatsNode::Unrecorded`.
-                Some(struct_fields) if dtype.nullability() == Nullability::Nullable => {
-                    struct_fields
-                        .fields()
-                        .map(|_| StatsAccumulator::empty())
-                        .collect()
-                }
-                Some(struct_fields) => struct_fields
+        // Readers that predate nested stats reject a file whose legacy layout doesn't have one entry
+        // per top-level field, so entries that aren't recorded are still written, empty.
+        let legacy = Arc::new(Mutex::new(match dtype.as_struct_fields_opt() {
+            Some(struct_fields) => {
+                // The fields of a nullable root aren't recorded, like `StatsNode::Unrecorded`.
+                let record = write_legacy_stats && !dtype.is_nullable();
+                struct_fields
                     .fields()
-                    .map(|field_dtype| StatsAccumulator::new(&field_dtype, stats.as_deref()))
-                    .collect(),
-                None => vec![StatsAccumulator::new(dtype, stats.as_deref())],
+                    .map(|field_dtype| {
+                        if record {
+                            StatsAccumulator::new(&field_dtype, stats.as_deref())
+                        } else {
+                            StatsAccumulator::empty()
+                        }
+                    })
+                    .collect()
             }
-        } else {
-            Vec::new()
+            None if write_legacy_stats => vec![StatsAccumulator::new(dtype, stats.as_deref())],
+            None => vec![StatsAccumulator::empty()],
         }));
 
         Ok(Self {
@@ -613,7 +615,8 @@ impl FileStatsAccumulator {
     }
 
     /// Returns the legacy top-level-fields-only aggregates (one per top-level struct field, or a
-    /// single entry for a non-struct root dtype). Empty if `write_legacy_stats` was `false`.
+    /// single entry for a non-struct root dtype). Each entry is empty if `write_legacy_stats` was
+    /// `false`.
     ///
     /// The legacy `ArrayStats` format has a fixed slot per [`Stat`] rather than open-ended
     /// aggregates, so it isn't restricted by the writer context.
@@ -1086,16 +1089,15 @@ mod tests {
     }
 
     #[rstest]
-    #[case(DType::struct_([("a", i32_dtype())], Nullability::NonNullable), StructArray::new(FieldNames::from(["a"]), [buffer![1i32, 2, 3].into_array()], 3, Validity::NonNullable).into_array())]
-    #[case(i32_dtype(), buffer![1i32, 2, 3].into_array())]
-    fn write_legacy_stats_false_skips_legacy_accumulation(
+    #[case(DType::struct_([("a", i32_dtype()), ("b", i32_dtype())], Nullability::NonNullable), StructArray::new(FieldNames::from(["a", "b"]), [buffer![1i32, 2, 3].into_array(), buffer![4i32, 5, 6].into_array()], 3, Validity::NonNullable).into_array(), 2)]
+    #[case(i32_dtype(), buffer![1i32, 2, 3].into_array(), 1)]
+    fn write_legacy_stats_false_keeps_one_empty_entry_per_top_level_field(
         #[case] dtype: DType,
         #[case] chunk: ArrayRef,
+        #[case] top_level_fields: usize,
     ) -> VortexResult<()> {
-        // With `write_legacy_stats: false`, `legacy` stays empty for both struct and non-struct
-        // roots. This must not panic — `process` indexes into `legacy[0]` for a non-struct root
-        // and `zip_eq`s it against the struct's fields otherwise, both of which would panic if
-        // `legacy` were left empty without also gating those code paths.
+        // Readers that predate nested stats reject a legacy layout without one entry per
+        // top-level field, so excluding legacy stats keeps the entries and records nothing.
         let session = array_session();
         let acc = FileStatsAccumulator::try_new(
             &dtype,
@@ -1108,7 +1110,9 @@ mod tests {
         let (mut ptr, _eof) = SequenceId::root().split();
         acc.process(Ok((ptr.advance(), chunk)))?;
 
-        assert!(acc.legacy_aggregate_stats()?.is_empty());
+        let legacy = acc.legacy_aggregate_stats()?;
+        assert_eq!(legacy.len(), top_level_fields);
+        assert!(legacy.iter().all(AggregateStats::is_empty));
         Ok(())
     }
 
