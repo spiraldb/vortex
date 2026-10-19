@@ -144,6 +144,7 @@ fn core_edition_keeps_single_reference() -> VortexResult<()> {
         BtrBlocksCompressorBuilder::from_session(&CORE_SESSION),
         &drifting(),
     )?;
+    assert!(ids.contains(&for_v1_id()));
     assert!(!ids.contains(&for_v2_id()));
     Ok(())
 }
@@ -162,6 +163,7 @@ fn nullable_drifting_roundtrip() -> VortexResult<()> {
 #[test]
 fn cuda_preset_keeps_single_reference() -> VortexResult<()> {
     let ids = compress_roundtrip(for_only().only_cuda_compatible(), &drifting())?;
+    assert!(ids.contains(&for_v1_id()));
     assert!(!ids.contains(&for_v2_id()));
     Ok(())
 }

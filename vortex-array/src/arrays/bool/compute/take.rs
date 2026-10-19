@@ -182,14 +182,12 @@ mod test {
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
 
-    use crate::Canonical;
     use crate::IntoArray as _;
     use crate::VortexSessionExecute;
     use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::arrays::DictArray;
     use crate::arrays::PrimitiveArray;
-    use crate::arrays::bool::BoolArrayExt;
     use crate::assert_arrays_eq;
     use crate::compute::conformance::take::test_take_conformance;
     use crate::validity::Validity;
@@ -205,14 +203,11 @@ mod test {
             Some(false),
         ]);
 
-        let b = reference
-            .take(buffer![0, 3, 4].into_array())
-            .unwrap()
-            .execute::<BoolArray>(&mut ctx)
-            .unwrap();
-        assert_eq!(
-            b.to_bit_buffer(),
-            BoolArray::from_iter([Some(false), None, Some(false)]).to_bit_buffer()
+        let b = reference.take(buffer![0, 3, 4].into_array()).unwrap();
+        assert_arrays_eq!(
+            b,
+            BoolArray::from_iter([Some(false), None, Some(false)]),
+            &mut ctx
         );
 
         let all_invalid_indices = PrimitiveArray::from_option_iter([None::<i32>, None, None]);
@@ -289,10 +284,7 @@ mod test {
         let values = BoolArray::from_iter([value]);
         let codes = PrimitiveArray::new(buffer![0i64, 0, 0], Validity::AllValid);
 
-        let actual = DictArray::try_new(codes.into_array(), values.into_array())?
-            .into_array()
-            .execute::<Canonical>(&mut ctx)?
-            .into_array();
+        let actual = DictArray::try_new(codes.into_array(), values.into_array())?.into_array();
 
         assert_arrays_eq!(
             actual,

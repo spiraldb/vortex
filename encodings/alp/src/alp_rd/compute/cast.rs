@@ -52,6 +52,7 @@ mod tests {
     use vortex_array::VortexSessionExecute;
     use vortex_array::array_session;
     use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::assert_arrays_eq;
     use vortex_array::builtins::ArrayBuiltins;
     use vortex_array::compute::conformance::cast::test_cast_conformance;
     use vortex_array::dtype::DType;
@@ -78,11 +79,8 @@ mod tests {
             &DType::Primitive(PType::F64, Nullability::NonNullable)
         );
 
-        let decoded = casted.execute::<PrimitiveArray>(&mut ctx).unwrap();
-        let f64_values = decoded.as_slice::<f64>();
-        assert_eq!(f64_values.len(), 5);
-        assert!((f64_values[0] - 1.0).abs() < f64::EPSILON);
-        assert!((f64_values[1] - 1.1).abs() < 1e-6); // Use larger epsilon for f32->f64 conversion
+        let expected = PrimitiveArray::from_iter(values.into_iter().map(f64::from));
+        assert_arrays_eq!(casted, expected, &mut ctx);
     }
 
     #[test]

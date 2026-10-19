@@ -11,6 +11,7 @@ use crate::arrays::ListViewArray;
 use crate::arrays::PrimitiveArray;
 use crate::arrays::StructArray;
 use crate::arrays::listview::ListViewArrayExt;
+use crate::assert_arrays_eq;
 use crate::dtype::DType;
 use crate::dtype::FieldNames;
 use crate::dtype::Nullability;
@@ -182,6 +183,11 @@ fn test_deeply_nested_out_of_order() {
     // Test that operations work correctly with out-of-order offsets.
     let sliced = level3.slice(0..1).unwrap();
     assert_eq!(sliced.len(), 1);
+    assert_arrays_eq!(
+        inner,
+        buffer![9i32, 10].into_array(),
+        &mut array_session().create_execution_ctx()
+    );
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -232,6 +238,11 @@ fn test_mixed_offset_size_types() {
     // Verify the sliced data maintains correct offsets despite type differences.
     let sliced_first = sliced_lv.list_elements_at(0).unwrap();
     assert_eq!(sliced_first.len(), 3);
+    assert_arrays_eq!(
+        sliced_first.as_::<ListView>().list_elements_at(0).unwrap(),
+        PrimitiveArray::from_iter(30i32..37),
+        &mut array_session().create_execution_ctx()
+    );
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

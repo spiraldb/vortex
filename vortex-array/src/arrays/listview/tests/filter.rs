@@ -69,6 +69,8 @@ fn test_filter_preserves_unreferenced_elements() {
     // Verify offsets are unchanged.
     assert_eq!(result_list.offset_at(0), 5, "Wrong offset at index 0");
     assert_eq!(result_list.offset_at(1), 0, "Wrong offset at index 3");
+    assert_eq!(result_list.size_at(0), 3);
+    assert_eq!(result_list.size_at(1), 2);
 }
 
 #[test]
@@ -109,6 +111,16 @@ fn test_filter_with_gaps() {
     assert_arrays_eq!(
         result_list.list_elements_at(0).unwrap(),
         PrimitiveArray::from_iter([7i32, 8, 9]),
+        &mut ctx
+    );
+    assert_arrays_eq!(
+        result_list.list_elements_at(1).unwrap(),
+        buffer![11i32, 12].into_array(),
+        &mut ctx
+    );
+    assert_arrays_eq!(
+        result_list.list_elements_at(2).unwrap(),
+        buffer![2i32, 3].into_array(),
         &mut ctx
     );
 }
@@ -167,6 +179,11 @@ fn test_filter_constant_arrays() {
     assert_eq!(result2_list.offset_at(1), 1);
     assert_eq!(result2_list.size_at(0), 3);
     assert_eq!(result2_list.size_at(1), 3);
+    assert_arrays_eq!(
+        result2_list.list_elements_at(0).unwrap(),
+        buffer![200i32, 300, 400].into_array(),
+        &mut SESSION.create_execution_ctx()
+    );
 }
 
 #[test]
@@ -229,4 +246,19 @@ fn test_filter_extreme_offsets() {
     assert_eq!(sparse_list.offset_at(0), 0); // First list
     assert_eq!(sparse_list.offset_at(1), 7500); // Last list
     assert_eq!(sparse_list.elements().len(), 10000); // Still keeps all elements
+    assert_arrays_eq!(
+        result_list.list_elements_at(1).unwrap(),
+        buffer![7500i32..7504].into_array(),
+        &mut SESSION.create_execution_ctx()
+    );
+    assert_arrays_eq!(
+        sparse_list.list_elements_at(0).unwrap(),
+        buffer![0i32..5].into_array(),
+        &mut SESSION.create_execution_ctx()
+    );
+    assert_arrays_eq!(
+        sparse_list.list_elements_at(1).unwrap(),
+        buffer![7500i32..7504].into_array(),
+        &mut SESSION.create_execution_ctx()
+    );
 }

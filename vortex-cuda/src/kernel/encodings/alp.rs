@@ -139,6 +139,7 @@ mod tests {
     use std::f32;
     use std::f64;
 
+    use rstest::rstest;
     use vortex::array::IntoArray;
     use vortex::array::array_session;
     use vortex::array::arrays::PrimitiveArray;
@@ -155,6 +156,7 @@ mod tests {
 
     use super::*;
     use crate::CanonicalCudaExt;
+    use crate::CudaDispatchMode;
     use crate::executor::CudaArrayExt;
     use crate::session::CudaSession;
 
@@ -199,11 +201,15 @@ mod tests {
             .execute(alp_array.clone().into_array(), &mut cuda_ctx)
             .await
             .vortex_expect("GPU decompression failed")
-            .into_host()
+            .into_host(cuda_ctx.execution_ctx())
             .await?
             .into_array();
 
-        assert_arrays_eq!(alp_array, gpu_result, &mut ctx);
+        assert_arrays_eq!(
+            gpu_result,
+            PrimitiveArray::from_iter([0.0f32, 20_000.0, 30_000.0, 40_000.0, 999.0]),
+            &mut ctx
+        );
 
         Ok(())
     }
@@ -212,11 +218,17 @@ mod tests {
     /// positions from the exception list, so patch validity doesn't need
     /// scattering. This test verifies that the encoded child's validity is
     /// preserved through the standalone ALP GPU executor.
+    #[rstest]
+    #[case::auto(CudaDispatchMode::Auto)]
+    #[case::standalone(CudaDispatchMode::StandaloneOnly)]
     #[crate::test]
-    async fn test_cuda_alp_nullable_with_patches() -> VortexResult<()> {
+    async fn test_cuda_alp_nullable_with_patches(
+        #[case] mode: CudaDispatchMode,
+    ) -> VortexResult<()> {
         let mut ctx = array_session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
-            .vortex_expect("failed to create execution context");
+            .vortex_expect("failed to create execution context")
+            .with_dispatch_mode(mode);
 
         // Values that will produce ALP exceptions at non-null positions.
         // Nulls at positions 1 and 3; the exception at position 4 can't be
@@ -243,21 +255,25 @@ mod tests {
             .into_array()
             .execute_cuda(&mut cuda_ctx)
             .await?
-            .into_host()
+            .into_host(cuda_ctx.execution_ctx())
             .await?
             .into_array();
 
-        assert_arrays_eq!(alp_array, gpu_result, &mut ctx);
+        assert_arrays_eq!(gpu_result, prim, &mut ctx);
         Ok(())
     }
 
     /// ALP with all-valid nullable data — the dtype is nullable but no
     /// elements are actually null.
+    #[rstest]
+    #[case::auto(CudaDispatchMode::Auto)]
+    #[case::standalone(CudaDispatchMode::StandaloneOnly)]
     #[crate::test]
-    async fn test_cuda_alp_all_valid_nullable() -> VortexResult<()> {
+    async fn test_cuda_alp_all_valid_nullable(#[case] mode: CudaDispatchMode) -> VortexResult<()> {
         let mut ctx = array_session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
-            .vortex_expect("failed to create execution context");
+            .vortex_expect("failed to create execution context")
+            .with_dispatch_mode(mode);
 
         let values = PrimitiveArray::new(
             Buffer::from(vec![1.0f32, 2.0, 3.0, 4.0, 5.0]),
@@ -274,11 +290,11 @@ mod tests {
             .into_array()
             .execute_cuda(&mut cuda_ctx)
             .await?
-            .into_host()
+            .into_host(cuda_ctx.execution_ctx())
             .await?
             .into_array();
 
-        assert_arrays_eq!(alp_array, gpu_result, &mut ctx);
+        assert_arrays_eq!(gpu_result, values, &mut ctx);
         Ok(())
     }
 
@@ -286,11 +302,17 @@ mod tests {
     /// none in chunk 1. Exercises the `PatchesCursor` branch where a
     /// non-trailing chunk has `chunk_offsets[c] == chunk_offsets[c+1]`
     /// (zero patches) via the offset math rather than the NULL sentinel.
+    #[rstest]
+    #[case::auto(CudaDispatchMode::Auto)]
+    #[case::standalone(CudaDispatchMode::StandaloneOnly)]
     #[crate::test]
-    async fn test_cuda_alp_multi_chunk_sparse_patches() -> VortexResult<()> {
+    async fn test_cuda_alp_multi_chunk_sparse_patches(
+        #[case] mode: CudaDispatchMode,
+    ) -> VortexResult<()> {
         let mut ctx = array_session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
-            .vortex_expect("failed to create execution context");
+            .vortex_expect("failed to create execution context")
+            .with_dispatch_mode(mode);
 
         // 3072 values (3 chunks). Inject exceptions (values ALP can't encode
         // losslessly) only in chunks 0 and 2; chunk 1 stays exception-free so
@@ -320,22 +342,28 @@ mod tests {
             .into_array()
             .execute_cuda(&mut cuda_ctx)
             .await?
-            .into_host()
+            .into_host(cuda_ctx.execution_ctx())
             .await?
             .into_array();
 
-        assert_arrays_eq!(alp_array, gpu_result, &mut ctx);
+        assert_arrays_eq!(gpu_result, prim, &mut ctx);
         Ok(())
     }
 
     /// Multi-chunk f64 decode with patches distributed across chunks. The f64
     /// path (i64 → double) is otherwise only covered by the partial-tail case,
     /// so this guards the fast-path for the (i64, f64) kernel variant.
+    #[rstest]
+    #[case::auto(CudaDispatchMode::Auto)]
+    #[case::standalone(CudaDispatchMode::StandaloneOnly)]
     #[crate::test]
-    async fn test_cuda_alp_f64_multi_chunk_with_patches() -> VortexResult<()> {
+    async fn test_cuda_alp_f64_multi_chunk_with_patches(
+        #[case] mode: CudaDispatchMode,
+    ) -> VortexResult<()> {
         let mut ctx = array_session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
-            .vortex_expect("failed to create execution context");
+            .vortex_expect("failed to create execution context")
+            .with_dispatch_mode(mode);
 
         // 3072 values (3 chunks). Sprinkle exceptions into each chunk.
         let values: Buffer<f64> = (0u32..3072)
@@ -363,11 +391,11 @@ mod tests {
             .into_array()
             .execute_cuda(&mut cuda_ctx)
             .await?
-            .into_host()
+            .into_host(cuda_ctx.execution_ctx())
             .await?
             .into_array();
 
-        assert_arrays_eq!(alp_array, gpu_result, &mut ctx);
+        assert_arrays_eq!(gpu_result, prim, &mut ctx);
         Ok(())
     }
 
@@ -411,22 +439,33 @@ mod tests {
             .execute(alp_array.clone().into_array(), &mut cuda_ctx)
             .await
             .vortex_expect("GPU decompression failed")
-            .into_host()
+            .into_host(cuda_ctx.execution_ctx())
             .await?
             .into_array();
 
-        assert_arrays_eq!(alp_array, gpu_result, &mut ctx);
+        let expected = PrimitiveArray::from_iter((0..LEN).map(|i| {
+            if i < NUM_PATCHES as i32 {
+                i as f32 * 0.125 + 0.5
+            } else {
+                i as f32 * 10_000.0
+            }
+        }));
+        assert_arrays_eq!(gpu_result, expected, &mut ctx);
         Ok(())
     }
 
     /// Tail-chunk bounds check: an array whose length is not a multiple of
     /// 1024 forces the kernel's tail-block path to bounds-check its decode
     /// loop. Includes a patch in the tail.
+    #[rstest]
+    #[case::auto(CudaDispatchMode::Auto)]
+    #[case::standalone(CudaDispatchMode::StandaloneOnly)]
     #[crate::test]
-    async fn test_cuda_alp_partial_tail_chunk() -> VortexResult<()> {
+    async fn test_cuda_alp_partial_tail_chunk(#[case] mode: CudaDispatchMode) -> VortexResult<()> {
         let mut ctx = array_session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
-            .vortex_expect("failed to create execution context");
+            .vortex_expect("failed to create execution context")
+            .with_dispatch_mode(mode);
 
         let values: Buffer<f64> = (0u32..1500)
             .map(|i| if i == 1400 { UNENCODABLE } else { i as f64 })
@@ -447,11 +486,11 @@ mod tests {
             .into_array()
             .execute_cuda(&mut cuda_ctx)
             .await?
-            .into_host()
+            .into_host(cuda_ctx.execution_ctx())
             .await?
             .into_array();
 
-        assert_arrays_eq!(alp_array, gpu_result, &mut ctx);
+        assert_arrays_eq!(gpu_result, prim, &mut ctx);
         Ok(())
     }
 }

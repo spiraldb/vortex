@@ -38,6 +38,7 @@ mod tests {
     use crate::array_session;
     use crate::arrays::Decimal;
     use crate::arrays::DecimalArray;
+    use crate::assert_arrays_eq;
     use crate::dtype::DecimalDType;
     use crate::dtype::Nullability;
     use crate::scalar::DecimalValue;
@@ -71,6 +72,11 @@ mod tests {
 
         let sliced = array.slice(1..3).unwrap();
         assert_eq!(sliced.len(), 2);
+        assert_arrays_eq!(
+            sliced,
+            DecimalArray::from_option_iter([Some(200i128), None], DecimalDType::new(3, 2)),
+            &mut array_session().create_execution_ctx()
+        );
     }
 
     #[test]

@@ -558,12 +558,7 @@ mod test {
         let uncompressed = PrimitiveArray::from_option_iter(values);
         let packed = BitPackedData::encode(&uncompressed.into_array(), 1, &mut ctx).unwrap();
         let expected = PrimitiveArray::from_option_iter(values);
-        let packed_primitive = packed
-            .as_array()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
-        assert_arrays_eq!(packed_primitive, expected, &mut ctx);
+        assert_arrays_eq!(packed, expected, &mut ctx);
     }
 
     #[test]
@@ -585,13 +580,8 @@ mod test {
 
         let packed_with_patches = BitPackedData::encode(&parray, 9, &mut ctx).unwrap();
         assert!(packed_with_patches.patches().is_some());
-        let packed_primitive = packed_with_patches
-            .as_array()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
         assert_arrays_eq!(
-            packed_primitive,
+            packed_with_patches,
             PrimitiveArray::new(values, vortex_array::validity::Validity::NonNullable),
             &mut ctx
         );

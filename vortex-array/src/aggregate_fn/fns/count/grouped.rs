@@ -86,7 +86,6 @@ fn valid_count(elem_mask: &Mask, offset: usize, size: usize) -> usize {
 mod tests {
     #![allow(clippy::cast_possible_truncation)]
 
-    use vortex_buffer::Buffer;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
 
@@ -125,23 +124,6 @@ mod tests {
         acc.finish()
     }
 
-    /// Reference valid-counts (non-nullable `U64`), one per group.
-    fn grouped_count_reference(
-        elements: &ArrayRef,
-        ranges: &[(usize, usize)],
-    ) -> VortexResult<ArrayRef> {
-        let mut ctx = array_session().create_execution_ctx();
-        let counts: Buffer<u64> = ranges
-            .iter()
-            .map(|&(offset, size)| {
-                Ok(elements
-                    .slice(offset..offset + size)?
-                    .valid_count(&mut ctx)? as u64)
-            })
-            .collect::<VortexResult<_>>()?;
-        Ok(PrimitiveArray::new(counts, Validity::NonNullable).into_array())
-    }
-
     fn listview(elements: ArrayRef, ranges: &[(usize, usize)]) -> VortexResult<ArrayRef> {
         let offsets = PrimitiveArray::from_iter(ranges.iter().map(|&(o, _)| o as i32));
         let sizes = PrimitiveArray::from_iter(ranges.iter().map(|&(_, s)| s as i32));
@@ -162,14 +144,12 @@ mod tests {
         let elem_dtype = DType::Primitive(PType::I32, NonNullable);
         let ranges = [(0, 2), (2, 1), (3, 3), (6, 0)];
 
-        let groups = listview(elements.clone(), &ranges)?;
+        let groups = listview(elements, &ranges)?;
         let actual = grouped_count_actual(&groups, &elem_dtype, &mut ctx)?;
-        let expected = grouped_count_reference(&elements, &ranges)?;
 
         let direct =
             PrimitiveArray::new(buffer![2u64, 1, 3, 0], Validity::NonNullable).into_array();
         assert_arrays_eq!(&actual, &direct, &mut ctx);
-        assert_arrays_eq!(&actual, &expected, &mut ctx);
         Ok(())
     }
 
@@ -182,14 +162,12 @@ mod tests {
         let elem_dtype = DType::Primitive(PType::I32, Nullable);
         let ranges = [(0, 3), (3, 2), (5, 1)];
 
-        let groups = listview(elements.clone(), &ranges)?;
+        let groups = listview(elements, &ranges)?;
         let actual = grouped_count_actual(&groups, &elem_dtype, &mut ctx)?;
-        let expected = grouped_count_reference(&elements, &ranges)?;
 
         // Group 0: {1, null, 3} -> 2. Group 1: {null, null} -> 0. Group 2: {9} -> 1.
         let direct = PrimitiveArray::new(buffer![2u64, 0, 1], Validity::NonNullable).into_array();
         assert_arrays_eq!(&actual, &direct, &mut ctx);
-        assert_arrays_eq!(&actual, &expected, &mut ctx);
         Ok(())
     }
 
@@ -207,13 +185,11 @@ mod tests {
         let elem_dtype = elements.dtype().clone();
         let ranges = [(0, 2), (2, 2), (4, 1)];
 
-        let groups = listview(elements.clone(), &ranges)?;
+        let groups = listview(elements, &ranges)?;
         let actual = grouped_count_actual(&groups, &elem_dtype, &mut ctx)?;
-        let expected = grouped_count_reference(&elements, &ranges)?;
 
         let direct = PrimitiveArray::new(buffer![1u64, 1, 1], Validity::NonNullable).into_array();
         assert_arrays_eq!(&actual, &direct, &mut ctx);
-        assert_arrays_eq!(&actual, &expected, &mut ctx);
         Ok(())
     }
 

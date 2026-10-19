@@ -5,12 +5,14 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 
+use arrow_array::Array;
 use arrow_array::ArrayRef as ArrowArrayRef;
+use arrow_array::BinaryViewArray;
+use arrow_array::Int32Array;
 use arrow_array::RunArray;
+use arrow_array::StringViewArray;
 use arrow_array::cast::AsArray;
-use arrow_array::types::BinaryViewType;
 use arrow_array::types::Int32Type;
-use arrow_array::types::StringViewType;
 use arrow_array::types::UInt8Type;
 use arrow_schema::DataType;
 use arrow_schema::Field;
@@ -41,7 +43,6 @@ use crate::ArrowExport;
 use crate::ArrowExportVTable;
 use crate::ArrowSession;
 use crate::ArrowSessionExt;
-use crate::executor::byte_view::canonical_varbinview_to_arrow;
 
 #[test]
 fn typed_options_are_independent() {
@@ -144,6 +145,11 @@ fn external_options_reach_nested_exporters() -> VortexResult<()> {
         .exporter(&options)
         .execute_arrow(array, Some(&field), &mut ctx)?;
     assert_eq!(arrow.len(), 1);
+    assert_eq!(arrow.null_count(), 0);
+    assert_eq!(
+        arrow.as_list::<i32>().value(0).to_data(),
+        Int32Array::from(vec![1, 2, 3]).to_data()
+    );
     assert_eq!(called.load(Ordering::Relaxed), 42);
     Ok(())
 }
@@ -162,6 +168,22 @@ fn sparse_views(binary: bool, ctx: &mut ExecutionCtx) -> VortexResult<VarBinView
         .into_array()
         .take(buffer![0u32, 1, 12].into_array())?
         .execute::<VarBinViewArray>(ctx)
+}
+
+fn expected_sparse_views(binary: bool) -> ArrowArrayRef {
+    let suffix = "x".repeat(256);
+    let values = [
+        Some(format!("0{suffix}")),
+        None,
+        Some(format!("12{suffix}")),
+    ];
+    if binary {
+        Arc::new(BinaryViewArray::from_iter(
+            values.iter().map(|v| v.as_ref().map(String::as_bytes)),
+        ))
+    } else {
+        Arc::new(StringViewArray::from_iter(values))
+    }
 }
 
 fn view_buffer_ptrs(array: &ArrowArrayRef) -> Vec<*const u8> {
@@ -288,11 +310,7 @@ fn compaction_option_reaches_nested_views(
 
     let view = sparse_views(binary, &mut ctx)?;
     let backing = view.data_buffers()[0].as_host().as_ptr();
-    let expected = if binary {
-        canonical_varbinview_to_arrow::<BinaryViewType>(&view, &mut ctx)?
-    } else {
-        canonical_varbinview_to_arrow::<StringViewType>(&view, &mut ctx)?
-    };
+    let expected = expected_sparse_views(binary);
 
     let (array, target) = shape.wrap(view.into_array(), expected.data_type().clone(), &mut ctx)?;
     let arrow = session.arrow().exporter(&options).execute_arrow(
@@ -321,6 +339,7 @@ fn execute_arrow_compacts_by_default(#[values(false, true)] binary: bool) -> Vor
         .arrow()
         .execute_arrow(view.into_array(), None, &mut ctx)?;
 
+    assert_eq!(arrow.to_data(), expected_sparse_views(binary).to_data());
     assert!(!view_buffer_ptrs(&arrow).contains(&backing));
     Ok(())
 }

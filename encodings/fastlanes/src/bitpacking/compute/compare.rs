@@ -232,12 +232,7 @@ mod tests {
         let values = PrimitiveArray::from_iter([0u32, 1, 2, 3, 4, 5, 3]);
         let packed = BitPackedData::encode(&values.into_array(), 3, &mut ctx).unwrap();
         let rhs = ConstantArray::new(3u32, packed.len()).into_array();
-        let result = packed
-            .into_array()
-            .binary(rhs, op)
-            .unwrap()
-            .execute::<BoolArray>(&mut ctx)
-            .unwrap();
+        let result = packed.into_array().binary(rhs, op).unwrap();
         assert_arrays_eq!(result, BoolArray::from_iter(expected), &mut ctx);
     }
 
@@ -262,13 +257,11 @@ mod tests {
                         let got = <BitPacked as CompareKernel>::compare(
                             packed.as_view(), &rhs, op, &mut ctx,
                         )?
-                        .expect("streaming compare kernel must engage")
-                        .execute::<BoolArray>(&mut ctx)?;
+                        .expect("streaming compare kernel must engage");
                         let want = prim
                             .clone()
                             .into_array()
-                            .binary(rhs.clone(), Operator::from(op))?
-                            .execute::<BoolArray>(&mut ctx)?;
+                            .binary(rhs.clone(), Operator::from(op))?;
                         assert_arrays_eq!(got, want, &mut SESSION.create_execution_ctx());
                     }
                 }
@@ -299,14 +292,8 @@ mod tests {
         let packed = BitPackedData::encode(&prim.clone().into_array(), 7, &mut ctx)?;
         assert!(packed.patches().is_some(), "test setup expects patches");
         let rhs = ConstantArray::new(50i32, prim.len()).into_array();
-        let expected = prim
-            .into_array()
-            .binary(rhs.clone(), Operator::Eq)?
-            .execute::<BoolArray>(&mut ctx)?;
-        let actual = packed
-            .into_array()
-            .binary(rhs, Operator::Eq)?
-            .execute::<BoolArray>(&mut ctx)?;
+        let expected = prim.into_array().binary(rhs.clone(), Operator::Eq)?;
+        let actual = packed.into_array().binary(rhs, Operator::Eq)?;
         assert_arrays_eq!(actual, expected, &mut ctx);
         Ok(())
     }
@@ -343,14 +330,12 @@ mod tests {
                 op,
                 &mut ctx,
             )?
-            .expect("fused compare kernel must engage for sliced arrays")
-            .execute::<BoolArray>(&mut ctx)?;
+            .expect("fused compare kernel must engage for sliced arrays");
             let want = prim
                 .clone()
                 .into_array()
                 .slice(start..start + slice_len)?
-                .binary(rhs.clone(), Operator::from(op))?
-                .execute::<BoolArray>(&mut ctx)?;
+                .binary(rhs.clone(), Operator::from(op))?;
             assert_arrays_eq!(got, want, &mut ctx);
         }
         Ok(())
@@ -381,13 +366,11 @@ mod tests {
             CompareOperator::Eq,
             &mut ctx,
         )?
-        .expect("fused compare kernel must engage for sliced arrays with patches")
-        .execute::<BoolArray>(&mut ctx)?;
+        .expect("fused compare kernel must engage for sliced arrays with patches");
         let want = prim
             .into_array()
             .slice(start..end)?
-            .binary(rhs, Operator::Eq)?
-            .execute::<BoolArray>(&mut ctx)?;
+            .binary(rhs, Operator::Eq)?;
         assert_arrays_eq!(got, want, &mut ctx);
         Ok(())
     }
@@ -399,14 +382,8 @@ mod tests {
         let prim = PrimitiveArray::from_option_iter([Some(1u32), None, Some(3), Some(4), None]);
         let packed = BitPackedData::encode(&prim.clone().into_array(), 3, &mut ctx)?;
         let rhs = ConstantArray::new(3u32, packed.len()).into_array();
-        let actual = packed
-            .into_array()
-            .binary(rhs.clone(), Operator::Eq)?
-            .execute::<BoolArray>(&mut ctx)?;
-        let expected = prim
-            .into_array()
-            .binary(rhs, Operator::Eq)?
-            .execute::<BoolArray>(&mut ctx)?;
+        let actual = packed.into_array().binary(rhs.clone(), Operator::Eq)?;
+        let expected = prim.into_array().binary(rhs, Operator::Eq)?;
         assert_arrays_eq!(actual, expected, &mut ctx);
         Ok(())
     }
@@ -459,9 +436,8 @@ mod tests {
             let want = prim
                 .clone()
                 .into_array()
-                .binary(rhs_array.clone(), Operator::from(op))?
-                .execute::<BoolArray>(&mut ctx)?;
-            assert_arrays_eq!(got.execute::<BoolArray>(&mut ctx)?, want, &mut ctx);
+                .binary(rhs_array.clone(), Operator::from(op))?;
+            assert_arrays_eq!(got, want, &mut ctx);
         }
         Ok(())
     }
@@ -484,9 +460,8 @@ mod tests {
             let want = prim
                 .clone()
                 .into_array()
-                .binary(rhs_array.clone(), Operator::from(op))?
-                .execute::<BoolArray>(&mut ctx)?;
-            assert_arrays_eq!(got.execute::<BoolArray>(&mut ctx)?, want, &mut ctx);
+                .binary(rhs_array.clone(), Operator::from(op))?;
+            assert_arrays_eq!(got, want, &mut ctx);
         }
         Ok(())
     }
@@ -513,9 +488,8 @@ mod tests {
             let want = prim
                 .clone()
                 .into_array()
-                .binary(rhs_array.clone(), Operator::from(op))?
-                .execute::<BoolArray>(&mut ctx)?;
-            assert_arrays_eq!(got.execute::<BoolArray>(&mut ctx)?, want, &mut ctx);
+                .binary(rhs_array.clone(), Operator::from(op))?;
+            assert_arrays_eq!(got, want, &mut ctx);
         }
         Ok(())
     }

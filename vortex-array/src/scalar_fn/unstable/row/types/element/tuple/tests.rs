@@ -25,6 +25,7 @@ use crate::dtype::DType;
 use crate::dtype::Nullability;
 use crate::extension::datetime::TimeUnit;
 use crate::extension::datetime::Timestamp;
+use crate::scalar::Scalar;
 use crate::scalar_fn::VecExecutionArgs;
 use crate::scalar_fn::unstable::row::InputElement;
 use crate::validity::Validity;
@@ -144,9 +145,10 @@ fn test_batch_constant_uses_constant_decoder() -> VortexResult<()> {
 
 #[test]
 fn test_batch_const_unwraps_filtered_masked_constant() -> VortexResult<()> {
+    let mut ctx = array_session().create_execution_ctx();
     let child = ConstantArray::new(7_i64, 3).into_array();
-    let masked =
-        MaskedArray::try_new(child, Validity::from_iter([true, false, true]))?.into_array();
+    let masked = MaskedArray::try_new(child, Validity::from_iter([true, false, true]), &mut ctx)?
+        .into_array();
     let filtered = masked.filter(Mask::from_iter([true, true, false]))?;
 
     let Some(const_array) = batch_const(&filtered) else {
@@ -154,6 +156,7 @@ fn test_batch_const_unwraps_filtered_masked_constant() -> VortexResult<()> {
     };
 
     assert!(const_array.is::<Constant>());
+    assert_eq!(const_array.as_::<Constant>().scalar(), &Scalar::from(7_i64));
     Ok(())
 }
 
@@ -169,5 +172,11 @@ fn test_batch_const_preserves_filtered_extension() -> VortexResult<()> {
     };
 
     assert_eq!(const_array.dtype(), extension.dtype());
+    let mut ctx = array_session().create_execution_ctx();
+    let scalar = const_array.execute_scalar(0, &mut ctx)?;
+    assert_eq!(
+        scalar.as_extension().to_storage_scalar(),
+        Scalar::from(7_i64)
+    );
     Ok(())
 }

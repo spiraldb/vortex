@@ -10,8 +10,11 @@ use vortex_array::dtype::FieldPath;
 use vortex_btrblocks::BtrBlocksCompressorBuilder;
 use vortex_btrblocks::SchemeExt;
 use vortex_btrblocks::schemes::integer::IntDictScheme;
+use vortex_edition::ComponentKind;
+use vortex_edition::EditionSessionExt;
 use vortex_error::VortexExpect;
 use vortex_layout::LayoutStrategy;
+use vortex_layout::VTable;
 use vortex_layout::layouts::buffered::BufferedStrategy;
 use vortex_layout::layouts::chunked::writer::ChunkedLayoutStrategy;
 use vortex_layout::layouts::collect::CollectStrategy;
@@ -19,6 +22,7 @@ use vortex_layout::layouts::compressed::CompressingStrategy;
 use vortex_layout::layouts::compressed::CompressorPlugin;
 use vortex_layout::layouts::dict::writer::DictStrategy;
 use vortex_layout::layouts::flat::writer::FlatLayoutStrategy;
+use vortex_layout::layouts::list::List;
 use vortex_layout::layouts::list::writer::ListLayoutStrategy;
 use vortex_layout::layouts::repartition::RepartitionStrategy;
 use vortex_layout::layouts::repartition::RepartitionWriterOptions;
@@ -77,7 +81,9 @@ impl WriteStrategyBuilder {
             field_writers: HashMap::new(),
             flat_strategy: None,
             probe_compressor: None,
-            use_list_layout: false,
+            use_list_layout: session
+                .enabled_component_ids(ComponentKind::Layout)
+                .contains(&List.id()),
         }
     }
 
@@ -96,19 +102,6 @@ impl WriteStrategyBuilder {
     /// [`Self::with_row_block_size`].
     pub fn with_data_block_target_bytes(mut self, target_bytes: Option<u64>) -> Self {
         self.data_block_target_bytes = target_bytes;
-        self
-    }
-
-    /// Enable writing list fields with [`ListLayoutStrategy`].
-    ///
-    /// **Note**: this is an unstable and experimental layout that is expected to change.
-    /// Using it may lead to unreadable files in the future.
-    ///
-    /// Writing fails unless the session's enabled editions include the `vortex.list` layout.
-    ///
-    /// [`ListLayoutStrategy`]: vortex_layout::layouts::list::writer::ListLayoutStrategy
-    pub fn with_list_layout(mut self) -> Self {
-        self.use_list_layout = true;
         self
     }
 

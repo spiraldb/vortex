@@ -70,12 +70,14 @@ fn resolves_values_across_data_buffers() -> VortexResult<()> {
 }
 
 #[rstest]
-#[case::inlined(VarBinViewArray::from_iter_str(["a", "", "twelve bytes"]))]
-#[case::referenced(VarBinViewArray::from_iter_str([LONG, "another long value here"]))]
-#[case::mixed(VarBinViewArray::from_iter_str(["short", LONG, "", "twelve bytes"]))]
-fn bytes_matches_bytes_at(#[case] array: VarBinViewArray) {
+#[case::inlined(VarBinViewArray::from_iter_str(["a", "", "twelve bytes"]), vec!["a", "", "twelve bytes"])]
+#[case::referenced(VarBinViewArray::from_iter_str([LONG, "another long value here"]), vec![LONG, "another long value here"])]
+#[case::mixed(VarBinViewArray::from_iter_str(["short", LONG, "", "twelve bytes"]), vec!["short", LONG, "", "twelve bytes"])]
+fn bytes_matches_bytes_at(#[case] array: VarBinViewArray, #[case] expected: Vec<&str>) {
     let resolved = array.resolved_views();
-    for index in 0..array.len() {
+    assert_eq!(resolved.len(), expected.len());
+    for (index, expected) in expected.into_iter().enumerate() {
+        assert_eq!(resolved.bytes(index), expected.as_bytes());
         assert_eq!(resolved.bytes(index), array.bytes_at(index).as_slice());
     }
 }
@@ -85,7 +87,9 @@ fn view_bytes_matches_bytes() -> VortexResult<()> {
     let array = two_buffer_array()?;
     let resolved = array.resolved_views();
 
+    assert_eq!(resolved.len(), TWO_BUFFER_VALUES.len());
     for (index, view) in resolved.views().iter().enumerate() {
+        assert_eq!(resolved.view_bytes(view), TWO_BUFFER_VALUES[index]);
         assert_eq!(resolved.view_bytes(view), resolved.bytes(index));
         // SAFETY: index < resolved.len().
         assert_eq!(unsafe { resolved.view_unchecked(index) }, view);

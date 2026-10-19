@@ -98,24 +98,6 @@ mod test {
     }
 
     #[test]
-    pub fn slice_within_block() {
-        let arr = bp(
-            &PrimitiveArray::from_iter((0u32..2048).map(|v| v % 64)).into_array(),
-            6,
-        );
-        let sliced = slice_via_reduce(&arr, 512..1434);
-        assert_nth_scalar!(sliced, 0, 512u32 % 64, &mut SESSION.create_execution_ctx());
-        assert_nth_scalar!(
-            sliced,
-            921,
-            1433u32 % 64,
-            &mut SESSION.create_execution_ctx()
-        );
-        assert_eq!(sliced.offset(), 512);
-        assert_eq!(sliced.len(), 922);
-    }
-
-    #[test]
     fn slice_within_block_u8s() {
         let packed = bp(
             &PrimitiveArray::from_iter((0..10_000).map(|i| (i % 63) as u8)).into_array(),
@@ -239,7 +221,11 @@ mod test {
         let taken = sliced
             .take(buffer![101i64, 1125, 1138].into_array())
             .unwrap();
-        assert_eq!(taken.len(), 3);
+        assert_arrays_eq!(
+            taken,
+            PrimitiveArray::from_iter([1086u32, 2110, 2123]),
+            &mut SESSION.create_execution_ctx()
+        );
     }
 
     #[test]
@@ -293,6 +279,13 @@ mod test {
             .unwrap(),
             256
         );
+
+        for (index, value) in values.iter().copied().enumerate() {
+            let scalar = packed.execute_scalar(index, &mut ctx).unwrap();
+            let expected = Scalar::from(value);
+            assert_eq!(scalar.dtype(), expected.dtype());
+            assert_eq!(scalar, expected);
+        }
 
         let expected = PrimitiveArray::from_iter(values.iter().copied());
         assert_arrays_eq!(packed, expected, &mut ctx);

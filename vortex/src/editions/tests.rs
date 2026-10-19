@@ -4,18 +4,21 @@
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
+use vortex_array::VortexSessionExecute;
 use vortex_array::array_session;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::ExtensionArray;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
+use vortex_array::assert_arrays_eq;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
 use vortex_array::extension::datetime::Date;
 use vortex_array::extension::datetime::TimeUnit;
 use vortex_array::session::ArraySessionExt;
+use vortex_array::stream::ArrayStreamExt;
 use vortex_array::validity::Validity;
 use vortex_btrblocks::BtrBlocksCompressorBuilder;
 use vortex_buffer::ByteBufferMut;
@@ -424,9 +427,9 @@ async fn disabling_editions_allows_uneditioned_components() -> VortexResult<()> 
     uneditioned_session
         .write_options()
         .disable_editions()
-        .write(&mut buffer, array.to_array_stream())
+        .write(&mut buffer, array.clone().to_array_stream())
         .await?;
-    assert!(!buffer.is_empty());
+    assert_written_values(&uneditioned_session, buffer, array).await?;
     Ok(())
 }
 
@@ -440,22 +443,20 @@ async fn write_with(session: &VortexSession, array: ArrayRef) -> VortexResult<By
     Ok(buffer)
 }
 
-/// Write `array` with `session`, opting in to the list layout.
-async fn write_list_layout(
+async fn assert_written_values(
     session: &VortexSession,
-    array: ArrayRef,
-) -> VortexResult<ByteBufferMut> {
-    let mut buffer = ByteBufferMut::empty();
-    session
-        .write_options()
-        .with_strategy(
-            WriteStrategyBuilder::from_session(session)
-                .with_list_layout()
-                .build(),
-        )
-        .write(&mut buffer, array.to_array_stream())
+    buffer: ByteBufferMut,
+    expected: ArrayRef,
+) -> VortexResult<()> {
+    let actual = session
+        .open_options()
+        .open_buffer(buffer)?
+        .scan()?
+        .into_array_stream()?
+        .read_all()
         .await?;
-    Ok(buffer)
+    assert_arrays_eq!(actual, expected, &mut session.create_execution_ctx());
+    Ok(())
 }
 
 /// The layout encodings a written file actually contains, depth first.
@@ -547,7 +548,8 @@ async fn writer_restricts_layouts_to_the_enabled_editions() -> VortexResult<()> 
         .map(|id| (ComponentKind::Layout, *id))
         .collect();
     let session = session_declaring(&members)?;
-    write_with(&session, array.clone()).await?;
+    let buffer = write_with(&session, array.clone()).await?;
+    assert_written_values(&session, buffer, array.clone()).await?;
 
     // Dropping one of them fails the write at the layout it may not emit.
     let session = session_declaring(&members[1..])?;
@@ -556,16 +558,18 @@ async fn writer_restricts_layouts_to_the_enabled_editions() -> VortexResult<()> 
         .err()
         .ok_or_else(|| vortex_err!("write emitted layout {} outside its edition", written[0]))?;
     assert!(
-        error.to_string().contains("not permitted by ctx"),
+        error.to_string().contains(&format!(
+            "Layout encoding {} not permitted by ctx",
+            written[0]
+        )),
         "unexpected error: {error}"
     );
     Ok(())
 }
 
-/// The list layout is opt-in: the default writer never emits it, and opting in writes it only when
-/// the enabled editions permit it.
+/// The writer emits the list layout exactly when the enabled editions include it.
 #[tokio::test]
-async fn list_layout_is_opt_in_and_edition_gated() -> VortexResult<()> {
+async fn list_layout_follows_enabled_editions() -> VortexResult<()> {
     use crate::VortexSessionDefault;
 
     let list = ListArray::try_new(
@@ -576,15 +580,10 @@ async fn list_layout_is_opt_in_and_edition_gated() -> VortexResult<()> {
     let array = StructArray::from_fields(&[("l", list.into_array())])?.into_array();
     let list_layout = Id::from("vortex.list");
 
-    // The default core edition does not include the list layout, so opting in fails the write.
+    // The default core edition does not include the list layout, so lists stay flat.
     let session = VortexSession::default();
-    let error = write_list_layout(&session, array.clone())
-        .await
-        .expect_err("the list layout is not in the default editions");
-    assert!(
-        error.to_string().contains("not permitted by ctx"),
-        "unexpected error: {error}"
-    );
+    let written = written_layout_ids(&session, write_with(&session, array.clone()).await?)?;
+    assert!(!written.contains(&list_layout), "{written:?}");
 
     let session = VortexSession::default();
     session.editions().declare_inclusion(EditionInclusion::new(
@@ -594,12 +593,8 @@ async fn list_layout_is_opt_in_and_edition_gated() -> VortexResult<()> {
     ))?;
     session.enable_edition(DEFAULT_PREVIEW_EDITION)?;
 
-    // Permitted but not requested: the default writer keeps lists flat.
-    let written = written_layout_ids(&session, write_with(&session, array.clone()).await?)?;
-    assert!(!written.contains(&list_layout), "{written:?}");
-
-    // Permitted and requested.
-    let written = written_layout_ids(&session, write_list_layout(&session, array).await?)?;
+    // Permitted: the default writer emits it.
+    let written = written_layout_ids(&session, write_with(&session, array).await?)?;
     assert!(written.contains(&list_layout), "{written:?}");
     Ok(())
 }
@@ -627,7 +622,9 @@ fn forbidden_sequence_compressor(
 #[tokio::test]
 async fn btrblocks_respects_enabled_array_encodings() -> VortexResult<()> {
     let session = writer_test_session()?;
-    write_with(&session, sequential_integers().into_array()).await?;
+    let array = sequential_integers().into_array();
+    let buffer = write_with(&session, array.clone()).await?;
+    assert_written_values(&session, buffer, array).await?;
     Ok(())
 }
 
@@ -713,5 +710,6 @@ async fn serialization_context_accepts_supported_compressor_output() -> VortexRe
         )
         .await?;
 
+    assert_written_values(&session, buffer, sequential_integers().into_array()).await?;
     Ok(())
 }

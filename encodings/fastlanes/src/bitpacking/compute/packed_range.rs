@@ -51,7 +51,9 @@ pub(super) fn constant_result<T: NativePType>(
             let scalar = Scalar::bool(value, validity.nullability());
             return Ok(ConstantArray::new(scalar, len).into_array());
         }
-        return Ok(BoolArray::new(BitBuffer::full_in(value, len, allocator), validity).into_array());
+        return Ok(
+            BoolArray::new(BitBuffer::full_in(value, len, allocator), validity).into_array(),
+        );
     };
 
     let fill = if value { u8::MAX } else { 0 };

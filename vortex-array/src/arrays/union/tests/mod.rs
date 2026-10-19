@@ -228,6 +228,18 @@ fn slice_and_filter_preserve_sparse_alignment() -> VortexResult<()> {
 
     let sliced = array.slice(1..3)?;
     let filtered = array.filter(Mask::from_iter([true, false, true]))?;
+    assert_eq!(sliced.len(), 2);
+    assert_eq!(filtered.len(), 2);
+    assert_eq!(sliced.dtype(), array.dtype());
+    assert_eq!(filtered.dtype(), array.dtype());
+    assert_eq!(
+        sliced.execute_scalar(1, &mut ctx)?,
+        Scalar::union(variants()?, 5, 30i32.into(), Nullability::NonNullable)?
+    );
+    assert_eq!(
+        filtered.execute_scalar(0, &mut ctx)?,
+        Scalar::union(variants()?, 5, 10i32.into(), Nullability::NonNullable)?
+    );
 
     assert_eq!(
         sliced.execute_scalar(0, &mut ctx)?,
@@ -272,6 +284,7 @@ fn constant_union_canonicalizes_to_sparse_union() -> VortexResult<()> {
             .into_union();
 
         assert_eq!(canonical.dtype(), scalar.dtype());
+        assert_eq!(canonical.len(), 3);
 
         let unselected = canonical
             .iter_children()
@@ -330,6 +343,8 @@ fn serde_roundtrip() -> VortexResult<()> {
             &ReadContext::new(array_ctx.to_ids()),
             &session,
         )?;
+        assert_eq!(decoded.len(), len);
+        assert_eq!(decoded.dtype(), &dtype);
         let decoded = decoded.as_::<Union>();
 
         assert_eq!(decoded.variants(), array.variants());

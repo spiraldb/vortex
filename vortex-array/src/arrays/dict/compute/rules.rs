@@ -355,6 +355,11 @@ mod tests {
         let result = result.as_::<Dict>();
 
         assert!(result.has_all_values_referenced());
+        assert_arrays_eq!(
+            result.array(),
+            BoolArray::from_iter([false, true, false, true]),
+            &mut array_session().create_execution_ctx()
+        );
 
         Ok(())
     }

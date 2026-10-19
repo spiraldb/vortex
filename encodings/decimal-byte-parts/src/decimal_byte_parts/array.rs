@@ -636,11 +636,7 @@ mod tests {
                 )
             }
         };
-        let actual = encoded
-            .clone()
-            .into_array()
-            .execute::<DecimalArray>(&mut ctx)?;
-        assert_arrays_eq!(expected.clone(), actual, &mut ctx);
+        assert_arrays_eq!(encoded, expected, &mut ctx);
         for row in 0..expected.len() {
             assert_eq!(
                 encoded.execute_scalar(row, &mut ctx)?,
@@ -753,8 +749,15 @@ mod tests {
             array.execute_scalar(0, &mut ctx)?,
             Scalar::null(array.dtype().clone())
         );
-        let canonical = array.clone().execute::<DecimalArray>(&mut ctx)?;
-        assert_arrays_eq!(array, canonical.into_array(), &mut ctx);
+        assert_arrays_eq!(
+            array,
+            DecimalArray::new(
+                buffer![0i128, 0, 11],
+                DecimalDType::new(38, 2),
+                Validity::from_iter([false, false, true]),
+            ),
+            &mut ctx
+        );
         Ok(())
     }
 }

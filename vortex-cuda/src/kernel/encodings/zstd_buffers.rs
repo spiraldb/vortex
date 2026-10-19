@@ -245,10 +245,10 @@ mod tests {
         let gpu_result = ZstdBuffersExecutor
             .execute(compressed.clone(), &mut cuda_ctx)
             .await?
-            .into_host()
+            .into_host(cuda_ctx.execution_ctx())
             .await?;
 
-        assert_arrays_eq!(compressed, gpu_result.into_array(), &mut ctx);
+        assert_arrays_eq!(gpu_result.into_array(), input, &mut ctx);
         Ok(())
     }
 
@@ -272,10 +272,10 @@ mod tests {
         let gpu_result = ZstdBuffersExecutor
             .execute(compressed.clone(), &mut cuda_ctx)
             .await?
-            .into_host()
+            .into_host(cuda_ctx.execution_ctx())
             .await?;
 
-        assert_arrays_eq!(compressed, gpu_result.into_array(), &mut ctx);
+        assert_arrays_eq!(gpu_result.into_array(), input, &mut ctx);
         Ok(())
     }
 }

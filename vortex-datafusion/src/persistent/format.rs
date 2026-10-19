@@ -795,6 +795,7 @@ mod tests {
     use arrow_schema::DataType;
     use arrow_schema::Field;
     use arrow_schema::TimeUnit;
+    use datafusion::datasource::listing::ListingTable;
     use datafusion_common::ScalarValue;
     use datafusion_common::config::ConfigOptions;
     use datafusion_expr::Operator;
@@ -1048,6 +1049,18 @@ mod tests {
             .collect()
             .await?;
 
+        let provider = ctx.session.table_provider("my_tbl").await?;
+        let table = provider
+            .downcast_ref::<ListingTable>()
+            .ok_or_else(|| anyhow::anyhow!("expected ListingTable"))?;
+        let format = table
+            .options()
+            .format
+            .downcast_ref::<VortexFormat>()
+            .ok_or_else(|| anyhow::anyhow!("expected VortexFormat"))?;
+        assert_eq!(format.options().footer_initial_read_size_bytes, 12345);
+        assert!(!format.options().predicate_pushdown);
+        assert_eq!(format.options().scan_concurrency, Some(3));
         Ok(())
     }
 

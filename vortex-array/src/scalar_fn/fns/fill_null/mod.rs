@@ -18,12 +18,14 @@ use crate::ColumnarView;
 use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::arrays::Bool;
+use crate::arrays::Constant;
 use crate::arrays::Decimal;
 use crate::arrays::Primitive;
 use crate::arrays::ScalarFnArray;
 use crate::arrays::VarBinView;
 use crate::dtype::DType;
 use crate::expr::BoundExpression;
+use crate::optimizer::ArrayOptimizer;
 use crate::scalar::Scalar;
 use crate::scalar_fn::Arity;
 use crate::scalar_fn::ChildName;
@@ -120,6 +122,14 @@ impl ScalarFnVTable for FillNull {
     ) -> VortexResult<ArrayRef> {
         let input = args.get(0)?;
         let fill_value = args.get(1)?;
+        // Parent kernels decline a fill that is not already constant. Materialize it here so a
+        // lazy scalar, such as a literal `ScalarFnArray`, can still fill nulls.
+        let fill_was_lazy = !fill_value.is::<Constant>();
+        let fill_value = if fill_was_lazy {
+            fill_value.execute_until::<Constant>(ctx)?
+        } else {
+            fill_value
+        };
 
         let fill_scalar = fill_value
             .as_constant()
@@ -131,6 +141,13 @@ impl ScalarFnVTable for FillNull {
         );
 
         let Some(columnar) = input.as_opt::<AnyColumnar>() else {
+            if fill_was_lazy {
+                // Hand the rebuilt node back with a constant fill so the input's FillNull
+                // kernels get a chance before we decode the input.
+                return FillNull::try_new(input, fill_value)?
+                    .into_array()
+                    .optimize_ctx(ctx.session());
+            }
             let input = input.execute::<ArrayRef>(ctx)?;
             return Ok(FillNull::try_new(input, fill_value)?.into_array());
         };
@@ -219,8 +236,15 @@ mod tests {
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::array_session;
+    use crate::arrays::Chunked;
+    use crate::arrays::ChunkedArray;
+    use crate::arrays::Constant;
+    use crate::arrays::ConstantArray;
+    use crate::arrays::Primitive;
     use crate::arrays::PrimitiveArray;
+    use crate::arrays::ScalarFnArray;
     use crate::arrays::StructArray;
+    use crate::arrays::scalar_fn::ExactScalarFn;
     use crate::assert_arrays_eq;
     use crate::builders::builder_with_capacity_in;
     use crate::builtins::ArrayBuiltins;
@@ -236,7 +260,24 @@ mod tests {
     use crate::expr::root;
     use crate::extension::datetime::Date;
     use crate::extension::datetime::TimeUnit;
+    use crate::kernel::ExecuteParentKernel;
+    use crate::matcher::Matcher;
+    use crate::optimizer::rules::ArrayParentReduceRule;
     use crate::scalar::Scalar;
+    use crate::scalar_fn::fns::binary::Binary;
+    use crate::scalar_fn::fns::operators::Operator;
+
+    /// A fill of `40 + 2` that is not a [`ConstantArray`] until it executes.
+    fn lazy_fill_42(len: usize) -> VortexResult<ArrayRef> {
+        Ok(ScalarFnArray::try_new(
+            Binary.bind(Operator::Add),
+            vec![
+                ConstantArray::new(40i32, len).into_array(),
+                ConstantArray::new(2i32, len).into_array(),
+            ],
+        )?
+        .into_array())
+    }
 
     #[test]
     fn dtype() {
@@ -250,8 +291,10 @@ mod tests {
     #[test]
     fn replace_children() {
         let expr = fill_null(root(), lit(0i32));
-        expr.with_children(vec![root(), lit(0i32)])
+        let replaced = expr
+            .with_children(vec![get_item("a", root()), lit(42i32)])
             .vortex_expect("operation should succeed in test");
+        assert_eq!(replaced, fill_null(get_item("a", root()), lit(42i32)));
     }
 
     #[test]
@@ -273,6 +316,91 @@ mod tests {
             PrimitiveArray::from_iter([1i32, 42, 3, 42, 5]),
             &mut ctx
         );
+    }
+
+    #[test]
+    fn evaluate_lazy_constant_fill() -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let input = PrimitiveArray::from_option_iter([Some(1i32), None, Some(3)]).into_array();
+        let fill = lazy_fill_42(input.len())?;
+        assert!(fill.as_constant().is_none());
+
+        let result = FillNull::try_new(input, fill)?
+            .into_array()
+            .execute::<ArrayRef>(&mut ctx)?;
+
+        assert_eq!(
+            result.dtype(),
+            &DType::Primitive(PType::I32, Nullability::NonNullable)
+        );
+        assert_arrays_eq!(result, PrimitiveArray::from_iter([1i32, 42, 3]), &mut ctx);
+        Ok(())
+    }
+
+    #[test]
+    fn evaluate_lazy_fill_preserves_chunked_input() -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let input = ChunkedArray::try_new(
+            vec![
+                PrimitiveArray::from_option_iter([Some(1i32), None]).into_array(),
+                PrimitiveArray::from_option_iter([Some(3), None]).into_array(),
+            ],
+            DType::Primitive(PType::I32, Nullability::Nullable),
+        )?
+        .into_array();
+        let fill = lazy_fill_42(input.len())?;
+
+        let result = FillNull::try_new(input, fill)?
+            .into_array()
+            .execute::<ArrayRef>(&mut ctx)?;
+
+        assert!(result.is::<Chunked>());
+        assert_arrays_eq!(
+            result,
+            PrimitiveArray::from_iter([1i32, 42, 3, 42]),
+            &mut ctx
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn non_constant_fill_declines_and_errors() -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let varying = PrimitiveArray::from_iter([1i32, 2, 3]).into_array();
+
+        let constant_input = ConstantArray::new(Scalar::null_native::<i32>(), 3).into_array();
+        let constant_parent =
+            FillNull::try_new(constant_input.clone(), varying.clone())?.into_array();
+        let reduced = FillNullReduceAdaptor(Constant).reduce_parent(
+            constant_input
+                .as_opt::<Constant>()
+                .vortex_expect("constant input"),
+            ExactScalarFn::<FillNull>::try_match(&constant_parent)
+                .vortex_expect("fill_null parent"),
+            0,
+        )?;
+        assert!(reduced.is_none());
+
+        let primitive_input =
+            PrimitiveArray::from_option_iter([Some(1i32), None, Some(3)]).into_array();
+        let primitive_parent = FillNull::try_new(primitive_input.clone(), varying)?.into_array();
+        let executed = FillNullExecuteAdaptor(Primitive).execute_parent(
+            primitive_input
+                .as_opt::<Primitive>()
+                .vortex_expect("primitive input"),
+            ExactScalarFn::<FillNull>::try_match(&primitive_parent)
+                .vortex_expect("fill_null parent"),
+            0,
+            &mut ctx,
+        )?;
+        assert!(executed.is_none());
+
+        let err = primitive_parent.execute::<ArrayRef>(&mut ctx).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("fill_null fill_value must be a constant/scalar")
+        );
+        Ok(())
     }
 
     #[test]
@@ -329,7 +457,11 @@ mod tests {
             DType::Extension(Date::new(TimeUnit::Days, Nullability::Nullable).erased()),
         ];
 
-        for dtype in dtypes {
+        let supported = [
+            true, true, true, true, true, false, false, false, false, false,
+        ];
+        for (dtype, supported) in dtypes.into_iter().zip(supported) {
+            assert_eq!(FillNull::supports_dtype(&dtype), supported, "{dtype}");
             let fill = Scalar::default_value(&dtype.as_nonnullable());
             let mut builder = builder_with_capacity_in(&dtype, 2, ctx.allocator());
             builder.append_scalar(&fill.cast(&dtype)?)?;
@@ -339,10 +471,11 @@ mod tests {
                 .fill_null(fill.clone())?
                 .execute::<Canonical>(&mut ctx);
 
-            if FillNull::supports_dtype(&dtype) {
+            if supported {
                 let filled = filled?.into_array();
                 assert_eq!(filled.dtype(), fill.dtype(), "{dtype}");
                 assert_eq!(filled.execute_scalar(1, &mut ctx)?, fill, "{dtype}");
+                assert_arrays_eq!(filled, ConstantArray::new(fill, 2), &mut ctx);
             } else {
                 assert!(filled.is_err(), "{dtype} executes but is not supported");
             }

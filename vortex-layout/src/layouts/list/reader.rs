@@ -47,8 +47,20 @@ type OptionalArrayFuture = BoxFuture<'static, VortexResult<Option<ArrayRef>>>;
 /// and above which we evaluate the expression over all rows and intersect afterward.
 const EXPR_EVAL_THRESHOLD: f64 = 0.2;
 
-/// Maximum number of outer-row scan ranges contributed by one list layout.
-const MAX_LIST_SPLIT_COUNT: u64 = 64;
+/// Minimum size of the outer-row split grid, so lists in small files still fan out.
+const MIN_LIST_SPLIT_COUNT: u64 = 64;
+
+/// Outer rows per grid cell that the grid grows to stay under for large files.
+const TARGET_LIST_SPLIT_ROWS: u64 = 8192;
+
+/// Number of cells in the outer-row split grid: at least [`MIN_LIST_SPLIT_COUNT`], and enough
+/// that a cell covers at most about [`TARGET_LIST_SPLIT_ROWS`] outer rows.
+fn list_split_grid_size(outer_row_count: u64) -> u64 {
+    outer_row_count
+        .div_ceil(TARGET_LIST_SPLIT_ROWS)
+        .next_power_of_two()
+        .max(MIN_LIST_SPLIT_COUNT)
+}
 
 /// Reader for [`ListLayout`].
 #[derive(Clone)]
@@ -376,13 +388,14 @@ impl LayoutReader for ListReader {
             )?;
 
             let row_range = split_range.row_range();
+            let grid_size = list_split_grid_size(self.layout.row_count());
             let mut last_split = None;
             for element_split in element_splits.into_sorted_deduped() {
                 let Some(split) = map_element_split_to_outer_grid(
                     element_split,
                     element_row_count,
                     self.layout.row_count(),
-                    MAX_LIST_SPLIT_COUNT,
+                    grid_size,
                 ) else {
                     continue;
                 };
@@ -1048,15 +1061,26 @@ mod tests {
 
         let mut splits = (1..1_000)
             .filter_map(|split| {
-                map_element_split_to_outer_grid(split, 1_000, 100_000, MAX_LIST_SPLIT_COUNT)
+                map_element_split_to_outer_grid(split, 1_000, 100_000, MIN_LIST_SPLIT_COUNT)
             })
             .collect::<Vec<_>>();
         splits.dedup();
 
-        let expected = (1..MAX_LIST_SPLIT_COUNT)
-            .map(|grid_index| grid_index * 100_000 / MAX_LIST_SPLIT_COUNT)
+        let expected = (1..MIN_LIST_SPLIT_COUNT)
+            .map(|grid_index| grid_index * 100_000 / MIN_LIST_SPLIT_COUNT)
             .collect::<Vec<_>>();
         assert_eq!(splits, expected);
+    }
+
+    #[rstest]
+    #[case::empty(0, 64)]
+    #[case::small(100_000, 64)]
+    #[case::floor_boundary(64 * 8192, 64)]
+    #[case::past_floor(64 * 8192 + 1, 128)]
+    #[case::million(1_000_000, 128)]
+    #[case::ten_million(10_000_000, 2048)]
+    fn split_grid_grows_with_row_count(#[case] outer_row_count: u64, #[case] expected: u64) {
+        assert_eq!(list_split_grid_size(outer_row_count), expected);
     }
 
     #[tokio::test]

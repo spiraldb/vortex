@@ -369,11 +369,7 @@ mod tests {
     ) -> VortexResult<()> {
         let mut ctx = SESSION.create_execution_ctx();
         let (array, expected) = variable(ptype, offset, len, encoded_offsets)?;
-        let decoded = array
-            .clone()
-            .into_array()
-            .execute::<PrimitiveArray>(&mut ctx)?;
-        assert_arrays_eq!(decoded, expected, &mut ctx);
+        assert_arrays_eq!(array, expected, &mut ctx);
         for index in [
             0,
             1,

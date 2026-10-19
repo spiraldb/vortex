@@ -367,18 +367,11 @@ mod tests {
 
         let true_count = buf.iter().map(|b| b.count_ones() as usize).sum::<usize>();
 
-        // Spot-check a few positions.
-        let first = bit_select(&buf, 0, len, 0);
-        let last = bit_select(&buf, 0, len, true_count - 1);
-        let first = first.expect("buffer has at least one set bit");
-        let last = last.expect("true_count - 1 is in bounds");
-        assert!(first < len);
-        assert!(last < len);
-        assert!(first <= last);
-
-        // Verify the found positions are actually set.
-        assert_ne!(buf[first / 8] & (1 << (first % 8)), 0);
-        assert_ne!(buf[last / 8] & (1 << (last % 8)), 0);
+        let is_set = |index: &usize| buf[*index / 8] & (1 << (*index % 8)) != 0;
+        let expected_first = (0..len).find(is_set);
+        let expected_last = (0..len).rev().find(is_set);
+        assert_eq!(bit_select(&buf, 0, len, 0), expected_first);
+        assert_eq!(bit_select(&buf, 0, len, true_count - 1), expected_last);
     }
 
     #[test]

@@ -221,7 +221,6 @@ mod tests {
     use rstest::rstest;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::arrays::BoolArray;
     use vortex_array::arrays::ConstantArray;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::assert_arrays_eq;
@@ -271,12 +270,8 @@ mod tests {
 
         let expected = prim
             .into_array()
-            .between(lower.clone(), upper.clone(), options.clone())?
-            .execute::<BoolArray>(&mut ctx)?;
-        let actual = packed
-            .into_array()
-            .between(lower, upper, options)?
-            .execute::<BoolArray>(&mut ctx)?;
+            .between(lower.clone(), upper.clone(), options.clone())?;
+        let actual = packed.into_array().between(lower, upper, options)?;
 
         assert_arrays_eq!(actual, expected, &mut ctx);
         Ok(())
@@ -298,12 +293,8 @@ mod tests {
 
         let expected = prim
             .into_array()
-            .between(lower.clone(), upper.clone(), options.clone())?
-            .execute::<BoolArray>(&mut ctx)?;
-        let actual = packed
-            .into_array()
-            .between(lower, upper, options)?
-            .execute::<BoolArray>(&mut ctx)?;
+            .between(lower.clone(), upper.clone(), options.clone())?;
+        let actual = packed.into_array().between(lower, upper, options)?;
 
         assert_arrays_eq!(actual, expected, &mut ctx);
         Ok(())
@@ -322,12 +313,8 @@ mod tests {
 
         let actual = packed
             .into_array()
-            .between(lower.clone(), upper.clone(), options.clone())?
-            .execute::<BoolArray>(&mut ctx)?;
-        let expected = prim
-            .into_array()
-            .between(lower, upper, options)?
-            .execute::<BoolArray>(&mut ctx)?;
+            .between(lower.clone(), upper.clone(), options.clone())?;
+        let expected = prim.into_array().between(lower, upper, options)?;
         assert_arrays_eq!(actual, expected, &mut ctx);
         Ok(())
     }
@@ -389,12 +376,8 @@ mod tests {
                 if !patched && !nullable {
                     assert_eq!(got.as_constant().is_some(), decided, "{lo} {up}");
                 }
-                let want = prim
-                    .clone()
-                    .into_array()
-                    .between(lower, upper, options)?
-                    .execute::<BoolArray>(&mut ctx)?;
-                assert_arrays_eq!(got.execute::<BoolArray>(&mut ctx)?, want, &mut ctx);
+                let want = prim.clone().into_array().between(lower, upper, options)?;
+                assert_arrays_eq!(got, want, &mut ctx);
             }
         }
         Ok(())
@@ -433,9 +416,8 @@ mod tests {
             let want = prim
                 .clone()
                 .into_array()
-                .between(lower.clone(), upper.clone(), options)?
-                .execute::<BoolArray>(&mut ctx)?;
-            assert_arrays_eq!(got.execute::<BoolArray>(&mut ctx)?, want, &mut ctx);
+                .between(lower.clone(), upper.clone(), options)?;
+            assert_arrays_eq!(got, want, &mut ctx);
         }
         Ok(())
     }

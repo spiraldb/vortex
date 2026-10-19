@@ -123,4 +123,11 @@ pub struct ZstdBuffersMetadata {
     /// Length of each child array, ordered as "child_dtypes"
     #[prost(uint64, repeated, tag = "6")]
     pub child_lens: Vec<u64>,
+    /// Number of leading children that belong to the inner array. Any child after them holds
+    /// the validity. Absent in arrays written before the validity was stored separately.
+    #[prost(uint32, optional, tag = "7")]
+    pub inner_child_count: Option<u32>,
+    /// Index of the child holding the validity, if it is not implied by the dtype.
+    #[prost(uint32, optional, tag = "8")]
+    pub validity_child: Option<u32>,
 }

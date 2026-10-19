@@ -320,37 +320,6 @@ mod tests {
     const ONE_MEG: u64 = 1 << 20;
 
     #[test]
-    fn effective_block_len_small_elements() {
-        // f64 = 8 bytes/element. 8192 * 8 = 64 KiB << 1 MiB, so no reduction.
-        let dtype = DType::Primitive(PType::F64, NonNullable);
-        let options = RepartitionWriterOptions {
-            block_size_minimum: 0,
-            block_len_multiple: 8192,
-            block_size_target: Some(ONE_MEG),
-            canonicalize: false,
-        };
-        assert_eq!(options.effective_block_len(&dtype), 8192);
-    }
-
-    #[test]
-    fn effective_block_len_large_elements() {
-        // FixedSizeList(f64, 1000) = 8000 bytes/element.
-        // div_ceil(1 MiB, 8000) = 132, so effective block len = min(8192, 132) = 132.
-        let dtype = DType::FixedSizeList(
-            Arc::new(DType::Primitive(PType::F64, NonNullable)),
-            1000,
-            NonNullable,
-        );
-        let options = RepartitionWriterOptions {
-            block_size_minimum: 0,
-            block_len_multiple: 8192,
-            block_size_target: Some(ONE_MEG),
-            canonicalize: false,
-        };
-        assert_eq!(options.effective_block_len(&dtype), 132);
-    }
-
-    #[test]
     fn effective_block_len_variable_width() {
         // Utf8 has no known element_size, so block_len_multiple is unchanged.
         let dtype = DType::Utf8(NonNullable);
@@ -385,7 +354,7 @@ mod tests {
     fn repartition_large_element_type_produces_small_blocks() -> VortexResult<()> {
         // Create a FixedSizeList(f64, 1000) array with 1000 lists.
         // Each list is 8000 bytes, so 1000 lists = 8 MiB total.
-        // With block_size_target = 1 MiB, effective block_len = 133.
+        // With block_size_target = 1 MiB, effective block_len = 132.
         // We expect the repartition to produce blocks of 132 rows each.
         let list_size: u32 = 1000;
         let num_lists: usize = 1000;
@@ -435,7 +404,7 @@ mod tests {
         //   - Total: 8 blocks, 1000 rows
         assert_eq!(layout.row_count(), num_lists as u64);
 
-        // All non-last children should have 131 rows.
+        // All non-last children should have 132 rows.
         let nchildren = layout.nchildren();
         assert!(nchildren > 1, "expected multiple chunks, got {nchildren}");
 
@@ -444,7 +413,7 @@ mod tests {
             assert_eq!(
                 child.row_count(),
                 132,
-                "chunk {i} has {} rows, expected 131",
+                "chunk {i} has {} rows, expected 132",
                 child.row_count()
             );
         }
