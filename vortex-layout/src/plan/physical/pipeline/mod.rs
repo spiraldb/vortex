@@ -38,12 +38,14 @@
 //! read, and a claimed port is dropped once its source has drained it, so a decoded segment
 //! lives only as long as a split that may still read it.
 
+mod children;
 mod compile;
 mod port;
 mod scan;
 pub mod synthetic;
 mod values;
 
+pub use self::children::ChildProjection;
 pub use self::compile::Chain;
 pub use self::compile::Compiler;
 pub use self::compile::Reach;

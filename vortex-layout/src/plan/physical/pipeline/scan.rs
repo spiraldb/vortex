@@ -31,6 +31,7 @@ use super::port::Slab;
 use super::port::SourceEnd;
 use super::values::ValueCache;
 use crate::plan::physical::PlanRef;
+use crate::plan::physical::operator::ChildInbox;
 use crate::plan::physical::operator::Cx;
 use crate::plan::physical::operator::InletSet;
 use crate::plan::physical::operator::Input;
@@ -39,6 +40,7 @@ use crate::plan::physical::operator::Source;
 use crate::plan::physical::operator::SourceBlocked;
 use crate::plan::physical::operator::SourceReady;
 use crate::plan::physical::operator::Step;
+use crate::plan::physical::pipeline::ChildProjection;
 use crate::segments::SegmentId;
 
 #[cfg(debug_assertions)]
@@ -82,9 +84,11 @@ impl Split {
 pub enum Turn {
     /// Read this segment and [`deliver`](Scan::deliver) its bytes.
     Read(ReadRequest),
+    /// Plan and execute this child projection, then return its arrays to the scan.
+    Child(ChildProjection),
     /// The next rows of split `split`, in row order within the split.
     Output(usize, ArrayRef),
-    /// Nothing can run until a read is delivered.
+    /// Nothing can run until a read or child projection completes.
     Waiting,
     /// Every split has produced all its rows.
     Done,
@@ -111,6 +115,7 @@ pub(crate) struct Pipeline {
     /// Reads it asked for that have not arrived, so retiring it cancels them only when any
     /// are left.
     pending: usize,
+    child_inbox: Option<Box<ChildInbox>>,
     /// Once its source has finished, the next stage to finish: stages are finished one at a
     /// time, each when the outlets have room for what it flushes.
     finishing: Option<usize>,
@@ -141,6 +146,7 @@ fn drive(
     session: &VortexSession,
     exec: &mut ExecutionCtx,
     reads: &mut SmallVec<[SegmentId; 1]>,
+    child_requests: &mut Vec<ChildProjection>,
 ) -> VortexResult<Progress> {
     let Pipeline {
         source,
@@ -153,6 +159,7 @@ fn drive(
         source_more,
         touched,
         changed,
+        child_inbox,
         ..
     } = pipe;
     let mut cx = Cx {
@@ -164,6 +171,8 @@ fn drive(
         exec,
         touched,
         changed,
+        child_requests,
+        child_inbox,
     };
     loop {
         // Closing needs no room, so a pipeline with nothing left to flush closes at once.
@@ -191,8 +200,16 @@ fn drive(
             let ready = source.ready(&mut cx)?;
             cx.changed.clear();
             vortex_ensure!(
-                cx.reads.is_empty() || ready == SourceReady::Blocked(SourceBlocked::Io),
+                cx.reads.is_empty()
+                    || matches!(
+                        ready,
+                        SourceReady::Blocked(SourceBlocked::Io | SourceBlocked::Child)
+                    ),
                 "A source that queues reads must block on IO"
+            );
+            vortex_ensure!(
+                cx.child_requests.is_empty() || ready == SourceReady::Blocked(SourceBlocked::Child),
+                "A source that queues asynchronous work must block on its completion"
             );
             match ready {
                 SourceReady::Ready => {}
@@ -281,6 +298,9 @@ pub(crate) struct Core {
     reads: FxHashMap<ReadId, (Option<PipelineId>, SegmentId)>,
     next_read: u64,
     new_reads: VecDeque<ReadRequest>,
+    child_requests: FxHashMap<u64, PendingChild>,
+    next_child: u64,
+    new_children: VecDeque<ChildProjection>,
     /// Split slots whose stage output has something new, with a flag per slot so a slot is
     /// queued once.
     dirty: Vec<usize>,
@@ -291,6 +311,12 @@ pub(crate) struct Core {
     pub(crate) split: usize,
     /// Whole values kept for later scans of the same split.
     pub(crate) values: ValueCache,
+    pub(crate) plan_children: bool,
+}
+
+struct PendingChild {
+    owner: Option<PipelineId>,
+    local_id: u64,
 }
 
 impl Core {
@@ -306,11 +332,15 @@ impl Core {
             reads: FxHashMap::default(),
             next_read: 0,
             new_reads: VecDeque::new(),
+            child_requests: FxHashMap::default(),
+            next_child: 0,
+            new_children: VecDeque::new(),
             dirty: Vec::new(),
             dirty_flags: Vec::new(),
             shares: Shares::new(splits),
             split: usize::MAX,
             values: ValueCache::default(),
+            plan_children: false,
         }
     }
 
@@ -331,6 +361,7 @@ impl Core {
             outlets,
             bytes: VecDeque::new(),
             pending: 0,
+            child_inbox: None,
             finishing: None,
             touched,
             changed,
@@ -405,21 +436,36 @@ impl Core {
             .ok_or_else(|| vortex_err!("Pipeline {id} is not live"))?;
         pipe.queued = false;
         let mut reads = SmallVec::new();
+        let mut child_requests = Vec::new();
         let progress = drive(
             pipe,
             &mut self.arena,
             &self.session,
             &mut self.exec,
             &mut reads,
+            &mut child_requests,
         )?;
         for segment_id in reads {
             self.ask(id, segment_id);
+        }
+        for child in child_requests {
+            self.ask_child(id, child)?;
         }
         #[cfg(debug_assertions)]
         self.validate_progress(id, &progress);
         match &progress {
             // A read-ahead source can still have delivered bytes to consume.
             Progress::Blocked(SourceBlocked::Io) if !self.pipeline(id).bytes.is_empty() => {
+                self.make_runnable(id);
+            }
+            Progress::Blocked(SourceBlocked::Child)
+                if !self.pipeline(id).bytes.is_empty()
+                    || self
+                        .pipeline(id)
+                        .child_inbox
+                        .as_ref()
+                        .is_some_and(|inbox| !inbox.completed.is_empty()) =>
+            {
                 self.make_runnable(id);
             }
             // Nothing changes a port while its source's pipeline runs, so the condition the run reported
@@ -439,6 +485,52 @@ impl Core {
     fn ask(&mut self, id: PipelineId, segment_id: SegmentId) {
         self.read(id, segment_id);
         self.pipeline_mut(id).pending += 1;
+    }
+
+    fn ask_child(&mut self, owner: PipelineId, child: ChildProjection) -> VortexResult<()> {
+        vortex_ensure!(
+            !self
+                .child_requests
+                .values()
+                .any(|pending| pending.owner == Some(owner) && pending.local_id == child.id),
+            "A source published child {} twice",
+            child.id
+        );
+        let id = self.next_child;
+        self.next_child = id
+            .checked_add(1)
+            .ok_or_else(|| vortex_err!("Scan child identifiers exhausted"))?;
+        self.child_requests.insert(
+            id,
+            PendingChild {
+                owner: Some(owner),
+                local_id: child.id,
+            },
+        );
+        self.pipeline_mut(owner)
+            .child_inbox
+            .get_or_insert_with(Default::default)
+            .pending += 1;
+        self.new_children.push_back(ChildProjection { id, ..child });
+        Ok(())
+    }
+
+    fn complete_child(&mut self, id: u64, arrays: Option<Vec<ArrayRef>>) -> VortexResult<()> {
+        let child = self
+            .child_requests
+            .remove(&id)
+            .ok_or_else(|| vortex_err!("Unknown scan child {id}"))?;
+        if let Some(owner) = child.owner {
+            let inbox = self
+                .pipeline_mut(owner)
+                .child_inbox
+                .as_mut()
+                .ok_or_else(|| vortex_err!("Child completed for a source with no child inbox"))?;
+            inbox.pending -= 1;
+            inbox.completed.push_back((child.local_id, arrays));
+            self.make_runnable(owner);
+        }
+        Ok(())
     }
 
     /// Wakes the sources of what pipeline `id` pushed and the sinks of what it took.
@@ -528,6 +620,13 @@ impl Core {
             }
             if pipe.pending > 0 {
                 self.cancel_reads(id);
+            }
+            if pipe.child_inbox.is_some_and(|inbox| inbox.pending > 0) {
+                for child in self.child_requests.values_mut() {
+                    if child.owner == Some(id) {
+                        child.owner = None;
+                    }
+                }
             }
             self.free_pipelines.push(id);
         }
@@ -671,15 +770,40 @@ impl Scan {
             0,
             splits.iter().map(|split| split.rows.clone()).collect(),
         );
-        // Only the rows some split reads can share a segment between readers.
-        let start = splits
-            .iter()
-            .map(|split| split.rows.start)
-            .min()
-            .unwrap_or(0);
-        let end = splits.iter().map(|split| split.rows.end).max().unwrap_or(0);
         match &root {
-            Root::Plan(plan) => core.shares.add(plan, start..end)?,
+            Root::Plan(plan) => {
+                if let [split] = splits.as_slice() {
+                    core.shares
+                        .add_selected(plan, split.rows.clone(), &split.mask)?;
+                } else if splits
+                    .windows(2)
+                    .all(|pair| pair[0].rows.end <= pair[1].rows.start)
+                {
+                    // List selections can leave large gaps between element ranges. Keep those
+                    // chunks lazy, merging adjacent ranges so dense scans still visit once.
+                    let mut rows = 0..0;
+                    for split in &splits {
+                        if split.rows.start > rows.end {
+                            if !rows.is_empty() {
+                                core.shares.add(plan, rows.clone())?;
+                            }
+                            rows.start = split.rows.start;
+                        }
+                        rows.end = split.rows.end;
+                    }
+                    if !rows.is_empty() {
+                        core.shares.add(plan, rows)?;
+                    }
+                } else {
+                    let start = splits
+                        .iter()
+                        .map(|split| split.rows.start)
+                        .min()
+                        .unwrap_or(0);
+                    let end = splits.iter().map(|split| split.rows.end).max().unwrap_or(0);
+                    core.shares.add(plan, start..end)?;
+                }
+            }
         }
         core.shares.retain_shared();
         core.dirty_flags = vec![false; 1];
@@ -714,6 +838,11 @@ impl Scan {
         self
     }
 
+    pub(crate) fn with_child_planning(mut self, enabled: bool) -> Self {
+        self.core.plan_children = enabled;
+        self
+    }
+
     /// Runs pipelines until the owner has something to do.
     pub fn step(&mut self) -> VortexResult<Turn> {
         loop {
@@ -722,6 +851,18 @@ impl Scan {
             }
             if let Some(read) = self.core.new_reads.pop_front() {
                 return Ok(Turn::Read(read));
+            }
+            while let Some(child) = self.core.new_children.pop_front() {
+                if self
+                    .core
+                    .child_requests
+                    .get(&child.id)
+                    .is_some_and(|pending| pending.owner.is_none())
+                {
+                    self.core.child_requests.remove(&child.id);
+                    continue;
+                }
+                return Ok(Turn::Child(child));
             }
             if let Some(slot) = self.core.dirty.pop() {
                 self.core.dirty_flags[slot] = false;
@@ -741,7 +882,7 @@ impl Scan {
             if self.live == 0 {
                 return Ok(Turn::Done);
             }
-            if !self.core.reads.is_empty() {
+            if !self.core.reads.is_empty() || !self.core.child_requests.is_empty() {
                 return Ok(Turn::Waiting);
             }
             vortex_bail!(
@@ -754,6 +895,15 @@ impl Scan {
     /// Delivers the bytes of a read [`step`](Self::step) returned.
     pub fn deliver(&mut self, read: ReadId, bytes: BufferHandle) -> VortexResult<()> {
         self.core.deliver(read, bytes)
+    }
+
+    /// Delivers a child projection to its source.
+    pub(crate) fn complete_child(
+        &mut self,
+        id: u64,
+        arrays: Option<Vec<ArrayRef>>,
+    ) -> VortexResult<()> {
+        self.core.complete_child(id, arrays)
     }
 
     /// Starts the next split in a free slot.

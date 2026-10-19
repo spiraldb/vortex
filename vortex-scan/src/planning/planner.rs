@@ -6,6 +6,7 @@
 use std::fmt;
 use std::ops::Range;
 
+use futures::future::BoxFuture;
 use vortex_error::VortexResult;
 use vortex_io::request::IoBatch;
 use vortex_io::request::IoConsumer;
@@ -49,6 +50,10 @@ pub enum PlannerOutput {
     Continue,
     /// Requests the planner publishes: fetches it needs, and optional hints.
     NeedsIO(IoBatch),
+    /// Suspends this planner until the future completes. The future owns its child tasks;
+    /// dropping the planner or cancelling its root drops the future. The planner retains
+    /// results through its own channel and resumes without a separate completion callback.
+    Await(BoxFuture<'static, VortexResult<()>>),
     /// A child planner, with the scope it is responsible for.
     Planner(WorkScope, Box<dyn Planner>),
     /// A morsel authorised to produce arrays for the scope.
@@ -74,6 +79,7 @@ impl fmt::Debug for PlannerOutput {
             Self::Done => f.write_str("Done"),
             Self::Continue => f.write_str("Continue"),
             Self::NeedsIO(batch) => f.debug_tuple("NeedsIO").field(batch).finish(),
+            Self::Await(_) => f.write_str("Await"),
             Self::Planner(scope, _) => f.debug_tuple("Planner").field(scope).finish(),
             Self::Morsel(scope, _) => f.debug_tuple("Morsel").field(scope).finish(),
         }

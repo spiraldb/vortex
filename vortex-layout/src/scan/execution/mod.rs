@@ -3,23 +3,29 @@
 
 //! Scan execution over physical plans through the planner I/O and compute protocol.
 //!
-//! A `ProjectionPlanner` emits one `ProjectionMorsel` for each fixed-size work chunk. The morsel
-//! runs the physical projection plan over the chunk's selected rows through
-//! the pipeline [`Scan`](crate::plan::physical::pipeline::Scan). Every segment read is published
-//! through a `ScanAdaptor`, so the planning driver can advance other work while reads wait.
+//! A `ProjectionPlanner` drives the physical projection over selected rows and schedules
+//! independently admitted child projections. Every segment read is published through a
+//! `ScanAdaptor`, so the driver advances other work while reads wait. Only the assembled result
+//! becomes a morsel, which publishes the selected rows in order.
 
 mod adaptor;
+mod children;
 mod projection;
 
 use std::sync::Arc;
 
+pub(super) use children::child_executor;
 use vortex_buffer::Alignment;
 use vortex_io::request::IoTarget;
-use vortex_mask::Mask;
+use vortex_scan::planning::next::next_fn;
 use vortex_scan::planning::planner::Planner;
 use vortex_scan::planning::planner::WorkScope;
+use vortex_scan::planning::selection::SelectedRows;
+use vortex_scan::planning::selection::SelectionPlanner;
+use vortex_scan::selection::Selection;
 use vortex_session::VortexSession;
 
+use self::children::Children;
 use self::projection::ProjectionPlanner;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::pipeline::ValueCache;
@@ -60,17 +66,18 @@ pub(super) struct ScanPlans {
     /// Whole values, such as dictionary values, shared by the splits of this scan. Their plans
     /// always read the same complete row domain, independently of a split's selection.
     pub(super) values: ValueCache,
+    pub(super) children: Option<Arc<Children>>,
 }
 
-/// The rows of a split selected for projection.
-struct SelectedRows {
-    /// The split the rows belong to.
+/// Selects the rows of a fixed work chunk before handing them to its projection planner.
+pub(super) fn plan_projection(
+    plans: ScanPlans,
     scope: WorkScope,
-    /// Which rows of `scope.rows` are selected.
-    mask: Mask,
-}
-
-/// The work for one split: project the rows of `scope` selected by `mask`.
-pub(super) fn plan_projection(plans: ScanPlans, scope: WorkScope, mask: Mask) -> Box<dyn Planner> {
-    Box::new(ProjectionPlanner::new(plans, SelectedRows { scope, mask }))
+    selection: Arc<Selection>,
+) -> Box<dyn Planner> {
+    Box::new(SelectionPlanner::new(
+        scope,
+        selection,
+        next_fn(move |selected| Ok(ProjectionPlanner::new(plans.clone(), selected))),
+    ))
 }

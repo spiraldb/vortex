@@ -19,6 +19,7 @@ use vortex_io::request::IoIntent;
 use vortex_io::request::IoResult;
 use vortex_scan::planning::planner::State;
 
+use crate::plan::physical::pipeline::ChildProjection;
 use crate::plan::physical::pipeline::ReadId;
 use crate::plan::physical::pipeline::Scan;
 use crate::plan::physical::pipeline::Turn;
@@ -40,6 +41,8 @@ pub(super) enum AdaptorStep {
     Yield,
     /// Requests to publish, each returned once.
     NeedsIO(IoBatch),
+    /// A child projection for the enclosing planner to schedule.
+    Child(ChildProjection),
     /// Rows the plan produced.
     Piece(Piece),
 }
@@ -97,6 +100,7 @@ impl ScanAdaptor {
         Ok(match self.step()? {
             Turn::Waiting | Turn::Done => AdaptorStep::Yield,
             Turn::Output(_, array) => AdaptorStep::Piece(self.piece(array)),
+            Turn::Child(child) => AdaptorStep::Child(child),
             Turn::Read(read) => {
                 // Publish every read the scan has ready together, so the owner can coalesce them.
                 let mut batch = vec![self.request(read.id, read.segment_id)?];
@@ -125,7 +129,7 @@ impl ScanAdaptor {
         match &turn {
             Turn::Done => self.done = true,
             Turn::Waiting => self.pending = Some(Turn::Waiting),
-            Turn::Read(_) | Turn::Output(..) => {}
+            Turn::Read(_) | Turn::Child(_) | Turn::Output(..) => {}
         }
         Ok(turn)
     }
@@ -137,6 +141,18 @@ impl ScanAdaptor {
             rows: start..start + 1,
             array,
         }
+    }
+
+    pub(super) fn complete_child(
+        &mut self,
+        id: u64,
+        arrays: Option<Vec<ArrayRef>>,
+    ) -> VortexResult<()> {
+        self.scan.complete_child(id, arrays)?;
+        if matches!(self.pending, Some(Turn::Waiting)) {
+            self.pending = None;
+        }
+        Ok(())
     }
 
     fn request(&mut self, read: ReadId, segment_id: SegmentId) -> VortexResult<request::IoRequest> {
