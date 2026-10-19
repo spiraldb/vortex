@@ -857,24 +857,16 @@ impl FSSTData {
 
     /// Check that the last codes offset doesn't exceed the codes bytes length.
     ///
-    /// Only host-resident offsets are checked. A compressed offsets child would have to be
-    /// decoded to read its last offset, so it is checked by the decode plan instead, once
-    /// `execute` has made it primitive.
+    /// Only host-resident offsets and bytes are checked. The last offset is executed, so offsets
+    /// in any encoding are checked.
     fn validate_codes_bounds(
         codes_bytes: &BufferHandle,
         codes_offsets: &ArrayRef,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<()> {
-        if codes_bytes.is_on_host()
-            && codes_offsets.is_host()
-            && codes_offsets.is::<Primitive>()
-            && !codes_offsets.is_empty()
-        {
-            let last_offset: usize = (&codes_offsets
-                .execute_scalar(codes_offsets.len() - 1, ctx)
-                .vortex_expect("offsets must support scalar_at"))
-                .try_into()
-                .vortex_expect("Failed to convert offset to usize");
+        if codes_bytes.is_on_host() && codes_offsets.is_host() && !codes_offsets.is_empty() {
+            let last_offset: usize =
+                (&codes_offsets.execute_scalar(codes_offsets.len() - 1, ctx)?).try_into()?;
             vortex_ensure!(
                 last_offset <= codes_bytes.len(),
                 InvalidArgument: "Last codes offset {} exceeds codes bytes length {}",
