@@ -127,7 +127,8 @@ impl LayoutReader for FileStatsLayoutReader {
 
         // Evaluate and cache.
         let pruned = self.evaluate_file_stats(expr)?;
-        self.prune_cache.insert(ExactBoundExpr(expr.clone()), pruned);
+        self.prune_cache
+            .insert(ExactBoundExpr(expr.clone()), pruned);
 
         if pruned {
             Ok(MaskFuture::ready(Mask::new_false(mask.len())))
