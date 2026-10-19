@@ -23,7 +23,6 @@ use vortex_session::VortexSession;
 
 use super::DEFAULT_CAPACITY;
 use super::compile::Chain;
-use super::compile::Compiler;
 use super::compile::Shares;
 use super::port::Arena;
 use super::port::PipelineId;
@@ -132,8 +131,6 @@ pub(crate) struct Pipeline {
 
 /// What one run of a pipeline came to.
 enum Progress {
-    /// The source can now activate its selected chunks in this scheduler.
-    Activate,
     /// The source waits for this.
     Blocked(SourceBlocked),
     /// An outlet is full.
@@ -150,7 +147,6 @@ fn drive(
     exec: &mut ExecutionCtx,
     reads: &mut SmallVec<[SegmentId; 1]>,
     child_requests: &mut Vec<ChildProjection>,
-    resolved_selections: &mut Vec<usize>,
 ) -> VortexResult<Progress> {
     let Pipeline {
         source,
@@ -177,7 +173,6 @@ fn drive(
         changed,
         child_requests,
         child_inbox,
-        resolved_selections,
     };
     loop {
         // Closing needs no room, so a pipeline with nothing left to flush closes at once.
@@ -218,7 +213,6 @@ fn drive(
             );
             match ready {
                 SourceReady::Ready => {}
-                SourceReady::Activate => return Ok(Progress::Activate),
                 SourceReady::Blocked(blocked) => return Ok(Progress::Blocked(blocked)),
             }
         }
@@ -318,7 +312,6 @@ pub(crate) struct Core {
     /// Whole values kept for later scans of the same split.
     pub(crate) values: ValueCache,
     pub(crate) plan_children: bool,
-    pub(crate) selection_waiters: Vec<Vec<PipelineId>>,
 }
 
 struct PendingChild {
@@ -348,7 +341,6 @@ impl Core {
             split: usize::MAX,
             values: ValueCache::default(),
             plan_children: false,
-            selection_waiters: Vec::new(),
         }
     }
 
@@ -445,7 +437,6 @@ impl Core {
         pipe.queued = false;
         let mut reads = SmallVec::new();
         let mut child_requests = Vec::new();
-        let mut resolved_selections = Vec::new();
         let progress = drive(
             pipe,
             &mut self.arena,
@@ -453,20 +444,7 @@ impl Core {
             &mut self.exec,
             &mut reads,
             &mut child_requests,
-            &mut resolved_selections,
         )?;
-        for selection in resolved_selections {
-            for waiter in std::mem::take(&mut self.selection_waiters[selection]) {
-                if self.pipelines[waiter].as_ref().is_some_and(|pipe| {
-                    pipe.state == State::Blocked(SourceBlocked::Selection(selection))
-                }) {
-                    self.make_runnable(waiter);
-                }
-            }
-        }
-        if let Progress::Blocked(SourceBlocked::Selection(selection)) = &progress {
-            self.selection_waiters[*selection].push(id);
-        }
         for segment_id in reads {
             self.ask(id, segment_id);
         }
@@ -476,7 +454,6 @@ impl Core {
         #[cfg(debug_assertions)]
         self.validate_progress(id, &progress);
         match &progress {
-            Progress::Activate => self.activate(id)?,
             // A read-ahead source can still have delivered bytes to consume.
             Progress::Blocked(SourceBlocked::Io) if !self.pipeline(id).bytes.is_empty() => {
                 self.make_runnable(id);
@@ -501,36 +478,6 @@ impl Core {
         if matches!(progress, Progress::Done) {
             self.retire(id);
         }
-        Ok(())
-    }
-
-    fn activate(&mut self, id: PipelineId) -> VortexResult<()> {
-        let mut pipe = self.pipelines[id]
-            .take()
-            .ok_or_else(|| vortex_err!("Pipeline {id} is not live"))?;
-        vortex_ensure!(
-            pipe.inlets.is_empty()
-                && pipe.pending == 0
-                && pipe.bytes.is_empty()
-                && pipe.child_inbox.is_none()
-                && pipe.continuing.is_empty()
-                && pipe.finishing.is_none(),
-            "Only an unstarted source without inlets or pending work can activate"
-        );
-        let mut chain = pipe.source.activate(&mut Compiler { core: self })?;
-        chain.stages.append(&mut pipe.stages);
-        pipe.source = chain.source;
-        pipe.stages = chain.stages;
-        pipe.inlets = chain.inlets;
-        pipe.touched = InletSet::new(pipe.inlets.len());
-        pipe.changed = InletSet::all(pipe.inlets.len());
-        for (index, &port) in pipe.inlets.iter().enumerate() {
-            self.arena.get_mut(port).source = SourceEnd::Pipeline { id, inlet: index };
-        }
-        self.pipelines[id] = Some(pipe);
-        self.make_runnable(id);
-        #[cfg(debug_assertions)]
-        self.validate();
         Ok(())
     }
 
@@ -950,12 +897,9 @@ impl Scan {
         self.core.deliver(read, bytes)
     }
 
-    /// Delivers a child projection to its source.
-    pub(crate) fn complete_child(
-        &mut self,
-        id: u64,
-        arrays: Option<Vec<ArrayRef>>,
-    ) -> VortexResult<()> {
+    /// Delivers a child projection to its source, with arrays in selected-split order.
+    /// `None` declines optional parallel work; a planner-owned selected view requires `Some`.
+    pub fn complete_child(&mut self, id: u64, arrays: Option<Vec<ArrayRef>>) -> VortexResult<()> {
         self.core.complete_child(id, arrays)
     }
 

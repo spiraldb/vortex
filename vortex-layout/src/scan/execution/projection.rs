@@ -21,8 +21,9 @@ use vortex_scan::planning::morsel::MorselOutput;
 use vortex_scan::planning::planner::Planner;
 use vortex_scan::planning::planner::PlannerOutput;
 use vortex_scan::planning::planner::State;
+use vortex_scan::planning::planner::WorkScope;
 
-use crate::plan::physical::pipeline::Scan;
+use crate::plan::physical::pipeline::SelectedPlan;
 use crate::plan::physical::pipeline::Split;
 use crate::scan::execution::ScanPlans;
 use crate::scan::execution::SelectedRows;
@@ -37,7 +38,8 @@ use crate::scan::execution::children::splits::parallel_splits;
 pub(super) struct ProjectionPlanner {
     plans: Option<ScanPlans>,
     dtype: DType,
-    selected: SelectedRows,
+    scope: WorkScope,
+    view: Option<SelectedPlan>,
     adaptor: Option<ScanAdaptor>,
     pieces: Vec<Piece>,
     done: bool,
@@ -48,12 +50,25 @@ pub(super) struct ProjectionPlanner {
 impl ProjectionPlanner {
     /// Creates a planner projecting `selected`.
     pub(super) fn new(plans: ScanPlans, selected: SelectedRows) -> Self {
+        let view = SelectedPlan::new(
+            plans.projection.clone(),
+            vec![Split {
+                rows: selected.scope.rows.clone(),
+                mask: selected.mask,
+            }],
+            1,
+        );
+        Self::from_view(plans, view, selected.scope)
+    }
+
+    pub(super) fn from_view(plans: ScanPlans, view: SelectedPlan, scope: WorkScope) -> Self {
         Self {
             dtype: plans.projection.dtype().clone(),
             children: plans.children.clone(),
             pending: None,
             plans: Some(plans),
-            selected,
+            scope,
+            view: Some(view),
             adaptor: None,
             pieces: Vec::new(),
             done: false,
@@ -62,7 +77,8 @@ impl ProjectionPlanner {
 
     fn finish(&mut self) -> VortexResult<PlannerOutput> {
         self.done = true;
-        self.pieces.sort_by_key(|piece| piece.rows.start);
+        self.pieces
+            .sort_by_key(|piece| (piece.split, piece.rows.start));
         let mut arrays: Vec<_> = std::mem::take(&mut self.pieces)
             .into_iter()
             .map(|piece| piece.array)
@@ -74,7 +90,7 @@ impl ProjectionPlanner {
             _ => ChunkedArray::try_new(arrays, self.dtype.clone())?.into_array(),
         };
         Ok(PlannerOutput::Morsel(
-            self.selected.scope.clone(),
+            self.scope.clone(),
             Box::new(ProjectedBatch(Some(array))),
         ))
     }
@@ -120,17 +136,14 @@ impl Planner for ProjectionPlanner {
                 .plans
                 .take()
                 .vortex_expect("an uncompiled projection still has its plans");
-            let scan = Scan::try_new(
-                plans.session,
-                plans.projection,
-                vec![Split {
-                    rows: self.selected.scope.rows.clone(),
-                    mask: self.selected.mask.clone(),
-                }],
-            )?
-            .with_row_offset(plans.row_offset)
-            .with_value_cache(plans.values)
-            .with_child_planning(self.children.is_some());
+            let view = self
+                .view
+                .take()
+                .vortex_expect("an uncompiled projection has a view");
+            let scan = view
+                .into_scan(plans.session, plans.values)?
+                .with_row_offset(plans.row_offset)
+                .with_child_planning(self.children.is_some());
             self.adaptor = Some(ScanAdaptor::new(scan, plans.locations));
             return Ok(PlannerOutput::Continue);
         };
@@ -141,21 +154,30 @@ impl Planner for ProjectionPlanner {
             AdaptorStep::Yield => PlannerOutput::Continue,
             AdaptorStep::NeedsIO(batch) => PlannerOutput::NeedsIO(batch),
             AdaptorStep::Child(child) => {
-                let Some(work) = parallel_splits(&child.plan, &child.splits)? else {
-                    adaptor.complete_child(child.id, None)?;
-                    return Ok(PlannerOutput::Continue);
-                };
-
                 let children = Arc::clone(
                     self.children
                         .as_ref()
                         .ok_or_else(|| vortex_err!("Child projection has no scheduler"))?,
                 );
+                let work = if children.can_parallelize() {
+                    parallel_splits(&child.view.plan, &child.view.splits)?
+                } else {
+                    None
+                };
+                if work.is_none() && !child.planner_owned {
+                    adaptor.complete_child(child.id, None)?;
+                    return Ok(PlannerOutput::Continue);
+                }
                 let (send, recv) = oneshot::channel();
                 self.pending = Some((child.id, recv));
                 PlannerOutput::Await(
                     async move {
-                        let arrays = children.execute(child.plan, work, child.values).await?;
+                        let arrays = match work {
+                            Some(work) => {
+                                children.execute(child.view.plan, work, child.values).await?
+                            }
+                            None => children.execute_view(child.view, child.values).await?,
+                        };
                         send.send(arrays)
                             .map_err(|_| vortex_err!("Projection planner was cancelled"))
                     }

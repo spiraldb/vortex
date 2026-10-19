@@ -210,7 +210,13 @@ impl ListFixture {
         .into_plan();
         let mut segments = vec![element_bytes; chunks as usize];
         segments.push(offset_bytes);
-        let indices = (0..100).map(|index| if uniform { index * (LISTS / 100) } else { index });
+        let indices = (0..100).map(|index| {
+            if uniform {
+                index * (LISTS / 100)
+            } else {
+                index
+            }
+        });
         Self {
             session,
             plan,
@@ -224,22 +230,33 @@ impl ListFixture {
             rows: 0..self.mask.len() as u64,
             mask: self.mask.clone(),
         };
-        let mut scan = Scan::try_new(self.session.clone(), self.plan.clone(), vec![split]).unwrap();
+        let scan = Scan::try_new(self.session.clone(), self.plan.clone(), vec![split]).unwrap();
+        let arrays = self.execute(scan);
+        assert_eq!(arrays.iter().map(|array| array.len()).sum::<usize>(), 100);
+        black_box(arrays);
+    }
+
+    /// A minimal in-memory planner driving each selected child graph through the same protocol.
+    fn execute(&self, mut scan: Scan) -> Vec<ArrayRef> {
+        let mut output = Vec::new();
         loop {
             match scan.step().unwrap() {
                 Turn::Read(read) => {
                     scan.deliver(read.id, self.segments[*read.segment_id as usize].clone())
                         .unwrap();
                 }
-                Turn::Output(_, array) => {
-                    assert_eq!(array.len(), 100);
-                    black_box(array);
+                Turn::Output(split, array) => output.push((split, array)),
+                Turn::Child(child) => {
+                    let (id, child_scan) = child.into_scan(self.session.clone()).unwrap();
+                    let arrays = self.execute(child_scan);
+                    scan.complete_child(id, Some(arrays)).unwrap();
                 }
-                Turn::Child(_) => unreachable!("microbenchmark has no child planner"),
                 Turn::Waiting => unreachable!("every read is delivered immediately"),
                 Turn::Done => break,
             }
         }
+        output.sort_by_key(|(split, _)| *split);
+        output.into_iter().map(|(_, array)| array).collect()
     }
 }
 

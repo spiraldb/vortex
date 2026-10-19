@@ -71,7 +71,6 @@ use crate::plan::physical::operator::SourceBlocked;
 use crate::plan::physical::operator::SourceReady;
 use crate::plan::physical::operator::Step;
 use crate::plan::physical::operators::PackSource;
-use crate::plan::physical::operators::compile_deferred_list;
 use crate::plan::physical::optimize;
 use crate::segments::SegmentId;
 use crate::test::SESSION;
@@ -211,8 +210,16 @@ struct Run {
 /// Drives a scan the way an owner does, completing reads only while the scan waits.
 fn drive(
     store: &Store,
-    mut scan: Scan,
+    scan: Scan,
     mut pick: impl FnMut(&[ReadRequest]) -> usize,
+) -> VortexResult<Run> {
+    drive_inner(store, scan, &mut pick)
+}
+
+fn drive_inner(
+    store: &Store,
+    mut scan: Scan,
+    pick: &mut dyn FnMut(&[ReadRequest]) -> usize,
 ) -> VortexResult<Run> {
     let mut inflight: Vec<ReadRequest> = Vec::new();
     let mut batch: Vec<u32> = Vec::new();
@@ -237,7 +244,19 @@ fn drive(
                 splits[split].push(array.clone());
                 arrays.push(array);
             }
-            Turn::Child(_) => unreachable!("child planning is disabled"),
+            Turn::Child(child) => {
+                let (id, child_scan) = child.into_scan(SESSION.clone())?;
+                let child = drive_inner(store, child_scan, pick)?;
+                assert_eq!(child.leftover, (0, 0));
+                events.extend(
+                    child
+                        .events
+                        .into_iter()
+                        .filter(|event| !matches!(event, Event::Piece(_))),
+                );
+                let arrays = child.splits.into_iter().flatten().collect();
+                scan.complete_child(id, Some(arrays))?;
+            }
             Turn::Waiting => {
                 if !batch.is_empty() {
                     events.push(Event::Io(std::mem::take(&mut batch)));
@@ -306,7 +325,7 @@ fn delivery(order: Delivery) -> impl FnMut(&[ReadRequest]) -> usize {
 fn grouped_list_ranges_preserve_order_and_shared_reads(
     #[values(Delivery::Fifo, Delivery::Lifo)] order: Delivery,
     #[values(false, true)] shared: bool,
-    #[values(false, true)] deferred: bool,
+    #[values(false, true)] planned: bool,
 ) -> VortexResult<()> {
     let mut store = Store::default();
     let elements = Buffer::from_iter(0_i64..20).into_array();
@@ -326,11 +345,7 @@ fn grouped_list_ranges_preserve_order_and_shared_reads(
         None,
     )?
     .into_plan();
-    let plan = if deferred {
-        deferred_lists(plan)
-    } else {
-        plan
-    };
+    let plan = if planned { selected_list(plan) } else { plan };
     let rows = [0_u64, 1, 7, 8];
     let mask = Mask::from_iter((0..10).map(|row| rows.contains(&row)));
     let result = run(&store, &plan, 0..10, mask, delivery(order))?;
@@ -357,20 +372,21 @@ fn grouped_list_ranges_preserve_order_and_shared_reads(
     Ok(())
 }
 
-fn deferred_lists(plan: PlanRef) -> PlanRef {
+fn selected_list(plan: PlanRef) -> PlanRef {
     SyntheticPlan::new(
         plan.dtype().clone(),
         plan.row_count(),
         Vec::new(),
         move |rows, mask, compiler| {
-            compile_deferred_list(plan.as_::<ListPack>(), rows, mask, compiler).map(Some)
+            plan.as_::<ListPack>()
+                .compile_selected(rows, mask, compiler, true)
         },
     )
     .into_plan()
 }
 
 #[rstest]
-fn deferred_list_does_not_lower_unselected_chunks(
+fn selected_list_view_skips_unselected_children(
     #[values(Delivery::Fifo, Delivery::Lifo)] order: Delivery,
     #[values(false, true)] empty: bool,
 ) -> VortexResult<()> {
@@ -378,7 +394,7 @@ fn deferred_list_does_not_lower_unselected_chunks(
     let elements = Buffer::from_iter(10_i64..12).into_array();
     let selected = lower(&store.flat(&elements)?)?;
     let unused = SyntheticPlan::new(elements.dtype().clone(), 2, Vec::new(), |_, _, _| {
-        Err(vortex_err!("Unselected chunk must not be compiled"))
+        Err(vortex_err!("Unselected child must not be compiled"))
     })
     .into_plan();
     let chunks = ConcatPlan::try_new(
@@ -386,7 +402,7 @@ fn deferred_list_does_not_lower_unselected_chunks(
         vec![unused.clone(), selected, unused],
     )?;
     let offsets = Buffer::from(vec![0_u64, 2, 4, 6]).into_array();
-    let plan = deferred_lists(
+    let plan = selected_list(
         ListPackPlan::try_new(
             false.into(),
             3,
@@ -396,8 +412,13 @@ fn deferred_list_does_not_lower_unselected_chunks(
         )?
         .into_plan(),
     );
-    let mask = Mask::from_iter([false, !empty, false]);
-    let result = run(&store, &plan, 0..3, mask, delivery(order))?;
+    let result = run(
+        &store,
+        &plan,
+        0..3,
+        Mask::from_iter([false, !empty, false]),
+        delivery(order),
+    )?;
     let expected = ListArray::try_new(
         elements,
         Buffer::from(vec![0_u64, 2]).into_array(),
@@ -421,7 +442,7 @@ fn deferred_list_does_not_lower_unselected_chunks(
 fn dense_nullable_list_ranges_share_one_scan(
     #[values(Delivery::Fifo, Delivery::Lifo)] order: Delivery,
     #[values(false, true)] partial: bool,
-    #[values(false, true)] deferred: bool,
+    #[values(false, true)] planned: bool,
 ) -> VortexResult<()> {
     let mut store = Store::default();
     let elements = Buffer::from_iter(0_i64..20).into_array();
@@ -441,11 +462,7 @@ fn dense_nullable_list_ranges_share_one_scan(
         Some(lower(&store.flat(&valid)?)?),
     )?
     .into_plan();
-    let plan = if deferred {
-        deferred_lists(plan)
-    } else {
-        plan
-    };
+    let plan = if planned { selected_list(plan) } else { plan };
     let mask = Mask::from_iter((0..10).map(|row| !partial || row != 4));
     let result = run(&store, &plan, 0..10, mask.clone(), delivery(order))?;
     if !partial {
@@ -1074,9 +1091,7 @@ fn pack_readiness_tracks_changes_and_consumption(
     let mut changed = InletSet::all(2);
     let mut child_requests = Vec::new();
     let mut child_inbox = None;
-    let mut resolved_selections = Vec::new();
     let mut cx = Cx {
-        resolved_selections: &mut resolved_selections,
         child_requests: &mut child_requests,
         child_inbox: &mut child_inbox,
         arena: &mut arena,

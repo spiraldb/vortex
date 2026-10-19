@@ -300,6 +300,62 @@ async fn independent_children_respect_the_shared_budget_and_return_in_order() ->
     Ok(())
 }
 
+#[tokio::test]
+async fn selected_view_preserves_split_order_and_skips_unselected_segments() -> VortexResult<()> {
+    let (children, service, plan, _) = fixture()?;
+    let view = SelectedPlan::new(plan, vec![Split::all(1..4), Split::all(17..20)], 2);
+    let task = tokio::spawn(Arc::clone(&children).execute_view(view, ValueCache::default()));
+    until(|| {
+        service
+            .sources
+            .lock()
+            .first()
+            .is_some_and(|source| source.requests.lock().len() == 2)
+    })
+    .await;
+    let source = Arc::clone(&service.sources.lock()[0]);
+    source.requests.lock().make_contiguous().reverse();
+    source.open();
+    let arrays = task.await.expect("selected view task panicked")?;
+    let actual =
+        ChunkedArray::try_new(arrays, DType::Primitive(PType::U64, false.into()))?.into_array();
+    let expected = Buffer::from_iter((1_u64..4).chain(17..20)).into_array();
+    assert_arrays_eq!(actual, expected, &mut children.session.create_execution_ctx());
+    assert_eq!(children.admitted(), 0);
+    assert!(children.budget.get().is_none());
+    assert_eq!(service.sources.lock().len(), 1);
+    assert_eq!(source.cleared.load(Ordering::Relaxed), 1);
+    Ok(())
+}
+
+#[rstest::rstest]
+#[tokio::test]
+async fn cancelled_or_failed_selected_view_releases_its_io(
+    #[values(false, true)] failure: bool,
+) -> VortexResult<()> {
+    let (children, service, plan, _) = fixture()?;
+    let view = SelectedPlan::new(plan, vec![Split::all(1..4)], 1);
+    let task = tokio::spawn(Arc::clone(&children).execute_view(view, ValueCache::default()));
+    until(|| !service.sources.lock().is_empty()).await;
+    let source = Arc::clone(&service.sources.lock()[0]);
+    if failure {
+        source.fail.store(true, Ordering::Release);
+        source.open();
+        let error = task
+            .await
+            .expect("selected view task panicked")
+            .expect_err("injected IO failure must propagate");
+        assert!(error.to_string().contains("injected child IO failure"));
+    } else {
+        task.abort();
+        assert!(task.await.expect_err("task must be cancelled").is_cancelled());
+    }
+    until(|| source.cleared.load(Ordering::Relaxed) == 1).await;
+    assert!(source.requests.lock().is_empty());
+    assert!(children.budget.get().is_none());
+    Ok(())
+}
+
 #[rstest::rstest]
 #[tokio::test]
 async fn cancelled_or_failed_parent_releases_child_io_and_budget(

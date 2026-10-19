@@ -38,15 +38,13 @@ use crate::plan::physical::operator::Step;
 use crate::plan::physical::pipeline::ChildProjection;
 use crate::plan::physical::pipeline::ReadId;
 use crate::plan::physical::pipeline::Scan;
+use crate::plan::physical::pipeline::SelectedPlan;
 use crate::plan::physical::pipeline::Split;
 use crate::plan::physical::pipeline::Turn;
 use crate::plan::physical::pipeline::ValueCache;
 use crate::segments::SegmentId;
 
-mod deferred;
 mod work;
-
-pub(crate) use deferred::compile_deferred_list;
 
 /// A list's offsets and validity arrive before its selected element ranges can be planned.
 pub(crate) struct ListSource {
@@ -54,6 +52,7 @@ pub(crate) struct ListSource {
     mask: Mask,
     values: ValueCache,
     plan_children: bool,
+    planner_owned: bool,
     awaiting_child: bool,
     serial_splits: Option<(Vec<Split>, bool)>,
     initialized: bool,
@@ -73,12 +72,14 @@ impl ListSource {
         mask: Mask,
         values: ValueCache,
         plan_children: bool,
+        planner_owned: bool,
     ) -> Self {
         Self {
             plan,
             mask,
             values,
             plan_children,
+            planner_owned,
             awaiting_child: false,
             serial_splits: None,
             initialized: false,
@@ -148,8 +149,8 @@ impl ListSource {
             get_available_parallelism().unwrap_or(1),
         )?;
         let splits = work::element_splits(elements.dtype(), ranges)?;
-        // Avoid handing tiny or variable-width work to the outer planner. The planner
-        // decides whether the substantial fixed-width ranges can be split safely.
+        // The baseline only hands off substantial fixed-width work. The selected-view path
+        // lets the planner own every child graph, including tiny and nested selections.
         let width = match elements.dtype() {
             DType::Primitive(ptype, _) => ptype.byte_width() as u64,
             DType::Bool(_) => 1,
@@ -158,13 +159,15 @@ impl ListSource {
         let bytes = splits.iter().fold(0_u64, |bytes, split| {
             bytes.saturating_add((split.mask.true_count() as u64).saturating_mul(width))
         });
-        if self.plan_children && bytes >= 512 * 1024 {
-            self.serial_splits = Some((splits.clone(), overlap));
+        if self.planner_owned || (self.plan_children && bytes >= 512 * 1024) {
+            if !self.planner_owned {
+                self.serial_splits = Some((splits.clone(), overlap));
+            }
             self.awaiting_child = true;
             cx.request_child(ChildProjection {
                 id: 0,
-                plan: elements,
-                splits,
+                view: SelectedPlan::new(elements, splits, if overlap { 2 } else { 1 }),
+                planner_owned: self.planner_owned,
                 values: self.values.clone(),
             });
             self.initialized = true;
@@ -235,15 +238,16 @@ impl Source for ListSource {
                 return Ok(SourceReady::Blocked(SourceBlocked::Child));
             };
             self.awaiting_child = false;
-            let (splits, overlap) = self
-                .serial_splits
-                .take()
-                .ok_or_else(|| vortex_err!("Missing deferred list ranges"))?;
             if let Some(arrays) = arrays {
                 self.chunks.extend(arrays.into_iter().enumerate());
                 self.finish()?;
                 return Ok(SourceReady::Ready);
             }
+            vortex_ensure!(!self.planner_owned, "Planner declined a selected list view");
+            let (splits, overlap) = self
+                .serial_splits
+                .take()
+                .ok_or_else(|| vortex_err!("Missing deferred list ranges"))?;
             self.start_elements(cx, splits, overlap)?;
         }
         let scan = self

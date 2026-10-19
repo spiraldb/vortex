@@ -63,14 +63,6 @@ impl Core {
     pub(super) fn validate_progress(&self, id: PipelineId, progress: &Progress) {
         let pipe = self.pipeline(id);
         match progress {
-            Progress::Activate => {
-                assert!(pipe.inlets.is_empty());
-                assert_eq!(pipe.pending, 0);
-                assert!(pipe.bytes.is_empty());
-            }
-            Progress::Blocked(SourceBlocked::Selection(selection)) => {
-                assert!(self.selection_waiters[*selection].contains(&id));
-            }
             Progress::Blocked(SourceBlocked::Inlet(index)) => {
                 assert!(
                     *index < pipe.inlets.len(),

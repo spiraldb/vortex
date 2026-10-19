@@ -22,7 +22,6 @@ use crate::plan::physical::PlanParts;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::PlanVTable;
 use crate::plan::physical::operators::ListSource;
-use crate::plan::physical::operators::compile_deferred_list;
 use crate::plan::physical::operators::UNBOUNDED;
 use crate::plan::physical::pipeline::Chain;
 use crate::plan::physical::pipeline::Compiler;
@@ -88,6 +87,39 @@ impl ListPackPlan {
         Ok(unsafe { Self::from_children_unchecked(dtype, row_count, children) })
     }
 
+    pub(crate) fn compile_selected(
+        &self,
+        rows: Range<u64>,
+        mask: &Mask,
+        compiler: &mut Compiler<'_>,
+        planner_owned: bool,
+    ) -> VortexResult<Option<Chain>> {
+        let plan = self;
+        if mask.all_false() {
+            return Ok(None);
+        }
+        let boundaries = offset_mask(mask);
+        let offsets = compiler
+            .compile(&plan.offsets()?, rows.start..rows.end + 1, &boundaries)?
+            .ok_or_else(|| vortex_err!("Selected list offsets produced no rows"))?;
+        let mut chains = vec![offsets];
+        if let Some(validity) = plan.validity()? {
+            chains.push(
+                compiler
+                    .compile(&validity, rows, mask)?
+                    .ok_or_else(|| vortex_err!("Selected list validity produced no rows"))?,
+            );
+        }
+        let source = ListSource::new(
+            plan.clone(),
+            mask.clone(),
+            compiler.values().clone(),
+            compiler.plan_children(),
+            planner_owned,
+        );
+        Ok(Some(compiler.join_with(chains, |_| UNBOUNDED, source)))
+    }
+
     /// Returns the plan producing list elements.
     pub fn elements(&self) -> VortexResult<PlanRef> {
         self.child_required(ELEMENTS)
@@ -141,31 +173,12 @@ impl PlanVTable for ListPack {
         mask: &Mask,
         compiler: &mut Compiler<'_>,
     ) -> VortexResult<Option<Chain>> {
-        if mask.all_false() {
-            return Ok(None);
-        }
-        if std::env::var_os("VORTEX_LIST_PIPELINE").is_some() {
-            return compile_deferred_list(plan, rows, mask, compiler).map(Some);
-        }
-        let boundaries = offset_mask(mask);
-        let offsets = compiler
-            .compile(&plan.offsets()?, rows.start..rows.end + 1, &boundaries)?
-            .ok_or_else(|| vortex_err!("Selected list offsets produced no rows"))?;
-        let mut chains = vec![offsets];
-        if let Some(validity) = plan.validity()? {
-            chains.push(
-                compiler
-                    .compile(&validity, rows, mask)?
-                    .ok_or_else(|| vortex_err!("Selected list validity produced no rows"))?,
-            );
-        }
-        let source = ListSource::new(
-            plan.clone(),
-            mask.clone(),
-            compiler.values().clone(),
-            compiler.plan_children(),
-        );
-        Ok(Some(compiler.join_with(chains, |_| UNBOUNDED, source)))
+        plan.compile_selected(
+            rows,
+            mask,
+            compiler,
+            std::env::var_os("VORTEX_LIST_PIPELINE").is_some(),
+        )
     }
 
     fn reach(

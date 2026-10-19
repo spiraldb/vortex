@@ -48,6 +48,7 @@ use super::ScanPlans;
 use super::SegmentLocation;
 use super::projection::ProjectionPlanner;
 use crate::plan::physical::PlanRef;
+use crate::plan::physical::pipeline::SelectedPlan;
 use crate::plan::physical::pipeline::Split;
 use crate::plan::physical::pipeline::ValueCache;
 
@@ -114,7 +115,7 @@ pub(in crate::scan) fn child_executor(
     io: Arc<dyn IoService>,
 ) -> Option<Arc<Children>> {
     let workers = get_available_parallelism().unwrap_or(1);
-    (workers > 1).then(|| {
+    (workers > 1 || std::env::var_os("VORTEX_LIST_PIPELINE").is_some()).then(|| {
         Arc::new(Children {
             session,
             locations,
@@ -131,6 +132,48 @@ impl Children {
     #[cfg(test)]
     pub(in crate::scan) fn admitted(&self) -> usize {
         self.admitted.load(Ordering::Relaxed)
+    }
+
+    pub(super) fn can_parallelize(&self) -> bool {
+        self.workers > 1
+    }
+
+    /// Execute a selected graph without holding the fixed-width parallel admission budget.
+    /// Nested lists may ask their enclosing planner for further selected views.
+    pub(super) fn execute_view(
+        self: Arc<Self>,
+        view: SelectedPlan,
+        values: ValueCache,
+    ) -> BoxFuture<'static, VortexResult<Vec<ArrayRef>>> {
+        async move {
+            let rows = view.splits.first().map_or(0, |split| split.rows.start)
+                ..view.splits.last().map_or(0, |split| split.rows.end);
+            let scope = WorkScope {
+                file_ordinal: 0,
+                rows,
+            };
+            let plans = ScanPlans {
+                session: self.session.clone(),
+                locations: Arc::clone(&self.locations),
+                projection: view.plan.clone(),
+                row_offset: 0,
+                values,
+                children: Some(Arc::clone(&self)),
+            };
+            let root = ProjectionPlanner::from_view(plans, view, scope.clone());
+            let mut run = Run::new();
+            run.admit(Box::new(root), scope, self.io.session());
+            let mut arrays = Vec::new();
+            loop {
+                match run.advance()? {
+                    Progress::Batch(batch) => arrays.push(batch.array),
+                    Progress::RootDone(_) | Progress::Idle => break,
+                    Progress::Waiting => poll_fn(|cx| run.poll_completion(cx)).await?,
+                }
+            }
+            Ok(arrays)
+        }
+        .boxed()
     }
 
     pub(super) fn execute(

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-"""Compare current and prebuilt list pipelines on identical ListLayout files."""
+"""Compare current list scans and planner-owned selected views on identical ListLayout files."""
 
 import argparse
 import hashlib
@@ -66,7 +66,7 @@ class Comparison:
         metadata = {
             "baseline": "current list implementation, prototype disabled",
             "commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
-            "candidate": "prebuilt pipeline prototype; VORTEX_LIST_PIPELINE=1",
+            "candidate": "planner-owned selected views; VORTEX_LIST_PIPELINE=1",
             "platform": platform.platform(),
             "logical_cpu_count": os.cpu_count(),
             "affinity": "unrestricted",
@@ -118,7 +118,7 @@ class Comparison:
         ]
         with (self.results / "commands.jsonl").open("a") as output:
             output.write(
-                json.dumps({"command": command, "selection_gate": version == "candidate", "VORTEX_SCAN_V2": "1"}) + "\n"
+                json.dumps({"command": command, "selected_view": version == "candidate", "VORTEX_SCAN_V2": "1"}) + "\n"
             )
         result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=180)
         (self.results / "raw" / f"{stem}.log").write_text(result.stderr)
@@ -197,10 +197,10 @@ def main() -> None:
             output.write("\n### Deferred list pipeline experiment\n\n")
             output.write(
                 f"{checks} reference checks passed; full Arrow decode on warm local disk. "
-                "The prototype prebuilds pipelines but does not implement the current decoded-work admission budget. "
+                "The candidate builds selected child graphs in the planner and retains admission limits for parallel fixed-width work. "
                 "Positive changes are slower.\n\n"
             )
-            output.write("| Dataset | Rows | Selection | Open mode | Current ms | Prototype ms | Change |\n")
+            output.write("| Dataset | Rows | Selection | Open mode | Current ms | Selected view ms | Change |\n")
             output.write("| --- | ---: | --- | --- | ---: | ---: | ---: |\n")
             for row in summary:
                 output.write(

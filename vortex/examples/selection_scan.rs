@@ -143,7 +143,7 @@ async fn open(
                 session.allocator(),
             )?);
             options
-                .with_metrics_registry(metrics.clone())
+                .with_metrics_registry(Arc::clone(metrics))
                 .open_read(InstrumentedReadAt::new(read, metrics.as_ref()))
                 .await?
         }

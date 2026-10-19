@@ -10,12 +10,9 @@ use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::buffer::BufferHandle;
 use vortex_error::VortexResult;
-use vortex_error::vortex_bail;
 use vortex_session::VortexSession;
 
 use super::pipeline::Arena;
-use super::pipeline::Chain;
-use super::pipeline::Compiler;
 use super::pipeline::Inlet;
 use super::pipeline::PortId;
 use crate::plan::physical::pipeline::ChildProjection;
@@ -38,8 +35,6 @@ pub enum Step {
 pub enum SourceReady {
     /// The next compute call can produce output or finish without blocking.
     Ready,
-    /// Replace this source with selected work in the same scheduler, through [`Source::activate`].
-    Activate,
     /// Nothing can happen until the condition clears.
     Blocked(SourceBlocked),
 }
@@ -51,8 +46,6 @@ pub enum SourceBlocked {
     Io,
     /// Wait for a child projection, possibly alongside pending reads.
     Child,
-    /// Wait for a list's runtime element selection.
-    Selection(usize),
     /// The inlet needs more batches or its sink to close it. It must be open and have room
     /// for its sink to push; debug builds check that the sink can still wake this source.
     Inlet(usize),
@@ -61,15 +54,6 @@ pub enum SourceBlocked {
 /// The start of a pipeline: produces batches from its inlets and the segments it asks to have
 /// read.
 pub trait Source: Operator {
-    /// Activates work whose selection was unavailable at initial compilation.
-    ///
-    /// Called only after returning [`SourceReady::Activate`]. The source must have no inlets,
-    /// pending reads, or emitted batches. The resulting chain inherits its downstream stages
-    /// and outlets, without starting another scan or handing work to the outer planner.
-    fn activate(&mut self, _compiler: &mut Compiler<'_>) -> VortexResult<Chain> {
-        vortex_bail!("Source does not support deferred activation")
-    }
-
     /// Prepares the next [`compute`](Operator::compute) call, after the driver checks outlets.
     /// Returning [`SourceReady::Ready`] guarantees that call can proceed without blocking.
     /// Any input or choice made here can be retained by the source for that call.
@@ -178,7 +162,6 @@ pub struct Cx<'a> {
     pub(super) changed: &'a mut InletSet,
     pub(super) child_requests: &'a mut Vec<ChildProjection>,
     pub(super) child_inbox: &'a mut Option<Box<ChildInbox>>,
-    pub(super) resolved_selections: &'a mut Vec<usize>,
 }
 
 #[derive(Default)]
@@ -188,10 +171,6 @@ pub(super) struct ChildInbox {
 }
 
 impl Cx<'_> {
-    pub(crate) fn resolve_selection(&mut self, selection: usize) {
-        self.resolved_selections.push(selection);
-    }
-
     /// Describes child work for the enclosing planner. Return [`SourceBlocked::Child`] while awaiting its completion.
     /// Identifiers need only be unique among this source's outstanding child projections.
     pub(crate) fn request_child(&mut self, child: ChildProjection) {
