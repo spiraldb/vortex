@@ -19,7 +19,6 @@ mod split;
 #[cfg(test)]
 mod tests;
 
-use std::cmp::Ordering;
 use std::ops::Range;
 use std::sync::Arc;
 
@@ -40,7 +39,6 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_ensure;
 use vortex_io::request::IoService;
 use vortex_io::session::RuntimeSessionExt;
-use vortex_mask::AllOr;
 use vortex_scan::planning::planner::WorkScope;
 use vortex_scan::selection::Selection;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
@@ -54,10 +52,8 @@ use crate::layouts::flat::Flat;
 use crate::layouts::struct_::Struct;
 use crate::layouts::zoned::LegacyStats;
 use crate::layouts::zoned::Zoned;
-use crate::plan::physical::PlanRef;
 use crate::plan::physical::lower;
 use crate::plan::physical::optimize;
-use crate::plan::physical::pipeline::Reach;
 use crate::plan::physical::plan_row_idx_expression;
 use crate::scan::arrow::to_record_batch;
 use crate::scan::execution::ScanPlans;
@@ -66,7 +62,6 @@ use crate::scan::execution::plan_projection;
 use crate::scan::v2::io::SegmentScanIo;
 use crate::scan::v2::io::segment_ranges;
 use crate::scan::v2::split::SplitPlan;
-use crate::segments::SegmentId;
 use crate::segments::SegmentSource;
 
 const ROW_BLOCK_SIZE: usize = 8192;
@@ -85,48 +80,6 @@ fn rows_per_chunk(row_count: u64, locations: &[SegmentLocation]) -> usize {
     let bytes_per_row = bytes.div_ceil(row_count).max(1);
     let blocks = TARGET_BYTES_PER_CHUNK / bytes_per_row / ROW_BLOCK_SIZE as u64;
     blocks.clamp(1, 8) as usize * ROW_BLOCK_SIZE
-}
-
-/// Groups the sorted, disjoint selected `slices` of the rows starting at `offset`: a slice joins
-/// the group before it when both read a stored segment in common, so no segment is read by two
-/// groups. A column's segments hold contiguous rows, so a slice can share a segment with an
-/// earlier slice of its group only if it shares one with the slice just before it.
-fn group_slices(
-    plan: &PlanRef,
-    offset: u64,
-    slices: &[(usize, usize)],
-) -> VortexResult<Vec<Range<usize>>> {
-    let mut groups: Vec<Range<usize>> = Vec::new();
-    let mut previous = Vec::new();
-    for &(start, end) in slices {
-        let mut segments = Vec::new();
-        plan.reach(
-            offset + start as u64..offset + end as u64,
-            &Reach::Offset(0),
-            &mut |segment, _| segments.push(segment),
-        )?;
-        segments.sort_unstable();
-        segments.dedup();
-        match groups.last_mut() {
-            Some(group) if shares_any(&previous, &segments) => group.end = end,
-            _ => groups.push(start..end),
-        }
-        previous = segments;
-    }
-    Ok(groups)
-}
-
-/// Whether two sorted segment lists have a segment in common.
-fn shares_any(left: &[SegmentId], right: &[SegmentId]) -> bool {
-    let (mut left, mut right) = (left.iter().peekable(), right.iter().peekable());
-    while let (Some(l), Some(r)) = (left.peek(), right.peek()) {
-        match l.cmp(r) {
-            Ordering::Less => _ = left.next(),
-            Ordering::Greater => _ = right.next(),
-            Ordering::Equal => return true,
-        }
-    }
-    false
 }
 
 /// Fixed boundaries in the file's row domain, clipped to the requested range.
@@ -373,33 +326,25 @@ impl<A: 'static + Send> PreparedScan<A> {
         })
     }
 
-    /// The groups of selected rows, each ready to be admitted to a planning run.
-    ///
-    /// Within each fixed chunk, selected runs that read a stored segment in common form one
-    /// group. A group spans only its own rows and keeps the selection's mask over them, so rows
-    /// between groups get no planner, plan or read.
-    fn split_plans(&self) -> VortexResult<Vec<SplitPlan>> {
-        let mut plans = Vec::new();
-        for rows in &self.splits {
-            let row_mask = self.selection.row_mask(rows);
-            let mask = row_mask.mask();
-            let groups = match mask.slices() {
-                AllOr::None => continue,
-                AllOr::All => vec![0..mask.len()],
-                AllOr::Some(slices) => group_slices(&self.plans.projection, rows.start, slices)?,
-            };
-            for group in groups {
+    /// The splits with selected rows, each ready to be admitted to a planning run.
+    fn split_plans(&self) -> Vec<SplitPlan> {
+        self.splits
+            .iter()
+            .filter_map(|rows| {
+                let row_mask = self.selection.row_mask(rows);
+                let mask = row_mask.mask();
+                // Only the span from the first selected row to the last is planned.
+                let span = mask.first()?..mask.last()? + 1;
                 let scope = WorkScope {
                     file_ordinal: 0,
-                    rows: rows.start + group.start as u64..rows.start + group.end as u64,
+                    rows: rows.start + span.start as u64..rows.start + span.end as u64,
                 };
-                plans.push(SplitPlan {
-                    root: plan_projection(self.plans.clone(), scope.clone(), mask.slice(group)),
+                Some(SplitPlan {
+                    root: plan_projection(self.plans.clone(), scope.clone(), mask.slice(span)),
                     scope,
-                });
-            }
-        }
-        Ok(plans)
+                })
+            })
+            .collect()
     }
 
     /// Runs every split as a task on the session's runtime and yields their mapped batches.
@@ -409,7 +354,7 @@ impl<A: 'static + Send> PreparedScan<A> {
     fn execute_stream(self) -> VortexResult<BoxStream<'static, VortexResult<A>>> {
         let concurrency = self.concurrency * get_available_parallelism().unwrap_or(1);
         let handle = self.session.handle();
-        let split_plans = self.split_plans()?;
+        let split_plans = self.split_plans();
         let io = self.io;
         let map_fn = self.map_fn;
         // Spawned as the buffer pulls them, so at most `concurrency` splits read at once.

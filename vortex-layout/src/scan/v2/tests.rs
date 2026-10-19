@@ -43,7 +43,6 @@ use super::ScanBuilder;
 use super::ScanFile;
 use super::row_chunks;
 use super::rows_per_chunk;
-use super::shares_any;
 use crate::LayoutRef;
 use crate::LayoutStrategy;
 use crate::layouts::chunked::writer::ChunkedLayoutStrategy;
@@ -386,7 +385,7 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
     });
     let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
     let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?)?;
-    let splits = scan.split_plans()?;
+    let splits = scan.split_plans();
     assert_eq!(
         splits.len(),
         (STORED_CHUNKS * STORED_CHUNK_ROWS).div_ceil(MAX_ROWS_PER_CHUNK)
@@ -415,19 +414,6 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
         );
     }
     Ok(())
-}
-
-#[rstest]
-#[case::empty(vec![], vec![2], false)]
-#[case::disjoint(vec![1, 3], vec![2, 4], false)]
-#[case::shared(vec![1, 3, 9], vec![2, 9], true)]
-fn sorted_segment_lists_intersect(
-    #[case] left: Vec<u32>,
-    #[case] right: Vec<u32>,
-    #[case] expected: bool,
-) {
-    let ids = |ids: Vec<u32>| ids.into_iter().map(SegmentId::from).collect::<Vec<_>>();
-    assert_eq!(shares_any(&ids(left), &ids(right)), expected);
 }
 
 /// Three stored chunks of 70,000 consecutive integers, read through a counting source.
@@ -462,12 +448,10 @@ async fn counted_ints(session: &VortexSession) -> VortexResult<(Arc<CountingSegm
 }
 
 #[rstest]
-// Rows reading the same stored chunk form one group, so it is read once.
-#[case::shared_segment(vec![5, 6, 30_000, 140_100], vec![5..30_001, 140_100..140_101], 2)]
-// Rows in one work chunk but different stored chunks plan nothing between them.
-#[case::separate_segments(vec![66_000, 75_000], vec![66_000..66_001, 75_000..75_001], 2)]
+#[case::one_stored_chunk(vec![5, 6, 30_000, 140_100], vec![5..30_001, 140_100..140_101], 2)]
+#[case::two_stored_chunks(vec![66_000, 75_000], vec![66_000..75_001], 2)]
 #[tokio::test]
-async fn selected_rows_plan_only_their_groups(
+async fn work_chunks_plan_only_their_selected_span(
     #[case] rows: Vec<u64>,
     #[case] scopes: Vec<Range<u64>>,
     #[case] reads: usize,
@@ -479,7 +463,7 @@ async fn selected_rows_plan_only_their_groups(
         builder(&session, &segments, &layout)?
             .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(rows.clone()))?),
     )?;
-    let splits = scan.split_plans()?;
+    let splits = scan.split_plans();
     assert_eq!(
         splits
             .iter()
@@ -491,7 +475,7 @@ async fn selected_rows_plan_only_their_groups(
     for split in splits {
         arrays.extend(split.run(Arc::clone(&scan.io)).await?);
     }
-    // Each group reads only the stored chunks holding its selected rows.
+    // Each work chunk reads only the stored chunks holding its selected rows.
     assert_eq!(counted.reads.load(Ordering::Relaxed), reads);
     let expected = rows
         .iter()
