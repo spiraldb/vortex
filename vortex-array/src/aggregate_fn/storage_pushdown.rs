@@ -3,7 +3,7 @@
 
 //! Opt-in pushdown of an aggregate into the storage of one extension type.
 //!
-//! See [`StoragePushdown`] for when such a pushdown is correct.
+//! See [`ExtensionStoragePushdown`] for when such a pushdown is correct.
 
 use std::mem;
 
@@ -32,79 +32,41 @@ use crate::scalar::Scalar;
 
 /// An opt-in pushdown of aggregate `A` into the storage of extension type `E`.
 ///
-/// An extension type gives its storage a meaning: a [`Timestamp`] is an instant, not an `i64`.
-/// Aggregates do not see through extension types on their own, so most of them reject an
-/// extension dtype. `StoragePushdown` lets you declare, for one aggregate and one extension type
-/// at a time, that running the aggregate on the storage gives the right answer for the extension
-/// type.
+/// Registering a pair declares that `A` over `E`'s storage is correct for `E`. Nothing checks
+/// this, and a wrong registration silently returns wrong answers. Only register a pair when both
+/// of these hold:
 ///
-/// **Registering a pair is a claim about `E`, and nothing checks it.** The adapter runs `A` on
-/// the raw storage values whether or not that is meaningful for `E`. A wrong registration does
-/// not fail. It silently returns answers that are wrong for `E`, and query planning and pruning
-/// may rely on those answers.
+/// - **`E`'s domain supports the aggregation.** The result must mean something for values of `E`.
+///   The minimum of some timestamps is an instant, but their sum is not.
+/// - **The storage computes it soundly.** Every operation `A` uses must give the same answer on
+///   the storage as on `E`:
+///   - comparison (`min`, `max`, `min_max`, `bounded_*`, `is_sorted`): `E` orders like its
+///     storage.
+///   - equality (`is_constant`, `all_non_distinct`): each value of `E` has exactly one storage
+///     value.
+///   - addition (`sum`, `mean`): adding storage values gives the storage of their sum.
+///   - NaN detection (`nan_count`, `all_nan`, `all_non_nan`): a NaN in the storage is a NaN of `E`.
 ///
-/// # When a pushdown is correct
+/// For example, `Date`, `Time` and `Timestamp` pass for comparison but not for `sum`. Aggregates
+/// that already accept any extension dtype, such as `count` and `null_count`, need no pushdown.
 ///
-/// Every aggregate is built from a few operations on its input values: comparison, equality,
-/// addition, or NaN detection. A pushdown of `A` into `E`'s storage is correct only when each
-/// operation `A` uses can be derived from the same operation on `E`'s storage. That is a
-/// property of the specific type `E` and the specific aggregate `A`, not of extension types in
-/// general. One extension type can support pushdown for some aggregates and not others.
-///
-/// [`Timestamp`] shows both cases:
-///
-/// - Comparing two timestamps of the same unit and time zone is the same as comparing their `i64`
-///   storage. So `min`, `max` and `is_sorted` can be pushed down into its storage.
-/// - Adding two timestamps is not meaningful: the sum of two instants is not an instant. The `i64`
-///   addition on the storage is still defined, though, so a `sum` pushdown would run and return a
-///   meaningless number. `sum` must not be registered for `Timestamp`.
-///
-/// Check each aggregate against this table before registering it for a type:
-///
-/// | Aggregates | Operation used | Holds for `E` when... | Fits | Does not fit |
-/// | --- | --- | --- | --- | --- |
-/// | `min`, `max`, `min_max`, `bounded_min`, `bounded_max`, `is_sorted` | comparison | comparing two values of `E` is comparing their storage | `Date`, `Time`, `Timestamp` | a case-insensitive string type, a little-endian integer stored as bytes |
-/// | `is_constant`, `all_non_distinct` | equality | each value of `E` has exactly one storage value, so equal values have equal storage | `Date`, `Time`, `Timestamp`, `Uuid` | JSON text (`{"a":1}` and `{ "a": 1 }` are equal), a case-insensitive string type |
-/// | `sum`, `mean` | addition | adding the storage of two values gives the storage of their sum | a duration stored as an integer count | `Timestamp`, `Date`, `Uuid` |
-/// | `nan_count`, `all_nan`, `all_non_nan` | NaN detection | a NaN storage value is a NaN value of `E` | a float-backed measurement type | a type that stores a sentinel in its float storage |
-///
-/// If an aggregate is not in the table, work out which operations it uses and check each one.
-/// Aggregates that already accept any extension dtype, such as `count`, `null_count`,
-/// `all_null`, `all_non_null` and `uncompressed_size_in_bytes`, need no pushdown.
-///
-/// # Behavior
-///
-/// - Inputs must have an extension dtype of type `E`. For any other input, `return_dtype` and
-///   `partial_dtype` return `None`, so binding fails.
-/// - `A` must also accept `E`'s storage dtype. If it does not, the pair still registers but
-///   binding it to a column of `E` fails. For example, `IsSorted` rejects the fixed-size-list
-///   storage of `Uuid`.
-/// - Each batch is unwrapped to its storage array and accumulated by `A`, so kernels and cached
-///   statistics of `A` on the storage encoding still apply.
-/// - Partials and results are those of `A` over the storage dtype, and are not converted back to
-///   `E`. For example, the extrema of a timestamp column come back as raw `i64` storage values,
-///   in the column's unit.
-/// - Partials depend on `E`'s metadata as well as on `E`. Timestamps in milliseconds and in
-///   seconds share the `Timestamp` type but not the scale of their storage. Only merge partials
-///   accumulated over the same extension dtype.
-/// - The pushdown is an aggregate of its own, with id `<A>[<E>]` (e.g.
-///   `vortex.is_sorted[vortex.timestamp]`). It never replaces `A`, and a request for `A` on a
-///   column of `E` does not use it. Its options are `A`'s options, and it serializes through
-///   `A`, so a registered pair round-trips by id.
-///
-/// [`Timestamp`]: crate::extension::datetime::Timestamp
+/// Inputs must be extension dtypes of type `E` whose storage `A` accepts; anything else fails to
+/// bind. Results are `A`'s over the storage and are not converted back to `E`, so the extrema of a
+/// timestamp column are raw `i64` values in the column's unit. Partials are only comparable for
+/// the same extension dtype, including metadata such as a timestamp's unit. The pushdown is an
+/// aggregate of its own, with id `<A>[<E>]`, and never replaces `A`.
 ///
 /// # Example
 ///
-/// Timestamps compare like their `i64` storage, so `is_sorted` can be pushed down into the
-/// storage. Register the pair once on the session, then bind it like any other aggregate:
+/// Timestamps compare like their `i64` storage, so `is_sorted` can be pushed down. Register the
+/// pair once on the session, then bind it like any other aggregate:
 ///
 /// ```
 /// # use vortex_array::IntoArray;
 /// # use vortex_array::VortexSessionExecute;
 /// # use vortex_array::aggregate_fn::Accumulator;
 /// # use vortex_array::aggregate_fn::DynAccumulator;
-/// # use vortex_array::aggregate_fn::StoragePushdown;
+/// # use vortex_array::aggregate_fn::ExtensionStoragePushdown;
 /// # use vortex_array::aggregate_fn::fns::is_sorted::IsSorted;
 /// # use vortex_array::aggregate_fn::fns::is_sorted::IsSortedOptions;
 /// # use vortex_array::aggregate_fn::session::AggregateFnSessionExt;
@@ -118,7 +80,7 @@ use crate::scalar::Scalar;
 /// let session = vortex_array::array_session();
 ///
 /// // Register `vortex.is_sorted[vortex.timestamp]`.
-/// let is_sorted = StoragePushdown::new(IsSorted, Timestamp);
+/// let is_sorted = ExtensionStoragePushdown::new(IsSorted, Timestamp);
 /// session.aggregate_fns().register(is_sorted.clone());
 ///
 /// // Aggregate a timestamp column through its storage.
@@ -140,17 +102,17 @@ use crate::scalar::Scalar;
 /// # }
 /// ```
 #[derive(Clone, Debug)]
-pub struct StoragePushdown<A: AggregateFnVTable, E: ExtVTable> {
+pub struct ExtensionStoragePushdown<A: AggregateFnVTable, E: ExtVTable> {
     aggregate: A,
     ext: E,
     id: AggregateFnId,
 }
 
-impl<A: AggregateFnVTable, E: ExtVTable> StoragePushdown<A, E> {
+impl<A: AggregateFnVTable, E: ExtVTable> ExtensionStoragePushdown<A, E> {
     /// Push `aggregate` down into the storage of extension type `ext`.
     ///
     /// Only do this when `aggregate` over the storage is correct for `ext`; see
-    /// [`StoragePushdown`] for how to check.
+    /// [`ExtensionStoragePushdown`] for how to check.
     pub fn new(aggregate: A, ext: E) -> Self {
         #[expect(clippy::disallowed_methods, reason = "interning a dynamic id")]
         let id = AggregateFnId::new(&format!("{}[{}]", aggregate.id(), ext.id()));
@@ -212,7 +174,7 @@ impl<A: AggregateFnVTable, E: ExtVTable> StoragePushdown<A, E> {
     }
 }
 
-impl<A: AggregateFnVTable, E: ExtVTable> AggregateFnVTable for StoragePushdown<A, E> {
+impl<A: AggregateFnVTable, E: ExtVTable> AggregateFnVTable for ExtensionStoragePushdown<A, E> {
     type Options = A::Options;
     type Partial = A::Partial;
 
@@ -348,7 +310,7 @@ mod tests {
     use rstest::rstest;
     use vortex_error::VortexResult;
 
-    use super::StoragePushdown;
+    use super::ExtensionStoragePushdown;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::aggregate_fn::Accumulator;
@@ -371,7 +333,7 @@ mod tests {
     #[test]
     fn pushes_down_into_storage() -> VortexResult<()> {
         let session = crate::array_session();
-        let aggregate = StoragePushdown::new(MinMax, Timestamp);
+        let aggregate = ExtensionStoragePushdown::new(MinMax, Timestamp);
         session.aggregate_fns().register(aggregate.clone());
         assert!(
             session
@@ -418,7 +380,7 @@ mod tests {
         };
         let accumulator = || {
             Accumulator::try_new(
-                StoragePushdown::new(MinMax, Timestamp),
+                ExtensionStoragePushdown::new(MinMax, Timestamp),
                 NumericalAggregateOpts::default(),
                 DType::Extension(ext_dtype.clone()),
             )
@@ -442,7 +404,7 @@ mod tests {
     fn rejects_other_extension_types() {
         let date = DType::Extension(Date::new(TimeUnit::Days, Nullability::Nullable).erased());
         assert!(
-            StoragePushdown::new(MinMax, Timestamp)
+            ExtensionStoragePushdown::new(MinMax, Timestamp)
                 .return_dtype(&NumericalAggregateOpts::default(), &date)
                 .is_none()
         );
@@ -453,12 +415,12 @@ mod tests {
         let session = crate::array_session();
         let aggregate_fns = session.aggregate_fns();
         for id in [
-            StoragePushdown::new(IsSorted, Date).id(),
-            StoragePushdown::new(IsSorted, Time).id(),
-            StoragePushdown::new(IsSorted, Timestamp).id(),
-            StoragePushdown::new(MinMax, Date).id(),
-            StoragePushdown::new(MinMax, Time).id(),
-            StoragePushdown::new(MinMax, Timestamp).id(),
+            ExtensionStoragePushdown::new(IsSorted, Date).id(),
+            ExtensionStoragePushdown::new(IsSorted, Time).id(),
+            ExtensionStoragePushdown::new(IsSorted, Timestamp).id(),
+            ExtensionStoragePushdown::new(MinMax, Date).id(),
+            ExtensionStoragePushdown::new(MinMax, Time).id(),
+            ExtensionStoragePushdown::new(MinMax, Timestamp).id(),
         ] {
             assert!(
                 aggregate_fns.find_plugin(&id).is_some(),
@@ -487,7 +449,7 @@ mod tests {
         .into_array();
 
         let mut acc = Accumulator::try_new(
-            StoragePushdown::new(IsSorted, Timestamp),
+            ExtensionStoragePushdown::new(IsSorted, Timestamp),
             IsSortedOptions { strict },
             DType::Extension(ext_dtype),
         )?;
@@ -507,7 +469,7 @@ mod tests {
         let array = ExtensionArray::new(ext_dtype.clone(), storage.clone()).into_array();
 
         let mut acc = Accumulator::try_new(
-            StoragePushdown::new(MinMax, Date),
+            ExtensionStoragePushdown::new(MinMax, Date),
             NumericalAggregateOpts::default(),
             DType::Extension(ext_dtype),
         )?;

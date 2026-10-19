@@ -13,7 +13,7 @@ use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnPluginRef;
 use crate::aggregate_fn::AggregateFnRef;
 use crate::aggregate_fn::AggregateFnVTable;
-use crate::aggregate_fn::StoragePushdown;
+use crate::aggregate_fn::ExtensionStoragePushdown;
 use crate::aggregate_fn::fns::all_nan::AllNan;
 use crate::aggregate_fn::fns::all_non_distinct::AllNonDistinct;
 use crate::aggregate_fn::fns::all_non_nan::AllNonNan;
@@ -165,13 +165,13 @@ impl AggregateFnSession {
     }
 
     /// Push the comparison-based aggregates `is_sorted` and `min_max` down into the storage of
-    /// extension type `ext`, through [`StoragePushdown`].
+    /// extension type `ext`, through [`ExtensionStoragePushdown`].
     ///
     /// Only call this when comparing two values of `ext` is the same as comparing their storage,
-    /// as for the temporal types. See [`StoragePushdown`] for how to check.
+    /// as for the temporal types. See [`ExtensionStoragePushdown`] for how to check.
     pub fn register_storage_ordered<E: ExtVTable>(&self, ext: E) {
-        self.register(StoragePushdown::new(IsSorted, ext.clone()));
-        self.register(StoragePushdown::new(MinMax, ext));
+        self.register(ExtensionStoragePushdown::new(IsSorted, ext.clone()));
+        self.register(ExtensionStoragePushdown::new(MinMax, ext));
     }
 
     /// The default per-chunk zone statistics for a column of `input_dtype`, collected from every
