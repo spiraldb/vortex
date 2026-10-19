@@ -121,6 +121,10 @@ pub(crate) fn selected_slice(mask: &Mask, rows: Range<usize>) -> Option<(Range<u
             let bits = values.bit_buffer().slice(rows.clone());
             let first = bits.set_indices().next()?;
             let end = bits.last_set_index()? + 1;
+            if rows.start + first == 0 && rows.start + end == mask.len() {
+                // Keep the derived indices shared across fields when no rows were trimmed.
+                return Some((0..mask.len(), mask.clone()));
+            }
             let len = end - first;
             let selected = if bits.count_range(first, end) == len {
                 Mask::new_true(len)
