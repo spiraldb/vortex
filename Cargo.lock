@@ -11547,6 +11547,7 @@ dependencies = [
  "vortex-spatial",
  "vortex-tensor",
  "wkb",
+ "zstd 0.13.3",
 ]
 
 [[package]]
