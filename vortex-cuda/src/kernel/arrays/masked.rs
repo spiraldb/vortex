@@ -82,7 +82,7 @@ mod tests {
         let validity = Validity::Array(
             BoolArray::from_iter([true, false, true, true].into_iter()).into_array(),
         );
-        let masked = MaskedArray::try_new(child, validity)?;
+        let masked = MaskedArray::try_new(child, validity, cuda_ctx.execution_ctx())?;
 
         let gpu_result = MaskedExecutor
             .execute(masked.clone().into_array(), &mut cuda_ctx)

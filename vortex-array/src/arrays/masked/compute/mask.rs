@@ -40,19 +40,22 @@ mod tests {
     #[case(
         MaskedArray::try_new(
             PrimitiveArray::from_iter([1i32, 2, 3, 4, 5]).into_array(),
-            Validity::from_iter([true, true, false, true, false])
+            Validity::from_iter([true, true, false, true, false]),
+            &mut array_session().create_execution_ctx(),
         ).unwrap()
     )]
     #[case(
         MaskedArray::try_new(
             PrimitiveArray::from_iter([10i32, 20, 30]).into_array(),
-            Validity::AllValid
+            Validity::AllValid,
+            &mut array_session().create_execution_ctx(),
         ).unwrap()
     )]
     #[case(
         MaskedArray::try_new(
             PrimitiveArray::from_iter(0..100).into_array(),
-            Validity::from_iter((0..100).map(|i| i % 3 != 0))
+            Validity::from_iter((0..100).map(|i| i % 3 != 0)),
+            &mut array_session().create_execution_ctx(),
         ).unwrap()
     )]
     fn test_mask_masked_conformance(#[case] array: MaskedArray) {

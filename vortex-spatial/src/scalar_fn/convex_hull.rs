@@ -176,12 +176,14 @@ mod tests {
 
     #[test]
     fn propagates_nulls() -> VortexResult<()> {
+        let mut ctx = vortex_array::array_session().create_execution_ctx();
         let input = MaskedArray::try_new(
             multipoint_column(vec![
                 vec![(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
                 vec![(2.0, 2.0)],
             ])?,
             Validity::from_iter([true, false]),
+            &mut ctx,
         )?
         .into_array();
         let expected = MaskedArray::try_new(
@@ -190,10 +192,10 @@ mod tests {
                 vec![vec![(2.0, 2.0), (2.0, 2.0)]],
             ])?,
             Validity::from_iter([true, false]),
+            &mut ctx,
         )?
         .into_array();
         let result = SpatialConvexHull::try_new(input)?.into_array();
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
 
         assert_arrays_eq!(result, expected, &mut ctx);
         Ok(())
@@ -221,6 +223,7 @@ mod tests {
 
     #[test]
     fn collect_hull_area_pipeline() -> VortexResult<()> {
+        let mut ctx = vortex_array::array_session().create_execution_ctx();
         let points = point_column(
             vec![0.0, 2.0, 2.0, 0.0, 1.0, 0.0, 1.0, 2.0],
             vec![0.0, 0.0, 2.0, 2.0, 1.0, 0.0, 1.0, 2.0],
@@ -236,7 +239,6 @@ mod tests {
         let hulls = SpatialConvexHull::try_new(collected)?.into_array();
         let areas = SpatialArea::try_new(hulls)?.into_array();
         let expected = PrimitiveArray::from_iter([4.0_f64, 0.0]).into_array();
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
 
         assert_arrays_eq!(areas, expected, &mut ctx);
         Ok(())
