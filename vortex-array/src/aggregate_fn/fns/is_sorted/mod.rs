@@ -3,7 +3,6 @@
 
 mod bool;
 mod decimal;
-mod extension;
 mod primitive;
 mod varbin;
 
@@ -18,7 +17,6 @@ use vortex_session::registry::CachedId;
 
 use self::bool::check_bool_sorted;
 use self::decimal::check_decimal_sorted;
-use self::extension::check_extension_sorted;
 use self::primitive::check_primitive_sorted;
 use self::varbin::check_varbinview_sorted;
 use crate::ArrayRef;
@@ -514,9 +512,9 @@ impl AggregateFnVTable for IsSorted {
                         check_varbinview_sorted(v, args.options.strict, ctx)?
                     }
                     Canonical::Decimal(d) => check_decimal_sorted(d, args.options.strict, ctx)?,
-                    Canonical::Extension(e) => check_extension_sorted(e, args.options.strict, ctx)?,
                     Canonical::Null(_) => !args.options.strict,
-                    // Struct, List, FixedSizeList should have been filtered out by return_dtype
+                    // Struct, List, FixedSizeList and Extension should have been filtered out by
+                    // return_dtype
                     _ => unreachable!(),
                 };
 

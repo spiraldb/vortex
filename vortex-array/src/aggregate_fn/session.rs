@@ -13,6 +13,7 @@ use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnPluginRef;
 use crate::aggregate_fn::AggregateFnRef;
 use crate::aggregate_fn::AggregateFnVTable;
+use crate::aggregate_fn::ExtensionAggregate;
 use crate::aggregate_fn::fns::all_nan::AllNan;
 use crate::aggregate_fn::fns::all_non_distinct::AllNonDistinct;
 use crate::aggregate_fn::fns::all_non_nan::AllNonNan;
@@ -48,6 +49,10 @@ use crate::arrays::dict::compute::is_constant::DictIsConstantKernel;
 use crate::arrays::dict::compute::is_sorted::DictIsSortedKernel;
 use crate::arrays::dict::compute::min_max::DictMinMaxKernel;
 use crate::dtype::DType;
+use crate::dtype::extension::ExtVTable;
+use crate::extension::datetime::Date;
+use crate::extension::datetime::Time;
+use crate::extension::datetime::Timestamp;
 
 /// Session state for aggregate functions and encoding-specific aggregate kernels.
 ///
@@ -116,6 +121,12 @@ impl Default for AggregateFnSession {
         this.register(SumV2);
         this.register(UncompressedSizeInBytes);
 
+        // Temporal extension types order like their integer storage, so order-based aggregates
+        // run on the storage.
+        this.register_storage_ordered(Date);
+        this.register_storage_ordered(Time);
+        this.register_storage_ordered(Timestamp);
+
         // Register the built-in aggregate kernels.
         this.register_aggregate_kernel(Chunked.id(), None::<AggregateFnId>, &ChunkedArrayAggregate);
         this.register_aggregate_kernel(Dict.id(), Some(MinMax.id()), &DictMinMaxKernel);
@@ -151,6 +162,13 @@ impl AggregateFnSession {
         let id = vtable.id();
         let pluginref = Arc::new(vtable) as AggregateFnPluginRef;
         self.registry.insert(id, pluginref);
+    }
+
+    /// Register the order-based aggregates for an extension type `ext` whose values order like
+    /// its storage, computing them over the storage through [`ExtensionAggregate`].
+    pub fn register_storage_ordered<E: ExtVTable>(&self, ext: E) {
+        self.register(ExtensionAggregate::new(IsSorted, ext.clone()));
+        self.register(ExtensionAggregate::new(MinMax, ext));
     }
 
     /// The default per-chunk zone statistics for a column of `input_dtype`, collected from every

@@ -252,6 +252,7 @@ impl<A: AggregateFnVTable, E: ExtVTable> AggregateFnVTable for ExtensionAggregat
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
     use vortex_error::VortexResult;
 
     use super::ExtensionAggregate;
@@ -261,6 +262,9 @@ mod tests {
     use crate::aggregate_fn::AggregateFnVTable;
     use crate::aggregate_fn::DynAccumulator;
     use crate::aggregate_fn::NumericalAggregateOpts;
+    use crate::aggregate_fn::fns::is_sorted::IsSorted;
+    use crate::aggregate_fn::fns::is_sorted::IsSortedOptions;
+    use crate::aggregate_fn::fns::min_max::MinMax;
     use crate::aggregate_fn::fns::sum::Sum;
     use crate::aggregate_fn::session::AggregateFnSessionExt;
     use crate::arrays::ExtensionArray;
@@ -268,6 +272,7 @@ mod tests {
     use crate::dtype::DType;
     use crate::dtype::Nullability;
     use crate::extension::datetime::Date;
+    use crate::extension::datetime::Time;
     use crate::extension::datetime::TimeUnit;
     use crate::extension::datetime::Timestamp;
 
@@ -349,5 +354,77 @@ mod tests {
                 .return_dtype(&NumericalAggregateOpts::default(), &date)
                 .is_none()
         );
+    }
+
+    #[test]
+    fn default_session_registers_temporal_order_aggregates() {
+        let session = crate::array_session();
+        let aggregate_fns = session.aggregate_fns();
+        for id in [
+            ExtensionAggregate::new(IsSorted, Date).id(),
+            ExtensionAggregate::new(IsSorted, Time).id(),
+            ExtensionAggregate::new(IsSorted, Timestamp).id(),
+            ExtensionAggregate::new(MinMax, Date).id(),
+            ExtensionAggregate::new(MinMax, Time).id(),
+            ExtensionAggregate::new(MinMax, Timestamp).id(),
+        ] {
+            assert!(aggregate_fns.find_plugin(&id).is_some(), "{id} is not registered");
+        }
+    }
+
+    #[rstest]
+    #[case::sorted([Some(1_000), None, Some(2_000), Some(2_000)], false, true)]
+    #[case::unsorted([Some(2_000), Some(1_000), None, Some(3_000)], false, false)]
+    #[case::strict_with_duplicates([Some(1_000), Some(2_000), Some(2_000), None], true, false)]
+    fn is_sorted_over_timestamps(
+        #[case] values: [Option<i64>; 4],
+        #[case] strict: bool,
+        #[case] expected: bool,
+    ) -> VortexResult<()> {
+        let session = crate::array_session();
+        let mut ctx = session.create_execution_ctx();
+        let ext_dtype = Timestamp::new(TimeUnit::Milliseconds, Nullability::Nullable).erased();
+        let array = ExtensionArray::new(
+            ext_dtype.clone(),
+            PrimitiveArray::from_option_iter(values).into_array(),
+        )
+        .into_array();
+
+        let mut acc = Accumulator::try_new(
+            ExtensionAggregate::new(IsSorted, Timestamp),
+            IsSortedOptions { strict },
+            DType::Extension(ext_dtype),
+        )?;
+        acc.accumulate(&array, &mut ctx)?;
+
+        assert_eq!(bool::try_from(&acc.finish()?)?, expected);
+        Ok(())
+    }
+
+    #[test]
+    fn min_max_over_dates_matches_storage() -> VortexResult<()> {
+        let session = crate::array_session();
+        let mut ctx = session.create_execution_ctx();
+        let ext_dtype = Date::new(TimeUnit::Days, Nullability::Nullable).erased();
+        let storage = PrimitiveArray::from_option_iter([Some(20i32), None, Some(-3), Some(7)])
+            .into_array();
+        let array = ExtensionArray::new(ext_dtype.clone(), storage.clone()).into_array();
+
+        let mut acc = Accumulator::try_new(
+            ExtensionAggregate::new(MinMax, Date),
+            NumericalAggregateOpts::default(),
+            DType::Extension(ext_dtype),
+        )?;
+        acc.accumulate(&array, &mut ctx)?;
+
+        let mut expected = Accumulator::try_new(
+            MinMax,
+            NumericalAggregateOpts::default(),
+            storage.dtype().clone(),
+        )?;
+        expected.accumulate(&storage, &mut ctx)?;
+
+        assert_eq!(acc.finish()?, expected.finish()?);
+        Ok(())
     }
 }
