@@ -25,7 +25,9 @@ use vortex_array::arrays::ListArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::TemporalArray;
+use vortex_array::arrays::VarBin;
 use vortex_array::arrays::VarBinViewArray;
+use vortex_array::arrays::varbin::VarBinArraySlotsExt;
 use vortex_array::assert_arrays_eq;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::DecimalDType;
@@ -48,6 +50,10 @@ use vortex_fastlanes::Delta;
 use crate::BtrBlocksCompressor;
 use crate::BtrBlocksCompressorBuilder;
 use crate::SESSION;
+use crate::SchemeExt;
+use crate::schemes::binary;
+use crate::schemes::integer;
+use crate::schemes::string;
 
 #[track_caller]
 fn assert_roundtrip(compressor: &BtrBlocksCompressor, input: &ArrayRef) -> VortexResult<ArrayRef> {
@@ -105,6 +111,65 @@ fn test_default_compressor_roundtrip() -> VortexResult<()> {
     let compressed = assert_roundtrip(&compressor, &input)?;
     assert!(compressed.nbytes() < input.nbytes());
 
+    Ok(())
+}
+
+#[rstest]
+#[case::nonnullable(DType::Utf8(Nullability::NonNullable), false)]
+#[case::nullable(DType::Utf8(Nullability::Nullable), true)]
+fn test_utf8_varbin_fallback(#[case] dtype: DType, #[case] nullable: bool) -> VortexResult<()> {
+    let mut values = vec![Some(""), Some("a"), Some("bb"), Some("é"), Some("🐬")];
+    if nullable {
+        values.push(None);
+    }
+    let input = VarBinViewArray::from_iter(values, dtype).into_array();
+    let builder = BtrBlocksCompressorBuilder::from_session(&SESSION).unrestricted();
+    let baseline = assert_roundtrip(
+        &builder
+            .clone()
+            .exclude_schemes([string::VarBinScheme::UTF8.id()])
+            .build(),
+        &input,
+    )?;
+    let compressed = assert_roundtrip(&builder.build(), &input)?;
+
+    assert!(compressed.is::<VarBin>());
+    assert_eq!(compressed.dtype(), input.dtype());
+    assert!(compressed.nbytes() < baseline.nbytes());
+    Ok(())
+}
+
+#[rstest]
+#[case::binary(DType::Binary(Nullability::NonNullable), &binary::VarBinScheme::BINARY)]
+#[case::utf8(DType::Utf8(Nullability::NonNullable), &string::VarBinScheme::UTF8)]
+#[case::nullable_utf8(DType::Utf8(Nullability::Nullable), &string::VarBinScheme::UTF8)]
+fn test_varbin_compresses_offsets(
+    #[case] dtype: DType,
+    #[case] scheme: &'static dyn crate::Scheme,
+) -> VortexResult<()> {
+    let values = (0..4096).map(|i| {
+        if dtype.is_nullable() && i % 7 == 0 {
+            None
+        } else {
+            Some(format!("é🐬{i:08}"))
+        }
+    });
+    let input = VarBinViewArray::from_iter(values, dtype.clone()).into_array();
+    let compressor = BtrBlocksCompressorBuilder::empty()
+        .with_new_scheme(scheme)
+        .with_new_scheme(&integer::SequenceScheme)
+        .with_new_scheme(&integer::FOR_V1)
+        .with_new_scheme(&integer::BITPACKING_V1)
+        .build();
+    let compressed = assert_roundtrip(&compressor, &input)?;
+    let varbin = compressed.as_::<VarBin>();
+
+    assert_eq!(compressed.dtype(), &dtype);
+    assert!(compressed.nbytes() < input.nbytes());
+    assert!(varbin.offsets().nbytes() < ((input.len() + 1) * size_of::<u64>()) as u64);
+    if !dtype.is_nullable() {
+        assert!(varbin.offsets().is::<vortex_sequence::Sequence>());
+    }
     Ok(())
 }
 

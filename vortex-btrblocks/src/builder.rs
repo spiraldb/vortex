@@ -266,6 +266,8 @@ mod tests {
     #[rstest]
     #[case::fsst_missing_codes(&string::FSSTScheme, vec![FSST.id()], false)]
     #[case::fsst_with_codes(&string::FSSTScheme, vec![FSST.id(), VarBin.id()], true)]
+    #[case::utf8_varbin_missing_id(&string::VarBinScheme::UTF8, vec![], false)]
+    #[case::utf8_varbin_with_id(&string::VarBinScheme::UTF8, vec![VarBin.id()], true)]
     #[case::decimal_v1_id(&DECIMAL_V1, vec![decimal_byte_parts_v1_id()], true)]
     #[case::decimal_both_ids(&DECIMAL_V2, vec![decimal_byte_parts_v1_id(), DecimalByteParts.id()], true)]
     #[case::bitpacking_v1_id(

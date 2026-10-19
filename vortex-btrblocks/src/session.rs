@@ -76,13 +76,14 @@ impl Default for CompressionSession {
                 &string::FSSTScheme,
                 &string::OnPairScheme,
                 &string::NullDominatedSparseScheme,
+                &string::VarBinScheme::UTF8,
                 #[cfg(feature = "zstd")]
                 &string::ZstdScheme,
                 ////////////////////////////////////////////////////////////////////////////////////
                 // Binary schemes.
                 ////////////////////////////////////////////////////////////////////////////////////
                 &binary::BinaryDictScheme,
-                &binary::VarBinScheme,
+                &binary::VarBinScheme::BINARY,
                 #[cfg(feature = "zstd")]
                 &binary::ZstdScheme,
                 #[cfg(feature = "zstd")]

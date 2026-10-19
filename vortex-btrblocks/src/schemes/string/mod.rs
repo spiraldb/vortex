@@ -23,3 +23,5 @@ pub use vortex_compressor::stats::StringStats;
 pub use zstd::ZstdScheme;
 #[cfg(feature = "zstd")]
 pub use zstd_buffers::ZstdBuffersScheme;
+
+pub use super::varbin::VarBinScheme;
