@@ -33,22 +33,80 @@ use crate::scalar::Scalar;
 ///
 /// Inputs must have an extension dtype of type `E`. Every batch is unwrapped to its storage array
 /// and accumulated by `A`, so storage-encoding kernels registered for `A` still fire. Partials and
-/// results are those of `A` over the storage dtype.
+/// results are those of `A` over the storage dtype: they are not converted back to `E`, so e.g.
+/// the extrema of a timestamp column come back as its raw `i64` storage values.
 ///
-/// The adapter is an aggregate of its own, with id `<A>[<E>]`, so supporting a new pair is one
-/// registration:
+/// The adapter is an aggregate of its own, with id `<A>[<E>]` (e.g.
+/// `vortex.is_sorted[vortex.timestamp]`). Its options are `A`'s options, and it serializes
+/// through `A`, so a registered pair round-trips by id.
+///
+/// # When to use it
+///
+/// Running `A` over the storage is only correct when the storage has the semantics `A` relies on
+/// for `E`. The adapter cannot check this, so only register a pair after checking the property
+/// for that aggregate:
+///
+/// | Aggregates | `E` must... | Fits | Does not fit |
+/// | --- | --- | --- | --- |
+/// | `min`, `max`, `min_max`, `bounded_min`, `bounded_max`, `is_sorted` | order exactly like its storage | `Date`, `Time`, `Timestamp` over integers | a case-insensitive string type, a little-endian integer stored as bytes |
+/// | `is_constant`, `all_non_distinct` | have one storage value per value, so equal values have equal storage | `Date`, `Time`, `Timestamp`, `Uuid` | JSON text (`{"a":1}` and `{ "a": 1 }` are equal), a case-insensitive string type |
+/// | `sum`, `mean` | have values for which adding the storage is meaningful | a duration stored as an integer count | `Timestamp` (the sum of two instants is not an instant), `Uuid` |
+/// | `nan_count`, `all_nan`, `all_non_nan` | treat a NaN storage value as NaN | a float-backed measurement type | a type that stores a sentinel in its float storage |
+/// | `count`, `null_count`, `all_null`, `all_non_null`, `uncompressed_size_in_bytes` | (always holds: these depend only on validity or storage bytes) | any `E` | |
+///
+/// `A` must also accept `E`'s storage dtype. If it does not, the pair still registers, but binding
+/// it to a column of `E` fails: `IsSorted` rejects the fixed-size-list storage of `Uuid`, for
+/// example.
+///
+/// Partials depend on `E`'s metadata as well as `E`. For example, timestamps in milliseconds and
+/// in seconds share the `Timestamp` type but not the scale of their storage. Only merge partials
+/// accumulated over the same extension dtype.
+///
+/// # Example
+///
+/// `Timestamp` orders like its `i64` storage, so `is_sorted` and `min_max` can run on the
+/// storage. Register the pair once on the session, then bind it like any other aggregate:
 ///
 /// ```
+/// # use vortex_array::IntoArray;
+/// # use vortex_array::VortexSessionExecute;
+/// # use vortex_array::aggregate_fn::Accumulator;
+/// # use vortex_array::aggregate_fn::DynAccumulator;
 /// # use vortex_array::aggregate_fn::ExtensionAggregate;
-/// # use vortex_array::aggregate_fn::fns::sum::Sum;
+/// # use vortex_array::aggregate_fn::fns::is_sorted::IsSorted;
+/// # use vortex_array::aggregate_fn::fns::is_sorted::IsSortedOptions;
 /// # use vortex_array::aggregate_fn::session::AggregateFnSessionExt;
+/// # use vortex_array::arrays::ExtensionArray;
+/// # use vortex_array::arrays::PrimitiveArray;
+/// # use vortex_array::dtype::DType;
+/// # use vortex_array::dtype::Nullability;
+/// # use vortex_array::extension::datetime::TimeUnit;
 /// # use vortex_array::extension::datetime::Timestamp;
-/// # let session = vortex_array::array_session();
-/// session.aggregate_fns().register(ExtensionAggregate::new(Sum, Timestamp));
-/// ```
+/// # fn main() -> vortex_error::VortexResult<()> {
+/// let session = vortex_array::array_session();
 ///
-/// Only register a pair when `A` over the storage is meaningful for `E`, e.g. when `E` orders and
-/// compares like its storage.
+/// // Register `vortex.is_sorted[vortex.timestamp]`.
+/// let is_sorted = ExtensionAggregate::new(IsSorted, Timestamp);
+/// session.aggregate_fns().register(is_sorted.clone());
+///
+/// // Aggregate a timestamp column through its storage.
+/// let ext_dtype = Timestamp::new(TimeUnit::Milliseconds, Nullability::NonNullable).erased();
+/// let column = ExtensionArray::new(
+///     ext_dtype.clone(),
+///     PrimitiveArray::from_iter([1_000i64, 2_000, 3_000]).into_array(),
+/// )
+/// .into_array();
+///
+/// let mut acc = Accumulator::try_new(
+///     is_sorted,
+///     IsSortedOptions { strict: true },
+///     DType::Extension(ext_dtype),
+/// )?;
+/// acc.accumulate(&column, &mut session.create_execution_ctx())?;
+/// assert!(bool::try_from(&acc.finish()?)?);
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Clone, Debug)]
 pub struct ExtensionAggregate<A: AggregateFnVTable, E: ExtVTable> {
     aggregate: A,
