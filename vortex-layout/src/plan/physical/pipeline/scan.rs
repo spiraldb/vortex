@@ -23,6 +23,7 @@ use vortex_session::VortexSession;
 
 use super::DEFAULT_CAPACITY;
 use super::compile::Chain;
+use super::compile::Compiler;
 use super::compile::Shares;
 use super::port::Arena;
 use super::port::PipelineId;
@@ -131,6 +132,8 @@ pub(crate) struct Pipeline {
 
 /// What one run of a pipeline came to.
 enum Progress {
+    /// The source can now activate its selected chunks in this scheduler.
+    Activate,
     /// The source waits for this.
     Blocked(SourceBlocked),
     /// An outlet is full.
@@ -215,6 +218,7 @@ fn drive(
             );
             match ready {
                 SourceReady::Ready => {}
+                SourceReady::Activate => return Ok(Progress::Activate),
                 SourceReady::Blocked(blocked) => return Ok(Progress::Blocked(blocked)),
             }
         }
@@ -472,6 +476,7 @@ impl Core {
         #[cfg(debug_assertions)]
         self.validate_progress(id, &progress);
         match &progress {
+            Progress::Activate => self.activate(id)?,
             // A read-ahead source can still have delivered bytes to consume.
             Progress::Blocked(SourceBlocked::Io) if !self.pipeline(id).bytes.is_empty() => {
                 self.make_runnable(id);
@@ -496,6 +501,36 @@ impl Core {
         if matches!(progress, Progress::Done) {
             self.retire(id);
         }
+        Ok(())
+    }
+
+    fn activate(&mut self, id: PipelineId) -> VortexResult<()> {
+        let mut pipe = self.pipelines[id]
+            .take()
+            .ok_or_else(|| vortex_err!("Pipeline {id} is not live"))?;
+        vortex_ensure!(
+            pipe.inlets.is_empty()
+                && pipe.pending == 0
+                && pipe.bytes.is_empty()
+                && pipe.child_inbox.is_none()
+                && pipe.continuing.is_empty()
+                && pipe.finishing.is_none(),
+            "Only an unstarted source without inlets or pending work can activate"
+        );
+        let mut chain = pipe.source.activate(&mut Compiler { core: self })?;
+        chain.stages.append(&mut pipe.stages);
+        pipe.source = chain.source;
+        pipe.stages = chain.stages;
+        pipe.inlets = chain.inlets;
+        pipe.touched = InletSet::new(pipe.inlets.len());
+        pipe.changed = InletSet::all(pipe.inlets.len());
+        for (index, &port) in pipe.inlets.iter().enumerate() {
+            self.arena.get_mut(port).source = SourceEnd::Pipeline { id, inlet: index };
+        }
+        self.pipelines[id] = Some(pipe);
+        self.make_runnable(id);
+        #[cfg(debug_assertions)]
+        self.validate();
         Ok(())
     }
 

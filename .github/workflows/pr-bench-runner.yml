@@ -84,6 +84,18 @@ jobs:
         run: |
           cargo build --locked --package vortex --profile release_debug \
             --example selection_scan --example generate_list_fixture
+          cargo bench --locked --package vortex-layout --profile release_debug \
+            --bench pipeline_scan --no-run --message-format=json > /tmp/list-micro-build.jsonl
+          python3 - <<'PY'
+          import json
+          import shutil
+
+          with open('/tmp/list-micro-build.jsonl') as source:
+              for line in source:
+                  artifact = json.loads(line)
+                  if artifact.get('target', {}).get('name') == 'pipeline_scan' and artifact.get('executable'):
+                      shutil.copy2(artifact['executable'], 'target/release_debug/pipeline_scan')
+          PY
       - name: Upload list pipeline comparison binaries
         if: inputs.benchmark_id == 'random-access-bench' && inputs.remote_data_dir == ''
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
@@ -92,6 +104,7 @@ jobs:
           path: |
             target/release_debug/examples/selection_scan
             target/release_debug/examples/generate_list_fixture
+            target/release_debug/pipeline_scan
       - name: Upload benchmark binary
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
         with:
@@ -142,7 +155,7 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8
         with:
           name: list-pipeline-binaries
-          path: target/release_debug/examples/
+          path: target/release_debug/
 
       - name: Setup Polar Signals
         if: github.event.pull_request.head.repo.fork == false
@@ -207,8 +220,17 @@ jobs:
           RUSTFLAGS: "-C target-cpu=native -C force-frame-pointers=yes"
         run: |
           chmod +x target/release_debug/examples/selection_scan \
-            target/release_debug/examples/generate_list_fixture
+            target/release_debug/examples/generate_list_fixture target/release_debug/pipeline_scan
           python3 scripts/bench-list-pipeline.py
+          for round in 0 1; do
+            versions="current fixed"
+            if [ "$round" = 1 ]; then versions="fixed current"; fi
+            for version in $versions; do
+              if [ "$version" = fixed ]; then export VORTEX_LIST_PIPELINE=1; else unset VORTEX_LIST_PIPELINE; fi
+              target/release_debug/pipeline_scan --bench list_scan --sample-count 100 --sample-size 100 \
+                > "list-pipeline-results/micro-$version-$round.log"
+            done
+          done
 
       - name: Upload list pipeline comparison results
         if: always() && inputs.benchmark_id == 'random-access-bench' && inputs.remote_data_dir == ''

@@ -10,9 +10,12 @@ use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::buffer::BufferHandle;
 use vortex_error::VortexResult;
+use vortex_error::vortex_bail;
 use vortex_session::VortexSession;
 
 use super::pipeline::Arena;
+use super::pipeline::Chain;
+use super::pipeline::Compiler;
 use super::pipeline::Inlet;
 use super::pipeline::PortId;
 use crate::plan::physical::pipeline::ChildProjection;
@@ -35,6 +38,8 @@ pub enum Step {
 pub enum SourceReady {
     /// The next compute call can produce output or finish without blocking.
     Ready,
+    /// Replace this source with selected work in the same scheduler, through [`Source::activate`].
+    Activate,
     /// Nothing can happen until the condition clears.
     Blocked(SourceBlocked),
 }
@@ -56,6 +61,15 @@ pub enum SourceBlocked {
 /// The start of a pipeline: produces batches from its inlets and the segments it asks to have
 /// read.
 pub trait Source: Operator {
+    /// Activates work whose selection was unavailable at initial compilation.
+    ///
+    /// Called only after returning [`SourceReady::Activate`]. The source must have no inlets,
+    /// pending reads, or emitted batches. The resulting chain inherits its downstream stages
+    /// and outlets, without starting another scan or handing work to the outer planner.
+    fn activate(&mut self, _compiler: &mut Compiler<'_>) -> VortexResult<Chain> {
+        vortex_bail!("Source does not support deferred activation")
+    }
+
     /// Prepares the next [`compute`](Operator::compute) call, after the driver checks outlets.
     /// Returning [`SourceReady::Ready`] guarantees that call can proceed without blocking.
     /// Any input or choice made here can be retained by the source for that call.

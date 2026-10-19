@@ -22,6 +22,7 @@ use crate::plan::physical::PlanParts;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::PlanVTable;
 use crate::plan::physical::operators::ListSource;
+use crate::plan::physical::operators::compile_deferred_list;
 use crate::plan::physical::operators::UNBOUNDED;
 use crate::plan::physical::pipeline::Chain;
 use crate::plan::physical::pipeline::Compiler;
@@ -144,8 +145,7 @@ impl PlanVTable for ListPack {
             return Ok(None);
         }
         if std::env::var_os("VORTEX_LIST_PIPELINE").is_some() {
-            return crate::plan::physical::operators::compile_deferred_list(plan, rows, mask, compiler)
-                .map(Some);
+            return compile_deferred_list(plan, rows, mask, compiler).map(Some);
         }
         let boundaries = offset_mask(mask);
         let offsets = compiler

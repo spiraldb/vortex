@@ -20,10 +20,10 @@
 //!
 //! # Masks
 //!
-//! Every mask a scan applies is known when the pipelines that apply it are compiled: the split's
-//! selection, and the rows the earlier conjuncts kept. The
-//! compiler places the mask in the stage that reads the rows, so chunks a mask selects nothing
-//! of are never built and never read.
+//! The compiler places known masks in the stages that read the rows. Experimental list sources
+//! can instead wait for offsets and validity to resolve their element selection. A chunk
+//! dispatcher then activates only overlapping children in the same scheduler, preserving its
+//! downstream stages and outlets. Chunks outside that selection are never built or read.
 //!
 //! # Sharing
 //!

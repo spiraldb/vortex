@@ -42,6 +42,7 @@ use vortex_session::registry::ReadContext;
 use vortex_utils::parallelism::get_available_parallelism;
 
 use super::port::SourceEnd;
+use super::synthetic::SyntheticPlan;
 use super::synthetic::row_dtype;
 use super::*;
 use crate::LayoutRef;
@@ -51,8 +52,10 @@ use crate::layouts::dict::DictLayout;
 use crate::layouts::flat::FlatLayout;
 use crate::layouts::foreign::new_foreign_layout;
 use crate::layouts::struct_::StructLayout;
+use crate::plan::physical::ConcatPlan;
 use crate::plan::physical::EvalPlan;
 use crate::plan::physical::Filter;
+use crate::plan::physical::ListPack;
 use crate::plan::physical::ListPackPlan;
 use crate::plan::physical::PackPlan;
 use crate::plan::physical::PlanRef;
@@ -68,6 +71,7 @@ use crate::plan::physical::operator::SourceBlocked;
 use crate::plan::physical::operator::SourceReady;
 use crate::plan::physical::operator::Step;
 use crate::plan::physical::operators::PackSource;
+use crate::plan::physical::operators::compile_deferred_list;
 use crate::plan::physical::optimize;
 use crate::segments::SegmentId;
 use crate::test::SESSION;
@@ -302,6 +306,7 @@ fn delivery(order: Delivery) -> impl FnMut(&[ReadRequest]) -> usize {
 fn grouped_list_ranges_preserve_order_and_shared_reads(
     #[values(Delivery::Fifo, Delivery::Lifo)] order: Delivery,
     #[values(false, true)] shared: bool,
+    #[values(false, true)] deferred: bool,
 ) -> VortexResult<()> {
     let mut store = Store::default();
     let elements = Buffer::from_iter(0_i64..20).into_array();
@@ -321,6 +326,11 @@ fn grouped_list_ranges_preserve_order_and_shared_reads(
         None,
     )?
     .into_plan();
+    let plan = if deferred {
+        deferred_lists(plan)
+    } else {
+        plan
+    };
     let rows = [0_u64, 1, 7, 8];
     let mask = Mask::from_iter((0..10).map(|row| rows.contains(&row)));
     let result = run(&store, &plan, 0..10, mask, delivery(order))?;
@@ -347,10 +357,71 @@ fn grouped_list_ranges_preserve_order_and_shared_reads(
     Ok(())
 }
 
+fn deferred_lists(plan: PlanRef) -> PlanRef {
+    SyntheticPlan::new(
+        plan.dtype().clone(),
+        plan.row_count(),
+        Vec::new(),
+        move |rows, mask, compiler| {
+            compile_deferred_list(plan.as_::<ListPack>(), rows, mask, compiler).map(Some)
+        },
+    )
+    .into_plan()
+}
+
+#[rstest]
+fn deferred_list_does_not_lower_unselected_chunks(
+    #[values(Delivery::Fifo, Delivery::Lifo)] order: Delivery,
+    #[values(false, true)] empty: bool,
+) -> VortexResult<()> {
+    let mut store = Store::default();
+    let elements = Buffer::from_iter(10_i64..12).into_array();
+    let selected = lower(&store.flat(&elements)?)?;
+    let unused = SyntheticPlan::new(elements.dtype().clone(), 2, Vec::new(), |_, _, _| {
+        Err(vortex_err!("Unselected chunk must not be compiled"))
+    })
+    .into_plan();
+    let chunks = ConcatPlan::try_new(
+        elements.dtype().clone(),
+        vec![unused.clone(), selected, unused],
+    )?;
+    let offsets = Buffer::from(vec![0_u64, 2, 4, 6]).into_array();
+    let plan = deferred_lists(
+        ListPackPlan::try_new(
+            false.into(),
+            3,
+            chunks.into_plan(),
+            lower(&store.flat(&offsets)?)?,
+            None,
+        )?
+        .into_plan(),
+    );
+    let mask = Mask::from_iter([false, !empty, false]);
+    let result = run(&store, &plan, 0..3, mask, delivery(order))?;
+    let expected = ListArray::try_new(
+        elements,
+        Buffer::from(vec![0_u64, 2]).into_array(),
+        Validity::NonNullable,
+    )?
+    .into_array();
+    let expected = if empty {
+        expected.slice(0..0)?
+    } else {
+        expected
+    };
+    let actual = ChunkedArray::try_new(result.arrays, expected.dtype().clone())?.into_array();
+    assert_arrays_eq!(actual, expected, &mut SESSION.create_execution_ctx());
+    if !empty {
+        assert_eq!(segments_read(&result.events), vec![0, 1]);
+    }
+    Ok(())
+}
+
 #[rstest]
 fn dense_nullable_list_ranges_share_one_scan(
     #[values(Delivery::Fifo, Delivery::Lifo)] order: Delivery,
     #[values(false, true)] partial: bool,
+    #[values(false, true)] deferred: bool,
 ) -> VortexResult<()> {
     let mut store = Store::default();
     let elements = Buffer::from_iter(0_i64..20).into_array();
@@ -370,6 +441,11 @@ fn dense_nullable_list_ranges_share_one_scan(
         Some(lower(&store.flat(&valid)?)?),
     )?
     .into_plan();
+    let plan = if deferred {
+        deferred_lists(plan)
+    } else {
+        plan
+    };
     let mask = Mask::from_iter((0..10).map(|row| !partial || row != 4));
     let result = run(&store, &plan, 0..10, mask.clone(), delivery(order))?;
     if !partial {

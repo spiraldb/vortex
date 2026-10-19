@@ -34,6 +34,8 @@ use crate::plan::physical::operator::Source;
 use crate::plan::physical::operator::SourceBlocked;
 use crate::plan::physical::operator::SourceReady;
 use crate::plan::physical::operator::Step;
+use crate::plan::physical::operators::ConcatSource;
+use crate::plan::physical::operators::SelectStage;
 use crate::segments::SegmentId;
 use crate::test::SESSION;
 
@@ -109,6 +111,48 @@ fn assert_rows(expected: ArrayRef, arrays: Vec<ArrayRef>) -> VortexResult<()> {
 
 fn segment(id: u32) -> Option<SegmentId> {
     Some(SegmentId::from(id))
+}
+
+struct ActivateChunks;
+
+impl Source for ActivateChunks {
+    fn ready(&mut self, _cx: &mut Cx<'_>) -> VortexResult<SourceReady> {
+        Ok(SourceReady::Activate)
+    }
+
+    fn activate(&mut self, compiler: &mut Compiler<'_>) -> VortexResult<Chain> {
+        let mut chains = Vec::new();
+        for id in 0..2 {
+            let plan = RowSource::plan(8, vec![4], segment(id), false);
+            let start = u64::from(id) * 4;
+            chains.push(
+                compiler
+                    .compile(&plan, start..start + 4, &Mask::new_true(4))?
+                    .ok_or_else(|| vortex_err!("Selected chunk has no chain"))?,
+            );
+        }
+        Ok(compiler.join(chains, ConcatSource::new(2)))
+    }
+}
+
+impl Operator for ActivateChunks {
+    fn compute(&mut self, _input: Input, _cx: &mut Cx<'_>) -> VortexResult<Step> {
+        Err(vortex_err!("Dispatcher must activate before computing"))
+    }
+}
+
+#[rstest]
+fn activation_preserves_stages_and_orders_new_inlets(
+    #[values(&[0, 1], &[1, 0])] order: &[u32],
+) -> VortexResult<()> {
+    let plan = SyntheticPlan::new(row_dtype(), 8, Vec::new(), |_, _, _| {
+        Ok(Some(
+            Chain::new(ActivateChunks).with(SelectStage::new(Some(1..3), None)),
+        ))
+    })
+    .into_plan();
+    let result = run(&plan, 0..8, Mask::new_true(8), scripted(order))?;
+    assert_rows(indices([1, 2, 5, 6]), result.arrays)
 }
 
 /// A source's pieces come out in order, one array each, after its read if it has one.

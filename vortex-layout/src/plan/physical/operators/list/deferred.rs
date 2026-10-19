@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Benchmark prototype: prebuild list pipelines and resolve their selection at runtime.
+//! Benchmark prototype: build list dependencies upfront and resolve selection at runtime.
+//!
+//! Chunk dispatchers wait for offsets and validity, then activate only selected children in the
+//! same scheduler. Unselected chunks need no runtime sources or ports.
 //!
 //! Enabled only by `VORTEX_LIST_PIPELINE`. Supports primitive and nested-list fixture plans;
 //! unsupported plans fail explicitly. This experiment does not implement the planner's decoded-work
@@ -29,6 +32,7 @@ use vortex_mask::Mask;
 
 use super::selected_ranges;
 use crate::plan::physical::Concat;
+use crate::plan::physical::ConcatPlan;
 use crate::plan::physical::Filter;
 use crate::plan::physical::LegacyStats;
 use crate::plan::physical::ListPack;
@@ -50,6 +54,7 @@ use crate::plan::physical::operators::UNBOUNDED;
 use crate::plan::physical::operators::join_inlet;
 use crate::plan::physical::pipeline::Chain;
 use crate::plan::physical::pipeline::Compiler;
+use crate::plan::physical::pipeline::overlapping;
 
 #[derive(Clone)]
 struct Demand {
@@ -64,7 +69,14 @@ impl Demand {
     fn ranges(&self, len: u64) -> Option<Vec<Range<u64>>> {
         let selected = self.ranges.get()?;
         let mut result: Vec<Range<u64>> = Vec::new();
-        for range in selected {
+        let first = selected.partition_point(|range| {
+            range.end <= self.domain.start
+                || range.end.saturating_add(u64::from(self.boundaries)) <= self.offset
+        });
+        for range in &selected[first..] {
+            if range.start >= self.domain.end || range.start >= self.offset + len {
+                break;
+            }
             let start = range.start.max(self.domain.start);
             let end = range.end.min(self.domain.end);
             if start >= end {
@@ -118,7 +130,7 @@ pub(crate) fn compile_deferred_list(
     compiler: &mut Compiler<'_>,
 ) -> VortexResult<Chain> {
     let ranges = match mask.slices() {
-        AllOr::All => vec![rows.clone()],
+        AllOr::All => vec![rows],
         AllOr::None => Vec::new(),
         AllOr::Some(slices) => slices
             .iter()
@@ -182,16 +194,15 @@ fn compile(plan: &PlanRef, demand: Demand, compiler: &mut Compiler<'_>) -> Vorte
         return compile(&stats.data_plan()?, demand, compiler);
     }
     if let Some(concat) = plan.as_opt::<Concat>() {
-        let mut chains = Vec::new();
-        for (index, &start) in concat.row_offsets().iter().enumerate() {
-            chains.push(compile(
-                &concat.child_required(index)?,
-                demand.shifted(start),
-                compiler,
-            )?);
-        }
-        let count = chains.len();
-        return Ok(compiler.join(chains, ConcatSource::new(count)));
+        let mut source = DeferredConcat {
+            plan: concat.clone(),
+            demand,
+        };
+        return if source.demand.ranges.get().is_some() {
+            source.activate(compiler)
+        } else {
+            Ok(Chain::new(source))
+        };
     }
     if let Some(list) = plan.as_opt::<ListPack>() {
         return compile_list(list, demand, compiler);
@@ -208,6 +219,57 @@ fn compile(plan: &PlanRef, demand: Demand, compiler: &mut Compiler<'_>) -> Vorte
         "Deferred-list benchmark prototype cannot compile {}",
         plan.id()
     )
+}
+
+/// Keep one dispatcher while selection is unknown; lower only selected children afterwards.
+struct DeferredConcat {
+    plan: ConcatPlan,
+    demand: Demand,
+}
+
+impl Source for DeferredConcat {
+    fn ready(&mut self, _cx: &mut Cx<'_>) -> VortexResult<SourceReady> {
+        if self.demand.ranges.get().is_some() {
+            Ok(SourceReady::Activate)
+        } else {
+            self.demand.blocked()
+        }
+    }
+
+    fn activate(&mut self, compiler: &mut Compiler<'_>) -> VortexResult<Chain> {
+        let ranges = self
+            .demand
+            .ranges(self.plan.row_count())
+            .ok_or_else(|| vortex_err!("Chunks activated before their selection"))?;
+        let mut chains = Vec::new();
+        let mut previous = None;
+        for range in ranges {
+            for (index, start, _) in overlapping(&self.plan, &range) {
+                // Several selected ranges can lie in one chunk. Give that chunk one source,
+                // which applies their combined selection and reads its segment only once.
+                if previous == Some(index) {
+                    continue;
+                }
+                previous = Some(index);
+                chains.push(compile(
+                    &self.plan.child_required(index)?,
+                    self.demand.shifted(start),
+                    compiler,
+                )?);
+            }
+        }
+        let count = chains.len();
+        if count == 1 {
+            return Ok(chains.remove(0));
+        }
+        Ok(compiler.join(chains, ConcatSource::new(count)))
+    }
+}
+
+impl Operator for DeferredConcat {
+    fn compute(&mut self, _input: Input, _cx: &mut Cx<'_>) -> VortexResult<Step> {
+        vortex_bail!("Chunk dispatcher computed before activation")
+    }
 }
 
 struct DeferredScan {
@@ -312,18 +374,30 @@ impl Source for DeferredList {
                 .map(|range| range.end - range.start)
                 .sum::<u64>();
             let valid = validity.execute_mask(usize::try_from(count)?, cx.exec())?;
-            let selected_indices = selected
-                .iter()
-                .flat_map(|range| range.clone())
-                .map(|index| index as usize);
-            let (offsets, ranges) = selected_ranges(
+            let selected = selected
+                .into_iter()
+                .map(|range| Ok(usize::try_from(range.start)?..usize::try_from(range.end)?))
+                .collect::<VortexResult<Vec<_>>>()?;
+            let selected_indices = selected.iter().flat_map(|range| range.clone());
+            let (mut selected_offsets, mut ranges) = selected_ranges(
                 selected_indices,
                 offsets.as_slice::<u64>(),
                 &valid,
                 self.plan.elements()?.row_count(),
             )?;
-            let last = offsets.last().copied().unwrap_or(0);
-            let offsets = offsets.into_array();
+            if selected.len() == 1
+                && !valid.all_true()
+                && let Some(retained) = super::work::preserve_null_span(
+                    self.plan.elements()?.dtype(),
+                    offsets.as_slice::<u64>(),
+                    selected_offsets.last().copied().unwrap_or(0),
+                    &mut ranges,
+                )
+            {
+                selected_offsets = retained;
+            }
+            let last = selected_offsets.last().copied().unwrap_or(0);
+            let offsets = selected_offsets.into_array();
             let stats = offsets.statistics();
             stats.set(Stat::IsSorted, Precision::Exact(true.into()));
             stats.set(Stat::Min, Precision::Exact(0_u64.into()));
