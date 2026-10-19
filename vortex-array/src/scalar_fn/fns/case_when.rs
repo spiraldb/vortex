@@ -9,6 +9,9 @@
 //! Unlike SQL which coerces all branches to a common supertype, all THEN/ELSE
 //! branches must share the same base dtype (ignoring nullability). The result
 //! nullability is the union of all branches (forced nullable if no ELSE).
+//!
+//! The serialized expression format is not part of a Vortex edition and is not
+//! guaranteed to remain compatible across Vortex versions.
 
 use std::fmt;
 use std::fmt::Formatter;
@@ -19,6 +22,7 @@ use prost::Message;
 use vortex_buffer::BufferMut;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
+use vortex_error::vortex_ensure;
 use vortex_mask::AllOr;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
@@ -91,11 +95,19 @@ impl ScalarFnVTable for CaseWhen {
         *ID
     }
 
-    fn serialize(&self, _options: &Self::Options) -> VortexResult<Option<Vec<u8>>> {
-        // let num_children = options.num_when_then_pairs * 2 + u32::from(options.has_else);
-        // Ok(Some(pb::CaseWhenOpts { num_children }.encode_to_vec()))
-        // stabilize the expr
-        vortex_bail!("cannot serialize")
+    fn serialize(&self, options: &Self::Options) -> VortexResult<Option<Vec<u8>>> {
+        vortex_ensure!(
+            options.num_when_then_pairs > 0,
+            "CaseWhen must have at least one WHEN/THEN pair"
+        );
+        let Some(num_children) = options
+            .num_when_then_pairs
+            .checked_mul(2)
+            .and_then(|count| count.checked_add(u32::from(options.has_else)))
+        else {
+            vortex_bail!("CaseWhen has too many children to serialize");
+        };
+        Ok(Some(pb::CaseWhenOpts { num_children }.encode_to_vec()))
     }
 
     fn deserialize(
@@ -497,6 +509,7 @@ mod tests {
     use crate::expr::is_null;
     use crate::expr::lit;
     use crate::expr::nested_case_when;
+    use crate::expr::proto::ExprSerializeProtoExt;
     use crate::expr::root;
     use crate::expr::test_harness;
     use crate::scalar::Scalar;
@@ -778,17 +791,76 @@ mod tests {
     // ==================== Serialization Tests ====================
 
     #[rstest]
-    #[case(1, true)]
-    #[case(1, false)]
-    #[case(3, true)]
-    #[case(4, false)]
-    fn test_serialization_is_unsupported(#[case] num_when_then_pairs: u32, #[case] has_else: bool) {
+    #[case(1, true, 3)]
+    #[case(1, false, 2)]
+    #[case(3, true, 7)]
+    #[case(4, false, 8)]
+    #[case(u32::MAX / 2, true, u32::MAX)]
+    #[case(u32::MAX / 2, false, u32::MAX - 1)]
+    fn test_serialization_roundtrip(
+        #[case] num_when_then_pairs: u32,
+        #[case] has_else: bool,
+        #[case] num_children: u32,
+    ) -> VortexResult<()> {
+        let options = CaseWhenOptions {
+            num_when_then_pairs,
+            has_else,
+        };
+        let serialized = CaseWhen.serialize(&options)?.expect("serializable options");
+        assert_eq!(
+            pb::CaseWhenOpts::decode(serialized.as_slice())?.num_children,
+            num_children
+        );
+        assert_eq!(
+            CaseWhen.deserialize(&serialized, &VortexSession::empty())?,
+            options
+        );
+        Ok(())
+    }
+
+    #[rstest]
+    #[case(0, "at least one WHEN/THEN pair")]
+    #[case(u32::MAX / 2 + 1, "too many children")]
+    fn test_serialization_invalid_options(
+        #[case] num_when_then_pairs: u32,
+        #[case] expected_error: &str,
+        #[values(false, true)] has_else: bool,
+    ) {
         let options = CaseWhenOptions {
             num_when_then_pairs,
             has_else,
         };
         let error = CaseWhen.serialize(&options).unwrap_err();
-        assert!(error.to_string().contains("cannot serialize"));
+        assert!(error.to_string().contains(expected_error));
+    }
+
+    #[rstest]
+    #[case::missing(&[])]
+    #[case::zero_children(&[0x08, 0])]
+    #[case::one_child(&[0x08, 1])]
+    #[case::truncated(&[0x08, 0x80])]
+    fn test_deserialization_invalid_metadata(#[case] metadata: &[u8]) {
+        assert!(
+            CaseWhen
+                .deserialize(metadata, &VortexSession::empty())
+                .is_err()
+        );
+    }
+
+    #[rstest]
+    fn test_expression_serialization_roundtrip(
+        #[values(1, 3)] num_when_then_pairs: u32,
+        #[values(false, true)] has_else: bool,
+    ) -> VortexResult<()> {
+        let branches = (0..num_when_then_pairs)
+            .map(|value| (eq(col("value"), lit(value)), lit(value)))
+            .collect();
+        let expression = nested_case_when(branches, has_else.then(|| lit(42u32)));
+        let bytes = expression.serialize_proto()?.encode_to_vec();
+        let proto = pb::Expr::decode(bytes.as_slice())?;
+        assert_eq!(proto.id, "vortex.case_when");
+        assert_eq!(Expression::from_proto(&proto, &SESSION)?, expression);
+        Ok(())
     }
 
     // ==================== Display Tests ====================
