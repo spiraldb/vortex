@@ -25,6 +25,7 @@ use vortex_mask::AllOr;
 use vortex_mask::Mask;
 use vortex_utils::parallelism::get_available_parallelism;
 
+use self::reads::ElementReads;
 use super::join;
 use super::join_inlet;
 use crate::plan::physical::ListPackPlan;
@@ -43,6 +44,7 @@ use crate::plan::physical::pipeline::Turn;
 use crate::plan::physical::pipeline::ValueCache;
 use crate::segments::SegmentId;
 
+mod reads;
 mod work;
 
 /// A list's offsets and validity arrive before its selected element ranges can be planned.
@@ -57,6 +59,8 @@ pub(crate) struct ListSource {
     offsets: Option<ArrayRef>,
     validity: Option<Validity>,
     elements: Option<Scan>,
+    /// Element reads issued by this source when the elements are plain segment chunks.
+    direct: Option<ElementReads>,
     reads: FxHashMap<SegmentId, VecDeque<ReadId>>,
     pending_children: usize,
     chunks: Vec<(usize, ArrayRef)>,
@@ -82,6 +86,7 @@ impl ListSource {
             offsets: None,
             validity: None,
             elements: None,
+            direct: None,
             reads: FxHashMap::default(),
             pending_children: 0,
             chunks: Vec::new(),
@@ -174,11 +179,17 @@ impl ListSource {
 
     fn start_elements(
         &mut self,
-        cx: &Cx<'_>,
+        cx: &mut Cx<'_>,
         splits: Vec<Split>,
         overlap: bool,
     ) -> VortexResult<()> {
-        let scan = Scan::try_new(cx.session().clone(), self.plan.elements()?, splits)?
+        let elements = self.plan.elements()?;
+        if let Some(mut reads) = ElementReads::try_new(&elements, &splits)? {
+            reads.request(cx);
+            self.direct = Some(reads);
+            return Ok(());
+        }
+        let scan = Scan::try_new(cx.session().clone(), elements, splits)?
             .with_value_cache(self.values.clone())
             .with_child_planning(self.plan_children);
         self.elements = Some(if overlap {
@@ -242,6 +253,22 @@ impl Source for ListSource {
                 return Ok(SourceReady::Ready);
             }
             self.start_elements(cx, splits, overlap)?;
+        }
+        if let Some(reads) = self.direct.as_mut() {
+            let session = cx.session().clone();
+            while let Some((segment, bytes)) = cx.take_segment() {
+                reads.deliver(segment, bytes, &session)?;
+            }
+            if !reads.is_done() {
+                return Ok(SourceReady::Blocked(SourceBlocked::Io));
+            }
+            let reads = self
+                .direct
+                .take()
+                .ok_or_else(|| vortex_err!("Missing list element reads"))?;
+            self.chunks.extend(reads.finish()?.into_iter().enumerate());
+            self.finish()?;
+            return Ok(SourceReady::Ready);
         }
         let scan = self
             .elements

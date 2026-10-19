@@ -393,6 +393,75 @@ fn dense_nullable_list_ranges_share_one_scan(
     Ok(())
 }
 
+#[rstest]
+fn segment_list_elements_are_read_by_the_list_source(
+    #[values(Delivery::Fifo, Delivery::Lifo)] order: Delivery,
+    #[values(false, true)] utf8: bool,
+) -> VortexResult<()> {
+    let mut store = Store::default();
+    let elements = if utf8 {
+        VarBinViewArray::from_iter_str((0..100).map(|value| format!("v{value}"))).into_array()
+    } else {
+        Buffer::from_iter(0_i64..100).into_array()
+    };
+    let offsets = Buffer::from_iter((0_u64..=20).map(|row| row * 5)).into_array();
+    let input =
+        ListArray::try_new(elements.clone(), offsets.clone(), Validity::NonNullable)?.into_array();
+    let plan = ListPackPlan::try_new(
+        false.into(),
+        20,
+        lower(&store.chunked(&elements, &[10; 10])?)?,
+        lower(&store.flat(&offsets)?)?,
+        None,
+    )?
+    .into_plan();
+    let rows = [1_u64, 13];
+    let mask = Mask::from_iter((0..20).map(|row| rows.contains(&row)));
+    let result = run(&store, &plan, 0..20, mask, delivery(order))?;
+    let actual = ChunkedArray::try_new(result.arrays, input.dtype().clone())?.into_array();
+    let expected = input.take(Buffer::from_iter(rows).into_array())?;
+    assert_arrays_eq!(actual, expected, &mut SESSION.create_execution_ctx());
+    // Only the offsets and the two touched element chunks are read, and the element reads are
+    // published together once the offsets arrive.
+    assert_eq!(segments_read(&result.events), vec![0, 6, 10]);
+    assert!(
+        result.events.contains(&Event::Io(vec![0, 6])),
+        "{:?}",
+        result.events
+    );
+    Ok(())
+}
+
+#[rstest]
+fn dict_list_elements_fall_back_to_a_nested_scan(
+    #[values(Delivery::Fifo, Delivery::Lifo)] order: Delivery,
+) -> VortexResult<()> {
+    let mut store = Store::default();
+    let values = VarBinViewArray::from_iter_str(["a", "b", "c"]).into_array();
+    let codes = PrimitiveArray::from_iter((0..100).map(|value| (value % 3) as u8)).into_array();
+    let elements = VarBinViewArray::from_iter_str((0..100).map(|value| ["a", "b", "c"][value % 3]))
+        .into_array();
+    let offsets = Buffer::from_iter((0_u64..=20).map(|row| row * 5)).into_array();
+    let input = ListArray::try_new(elements, offsets.clone(), Validity::NonNullable)?.into_array();
+    let layout =
+        DictLayout::new(store.flat(&values)?, store.chunked(&codes, &[10; 10])?).into_layout();
+    let plan = ListPackPlan::try_new(
+        false.into(),
+        20,
+        lower(&layout)?,
+        lower(&store.flat(&offsets)?)?,
+        None,
+    )?
+    .into_plan();
+    let rows = [1_u64, 2, 13];
+    let mask = Mask::from_iter((0..20).map(|row| rows.contains(&row)));
+    let result = run(&store, &plan, 0..20, mask, delivery(order))?;
+    let actual = ChunkedArray::try_new(result.arrays, input.dtype().clone())?.into_array();
+    let expected = input.take(Buffer::from_iter(rows).into_array())?;
+    assert_arrays_eq!(actual, expected, &mut SESSION.create_execution_ctx());
+    Ok(())
+}
+
 /// Delivers segments in the given order.
 fn scripted(order: &[u32]) -> impl FnMut(&[ReadRequest]) -> usize + '_ {
     let mut next = order.iter();
