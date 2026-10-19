@@ -128,7 +128,7 @@ fn sorted_i16() -> PrimitiveArray {
     PrimitiveArray::from_iter((0..N).map(|i| (i / 3) as i16 - 3000))
 }
 
-fn halfs() -> PrimitiveArray {
+fn f16s() -> PrimitiveArray {
     let mut rng = Rng(8);
     PrimitiveArray::from_iter((0..N).map(|_| f16::from_f32(rng.below(4096) as f32 / 16.0)))
 }
@@ -186,7 +186,7 @@ fn datasets() -> Vec<(&'static str, PrimitiveArray)> {
         ("low_cardinality_u16", low_cardinality_u16()),
         ("multiples_u64", multiples_u64()),
         ("sorted_i16", sorted_i16()),
-        ("halfs", halfs()),
+        ("f16s", f16s()),
         ("repeating_u32", repeating_u32()),
     ]
 }
@@ -640,7 +640,7 @@ fn is_constant_matches() -> VortexResult<()> {
 #[case(timestamps())]
 #[case(prices_f64())]
 #[case(with_nulls(small_i32(), 1))]
-#[case(halfs())]
+#[case(f16s())]
 fn consistency(#[case] array: PrimitiveArray) -> VortexResult<()> {
     let mut ctx = SESSION.create_execution_ctx();
     let pco2 = compress(&array, &mut ctx)?.into_array();
