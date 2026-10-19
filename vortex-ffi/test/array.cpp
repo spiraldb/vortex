@@ -174,11 +174,6 @@ TEST_CASE("Array with validity", "[array]") {
 }
 
 TEST_CASE("Struct array creation", "[array]") {
-    vx_session *session = vx_session_new();
-    defer {
-        vx_session_free(session);
-    };
-
     vx_error *error = nullptr;
 
     vx_validity validity = {};
@@ -210,7 +205,7 @@ TEST_CASE("Struct array creation", "[array]") {
         REQUIRE(to_string_view(vx_struct_fields_field_name(fields, 0)) == "age");
         vx_struct_fields_free(fields);
         vx_dtype_free(dtype);
-        const vx_array *age = vx_array_get_field(session, struct_array, 0, &error);
+        const vx_array *age = vx_array_get_field(struct_array, 0, &error);
         require_no_error(error);
         REQUIRE(vx_array_has_dtype(age, DTYPE_NULL));
         REQUIRE(vx_array_len(age) == 5);

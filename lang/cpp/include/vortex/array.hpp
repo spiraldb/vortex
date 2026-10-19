@@ -199,16 +199,16 @@ public:
     size_t null_count(const Session &session) const;
 
     /**
-     * Get a Struct field by index. Throws if Array is not a Struct or if index
-     * is out of bounds.
+     * Get a Struct field by index. Throws if Array is not a canonical Struct
+     * or if index is out of bounds.
      */
-    Array field(const Session &session, size_t index) const;
+    Array field(size_t index) const;
 
     /**
-     * Get a Struct field by name. Throws if Array is not a Struct or doesn't
-     * have this named field.
+     * Get a Struct field by name. Throws if Array is not a canonical Struct or
+     * doesn't have this named field.
      */
-    Array field(const Session &session, std::string_view name) const;
+    Array field(std::string_view name) const;
 
     /*
      * Create a new Array slicing [begin; end) rows from original.

@@ -130,24 +130,24 @@ TEST_CASE("make_struct and fields", "[array]") {
     REQUIRE(s.dtype().fields().size() == 2);
 
     Session session;
-    Array by_index = s.field(session, 0);
+    Array by_index = s.field(0);
     REQUIRE(by_index.is_primitive(U8));
 
-    Array by_name = s.field(session, "height");
+    Array by_name = s.field("height");
     REQUIRE(by_name.is_primitive(U16));
     auto view = by_name.values<uint16_t>(session);
     REQUIRE(std::ranges::equal(view.values(), heights));
     REQUIRE(std::ranges::equal(by_index.values<uint8_t>(session).values(), ages));
 
-    REQUIRE_THROWS_AS(s.field(session, 2), VortexException);
-    REQUIRE_THROWS_AS(s.field(session, "nope"), VortexException);
+    REQUIRE_THROWS_AS(s.field(2), VortexException);
+    REQUIRE_THROWS_AS(s.field("nope"), VortexException);
 
     std::vector<ColumnField> fields_vec;
     fields_vec.emplace_back("age", Array::primitive<uint8_t>(ages));
     Array other = make_struct(fields_vec);
     REQUIRE(other.size() == 3);
     REQUIRE(other.has_dtype(DataTypeVariant::Struct));
-    REQUIRE(std::ranges::equal(other.field(session, "age").values<uint8_t>(session).values(), ages));
+    REQUIRE(std::ranges::equal(other.field("age").values<uint8_t>(session).values(), ages));
 }
 
 TEST_CASE("Mismatched field length", "[array]") {
