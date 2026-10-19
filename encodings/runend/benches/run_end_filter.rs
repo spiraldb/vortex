@@ -21,6 +21,7 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use vortex_buffer::BitBuffer;
+use vortex_buffer::BufferAllocatorRef;
 use vortex_runend::_benchmarking::filter_run_end_primitive;
 
 #[global_allocator]
@@ -112,6 +113,13 @@ fn filter_run_end(bencher: Bencher, args: FilterBenchArgs) {
     bencher
         .with_inputs(|| (run_ends.clone(), mask.clone()))
         .bench_refs(|(run_ends, mask)| {
-            filter_run_end_primitive::<u32>(run_ends, 0, length, mask).expect("filter")
+            filter_run_end_primitive::<u32>(
+                run_ends,
+                0,
+                length,
+                mask,
+                BufferAllocatorRef::static_ref(),
+            )
+            .expect("filter")
         });
 }
