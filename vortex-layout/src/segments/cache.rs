@@ -54,6 +54,8 @@ pub trait SegmentCache: Send + Sync {
     ///
     /// Lookups may be polled while a segment request is constructed, before its returned
     /// future is polled. Ready misses preserve the source's eager read registration.
+    /// Pending lookups delay registration until they resolve and the caller polls the request,
+    /// which can reduce read coalescing. This prevents cache hits from registering source reads.
     async fn get(&self, id: SegmentId) -> VortexResult<Option<ByteBuffer>>;
     /// Store a segment in the cache.
     async fn put(&self, id: SegmentId, buffer: ByteBuffer) -> VortexResult<()>;
