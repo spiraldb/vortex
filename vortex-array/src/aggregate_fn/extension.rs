@@ -426,14 +426,18 @@ mod tests {
             ExtensionAggregate::new(MinMax, Time).id(),
             ExtensionAggregate::new(MinMax, Timestamp).id(),
         ] {
-            assert!(aggregate_fns.find_plugin(&id).is_some(), "{id} is not registered");
+            assert!(
+                aggregate_fns.find_plugin(&id).is_some(),
+                "{id} is not registered"
+            );
         }
     }
 
     #[rstest]
-    #[case::sorted([Some(1_000), None, Some(2_000), Some(2_000)], false, true)]
+    // Nulls sort first.
+    #[case::sorted([None, Some(1_000), Some(2_000), Some(2_000)], false, true)]
     #[case::unsorted([Some(2_000), Some(1_000), None, Some(3_000)], false, false)]
-    #[case::strict_with_duplicates([Some(1_000), Some(2_000), Some(2_000), None], true, false)]
+    #[case::strict_with_duplicates([None, Some(1_000), Some(2_000), Some(2_000)], true, false)]
     fn is_sorted_over_timestamps(
         #[case] values: [Option<i64>; 4],
         #[case] strict: bool,
@@ -464,8 +468,8 @@ mod tests {
         let session = crate::array_session();
         let mut ctx = session.create_execution_ctx();
         let ext_dtype = Date::new(TimeUnit::Days, Nullability::Nullable).erased();
-        let storage = PrimitiveArray::from_option_iter([Some(20i32), None, Some(-3), Some(7)])
-            .into_array();
+        let storage =
+            PrimitiveArray::from_option_iter([Some(20i32), None, Some(-3), Some(7)]).into_array();
         let array = ExtensionArray::new(ext_dtype.clone(), storage.clone()).into_array();
 
         let mut acc = Accumulator::try_new(
