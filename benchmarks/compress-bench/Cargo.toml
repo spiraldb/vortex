@@ -26,6 +26,7 @@ indicatif = { workspace = true }
 itertools = { workspace = true }
 lance-bench = { path = "../lance-bench", optional = true }
 mimalloc = { workspace = true }
+parking_lot = { workspace = true }
 parquet = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
@@ -40,6 +41,7 @@ vortex-cuda = { workspace = true, optional = true }
 
 [dev-dependencies]
 arrow-select = { workspace = true }
+rstest = { workspace = true }
 
 [features]
 cuda = ["dep:tempfile", "dep:vortex-cuda"]
