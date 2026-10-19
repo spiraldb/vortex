@@ -29,7 +29,9 @@ if [ "${1:-}" = setup ]; then
   git -C "$HEADSTART_DIR" fetch --quiet origin "$HEADSTART_REV"
   git -C "$HEADSTART_DIR" checkout --quiet "$HEADSTART_REV"
   # Builds a stage 1 rustc from source: allow about an hour on 4 cores and 20 GB of disk.
-  "$HEADSTART_DIR/scripts/setup.sh"
+  # Under GITHUB_ACTIONS, rustc's bootstrap assumes rust-lang's own CI checkout and runs
+  # `git rev-parse HEAD^1`, which fails in the shallow submodule.
+  env -u GITHUB_ACTIONS "$HEADSTART_DIR/scripts/setup.sh"
   exit
 fi
 

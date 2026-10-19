@@ -113,11 +113,11 @@ jobs:
             echo
             echo "Patched toolchain, headstart off (\"today\") vs on, 3 runs each:"
             echo
-            sed -n '/^| project/,$p' headstart-bench.txt 2>/dev/null
+            sed -n '/^| project/,$p' headstart-bench.txt 2>/dev/null || true
             echo
             echo "Toolchain cache hit: ${{ steps.toolchain-cache.outputs.cache-hit || 'false' }}; build seconds: ${TOOLCHAIN_BUILD_SECONDS:-n/a}"
             echo
             echo '```'
-            grep -E "Compile requests|Cache hits|Cache misses" sccache-stats.txt 2>/dev/null
+            grep -E "Compile requests|Cache hits|Cache misses" sccache-stats.txt 2>/dev/null || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
