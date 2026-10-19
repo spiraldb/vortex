@@ -20,6 +20,7 @@ use vortex_array::match_each_unsigned_integer_ptype;
 use vortex_array::scalar::Scalar;
 use vortex_buffer::BitBuffer;
 use vortex_buffer::BitBufferMut;
+use vortex_buffer::ByteBufferMut;
 use vortex_error::VortexResult;
 
 use crate::BitPacked;
@@ -43,16 +44,20 @@ pub(super) fn constant_result<T: NativePType>(
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<ArrayRef> {
     let len = array.len();
+    let allocator = ctx.allocator().clone();
     let validity = array.validity()?.union_nullability(nullability);
     let Some(patches) = array.patches() else {
         if validity.definitely_no_nulls() {
             let scalar = Scalar::bool(value, validity.nullability());
             return Ok(ConstantArray::new(scalar, len).into_array());
         }
-        return Ok(BoolArray::new(BitBuffer::full(value, len), validity).into_array());
+        return Ok(BoolArray::new(BitBuffer::full_in(value, len, allocator), validity).into_array());
     };
 
-    let mut bits = BitBufferMut::full(value, len);
+    let fill = if value { u8::MAX } else { 0 };
+    let bytes = ByteBufferMut::full_in(fill, len.div_ceil(8), allocator);
+    let mut bits = BitBufferMut::from_buffer(bytes, 0, len);
+
     let indices = patches.indices().clone().execute::<PrimitiveArray>(ctx)?;
     let values = patches.values().clone().execute::<PrimitiveArray>(ctx)?;
     let offset = patches.offset();
