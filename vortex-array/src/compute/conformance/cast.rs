@@ -278,7 +278,7 @@ fn test_cast_to_primitive(
                 min,
                 max,
                 array,
-                array.display_values(),
+                array.display_values(ctx),
             )
         });
         return;
@@ -290,7 +290,7 @@ fn test_cast_to_primitive(
         vortex_panic!(
             "Cast must succeed because all values are within bounds. {} {}: {e}",
             target_ptype,
-            array.display_values(),
+            array.display_values(ctx),
         )
     });
     assert_eq!(casted.dtype(), &target_dtype);

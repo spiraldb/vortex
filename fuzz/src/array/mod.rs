@@ -597,7 +597,7 @@ pub fn run_fuzz_action(fuzz_action: FuzzArrayAction) -> VortexFuzzResult<bool> {
     debug!(
         "Initial array:\nTree:\n{}Values:\n{:#}",
         current_array.display_tree(),
-        current_array.display_values()
+        current_array.display_values(&ctx)
     );
 
     for (i, (action, expected)) in actions.into_iter().enumerate() {
