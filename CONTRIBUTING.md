@@ -100,6 +100,11 @@ Builds go to `target/headstart`, and the toolchain to `~/.cache/vortex-headstart
 that CI does not. To compare clean builds, use headstart's own
 `$HEADSTART_DIR/scripts/bench.sh -n 3 /path/to/vortex::-p vortex`.
 
+A stock sccache holds rustc's output until it exits, which hides the early-metadata messages
+headstart starts crates on. With `RUSTC_WRAPPER=sccache`, the script runs a patched sccache
+instead (`scripts/headstart/sccache.patch`, built by `setup`). It runs rustc in sccache's
+client-side mode, streams rustc's output, and keys each crate on its dependencies' early metadata.
+
 ### Pruning Rust dependencies
 
 Use [cargo-shear](https://github.com/Boshen/cargo-shear) to find unused dependencies. Install it
