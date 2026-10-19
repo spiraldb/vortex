@@ -125,11 +125,6 @@ impl Layout<Chunked> {
             OwnedLayoutChildren::layout_children(children),
         )
     }
-
-    /// Validated chunk boundaries, including the terminal row count.
-    pub(crate) fn chunk_offsets(&self) -> &[u64] {
-        &self.chunk_offsets
-    }
 }
 
 fn chunk_offsets(children: &dyn LayoutChildren) -> VortexResult<Vec<u64>> {

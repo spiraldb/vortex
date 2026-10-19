@@ -28,8 +28,6 @@ work in each timed iteration. CI drives the full matrix via
 cargo run -p random-access-bench --profile release_debug --features lance
 ```
 
-Vortex measurements always use the planner-driven V2 scan builder.
-
 ## Running against S3
 
 The same benchmark can read its data from an object store instead of local disk. The remote

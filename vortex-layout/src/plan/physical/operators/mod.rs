@@ -9,7 +9,6 @@
 mod concat;
 mod eval;
 mod filter;
-mod list;
 mod once;
 mod pack;
 mod scan;
@@ -19,7 +18,6 @@ mod whole;
 pub(crate) use concat::*;
 pub(crate) use eval::*;
 pub(crate) use filter::*;
-pub(crate) use list::*;
 pub(crate) use once::*;
 pub(crate) use pack::*;
 pub(crate) use scan::*;

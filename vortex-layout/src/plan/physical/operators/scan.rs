@@ -24,7 +24,7 @@ use crate::plan::physical::operator::Step;
 use crate::segments::SegmentId;
 
 /// Decodes the whole of a scan's segment.
-pub(super) fn decode(
+fn decode(
     plan: &SegmentScanPlan,
     segment: BufferHandle,
     session: &VortexSession,
@@ -42,7 +42,7 @@ pub(super) fn decode(
 }
 
 /// Slices a whole decoded segment to `slice`, then keeps the rows `filter` selects.
-pub(super) fn select(
+fn select(
     array: ArrayRef,
     slice: Option<&Range<usize>>,
     filter: Option<&Mask>,

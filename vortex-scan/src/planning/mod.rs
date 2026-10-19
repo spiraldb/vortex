@@ -10,7 +10,6 @@ pub mod driver;
 pub mod morsel;
 pub mod next;
 pub mod planner;
-pub mod selection;
 
 #[cfg(test)]
 mod tests;

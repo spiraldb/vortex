@@ -18,7 +18,6 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure;
 use vortex_error::vortex_err;
-use vortex_mask::AllOr;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
 
@@ -619,39 +618,6 @@ struct Active {
     output: Option<PortId>,
 }
 
-/// A split selecting more separate runs than this counts its whole row range instead, which
-/// bounds the walks over the plan before the scan starts.
-const MAX_SELECTED_RUNS: usize = 1024;
-
-/// The rows the splits select, sorted, with overlapping and adjacent runs merged.
-fn selected_runs(splits: &[Split]) -> VortexResult<Vec<Range<u64>>> {
-    let mut runs = Vec::new();
-    for split in splits {
-        match split.mask.slices() {
-            AllOr::None => {}
-            AllOr::Some(slices) if slices.len() <= MAX_SELECTED_RUNS => {
-                for &(start, end) in slices {
-                    runs.push(
-                        split.rows.start + u64::try_from(start)?
-                            ..split.rows.start + u64::try_from(end)?,
-                    );
-                }
-            }
-            AllOr::All | AllOr::Some(_) => runs.push(split.rows.clone()),
-        }
-    }
-    runs.retain(|run| !run.is_empty());
-    runs.sort_unstable_by_key(|run| run.start);
-    let mut merged: Vec<Range<u64>> = Vec::with_capacity(runs.len());
-    for run in runs {
-        match merged.last_mut() {
-            Some(last) if run.start <= last.end => last.end = last.end.max(run.end),
-            _ => merged.push(run),
-        }
-    }
-    Ok(merged)
-}
-
 /// Runs a plan over a list of splits.
 ///
 /// The plan runs as one stage under each split's selection.
@@ -705,16 +671,15 @@ impl Scan {
             0,
             splits.iter().map(|split| split.rows.clone()).collect(),
         );
-        // Only the rows some split selects can share a segment between readers. Chunks in the
-        // gaps between them stay lazy: they are never lowered or read. A segment several runs
-        // reach counts a reader per run, so it is decoded once even when distinct chunks
-        // reuse it; readers that never come leave their ports unclaimed.
+        // Only the rows some split reads can share a segment between readers.
+        let start = splits
+            .iter()
+            .map(|split| split.rows.start)
+            .min()
+            .unwrap_or(0);
+        let end = splits.iter().map(|split| split.rows.end).max().unwrap_or(0);
         match &root {
-            Root::Plan(plan) => {
-                for run in selected_runs(&splits)? {
-                    core.shares.add(plan, run)?;
-                }
-            }
+            Root::Plan(plan) => core.shares.add(plan, start..end)?,
         }
         core.shares.retain_shared();
         core.dirty_flags = vec![false; 1];

@@ -130,11 +130,28 @@ impl RandomAccessor for ArrowIpcRandomAccessor {
 
 /// Random accessor for Vortex format files.
 ///
-/// The file handle is opened at construction time and reused across `take()` calls.
+/// The file handle is opened at construction time and reused across `take()` calls. Files the
+/// V2 scan supports are read with it; others, such as files with list columns, use the default
+/// scan.
 pub struct VortexRandomAccessor {
     name: String,
     format: Format,
     file: VortexFile,
+    v2: bool,
+}
+
+/// Whether the V2 scan can read `file`. It checks the file's layouts before reading any rows.
+async fn supports_v2(file: &VortexFile) -> bool {
+    let Ok(stream) = ScanBuilder::new(SESSION.clone(), file.scan_file())
+        .with_row_range(0..0)
+        .into_stream()
+    else {
+        return false;
+    };
+    ArrayStreamAdapter::new(file.dtype().clone(), stream)
+        .read_all()
+        .await
+        .is_ok()
 }
 
 impl VortexRandomAccessor {
@@ -144,10 +161,15 @@ impl VortexRandomAccessor {
         name: impl Into<String>,
         format: Format,
     ) -> anyhow::Result<Self> {
-        let file = SESSION.open_options().open_path(path.as_ref()).await?;
+        let file = SESSION
+            .open_options()
+            .with_layout_reader_cache()
+            .open_path(path.as_ref())
+            .await?;
         Ok(Self {
             name: name.into(),
             format,
+            v2: supports_v2(&file).await,
             file,
         })
     }
@@ -161,11 +183,13 @@ impl VortexRandomAccessor {
     ) -> anyhow::Result<Self> {
         let file = SESSION
             .open_options()
+            .with_layout_reader_cache()
             .open_object_store(remote.store(), remote.key(path)?)
             .await?;
         Ok(Self {
             name: name.into(),
             format,
+            v2: supports_v2(&file).await,
             file,
         })
     }
@@ -182,13 +206,22 @@ impl RandomAccessor for VortexRandomAccessor {
     }
 
     async fn take(&self, indices: &[u64]) -> anyhow::Result<RandomAccessorRet> {
-        let indices_buf: Buffer<u64> = Buffer::from(indices.to_vec());
-        let stream = ScanBuilder::new(SESSION.clone(), self.file.scan_file())
-            .with_row_indices(StrictSortedBuffer::try_new(indices_buf)?)
-            .into_stream()?;
-        let array = ArrayStreamAdapter::new(self.file.dtype().clone(), stream)
-            .read_all()
-            .await?;
+        let indices = StrictSortedBuffer::try_new(Buffer::from(indices.to_vec()))?;
+        let array = if self.v2 {
+            let stream = ScanBuilder::new(SESSION.clone(), self.file.scan_file())
+                .with_row_indices(indices)
+                .into_stream()?;
+            ArrayStreamAdapter::new(self.file.dtype().clone(), stream)
+                .read_all()
+                .await?
+        } else {
+            self.file
+                .scan()?
+                .with_row_indices(indices)
+                .into_array_stream()?
+                .read_all()
+                .await?
+        };
 
         // We canonicalize / decompress for equivalence to Arrow's `RecordBatch`es.
         let mut ctx = SESSION.create_execution_ctx();
