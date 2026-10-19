@@ -17,7 +17,7 @@
 //!   sources/sinks.
 //! - [`compressor`] contains the default BtrBlocks-style adaptive compressor.
 //! - [`encodings`] exposes maintained encoding crates such as FastLanes, Pco, and Zstd.
-//! - [`session`] contains [`VortexSession`](session::VortexSession), the registry container used to
+//! - [`session`] contains [`VortexSession`], the registry container used to
 //!   make array, layout, scalar-function, and runtime plugins available.
 //!
 //! Most applications should create a default session with [`VortexSessionDefault`]. Lower-level
