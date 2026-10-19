@@ -29,7 +29,10 @@ impl OperationsVTable<VarBin> for VarBin {
 
         let start = offset_at(state, index, ctx)?;
         let end = offset_at(state, index + 1, ctx)?;
-        Ok(varbin_scalar(array.bytes().slice(start..end), array.dtype()))
+        Ok(varbin_scalar(
+            array.bytes().slice(start..end),
+            array.dtype(),
+        ))
     }
 
     fn scalar_at(

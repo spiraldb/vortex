@@ -162,24 +162,17 @@ impl ValidityVTable<ScalarFnValidity> for ScalarFnValidity {
 mod tests {
     use vortex_error::VortexResult;
 
+    use super::ValidityArray;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::array_session;
     use crate::arrays::PrimitiveArray;
     use crate::compute::conformance::consistency::test_scalar_probe_consistency;
 
-    use super::ValidityArray;
-
     #[test]
     fn scalar_probe_child_nullness() -> VortexResult<()> {
-        let child = PrimitiveArray::from_option_iter([
-            Some(1i32),
-            None,
-            Some(3),
-            None,
-            Some(5),
-        ])
-        .into_array();
+        let child = PrimitiveArray::from_option_iter([Some(1i32), None, Some(3), None, Some(5)])
+            .into_array();
         let array = ValidityArray::new(child).into_array();
 
         test_scalar_probe_consistency(&array, &mut array_session().create_execution_ctx());

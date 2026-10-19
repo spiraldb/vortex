@@ -190,8 +190,9 @@ fn array(name: &str) -> ArrayRef {
         "map" => nullable_map(),
         "dict" => dict_over_nullable_values(),
         "struct" => nullable_struct(),
-        "bool" => BoolArray::from_iter((0..LEN).map(|i| (i % 7 != 0).then_some(i % 2 == 0)))
-            .into_array(),
+        "bool" => {
+            BoolArray::from_iter((0..LEN).map(|i| (i % 7 != 0).then_some(i % 2 == 0))).into_array()
+        }
         "varbinview" => VarBinViewArray::from_iter(
             [
                 Some("short"),
