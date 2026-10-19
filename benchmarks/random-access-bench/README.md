@@ -28,16 +28,7 @@ work in each timed iteration. CI drives the full matrix via
 cargo run -p random-access-bench --profile release_debug --features lance
 ```
 
-Pass `--scan-v2` to use Vortex's planner-driven V2 scan API. The default uses V1. Run each
-version separately with the same dataset, pattern, and open-mode options; save their outputs
-to separate files because measurement names stay the same:
-
-```bash
-cargo run -p random-access-bench --profile release_debug -- \
-  --formats vortex --display-format gh-json -o v1.json
-cargo run -p random-access-bench --profile release_debug -- \
-  --formats vortex --scan-v2 --display-format gh-json -o v2.json
-```
+Vortex measurements always use the planner-driven V2 scan builder.
 
 ## Running against S3
 

@@ -34,7 +34,7 @@ use vortex::array::stream::ArrayStreamExt;
 use vortex::buffer::Buffer;
 use vortex::file::OpenOptionsSessionExt;
 use vortex::file::VortexFile;
-use vortex::layout::scan::v2::ScanBuilder as V2ScanBuilder;
+use vortex::layout::scan::v2::ScanBuilder;
 use vortex::scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex::utils::aliases::hash_map::HashMap;
 
@@ -135,7 +135,6 @@ pub struct VortexRandomAccessor {
     name: String,
     format: Format,
     file: VortexFile,
-    scan_v2: bool,
 }
 
 impl VortexRandomAccessor {
@@ -145,16 +144,11 @@ impl VortexRandomAccessor {
         name: impl Into<String>,
         format: Format,
     ) -> anyhow::Result<Self> {
-        let file = SESSION
-            .open_options()
-            .with_layout_reader_cache()
-            .open_path(path.as_ref())
-            .await?;
+        let file = SESSION.open_options().open_path(path.as_ref()).await?;
         Ok(Self {
             name: name.into(),
             format,
             file,
-            scan_v2: false,
         })
     }
 
@@ -167,21 +161,13 @@ impl VortexRandomAccessor {
     ) -> anyhow::Result<Self> {
         let file = SESSION
             .open_options()
-            .with_layout_reader_cache()
             .open_object_store(remote.store(), remote.key(path)?)
             .await?;
         Ok(Self {
             name: name.into(),
             format,
             file,
-            scan_v2: false,
         })
-    }
-
-    /// Selects the explicit planner-driven V2 scan API for this benchmark accessor.
-    pub fn with_scan_v2(mut self, enabled: bool) -> Self {
-        self.scan_v2 = enabled;
-        self
     }
 }
 
@@ -197,22 +183,12 @@ impl RandomAccessor for VortexRandomAccessor {
 
     async fn take(&self, indices: &[u64]) -> anyhow::Result<RandomAccessorRet> {
         let indices_buf: Buffer<u64> = Buffer::from(indices.to_vec());
-        let indices = StrictSortedBuffer::try_new(indices_buf)?;
-        let array = if self.scan_v2 {
-            let stream = V2ScanBuilder::new(SESSION.clone(), self.file.scan_file())
-                .with_row_indices(indices)
-                .into_stream()?;
-            ArrayStreamAdapter::new(self.file.dtype().clone(), stream)
-                .read_all()
-                .await?
-        } else {
-            self.file
-                .scan()?
-                .with_row_indices(indices)
-                .into_array_stream()?
-                .read_all()
-                .await?
-        };
+        let stream = ScanBuilder::new(SESSION.clone(), self.file.scan_file())
+            .with_row_indices(StrictSortedBuffer::try_new(indices_buf)?)
+            .into_stream()?;
+        let array = ArrayStreamAdapter::new(self.file.dtype().clone(), stream)
+            .read_all()
+            .await?;
 
         // We canonicalize / decompress for equivalence to Arrow's `RecordBatch`es.
         let mut ctx = SESSION.create_execution_ctx();

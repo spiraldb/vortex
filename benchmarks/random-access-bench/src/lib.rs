@@ -153,11 +153,10 @@ async fn benchmark_random_access(
     storage: &str,
     reopen: bool,
     remote: Option<&RemoteDataDir>,
-    scan_v2: bool,
 ) -> Result<RandomAccessRun> {
     let time_limit = Duration::from_secs(time_limit_secs);
     let mut runs = Vec::new();
-    let prepared_accessor = open_accessor(dataset, format, remote, scan_v2).await?;
+    let prepared_accessor = open_accessor(dataset, format, remote).await?;
     let cached_accessor = (!reopen).then_some(prepared_accessor);
 
     if let Some(accessor) = &cached_accessor {
@@ -177,7 +176,7 @@ async fn benchmark_random_access(
         let arr = if let Some(accessor) = &cached_accessor {
             accessor.take(indices).await?
         } else {
-            open_accessor(dataset, format, remote, scan_v2)
+            open_accessor(dataset, format, remote)
                 .await?
                 .take(indices)
                 .await?
@@ -307,7 +306,6 @@ async fn open_accessor(
     dataset: &dyn BenchDataset,
     format: Format,
     remote: Option<&RemoteDataDir>,
-    scan_v2: bool,
 ) -> Result<Box<dyn RandomAccessor>> {
     let name = format!(
         "random-access/{}/{}-{}",
@@ -325,13 +323,12 @@ async fn open_accessor(
         }
         Format::OnDiskVortex | Format::VortexCompact => {
             let path = dataset_path(dataset, format).await?;
-            let accessor = match remote {
-                Some(remote) => {
-                    VortexRandomAccessor::open_object_store(remote, &path, name, format).await?
-                }
-                None => VortexRandomAccessor::open(path, name, format).await?,
-            };
-            Ok(Box::new(accessor.with_scan_v2(scan_v2)))
+            Ok(match remote {
+                Some(remote) => Box::new(
+                    VortexRandomAccessor::open_object_store(remote, &path, name, format).await?,
+                ),
+                None => Box::new(VortexRandomAccessor::open(path, name, format).await?),
+            })
         }
         Format::Parquet => {
             let path = dataset_path(dataset, format).await?;
@@ -378,8 +375,6 @@ pub struct RunConfig {
     pub time_limit: u64,
     /// Whether each benchmark run reuses or reopens its file handle.
     pub open_mode: OpenMode,
-    /// Uses the explicit V2 scan API for Vortex formats when enabled.
-    pub scan_v2: bool,
     /// Format used to emit measurements.
     pub display_format: DisplayFormat,
     /// Optional path for the primary result output.
@@ -398,7 +393,6 @@ pub async fn run(config: RunConfig) -> Result<()> {
         patterns,
         time_limit,
         open_mode,
-        scan_v2,
         display_format,
         output_path,
         ingest_output,
@@ -452,7 +446,6 @@ pub async fn run(config: RunConfig) -> Result<()> {
                         storage,
                         reopen,
                         remote,
-                        scan_v2,
                     )
                     .await?;
 
@@ -482,7 +475,6 @@ pub async fn run(config: RunConfig) -> Result<()> {
                         storage,
                         reopen,
                         remote,
-                        scan_v2,
                     )
                     .await?;
 
