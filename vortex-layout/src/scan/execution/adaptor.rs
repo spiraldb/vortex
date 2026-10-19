@@ -28,6 +28,8 @@ use crate::segments::SegmentId;
 /// Rows a running plan produced, in row order.
 #[derive(Clone)]
 pub(super) struct Piece {
+    /// The scan split that produced the piece. Splits are in row order.
+    pub(super) split: usize,
     /// Orders the piece among the outputs of one scan.
     pub(super) rows: Range<u64>,
     /// The selected rows the piece holds.
@@ -96,7 +98,7 @@ impl ScanAdaptor {
         }
         Ok(match self.step()? {
             Turn::Waiting | Turn::Done => AdaptorStep::Yield,
-            Turn::Output(_, array) => AdaptorStep::Piece(self.piece(array)),
+            Turn::Output(split, array) => AdaptorStep::Piece(self.piece(split, array)),
             Turn::Read(read) => {
                 // Publish every read the scan has ready together, so the owner can coalesce them.
                 let mut batch = vec![self.request(read.id, read.segment_id)?];
@@ -130,10 +132,11 @@ impl ScanAdaptor {
         Ok(turn)
     }
 
-    fn piece(&mut self, array: ArrayRef) -> Piece {
+    fn piece(&mut self, split: usize, array: ArrayRef) -> Piece {
         let start = self.next_piece;
         self.next_piece += 1;
         Piece {
+            split,
             rows: start..start + 1,
             array,
         }

@@ -83,22 +83,16 @@ fn lower_flat(layout: &FlatLayout) -> SegmentScanPlan {
 }
 
 fn lower_chunked(layout: &ChunkedLayout) -> VortexResult<ConcatPlan> {
-    let mut row_offsets = Vec::with_capacity(layout.nchildren());
-    let mut row_count = 0u64;
-    for index in 0..layout.nchildren() {
-        row_offsets.push(row_count);
-        row_count = row_count
-            .checked_add(layout.child_row_count(index))
-            .ok_or_else(|| vortex_err!("Chunked row count overflow"))?;
-    }
+    let nchunks = layout.nchildren();
+    let chunks = layout.to_layout();
     // SAFETY: Chunked layout construction validates that every child has the parent dtype and
-    // that their row counts sum to the parent; offsets were computed with checked addition above.
+    // computes the chunk offsets with checked addition, ending at the parent's row count.
     Ok(unsafe {
         ConcatPlan::from_children_unchecked(
             layout.dtype().clone(),
             layout.row_count(),
-            row_offsets.into(),
-            lazy_children(layout.to_layout(), (0..layout.nchildren()).collect()),
+            layout.chunk_offsets()[..nchunks].into(),
+            PlanChildren::lazy(nchunks, move |index| lower_slot(&chunks, index)),
         )
     })
 }
@@ -159,11 +153,15 @@ fn lazy_children(layout: LayoutRef, slots: Vec<usize>) -> PlanChildren {
             .get(index)
             .copied()
             .ok_or_else(|| vortex_err!("Missing plan child slot {index}"))?;
-        let child = layout
-            .slot(slot)?
-            .ok_or_else(|| vortex_err!("Layout child slot {slot} is absent"))?;
-        lower(&child)
+        lower_slot(&layout, slot)
     })
+}
+
+fn lower_slot(layout: &LayoutRef, slot: usize) -> VortexResult<PlanRef> {
+    let child = layout
+        .slot(slot)?
+        .ok_or_else(|| vortex_err!("Layout child slot {slot} is absent"))?;
+    lower(&child)
 }
 
 fn lower_zoned(layout: &LayoutRef) -> VortexResult<PlanRef> {

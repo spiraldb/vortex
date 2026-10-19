@@ -72,7 +72,7 @@ const POISSON_EXPECTED_COUNT: usize = 100;
 const CACHED_WARMUP_DURATION: Duration = Duration::from_secs(1);
 
 /// Generate indices for the given dataset and access pattern.
-fn generate_indices(dataset: &dyn BenchDataset, pattern: AccessPattern) -> Vec<u64> {
+pub fn generate_indices(dataset: &dyn BenchDataset, pattern: AccessPattern) -> Vec<u64> {
     let row_count = dataset.row_count();
     let mut rng = StdRng::seed_from_u64(42);
 

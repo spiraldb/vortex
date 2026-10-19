@@ -30,7 +30,7 @@ impl PlanChildren {
     ) -> Self {
         Self {
             initializer: Some(Arc::new(initializer)),
-            cache: (0..len).map(|_| OnceCell::new()).collect::<Vec<_>>().into(),
+            cache: (0..len).map(|_| OnceCell::new()).collect(),
         }
     }
 

@@ -671,15 +671,14 @@ impl Scan {
             0,
             splits.iter().map(|split| split.rows.clone()).collect(),
         );
-        // Only the rows some split reads can share a segment between readers.
-        let start = splits
-            .iter()
-            .map(|split| split.rows.start)
-            .min()
-            .unwrap_or(0);
-        let end = splits.iter().map(|split| split.rows.end).max().unwrap_or(0);
+        // Only the rows some split reads can share a segment between readers, so the rows
+        // between splits are never visited.
         match &root {
-            Root::Plan(plan) => core.shares.add(plan, start..end)?,
+            Root::Plan(plan) => {
+                for split in &splits {
+                    core.shares.add(plan, split.rows.clone())?;
+                }
+            }
         }
         core.shares.retain_shared();
         core.dirty_flags = vec![false; 1];

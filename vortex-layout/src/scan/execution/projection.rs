@@ -17,7 +17,6 @@ use vortex_scan::planning::planner::PlannerOutput;
 use vortex_scan::planning::planner::State;
 
 use crate::plan::physical::pipeline::Scan;
-use crate::plan::physical::pipeline::Split;
 use crate::scan::execution::ScanPlans;
 use crate::scan::execution::SelectedRows;
 use crate::scan::execution::adaptor::AdaptorStep;
@@ -55,7 +54,7 @@ impl Planner for ProjectionPlanner {
         let Some((plans, selected)) = self.work.take() else {
             return Ok(PlannerOutput::Done);
         };
-        if selected.mask.all_false() {
+        if selected.splits.is_empty() {
             return Ok(PlannerOutput::Done);
         }
         Ok(PlannerOutput::Morsel(
@@ -91,7 +90,9 @@ impl ProjectionMorsel {
 
     fn finish(&mut self) -> VortexResult<MorselOutput> {
         self.done = true;
-        self.pieces.sort_by_key(|piece| piece.rows.start);
+        // Splits run at once, so their pieces arrive interleaved.
+        self.pieces
+            .sort_by_key(|piece| (piece.split, piece.rows.start));
         let mut arrays: Vec<_> = std::mem::take(&mut self.pieces)
             .into_iter()
             .map(|piece| piece.array)
@@ -135,16 +136,13 @@ impl Morsel for ProjectionMorsel {
                 .plans
                 .take()
                 .vortex_expect("an uncompiled projection still has its plans");
-            let scan = Scan::try_new(
-                plans.session,
-                plans.projection,
-                vec![Split {
-                    rows: self.selected.scope.rows.clone(),
-                    mask: self.selected.mask.clone(),
-                }],
-            )?
-            .with_row_offset(plans.row_offset)
-            .with_value_cache(plans.values);
+            let splits = std::mem::take(&mut self.selected.splits);
+            // Every split is active at once, so all of their reads are published together.
+            let active = splits.len();
+            let scan = Scan::try_new(plans.session, plans.projection, splits)?
+                .with_max_active(active)
+                .with_row_offset(plans.row_offset)
+                .with_value_cache(plans.values);
             self.adaptor = Some(ScanAdaptor::new(scan, plans.locations));
             return Ok(MorselOutput::Continue);
         };

@@ -385,7 +385,7 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
     });
     let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
     let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?)?;
-    let splits = scan.split_plans();
+    let splits = scan.split_plans()?;
     assert_eq!(
         splits.len(),
         (STORED_CHUNKS * STORED_CHUNK_ROWS).div_ceil(MAX_ROWS_PER_CHUNK)
@@ -449,9 +449,12 @@ async fn counted_ints(session: &VortexSession) -> VortexResult<(Arc<CountingSegm
 
 #[rstest]
 #[case::one_stored_chunk(vec![5, 6, 30_000, 140_100], vec![5..30_001, 140_100..140_101], 2)]
-#[case::two_stored_chunks(vec![66_000, 75_000], vec![66_000..75_001], 2)]
+// Rows in one work chunk but different stored chunks plan nothing between them.
+#[case::two_stored_chunks(vec![66_000, 75_000], vec![66_000..66_001, 75_000..75_001], 2)]
+// Rows in different work chunks but one stored chunk read it once.
+#[case::two_work_chunks(vec![60_000, 66_000], vec![60_000..66_001], 1)]
 #[tokio::test]
-async fn work_chunks_plan_only_their_selected_span(
+async fn splits_read_each_stored_chunk_once(
     #[case] rows: Vec<u64>,
     #[case] scopes: Vec<Range<u64>>,
     #[case] reads: usize,
@@ -463,7 +466,13 @@ async fn work_chunks_plan_only_their_selected_span(
         builder(&session, &segments, &layout)?
             .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(rows.clone()))?),
     )?;
-    let splits = scan.split_plans();
+    // Runs reading the same stored chunk are one pipeline split, which visits no other chunk.
+    assert_eq!(
+        scan.split_rows()?.concat(),
+        scopes,
+        "each planner here reads one stored chunk"
+    );
+    let splits = scan.split_plans()?;
     assert_eq!(
         splits
             .iter()
@@ -475,7 +484,7 @@ async fn work_chunks_plan_only_their_selected_span(
     for split in splits {
         arrays.extend(split.run(Arc::clone(&scan.io)).await?);
     }
-    // Each work chunk reads only the stored chunks holding its selected rows.
+    // Splits read only the stored chunks holding their selected rows, each chunk once.
     assert_eq!(counted.reads.load(Ordering::Relaxed), reads);
     let expected = rows
         .iter()
@@ -489,7 +498,8 @@ async fn work_chunks_plan_only_their_selected_span(
     Ok(())
 }
 
-/// V2 rejects list layouts: their element ranges are only known once their offsets are read.
+/// V2 rejects list layouts when it plans them: their element ranges are only known once their
+/// offsets are read.
 #[tokio::test]
 async fn list_layouts_return_an_error() -> VortexResult<()> {
     let session = new_session().with_tokio();
@@ -501,7 +511,7 @@ async fn list_layouts_return_an_error() -> VortexResult<()> {
         .try_next()
         .await
         .expect_err("V2 must reject an unsupported layout");
-    assert!(error.to_string().contains("V2 scans do not support"));
+    assert!(error.to_string().contains("has no pipeline implementation"));
     Ok(())
 }
 

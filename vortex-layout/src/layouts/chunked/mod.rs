@@ -117,6 +117,11 @@ impl Layout<Chunked> {
         .into_typed()
     }
 
+    /// The first row of each chunk, followed by the layout's row count.
+    pub fn chunk_offsets(&self) -> &[u64] {
+        &self.data().chunk_offsets
+    }
+
     /// Rebuild this layout with owned children.
     pub fn with_children(&self, children: Vec<LayoutRef>) -> Self {
         Self::new(

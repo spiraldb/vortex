@@ -9,16 +9,19 @@
 //! file's [`SegmentSource`]. The layout reader is never asked to evaluate anything.
 //!
 //! Import this module's [`ScanBuilder`] to select V2 explicitly. It accepts a [`ScanFile`]
-//! directly and supports projection, row ranges, and selections. Unsupported layouts return an
-//! error; filters and limits are not part of this builder's API. Work is partitioned into fixed
-//! chunks of up to 65,536 rows, independently of the stored layout's chunk boundaries.
-//! Full-file projections use smaller 8,192-row multiples when serialized bytes per row are high.
+//! directly and supports projection, row ranges, and selections. Layouts without a pipeline
+//! implementation return an error; filters and limits are not part of this builder's API. Work is
+//! partitioned into fixed chunks of up to 65,536 rows, independently of the stored layout's chunk
+//! boundaries. Full-file projections use smaller 8,192-row multiples when serialized bytes per row
+//! are high. A partial selection is instead planned by the stored segments its rows read, so each
+//! segment is read once and rows between selected runs are never visited.
 
 mod io;
 mod split;
 #[cfg(test)]
 mod tests;
 
+use std::cmp::Ordering;
 use std::ops::Range;
 use std::sync::Arc;
 
@@ -36,9 +39,9 @@ use vortex_array::VortexSessionExecute;
 use vortex_array::dtype::DType;
 use vortex_array::expr::BoundExpression;
 use vortex_error::VortexResult;
-use vortex_error::vortex_ensure;
 use vortex_io::request::IoService;
 use vortex_io::session::RuntimeSessionExt;
+use vortex_mask::AllOr;
 use vortex_scan::planning::planner::WorkScope;
 use vortex_scan::selection::Selection;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
@@ -46,14 +49,10 @@ use vortex_session::VortexSession;
 use vortex_utils::parallelism::get_available_parallelism;
 
 use crate::LayoutRef;
-use crate::layouts::chunked::Chunked;
-use crate::layouts::dict::Dict;
-use crate::layouts::flat::Flat;
-use crate::layouts::struct_::Struct;
-use crate::layouts::zoned::LegacyStats;
-use crate::layouts::zoned::Zoned;
 use crate::plan::physical::lower;
 use crate::plan::physical::optimize;
+use crate::plan::physical::pipeline::Reach;
+use crate::plan::physical::pipeline::Split;
 use crate::plan::physical::plan_row_idx_expression;
 use crate::scan::arrow::to_record_batch;
 use crate::scan::execution::ScanPlans;
@@ -62,11 +61,15 @@ use crate::scan::execution::plan_projection;
 use crate::scan::v2::io::SegmentScanIo;
 use crate::scan::v2::io::segment_ranges;
 use crate::scan::v2::split::SplitPlan;
+use crate::segments::SegmentId;
 use crate::segments::SegmentSource;
 
 const ROW_BLOCK_SIZE: usize = 8192;
 const MAX_ROWS_PER_CHUNK: usize = 8 * ROW_BLOCK_SIZE;
 const TARGET_BYTES_PER_CHUNK: u64 = 8 * 1024 * 1024;
+/// A chunk selected in more runs than this is planned whole: finding the segments of each run
+/// would cost more than the chunks it could skip.
+const MAX_RUNS: usize = 64;
 
 /// Limit estimated bytes per task without changing the writer-aligned row granularity.
 fn rows_per_chunk(row_count: u64, locations: &[SegmentLocation]) -> usize {
@@ -80,6 +83,19 @@ fn rows_per_chunk(row_count: u64, locations: &[SegmentLocation]) -> usize {
     let bytes_per_row = bytes.div_ceil(row_count).max(1);
     let blocks = TARGET_BYTES_PER_CHUNK / bytes_per_row / ROW_BLOCK_SIZE as u64;
     blocks.clamp(1, 8) as usize * ROW_BLOCK_SIZE
+}
+
+/// Whether two sorted segment lists have a segment in common.
+fn shares_any(left: &[SegmentId], right: &[SegmentId]) -> bool {
+    let (mut left, mut right) = (left.iter().peekable(), right.iter().peekable());
+    while let (Some(l), Some(r)) = (left.peek(), right.peek()) {
+        match l.cmp(r) {
+            Ordering::Less => _ = left.next(),
+            Ordering::Greater => _ = right.next(),
+            Ordering::Equal => return true,
+        }
+    }
+    false
 }
 
 /// Fixed boundaries in the file's row domain, clipped to the requested range.
@@ -109,8 +125,9 @@ pub struct ScanFile {
 
 /// Builds a projection scan on the planner-driven V2 executor.
 ///
-/// This builder reads the file's layout and segments directly. Unsupported layouts return an
-/// error when the stream is polled. Filters and row limits are not supported.
+/// This builder reads the file's layout and segments directly. A layout with no pipeline
+/// implementation returns an error when the first split that reads it is planned. Filters and row
+/// limits are not supported.
 pub struct ScanBuilder<A = ArrayRef> {
     session: VortexSession,
     file: ScanFile,
@@ -237,34 +254,6 @@ impl<A: 'static + Send> ScanBuilder<A> {
     }
 }
 
-/// Whether every required layout lowers to plans with a pipeline implementation.
-///
-/// List layouts lower to a list assembly, which cannot compile before its offsets are read.
-fn supports_layout(layout: &LayoutRef, identity: bool) -> VortexResult<bool> {
-    if !(layout.is::<Flat>()
-        || layout.is::<Chunked>()
-        || layout.is::<Struct>()
-        || layout.is::<Dict>()
-        || layout.is::<Zoned>()
-        || layout.is::<LegacyStats>())
-    {
-        return Ok(false);
-    }
-    // An identity projection cannot use zone statistics. Leave their layouts uninitialized.
-    if identity && (layout.is::<Zoned>() || layout.is::<LegacyStats>()) {
-        return match layout.slot(0)? {
-            Some(data) => supports_layout(&data, identity),
-            None => Ok(false),
-        };
-    }
-    for child in layout.children()? {
-        if !supports_layout(&child, identity)? {
-            return Ok(false);
-        }
-    }
-    Ok(true)
-}
-
 /// A scan planned over its file, ready to run its splits.
 struct PreparedScan<A: 'static + Send> {
     session: VortexSession,
@@ -284,10 +273,6 @@ impl<A: 'static + Send> PreparedScan<A> {
     /// fixed-size row chunks.
     fn try_new(builder: ScanBuilder<A>) -> VortexResult<Self> {
         let file = builder.file;
-        vortex_ensure!(
-            supports_layout(&file.layout, builder.projection.is_root())?,
-            "V2 scans do not support this file's layout"
-        );
         let root = lower(&file.layout)?;
         let row_count = root.row_count();
         // An identity projection needs no rewrites. Keep the lowered children lazy, including
@@ -326,25 +311,84 @@ impl<A: 'static + Send> PreparedScan<A> {
         })
     }
 
-    /// The splits with selected rows, each ready to be admitted to a planning run.
-    fn split_plans(&self) -> Vec<SplitPlan> {
-        self.splits
-            .iter()
-            .filter_map(|rows| {
-                let row_mask = self.selection.row_mask(rows);
-                let mask = row_mask.mask();
-                // Only the span from the first selected row to the last is planned.
-                let span = mask.first()?..mask.last()? + 1;
+    /// The rows each planner projects, as the pipeline splits that produce them, in row order.
+    ///
+    /// A fully selected chunk, or one selected in more than [`MAX_RUNS`] runs, is one split of
+    /// its own planner. Otherwise each selected run joins the planner before it, even across
+    /// chunk boundaries, while the two read a stored segment in common, so no stored segment is
+    /// read or decoded by two planners. Within a planner, a run extends the split before it when
+    /// both read exactly the same segments: every row between them then lies in those segments'
+    /// chunks, so the split visits no chunk the selection skips.
+    ///
+    /// A column's segments hold contiguous rows, so a run can only share a segment with an
+    /// earlier run of its planner if it shares one with the run just before it.
+    fn split_rows(&self) -> VortexResult<Vec<Vec<Range<u64>>>> {
+        let mut planners: Vec<Vec<Range<u64>>> = Vec::new();
+        // The segments the last selected run reads, or none once its planner is closed.
+        let mut previous = Vec::new();
+        for rows in &self.splits {
+            let row_mask = self.selection.row_mask(rows);
+            let mask = row_mask.mask();
+            let slices = match mask.slices() {
+                AllOr::None => continue,
+                AllOr::Some(slices) if slices.len() <= MAX_RUNS => slices,
+                AllOr::All | AllOr::Some(_) => {
+                    let span = mask.first().unwrap_or(0)..mask.last().map_or(0, |last| last + 1);
+                    let split = rows.start + span.start as u64..rows.start + span.end as u64;
+                    planners.push(vec![split]);
+                    previous.clear();
+                    continue;
+                }
+            };
+            for &(start, end) in slices {
+                let run = rows.start + start as u64..rows.start + end as u64;
+                let mut segments = Vec::new();
+                self.plans.projection.reach(
+                    run.clone(),
+                    &Reach::Offset(0),
+                    &mut |segment, _| segments.push(segment),
+                )?;
+                segments.sort_unstable();
+                segments.dedup();
+                match planners.last_mut() {
+                    Some(splits) if segments == previous && !segments.is_empty() => {
+                        if let Some(split) = splits.last_mut() {
+                            split.end = run.end;
+                        }
+                    }
+                    Some(splits) if shares_any(&previous, &segments) => splits.push(run),
+                    _ => planners.push(vec![run]),
+                }
+                previous = segments;
+            }
+        }
+        Ok(planners)
+    }
+
+    /// The planners with selected rows, each ready to be admitted to a planning run.
+    fn split_plans(&self) -> VortexResult<Vec<SplitPlan>> {
+        Ok(self
+            .split_rows()?
+            .into_iter()
+            .filter_map(|ranges| {
+                let rows = ranges.first()?.start..ranges.last()?.end;
+                let splits = ranges
+                    .into_iter()
+                    .map(|rows| Split {
+                        mask: self.selection.row_mask(&rows).mask().clone(),
+                        rows,
+                    })
+                    .collect();
                 let scope = WorkScope {
                     file_ordinal: 0,
-                    rows: rows.start + span.start as u64..rows.start + span.end as u64,
+                    rows,
                 };
                 Some(SplitPlan {
-                    root: plan_projection(self.plans.clone(), scope.clone(), mask.slice(span)),
+                    root: plan_projection(self.plans.clone(), scope.clone(), splits),
                     scope,
                 })
             })
-            .collect()
+            .collect())
     }
 
     /// Runs every split as a task on the session's runtime and yields their mapped batches.
@@ -354,7 +398,7 @@ impl<A: 'static + Send> PreparedScan<A> {
     fn execute_stream(self) -> VortexResult<BoxStream<'static, VortexResult<A>>> {
         let concurrency = self.concurrency * get_available_parallelism().unwrap_or(1);
         let handle = self.session.handle();
-        let split_plans = self.split_plans();
+        let split_plans = self.split_plans()?;
         let io = self.io;
         let map_fn = self.map_fn;
         // Spawned as the buffer pulls them, so at most `concurrency` splits read at once.

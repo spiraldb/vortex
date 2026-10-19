@@ -26,12 +26,20 @@ tokio = { workspace = true, features = ["full"] }
 url = { workspace = true }
 vortex-bench = { workspace = true }
 
+[dev-dependencies]
+divan = { workspace = true }
+vortex = { workspace = true }
+
 [features]
 lance = ["dep:lance-bench"]
 
 [[bin]]
 name = "random-access-bench"
 test = false
+
+[[bench]]
+name = "v2_take"
+harness = false
 
 [lints]
 workspace = true

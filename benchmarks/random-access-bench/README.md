@@ -22,10 +22,23 @@ untimed warm-up, then reuses the open file handle. Reopen mode includes file ope
 work in each timed iteration. CI drives the full matrix via
 [`scripts/random-access-split.py`](../../scripts/random-access-split.py).
 
+Vortex measurements use the planner-driven V2 scan builder.
+
 ## Running locally
 
 ```bash
 cargo run -p random-access-bench --profile release_debug --features lance
+```
+
+## Micro benchmarks
+
+The `v2_take` divan benchmark runs each Vortex query with the default and V2 scans over the
+files in the page cache, plus the per-scan cost of a V2 scan that selects no rows. Write the
+files first:
+
+```bash
+cargo run -p random-access-bench --profile release_debug -- --prepare-data --formats vortex
+cargo bench -p random-access-bench --bench v2_take
 ```
 
 ## Running against S3

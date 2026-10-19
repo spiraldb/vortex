@@ -9055,6 +9055,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "codspeed-divan-compat",
  "indicatif",
  "lance-bench",
  "mimalloc",
@@ -9063,6 +9064,7 @@ dependencies = [
  "tabled",
  "tokio",
  "url",
+ "vortex",
  "vortex-bench",
 ]
 
