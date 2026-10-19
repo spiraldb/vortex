@@ -34,15 +34,41 @@ use crate::segments::SegmentFuture;
 use crate::segments::SegmentId;
 use crate::segments::SegmentSource;
 
-/// Byte ranges of a file's segments, keyed by `(offset, length)`, back to their segment ids.
-pub(super) type SegmentRanges = Arc<HashMap<(u64, usize), SegmentId>>;
+/// Finds a file's segment by its byte range, to answer a range request with the segment.
+#[derive(Clone)]
+pub(super) enum SegmentRanges {
+    /// Every location, indexed by segment id and in offset order, as writers lay segments out.
+    /// Searched in place, so a scan builds nothing per segment.
+    Sorted(Arc<[SegmentLocation]>),
+    /// Segment ids keyed by `(offset, length)`, for locations in any other order.
+    Keyed(Arc<HashMap<(u64, usize), SegmentId>>),
+}
 
-pub(super) fn segment_ranges(locations: &[SegmentLocation]) -> SegmentRanges {
-    let ranges = locations.iter().enumerate().map(|(id, location)| {
-        let id = SegmentId::from(u32::try_from(id).unwrap_or(u32::MAX));
-        ((location.offset, location.length as usize), id)
-    });
-    Arc::new(ranges.collect())
+impl SegmentRanges {
+    pub(super) fn new(locations: Arc<[SegmentLocation]>) -> Self {
+        if locations.is_sorted_by_key(|location| location.offset) {
+            return Self::Sorted(locations);
+        }
+        let ranges = locations.iter().enumerate().map(|(id, location)| {
+            let id = SegmentId::from(u32::try_from(id).unwrap_or(u32::MAX));
+            ((location.offset, location.length as usize), id)
+        });
+        Self::Keyed(Arc::new(ranges.collect()))
+    }
+
+    fn find(&self, offset: u64, len: usize) -> Option<SegmentId> {
+        match self {
+            Self::Sorted(locations) => {
+                let first = locations.partition_point(|location| location.offset < offset);
+                let index = locations[first..]
+                    .iter()
+                    .take_while(|location| location.offset == offset)
+                    .position(|location| location.length as usize == len)?;
+                u32::try_from(first + index).ok().map(SegmentId::from)
+            }
+            Self::Keyed(ranges) => ranges.get(&(offset, len)).copied(),
+        }
+    }
 }
 
 /// Serves splits from any [`SegmentSource`], by segment id.
@@ -61,7 +87,7 @@ impl IoService for SegmentScanIo {
     fn session(&self) -> Arc<dyn IoSource> {
         Arc::new(SegmentIoSource::new(
             Arc::clone(&self.segments),
-            Arc::clone(&self.ranges),
+            self.ranges.clone(),
         ))
     }
 }
@@ -114,9 +140,9 @@ impl IoSource for SegmentIoSource {
                     request.target
                 );
             };
-            let segment = *self
+            let segment = self
                 .ranges
-                .get(&(offset, len))
+                .find(offset, len)
                 .ok_or_else(|| vortex_err!("No segment at bytes {offset}+{len}"))?;
             if request.intent == IoIntent::Announce {
                 self.announced
@@ -247,7 +273,7 @@ mod tests {
     use vortex_io::request::IoTarget;
 
     use super::SegmentIoSource;
-    use super::segment_ranges;
+    use super::SegmentRanges;
     use crate::scan::execution::SegmentLocation;
     use crate::segments::SegmentFuture;
     use crate::segments::SegmentId;
@@ -262,6 +288,29 @@ mod tests {
             self.0.fetch_add(1, Ordering::Relaxed);
             let bytes = ByteBuffer::from(vec![u8::try_from(*id).unwrap_or(u8::MAX); 4]);
             future::ready(Ok(BufferHandle::new_host(bytes))).boxed()
+        }
+    }
+
+    fn location(offset: u64, length: u32) -> SegmentLocation {
+        SegmentLocation {
+            offset,
+            length,
+            alignment: Alignment::none(),
+        }
+    }
+
+    /// Ranges are found by search when locations are in offset order, where a zero-length
+    /// segment can share its offset with the next, and by key otherwise.
+    #[test]
+    fn segment_ranges_find_each_segment() {
+        let sorted = SegmentRanges::new([location(0, 4), location(4, 0), location(4, 8)].into());
+        assert!(matches!(sorted, SegmentRanges::Sorted(_)));
+        let unsorted = SegmentRanges::new([location(4, 0), location(4, 8), location(0, 4)].into());
+        assert!(matches!(unsorted, SegmentRanges::Keyed(_)));
+        for (ranges, ids) in [(sorted, [0, 1, 2]), (unsorted, [2, 0, 1])] {
+            let found = [(0, 4), (4, 0), (4, 8)].map(|(offset, len)| ranges.find(offset, len));
+            assert_eq!(found, ids.map(|id| Some(SegmentId::from(id))));
+            assert_eq!(ranges.find(4, 4), None);
         }
     }
 
@@ -301,7 +350,7 @@ mod tests {
             length: 4,
             alignment: Alignment::none(),
         });
-        let io = SegmentIoSource::new(segments, segment_ranges(&locations));
+        let io = SegmentIoSource::new(segments, SegmentRanges::new(locations.into()));
         let mut pending = request(IoIntent::Fetch, 1);
         pending.target = IoTarget::range(4, 4);
         io.submit(IoOwnerId(0), vec![pending, request(IoIntent::Fetch, 0)])?;
@@ -334,7 +383,10 @@ mod tests {
             length: 4,
             alignment: Alignment::none(),
         };
-        let io = SegmentIoSource::new(Arc::clone(&segments) as _, segment_ranges(&[location]));
+        let io = SegmentIoSource::new(
+            Arc::clone(&segments) as _,
+            SegmentRanges::new([location].into()),
+        );
 
         io.submit(IoOwnerId(0), vec![request(IoIntent::Prefetch, 0)])?;
         assert_eq!(segments.0.load(Ordering::Relaxed), 1);
@@ -362,7 +414,10 @@ mod tests {
             length: 4,
             alignment: Alignment::none(),
         };
-        let io = SegmentIoSource::new(Arc::clone(&segments) as _, segment_ranges(&[location]));
+        let io = SegmentIoSource::new(
+            Arc::clone(&segments) as _,
+            SegmentRanges::new([location].into()),
+        );
         io.submit(
             IoOwnerId(0),
             vec![

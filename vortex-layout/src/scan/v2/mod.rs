@@ -58,8 +58,8 @@ use crate::scan::arrow::to_record_batch;
 use crate::scan::execution::ScanPlans;
 pub use crate::scan::execution::SegmentLocation;
 use crate::scan::execution::plan_projection;
+use crate::scan::v2::io::SegmentRanges;
 use crate::scan::v2::io::SegmentScanIo;
-use crate::scan::v2::io::segment_ranges;
 use crate::scan::v2::split::SplitPlan;
 use crate::segments::SegmentId;
 use crate::segments::SegmentSource;
@@ -291,7 +291,7 @@ impl<A: 'static + Send> PreparedScan<A> {
         let splits = row_chunks(builder.row_range.unwrap_or(0..row_count), chunk_rows);
         let io = Arc::new(SegmentScanIo::new(
             file.segments,
-            segment_ranges(&file.locations),
+            SegmentRanges::new(Arc::clone(&file.locations)),
         ));
         Ok(Self {
             session: builder.session.clone(),
