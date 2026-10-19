@@ -105,6 +105,9 @@ fn gather<T: Number + NativePType>(
     positions: &[usize],
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<Buffer<T>> {
+    if data.has_index() {
+        return gather_indexed(data, positions, ctx);
+    }
     let block_ids = positions
         .iter()
         .map(|&position| {
@@ -184,6 +187,66 @@ fn gather<T: Number + NativePType>(
                 .map_err(|_| vortex_err!("Pco block {block} was not decoded"))?;
         }
         out.push(decoded[decoded_starts[cursor] + position - value_starts[cursor]]);
+    }
+    Ok(out.freeze())
+}
+
+/// Scatter each decoded run into the result immediately, so checkpoint reads reuse scratch
+/// space instead of retaining and repeatedly growing a buffer of all touched blocks.
+fn gather_indexed<T: Number + NativePType>(
+    data: &PcoData,
+    positions: &[usize],
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<Buffer<T>> {
+    let mut ordered = positions
+        .iter()
+        .copied()
+        .enumerate()
+        .filter(|&(_, position)| position != NO_VALUE)
+        .collect::<Vec<_>>();
+    ordered.sort_unstable_by_key(|&(_, position)| position);
+    let mut out = BufferMut::<T>::with_capacity_in(positions.len(), ctx.allocator().clone());
+    out.push_n(T::default(), positions.len());
+    let mut decoder = BlockDecoder::<T>::new(data, true)?;
+    let mut decoded = BufferMut::<T>::empty();
+    let mut start = 0;
+    while start < ordered.len() {
+        let first = ordered[start].1;
+        let page = data.page_of(first);
+        let entry = &data.entries[page];
+        let first_block = (first - entry.values.start) / entry.block_len;
+        let mut last_block = first_block;
+        let mut last = first;
+        let mut end = start + 1;
+        while end < ordered.len() {
+            let next = ordered[end].1;
+            if next >= entry.values.end {
+                break;
+            }
+            let block = (next - entry.values.start) / entry.block_len;
+            if block != last_block {
+                let block_end = entry.values.start
+                    + entry.block_values(last_block..last_block + 1).end;
+                if block != last_block + 1 || last + FULL_BATCH_N < block_end {
+                    break;
+                }
+            }
+            last_block = block;
+            last = next;
+            end += 1;
+        }
+        let local_start = first_block * entry.block_len;
+        decoded.clear();
+        decoder.append_page_values(
+            page,
+            local_start..last + 1 - entry.values.start,
+            &mut decoded,
+        )?;
+        let value_start = entry.values.start + local_start;
+        for &(output, position) in &ordered[start..end] {
+            out[output] = decoded[position - value_start];
+        }
+        start = end;
     }
     Ok(out.freeze())
 }

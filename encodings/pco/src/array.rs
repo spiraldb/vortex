@@ -52,6 +52,7 @@ use vortex_array::vtable::VTable;
 use vortex_array::vtable::ValidityVTable;
 use vortex_array::vtable::child_to_validity;
 use vortex_array::vtable::validity_to_child;
+use vortex_buffer::Alignment;
 use vortex_buffer::BufferMut;
 use vortex_buffer::ByteBuffer;
 use vortex_error::VortexError;
@@ -674,6 +675,15 @@ fn parse_checkpoint_tables(
         .collect()
 }
 
+/// At most one scan-sized decoded window is retained per v2 array, shared by its slices.
+#[derive(Debug)]
+struct DecodedWindow {
+    values: Range<usize>,
+    buffer: ByteBuffer,
+}
+
+const MAX_DECODED_WINDOW_BYTES: usize = 256 * 1024;
+
 #[derive(Clone, Debug)]
 /// Encoding-specific data for a [`PcoArray`].
 pub struct PcoData {
@@ -685,6 +695,7 @@ pub struct PcoData {
     /// Each chunk's parsed checkpoint table, empty without an index.
     tables: Arc<[Option<CheckpointTable>]>,
     decoders: Arc<DecoderCache>,
+    decoded_window: Option<Arc<Mutex<Option<DecodedWindow>>>>,
     ptype: PType,
     unsliced_n_rows: usize,
     slice_start: usize,
@@ -793,6 +804,7 @@ impl PcoData {
             pages,
             metadata,
             index: None,
+            decoded_window: None,
             entries: entries.into(),
             tables: Arc::new([]),
             ptype,
@@ -836,6 +848,7 @@ impl PcoData {
             chunk_metas,
             pages,
             metadata,
+            decoded_window: index.as_ref().map(|_| Arc::default()),
             index,
             entries: entries.into(),
             tables: tables.into(),
@@ -934,6 +947,7 @@ impl PcoData {
     pub fn without_index(&self) -> Self {
         let mut data = self.clone();
         data.index = None;
+        data.decoded_window = None;
         data.entries = build_page_index(&data.metadata, None)
             .unwrap_or_default()
             .0
@@ -948,6 +962,7 @@ impl PcoData {
         self.tables = parse_checkpoint_tables(self.index.as_ref(), &n_records)?.into();
         self.entries = entries.into();
         self.decoders = Arc::new(DecoderCache::new(self.chunk_metas.len()));
+        self.decoded_window = self.index.as_ref().map(|_| Arc::default());
         Ok(())
     }
 
@@ -1048,17 +1063,46 @@ impl PcoData {
             self.n_values(),
             values.end
         );
-        let number_type = number_type_from_ptype(self.ptype);
-        let values_byte_buffer = match_number_enum!(
-            number_type,
-            NumberType<T> => {
-                let mut out = BufferMut::<T>::with_capacity_in(values.len(), ctx.allocator().clone());
-                // Keep chunk decompressors for later reads of slices, not of whole arrays.
-                let retain = values.len() < self.n_values();
-                BlockDecoder::<T>::new(self, retain)?.decode_values(values, &mut out)?;
-                out.freeze().into_byte_buffer()
+        // Conjuncts commonly read the same scan window independently. Retain only one small
+        // slice, so a full-array scan never leaves an unbounded decompressed copy behind.
+        let cache = self.decoded_window.as_ref().filter(|_| {
+            values.len() < self.n_values()
+                && values.len() <= MAX_DECODED_WINDOW_BYTES / self.ptype.byte_width()
+        });
+        let cached = cache.and_then(|cache| {
+            cache
+                .lock()
+                .as_ref()
+                .filter(|window| window.values == values)
+                .map(|window| window.buffer.clone())
+        });
+        let values_byte_buffer = if let Some(buffer) = cached {
+            buffer
+        } else {
+            let number_type = number_type_from_ptype(self.ptype);
+            let (buffer, fits_cache) = match_number_enum!(
+                number_type,
+                NumberType<T> => {
+                    let mut out = BufferMut::<T>::with_capacity_in(values.len(), ctx.allocator().clone());
+                    // Keep chunk decompressors for later reads of slices, not of whole arrays.
+                    let retain = values.len() < self.n_values();
+                    BlockDecoder::<T>::new(self, retain)?.decode_values(values.clone(), &mut out)?;
+                    // Initial allocations include fixed alignment padding; reject buffers
+                    // that grew to hold extra decoded values, not that padding.
+                    let capacity_limit = MAX_DECODED_WINDOW_BYTES
+                        + Alignment::DEFAULT_ALIGNMENT.as_usize();
+                    let fits_cache = out.capacity() <= capacity_limit / size_of::<T>();
+                    (out.freeze().into_byte_buffer(), fits_cache)
+                }
+            );
+            if let Some(cache) = cache.filter(|_| fits_cache) {
+                *cache.lock() = Some(DecodedWindow {
+                    values,
+                    buffer: buffer.clone(),
+                });
             }
-        );
+            buffer
+        };
         Ok(PrimitiveArray::from_values_byte_buffer(
             values_byte_buffer,
             self.ptype,
@@ -1565,9 +1609,44 @@ mod tests {
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
 
+    use super::MAX_DECODED_WINDOW_BYTES;
     use super::VALUES_PER_CHUNK;
     use crate::Pco;
     use crate::PcoData;
+    use crate::PcoOptions;
+
+    #[test]
+    fn decoded_window_is_bounded_and_reset_on_rederive() -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let values = PrimitiveArray::from_iter(0..65_536u64);
+        let pco = Pco::compress(values.as_view(), &PcoOptions::v2(), &mut ctx)?;
+        let data = pco.data();
+        let cache = data.decoded_window.as_ref().unwrap();
+        let limit = MAX_DECODED_WINDOW_BYTES / size_of::<u64>();
+
+        let whole = data.decompress(&Validity::NonNullable, &mut ctx)?;
+        assert_arrays_eq!(whole, values, &mut ctx);
+        assert!(cache.lock().is_none());
+        let oversized = data._slice(0, limit + 1);
+        let _ = oversized.decompress(&Validity::NonNullable, &mut ctx)?;
+        assert!(cache.lock().is_none());
+        let unaligned = data._slice(1, limit + 1);
+        let _ = unaligned.decompress(&Validity::NonNullable, &mut ctx)?;
+        assert!(cache.lock().is_none());
+
+        let window = data._slice(0, limit);
+        let first = window.decompress(&Validity::NonNullable, &mut ctx)?;
+        let second = window.decompress(&Validity::NonNullable, &mut ctx)?;
+        assert_arrays_eq!(first, second, &mut ctx);
+        assert_eq!(
+            cache.lock().as_ref().unwrap().buffer.len(),
+            MAX_DECODED_WINDOW_BYTES
+        );
+        let mut rebound = data.clone();
+        rebound.rederive()?;
+        assert!(rebound.decoded_window.as_ref().unwrap().lock().is_none());
+        Ok(())
+    }
 
     #[test]
     fn test_slice_nullable() {

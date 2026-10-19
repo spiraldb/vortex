@@ -311,6 +311,28 @@ fn round_trip_and_slices(#[case] nullable: bool) -> VortexResult<()> {
 #[rstest]
 #[case::non_null(false)]
 #[case::nullable(true)]
+fn repeated_slice_decodes_match(#[case] nullable: bool) -> VortexResult<()> {
+    let mut ctx = SESSION.create_execution_ctx();
+    for (seed, (_, array)) in datasets().into_iter().enumerate() {
+        let array = if nullable {
+            with_nulls(array, seed as u64)
+        } else {
+            array
+        };
+        let pco2 = compress(&array, &mut ctx)?;
+        for range in [500..9000, 500..9000, 7000..15_000, 500..9000, 0..N] {
+            let decoded = pco2
+                .slice(range.clone())?
+                .execute::<PrimitiveArray>(&mut ctx)?;
+            assert_arrays_eq!(decoded, array.slice(range)?, &mut ctx);
+        }
+    }
+    Ok(())
+}
+
+#[rstest]
+#[case::non_null(false)]
+#[case::nullable(true)]
 fn scalar_at_matches(#[case] nullable: bool) -> VortexResult<()> {
     let mut ctx = SESSION.create_execution_ctx();
     let mut rng = Rng(11);
@@ -357,15 +379,22 @@ fn take_decodes_touched_blocks(#[case] nullable: bool) -> VortexResult<()> {
         let pco2 = compress(&array, &mut ctx)?;
         let sliced = pco2.slice(500..19_000)?;
         let expected_sliced = array.slice(500..19_000)?;
-        for n in [1, 17, 3000] {
+        for n in [0, 1, 17, 3000] {
             let indices = random_indices(&mut rng, n, sliced.len()).into_array();
             let taken = <Pco as TakeExecute>::take(sliced.as_::<Pco>(), &indices, &mut ctx)?
                 .expect("Pco take kernel applies");
             assert_arrays_eq!(taken, expected_sliced.take(indices.clone())?, &mut ctx);
         }
-        let nullable_indices =
-            PrimitiveArray::from_option_iter([Some(3u64), None, Some(18_000), Some(0)])
-                .into_array();
+        let nullable_indices = PrimitiveArray::from_option_iter([
+            Some(3u64),
+            None,
+            Some(18_000),
+            Some(0),
+            Some(3),
+            Some(524),
+            Some(523),
+        ])
+        .into_array();
         assert_arrays_eq!(
             sliced.take(nullable_indices.clone())?,
             expected_sliced.take(nullable_indices)?,

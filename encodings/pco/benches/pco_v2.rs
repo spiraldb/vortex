@@ -9,6 +9,8 @@
 #![expect(clippy::cast_precision_loss)]
 
 use std::sync::LazyLock;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 
 use divan::Bencher;
 use mimalloc::MiMalloc;
@@ -173,11 +175,45 @@ fn scalar_at(bencher: Bencher, case: &str) {
         });
 }
 
+#[divan::bench(args = ["timestamps/pco-8k", "timestamps/pco2", "prices/pco-8k", "prices/pco2"])]
+fn decompress_repeated_slices(bencher: Bencher, case: &str) {
+    let array = encoded(case);
+    bencher
+        .with_inputs(|| SESSION.create_execution_ctx())
+        .bench_refs(|ctx| {
+            for start in (0..LEN).step_by(32_768) {
+                let slice = array.slice(start..start + 32_768).vortex_expect("slice");
+                for _ in 0..2 {
+                    divan::black_box(
+                        slice
+                            .clone()
+                            .execute::<PrimitiveArray>(ctx)
+                            .vortex_expect("decompress"),
+                    );
+                }
+            }
+        });
+}
+
 #[divan::bench(args = CASES)]
 fn take_100(bencher: Bencher, case: &str) {
+    take(bencher, case, 100);
+}
+
+#[divan::bench(args = ["timestamps/pco2", "prices/pco2"])]
+fn take_10000(bencher: Bencher, case: &str) {
+    take(bencher, case, 10_000);
+}
+
+#[divan::bench(args = ["timestamps/pco2", "prices/pco2"])]
+fn take_100000(bencher: Bencher, case: &str) {
+    take(bencher, case, 100_000);
+}
+
+fn take(bencher: Bencher, case: &str, count: usize) {
     let array = encoded(case);
     let indices =
-        PrimitiveArray::from_iter(indices(100).into_iter().map(|i| i as u64)).into_array();
+        PrimitiveArray::from_iter(indices(count).into_iter().map(|i| i as u64)).into_array();
     bencher
         .with_inputs(|| SESSION.create_execution_ctx())
         .bench_refs(|ctx| {
@@ -192,11 +228,17 @@ fn take_100(bencher: Bencher, case: &str) {
 #[divan::bench(args = CASES)]
 fn filter_clustered_0_1pct(bencher: Bencher, case: &str) {
     let array = encoded(case);
-    let start = LEN / 3;
-    let mask = Mask::from_slices(LEN, vec![(start, start + LEN / 1000)]);
+    let offset = AtomicUsize::new(0);
     bencher
-        .with_inputs(|| SESSION.create_execution_ctx())
-        .bench_refs(|ctx| {
+        .with_inputs(|| {
+            // Keep checkpoint alignment constant without reusing the previous decoded window.
+            let start = LEN / 3 + offset.fetch_xor(65_536, Ordering::Relaxed);
+            (
+                SESSION.create_execution_ctx(),
+                Mask::from_slices(LEN, vec![(start, start + LEN / 1000)]),
+            )
+        })
+        .bench_refs(|(ctx, mask)| {
             array
                 .filter(mask.clone())
                 .vortex_expect("filter")
