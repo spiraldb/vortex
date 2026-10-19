@@ -1628,10 +1628,20 @@ mod tests {
         assert_arrays_eq!(whole, values, &mut ctx);
         assert!(cache.lock().is_none());
         let oversized = data._slice(0, limit + 1);
-        let _ = oversized.decompress(&Validity::NonNullable, &mut ctx)?;
+        let decoded = oversized.decompress(&Validity::NonNullable, &mut ctx)?;
+        assert_arrays_eq!(
+            decoded,
+            values.clone().into_array().slice(0..limit + 1)?,
+            &mut ctx
+        );
         assert!(cache.lock().is_none());
         let unaligned = data._slice(1, limit + 1);
-        let _ = unaligned.decompress(&Validity::NonNullable, &mut ctx)?;
+        let decoded = unaligned.decompress(&Validity::NonNullable, &mut ctx)?;
+        assert_arrays_eq!(
+            decoded,
+            values.clone().into_array().slice(1..limit + 1)?,
+            &mut ctx
+        );
         assert!(cache.lock().is_none());
 
         let window = data._slice(0, limit);

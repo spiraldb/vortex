@@ -225,8 +225,8 @@ fn gather_indexed<T: Number + NativePType>(
             }
             let block = (next - entry.values.start) / entry.block_len;
             if block != last_block {
-                let block_end = entry.values.start
-                    + entry.block_values(last_block..last_block + 1).end;
+                let block_end =
+                    entry.values.start + entry.block_values(last_block..last_block + 1).end;
                 if block != last_block + 1 || last + FULL_BATCH_N < block_end {
                     break;
                 }
