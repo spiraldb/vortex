@@ -67,9 +67,10 @@ use crate::scalar::Scalar;
 /// | `is_constant`, `all_non_distinct` | equality | each value of `E` has exactly one storage value, so equal values have equal storage | `Date`, `Time`, `Timestamp`, `Uuid` | JSON text (`{"a":1}` and `{ "a": 1 }` are equal), a case-insensitive string type |
 /// | `sum`, `mean` | addition | adding the storage of two values gives the storage of their sum | a duration stored as an integer count | `Timestamp`, `Date`, `Uuid` |
 /// | `nan_count`, `all_nan`, `all_non_nan` | NaN detection | a NaN storage value is a NaN value of `E` | a float-backed measurement type | a type that stores a sentinel in its float storage |
-/// | `count`, `null_count`, `all_null`, `all_non_null`, `uncompressed_size_in_bytes` | none: validity or storage bytes only | always | any `E` | |
 ///
 /// If an aggregate is not in the table, work out which operations it uses and check each one.
+/// Aggregates that already accept any extension dtype, such as `count`, `null_count`,
+/// `all_null`, `all_non_null` and `uncompressed_size_in_bytes`, need no pushdown.
 ///
 /// # Behavior
 ///
