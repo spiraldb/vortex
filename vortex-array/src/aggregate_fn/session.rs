@@ -13,7 +13,7 @@ use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnPluginRef;
 use crate::aggregate_fn::AggregateFnRef;
 use crate::aggregate_fn::AggregateFnVTable;
-use crate::aggregate_fn::ExtensionAggregate;
+use crate::aggregate_fn::StoragePushdown;
 use crate::aggregate_fn::fns::all_nan::AllNan;
 use crate::aggregate_fn::fns::all_non_distinct::AllNonDistinct;
 use crate::aggregate_fn::fns::all_non_nan::AllNonNan;
@@ -121,8 +121,8 @@ impl Default for AggregateFnSession {
         this.register(SumV2);
         this.register(UncompressedSizeInBytes);
 
-        // Temporal extension types order like their integer storage, so order-based aggregates
-        // run on the storage.
+        // Temporal extension types compare like their integer storage, so comparison-based
+        // aggregates are pushed down into it.
         this.register_storage_ordered(Date);
         this.register_storage_ordered(Time);
         this.register_storage_ordered(Timestamp);
@@ -164,11 +164,14 @@ impl AggregateFnSession {
         self.registry.insert(id, pluginref);
     }
 
-    /// Register the order-based aggregates for an extension type `ext` whose values order like
-    /// its storage, computing them over the storage through [`ExtensionAggregate`].
+    /// Push the comparison-based aggregates `is_sorted` and `min_max` down into the storage of
+    /// extension type `ext`, through [`StoragePushdown`].
+    ///
+    /// Only call this when comparing two values of `ext` is the same as comparing their storage,
+    /// as for the temporal types. See [`StoragePushdown`] for how to check.
     pub fn register_storage_ordered<E: ExtVTable>(&self, ext: E) {
-        self.register(ExtensionAggregate::new(IsSorted, ext.clone()));
-        self.register(ExtensionAggregate::new(MinMax, ext));
+        self.register(StoragePushdown::new(IsSorted, ext.clone()));
+        self.register(StoragePushdown::new(MinMax, ext));
     }
 
     /// The default per-chunk zone statistics for a column of `input_dtype`, collected from every
