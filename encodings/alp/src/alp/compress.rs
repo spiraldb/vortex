@@ -150,7 +150,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::f32::consts as f32_consts;
+    use std::f32::consts::E as E_F32;
+    use std::f32::consts::PI as PI_F32;
     use std::f64::consts::E;
     use std::f64::consts::PI;
     use std::sync::LazyLock;
@@ -563,8 +564,8 @@ mod tests {
     fn test_large_f32_array_with_patches() {
         let size = 5_000;
         let mut values = vec![1.5f32; size];
-        values[100] = f32_consts::PI;
-        values[1500] = f32_consts::E;
+        values[100] = PI_F32;
+        values[1500] = E_F32;
         values[3000] = f32::NEG_INFINITY;
         values[4500] = f32::INFINITY;
 
