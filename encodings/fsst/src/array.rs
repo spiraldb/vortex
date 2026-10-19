@@ -26,6 +26,7 @@ use vortex_array::EqMode;
 use vortex_array::ExecutionCtx;
 use vortex_array::ExecutionResult;
 use vortex_array::TypedArrayRef;
+use vortex_array::VortexSessionExecute;
 use vortex_array::array_slots;
 use vortex_array::arrays::Primitive;
 use vortex_array::arrays::VarBin;
@@ -231,12 +232,13 @@ impl VTable for FSST {
         metadata: &[u8],
         buffers: &[BufferHandle],
         children: &dyn ArrayChildren,
-        _session: &VortexSession,
+        session: &VortexSession,
     ) -> VortexResult<ArrayParts<Self>> {
         let metadata = FSSTMetadata::decode(metadata)?;
         let symbols = Buffer::<Symbol>::from_byte_buffer(buffers[0].clone().try_to_host_sync()?);
         let symbol_lengths = Buffer::<u8>::from_byte_buffer(buffers[1].clone().try_to_host_sync()?);
 
+        let mut ctx = session.create_execution_ctx();
         if buffers.len() == 2 {
             return Self::deserialize_legacy(
                 self,
@@ -246,6 +248,7 @@ impl VTable for FSST {
                 &symbols,
                 &symbol_lengths,
                 children,
+                &mut ctx,
             );
         }
 
@@ -282,13 +285,13 @@ impl VTable for FSST {
             FSSTData::validate_parts(
                 symbols.as_slice(),
                 symbol_lengths.as_slice(),
-                &codes_bytes,
                 &codes_offsets,
                 dtype.nullability(),
                 &uncompressed_lengths,
                 dtype,
                 len,
             )?;
+            FSSTData::validate_codes_bounds(&codes_bytes, &codes_offsets, &mut ctx)?;
             let slots = FSSTSlots {
                 uncompressed_lengths,
                 codes_offsets,
@@ -606,6 +609,7 @@ impl FSST {
         symbol_lengths: Buffer<u8>,
         codes: VarBinArray,
         uncompressed_lengths: ArrayRef,
+        ctx: &mut ExecutionCtx,
     ) -> VortexResult<FSSTArray> {
         let len = codes.len();
         FSSTData::validate_parts_from_codes(
@@ -615,6 +619,7 @@ impl FSST {
             &uncompressed_lengths,
             &dtype,
             len,
+            ctx,
         )?;
         let slots = FSSTData::make_slots(&codes, &uncompressed_lengths);
         let codes_bytes = codes.bytes_handle().clone();
@@ -627,6 +632,7 @@ impl FSST {
         symbol_table: Arc<FSSTSymbolTable>,
         codes: VarBinArray,
         uncompressed_lengths: ArrayRef,
+        ctx: &mut ExecutionCtx,
     ) -> VortexResult<FSSTArray> {
         let len = codes.len();
         FSSTData::validate_parts_from_codes(
@@ -636,6 +642,7 @@ impl FSST {
             &uncompressed_lengths,
             &dtype,
             len,
+            ctx,
         )?;
         let slots = FSSTData::make_slots(&codes, &uncompressed_lengths);
         let codes_bytes = codes.bytes_handle().clone();
@@ -656,6 +663,7 @@ impl FSST {
         symbols: &Buffer<Symbol>,
         symbol_lengths: &Buffer<u8>,
         children: &dyn ArrayChildren,
+        ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrayParts<Self>> {
         if children.len() != 2 {
             vortex_bail!(InvalidArgument: "Expected 2 children, got {}", children.len());
@@ -686,6 +694,7 @@ impl FSST {
             &uncompressed_lengths,
             dtype,
             len,
+            ctx,
         )?;
         let slots = FSSTData::make_slots(&codes, &uncompressed_lengths);
         let codes_bytes = codes.bytes_handle().clone();
@@ -773,6 +782,10 @@ impl FSSTData {
         }
     }
 
+    /// Check the structure of the array without executing any of its children.
+    ///
+    /// The bounds of the codes offsets are checked by the constructors and on deserialization,
+    /// which have an execution context.
     pub fn validate(
         &self,
         dtype: &DType,
@@ -783,7 +796,6 @@ impl FSSTData {
         Self::validate_parts(
             self.symbol_table.symbols(),
             self.symbol_table.symbol_lengths(),
-            &self.codes_bytes,
             fsst_slots.codes_offsets,
             dtype.nullability(),
             fsst_slots.uncompressed_lengths,
@@ -793,11 +805,9 @@ impl FSSTData {
     }
 
     /// Validate using the decomposed components (codes bytes + offsets + nullability).
-    #[expect(clippy::too_many_arguments)]
     fn validate_parts(
         symbols: &[Symbol],
         symbol_lengths: &[u8],
-        codes_bytes: &BufferHandle,
         codes_offsets: &ArrayRef,
         codes_nullability: Nullability,
         uncompressed_lengths: &ArrayRef,
@@ -842,17 +852,29 @@ impl FSSTData {
             vortex_bail!(InvalidArgument: "codes nullability must match outer dtype nullability");
         }
 
-        // Validate that last offset doesn't exceed bytes length (when host-resident). A
-        // compressed offsets child would have to be decoded to read its last offset, so it is
-        // checked by the decode plan instead, once `execute` has made it primitive.
+        Ok(())
+    }
+
+    /// Check that the last codes offset doesn't exceed the codes bytes length.
+    ///
+    /// Only host-resident offsets are checked. A compressed offsets child would have to be
+    /// decoded to read its last offset, so it is checked by the decode plan instead, once
+    /// `execute` has made it primitive.
+    fn validate_codes_bounds(
+        codes_bytes: &BufferHandle,
+        codes_offsets: &ArrayRef,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<()> {
         if codes_bytes.is_on_host()
             && codes_offsets.is_host()
-            && let Some(codes_offsets) = codes_offsets.as_opt::<Primitive>()
+            && codes_offsets.is::<Primitive>()
             && !codes_offsets.is_empty()
         {
-            let last_offset: usize = match_each_integer_ptype!(codes_offsets.ptype(), |O| {
-                codes_offsets.as_slice::<O>()[codes_offsets.len() - 1].as_()
-            });
+            let last_offset: usize = (&codes_offsets
+                .execute_scalar(codes_offsets.len() - 1, ctx)
+                .vortex_expect("offsets must support scalar_at"))
+                .try_into()
+                .vortex_expect("Failed to convert offset to usize");
             vortex_ensure!(
                 last_offset <= codes_bytes.len(),
                 InvalidArgument: "Last codes offset {} exceeds codes bytes length {}",
@@ -898,17 +920,18 @@ impl FSSTData {
         uncompressed_lengths: &ArrayRef,
         dtype: &DType,
         len: usize,
+        ctx: &mut ExecutionCtx,
     ) -> VortexResult<()> {
         Self::validate_parts(
             symbols,
             symbol_lengths,
-            codes.bytes_handle(),
             codes.offsets(),
             codes.dtype().nullability(),
             uncompressed_lengths,
             dtype,
             len,
-        )
+        )?;
+        Self::validate_codes_bounds(codes.bytes_handle(), codes.offsets(), ctx)
     }
 
     pub(crate) unsafe fn new_unchecked_with_symbol_table(

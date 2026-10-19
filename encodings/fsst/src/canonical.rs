@@ -364,6 +364,7 @@ mod tests {
             encoded.symbol_table(),
             codes,
             encoded.uncompressed_lengths().slice(1..3)?,
+            &mut ctx,
         )?;
         let mut builder =
             VarBinViewBuilder::with_capacity_in(input.dtype().clone(), 2, ctx.allocator().clone());
@@ -388,6 +389,7 @@ mod tests {
             encoded.symbol_table(),
             encoded.codes(),
             PrimitiveArray::from_iter([4i32]).into_array(),
+            &mut ctx,
         )?;
 
         assert!(fsst_decode_bytes(invalid.as_view(), &mut ctx).is_err());
@@ -411,6 +413,7 @@ mod tests {
                 encoded.symbol_table(),
                 encoded.codes(),
                 lengths,
+                &mut ctx,
             )?;
             assert!(fsst_decode_bytes(invalid.as_view(), &mut ctx).is_err());
         }

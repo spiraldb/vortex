@@ -326,6 +326,7 @@ mod setup {
             ),
             compressed_codes,
             fsst.uncompressed_lengths().clone(),
+            &mut ctx,
         )
         .unwrap();
 
