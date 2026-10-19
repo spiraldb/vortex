@@ -264,7 +264,20 @@ mod tests {
     use crate::matcher::Matcher;
     use crate::optimizer::rules::ArrayParentReduceRule;
     use crate::scalar::Scalar;
-    use crate::scalar_fn::fns::literal::Literal;
+    use crate::scalar_fn::fns::binary::Binary;
+    use crate::scalar_fn::fns::operators::Operator;
+
+    /// A fill of `40 + 2` that is not a [`ConstantArray`] until it executes.
+    fn lazy_fill_42(len: usize) -> VortexResult<ArrayRef> {
+        Ok(ScalarFnArray::try_new(
+            Binary.bind(Operator::Add),
+            vec![
+                ConstantArray::new(40i32, len).into_array(),
+                ConstantArray::new(2i32, len).into_array(),
+            ],
+        )?
+        .into_array())
+    }
 
     #[test]
     fn dtype() {
@@ -306,15 +319,10 @@ mod tests {
     }
 
     #[test]
-    fn evaluate_lazy_literal_fill() -> VortexResult<()> {
+    fn evaluate_lazy_constant_fill() -> VortexResult<()> {
         let mut ctx = array_session().create_execution_ctx();
         let input = PrimitiveArray::from_option_iter([Some(1i32), None, Some(3)]).into_array();
-        let fill = ScalarFnArray::try_new_with_len(
-            Literal.bind(Scalar::from(42i32)),
-            vec![],
-            input.len(),
-        )?
-        .into_array();
+        let fill = lazy_fill_42(input.len())?;
         assert!(fill.as_constant().is_none());
 
         let result = FillNull::try_new(input, fill)?
@@ -340,12 +348,7 @@ mod tests {
             DType::Primitive(PType::I32, Nullability::Nullable),
         )?
         .into_array();
-        let fill = ScalarFnArray::try_new_with_len(
-            Literal.bind(Scalar::from(42i32)),
-            vec![],
-            input.len(),
-        )?
-        .into_array();
+        let fill = lazy_fill_42(input.len())?;
 
         let result = FillNull::try_new(input, fill)?
             .into_array()
