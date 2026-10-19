@@ -150,12 +150,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use core::f32;
-    use core::f64;
+    use std::f32::consts as f32_consts;
+    use std::f64::consts::E;
+    use std::f64::consts::PI;
     use std::sync::LazyLock;
 
-    use f64::consts::E;
-    use f64::consts::PI;
     use vortex_array::VortexSessionExecute;
     use vortex_array::assert_arrays_eq;
     use vortex_array::dtype::NativePType;
@@ -564,8 +563,8 @@ mod tests {
     fn test_large_f32_array_with_patches() {
         let size = 5_000;
         let mut values = vec![1.5f32; size];
-        values[100] = f32::consts::PI;
-        values[1500] = f32::consts::E;
+        values[100] = f32_consts::PI;
+        values[1500] = f32_consts::E;
         values[3000] = f32::NEG_INFINITY;
         values[4500] = f32::INFINITY;
 
