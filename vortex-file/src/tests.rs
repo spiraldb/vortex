@@ -1491,8 +1491,6 @@ async fn write_nullable_top_level_struct() -> VortexResult<()> {
         .write(&mut buf, array.to_array_stream())
         .await?;
 
-    // The root struct is nullable and has 2 null rows, so its own null-count entry (keyed by the
-    // root field path) should reflect that, in addition to the leaf `age` field's stats.
     let stats = summary
         .footer()
         .statistics()
@@ -1504,6 +1502,15 @@ async fn write_nullable_top_level_struct() -> VortexResult<()> {
         stat_value(root_stats, Stat::NullCount),
         Precision::exact(ScalarValue::from(2u64))
     );
+    let (age, _) = stats.get_by_path(&field_path!(age)).expect("age entry");
+    assert!(age.is_empty());
+
+    let file = SESSION.open_options().open_buffer(ByteBuffer::from(buf))?;
+    let stats = file
+        .file_stats()
+        .expect("file statistics should be present");
+    let (age, _) = stats.get_by_path(&field_path!(age)).expect("age entry");
+    assert!(age.is_empty());
 
     Ok(())
 }
@@ -2251,18 +2258,18 @@ async fn test_writer_with_statistics() -> VortexResult<()> {
     let summary = writer.finish().await?;
 
     let statistics = summary.footer().statistics().expect("requested statistics");
-    assert_eq!(statistics.stats_sets().len(), 1);
-    let stats = &statistics.stats_sets()[0];
+    assert_eq!(statistics.aggregates().len(), 1);
+    let (stats, _) = statistics.get(0);
     assert_eq!(
-        stats.get(Stat::Min),
+        stat_value(stats, Stat::Min),
         Precision::exact(ScalarValue::from(1u32))
     );
     assert_eq!(
-        stats.get(Stat::Max),
+        stat_value(stats, Stat::Max),
         Precision::exact(ScalarValue::from(5u32))
     );
     assert_eq!(
-        stats.get(Stat::NullCount),
+        stat_value(stats, Stat::NullCount),
         Precision::exact(ScalarValue::from(0u64))
     );
     assert_eq!(summary.row_count(), 5);

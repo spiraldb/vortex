@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use std::future;
+use std::iter;
 use std::sync::Arc;
 
 use futures::StreamExt;
@@ -204,11 +205,16 @@ struct StatsAccumulator {
 }
 
 impl StatsAccumulator {
+    /// An accumulator that records nothing.
+    fn empty() -> Self {
+        Self {
+            aggregates: Vec::new(),
+        }
+    }
+
     fn new(dtype: &DType, stats: Option<&[AggregateFnRef]>) -> Self {
         if !supports_file_stats(dtype) {
-            return Self {
-                aggregates: Vec::new(),
-            };
+            return Self::empty();
         }
 
         // When no explicit list is requested, each leaf picks its own default the way
@@ -334,6 +340,9 @@ fn default_pruning_aggregate_fns(dtype: &DType) -> Vec<AggregateFnRef> {
 /// [`DType::Variant`], are skipped entirely: no entry is emitted for them or anything beneath
 /// them.
 ///
+/// Entries beneath a nullable struct are still emitted, but the writer records no aggregates for
+/// them (see [`StatsNode::Unrecorded`]).
+///
 /// This function is the single source of truth for the number and order of stats entries, used
 /// both when accumulating stats at write time and when reconstructing them from the footer at
 /// read time, so no paths or dtypes need to be persisted in the flatbuffer itself.
@@ -364,6 +373,18 @@ enum StatsNode {
     Leaf(StatsAccumulator),
     /// A dtype that does not support file stats (e.g. [`DType::Variant`]); contributes no entries.
     Skipped,
+    /// A subtree beneath a nullable struct, which contributes `entries` entries that record no
+    /// aggregates.
+    ///
+    /// Struct fields are stored unmasked, so a row where the struct is null holds an unspecified
+    /// value in each child that the child's own validity may report as valid. Stats over those
+    /// children would count that value, e.g. undercount nulls, which can prune a file that
+    /// `is_null(s.a)` matches. Until nulls are propagated from structs into their children, these
+    /// entries are left empty. See <https://github.com/vortex-data/vortex/issues/9205>.
+    ///
+    /// The entries are kept rather than dropped so the footer layout from
+    /// [`postorder_stats_layout`] doesn't depend on whether they're recorded.
+    Unrecorded { entries: usize },
     /// A dtype with addressable children. Currently only built for `DType::Struct`.
     Container {
         /// One child per addressable sub-dtype, in declaration order (one per struct field,
@@ -382,15 +403,25 @@ impl StatsNode {
     fn build(dtype: &DType, stats: Option<&[AggregateFnRef]>) -> Self {
         match dtype.as_struct_fields_opt() {
             Some(struct_fields) => {
+                let nullable = dtype.nullability() == Nullability::Nullable;
                 let children = struct_fields
                     .names()
                     .iter()
                     .zip(struct_fields.fields())
                     .map(|(name, field_dtype)| {
-                        (Field::Name(name.clone()), Self::build(&field_dtype, stats))
+                        let child = if nullable {
+                            Self::Unrecorded {
+                                entries: postorder_stats_layout(&field_dtype).len(),
+                            }
+                        } else {
+                            Self::build(&field_dtype, stats)
+                        };
+                        (Field::Name(name.clone()), child)
                     })
                     .collect();
-                let own = if dtype.nullability() == Nullability::Nullable {
+                // Only reached through non-nullable ancestors, so the struct's own validity is
+                // its full logical validity.
+                let own = if nullable {
                     Self::Leaf(StatsAccumulator::new(dtype, stats))
                 } else {
                     Self::Skipped
@@ -407,7 +438,7 @@ impl StatsNode {
 
     fn push_chunk(&mut self, array: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<()> {
         match self {
-            Self::Skipped => Ok(()),
+            Self::Skipped | Self::Unrecorded { .. } => Ok(()),
             Self::Leaf(acc) => acc.push_chunk(array, ctx),
             Self::Container { .. } => {
                 let struct_array = array.clone().execute::<StructArray>(ctx)?;
@@ -460,6 +491,10 @@ impl StatsNode {
     ) -> VortexResult<()> {
         match self {
             Self::Skipped => Ok(()),
+            Self::Unrecorded { entries } => {
+                out.extend(iter::repeat_n(AggregateStats::default(), *entries));
+                Ok(())
+            }
             Self::Leaf(acc) => {
                 out.push(acc.aggregate_stats(allowed)?);
                 Ok(())
@@ -509,6 +544,13 @@ impl FileStatsAccumulator {
 
         let legacy = Arc::new(Mutex::new(if write_legacy_stats {
             match dtype.as_struct_fields_opt() {
+                // The fields of a nullable root are recorded empty, like `StatsNode::Unrecorded`.
+                Some(struct_fields) if dtype.nullability() == Nullability::Nullable => {
+                    struct_fields
+                        .fields()
+                        .map(|_| StatsAccumulator::empty())
+                        .collect()
+                }
                 Some(struct_fields) => struct_fields
                     .fields()
                     .map(|field_dtype| StatsAccumulator::new(&field_dtype, stats.as_deref()))
@@ -855,10 +897,11 @@ mod tests {
     }
 
     #[test]
-    fn three_level_nested_struct_accumulates_stats_at_each_level() -> VortexResult<()> {
+    fn three_level_nested_struct_records_only_entries_without_nullable_ancestors()
+    -> VortexResult<()> {
         // Same shape as `postorder_layout_three_level_nesting_with_mixed_nullability`, but
-        // exercises actual accumulation: each nullable level along the path should independently
-        // contribute its own null-count entry, in post-order.
+        // exercises actual accumulation. The root is nullable, so every entry beneath it is left
+        // empty; only the root's own null-count entry is recorded.
         let mut ctx = array_session().create_execution_ctx();
 
         let leaf_c = buffer![10i32, 20, 30].into_array();
@@ -882,28 +925,69 @@ mod tests {
 
         let stats_sets = node_stats_sets(&node)?;
 
-        // `a.b.c`'s own stats come first (post-order), then `a.b`'s null-count entry, then the
-        // root's own null-count entry.
+        // Post-order: `a.b.c`, then `a.b`'s null-count entry, then the root's.
         assert_eq!(stats_sets.len(), 3);
-        assert_eq!(
-            stats_sets[0].get(Stat::Min).as_exact(),
-            Some(ScalarValue::from(10i32))
-        );
-        assert_eq!(
-            stats_sets[0].get(Stat::Max).as_exact(),
-            Some(ScalarValue::from(30i32))
-        );
-        assert_eq!(
-            stats_sets[0].get(Stat::NullCount).as_exact(),
-            Some(ScalarValue::from(0u64))
-        );
-        assert_eq!(
-            stats_sets[1].get(Stat::NullCount).as_exact(),
-            Some(ScalarValue::from(1u64))
-        );
+        assert!(stats_sets[0].is_empty());
+        assert!(stats_sets[1].is_empty());
         assert_eq!(
             stats_sets[2].get(Stat::NullCount).as_exact(),
             Some(ScalarValue::from(1u64))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn children_of_nullable_struct_are_unrecorded() -> VortexResult<()> {
+        // https://github.com/vortex-data/vortex/issues/9205
+        let mut ctx = array_session().create_execution_ctx();
+
+        let a = buffer![1i32, 999, 3].into_array();
+        let s_validity = Validity::Array(BoolArray::from_iter([true, false, true]).into_array());
+        let s = StructArray::new(FieldNames::from(["a"]), [a], 3, s_validity).into_array();
+        let root =
+            StructArray::new(FieldNames::from(["s"]), [s], 3, Validity::NonNullable).into_array();
+
+        let requested = [agg(Stat::NullCount), agg(Stat::Min), agg(Stat::Max)];
+        let mut node = StatsNode::build(root.dtype(), Some(&requested));
+        node.push_chunk(&root, &mut ctx)?;
+
+        let mut aggregates = Vec::new();
+        node.collect_aggregate_stats(&|_| true, &mut aggregates)?;
+
+        // `s.a`, then `s`'s own null-count entry.
+        assert_eq!(aggregates.len(), 2);
+        assert!(aggregates[0].is_empty());
+        assert_eq!(
+            aggregates[1].get(&agg(Stat::NullCount)),
+            Precision::exact(Scalar::from(1u64))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn nullable_children_of_non_nullable_struct_are_recorded() -> VortexResult<()> {
+        // `s` is non-nullable, so `s.a`'s own validity is its full logical validity.
+        let mut ctx = array_session().create_execution_ctx();
+
+        let a = PrimitiveArray::from_option_iter([Some(1i32), None, Some(3)]).into_array();
+        let s =
+            StructArray::new(FieldNames::from(["a"]), [a], 3, Validity::NonNullable).into_array();
+        let root =
+            StructArray::new(FieldNames::from(["s"]), [s], 3, Validity::NonNullable).into_array();
+
+        let requested = [agg(Stat::NullCount), agg(Stat::Max)];
+        let mut node = StatsNode::build(root.dtype(), Some(&requested));
+        node.push_chunk(&root, &mut ctx)?;
+
+        let stats_sets = node_stats_sets(&node)?;
+        assert_eq!(stats_sets.len(), 1);
+        assert_eq!(
+            stats_sets[0].get(Stat::NullCount).as_exact(),
+            Some(ScalarValue::from(1u64))
+        );
+        assert_eq!(
+            stats_sets[0].get(Stat::Max).as_exact(),
+            Some(ScalarValue::from(3i32))
         );
         Ok(())
     }
@@ -972,6 +1056,32 @@ mod tests {
         );
         assert!(legacy[0].get(&agg(Stat::Min)).is_absent());
         assert!(legacy[0].get(&agg(Stat::Max)).is_absent());
+        Ok(())
+    }
+
+    #[test]
+    fn legacy_aggregate_stats_of_nullable_root_are_unrecorded() -> VortexResult<()> {
+        let session = array_session();
+        let dtype = DType::struct_([("a", i32_dtype())], Nullability::Nullable);
+
+        let acc = FileStatsAccumulator::try_new(
+            &dtype,
+            Some(Arc::from([agg(Stat::NullCount), agg(Stat::Max)])),
+            &session,
+            true,
+            &LayoutWriterContext::new(ArrayContext::empty()),
+        )?;
+
+        let a = buffer![1i32, 999, 3].into_array();
+        let validity = Validity::Array(BoolArray::from_iter([true, false, true]).into_array());
+        let root = StructArray::new(FieldNames::from(["a"]), [a], 3, validity).into_array();
+
+        let (mut ptr, _eof) = SequenceId::root().split();
+        acc.process(Ok((ptr.advance(), root)))?;
+
+        let legacy = acc.legacy_aggregate_stats()?;
+        assert_eq!(legacy.len(), 1);
+        assert!(legacy[0].is_empty());
         Ok(())
     }
 

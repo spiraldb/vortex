@@ -444,8 +444,6 @@ mod tests {
 
     #[test]
     fn column_stats_reports_nested_leaves_by_quoted_path() -> VortexResult<()> {
-        // A nullable struct `s` contributes `s.b` and a trailing own entry to the post-order stats
-        // layout; only the leaves are statistics columns, keyed by their full quoted path.
         let summary = RUNTIME.block_on(async {
             let b = buffer![10i32, 20, 30].into_array();
             let inner = StructArray::new(["b"].into(), [b], 3, Validity::AllValid).into_array();
@@ -470,7 +468,8 @@ mod tests {
         assert_eq!(leaf_stats_columns(file_stats).len(), 2);
         let nested = column_stats(&summary, 0)?;
         assert_eq!(nested.column_key, "\"s\".\"b\"");
-        assert!(nested.min.is_some());
+        assert!(nested.min.is_none());
+        assert!(nested.null_count.is_none());
         assert!(nested.column_size_bytes.is_some_and(|size| size > 0));
 
         let top_level = column_stats(&summary, 1)?;
