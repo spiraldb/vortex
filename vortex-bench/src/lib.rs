@@ -30,6 +30,8 @@ use tpch::benchmark::TpcHBenchmark;
 pub use utils::file::*;
 pub use utils::logging::*;
 use vortex::compressor::BtrBlocksCompressorBuilder;
+use vortex::editions::EditionSessionExt;
+use vortex::encodings::pco::editions::PCO_2026_10;
 use vortex::error::VortexExpect;
 use vortex::error::vortex_err;
 use vortex::file::VortexWriteOptions;
@@ -83,6 +85,10 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 pub static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     let session = VortexSession::default().with_tokio();
     vortex_spatial::initialize(&session);
+    // The draft `pco` edition lets the compact compressor write Pco v2 in place of v1.
+    session
+        .enable_edition(PCO_2026_10)
+        .vortex_expect("the pco edition is registered with the default session");
     session
 });
 
