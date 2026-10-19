@@ -6,6 +6,8 @@
 use std::sync::Arc;
 
 use vortex_error::VortexExpect;
+use vortex_error::VortexResult;
+use vortex_error::vortex_ensure;
 use vortex_error::vortex_panic;
 use vortex_utils::iter::ReduceBalancedIterExt;
 
@@ -1148,31 +1150,63 @@ pub fn in_list(needle: Expression, list: Expression) -> Expression {
     )
 }
 
-/// Creates `needle IN (elements)` for a list of constant elements of `element_dtype`.
+/// Creates `needle IN (elements)` with SQL null semantics for a list of constant elements of
+/// `element_dtype`, ignoring nullability. An element can also be an untyped null.
+///
+/// The nullability of `element_dtype` is not used: the list elements are nullable only when a
+/// null element is present.
 ///
 /// Non-null integers that hold every value between their smallest and largest become a range
 /// check, which is cheaper to evaluate and prunes with tighter bounds than a set lookup, as for
 /// the keys of a small dimension table that a join pushes down.
 ///
+/// # Errors
+///
+/// Returns an error if an element is not a null and not of `element_dtype`.
+///
 /// ```rust
 /// # use vortex_array::dtype::{DType, Nullability, PType};
 /// # use vortex_array::expr::{in_list_of, root};
 /// let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
-/// let expr = in_list_of(root(), dtype, vec![3i32.into(), 1i32.into(), 2i32.into()]);
+/// let expr = in_list_of(root(), dtype, vec![3i32.into(), 1i32.into(), 2i32.into()])?;
 /// assert_eq!(expr.to_string(), "(1i32 <= $ <= 3i32)");
+/// # Ok::<(), vortex_error::VortexError>(())
 /// ```
 pub fn in_list_of(
     needle: Expression,
     element_dtype: DType,
-    mut elements: Vec<Scalar>,
-) -> Expression {
+    elements: Vec<Scalar>,
+) -> VortexResult<Expression> {
+    let element_dtype = if elements.iter().any(Scalar::is_null) {
+        element_dtype.as_nullable()
+    } else {
+        element_dtype.as_nonnullable()
+    };
+    let mut elements = elements
+        .iter()
+        .map(|element| {
+            vortex_ensure!(
+                element.dtype() == &DType::Null
+                    || element.dtype().eq_ignore_nullability(&element_dtype),
+                "IN list element {element} is not of type {element_dtype}"
+            );
+            element.cast(&element_dtype)
+        })
+        .collect::<VortexResult<Vec<_>>>()?;
+
     if let Some((low, high)) = contiguous_integer_bounds(&elements) {
         let options = BetweenOptions {
             lower_strict: StrictComparison::NonStrict,
             upper_strict: StrictComparison::NonStrict,
         };
-        return between(needle, lit(low.clone()), lit(high.clone()), options);
+        return Ok(between(
+            needle,
+            lit(low.clone()),
+            lit(high.clone()),
+            options,
+        ));
     }
+
     // Ordered elements make equal lists from the same set, so that equal filters deduplicate.
     if elements
         .windows(2)
@@ -1181,7 +1215,7 @@ pub fn in_list_of(
         elements.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     }
     let list = Scalar::list(Arc::new(element_dtype), elements, Nullability::NonNullable);
-    in_list(needle, lit(list))
+    Ok(in_list(needle, lit(list)))
 }
 
 /// The smallest and largest of non-null integer `scalars` when they hold every integer between

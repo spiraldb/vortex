@@ -26,9 +26,7 @@ use vortex::VortexSessionDefault;
 use vortex::array::VortexSessionExecute;
 use vortex::dtype::DType;
 use vortex::dtype::Nullability;
-use vortex::error::VortexResult;
 use vortex::expr::Expression;
-use vortex::expr::and_collect;
 use vortex::expr::byte_length;
 use vortex::expr::cast;
 use vortex::expr::get_item;
@@ -39,10 +37,8 @@ use vortex::expr::list_length;
 use vortex::expr::lit;
 use vortex::expr::nested_case_when;
 use vortex::expr::not;
-use vortex::expr::or_collect;
 use vortex::expr::pack;
 use vortex::expr::root;
-use vortex::scalar::Scalar;
 use vortex::scalar_fn::ScalarFnVTableExt;
 use vortex::scalar_fn::fns::binary::Binary;
 use vortex::scalar_fn::fns::like::Like;
@@ -440,64 +436,27 @@ impl DefaultExpressionConverter {
             return Err(Unconverted::Unsupported);
         }
         let value_dtype = converted_dtype(&value, input_dtype)?;
-        let operator = if in_list.negated() {
-            Operator::NotEq
+
+        let elements = in_list
+            .list()
+            .iter()
+            .map(|element| {
+                let element = self.convert_expr(element, schema, input_dtype)?;
+                element
+                    .as_opt::<Literal>()
+                    .cloned()
+                    .ok_or(Unconverted::Unsupported)
+            })
+            .collect::<Conversion<Vec<_>>>()?;
+
+        // An element of another type than the value declines the pushdown: no implicit casts.
+        let membership =
+            in_list_of(value, value_dtype, elements).map_err(|_| Unconverted::Unsupported)?;
+        Ok(if in_list.negated() {
+            not(membership)
         } else {
-            Operator::Eq
-        };
-        // A positive list of literals becomes one set lookup. An OR of equalities would
-        // scan the needle once per element, which dynamic join filters make up to 150 times.
-        // Floats keep the comparisons, whose -0.0 and NaN semantics differ from set membership.
-        let is_float = matches!(&value_dtype, DType::Primitive(ptype, _) if ptype.is_float());
-        if !in_list.negated() && !is_float {
-            let elements = in_list
-                .list()
-                .iter()
-                .map(|element| self.convert_expr(element, schema, input_dtype))
-                .collect::<Conversion<Vec<_>>>()?;
-            let scalars = elements
-                .iter()
-                .map(|element| element.as_opt::<Literal>().cloned())
-                .collect::<Option<Vec<_>>>();
-            // Null elements make a nullable list, whose SQL semantics `in_list` preserves.
-            let element_dtype = if scalars.iter().flatten().any(Scalar::is_null) {
-                value_dtype.as_nullable()
-            } else {
-                value_dtype.as_nonnullable()
-            };
-            if let Some(scalars) = scalars
-                && !scalars.is_empty()
-                && scalars
-                    .iter()
-                    .all(|scalar| scalar.dtype().eq_ignore_nullability(&element_dtype))
-            {
-                let scalars = scalars
-                    .iter()
-                    .map(|scalar| scalar.cast(&element_dtype))
-                    .collect::<VortexResult<Vec<_>>>()
-                    .map_err(|_| Unconverted::Unsupported)?;
-                return Ok(in_list_of(value, element_dtype, scalars));
-            }
-        }
-        let mut comparisons = Vec::with_capacity(in_list.len());
-        for element in in_list.list() {
-            let element = self.convert_expr(element, schema, input_dtype)?;
-            let element_dtype = converted_dtype(&element, input_dtype)?;
-            if element_dtype == DType::Null {
-                comparisons.push(lit(None::<bool>));
-            } else if value_dtype.eq_ignore_nullability(&element_dtype) {
-                comparisons.push(Binary.new_expr(operator, [value.clone(), element]));
-            } else {
-                return Err(Unconverted::Unsupported);
-            }
-        }
-        // Kleene AND/OR preserve SQL IN/NOT IN nulls; list_contains does not.
-        let membership = if in_list.negated() {
-            and_collect(comparisons)
-        } else {
-            or_collect(comparisons)
-        };
-        membership.ok_or(Unconverted::Unsupported)
+            membership
+        })
     }
 
     fn convert_scalar_function(

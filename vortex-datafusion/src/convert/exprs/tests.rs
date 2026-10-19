@@ -329,13 +329,13 @@ fn test_native_in_list_large(#[values(false, true)] negated: bool) -> anyhow::Re
     )
 }
 
-#[test]
-fn test_in_list_converts_to_set_lookup() -> DFResult<()> {
+#[rstest]
+fn test_in_list_converts_to_set_lookup(#[values(false, true)] negated: bool) -> DFResult<()> {
     let schema = Schema::new(vec![Field::new("a", DataType::Int32, true)]);
     let expr = Arc::new(df_expr::InListExpr::try_new(
         Arc::new(df_expr::Column::new("a", 0)),
         int_literals([Some(1), Some(3), Some(7)]),
-        false,
+        negated,
         &schema,
     )?);
     let element_dtype = Arc::new(DType::Primitive(PType::I32, Nullability::NonNullable));
@@ -344,10 +344,10 @@ fn test_in_list_converts_to_set_lookup() -> DFResult<()> {
         vec![1i32.into(), 3i32.into(), 7i32.into()],
         Nullability::NonNullable,
     );
-    assert_eq!(
-        convert(expr, &schema)?,
-        vortex::expr::in_list(get_item("a", root()), lit(list))
-    );
+    let membership = vortex::expr::in_list(get_item("a", root()), lit(list));
+    let expected = if negated { not(membership) } else { membership };
+
+    assert_eq!(convert(expr, &schema)?, expected);
     Ok(())
 }
 

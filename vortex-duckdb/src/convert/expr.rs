@@ -751,9 +751,8 @@ fn try_from_compare_in(
     else {
         return Ok(None);
     };
-    // The IN list itself is never null. Null values are elements, and in_list handles them.
     let element_dtype = list_elements[0].dtype().clone();
-    let expr = in_list_of(element, element_dtype, list_elements);
+    let expr = in_list_of(element, element_dtype, list_elements)?;
     Ok(Some(if not_in { not(expr) } else { expr }))
 }
 

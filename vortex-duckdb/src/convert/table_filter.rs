@@ -89,9 +89,7 @@ pub fn try_from_table_filter(
                 "IN filter must have at least one value"
             );
             let dtype = scalars[0].dtype().clone();
-            // The IN list itself is never null. Null values are elements, and in_list handles
-            // them.
-            in_list_of(col.clone(), dtype, scalars)
+            in_list_of(col.clone(), dtype, scalars)?
         }
         TableFilterClass::Dynamic(dynamic) => {
             dynamic_filter_expr(dynamic, col.return_dtype(scope_dtype)?, col.clone())?
