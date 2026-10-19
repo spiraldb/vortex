@@ -72,7 +72,6 @@ use crate::test::new_session;
 const CHUNK_ROWS: usize = 1000;
 const CHUNKS: usize = 4;
 
-mod child_work;
 static UNSUPPORTED_ID: CachedId = CachedId::new("test.unsupported");
 
 /// A table chunk of `CHUNK_ROWS` rows starting at row `start`: an integer, a nullable string and a

@@ -7,12 +7,12 @@
 //! batches to its caller as they are produced. Runnable items are prioritised in DFS preorder,
 //! with roots ordered by admission and children by emission. Each visit takes at most one CPU
 //! step. A parent's continuation follows its emitted child's entire subtree. Waiting work is
-//! skipped and regains its priority when IO or an asynchronous task makes it runnable. Published IO is registered
+//! skipped and regains its priority when IO makes it runnable. Published IO is registered
 //! immediately and state is inspected again before parking. Output follows emission order,
 //! not global row order. An earlier runnable branch can starve later branches.
 //!
 //! A run never blocks: [`Run::advance`] returns [`Progress::Waiting`] when every live item waits
-//! for IO or tasks, and the caller decides how to wait, by awaiting [`Run::poll_completion`] or by handing
+//! for IO, and the caller decides how to wait, by awaiting [`Run::poll_completion`] or by handing
 //! a completion it took from a source to [`Run::complete`]. [`Driver::run`] is the blocking
 //! convenience for one root.
 
@@ -21,12 +21,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use std::task::Context;
 use std::task::Poll;
-use std::task::Waker;
 
-use futures::FutureExt;
-use futures::future::BoxFuture;
-use smallvec::SmallVec;
-use smallvec::smallvec;
 use vortex_array::ArrayRef;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
@@ -88,9 +83,6 @@ enum Output {
     Morsel(MorselOutput),
 }
 
-// Root, selection, projection, and continuation fit inline. Deeper compositions can spill.
-type Priority = SmallVec<[u64; 4]>;
-
 /// One live planner or morsel. Boxed in the run queue and the parked map, so scheduling moves a
 /// pointer.
 struct Work {
@@ -99,7 +91,7 @@ struct Work {
     scope: WorkScope,
     item: Item,
     /// Stable child-ordinal path, beginning with the root's admission ordinal.
-    path: Priority,
+    path: Vec<u64>,
     /// The parent continuation sorts after all previously emitted child subtrees.
     next_child: u64,
     /// Published `Fetch` requests not yet delivered, with the target each must be answered with.
@@ -107,7 +99,7 @@ struct Work {
 }
 
 impl Work {
-    fn priority(&self) -> Priority {
+    fn priority(&self) -> Vec<u64> {
         let mut priority = self.path.clone();
         priority.push(self.next_child);
         priority
@@ -115,7 +107,7 @@ impl Work {
 
     // Child k takes the continuation's old key as its path. Its subtree then sorts before
     // the parent's new continuation at k + 1, even if descendants are discovered after IO.
-    fn child_path(&mut self) -> Priority {
+    fn child_path(&mut self) -> Vec<u64> {
         let path = self.priority();
         self.next_child += 1;
         path
@@ -154,7 +146,7 @@ impl Work {
 /// Keeps scheduling order separate from lookup for deliveries to runnable work.
 #[derive(Default)]
 struct ReadyQueue {
-    priorities: BTreeMap<Priority, IoOwnerId>,
+    priorities: BTreeMap<Vec<u64>, IoOwnerId>,
     work: HashMap<IoOwnerId, Box<Work>>,
 }
 
@@ -199,8 +191,6 @@ pub struct Run {
     next_owner: u64,
     queue: ReadyQueue,
     parked: HashMap<IoOwnerId, Box<Work>>,
-    /// Allocated only for owners that publish asynchronous work.
-    tasks: HashMap<IoOwnerId, BoxFuture<'static, VortexResult<()>>>,
     /// Batches and finished roots not yet returned by [`advance`](Self::advance).
     events: VecDeque<Progress>,
     /// Visits left before the sources are polled for completions again.
@@ -243,7 +233,7 @@ impl Run {
         let id = RootId(self.next_root);
         self.next_root += 1;
         self.roots.insert(id, Root { io, live: 0 });
-        self.spawn(id, scope, Item::Planner(root), smallvec![id.0]);
+        self.spawn(id, scope, Item::Planner(root), vec![id.0]);
         id
     }
 
@@ -255,9 +245,6 @@ impl Run {
         };
         self.queue.cancel(root);
         self.parked.retain(|_, work| work.root != root);
-        self.tasks.retain(|owner, _| {
-            self.queue.work.contains_key(owner) || self.parked.contains_key(owner)
-        });
         cancelled.io.clear();
     }
 
@@ -310,10 +297,10 @@ impl Run {
             let work = parked.get_mut();
             work.deliver(request, result)?;
             // An item that still waits for other requests stays parked.
-            if work.state() != State::Waiting && !self.tasks.contains_key(&owner) {
+            if work.state() != State::Waiting {
                 let work = parked.remove();
                 self.queue.insert(work);
-            } else if work.outstanding.is_empty() && !self.tasks.contains_key(&owner) {
+            } else if work.outstanding.is_empty() {
                 vortex_bail!(
                     "work for scope {:?} waits with no outstanding fetch",
                     work.scope
@@ -345,23 +332,6 @@ impl Run {
         }
         let mut delivered = false;
         for io in sources {
-            // A root may now wait solely for child work. IO sources need not accept a poll
-            // with no fetches outstanding.
-            if !self.tasks.is_empty()
-                && !self
-                    .parked
-                    .values()
-                    .chain(self.queue.work.values())
-                    .any(|work| {
-                        !work.outstanding.is_empty()
-                            && self
-                                .roots
-                                .get(&work.root)
-                                .is_some_and(|root| Arc::ptr_eq(&root.io, &io))
-                    })
-            {
-                continue;
-            }
             match io.poll_completion(cx) {
                 Poll::Ready(Ok(completion)) => {
                     if let Err(error) = self.complete(completion) {
@@ -373,10 +343,6 @@ impl Run {
                 Poll::Pending => {}
             }
         }
-        match self.take_tasks(cx) {
-            Ok(completed) => delivered |= completed,
-            Err(error) => return Poll::Ready(Err(error)),
-        }
         if delivered {
             Poll::Ready(Ok(()))
         } else {
@@ -386,7 +352,6 @@ impl Run {
 
     /// Delivers the completions every root's session has ready, without blocking.
     fn take_completions(&mut self) -> VortexResult<()> {
-        self.take_tasks(&mut Context::from_waker(Waker::noop()))?;
         if self.roots.len() == 1 {
             // The common case, without collecting the sessions.
             let Some(io) = self.roots.values().next().map(|root| Arc::clone(&root.io)) else {
@@ -410,35 +375,7 @@ impl Run {
         Ok(())
     }
 
-    fn take_tasks(&mut self, cx: &mut Context<'_>) -> VortexResult<bool> {
-        if self.tasks.is_empty() {
-            return Ok(false);
-        }
-        let mut completed = Vec::new();
-        for (&owner, future) in &mut self.tasks {
-            if let Poll::Ready(result) = future.poll_unpin(cx) {
-                result?;
-                completed.push(owner);
-            }
-        }
-        let delivered = !completed.is_empty();
-        for owner in completed {
-            self.tasks.remove(&owner);
-            let work = self
-                .parked
-                .remove(&owner)
-                .ok_or_else(|| vortex_err!("future completed for unknown planner {owner:?}"))?;
-            self.settle(work)?;
-        }
-        for work in self.parked.values() {
-            if work.outstanding.is_empty() && !self.tasks.contains_key(&work.id) {
-                vortex_bail!("work waits after its last task and fetch completed");
-            }
-        }
-        Ok(delivered)
-    }
-
-    fn spawn(&mut self, root: RootId, scope: WorkScope, item: Item, path: Priority) {
+    fn spawn(&mut self, root: RootId, scope: WorkScope, item: Item, path: Vec<u64>) {
         let id = IoOwnerId(self.next_owner);
         self.next_owner += 1;
         if let Some(root) = self.roots.get_mut(&root) {
@@ -458,7 +395,6 @@ impl Run {
 
     /// Retires a finished item, and its root once nothing descended from it is live.
     fn retire(&mut self, work: &Work) {
-        self.tasks.remove(&work.id);
         let Entry::Occupied(mut root) = self.roots.entry(work.root) else {
             return;
         };
@@ -470,9 +406,9 @@ impl Run {
         }
     }
 
-    /// Parks an item that waits for IO or tasks; at least one must be outstanding.
+    /// Parks an item that waits for IO, which is a protocol error with no fetch outstanding.
     fn park(&mut self, work: Box<Work>) -> VortexResult<()> {
-        if work.outstanding.is_empty() && !self.tasks.contains_key(&work.id) {
+        if work.outstanding.is_empty() {
             vortex_bail!(
                 "work for scope {:?} waits with no outstanding fetch",
                 work.scope
@@ -515,12 +451,6 @@ impl Run {
             | Output::Morsel(MorselOutput::NeedsIO(batch)) => {
                 self.submit(&mut work, batch)?;
                 self.settle(work)?;
-            }
-            Output::Planner(PlannerOutput::Await(future)) => {
-                self.tasks.insert(work.id, future);
-                // Await suspends this planner even if its next compute is already prepared.
-                // Outstanding IO still belongs to it and can be delivered while it is suspended.
-                self.parked.insert(work.id, work);
             }
             Output::Planner(PlannerOutput::Planner(scope, child)) => {
                 let path = work.child_path();
@@ -611,10 +541,7 @@ impl Driver {
             match run.advance()? {
                 Progress::Batch(batch) => batches.push(batch),
                 Progress::RootDone(_) | Progress::Idle => return Ok(batches),
-                Progress::Waiting if run.tasks.is_empty() => run.complete(self.io.wait()?)?,
-                Progress::Waiting => {
-                    futures::executor::block_on(std::future::poll_fn(|cx| run.poll_completion(cx)))?
-                }
+                Progress::Waiting => run.complete(self.io.wait()?)?,
             }
         }
     }

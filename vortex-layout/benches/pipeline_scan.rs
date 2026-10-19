@@ -124,7 +124,6 @@ fn scan(bencher: Bencher, columns: u32) {
                 Turn::Output(_, array) => {
                     black_box(array);
                 }
-                Turn::Child(_) => unreachable!("benchmark has no asynchronous child work"),
                 Turn::Waiting => unreachable!("every read is delivered immediately"),
                 Turn::Done => break,
             }

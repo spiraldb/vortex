@@ -15,7 +15,6 @@ use vortex_session::VortexSession;
 use super::pipeline::Arena;
 use super::pipeline::Inlet;
 use super::pipeline::PortId;
-use crate::plan::physical::pipeline::ChildProjection;
 use crate::segments::SegmentId;
 
 /// The output of one non-blocking compute call.
@@ -44,8 +43,6 @@ pub enum SourceReady {
 pub enum SourceBlocked {
     /// Wait for bytes from newly queued or outstanding reads.
     Io,
-    /// Wait for a child projection, possibly alongside pending reads.
-    Child,
     /// The inlet needs more batches or its sink to close it. It must be open and have room
     /// for its sink to push; debug builds check that the sink can still wake this source.
     Inlet(usize),
@@ -160,28 +157,9 @@ pub struct Cx<'a> {
     pub(super) exec: &'a mut ExecutionCtx,
     pub(super) touched: &'a mut InletSet,
     pub(super) changed: &'a mut InletSet,
-    pub(super) child_requests: &'a mut Vec<ChildProjection>,
-    pub(super) child_inbox: &'a mut Option<Box<ChildInbox>>,
-}
-
-#[derive(Default)]
-pub(super) struct ChildInbox {
-    pub(super) pending: usize,
-    pub(super) completed: VecDeque<(u64, Option<Vec<ArrayRef>>)>,
 }
 
 impl Cx<'_> {
-    /// Describes child work for the enclosing planner. Return [`SourceBlocked::Child`] while awaiting its completion.
-    /// Identifiers need only be unique among this source's outstanding child projections.
-    pub(crate) fn request_child(&mut self, child: ChildProjection) {
-        self.child_requests.push(child);
-    }
-
-    /// Takes a completed child projection, oldest completion first.
-    pub(crate) fn take_child(&mut self) -> Option<(u64, Option<Vec<ArrayRef>>)> {
-        self.child_inbox.as_mut()?.completed.pop_front()
-    }
-
     /// Takes an inlet index whose sink appended data or closed since the last readiness
     /// check. Each index is reported once, and all inlets are reported on the first check.
     /// Remaining notifications are cleared after [`Source::ready`] returns. A source must

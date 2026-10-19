@@ -36,7 +36,6 @@ use crate::plan::physical::operator::Source;
 use crate::plan::physical::operator::SourceBlocked;
 use crate::plan::physical::operator::SourceReady;
 use crate::plan::physical::operator::Step;
-use crate::plan::physical::pipeline::ChildProjection;
 use crate::plan::physical::pipeline::ReadId;
 use crate::plan::physical::pipeline::Scan;
 use crate::plan::physical::pipeline::Split;
@@ -52,9 +51,6 @@ pub(crate) struct ListSource {
     plan: ListPackPlan,
     mask: Mask,
     values: ValueCache,
-    plan_children: bool,
-    awaiting_child: bool,
-    serial_splits: Option<(Vec<Split>, bool)>,
     initialized: bool,
     offsets: Option<ArrayRef>,
     validity: Option<Validity>,
@@ -62,33 +58,23 @@ pub(crate) struct ListSource {
     /// Element reads issued by this source when the elements are plain segment chunks.
     direct: Option<ElementReads>,
     reads: FxHashMap<SegmentId, VecDeque<ReadId>>,
-    pending_children: usize,
     chunks: Vec<(usize, ArrayRef)>,
     output: Option<ArrayRef>,
     done: bool,
 }
 
 impl ListSource {
-    pub(crate) fn new(
-        plan: ListPackPlan,
-        mask: Mask,
-        values: ValueCache,
-        plan_children: bool,
-    ) -> Self {
+    pub(crate) fn new(plan: ListPackPlan, mask: Mask, values: ValueCache) -> Self {
         Self {
             plan,
             mask,
             values,
-            plan_children,
-            awaiting_child: false,
-            serial_splits: None,
             initialized: false,
             offsets: None,
             validity: None,
             elements: None,
             direct: None,
             reads: FxHashMap::default(),
-            pending_children: 0,
             chunks: Vec::new(),
             output: None,
             done: false,
@@ -150,28 +136,6 @@ impl ListSource {
             get_available_parallelism().unwrap_or(1),
         )?;
         let splits = work::element_splits(elements.dtype(), ranges)?;
-        // Avoid handing tiny or variable-width work to the outer planner. The planner
-        // decides whether the substantial fixed-width ranges can be split safely.
-        let width = match elements.dtype() {
-            DType::Primitive(ptype, _) => ptype.byte_width() as u64,
-            DType::Bool(_) => 1,
-            _ => 0,
-        };
-        let bytes = splits.iter().fold(0_u64, |bytes, split| {
-            bytes.saturating_add((split.mask.true_count() as u64).saturating_mul(width))
-        });
-        if self.plan_children && bytes >= 512 * 1024 {
-            self.serial_splits = Some((splits.clone(), overlap));
-            self.awaiting_child = true;
-            cx.request_child(ChildProjection {
-                id: 0,
-                plan: elements,
-                splits,
-                values: self.values.clone(),
-            });
-            self.initialized = true;
-            return Ok(());
-        }
         self.start_elements(cx, splits, overlap)?;
         self.initialized = true;
         Ok(())
@@ -190,8 +154,7 @@ impl ListSource {
             return Ok(());
         }
         let scan = Scan::try_new(cx.session().clone(), elements, splits)?
-            .with_value_cache(self.values.clone())
-            .with_child_planning(self.plan_children);
+            .with_value_cache(self.values.clone());
         self.elements = Some(if overlap {
             scan.with_max_active(2)
         } else {
@@ -238,22 +201,6 @@ impl Source for ListSource {
             }
             self.initialize(cx)?;
         }
-        if self.awaiting_child {
-            let Some((_, arrays)) = cx.take_child() else {
-                return Ok(SourceReady::Blocked(SourceBlocked::Child));
-            };
-            self.awaiting_child = false;
-            let (splits, overlap) = self
-                .serial_splits
-                .take()
-                .ok_or_else(|| vortex_err!("Missing deferred list ranges"))?;
-            if let Some(arrays) = arrays {
-                self.chunks.extend(arrays.into_iter().enumerate());
-                self.finish()?;
-                return Ok(SourceReady::Ready);
-            }
-            self.start_elements(cx, splits, overlap)?;
-        }
         if let Some(reads) = self.direct.as_mut() {
             let session = cx.session().clone();
             while let Some((segment, bytes)) = cx.take_segment() {
@@ -282,10 +229,6 @@ impl Source for ListSource {
                 .ok_or_else(|| vortex_err!("Unexpected list element segment {segment}"))?;
             scan.deliver(request, bytes)?;
         }
-        while let Some((id, arrays)) = cx.take_child() {
-            scan.complete_child(id, arrays)?;
-            self.pending_children -= 1;
-        }
         loop {
             match scan.step()? {
                 Turn::Read(read) => {
@@ -296,16 +239,8 @@ impl Source for ListSource {
                     cx.request_read(read.segment_id);
                 }
                 Turn::Output(split, array) => self.chunks.push((split, array)),
-                Turn::Child(child) => {
-                    self.pending_children += 1;
-                    cx.request_child(child);
-                }
                 Turn::Waiting => {
-                    return Ok(SourceReady::Blocked(if self.pending_children > 0 {
-                        SourceBlocked::Child
-                    } else {
-                        SourceBlocked::Io
-                    }));
+                    return Ok(SourceReady::Blocked(SourceBlocked::Io));
                 }
                 Turn::Done => {
                     self.finish()?;

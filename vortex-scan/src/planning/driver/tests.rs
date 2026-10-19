@@ -22,8 +22,6 @@ use crate::planning::tests::scripted::array_of;
 use crate::planning::tests::scripted::ctx;
 use crate::planning::tests::scripted::scope;
 
-mod tasks;
-
 fn request(id: u32, offset: u64) -> IoRequest {
     IoRequest {
         intent: IoIntent::Fetch,
@@ -140,34 +138,6 @@ fn dfs_finishes_child_subtree_before_parent_continues() -> VortexResult<()> {
             "compute parent",
         ]
     );
-    Ok(())
-}
-
-#[rstest]
-fn nested_planner_chains_preserve_sibling_order(
-    #[values(1, 3, 8, 16)] depth: u64,
-) -> VortexResult<()> {
-    let log = Log::default();
-    let mut steps = vec![one_batch_morsel(scope(0..1), 1), PlannerStep::Done];
-    for row in 1..=depth {
-        steps = vec![
-            PlannerStep::Planner(scope(0..row), steps),
-            one_batch_morsel(scope(row..row + 1), 1),
-            PlannerStep::Done,
-        ];
-    }
-    let root = ScriptedPlanner::boxed("root", steps, &log);
-    let batches = driver(&source()).run(root)?;
-    let scopes: Vec<_> = batches.iter().map(|batch| batch.scope.clone()).collect();
-    assert_eq!(
-        scopes,
-        (0..=depth)
-            .map(|row| scope(row..row + 1))
-            .collect::<Vec<_>>()
-    );
-    for batch in batches {
-        assert_arrays_eq!(batch.array, array_of(1), &mut ctx());
-    }
     Ok(())
 }
 

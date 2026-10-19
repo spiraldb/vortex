@@ -233,7 +233,6 @@ fn drive(
                 splits[split].push(array.clone());
                 arrays.push(array);
             }
-            Turn::Child(_) => unreachable!("child planning is disabled"),
             Turn::Waiting => {
                 if !batch.is_empty() {
                     events.push(Event::Io(std::mem::take(&mut batch)));
@@ -1065,11 +1064,7 @@ fn pack_readiness_tracks_changes_and_consumption(
     let mut exec = SESSION.create_execution_ctx();
     let mut touched = InletSet::new(2);
     let mut changed = InletSet::all(2);
-    let mut child_requests = Vec::new();
-    let mut child_inbox = None;
     let mut cx = Cx {
-        child_requests: &mut child_requests,
-        child_inbox: &mut child_inbox,
         arena: &mut arena,
         inlets: &inlets,
         bytes: &mut bytes,

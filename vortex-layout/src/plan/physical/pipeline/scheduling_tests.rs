@@ -64,7 +64,6 @@ fn run(
                 events.push(None);
                 arrays.push(array);
             }
-            Turn::Child(_) => unreachable!("child planning is disabled"),
             Turn::Waiting => {
                 if inflight.is_empty() {
                     return Err(vortex_err!("scan waits with no reads in flight"));
@@ -194,7 +193,6 @@ fn splits_produce_their_own_rows() -> VortexResult<()> {
         match scan.step()? {
             Turn::Read(read) => inflight.push(read),
             Turn::Output(split, array) => by_split[split].push(array),
-            Turn::Child(_) => unreachable!("child planning is disabled"),
             Turn::Waiting => {
                 let read: ReadRequest = inflight.remove(0);
                 scan.deliver(read.id, empty_segment())?;
@@ -260,7 +258,6 @@ fn a_source_has_several_reads_in_flight(#[values(1, 3)] deliveries: usize) -> Vo
         match scan.step()? {
             Turn::Read(read) => inflight.push(read),
             Turn::Output(_, array) => arrays.push(array),
-            Turn::Child(_) => unreachable!("child planning is disabled"),
             Turn::Waiting => {
                 if first_wait {
                     assert_eq!(
@@ -420,7 +417,6 @@ fn finishing_cancels_reads_in_flight() -> VortexResult<()> {
         match scan.step()? {
             Turn::Read(read) => inflight.push(read),
             Turn::Output(split, array) => by_split[split].push(array),
-            Turn::Child(_) => unreachable!("child planning is disabled"),
             Turn::Waiting => {
                 let read = inflight.remove(0);
                 scan.deliver(read.id, empty_segment())?;

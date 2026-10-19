@@ -3,18 +3,17 @@
 
 //! Scan execution over physical plans through the planner I/O and compute protocol.
 //!
-//! A `ProjectionPlanner` drives the physical projection over selected rows and schedules
-//! independently admitted child projections. Every segment read is published through a
-//! `ScanAdaptor`, so the driver advances other work while reads wait. Only the assembled result
-//! becomes a morsel, which publishes the selected rows in order.
+//! A `SelectionPlanner` resolves each fixed-size work chunk's selected rows and hands them to a
+//! `ProjectionPlanner`, which emits one `ProjectionMorsel` for them. The morsel runs the physical
+//! projection plan over the chunk's selected rows through the pipeline
+//! [`Scan`](crate::plan::physical::pipeline::Scan). Every segment read is published through a
+//! `ScanAdaptor`, so the planning driver can advance other work while reads wait.
 
 mod adaptor;
-mod children;
 mod projection;
 
 use std::sync::Arc;
 
-pub(super) use children::child_executor;
 use vortex_buffer::Alignment;
 use vortex_io::request::IoTarget;
 use vortex_scan::planning::next::next_fn;
@@ -25,7 +24,6 @@ use vortex_scan::planning::selection::SelectionPlanner;
 use vortex_scan::selection::Selection;
 use vortex_session::VortexSession;
 
-use self::children::Children;
 use self::projection::ProjectionPlanner;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::pipeline::ValueCache;
@@ -66,7 +64,6 @@ pub(super) struct ScanPlans {
     /// Whole values, such as dictionary values, shared by the splits of this scan. Their plans
     /// always read the same complete row domain, independently of a split's selection.
     pub(super) values: ValueCache,
-    pub(super) children: Option<Arc<Children>>,
 }
 
 /// Selects the rows of a fixed work chunk before handing them to its projection planner.
