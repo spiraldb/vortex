@@ -17,12 +17,16 @@ use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::DictArray;
 use vortex_array::arrays::InterleaveArray;
 use vortex_array::arrays::ListArray;
+use vortex_array::arrays::ListViewArray;
+use vortex_array::arrays::MapArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinViewArray;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldNames;
+use vortex_array::dtype::MapDType;
 use vortex_array::dtype::Nullability;
+use vortex_array::dtype::PType;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
 use vortex_error::VortexExpect;
@@ -107,6 +111,56 @@ fn nullable_interleave() -> ArrayRef {
     .into_array()
 }
 
+fn nullable_map() -> ArrayRef {
+    let entries_len = LEN * 3;
+    let keys = PrimitiveArray::from_iter(
+        (0..entries_len)
+            // Each group of three entries has keys 0, 1, 0.
+            .map(|i| i32::try_from(i % 3 % 2).vortex_expect("key fits i32")),
+    )
+    .into_array();
+    let values = VarBinViewArray::from_iter(
+        [Some("short"), None, Some("a longer map value")]
+            .into_iter()
+            .cycle()
+            .take(entries_len),
+        DType::Utf8(Nullability::Nullable),
+    )
+    .into_array();
+    let entries = StructArray::try_new(
+        FieldNames::from(["key", "value"]),
+        vec![keys, values],
+        entries_len,
+        Validity::NonNullable,
+    )
+    .vortex_expect("map entries fixture")
+    .into_array();
+    let offsets = (0..LEN)
+        .map(|i| u32::try_from(i * 3).vortex_expect("map offset fits u32"))
+        .collect::<Buffer<u32>>()
+        .into_array();
+    let sizes = (0..LEN)
+        .map(|i| u32::try_from(i % 4).vortex_expect("map size fits u32"))
+        .collect::<Buffer<u32>>()
+        .into_array();
+    let listview = ListViewArray::new(
+        entries,
+        offsets,
+        sizes,
+        Validity::from_iter((0..LEN).map(|i| i % 11 != 0)),
+        &mut array_session().create_execution_ctx(),
+    );
+    let dtype = MapDType::try_new(
+        DType::Primitive(PType::I32, Nullability::NonNullable),
+        DType::Utf8(Nullability::Nullable),
+        false,
+    )
+    .vortex_expect("map dtype fixture");
+    MapArray::try_new(dtype, listview)
+        .vortex_expect("map fixture")
+        .into_array()
+}
+
 fn indices() -> Vec<usize> {
     let mut seed = 42u64;
     (0..ACCESSES)
@@ -125,6 +179,7 @@ const ARRAYS: &[&str] = &[
     "varbinview",
     "list",
     "interleave",
+    "map",
 ];
 
 fn array(name: &str) -> ArrayRef {
@@ -132,6 +187,7 @@ fn array(name: &str) -> ArrayRef {
         "primitive" => nullable_primitive(LEN),
         "list" => nullable_list(),
         "interleave" => nullable_interleave(),
+        "map" => nullable_map(),
         "dict" => dict_over_nullable_values(),
         "struct" => nullable_struct(),
         "bool" => BoolArray::from_iter((0..LEN).map(|i| (i % 7 != 0).then_some(i % 2 == 0)))
