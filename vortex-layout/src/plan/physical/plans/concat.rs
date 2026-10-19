@@ -26,6 +26,7 @@ use crate::plan::physical::pipeline::Chain;
 use crate::plan::physical::pipeline::Compiler;
 use crate::plan::physical::pipeline::Reach;
 use crate::plan::physical::pipeline::overlapping;
+use crate::plan::physical::selection::selected_slice;
 use crate::segments::SegmentId;
 
 /// Concatenates its children row-wise.
@@ -157,20 +158,26 @@ impl PlanVTable for Concat {
         mask: &Mask,
         compiler: &mut Compiler<'_>,
     ) -> VortexResult<Option<Chain>> {
-        let mut chains = Vec::with_capacity(overlapping(plan, &rows).size_hint().1.unwrap_or(0));
+        let capacity = if mask.all_true() {
+            overlapping(plan, &rows).size_hint().1.unwrap_or(0)
+        } else {
+            0
+        };
+        let mut chains = Vec::with_capacity(capacity);
         for (index, start, local) in overlapping(plan, &rows) {
-            let local_mask = mask.slice(
+            let Some((span, local_mask)) = selected_slice(
+                mask,
                 usize::try_from(local.start - rows.start)?
                     ..usize::try_from(local.end - rows.start)?,
-            );
-            // A chunk the mask selects nothing of is never built, so never read.
-            if local_mask.all_false() {
+            ) else {
                 continue;
-            }
+            };
             let chunk = plan.child_required(index)?;
-            if let Some(chain) =
-                compiler.compile(&chunk, local.start - start..local.end - start, &local_mask)?
-            {
+            if let Some(chain) = compiler.compile(
+                &chunk,
+                rows.start + span.start as u64 - start..rows.start + span.end as u64 - start,
+                &local_mask,
+            )? {
                 chains.push(chain);
             }
         }

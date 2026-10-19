@@ -43,9 +43,11 @@ use crate::layouts::chunked::ChunkedLayout;
 use crate::layouts::dict::DictLayout;
 use crate::layouts::flat::FlatLayout;
 use crate::layouts::struct_::StructLayout;
+use crate::plan::physical::ConcatPlan;
 use crate::plan::physical::EvalPlan;
 use crate::plan::physical::Filter;
 use crate::plan::physical::PackPlan;
+use crate::plan::physical::PlanChildren;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::SegmentScan;
 use crate::plan::physical::Take;
@@ -60,6 +62,7 @@ use crate::plan::physical::operator::SourceReady;
 use crate::plan::physical::operator::Step;
 use crate::plan::physical::operators::PackSource;
 use crate::plan::physical::optimize;
+use crate::plan::physical::selection::selected;
 use crate::segments::SegmentId;
 use crate::test::SESSION;
 
@@ -832,5 +835,90 @@ fn pack_readiness_tracks_changes_and_consumption(
                 .contains("Pack fields ended at different rows")
         );
     }
+    Ok(())
+}
+
+#[rstest]
+#[case::sparse(2..19, vec![0, 5, 14, 16])]
+#[case::contiguous(2..19, (5..10).collect())]
+#[case::empty(2..19, vec![])]
+fn bound_selection_matches_projection(
+    #[case] rows: Range<u64>,
+    #[case] indices: Vec<usize>,
+) -> VortexResult<()> {
+    let mut store = Store::default();
+    let (plan, expected) = fixture(&mut store)?;
+    let mask = Mask::from_indices((rows.end - rows.start) as usize, indices);
+    let plan = selected(plan, rows.clone(), mask.clone());
+    let result = run(
+        &store,
+        &plan,
+        rows.clone(),
+        Mask::new_true(mask.len()),
+        delivery(Delivery::Lifo),
+    )?;
+    assert_view(&expected, &rows, &mask, result.arrays)
+}
+
+#[test]
+fn bound_selection_never_initializes_skipped_chunks() -> VortexResult<()> {
+    let mut store = Store::default();
+    let array = PrimitiveArray::from_iter(0..20i32).into_array();
+    let first = lower(&store.flat(&array.slice(0..5)?)?)?;
+    let last = lower(&store.flat(&array.slice(15..20)?)?)?;
+    let children = PlanChildren::lazy(4, move |index| match index {
+        0 => Ok(first.clone()),
+        3 => Ok(last.clone()),
+        _ => Err(vortex_err!("unselected chunk {index} was initialized")),
+    });
+    // SAFETY: All four logical chunks have five rows of the same primitive dtype. The two
+    // unselected initializers deliberately fail to detect discovery as well as compilation.
+    let plan = unsafe {
+        ConcatPlan::from_children_unchecked(
+            array.dtype().clone(),
+            20,
+            vec![0, 5, 10, 15].into(),
+            children,
+        )
+    }
+    .into_plan();
+    let mask = Mask::from_indices(20, [2, 17]);
+    let plan = selected(plan, 0..20, mask.clone());
+    let result = run(
+        &store,
+        &plan,
+        0..20,
+        Mask::new_true(20),
+        delivery(Delivery::Fifo),
+    )?;
+    assert_eq!(reads(&result.events), 2);
+    assert_view(&array, &(0..20), &mask, result.arrays)
+}
+
+#[test]
+fn bound_selection_keeps_whole_dictionary_values() -> VortexResult<()> {
+    let mut store = Store::default();
+    let values = PrimitiveArray::from_iter(100..120i32).into_array();
+    let codes = PrimitiveArray::from_iter((0..20u32).rev()).into_array();
+    let layout = DictLayout::new(
+        store.chunked(&values, &[5, 5, 5, 5])?,
+        store.chunked(&codes, &[5, 5, 5, 5])?,
+    )
+    .into_layout();
+    let mask = Mask::from_indices(20, [1, 18]);
+    let plan = selected(lower(&layout)?, 0..20, mask);
+    let result = run(
+        &store,
+        &plan,
+        0..20,
+        Mask::new_true(20),
+        delivery(Delivery::Lifo),
+    )?;
+    assert_eq!(reads(&result.events), 6, "all values and two code chunks");
+    assert_arrays_eq!(
+        join(values.dtype(), result.arrays)?,
+        PrimitiveArray::from_iter([118, 101]).into_array(),
+        &mut SESSION.create_execution_ctx()
+    );
     Ok(())
 }

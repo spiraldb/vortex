@@ -428,7 +428,7 @@ async fn list_layouts_return_an_error() -> VortexResult<()> {
         .try_next()
         .await
         .expect_err("V2 must reject an unsupported layout");
-    assert!(error.to_string().contains("V2 scans do not support"));
+    assert!(error.to_string().contains("vortex.plan.list_pack"));
     Ok(())
 }
 
@@ -479,5 +479,19 @@ async fn work_chunks_ignore_layout_boundaries(
     let arrays: Vec<_> = scan.execute_stream()?.try_collect().await?;
     assert_eq!(arrays.len(), 1);
     assert_eq!(arrays[0].len(), CHUNKS * CHUNK_ROWS);
+    Ok(())
+}
+
+#[tokio::test]
+async fn selected_split_scope_is_bounded_before_projection() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, table().as_ref()).await?;
+    let scan = PreparedScan::try_new(
+        builder(&session, &segments, &layout)?
+            .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(vec![7, 2001]))?),
+    )?;
+    let splits = scan.split_plans();
+    assert_eq!(splits.len(), 1);
+    assert_eq!(splits[0].scope.rows, 7..2002);
     Ok(())
 }

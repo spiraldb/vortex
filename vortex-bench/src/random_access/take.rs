@@ -26,13 +26,15 @@ use parquet::arrow::async_reader::AsyncFileReader;
 use parquet::file::metadata::PageIndexPolicy;
 use stream::StreamExt;
 use tokio::fs::File;
-use vortex::array::Canonical;
 use vortex::array::IntoArray;
+use vortex::array::RecursiveCanonical;
 use vortex::array::VortexSessionExecute;
+use vortex::array::stream::ArrayStreamAdapter;
 use vortex::array::stream::ArrayStreamExt;
 use vortex::buffer::Buffer;
 use vortex::file::OpenOptionsSessionExt;
 use vortex::file::VortexFile;
+use vortex::layout::scan::v2::ScanBuilder;
 use vortex::scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex::utils::aliases::hash_map::HashMap;
 
@@ -128,11 +130,14 @@ impl RandomAccessor for ArrowIpcRandomAccessor {
 
 /// Random accessor for Vortex format files.
 ///
-/// The file handle is opened at construction time and reused across `take()` calls.
+/// The file handle is opened at construction time and reused across `take()` calls. Reader and
+/// optional segment caches are disabled for both scan implementations. Set `VORTEX_BENCH_SCAN=v1`
+/// to compare with V1. V2 requires files without list layouts.
 pub struct VortexRandomAccessor {
     name: String,
     format: Format,
     file: VortexFile,
+    v2: bool,
 }
 
 impl VortexRandomAccessor {
@@ -144,12 +149,13 @@ impl VortexRandomAccessor {
     ) -> anyhow::Result<Self> {
         let file = SESSION
             .open_options()
-            .with_layout_reader_cache()
+            .without_segment_cache()
             .open_path(path.as_ref())
             .await?;
         Ok(Self {
             name: name.into(),
             format,
+            v2: !std::env::var("VORTEX_BENCH_SCAN").is_ok_and(|scan| scan == "v1"),
             file,
         })
     }
@@ -163,12 +169,13 @@ impl VortexRandomAccessor {
     ) -> anyhow::Result<Self> {
         let file = SESSION
             .open_options()
-            .with_layout_reader_cache()
+            .without_segment_cache()
             .open_object_store(remote.store(), remote.key(path)?)
             .await?;
         Ok(Self {
             name: name.into(),
             format,
+            v2: !std::env::var("VORTEX_BENCH_SCAN").is_ok_and(|scan| scan == "v1"),
             file,
         })
     }
@@ -185,18 +192,29 @@ impl RandomAccessor for VortexRandomAccessor {
     }
 
     async fn take(&self, indices: &[u64]) -> anyhow::Result<RandomAccessorRet> {
-        let indices_buf: Buffer<u64> = Buffer::from(indices.to_vec());
-        let array = self
-            .file
-            .scan()?
-            .with_row_indices(StrictSortedBuffer::try_new(indices_buf)?)
-            .into_array_stream()?
-            .read_all()
-            .await?;
+        let indices = StrictSortedBuffer::try_new(Buffer::from(indices.to_vec()))?;
+        let array = if self.v2 {
+            let stream = ScanBuilder::new(SESSION.clone(), self.file.scan_file())
+                .with_row_indices(indices)
+                .into_stream()?;
+            ArrayStreamAdapter::new(self.file.dtype().clone(), stream)
+                .read_all()
+                .await?
+        } else {
+            self.file
+                .scan()?
+                .with_row_indices(indices)
+                .into_array_stream()?
+                .read_all()
+                .await?
+        };
 
         // We canonicalize / decompress for equivalence to Arrow's `RecordBatch`es.
         let mut ctx = SESSION.create_execution_ctx();
-        let canonical = array.execute::<Canonical>(&mut ctx)?.into_array();
+        let canonical = array
+            .execute::<RecursiveCanonical>(&mut ctx)?
+            .0
+            .into_array();
         Ok(RandomAccessorRet::ArrayRef(canonical))
     }
 }

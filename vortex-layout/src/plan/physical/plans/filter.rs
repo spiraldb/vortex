@@ -103,12 +103,12 @@ impl PlanVTable for Filter {
         mask: &Mask,
         compiler: &mut Compiler<'_>,
     ) -> VortexResult<Option<Chain>> {
+        if mask.all_false() {
+            return Ok(None);
+        }
         let child = plan.child_plan()?;
         if let Some(scan) = child.as_opt::<SegmentScan>() {
             return compiler.scan(scan, rows, Some(mask.clone()));
-        }
-        if mask.all_false() {
-            return Ok(None);
         }
         let len = usize::try_from(rows.end - rows.start)?;
         let predicate = plan.dtype().is_boolean();
