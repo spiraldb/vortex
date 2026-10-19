@@ -57,6 +57,7 @@ pub struct ExtensionAggregate<A: AggregateFnVTable, E: ExtVTable> {
 impl<A: AggregateFnVTable, E: ExtVTable> ExtensionAggregate<A, E> {
     /// Define `aggregate` over extension type `ext`.
     pub fn new(aggregate: A, ext: E) -> Self {
+        #[expect(clippy::disallowed_methods, reason = "interning a dynamic id")]
         let id = AggregateFnId::new(&format!("{}[{}]", aggregate.id(), ext.id()));
         Self { aggregate, ext, id }
     }
@@ -189,7 +190,10 @@ impl<A: AggregateFnVTable, E: ExtVTable> AggregateFnVTable for ExtensionAggregat
             }
             Columnar::Constant(constant) => {
                 let storage = constant.scalar().as_extension().to_storage_scalar();
-                state.accumulate(&ConstantArray::new(storage, constant.len()).into_array(), ctx)
+                state.accumulate(
+                    &ConstantArray::new(storage, constant.len()).into_array(),
+                    ctx,
+                )
             }
             Columnar::Canonical(_) => {
                 vortex_bail!(
