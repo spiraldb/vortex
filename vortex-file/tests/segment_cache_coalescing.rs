@@ -3,8 +3,6 @@
 
 //! Exercise cache lookup ordering with the file source's real physical-read coalescer.
 
-#![expect(clippy::tests_outside_test_module)]
-
 use std::sync::Arc;
 
 use futures::FutureExt;
