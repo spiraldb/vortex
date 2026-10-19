@@ -24,18 +24,13 @@ use vortex_mask::Mask;
 use crate::ArrayRef;
 use crate::ArraySlots;
 use crate::ExecutionCtx;
-#[cfg(debug_assertions)]
 use crate::array::Array;
 use crate::array::ArrayParts;
 use crate::array::TypedArrayRef;
 use crate::array::child_to_validity;
 use crate::array::validity_to_child;
 use crate::array_slots;
-#[cfg(debug_assertions)]
-use crate::arrays::Bool;
 use crate::arrays::VarBinView;
-#[cfg(debug_assertions)]
-use crate::arrays::bool::BoolArrayExt;
 use crate::arrays::varbinview::BinaryView;
 use crate::arrays::varbinview::ResolvedViews;
 use crate::buffer::BufferHandle;
@@ -43,7 +38,6 @@ use crate::builders::ArrayBuilder;
 use crate::builders::VarBinViewBuilder;
 use crate::dtype::DType;
 use crate::dtype::Nullability;
-#[cfg(debug_assertions)]
 use crate::validity::Validity;
 
 #[array_slots(VarBinView)]
@@ -314,9 +308,6 @@ impl VarBinViewData {
         dtype: DType,
         validity: Validity,
     ) -> Self {
-        #[cfg(debug_assertions)]
-        Self::debug_validate(&views, &buffers, &dtype, &validity);
-
         let handles: Vec<BufferHandle> = buffers
             .iter()
             .cloned()
@@ -358,30 +349,6 @@ impl VarBinViewData {
         let check_utf8 = Self::check_nullability(dtype, validity)?;
         let mask = validity.execute_mask(views.len(), ctx)?;
         Self::validate_views(views, &mask, buffers, check_utf8)
-    }
-
-    /// Debug-only validation for unchecked construction.
-    ///
-    /// This never executes the validity, so the views are only checked when the validity is
-    /// constant or a canonical host-resident bitmap.
-    #[cfg(debug_assertions)]
-    fn debug_validate(
-        views: &Buffer<BinaryView>,
-        buffers: &Arc<[ByteBuffer]>,
-        dtype: &DType,
-        validity: &Validity,
-    ) {
-        let mask = match validity {
-            Validity::NonNullable | Validity::AllValid => Mask::AllTrue(views.len()),
-            Validity::AllInvalid => Mask::AllFalse(views.len()),
-            Validity::Array(array) => match array.as_opt::<Bool>() {
-                Some(bools) if array.is_host() => Mask::from_buffer(bools.to_bit_buffer()),
-                _ => return,
-            },
-        };
-        Self::check_nullability(dtype, validity)
-            .and_then(|check_utf8| Self::validate_views(views, &mask, buffers, check_utf8))
-            .vortex_expect("[Debug Assertion]: Invalid `VarBinViewArray` parameters");
     }
 
     /// Validates components like validate() and replaces views at null slots to empty views
