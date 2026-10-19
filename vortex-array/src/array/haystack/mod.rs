@@ -50,6 +50,8 @@ const BITMAP_BITS_PER_ELEMENT: u128 = 64;
 /// A lookup in a bitmap of up to 128 KiB stays in the L2 cache and does not branch, where a
 /// binary search through a sparse set mispredicts about half its comparisons.
 const BITMAP_MIN_BITS: u128 = 1 << 20;
+/// Needles beyond this many are decoded and looked up a batch of this many at a time.
+const NEEDLE_BATCH_LEN: usize = 8192;
 
 /// Looks up needles among the elements of an array, for many batches of needles.
 ///
@@ -216,7 +218,7 @@ impl<T: NativePType + SetInteger> HaystackState for PrimitiveSet<T> {
         for start in (0..len).step_by(NEEDLE_BATCH_LEN) {
             let end = (start + NEEDLE_BATCH_LEN).min(len);
             let batch = needles
-                .execute_slice(start..end, ctx)?
+                .slice(start..end)?
                 .execute::<PrimitiveArray>(ctx)?
                 .reinterpret_cast(T::PTYPE);
             bits.append_buffer(&self.0.contains(batch.as_slice::<T>(), ctx.allocator()));
@@ -224,9 +226,6 @@ impl<T: NativePType + SetInteger> HaystackState for PrimitiveSet<T> {
         Ok((bits.freeze(), needles.validity()?))
     }
 }
-
-/// Needles beyond this many are decoded and looked up a batch of this many at a time.
-const NEEDLE_BATCH_LEN: usize = 8192;
 
 /// The unscaled values of decimals, as the narrowest type that holds every value of their
 /// precision.
