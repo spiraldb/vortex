@@ -41,10 +41,9 @@ use super::MAX_ROWS_PER_CHUNK;
 use super::PreparedScan;
 use super::ScanBuilder;
 use super::ScanFile;
-use super::group_slices;
-use super::max_gap_rows;
 use super::row_chunks;
 use super::rows_per_chunk;
+use super::shares_any;
 use crate::LayoutRef;
 use crate::LayoutStrategy;
 use crate::layouts::chunked::writer::ChunkedLayoutStrategy;
@@ -387,7 +386,7 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
     });
     let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
     let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?)?;
-    let splits = scan.split_plans();
+    let splits = scan.split_plans()?;
     assert_eq!(
         splits.len(),
         (STORED_CHUNKS * STORED_CHUNK_ROWS).div_ceil(MAX_ROWS_PER_CHUNK)
@@ -419,34 +418,16 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
 }
 
 #[rstest]
-#[case::empty(vec![], 10, vec![])]
-#[case::joined(vec![(0, 2), (5, 6), (16, 20)], 10, vec![0..20])]
-#[case::at_limit(vec![(0, 2), (12, 13)], 10, vec![0..13])]
-#[case::split(vec![(0, 2), (13, 14), (30, 31)], 10, vec![0..2, 13..14, 30..31])]
-#[case::adjacent_only(vec![(0, 2), (3, 4)], 0, vec![0..2, 3..4])]
-fn selected_slices_group_across_small_gaps(
-    #[case] slices: Vec<(usize, usize)>,
-    #[case] max_gap: usize,
-    #[case] expected: Vec<Range<usize>>,
+#[case::empty(vec![], vec![2], false)]
+#[case::disjoint(vec![1, 3], vec![2, 4], false)]
+#[case::shared(vec![1, 3, 9], vec![2, 9], true)]
+fn sorted_segment_lists_intersect(
+    #[case] left: Vec<u32>,
+    #[case] right: Vec<u32>,
+    #[case] expected: bool,
 ) {
-    assert_eq!(group_slices(&slices, max_gap), expected);
-}
-
-#[rstest]
-#[case::narrow_rows(1_000_000, 4_000_000, 262_144)]
-#[case::wide_rows(1_000_000, 1_000_000_000, 8192)]
-#[case::empty(0, 0, 1_048_576)]
-fn gap_budget_covers_a_writer_block(
-    #[case] rows: u64,
-    #[case] bytes: u32,
-    #[case] expected: usize,
-) {
-    let locations = [SegmentLocation {
-        offset: 0,
-        length: bytes,
-        alignment: Alignment::none(),
-    }];
-    assert_eq!(max_gap_rows(rows, &locations), expected);
+    let ids = |ids: Vec<u32>| ids.into_iter().map(SegmentId::from).collect::<Vec<_>>();
+    assert_eq!(shares_any(&ids(left), &ids(right)), expected);
 }
 
 /// Three stored chunks of 70,000 consecutive integers, read through a counting source.
@@ -481,26 +462,24 @@ async fn counted_ints(session: &VortexSession) -> VortexResult<(Arc<CountingSegm
 }
 
 #[rstest]
-#[case::default_gap(None, vec![5..30_001, 140_100..140_101], 2)]
-#[case::narrow_gap(Some(100), vec![5..7, 30_000..30_001, 140_100..140_101], 3)]
+// Rows reading the same stored chunk form one group, so it is read once.
+#[case::shared_segment(vec![5, 6, 30_000, 140_100], vec![5..30_001, 140_100..140_101], 2)]
+// Rows in one work chunk but different stored chunks plan nothing between them.
+#[case::separate_segments(vec![66_000, 75_000], vec![66_000..66_001, 75_000..75_001], 2)]
 #[tokio::test]
 async fn selected_rows_plan_only_their_groups(
-    #[case] max_gap: Option<usize>,
+    #[case] rows: Vec<u64>,
     #[case] scopes: Vec<Range<u64>>,
     #[case] reads: usize,
 ) -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (counted, layout) = counted_ints(&session).await?;
     let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
-    let rows = vec![5_u64, 6, 30_000, 140_100];
-    let mut scan = PreparedScan::try_new(
+    let scan = PreparedScan::try_new(
         builder(&session, &segments, &layout)?
             .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(rows.clone()))?),
     )?;
-    if let Some(max_gap) = max_gap {
-        scan.max_gap = max_gap;
-    }
-    let splits = scan.split_plans();
+    let splits = scan.split_plans()?;
     assert_eq!(
         splits
             .iter()
@@ -512,8 +491,7 @@ async fn selected_rows_plan_only_their_groups(
     for split in splits {
         arrays.extend(split.run(Arc::clone(&scan.io)).await?);
     }
-    // Each group reads only the stored chunks holding its selected rows. Groups split by a
-    // wide gap inside one stored chunk read it once each.
+    // Each group reads only the stored chunks holding its selected rows.
     assert_eq!(counted.reads.load(Ordering::Relaxed), reads);
     let expected = rows
         .iter()

@@ -19,6 +19,7 @@ mod split;
 #[cfg(test)]
 mod tests;
 
+use std::cmp::Ordering;
 use std::ops::Range;
 use std::sync::Arc;
 
@@ -53,8 +54,10 @@ use crate::layouts::flat::Flat;
 use crate::layouts::struct_::Struct;
 use crate::layouts::zoned::LegacyStats;
 use crate::layouts::zoned::Zoned;
+use crate::plan::physical::PlanRef;
 use crate::plan::physical::lower;
 use crate::plan::physical::optimize;
+use crate::plan::physical::pipeline::Reach;
 use crate::plan::physical::plan_row_idx_expression;
 use crate::scan::arrow::to_record_batch;
 use crate::scan::execution::ScanPlans;
@@ -63,52 +66,67 @@ use crate::scan::execution::plan_projection;
 use crate::scan::v2::io::SegmentScanIo;
 use crate::scan::v2::io::segment_ranges;
 use crate::scan::v2::split::SplitPlan;
+use crate::segments::SegmentId;
 use crate::segments::SegmentSource;
 
 const ROW_BLOCK_SIZE: usize = 8192;
 const MAX_ROWS_PER_CHUNK: usize = 8 * ROW_BLOCK_SIZE;
 const TARGET_BYTES_PER_CHUNK: u64 = 8 * 1024 * 1024;
-/// Selected rows closer than a writer block are likely to share stored segments.
-const MAX_GAP_BYTES: u64 = 1024 * 1024;
-
-fn bytes_per_row(row_count: u64, locations: &[SegmentLocation]) -> u64 {
-    let bytes: u64 = locations
-        .iter()
-        .map(|location| u64::from(location.length))
-        .sum();
-    bytes.div_ceil(row_count.max(1)).max(1)
-}
 
 /// Limit estimated bytes per task without changing the writer-aligned row granularity.
 fn rows_per_chunk(row_count: u64, locations: &[SegmentLocation]) -> usize {
     if row_count <= MAX_ROWS_PER_CHUNK as u64 {
         return MAX_ROWS_PER_CHUNK;
     }
-    let blocks =
-        TARGET_BYTES_PER_CHUNK / bytes_per_row(row_count, locations) / ROW_BLOCK_SIZE as u64;
+    let bytes: u64 = locations
+        .iter()
+        .map(|location| u64::from(location.length))
+        .sum();
+    let bytes_per_row = bytes.div_ceil(row_count).max(1);
+    let blocks = TARGET_BYTES_PER_CHUNK / bytes_per_row / ROW_BLOCK_SIZE as u64;
     blocks.clamp(1, 8) as usize * ROW_BLOCK_SIZE
 }
 
-/// The widest unselected gap kept inside one group of selected rows: one row block, or more
-/// when a writer block of serialized bytes spans more rows.
-fn max_gap_rows(row_count: u64, locations: &[SegmentLocation]) -> usize {
-    let rows = MAX_GAP_BYTES / bytes_per_row(row_count, locations);
-    usize::try_from(rows)
-        .unwrap_or(usize::MAX)
-        .max(ROW_BLOCK_SIZE)
-}
-
-/// Groups sorted, disjoint selected slices, starting a new group at each gap wider than
-/// `max_gap` rows.
-fn group_slices(slices: &[(usize, usize)], max_gap: usize) -> Vec<Range<usize>> {
+/// Groups the sorted, disjoint selected `slices` of the rows starting at `offset`: a slice joins
+/// the group before it when both read a stored segment in common, so no segment is read by two
+/// groups. A column's segments hold contiguous rows, so a slice can share a segment with an
+/// earlier slice of its group only if it shares one with the slice just before it.
+fn group_slices(
+    plan: &PlanRef,
+    offset: u64,
+    slices: &[(usize, usize)],
+) -> VortexResult<Vec<Range<usize>>> {
     let mut groups: Vec<Range<usize>> = Vec::new();
+    let mut previous = Vec::new();
     for &(start, end) in slices {
+        let mut segments = Vec::new();
+        plan.reach(
+            offset + start as u64..offset + end as u64,
+            &Reach::Offset(0),
+            &mut |segment, _| segments.push(segment),
+        )?;
+        segments.sort_unstable();
+        segments.dedup();
         match groups.last_mut() {
-            Some(group) if start - group.end <= max_gap => group.end = end,
+            Some(group) if shares_any(&previous, &segments) => group.end = end,
             _ => groups.push(start..end),
         }
+        previous = segments;
     }
-    groups
+    Ok(groups)
+}
+
+/// Whether two sorted segment lists have a segment in common.
+fn shares_any(left: &[SegmentId], right: &[SegmentId]) -> bool {
+    let (mut left, mut right) = (left.iter().peekable(), right.iter().peekable());
+    while let (Some(l), Some(r)) = (left.peek(), right.peek()) {
+        match l.cmp(r) {
+            Ordering::Less => _ = left.next(),
+            Ordering::Greater => _ = right.next(),
+            Ordering::Equal => return true,
+        }
+    }
+    false
 }
 
 /// Fixed boundaries in the file's row domain, clipped to the requested range.
@@ -303,8 +321,6 @@ struct PreparedScan<A: 'static + Send> {
     /// The scan's splits, over the root row domain, in row order.
     splits: Vec<Range<u64>>,
     selection: Selection,
-    /// The widest unselected gap kept inside one split's group of selected rows.
-    max_gap: usize,
     map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
     ordered: bool,
     concurrency: usize,
@@ -335,7 +351,6 @@ impl<A: 'static + Send> PreparedScan<A> {
             MAX_ROWS_PER_CHUNK
         };
         let splits = row_chunks(builder.row_range.unwrap_or(0..row_count), chunk_rows);
-        let max_gap = max_gap_rows(row_count, &file.locations);
         let io = Arc::new(SegmentScanIo::new(
             file.segments,
             segment_ranges(&file.locations),
@@ -352,7 +367,6 @@ impl<A: 'static + Send> PreparedScan<A> {
             io,
             splits,
             selection: builder.selection,
-            max_gap,
             map_fn: builder.map_fn,
             ordered: builder.ordered,
             concurrency: builder.concurrency,
@@ -361,10 +375,10 @@ impl<A: 'static + Send> PreparedScan<A> {
 
     /// The groups of selected rows, each ready to be admitted to a planning run.
     ///
-    /// Within each fixed chunk, a selected run joins the group before it while the gap between
-    /// them is at most `max_gap` rows. A group spans only its own rows and keeps the selection's
-    /// mask over them, so rows in wider gaps get no planner, plan or read.
-    fn split_plans(&self) -> Vec<SplitPlan> {
+    /// Within each fixed chunk, selected runs that read a stored segment in common form one
+    /// group. A group spans only its own rows and keeps the selection's mask over them, so rows
+    /// between groups get no planner, plan or read.
+    fn split_plans(&self) -> VortexResult<Vec<SplitPlan>> {
         let mut plans = Vec::new();
         for rows in &self.splits {
             let row_mask = self.selection.row_mask(rows);
@@ -372,7 +386,7 @@ impl<A: 'static + Send> PreparedScan<A> {
             let groups = match mask.slices() {
                 AllOr::None => continue,
                 AllOr::All => vec![0..mask.len()],
-                AllOr::Some(slices) => group_slices(slices, self.max_gap),
+                AllOr::Some(slices) => group_slices(&self.plans.projection, rows.start, slices)?,
             };
             for group in groups {
                 let scope = WorkScope {
@@ -385,7 +399,7 @@ impl<A: 'static + Send> PreparedScan<A> {
                 });
             }
         }
-        plans
+        Ok(plans)
     }
 
     /// Runs every split as a task on the session's runtime and yields their mapped batches.
@@ -395,7 +409,7 @@ impl<A: 'static + Send> PreparedScan<A> {
     fn execute_stream(self) -> VortexResult<BoxStream<'static, VortexResult<A>>> {
         let concurrency = self.concurrency * get_available_parallelism().unwrap_or(1);
         let handle = self.session.handle();
-        let split_plans = self.split_plans();
+        let split_plans = self.split_plans()?;
         let io = self.io;
         let map_fn = self.map_fn;
         // Spawned as the buffer pulls them, so at most `concurrency` splits read at once.
