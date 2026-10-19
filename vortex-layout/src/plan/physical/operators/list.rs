@@ -43,7 +43,10 @@ use crate::plan::physical::pipeline::Turn;
 use crate::plan::physical::pipeline::ValueCache;
 use crate::segments::SegmentId;
 
+mod deferred;
 mod work;
+
+pub(crate) use deferred::compile_deferred_list;
 
 /// A list's offsets and validity arrive before its selected element ranges can be planned.
 pub(crate) struct ListSource {

@@ -147,6 +147,7 @@ fn drive(
     exec: &mut ExecutionCtx,
     reads: &mut SmallVec<[SegmentId; 1]>,
     child_requests: &mut Vec<ChildProjection>,
+    resolved_selections: &mut Vec<usize>,
 ) -> VortexResult<Progress> {
     let Pipeline {
         source,
@@ -173,6 +174,7 @@ fn drive(
         changed,
         child_requests,
         child_inbox,
+        resolved_selections,
     };
     loop {
         // Closing needs no room, so a pipeline with nothing left to flush closes at once.
@@ -312,6 +314,7 @@ pub(crate) struct Core {
     /// Whole values kept for later scans of the same split.
     pub(crate) values: ValueCache,
     pub(crate) plan_children: bool,
+    pub(crate) selection_waiters: Vec<Vec<PipelineId>>,
 }
 
 struct PendingChild {
@@ -341,6 +344,7 @@ impl Core {
             split: usize::MAX,
             values: ValueCache::default(),
             plan_children: false,
+            selection_waiters: Vec::new(),
         }
     }
 
@@ -437,6 +441,7 @@ impl Core {
         pipe.queued = false;
         let mut reads = SmallVec::new();
         let mut child_requests = Vec::new();
+        let mut resolved_selections = Vec::new();
         let progress = drive(
             pipe,
             &mut self.arena,
@@ -444,7 +449,20 @@ impl Core {
             &mut self.exec,
             &mut reads,
             &mut child_requests,
+            &mut resolved_selections,
         )?;
+        for selection in resolved_selections {
+            for waiter in std::mem::take(&mut self.selection_waiters[selection]) {
+                if self.pipelines[waiter].as_ref().is_some_and(|pipe| {
+                    pipe.state == State::Blocked(SourceBlocked::Selection(selection))
+                }) {
+                    self.make_runnable(waiter);
+                }
+            }
+        }
+        if let Progress::Blocked(SourceBlocked::Selection(selection)) = &progress {
+            self.selection_waiters[*selection].push(id);
+        }
         for segment_id in reads {
             self.ask(id, segment_id);
         }

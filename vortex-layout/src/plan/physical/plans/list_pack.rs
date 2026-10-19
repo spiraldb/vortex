@@ -143,6 +143,10 @@ impl PlanVTable for ListPack {
         if mask.all_false() {
             return Ok(None);
         }
+        if std::env::var_os("VORTEX_LIST_PIPELINE").is_some() {
+            return crate::plan::physical::operators::compile_deferred_list(plan, rows, mask, compiler)
+                .map(Some);
+        }
         let boundaries = offset_mask(mask);
         let offsets = compiler
             .compile(&plan.offsets()?, rows.start..rows.end + 1, &boundaries)?

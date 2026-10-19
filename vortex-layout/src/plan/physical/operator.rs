@@ -46,6 +46,8 @@ pub enum SourceBlocked {
     Io,
     /// Wait for a child projection, possibly alongside pending reads.
     Child,
+    /// Wait for a list's runtime element selection.
+    Selection(usize),
     /// The inlet needs more batches or its sink to close it. It must be open and have room
     /// for its sink to push; debug builds check that the sink can still wake this source.
     Inlet(usize),
@@ -162,6 +164,7 @@ pub struct Cx<'a> {
     pub(super) changed: &'a mut InletSet,
     pub(super) child_requests: &'a mut Vec<ChildProjection>,
     pub(super) child_inbox: &'a mut Option<Box<ChildInbox>>,
+    pub(super) resolved_selections: &'a mut Vec<usize>,
 }
 
 #[derive(Default)]
@@ -171,6 +174,10 @@ pub(super) struct ChildInbox {
 }
 
 impl Cx<'_> {
+    pub(crate) fn resolve_selection(&mut self, selection: usize) {
+        self.resolved_selections.push(selection);
+    }
+
     /// Describes child work for the enclosing planner. Return [`SourceBlocked::Child`] while awaiting its completion.
     /// Identifiers need only be unique among this source's outstanding child projections.
     pub(crate) fn request_child(&mut self, child: ChildProjection) {

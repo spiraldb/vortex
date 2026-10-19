@@ -77,6 +77,21 @@ jobs:
             target/release_debug/${{ inputs.benchmark_id }}
           polarsignals-cloud-token: ${{ secrets.POLAR_SIGNALS_API_KEY }}
           project-id: "e5d846e1-b54c-46e7-9174-8bf055a3af56"
+      - name: Build list pipeline comparison
+        if: inputs.benchmark_id == 'random-access-bench' && inputs.remote_data_dir == ''
+        env:
+          RUSTFLAGS: "-C target-cpu=native -C force-frame-pointers=yes"
+        run: |
+          cargo build --locked --package vortex --profile release_debug \
+            --example selection_scan --example generate_list_fixture
+      - name: Upload list pipeline comparison binaries
+        if: inputs.benchmark_id == 'random-access-bench' && inputs.remote_data_dir == ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
+        with:
+          name: list-pipeline-binaries
+          path: |
+            target/release_debug/examples/selection_scan
+            target/release_debug/examples/generate_list_fixture
       - name: Upload benchmark binary
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
         with:
@@ -121,6 +136,13 @@ jobs:
       - name: Make benchmark binary executable
         shell: bash
         run: chmod +x target/release_debug/${{ inputs.benchmark_id }}
+
+      - name: Download list pipeline comparison binaries
+        if: inputs.benchmark_id == 'random-access-bench' && inputs.remote_data_dir == ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8
+        with:
+          name: list-pipeline-binaries
+          path: target/release_debug/examples/
 
       - name: Setup Polar Signals
         if: github.event.pull_request.head.repo.fork == false
@@ -178,6 +200,26 @@ jobs:
           FLAT_LAYOUT_INLINE_ARRAY_NODE: "1"
         run: |
           python3 scripts/compress-split.py
+
+      - name: Compare current and deferred list pipelines
+        if: inputs.benchmark_id == 'random-access-bench' && inputs.remote_data_dir == ''
+        env:
+          RUSTFLAGS: "-C target-cpu=native -C force-frame-pointers=yes"
+        run: |
+          chmod +x target/release_debug/examples/selection_scan \
+            target/release_debug/examples/generate_list_fixture
+          python3 scripts/bench-list-pipeline.py
+
+      - name: Upload list pipeline comparison results
+        if: always() && inputs.benchmark_id == 'random-access-bench' && inputs.remote_data_dir == ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
+        with:
+          name: list-pipeline-results
+          path: |
+            list-pipeline-results/*.json
+            list-pipeline-results/*.jsonl
+            list-pipeline-results/*.log
+            list-pipeline-results/raw/
 
       - name: Run ${{ inputs.benchmark_name }} benchmark (per-column-encoder)
         if: inputs.benchmark_id == 'string-bench'

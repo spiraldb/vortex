@@ -998,7 +998,9 @@ fn pack_readiness_tracks_changes_and_consumption(
     let mut changed = InletSet::all(2);
     let mut child_requests = Vec::new();
     let mut child_inbox = None;
+    let mut resolved_selections = Vec::new();
     let mut cx = Cx {
+        resolved_selections: &mut resolved_selections,
         child_requests: &mut child_requests,
         child_inbox: &mut child_inbox,
         arena: &mut arena,

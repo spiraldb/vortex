@@ -81,6 +81,12 @@ pub struct Compiler<'a> {
 }
 
 impl Compiler<'_> {
+    pub(crate) fn selection_gate(&mut self) -> usize {
+        let id = self.core.selection_waiters.len();
+        self.core.selection_waiters.push(Vec::new());
+        id
+    }
+
     /// Compiles `plan` over `rows` of its domain, restricted to `mask`, into a chain producing
     /// the rows `mask` selects, in order, or `None` when that is no row.
     pub fn compile(
