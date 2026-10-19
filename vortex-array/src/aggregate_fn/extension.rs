@@ -4,6 +4,8 @@
 //! Generic adapter that defines an aggregate over one extension type by running an existing
 //! aggregate over the extension's storage.
 
+use std::mem;
+
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
@@ -70,10 +72,15 @@ impl<A: AggregateFnVTable, E: ExtVTable> ExtensionAggregate<A, E> {
             .map(|ext_dtype| ext_dtype.storage_dtype())
     }
 
-    /// Derive the storage aggregate's dtypes from this aggregate's, which share the partial and
-    /// return dtypes.
-    fn storage_dtypes(&self, args: AggregateArgs<'_, A::Options>) -> VortexResult<AggregateDTypes> {
-        let storage_dtype = self.storage_dtype(args.dtype).ok_or_else(|| {
+    /// The arguments of the storage aggregate `A`.
+    ///
+    /// `A` shares this aggregate's options, return and partial dtypes, and its input dtype is
+    /// borrowed from the extension dtype, so this allocates nothing.
+    fn storage_args<'a>(
+        &self,
+        args: AggregateArgs<'a, A::Options>,
+    ) -> VortexResult<AggregateArgs<'a, A::Options>> {
+        let dtype = self.storage_dtype(args.dtype).ok_or_else(|| {
             vortex_err!(
                 "Aggregate function {} expects extension type {}, got {}",
                 self.id,
@@ -81,19 +88,40 @@ impl<A: AggregateFnVTable, E: ExtVTable> ExtensionAggregate<A, E> {
                 args.dtype
             )
         })?;
-        Ok(AggregateDTypes::new(
-            storage_dtype.clone(),
-            args.return_dtype.clone(),
-            args.partial_dtype.clone(),
-        ))
+        Ok(AggregateArgs { dtype, ..args })
+    }
+
+    /// Accumulate a storage batch into `state` through an [`Accumulator`] of `A`, so that the
+    /// kernels and cached statistics of `A` on the storage encoding still apply.
+    fn accumulate_storage(
+        &self,
+        args: AggregateArgs<'_, A::Options>,
+        state: &mut A::Partial,
+        storage: &ArrayRef,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<()> {
+        let mut accumulator = Accumulator::from_dtypes(
+            self.aggregate.clone(),
+            args.options.clone(),
+            AggregateDTypes::new(
+                args.dtype.clone(),
+                args.return_dtype.clone(),
+                args.partial_dtype.clone(),
+            ),
+        );
+        accumulator.accumulate(storage, ctx)?;
+        let Some(batch) = accumulator.take_partial() else {
+            return Ok(());
+        };
+        let running = mem::replace(state, self.aggregate.empty_partial(args)?);
+        *state = self.aggregate.merge_partials(args, running, batch)?;
+        Ok(())
     }
 }
 
 impl<A: AggregateFnVTable, E: ExtVTable> AggregateFnVTable for ExtensionAggregate<A, E> {
     type Options = A::Options;
-    // The storage aggregate is held as a fully-fledged `Accumulator` so that storage batches
-    // consult the kernel registry and the cached statistics of `A`.
-    type Partial = Accumulator<A>;
+    type Partial = A::Partial;
 
     fn id(&self) -> AggregateFnId {
         self.id
@@ -118,11 +146,7 @@ impl<A: AggregateFnVTable, E: ExtVTable> AggregateFnVTable for ExtensionAggregat
     }
 
     fn empty_partial(&self, args: AggregateArgs<'_, Self::Options>) -> VortexResult<Self::Partial> {
-        Ok(Accumulator::from_dtypes(
-            self.aggregate.clone(),
-            args.options.clone(),
-            self.storage_dtypes(args)?,
-        ))
+        self.aggregate.empty_partial(self.storage_args(args)?)
     }
 
     fn partial_from_scalar(
@@ -130,42 +154,42 @@ impl<A: AggregateFnVTable, E: ExtVTable> AggregateFnVTable for ExtensionAggregat
         args: AggregateArgs<'_, Self::Options>,
         scalar: &Scalar,
     ) -> VortexResult<Self::Partial> {
-        let mut partial = self.empty_partial(args)?;
-        partial.combine_partials(scalar)?;
-        Ok(partial)
+        self.aggregate
+            .partial_from_scalar(self.storage_args(args)?, scalar)
     }
 
     fn merge_partials(
         &self,
-        _args: AggregateArgs<'_, Self::Options>,
-        mut first: Self::Partial,
-        mut second: Self::Partial,
+        args: AggregateArgs<'_, Self::Options>,
+        first: Self::Partial,
+        second: Self::Partial,
     ) -> VortexResult<Self::Partial> {
-        first.merge_from(&mut second)?;
-        Ok(first)
+        self.aggregate
+            .merge_partials(self.storage_args(args)?, first, second)
     }
 
     fn to_scalar(
         &self,
-        _args: AggregateArgs<'_, Self::Options>,
+        args: AggregateArgs<'_, Self::Options>,
         partial: &Self::Partial,
     ) -> VortexResult<Scalar> {
-        partial.partial_scalar()
+        self.aggregate.to_scalar(self.storage_args(args)?, partial)
     }
 
     fn is_saturated(
         &self,
-        _args: AggregateArgs<'_, Self::Options>,
+        args: AggregateArgs<'_, Self::Options>,
         partial: &Self::Partial,
     ) -> bool {
-        partial.is_saturated()
+        self.storage_args(args)
+            .is_ok_and(|args| self.aggregate.is_saturated(args, partial))
     }
 
     /// Unwrap extension arrays to their storage before decoding, so the storage accumulator sees
     /// the storage encoding.
     fn try_accumulate(
         &self,
-        _args: AggregateArgs<'_, Self::Options>,
+        args: AggregateArgs<'_, Self::Options>,
         state: &mut Self::Partial,
         batch: &ArrayRef,
         ctx: &mut ExecutionCtx,
@@ -173,24 +197,27 @@ impl<A: AggregateFnVTable, E: ExtVTable> AggregateFnVTable for ExtensionAggregat
         let Some(array) = batch.as_opt::<Extension>() else {
             return Ok(false);
         };
-        state.accumulate(array.storage_array(), ctx)?;
+        self.accumulate_storage(self.storage_args(args)?, state, array.storage_array(), ctx)?;
         Ok(true)
     }
 
     fn accumulate(
         &self,
-        _args: AggregateArgs<'_, Self::Options>,
+        args: AggregateArgs<'_, Self::Options>,
         state: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<()> {
+        let args = self.storage_args(args)?;
         match batch {
             Columnar::Canonical(Canonical::Extension(array)) => {
-                state.accumulate(array.storage_array(), ctx)
+                self.accumulate_storage(args, state, array.storage_array(), ctx)
             }
             Columnar::Constant(constant) => {
                 let storage = constant.scalar().as_extension().to_storage_scalar();
-                state.accumulate(
+                self.accumulate_storage(
+                    args,
+                    state,
                     &ConstantArray::new(storage, constant.len()).into_array(),
                     ctx,
                 )
@@ -210,16 +237,16 @@ impl<A: AggregateFnVTable, E: ExtVTable> AggregateFnVTable for ExtensionAggregat
         args: AggregateArgs<'_, Self::Options>,
         states: ArrayRef,
     ) -> VortexResult<ArrayRef> {
-        let dtypes = self.storage_dtypes(args)?;
-        self.aggregate.finalize(dtypes.args(args.options), states)
+        self.aggregate.finalize(self.storage_args(args)?, states)
     }
 
     fn finalize_scalar(
         &self,
-        _args: AggregateArgs<'_, Self::Options>,
+        args: AggregateArgs<'_, Self::Options>,
         partial: &Self::Partial,
     ) -> VortexResult<Scalar> {
-        partial.final_scalar()
+        self.aggregate
+            .finalize_scalar(self.storage_args(args)?, partial)
     }
 }
 
@@ -277,6 +304,40 @@ mod tests {
         expected.accumulate(&storage, &mut ctx)?;
 
         assert_eq!(acc.finish()?, expected.finish()?);
+        Ok(())
+    }
+
+    #[test]
+    fn combines_flushed_partials() -> VortexResult<()> {
+        let session = crate::array_session();
+        let mut ctx = session.create_execution_ctx();
+        let ext_dtype = Timestamp::new(TimeUnit::Milliseconds, Nullability::Nullable).erased();
+        let batch = |values: [Option<i64>; 2]| {
+            ExtensionArray::new(
+                ext_dtype.clone(),
+                PrimitiveArray::from_option_iter(values).into_array(),
+            )
+            .into_array()
+        };
+        let accumulator = || {
+            Accumulator::try_new(
+                ExtensionAggregate::new(Sum, Timestamp),
+                NumericalAggregateOpts::default(),
+                DType::Extension(ext_dtype.clone()),
+            )
+        };
+
+        let mut first = accumulator()?;
+        first.accumulate(&batch([Some(3_000), None]), &mut ctx)?;
+        let mut second = accumulator()?;
+        second.accumulate(&batch([Some(1_000), Some(500)]), &mut ctx)?;
+        first.combine_partials(&second.flush()?)?;
+
+        let mut expected = accumulator()?;
+        expected.accumulate(&batch([Some(3_000), None]), &mut ctx)?;
+        expected.accumulate(&batch([Some(1_000), Some(500)]), &mut ctx)?;
+
+        assert_eq!(first.finish()?, expected.finish()?);
         Ok(())
     }
 
