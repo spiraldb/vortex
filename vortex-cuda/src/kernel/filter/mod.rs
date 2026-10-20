@@ -12,9 +12,6 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use cudarc::driver::DevicePtr;
-use cudarc::driver::DevicePtrMut;
-use cudarc::driver::DeviceRepr;
 use tracing::instrument;
 use vortex::array::ArrayRef;
 use vortex::array::Canonical;
@@ -29,6 +26,9 @@ use vortex::error::vortex_err;
 use vortex::mask::Mask;
 use vortex_cub::filter::CubFilterable;
 use vortex_cub::filter::cudaStream_t;
+use vortex_cuda_driver::DevicePtr;
+use vortex_cuda_driver::DevicePtrMut;
+use vortex_cuda_driver::DeviceRepr;
 
 use crate::CudaDeviceBuffer;
 use crate::executor::CudaArrayExt;

@@ -8,11 +8,11 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
 use arc_swap::ArcSwapOption;
-use cudarc::driver::CudaContext;
-use cudarc::driver::CudaStream;
 use parking_lot::Mutex;
 use vortex::error::VortexResult;
 use vortex::error::vortex_err;
+use vortex_cuda_driver::CudaContext;
+use vortex_cuda_driver::CudaStream;
 
 use crate::stream::VortexCudaStream;
 
@@ -117,11 +117,11 @@ mod tests {
     use std::sync::Arc;
     use std::sync::Barrier;
     use std::thread;
-    use vortex::utils::aliases::hash_set::HashSet;
 
-    use cudarc::driver::CudaContext;
     use vortex::error::VortexResult;
     use vortex::error::vortex_err;
+    use vortex::utils::aliases::hash_set::HashSet;
+    use vortex_cuda_driver::CudaContext;
 
     use super::VortexCudaStreamPool;
 

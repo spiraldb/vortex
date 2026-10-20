@@ -4,9 +4,6 @@
 use std::fmt::Debug;
 
 use async_trait::async_trait;
-use cudarc::driver::DeviceRepr;
-use cudarc::driver::LaunchConfig;
-use cudarc::driver::PushKernelArg;
 use tracing::instrument;
 use vortex::array::ArrayRef;
 use vortex::array::Canonical;
@@ -24,6 +21,9 @@ use vortex::encodings::alp::match_each_alp_float_ptype;
 use vortex::error::VortexResult;
 use vortex::error::vortex_ensure;
 use vortex::error::vortex_err;
+use vortex_cuda_driver::DeviceRepr;
+use vortex_cuda_driver::LaunchConfig;
+use vortex_cuda_driver::PushKernelArg;
 
 use crate::CudaBufferExt;
 use crate::CudaDeviceBuffer;

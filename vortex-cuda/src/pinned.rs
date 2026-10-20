@@ -7,14 +7,6 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 
-use cudarc::driver::CudaContext;
-use cudarc::driver::CudaEvent;
-use cudarc::driver::CudaStream;
-use cudarc::driver::CudaViewMut;
-use cudarc::driver::HostSlice;
-use cudarc::driver::SyncOnDrop;
-use cudarc::driver::result;
-use cudarc::driver::sys::CUevent_flags;
 use parking_lot::Mutex;
 use vortex::error::VortexExpect;
 use vortex::error::VortexResult;
@@ -22,6 +14,14 @@ use vortex::error::vortex_ensure;
 use vortex::error::vortex_ensure_eq;
 use vortex::error::vortex_err;
 use vortex::utils::aliases::hash_map::HashMap;
+use vortex_cuda_driver::CudaContext;
+use vortex_cuda_driver::CudaEvent;
+use vortex_cuda_driver::CudaStream;
+use vortex_cuda_driver::CudaViewMut;
+use vortex_cuda_driver::HostSlice;
+use vortex_cuda_driver::SyncOnDrop;
+use vortex_cuda_driver::result;
+use vortex_cuda_driver::sys::CUevent_flags;
 
 use crate::CudaDeviceBuffer;
 use crate::stream::VortexCudaStream;
@@ -66,8 +66,7 @@ impl PinnedByteBuffer {
         // Bind explicitly rather than relying on event creation to bind this worker thread.
         ctx.bind_to_thread()
             .map_err(|e| vortex_err!("failed to bind pinned host buffer context: {e}"))?;
-        // Keep file-I/O staging cacheable: cudarc's allocator uses write-combined memory,
-        // which makes CPU reads expensive.
+        // Keep file-I/O staging cacheable: write-combined pinned memory makes CPU reads expensive.
         let ptr = unsafe { result::malloc_host(capacity, 0) }
             .map_err(|e| vortex_err!("failed to allocate pinned host buffer: {e}"))?
             .cast::<u8>();
@@ -117,7 +116,7 @@ impl HostSlice<u8> for PinnedByteBufferView<'_> {
         let slice = unsafe {
             std::slice::from_raw_parts(self.buffer.ptr.add(self.range.start), self.range.len())
         };
-        let sync = SyncOnDrop::Record(Some((&self.buffer.event, stream)));
+        let sync = SyncOnDrop::record_event(&self.buffer.event, stream);
         (slice, sync)
     }
 
@@ -131,7 +130,7 @@ impl HostSlice<u8> for PinnedByteBufferView<'_> {
         let slice = unsafe {
             std::slice::from_raw_parts_mut(self.buffer.ptr.add(self.range.start), self.range.len())
         };
-        let sync = SyncOnDrop::Record(Some((&self.buffer.event, stream)));
+        let sync = SyncOnDrop::record_event(&self.buffer.event, stream);
         (slice, sync)
     }
 }
@@ -391,7 +390,7 @@ impl PooledPinnedBuffer {
             range,
         };
         // Keep the source guard's record as well as the explicit completion record. The latter
-        // also fences the source when cudarc's automatic event tracking is disabled.
+        // also fences the source independently of device memory access tracking.
         let completion = stream
             .memcpy_htod(&source, destination)
             .and_then(|()| source.buffer.event.record(stream));
@@ -439,12 +438,12 @@ mod tests {
     use std::sync::Arc;
     use std::sync::mpsc::Sender;
 
-    use cudarc::driver::CudaContext;
-    use cudarc::driver::sys::cudaError_enum;
     use rstest::rstest;
     use vortex::array::buffer::DeviceBuffer;
     use vortex::buffer::Alignment;
     use vortex::error::VortexResult;
+    use vortex_cuda_driver::CudaContext;
+    use vortex_cuda_driver::sys::cudaError_enum;
 
     use super::*;
 
@@ -534,16 +533,8 @@ mod tests {
 
     #[rstest]
     #[crate::test]
-    fn transfer_retains_and_reuses_source(
-        #[values(false, true)] ranged: bool,
-        #[values(false, true)] automatic_tracking: bool,
-    ) -> VortexResult<()> {
+    fn transfer_retains_and_reuses_source(#[values(false, true)] ranged: bool) -> VortexResult<()> {
         let (pool, stream) = setup()?;
-        if !automatic_tracking {
-            // SAFETY: Device allocations are used and freed on their allocation stream;
-            // the pool must independently fence host reuse even without cudarc tracking.
-            unsafe { stream.context().disable_event_tracking() };
-        }
         let mut pinned = pool.get(1024)?;
         pinned.as_mut_slice().fill(0xAB);
         let allocation = pinned.as_mut_slice().as_ptr();
@@ -607,18 +598,12 @@ mod tests {
         Ok(())
     }
 
-    fn setup_resubmission(
-        automatic_tracking: bool,
-    ) -> VortexResult<(
+    fn setup_resubmission() -> VortexResult<(
         Arc<PinnedByteBufferPool>,
         VortexCudaStream,
         VortexCudaStream,
     )> {
         let (pool, stream) = setup()?;
-        if !automatic_tracking {
-            // SAFETY: Each destination stays on its allocation stream. The pool fences sources.
-            unsafe { stream.context().disable_event_tracking() };
-        }
         let other = VortexCudaStream(
             pool.ctx
                 .new_stream()
@@ -630,7 +615,7 @@ mod tests {
     fn submit_to_bucket(
         mut pinned: PooledPinnedBuffer,
         stream: &VortexCudaStream,
-        destination: &mut cudarc::driver::CudaSlice<u8>,
+        destination: &mut vortex_cuda_driver::CudaSlice<u8>,
     ) -> VortexResult<()> {
         let owner = pinned.inner.as_mut().unwrap();
         // SAFETY: Tests initialize the source. On failure retain_after_transfer synchronizes
@@ -691,18 +676,19 @@ mod tests {
         Ok(())
     }
 
-    fn assert_device_bytes(device: cudarc::driver::CudaSlice<u8>, byte: u8) -> VortexResult<()> {
+    fn assert_device_bytes(
+        device: vortex_cuda_driver::CudaSlice<u8>,
+        byte: u8,
+    ) -> VortexResult<()> {
         let host = CudaDeviceBuffer::new(device).copy_to_host_sync(Alignment::of::<u8>())?;
         assert!(host.as_ref().iter().all(|value| *value == byte));
         Ok(())
     }
 
     #[rstest]
-    #[case::untracked(false)]
-    #[case::tracked(true)]
     #[crate::test]
-    fn pending_bucket_source_resubmission(#[case] automatic_tracking: bool) -> VortexResult<()> {
-        let (pool, stream, other) = setup_resubmission(automatic_tracking)?;
+    fn pending_bucket_source_resubmission() -> VortexResult<()> {
+        let (pool, stream, other) = setup_resubmission()?;
         let len = 1024 * 1024;
         let mut pinned = pool.get(len)?;
         pinned.as_mut_slice().fill(0x5A);
@@ -725,11 +711,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::untracked(false)]
-    #[case::tracked(true)]
     #[crate::test]
-    fn pending_bucket_source_wait_failure(#[case] automatic_tracking: bool) -> VortexResult<()> {
-        let (pool, stream, other) = setup_resubmission(automatic_tracking)?;
+    fn pending_bucket_source_wait_failure() -> VortexResult<()> {
+        let (pool, stream, other) = setup_resubmission()?;
         let len = 1024 * 1024;
         let mut pinned = pool.get(len)?;
         pinned.as_mut_slice().fill(0x5A);
@@ -760,15 +744,8 @@ mod tests {
 
     #[rstest]
     #[crate::test]
-    fn failed_fence_waits_before_reuse(
-        #[values(false, true)] automatic_tracking: bool,
-    ) -> VortexResult<()> {
+    fn failed_fence_waits_before_reuse() -> VortexResult<()> {
         let (pool, stream) = setup()?;
-        if !automatic_tracking {
-            // SAFETY: The destination is used only on its allocation stream; the explicit
-            // recovery path must fence the source without depending on automatic tracking.
-            unsafe { stream.context().disable_event_tracking() };
-        }
         let mut pinned = pool.get(1024 * 1024)?;
         pinned.as_mut_slice().fill(0x3C);
         let mut destination = stream.device_alloc::<u8>(1024 * 1024)?;

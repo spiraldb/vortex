@@ -7,9 +7,6 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use cudarc::driver::CudaSlice;
-use cudarc::driver::DevicePtr;
-use cudarc::driver::DevicePtrMut;
 use futures::future::try_join_all;
 use tracing::debug;
 use tracing::instrument;
@@ -35,6 +32,9 @@ use vortex::error::VortexResult;
 use vortex::error::vortex_bail;
 use vortex::error::vortex_err;
 use vortex::mask::AllOr;
+use vortex_cuda_driver::CudaSlice;
+use vortex_cuda_driver::DevicePtr;
+use vortex_cuda_driver::DevicePtrMut;
 use vortex_nvcomp::sys::nvcompStatus_t;
 use vortex_nvcomp::zstd as nvcomp_zstd;
 

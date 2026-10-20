@@ -15,12 +15,6 @@ use std::sync::LazyLock;
 use std::sync::mpsc;
 use std::time::SystemTime;
 
-use cudarc::driver::CudaFunction;
-use cudarc::driver::CudaSlice;
-use cudarc::driver::DevicePtrMut;
-use cudarc::driver::LaunchConfig;
-use cudarc::driver::PushKernelArg;
-use cudarc::driver::sys::CUdevice_attribute;
 use futures::FutureExt;
 use futures::StreamExt;
 use futures::TryFutureExt;
@@ -41,6 +35,12 @@ use vortex::io::CoalesceConfig;
 use vortex::io::VortexReadAt;
 use vortex::io::runtime::Handle;
 use vortex::io::std_file::read_exact_at;
+use vortex_cuda_driver::CudaFunction;
+use vortex_cuda_driver::CudaSlice;
+use vortex_cuda_driver::DevicePtrMut;
+use vortex_cuda_driver::LaunchConfig;
+use vortex_cuda_driver::PushKernelArg;
+use vortex_cuda_driver::sys::CUdevice_attribute;
 
 #[cfg(target_os = "linux")]
 use self::direct::DirectFileReadBackend;
