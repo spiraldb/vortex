@@ -9,9 +9,10 @@
 //! file's [`SegmentSource`]. The layout reader is never asked to evaluate anything.
 //!
 //! Import this module's [`ScanBuilder`] to select V2 explicitly. It accepts a [`ScanFile`]
-//! directly and supports projection, row ranges, and selections. Unsupported layouts return an
-//! error; filters and limits are not part of this builder's API. Work is partitioned into fixed
-//! chunks of up to 65,536 rows, independently of the stored layout's chunk boundaries.
+//! directly and supports projection, filters, row ranges, and selections. Unsupported layouts return an
+//! error; limits are not part of this builder's API. Work is partitioned into fixed
+//! chunks of up to 65,536 rows, or 1,048,576 rows for filtered scans, independently of the stored
+//! layout's chunk boundaries.
 //! Full-file projections use smaller 8,192-row multiples when serialized bytes per row are high.
 
 mod io;
@@ -29,6 +30,7 @@ use arrow_schema::SchemaRef;
 use futures::Stream;
 use futures::StreamExt;
 use futures::TryStreamExt;
+use futures::channel::mpsc;
 use futures::stream;
 use futures::stream::BoxStream;
 use vortex_array::ArrayRef;
@@ -49,6 +51,7 @@ use crate::plan::physical::lower;
 use crate::plan::physical::optimize;
 use crate::plan::physical::plan_row_idx_expression;
 use crate::scan::arrow::to_record_batch;
+use crate::scan::execution::FilterPlans;
 use crate::scan::execution::ScanPlans;
 pub use crate::scan::execution::SegmentLocation;
 use crate::scan::execution::plan_selection;
@@ -59,6 +62,7 @@ use crate::segments::SegmentSource;
 
 const ROW_BLOCK_SIZE: usize = 8192;
 const MAX_ROWS_PER_CHUNK: usize = 8 * ROW_BLOCK_SIZE;
+const FILTERED_ROWS_PER_CHUNK: usize = 16 * MAX_ROWS_PER_CHUNK;
 const TARGET_BYTES_PER_CHUNK: u64 = 8 * 1024 * 1024;
 
 /// Limit estimated bytes per task without changing the writer-aligned row granularity.
@@ -103,11 +107,12 @@ pub struct ScanFile {
 /// Builds a projection scan on the planner-driven V2 executor.
 ///
 /// This builder reads the file's layout and segments directly. Unsupported layouts return an
-/// error when the stream is polled. Filters and row limits are not supported.
+/// error when the stream is polled. Row limits are not supported.
 pub struct ScanBuilder<A = ArrayRef> {
     session: VortexSession,
     file: ScanFile,
     projection: BoundExpression,
+    filter: Option<BoundExpression>,
     ordered: bool,
     row_range: Option<Range<u64>>,
     selection: Selection,
@@ -121,6 +126,7 @@ impl ScanBuilder<ArrayRef> {
     pub fn new(session: VortexSession, file: ScanFile) -> Self {
         Self {
             projection: BoundExpression::new_root(file.layout.dtype().clone()),
+            filter: None,
             session,
             file,
             ordered: true,
@@ -161,6 +167,12 @@ impl<A: 'static + Send> ScanBuilder<A> {
         self
     }
 
+    /// Evaluates a bound predicate before projecting the surviving rows.
+    pub fn with_some_filter(mut self, filter: Option<BoundExpression>) -> Self {
+        self.filter = filter;
+        self
+    }
+
     /// Configures whether batches are yielded in file order.
     pub fn with_ordered(mut self, ordered: bool) -> Self {
         self.ordered = ordered;
@@ -198,7 +210,7 @@ impl<A: 'static + Send> ScanBuilder<A> {
     }
 
     /// Maps each output batch on its split's task.
-    fn map<B: 'static>(
+    pub fn map<B: 'static>(
         self,
         map_fn: impl Fn(A) -> VortexResult<B> + 'static + Send + Sync,
     ) -> ScanBuilder<B> {
@@ -207,6 +219,7 @@ impl<A: 'static + Send> ScanBuilder<A> {
             session: self.session,
             file: self.file,
             projection: self.projection,
+            filter: self.filter,
             ordered: self.ordered,
             row_range: self.row_range,
             selection: self.selection,
@@ -251,6 +264,10 @@ impl<A: 'static + Send> PreparedScan<A> {
         let file = builder.file;
         let root = lower(&file.layout)?;
         let row_count = root.row_count();
+        let filter = builder
+            .filter
+            .map(|filter| FilterPlans::new(filter, &root, &builder.session).map(Arc::new))
+            .transpose()?;
         // An identity projection needs no rewrites. Keep the lowered children lazy, including
         // statistics that a projection-only scan never reads.
         let identity = builder.projection.is_root() && builder.projection.dtype() == root.dtype();
@@ -259,7 +276,9 @@ impl<A: 'static + Send> PreparedScan<A> {
         } else {
             optimize(plan_row_idx_expression(builder.projection, root)?)?
         };
-        let chunk_rows = if identity {
+        let chunk_rows = if filter.is_some() {
+            FILTERED_ROWS_PER_CHUNK
+        } else if identity {
             rows_per_chunk(row_count, &file.locations)
         } else {
             MAX_ROWS_PER_CHUNK
@@ -275,6 +294,7 @@ impl<A: 'static + Send> PreparedScan<A> {
                 session: builder.session,
                 locations: file.locations,
                 projection,
+                filter,
                 row_offset: builder.row_offset,
                 values: Default::default(),
             },
@@ -315,6 +335,21 @@ impl<A: 'static + Send> PreparedScan<A> {
         let split_plans = self.split_plans();
         let io = self.io;
         let map_fn = self.map_fn;
+        if !self.ordered
+            && split_plans.iter().any(|split| {
+                split.scope.rows.end - split.scope.rows.start > MAX_ROWS_PER_CHUNK as u64
+            })
+        {
+            let streams = stream::iter(split_plans).map(move |split| {
+                let (send, recv) = mpsc::channel(1);
+                let task =
+                    handle.spawn(split.run_unordered(Arc::clone(&io), Arc::clone(&map_fn), send));
+                let errors = stream::once(task)
+                    .filter_map(|result| std::future::ready(result.err().map(Err)));
+                stream::select(recv, errors)
+            });
+            return Ok(streams.flatten_unordered(concurrency).boxed());
+        }
         // Spawned as the buffer pulls them, so at most `concurrency` splits read at once.
         let tasks = stream::iter(split_plans).map(move |split| {
             let io = Arc::clone(&io);
