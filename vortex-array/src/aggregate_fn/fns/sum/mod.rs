@@ -61,14 +61,8 @@ pub fn sum(array: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<Scalar> {
         array.dtype().clone(),
     )?;
     acc.accumulate(array, ctx)?;
-    let result = acc.finish()?;
-
-    // Cache the computed sum as a statistic (only if non-null, i.e. no overflow).
-    if let Some(val) = result.value().cloned() {
-        array.statistics().set(Stat::Sum, Precision::Exact(val));
-    }
-
-    Ok(result)
+    // The accumulator caches the sum on `array` as a statistic.
+    acc.finish()
 }
 
 /// Sum an array, starting from zero.
@@ -152,7 +146,7 @@ impl AggregateFnVTable for Sum {
     fn partial_from_scalar(
         &self,
         args: AggregateArgs<'_, Self::Options>,
-        scalar: Scalar,
+        scalar: &Scalar,
     ) -> VortexResult<Self::Partial> {
         vortex_ensure!(
             scalar.dtype().eq_ignore_nullability(args.return_dtype),
@@ -164,7 +158,7 @@ impl AggregateFnVTable for Sum {
         let current = if scalar.is_null() {
             None
         } else {
-            Some(sum_state_from_scalar(&scalar, args.return_dtype)?)
+            Some(sum_state_from_scalar(scalar, args.return_dtype)?)
         };
         Ok(SumPartial { current })
     }
@@ -448,7 +442,6 @@ fn checked_add_i64(acc: &mut i64, val: i64) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use num_traits::CheckedAdd;
     use vortex_buffer::buffer;
     use vortex_error::VortexExpect;
     use vortex_error::VortexResult;
@@ -486,67 +479,8 @@ mod tests {
     use crate::expr::stats::Stat;
     use crate::expr::stats::StatsProvider;
     use crate::scalar::DecimalValue;
-    use crate::scalar::NumericOperator;
     use crate::scalar::Scalar;
     use crate::validity::Validity;
-
-    /// Sum an array with an initial value (test-only helper).
-    fn sum_with_accumulator(array: &ArrayRef, accumulator: &Scalar) -> VortexResult<Scalar> {
-        let mut ctx = array_session().create_execution_ctx();
-        if accumulator.is_null() {
-            return Ok(accumulator.clone());
-        }
-        if accumulator.is_zero() == Some(true) {
-            return sum(array, &mut ctx);
-        }
-
-        let sum_dtype = Stat::Sum.dtype(array.dtype()).ok_or_else(|| {
-            vortex_error::vortex_err!("Sum not supported for dtype: {}", array.dtype())
-        })?;
-
-        // For non-float types, try statistics short-circuit with accumulator.
-        if !matches!(&sum_dtype, DType::Primitive(p, _) if p.is_float())
-            && let Precision::Exact(sum_scalar) = array.statistics().get(Stat::Sum)
-        {
-            return add_scalars(&sum_dtype, &sum_scalar, accumulator);
-        }
-
-        // Compute array sum from zero (also caches stats).
-        let array_sum = sum(array, &mut ctx)?;
-
-        // Combine with the accumulator.
-        add_scalars(&sum_dtype, &array_sum, accumulator)
-    }
-
-    /// Add two sum scalars with overflow checking.
-    fn add_scalars(sum_dtype: &DType, lhs: &Scalar, rhs: &Scalar) -> VortexResult<Scalar> {
-        if lhs.is_null() || rhs.is_null() {
-            return Ok(Scalar::null(sum_dtype.as_nullable()));
-        }
-
-        Ok(match sum_dtype {
-            DType::Primitive(ptype, _) if ptype.is_float() => {
-                let lhs_val = f64::try_from(lhs)?;
-                let rhs_val = f64::try_from(rhs)?;
-                Scalar::primitive(lhs_val + rhs_val, Nullable)
-            }
-            DType::Primitive(..) => lhs
-                .as_primitive()
-                .checked_add(&rhs.as_primitive())
-                .map(Scalar::from)
-                .unwrap_or_else(|| Scalar::null(sum_dtype.as_nullable())),
-            // Add widens the result precision, so restate the sum in the accumulator's own
-            // decimal type, treating a value that no longer fits as an overflow.
-            DType::Decimal(decimal_dtype, _) => lhs
-                .as_decimal()
-                .checked_binary_numeric(&rhs.as_decimal(), NumericOperator::Add)?
-                .and_then(|scalar| scalar.as_decimal().decimal_value())
-                .filter(|value| value.fits_in_precision(*decimal_dtype))
-                .map(|value| Scalar::decimal(value, *decimal_dtype, Nullable))
-                .unwrap_or_else(|| Scalar::null(sum_dtype.as_nullable())),
-            _ => unreachable!("Sum will always be a decimal or a primitive dtype"),
-        })
-    }
 
     // Multi-batch and reset tests
 
@@ -612,8 +546,8 @@ mod tests {
         let args = owned.args(&options);
 
         let overflowed =
-            Sum.partial_from_scalar(args, Scalar::null(DType::Primitive(PType::I64, Nullable)))?;
-        let five = Sum.partial_from_scalar(args, Scalar::primitive(5i64, Nullable))?;
+            Sum.partial_from_scalar(args, &Scalar::null(DType::Primitive(PType::I64, Nullable)))?;
+        let five = Sum.partial_from_scalar(args, &Scalar::primitive(5i64, Nullable))?;
         let state = Sum.merge_partials(args, five, overflowed)?;
 
         assert!(Sum.is_saturated(args, &state));
@@ -634,8 +568,16 @@ mod tests {
         )
         .vortex_expect("operation should succeed in test");
         let array = array.into_array();
-        // compute sum with accumulator to populate stats
-        sum_with_accumulator(&array, &Scalar::primitive(2i64, Nullable))?;
+        let mut ctx = array_session().create_execution_ctx();
+        let mut acc = Accumulator::try_new(
+            Sum,
+            NumericalAggregateOpts::default(),
+            array.dtype().clone(),
+        )?;
+        acc.combine_partials(&Scalar::primitive(2i64, Nullable))?;
+        acc.accumulate(&array, &mut ctx)?;
+        assert_eq!(acc.finish()?, Scalar::primitive(11i64, Nullable));
+        assert_eq!(array.statistics().get(Stat::Sum), Precision::exact(9i64));
 
         let sum_without_acc = sum(&array, &mut array_session().create_execution_ctx())?;
         assert_eq!(sum_without_acc, Scalar::primitive(9i64, Nullable));
@@ -648,8 +590,15 @@ mod tests {
     fn sum_constant_float_non_multiply() -> VortexResult<()> {
         let acc = -2048669276050936500000000000f64;
         let array = ConstantArray::new(6.1811675e16f64, 25);
-        let result = sum_with_accumulator(&array.into_array(), &Scalar::primitive(acc, Nullable))
-            .vortex_expect("operation should succeed in test");
+        let array = array.into_array();
+        let mut accumulator = Accumulator::try_new(
+            Sum,
+            NumericalAggregateOpts::default(),
+            array.dtype().clone(),
+        )?;
+        accumulator.combine_partials(&Scalar::primitive(acc, Nullable))?;
+        accumulator.accumulate(&array, &mut array_session().create_execution_ctx())?;
+        let result = accumulator.finish()?;
         assert_eq!(
             f64::try_from(&result).vortex_expect("operation should succeed in test"),
             -2048669274505644600000000000f64

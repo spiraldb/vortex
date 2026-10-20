@@ -395,14 +395,13 @@ mod tests {
     use vortex_array::dtype::DType;
     use vortex_array::dtype::Nullability;
     use vortex_array::scalar::Scalar;
-    use vortex_array::scalar::ScalarValue;
+    use vortex_arrow::ArrowExportOptions;
     use vortex_arrow::ArrowSessionExt;
     use vortex_error::VortexResult;
     use vortex_session::VortexSession;
 
     use crate::ParquetVariant;
     use crate::ParquetVariantArrayExt;
-    use crate::operations::parquet_variant_to_scalar;
 
     static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
         let session = array_session();
@@ -418,24 +417,23 @@ mod tests {
         Arc::new(builder.finish())
     }
 
-    fn assert_scalar_at_matches_arrow_try_value(
+    fn assert_scalar_rows(
         arrow_variant: &ArrowVariantArray,
-        rows: impl IntoIterator<Item = usize>,
+        expected: &[Scalar],
     ) -> VortexResult<()> {
         let vortex_arr = ParquetVariant::from_arrow_variant(arrow_variant, &SESSION.arrow())?;
-
-        for index in rows {
-            let expected_inner = parquet_variant_to_scalar(arrow_variant.try_value(index)?)?;
-            let expected = Scalar::try_new(
-                vortex_arr.dtype().clone(),
-                Some(ScalarValue::Variant(Box::new(expected_inner))),
-            )?;
+        assert_eq!(vortex_arr.len(), expected.len());
+        assert_eq!(
+            vortex_arr.dtype(),
+            &DType::Variant(Nullability::NonNullable)
+        );
+        let mut ctx = SESSION.create_execution_ctx();
+        for (index, expected) in expected.iter().enumerate() {
             assert_eq!(
-                vortex_arr.execute_scalar(index, &mut array_session().create_execution_ctx())?,
-                expected
+                vortex_arr.execute_scalar(index, &mut ctx)?,
+                Scalar::variant(expected.clone())
             );
         }
-
         Ok(())
     }
 
@@ -548,7 +546,7 @@ mod tests {
 
         let inner_pv = vortex_arr.as_opt::<ParquetVariant>().unwrap();
         let mut ctx = array_session().create_execution_ctx();
-        let roundtripped = inner_pv.to_arrow(&mut ctx)?;
+        let roundtripped = inner_pv.to_arrow(&ArrowExportOptions::default(), &mut ctx)?;
         assert_eq!(roundtripped.inner().null_count(), 2);
 
         Ok(())
@@ -577,7 +575,7 @@ mod tests {
                 .execute_scalar(1, &mut array_session().create_execution_ctx())?
                 .is_null()
         );
-        assert_scalar_at_matches_arrow_try_value(&arrow_variant, [0, 1])?;
+        assert_scalar_rows(&arrow_variant, &[Scalar::from(1i32), Scalar::from(2i32)])?;
 
         Ok(())
     }
@@ -590,7 +588,14 @@ mod tests {
         builder.append_variant(PqVariant::from(true));
         let arrow_variant = builder.build();
 
-        assert_scalar_at_matches_arrow_try_value(&arrow_variant, [0, 1, 2])
+        assert_scalar_rows(
+            &arrow_variant,
+            &[
+                Scalar::from(42i32),
+                Scalar::from("hello"),
+                Scalar::from(true),
+            ],
+        )
     }
 
     #[test]
@@ -609,7 +614,14 @@ mod tests {
         )?;
 
         let arrow_variant = ArrowVariantArray::try_new(&struct_array)?;
-        assert_scalar_at_matches_arrow_try_value(&arrow_variant, [0, 1, 2])
+        assert_scalar_rows(
+            &arrow_variant,
+            &[
+                Scalar::from(10i32),
+                Scalar::from(20i32),
+                Scalar::from(30i32),
+            ],
+        )
     }
 
     #[test]
@@ -642,7 +654,14 @@ mod tests {
         )?;
 
         let arrow_variant = ArrowVariantArray::try_new(&struct_array)?;
-        assert_scalar_at_matches_arrow_try_value(&arrow_variant, [0, 1, 2])
+        assert_scalar_rows(
+            &arrow_variant,
+            &[
+                Scalar::from("fallback-0"),
+                Scalar::from(20i32),
+                Scalar::from("fallback-2"),
+            ],
+        )
     }
 
     #[test]

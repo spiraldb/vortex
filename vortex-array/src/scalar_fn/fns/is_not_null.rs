@@ -111,7 +111,7 @@ impl IsNotNull {
     /// Creates a lazy non-null check over `input`.
     #[expect(clippy::new_ret_no_self, reason = "constructs the lazy result array")]
     pub fn new(input: ArrayRef) -> ScalarFnArray {
-        ScalarFnArray::try_new(IsNotNull.bind(EmptyOptions), vec![input])
+        ScalarFnArray::try_new(IsNotNull.bind(EmptyOptions), [input])
             .vortex_expect("IsNotNull has one child and an infallible return dtype")
     }
 }
@@ -190,7 +190,6 @@ mod tests {
     use std::sync::LazyLock;
 
     use vortex_buffer::buffer;
-    use vortex_error::VortexExpect as _;
     use vortex_error::VortexResult;
     use vortex_session::VortexSession;
 
@@ -282,13 +281,6 @@ mod tests {
             and(is_null(col("a")), not(col("b"))).bind(&dtype)?
         );
         Ok(())
-    }
-
-    #[test]
-    fn replace_children() {
-        let expr = is_not_null(root());
-        expr.with_children([root()])
-            .vortex_expect("operation should succeed in test");
     }
 
     #[test]

@@ -128,20 +128,19 @@ jobs:
             pytest --benchmark-disable test/test_hf_datasets.py
         working-directory: vortex-python/
 
+      # The lockfile tracks Polars 2, so also exercise the oldest supported 1.x release. The
+      # Polars integration parses Polars' serialized expression format, which differs across
+      # versions.
+      - name: Pytest - Vortex (Polars 1.x floor)
+        run: |
+          uv run --all-packages --with 'polars==1.32.0' \
+            pytest --benchmark-disable test/test_polars_.py test/test_dataset.py
+        working-directory: vortex-python/
+
       - name: Check Python documentation
         run: |
           uv run --all-packages make check
         working-directory: docs/
-
-      # Keep this last: setup-benchmark.sh confines everything except the wrapped
-      # benchmark to the housekeeping CPUs, so any step after it runs on few cores.
-      - name: Setup benchmark environment
-        run: sudo bash scripts/setup-benchmark.sh
-
-      - name: Pytest Benchmarks - Vortex
-        run: |
-          bash ../scripts/bench-taskset.sh uv run --all-packages pytest --benchmark-only benchmark/
-        working-directory: vortex-python/
 
   python-windows:
     name: "Python (windows-x64)"
@@ -582,6 +581,60 @@ jobs:
           alert-title: "Rust tests (linux-arm64) failed on develop"
           deduplication-key: ci-rust-test-linux-arm64-failure
 
+  # Runs the crates with hand-written SIMD kernels on EC2 instance families chosen for
+  # their CPU features, so that every runtime-dispatched kernel tier is exercised:
+  #   c6a (AMD Zen 3): AVX2 and BMI2, no AVX-512
+  #   c6i (Intel Ice Lake): AVX-512 F/BW/VBMI2/VPOPCNTDQ
+  #   c8g (Graviton4, Neoverse V2): SVE2 with BITPERM
+  # `VORTEX_EXPECT_CPU_FEATURES` lists every feature the instance must have; vortex-array-macros'
+  # `cpu_features` test fails if any of them is missing or any other known feature (e.g.
+  # AVX-512 on the avx2 entry) is detected.
+  rust-test-cpu-features:
+    name: "Rust tests (cpu-features, ${{ matrix.config.name }})"
+    if: github.repository == 'vortex-data/vortex'
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - name: avx2
+            runner: amd64-ci-medium
+            family: c6a.2xlarge
+            image: ubuntu24-full-x64-pre-v2
+            expect: "sse2,popcnt,bmi1,bmi2,avx,avx2"
+          - name: avx512
+            runner: amd64-ci-medium
+            family: c6i.2xlarge
+            image: ubuntu24-full-x64-pre-v2
+            expect: "sse2,popcnt,bmi1,bmi2,avx,avx2,avx512f,avx512bw,avx512vbmi2,avx512vpopcntdq"
+          - name: sve
+            runner: arm64-medium
+            family: c8g.2xlarge
+            image: ubuntu24-full-arm64-pre-v2
+            expect: "neon,sve,sve2,sve2-bitperm"
+    runs-on: >-
+      runs-on=${{ github.run_id }}/runner=${{ matrix.config.runner }}/family=${{ matrix.config.family }}/spot=price-capacity-optimized/image=${{ matrix.config.image }}/extras=s3-cache/tag=rust-test-cpu-features-${{ matrix.config.name }}
+    env:
+      VORTEX_EXPECT_CPU_FEATURES: ${{ matrix.config.expect }}
+    steps:
+      - parallel:
+          - uses: runs-on/action@v2
+            with:
+              sccache: s3
+          - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: ./.github/actions/setup-prebuild
+        with:
+          enable-sccache: "true"
+      # Print the detected features and fail fast if the instance is not the expected tier.
+      - name: Check CPU features
+        run: |
+          cargo nextest run --cargo-profile ci --locked --no-capture \
+            -p vortex-array-macros --test cpu_features
+      - name: Rust Tests
+        run: |
+          cargo nextest run --cargo-profile ci --locked --no-fail-fast \
+            -p vortex-buffer -p vortex-mask -p vortex-array
+
   btrblocks-golden:
     name: "Rust (btrblocks golden corpus)"
     timeout-minutes: 10
@@ -627,7 +680,7 @@ jobs:
           - uses: ./.github/actions/setup-prebuild
             with:
               enable-sccache: "true"
-          - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb  # v6
+          - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6  # v6
       - name: Build documentation and run Java checks
         run: ./gradlew --parallel javadoc check
         working-directory: ./java

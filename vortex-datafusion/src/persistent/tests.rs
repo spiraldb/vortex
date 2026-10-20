@@ -13,6 +13,7 @@ use datafusion::execution::SessionStateBuilder;
 use datafusion::prelude::SessionConfig;
 use datafusion::prelude::SessionContext;
 use datafusion_common::GetExt;
+use datafusion_common::arrow::compute::concat_batches;
 use datafusion_physical_plan::display::DisplayableExecutionPlan;
 use insta::assert_snapshot;
 use object_store::ObjectStore;
@@ -137,15 +138,32 @@ async fn test_query_file(#[values(Some(1), None)] limit: Option<usize>) -> anyho
 
     assert_eq!(summary.row_count(), 8);
 
-    let read_row_count = ctx
+    let batches = ctx
         .session
         .sql("SELECT * from '/test.vortex'")
         .await?
         .limit(0, limit)?
-        .count()
+        .collect()
         .await?;
 
-    assert_eq!(read_row_count, limit.unwrap_or(8));
+    let mut seen = std::collections::BTreeSet::new();
+    for batch in &batches {
+        assert_eq!(batch.num_columns(), 2);
+        for row in 0..batch.num_rows() {
+            let number = datafusion_common::ScalarValue::try_from_array(batch.column(1), row)?;
+            let datafusion_common::ScalarValue::UInt32(Some(number)) = number else {
+                panic!("expected non-null UInt32");
+            };
+            assert!((1..=8).contains(&number));
+            assert!(seen.insert(number), "duplicate row {number}");
+            let expected = ["ab", "foo", "bar", "baz"][(number as usize - 1) % 4];
+            assert_eq!(
+                datafusion_common::ScalarValue::try_from_array(batch.column(0), row)?,
+                datafusion_common::ScalarValue::Utf8View(Some(expected.to_owned()))
+            );
+        }
+    }
+    assert_eq!(seen.len(), limit.unwrap_or(8));
 
     Ok(())
 }
@@ -676,5 +694,103 @@ async fn arrow_uuid_extension_roundtrip_nested_struct() -> anyhow::Result<()> {
         &result
     );
 
+    Ok(())
+}
+
+#[rstest]
+#[case::modulo("id, a", "CAST(a % 2 AS BIGINT) = 0")]
+#[case::in_list("id, a IN (1, 4, 5, 6, 7, NULL) AS member", "TRUE")]
+#[case::not_in("id, a", "a NOT IN (1, 4, 5, 6, 7, 8)")]
+#[case::null_list("id, a", "a NOT IN (1, 4, 5, 6, 7, NULL)")]
+#[case::column_list("id, a", "a IN (b, 4, 5, 6, 7, 8)")]
+// Overflow equivalence is deferred until Vortex matches DataFusion's arithmetic semantics.
+#[case::add("id, a + CAST(1 AS INT) AS n", "id > 1")]
+#[case::subtract("id, a - CAST(1 AS INT) AS n", "id > 1")]
+#[case::multiply("id, a * CAST(2 AS INT) AS n", "id > 1")]
+#[case::arithmetic_filter("id", "b * CAST(2 AS INT) = 4")]
+#[case::narrow_cast("id, CAST(a AS TINYINT) AS n", "TRUE")]
+#[case::case_branch("id, CASE WHEN b <> 0 THEN 12 / b ELSE 0 END AS n", "TRUE")]
+#[case::case_filter("id", "CASE WHEN b <> 0 THEN 12 / b ELSE 0 END = 6")]
+#[case::case_else("id, CASE WHEN b = 0 THEN 0 ELSE 12 / b END AS n", "TRUE")]
+#[case::case_later_condition(
+    "id, CASE WHEN b = 0 THEN 0 WHEN 12 / b > 1 THEN 12 / b ELSE 1 END AS n",
+    "TRUE"
+)]
+#[case::case_no_else("id, CASE WHEN b <> 0 THEN 12 / b END AS n", "TRUE")]
+#[case::case_selected_error("id, CASE WHEN b = 0 THEN 12 / b ELSE 0 END AS n", "TRUE")]
+#[case::not("id, NOT (a IN (1, 2, NULL)) AS n", "NOT (a = b)")]
+#[case::projection_alias("id, a + CAST(1 AS INT) AS a, abs(a) AS b", "id > 1")]
+#[case::unprojected("id", "CAST(a AS VARCHAR) = '1'")]
+#[case::decimal(
+    "id, CAST(a AS DECIMAL(12, 2)) + CAST(b AS DECIMAL(12, 2)) AS n",
+    "TRUE"
+)]
+#[tokio::test]
+async fn test_predicate_memtable_oracle(
+    #[case] projection: &str,
+    #[case] predicate: &str,
+    #[values(false, true)] pushdown: bool,
+) -> anyhow::Result<()> {
+    let options = crate::VortexTableOptions {
+        projection_pushdown: pushdown,
+        predicate_pushdown: pushdown,
+        ..Default::default()
+    };
+    let ctx = TestSessionContext::new_with_factory(Arc::new(
+        VortexFormatFactory::new().with_options(options),
+    ));
+    let batch = arrow_array::record_batch!(
+        ("id", Int32, vec![0, 1, 2, 3, 4, 5]),
+        (
+            "a",
+            Int32,
+            vec![
+                Some(i32::MAX),
+                Some(i32::MIN),
+                Some(1),
+                Some(2),
+                None,
+                Some(4)
+            ]
+        ),
+        ("b", Int32, vec![0, 0, 1, 2, 0, 2])
+    )?;
+    ctx.write_arrow_batch("oracle.vortex", &batch).await?;
+    let actual_table = ctx
+        .table_provider("actual", "/oracle.vortex", batch.schema().as_ref().clone())
+        .await?;
+    ctx.session.register_table("actual", actual_table)?;
+    ctx.session.register_table(
+        "oracle",
+        Arc::new(datafusion::datasource::MemTable::try_new(
+            batch.schema(),
+            vec![vec![batch]],
+        )?),
+    )?;
+    let actual = ctx
+        .session
+        .sql(&format!(
+            "SELECT {projection} FROM actual WHERE {predicate} ORDER BY id"
+        ))
+        .await?;
+    let expected = ctx
+        .session
+        .sql(&format!(
+            "SELECT {projection} FROM oracle WHERE {predicate} ORDER BY id"
+        ))
+        .await?;
+    assert_eq!(actual.schema().as_arrow(), expected.schema().as_arrow());
+    let schema = Arc::new(expected.schema().as_arrow().clone());
+    match (actual.collect().await, expected.collect().await) {
+        (Ok(actual), Ok(expected)) => {
+            let actual = concat_batches(&schema, &actual)?;
+            let expected = concat_batches(&schema, &expected)?;
+            assert_eq!(actual, expected);
+        }
+        (Err(_), Err(_)) => {}
+        (actual, expected) => anyhow::bail!(
+            "Vortex/MemTable mismatch for {projection} WHERE {predicate}: {actual:?} / {expected:?}"
+        ),
+    }
     Ok(())
 }

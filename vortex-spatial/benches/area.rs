@@ -128,9 +128,11 @@ fn multipolygon(bencher: Bencher) {
 
 #[divan::bench]
 fn nullable_polygon(bencher: Bencher) {
+    let mut ctx = SESSION.create_execution_ctx();
     let geometry = MaskedArray::try_new(
         simple_polygons(),
         Validity::from_iter((0..ROWS).map(|row| !row.is_multiple_of(8))),
+        &mut ctx,
     )
     .unwrap()
     .into_array();

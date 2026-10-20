@@ -19,7 +19,7 @@ use crate::scalar::Scalar;
 /// Nested builders receive values from two sources: individual [`Scalar`]s, which have to be
 /// materialized into a canonical builder, and whole arrays, whose encoding the builder has no
 /// reason to decode. A `ChildBuilder` keeps the latter as chunks and materializes only the former,
-/// stitching everything back together into a [`ChunkedArray`] on [`finish`](Self::finish) when
+/// stitching everything back together into a [`crate::arrays::ChunkedArray`] on [`finish`](Self::finish) when
 /// more than one chunk accumulated.
 ///
 /// This keeps canonical arrays canonical only at the top level, which is all that [`Canonical`]
@@ -165,7 +165,6 @@ mod tests {
     use crate::VortexSessionExecute;
     use crate::array_session;
     use crate::arrays::Chunked;
-    use crate::arrays::ChunkedArray;
     use crate::arrays::Constant;
     use crate::arrays::ConstantArray;
     use crate::arrays::Primitive;
@@ -208,6 +207,10 @@ mod tests {
         // The chunks were never decoded.
         assert!(chunked.iter_chunks().all(|c| c.is::<Constant>()));
 
+        let expected: PrimitiveArray = std::iter::repeat_n(1i32, CHUNK_LEN)
+            .chain(std::iter::repeat_n(2i32, CHUNK_LEN))
+            .collect();
+        assert_arrays_eq!(child, expected, &mut ctx);
         Ok(())
     }
 
@@ -228,6 +231,10 @@ mod tests {
         assert_eq!(chunked.nchunks(), 2);
         assert!(chunked.iter_chunks().all(|c| c.is::<Constant>()));
 
+        let expected: PrimitiveArray = std::iter::repeat_n(1i32, 1)
+            .chain(std::iter::repeat_n(2i32, 1))
+            .collect();
+        assert_arrays_eq!(child, expected, &mut ctx);
         Ok(())
     }
 
@@ -244,15 +251,11 @@ mod tests {
         let child = builder.finish();
         assert_eq!(child.len(), CHUNK_LEN + 2);
 
-        let expected = ChunkedArray::try_new(
-            vec![
-                buffer![1i32].into_array(),
-                constant(2, CHUNK_LEN),
-                buffer![3i32].into_array(),
-            ],
-            DType::from(I32),
-        )?
-        .into_array();
+        let expected: PrimitiveArray = [1i32]
+            .into_iter()
+            .chain(std::iter::repeat_n(2i32, CHUNK_LEN))
+            .chain([3i32])
+            .collect();
         assert_arrays_eq!(&child, &expected, &mut ctx);
 
         Ok(())
@@ -269,6 +272,8 @@ mod tests {
         let child = builder.finish();
         assert!(child.is::<Constant>());
 
+        let expected: PrimitiveArray = std::iter::repeat_n(7i32, CHUNK_LEN).collect();
+        assert_arrays_eq!(child, expected, &mut ctx);
         Ok(())
     }
 
@@ -286,7 +291,12 @@ mod tests {
         builder.append_array(&empty, &mut ctx)?;
 
         assert_eq!(builder.len(), 2 * CHUNK_LEN);
-        assert_eq!(builder.finish().as_::<Chunked>().nchunks(), 2);
+        let child = builder.finish();
+        assert_eq!(child.as_::<Chunked>().nchunks(), 2);
+        let expected: PrimitiveArray = std::iter::repeat_n(1i32, CHUNK_LEN)
+            .chain(std::iter::repeat_n(2i32, CHUNK_LEN))
+            .collect();
+        assert_arrays_eq!(child, expected, &mut ctx);
 
         Ok(())
     }
@@ -302,6 +312,7 @@ mod tests {
 
         let child = builder.finish();
         assert!(child.is_empty());
+        assert_eq!(child.dtype(), &DType::from(I32));
         assert!(child.is::<Primitive>());
 
         Ok(())
@@ -357,7 +368,9 @@ mod tests {
 
         builder.append_array(&constant(1, CHUNK_LEN), &mut ctx)?;
         builder.append_scalar(&2i32.into())?;
-        assert_eq!(builder.finish().len(), CHUNK_LEN + 1);
+        let first = builder.finish();
+        let expected: PrimitiveArray = std::iter::repeat_n(1i32, CHUNK_LEN).chain([2i32]).collect();
+        assert_arrays_eq!(first, expected, &mut ctx);
 
         assert_eq!(builder.len(), 0);
         builder.append_scalar(&3i32.into())?;

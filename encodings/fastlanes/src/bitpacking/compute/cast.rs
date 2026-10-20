@@ -189,6 +189,11 @@ mod tests {
             casted.dtype(),
             &DType::Primitive(PType::U32, Nullability::Nullable)
         );
+        assert_arrays_eq!(
+            casted,
+            PrimitiveArray::from_option_iter([Some(5u32), None, Some(10), Some(15), None]),
+            &mut SESSION.create_execution_ctx()
+        );
     }
 
     /// End-to-end check that the real engine path `array.cast(target).execute()` routes through the
@@ -237,17 +242,12 @@ mod tests {
                     let mut ctx = SESSION.create_execution_ctx();
 
                     // Reference: plain primitive cast of the same values.
-                    let reference = source_ref
-                        .clone()
-                        .cast(target.clone())?
-                        .execute::<PrimitiveArray>(&mut ctx)?;
+                    let reference = source_ref.clone().cast(target.clone())?;
 
                     // Candidate: bit-pack, then cast through the real engine. This dispatches to
                     // `BitPacked`'s `CastKernel` widening pushdown.
                     let packed = bp(&source_ref, 3).into_array();
-                    let casted = packed
-                        .cast(target.clone())?
-                        .execute::<PrimitiveArray>(&mut ctx)?;
+                    let casted = packed.cast(target.clone())?;
                     assert_arrays_eq!(casted, reference, &mut ctx);
 
                     // Also exercise the sliced/offset path (offset > 0, trailer present).
@@ -255,14 +255,8 @@ mod tests {
                         let lo = len / 4;
                         let hi = len - len / 4;
                         let sliced = bp(&source_ref, 3).into_array().slice(lo..hi)?;
-                        let casted = sliced
-                            .cast(target.clone())?
-                            .execute::<PrimitiveArray>(&mut ctx)?;
-                        let reference = source_ref
-                            .clone()
-                            .slice(lo..hi)?
-                            .cast(target.clone())?
-                            .execute::<PrimitiveArray>(&mut ctx)?;
+                        let casted = sliced.cast(target.clone())?;
+                        let reference = source_ref.clone().slice(lo..hi)?.cast(target.clone())?;
                         assert_arrays_eq!(casted, reference, &mut ctx);
                     }
                 }

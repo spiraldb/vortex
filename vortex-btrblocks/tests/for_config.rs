@@ -33,7 +33,7 @@ use vortex_session::VortexSession;
 use vortex_session::registry::ReadContext;
 
 static FOR_V1: FoRScheme = FoRScheme::v1();
-static BITPACKING: BitPackingScheme = BitPackingScheme;
+static BITPACKING: BitPackingScheme = BitPackingScheme::v1();
 
 /// Registers the fastlanes encodings, and enables no editions.
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
@@ -144,6 +144,7 @@ fn core_edition_keeps_single_reference() -> VortexResult<()> {
         BtrBlocksCompressorBuilder::from_session(&CORE_SESSION),
         &drifting(),
     )?;
+    assert!(ids.contains(&for_v1_id()));
     assert!(!ids.contains(&for_v2_id()));
     Ok(())
 }
@@ -162,6 +163,7 @@ fn nullable_drifting_roundtrip() -> VortexResult<()> {
 #[test]
 fn cuda_preset_keeps_single_reference() -> VortexResult<()> {
     let ids = compress_roundtrip(for_only().only_cuda_compatible(), &drifting())?;
+    assert!(ids.contains(&for_v1_id()));
     assert!(!ids.contains(&for_v2_id()));
     Ok(())
 }

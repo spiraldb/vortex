@@ -297,6 +297,7 @@ mod tests {
                 vec![vec![(0.0, 0.0), (0.0, 5.0)]],
             ])?,
             Validity::from_iter([true, false, true]),
+            &mut ctx,
         )?
         .into_array();
 
@@ -359,6 +360,7 @@ mod tests {
                 vec![(0.0, 0.0), (0.0, 4.0)],
             ])?,
             Validity::from_iter([true, false, true]),
+            &mut ctx,
         )?
         .into_array();
 
@@ -382,6 +384,7 @@ mod tests {
                 vec![(0.0, 0.0), (0.0, 4.0)],
             ])?,
             Validity::from_iter([false, false]),
+            &mut ctx,
         )?
         .into_array();
         let expected =

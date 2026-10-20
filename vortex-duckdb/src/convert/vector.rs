@@ -20,6 +20,7 @@ use vortex::buffer::BitBuffer;
 use vortex::buffer::Buffer;
 use vortex::buffer::BufferAllocatorRef;
 use vortex::buffer::BufferMut;
+use vortex::buffer::trusted_len::TrustedLen;
 use vortex::dtype::DType;
 use vortex::dtype::DecimalDType;
 use vortex::dtype::DecimalType;
@@ -83,7 +84,7 @@ fn vector_as_slice<T: NativePType>(vector: &VectorRef, len: usize) -> ArrayRef {
     .into_array()
 }
 
-fn vector_i128_values(vector: &VectorRef, len: usize) -> impl Iterator<Item = i128> {
+fn vector_i128_values(vector: &VectorRef, len: usize) -> impl TrustedLen<Item = i128> {
     let base = unsafe { crate::cpp::duckdb_vector_get_data(vector.as_ptr()) }.cast::<i128>();
     // In batch copy, columns are 8 byte aligned, so reading vector's values
     // as &[i128] is UB. Read data unaligned specifically
@@ -303,13 +304,21 @@ pub fn flat_vector_to_vortex(vector: &VectorRef, len: usize) -> VortexResult<Arr
             let logical_type = vector.logical_type();
             let (precision, scale) = logical_type.as_decimal();
             let decimal_dtype = DecimalDType::try_new(precision, scale.try_into()?)?;
-            let validity = vector.validity_ref(len).to_validity();
+            let mask = vector.validity_ref(len).execute_mask();
+            let validity = Validity::from_mask(mask, Nullability::Nullable);
 
             // https://duckdb.org/docs/stable/sql/data_types/numeric.html#fixed-point-decimals
             match precision_to_duckdb_storage_size(&decimal_dtype)? {
                 DecimalType::I16 => {
                     let data = vector.as_slice_with_len::<i16>(len);
-                    DecimalArray::try_new(Buffer::copy_from(data), decimal_dtype, validity)
+                    if DecimalType::smallest_decimal_value_type(&decimal_dtype) == DecimalType::I8 {
+                        // Lossy conversion is defined behavior in Rust so this is fine
+                        let buf =
+                            Buffer::<i8>::from_trusted_len_iter(data.iter().map(|&v| v.as_()));
+                        DecimalArray::try_new(buf, decimal_dtype, validity)
+                    } else {
+                        DecimalArray::try_new(Buffer::copy_from(data), decimal_dtype, validity)
+                    }
                 }
                 DecimalType::I32 => {
                     let data = vector.as_slice_with_len::<i32>(len);
@@ -405,7 +414,7 @@ pub fn data_chunk_to_vortex(
     let columns = (0..chunk.column_count())
         .map(|i| {
             let vector = chunk.get_vector(i);
-            vector.flatten(len);
+            vector.flatten();
             flat_vector_to_vortex(vector, len.as_())
         })
         .collect::<VortexResult<Vec<_>>>()?;
@@ -484,15 +493,12 @@ mod tests {
 
         // Test conversion
         let result = flat_vector_to_vortex(&vector, len).unwrap();
-        let vortex_array = TemporalArray::try_from(result).unwrap();
-        let vortex_values = vortex_array
-            .temporal_values()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
-        let values_slice = vortex_values.as_slice::<i64>();
-
-        assert_eq!(values_slice, values);
+        let expected = TemporalArray::new_timestamp(
+            PrimitiveArray::from_option_iter(values.into_iter().map(Some)).into_array(),
+            TimeUnit::Microseconds,
+            None,
+        );
+        assert_arrays_eq!(result, expected, &mut ctx);
     }
 
     #[test]
@@ -512,15 +518,12 @@ mod tests {
 
         // Test conversion
         let result = flat_vector_to_vortex(&vector, len).unwrap();
-        let vortex_array = TemporalArray::try_from(result).unwrap();
-        let vortex_values = vortex_array
-            .temporal_values()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
-        let values_slice = vortex_values.as_slice::<i64>();
-
-        assert_eq!(values_slice, values);
+        let expected = TemporalArray::new_timestamp(
+            PrimitiveArray::from_option_iter(values.into_iter().map(Some)).into_array(),
+            TimeUnit::Seconds,
+            None,
+        );
+        assert_arrays_eq!(result, expected, &mut ctx);
     }
 
     #[test]
@@ -540,15 +543,12 @@ mod tests {
 
         // Test conversion
         let result = flat_vector_to_vortex(&vector, len).unwrap();
-        let vortex_array = TemporalArray::try_from(result).unwrap();
-        let vortex_values = vortex_array
-            .temporal_values()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
-        let values_slice = vortex_values.as_slice::<i64>();
-
-        assert_eq!(values_slice, values);
+        let expected = TemporalArray::new_timestamp(
+            PrimitiveArray::from_option_iter(values.into_iter().map(Some)).into_array(),
+            TimeUnit::Milliseconds,
+            None,
+        );
+        assert_arrays_eq!(result, expected, &mut ctx);
     }
 
     #[test]
@@ -573,24 +573,17 @@ mod tests {
 
         // Test conversion
         let result = flat_vector_to_vortex(&vector, len).unwrap();
-        let vortex_array = TemporalArray::try_from(result).unwrap();
-        let vortex_values = vortex_array
-            .temporal_values()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
-        let values_slice = vortex_values.as_slice::<i64>();
-
-        assert_eq!(values_slice, values);
-        assert_eq!(
-            vortex_values
-                .as_ref()
-                .validity()
-                .unwrap()
-                .execute_mask(vortex_values.as_ref().len(), &mut ctx)
-                .unwrap(),
-            Mask::from_indices(3, vec![0, 2])
+        let expected = TemporalArray::new_timestamp(
+            PrimitiveArray::from_option_iter([
+                Some(1_703_980_800_000_000_i64),
+                None,
+                Some(-86_400_000_000_i64),
+            ])
+            .into_array(),
+            TimeUnit::Microseconds,
+            None,
         );
+        assert_arrays_eq!(result, expected, &mut ctx);
     }
 
     #[test]
@@ -616,16 +609,13 @@ mod tests {
 
         // Test conversion
         let result = flat_vector_to_vortex(&vector, len).unwrap();
-        let vortex_array = TemporalArray::try_from(result).unwrap();
         let mut ctx = array_session().create_execution_ctx();
-        let vortex_values = vortex_array
-            .temporal_values()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
-        let values_slice = vortex_values.as_slice::<i64>();
-
-        assert_eq!(values_slice, values);
+        let expected = TemporalArray::new_timestamp(
+            PrimitiveArray::from_option_iter(values.into_iter().map(Some)).into_array(),
+            TimeUnit::Microseconds,
+            None,
+        );
+        assert_arrays_eq!(result, expected, &mut ctx);
     }
 
     #[test]
@@ -645,15 +635,12 @@ mod tests {
 
         // Test conversion
         let result = flat_vector_to_vortex(&vector, len).unwrap();
-        let vortex_array = TemporalArray::try_from(result).unwrap();
-        let vortex_values = vortex_array
-            .temporal_values()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
-        let values_slice = vortex_values.as_slice::<i64>();
-
-        assert_eq!(values_slice, values);
+        let expected = TemporalArray::new_timestamp(
+            PrimitiveArray::from_option_iter(values.into_iter().map(Some)).into_array(),
+            TimeUnit::Microseconds,
+            None,
+        );
+        assert_arrays_eq!(result, expected, &mut ctx);
     }
 
     #[test]
@@ -673,9 +660,8 @@ mod tests {
 
         // Test conversion
         let result = flat_vector_to_vortex(&vector, len).unwrap();
-        let vortex_array = result.execute::<BoolArray>(&mut ctx).unwrap();
         let expected = BoolArray::new(BitBuffer::from(values), Validity::AllValid);
-        assert_arrays_eq!(vortex_array, expected, &mut ctx);
+        assert_arrays_eq!(result, expected, &mut ctx);
     }
 
     #[test]
@@ -700,19 +686,8 @@ mod tests {
 
         // Test conversion
         let result = flat_vector_to_vortex(&vector, len).unwrap();
-        let vortex_array = result.execute::<PrimitiveArray>(&mut ctx).unwrap();
-        let vortex_slice = vortex_array.as_slice::<i32>();
-
-        assert_eq!(vortex_slice, values);
-        assert_eq!(
-            vortex_array
-                .as_ref()
-                .validity()
-                .unwrap()
-                .execute_mask(vortex_array.as_ref().len(), &mut ctx)
-                .unwrap(),
-            Mask::from_indices(3, vec![0, 2])
-        );
+        let expected = PrimitiveArray::from_option_iter([Some(1i32), None, Some(3)]);
+        assert_arrays_eq!(result, expected, &mut ctx);
     }
 
     #[test]
@@ -748,6 +723,15 @@ mod tests {
             PrimitiveArray::from_option_iter([Some(1i32), Some(2), Some(3), Some(4)]),
             &mut ctx
         );
+        assert_eq!(
+            vortex_array
+                .as_ref()
+                .validity()
+                .unwrap()
+                .execute_mask(len, &mut ctx)
+                .unwrap(),
+            Mask::AllTrue(len)
+        );
     }
 
     #[test]
@@ -778,6 +762,15 @@ mod tests {
             PrimitiveArray::from_option_iter([Some(1i32), Some(2), Some(3), Some(4)]),
             &mut ctx
         );
+        assert_eq!(
+            vortex_array
+                .as_ref()
+                .validity()
+                .unwrap()
+                .execute_mask(len, &mut ctx)
+                .unwrap(),
+            Mask::AllTrue(len)
+        );
     }
 
     #[test]
@@ -794,6 +787,15 @@ mod tests {
 
         assert_eq!(vortex_array.len(), len);
         assert_eq!(vortex_array.struct_fields().nfields(), 0);
+        assert_eq!(
+            vortex_array
+                .as_ref()
+                .validity()
+                .unwrap()
+                .execute_mask(len, &mut ctx)
+                .unwrap(),
+            Mask::AllTrue(len)
+        );
     }
 
     #[test]
@@ -839,6 +841,24 @@ mod tests {
             vortex_array.unmasked_field(1),
             PrimitiveArray::from_option_iter([Some(5i32), Some(6), Some(7), Some(8)]),
             &mut ctx
+        );
+        assert_eq!(
+            vortex_array
+                .as_ref()
+                .validity()
+                .unwrap()
+                .execute_mask(len, &mut ctx)
+                .unwrap(),
+            Mask::AllTrue(len)
+        );
+        assert_eq!(
+            vortex_array
+                .struct_fields()
+                .names()
+                .iter()
+                .map(|name| name.as_ref())
+                .collect::<Vec<&str>>(),
+            ["a", "b"]
         );
     }
 
@@ -1084,10 +1104,7 @@ mod tests {
             Some("EPSG:4326")
         );
 
-        let storage = wkb_data
-            .wkb_values()
-            .clone()
-            .execute::<VarBinViewArray>(&mut ctx)?;
+        let storage = wkb_data.wkb_values();
         let expected = VarBinViewArray::from_iter_nullable_bin([
             Some(wkb_a.as_slice()),
             None,

@@ -16,11 +16,11 @@ impl OperationsVTable<Sparse> for Sparse {
     fn scalar_at(
         array: ArrayView<'_, Sparse>,
         index: usize,
-        _ctx: &mut ExecutionCtx,
+        ctx: &mut ExecutionCtx,
     ) -> VortexResult<Scalar> {
         Ok(array
             .patches()
-            .get_patched(index)?
+            .get_patched(index, ctx)?
             .unwrap_or_else(|| array.fill_scalar().clone()))
     }
 }
@@ -55,7 +55,6 @@ mod tests {
         let mut expected = vec![999u64; 1000];
         expected[0] = 0;
 
-        let values = sliced.execute::<PrimitiveArray>(&mut ctx).unwrap();
-        assert_arrays_eq!(values, PrimitiveArray::from_iter(expected), &mut ctx);
+        assert_arrays_eq!(sliced, PrimitiveArray::from_iter(expected), &mut ctx);
     }
 }

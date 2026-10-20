@@ -33,6 +33,12 @@ else
     extra=""
     if [ "$PLATFORM_OS" = "osx" ]; then
         extra="OSX_BUILD_UNIVERSAL=1"
+        extensions="parquet;tpch;tpcds;icu"
+    else
+        make -C "$src_dir" setup-vcpkg
+        VCPKG_TOOLCHAIN_PATH="$PWD/${src_dir}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+        export VCPKG_TOOLCHAIN_PATH
+        extensions="parquet;tpch;tpcds;icu;httpfs"
     fi
 
     make -C "$src_dir" \
@@ -42,7 +48,8 @@ else
         BUILD_SHELL=false \
         BUILD_UNITTESTS=false \
         ENABLE_UNITTEST_CPP_TESTS=false \
-        BUILD_EXTENSIONS="parquet;tpch;tpcds" \
+        BUILD_EXTENSIONS="$extensions" \
+        LINK_CORE_EXTENSIONS=1 \
         $extra
 
     lib_dir="${src_dir}/build/release/src"

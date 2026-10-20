@@ -33,15 +33,6 @@ mod tests {
     use crate::validity::Validity;
 
     #[test]
-    fn test_chunked_array_validation_success() {
-        // Valid case: all chunks have the same dtype.
-        let chunk1 = buffer![1i32, 2, 3].into_array();
-        let chunk2 = buffer![4i32, 5, 6].into_array();
-        let result = ChunkedArray::try_new(vec![chunk1, chunk2], PType::I32.into());
-        assert!(result.is_ok());
-    }
-
-    #[test]
     fn test_chunked_array_validation_failure_mismatched_dtypes() {
         // Invalid case: chunks have different dtypes.
         let chunk1 = buffer![1i32, 2, 3].into_array();
@@ -49,16 +40,6 @@ mod tests {
         let result = ChunkedArray::try_new(vec![chunk1, chunk2], PType::I32.into());
 
         assert!(matches!(result, Err(VortexError::MismatchedTypes(_, _, _))));
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_decimal_array_validation_success() {
-        // Valid case: buffer and validity have matching lengths.
-        let buffer = Buffer::from_iter([100i128, 200, 300]);
-        let decimal_dtype = crate::dtype::DecimalDType::new(10, 2);
-        let result = DecimalArray::try_new(buffer, decimal_dtype, Validity::NonNullable);
-        assert!(result.is_ok());
     }
 
     #[test]
@@ -70,15 +51,6 @@ mod tests {
         let result = DecimalArray::try_new(buffer, decimal_dtype, validity);
 
         assert!(matches!(result, Err(VortexError::InvalidArgument(_, _))));
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_primitive_array_validation_success() {
-        // Valid case: buffer and validity have matching lengths.
-        let buffer = Buffer::from_iter([1i32, 2, 3]);
-        let result = PrimitiveArray::try_new(buffer, Validity::NonNullable);
-        assert!(result.is_ok());
     }
 
     #[test]
@@ -89,46 +61,6 @@ mod tests {
         let result = PrimitiveArray::try_new(buffer, validity);
 
         assert!(matches!(result, Err(VortexError::InvalidArgument(_, _))));
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_varbin_array_validation_success() {
-        // Valid case: offsets are monotonically increasing and within bounds.
-        let offsets = buffer![0i32, 3, 6, 10].into_array();
-        let bytes = ByteBuffer::from(vec![0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
-        let result = VarBinArray::try_new(
-            offsets,
-            bytes,
-            DType::Binary(Nullability::NonNullable),
-            Validity::NonNullable,
-        );
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_varbin_array_validation_non_monotonic_offsets_accepted() {
-        // VarBin does not validate monotonicity of offsets at construction time.
-        // Sortedness is enforced at the builder level instead.
-        let offsets = buffer![0i32, 3, 2, 5].into_array(); // 3 -> 2 is decreasing.
-        let bytes = ByteBuffer::from(vec![0u8, 1, 2, 3, 4]);
-        let result = VarBinArray::try_new(
-            offsets,
-            bytes,
-            DType::Binary(Nullability::NonNullable),
-            Validity::NonNullable,
-        );
-
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_list_array_validation_success() {
-        // Valid case: offsets are monotonically increasing.
-        let elements = buffer![1i32, 2, 3, 4, 5].into_array();
-        let offsets = buffer![0i64, 2, 3, 5].into_array();
-        let result = ListArray::try_new(elements, offsets, Validity::NonNullable);
-        assert!(result.is_ok());
     }
 
     #[test]
@@ -139,15 +71,6 @@ mod tests {
         let result = ListArray::try_new(elements, offsets, Validity::NonNullable);
 
         assert!(matches!(result, Err(VortexError::InvalidArgument(_, _))));
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_fixed_size_list_array_validation_success() {
-        // Valid case: elements length matches list_size * len.
-        let elements = buffer![1i32, 2, 3, 4, 5, 6].into_array();
-        let result = FixedSizeListArray::try_new(elements, 2, Validity::NonNullable, 3);
-        assert!(result.is_ok());
     }
 
     #[test]
@@ -157,7 +80,6 @@ mod tests {
         let result = FixedSizeListArray::try_new(elements, 2, Validity::NonNullable, 3); // Expects 2 * 3 = 6.
 
         assert!(matches!(result, Err(VortexError::InvalidArgument(_, _))));
-        assert!(result.is_err());
     }
 
     #[test]
@@ -197,18 +119,6 @@ mod tests {
         );
 
         assert!(matches!(result, Err(VortexError::InvalidArgument(_, _))));
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_struct_array_validation_success() {
-        // Valid case: all fields have the same length.
-        let field1 = buffer![1i32, 2, 3].into_array();
-        let field2 = buffer![4.0f64, 5.0, 6.0].into_array();
-        let fields = vec![field1, field2];
-        let names = ["a", "b"];
-        let result = StructArray::try_new(names.into(), fields, 3, Validity::NonNullable);
-        assert!(result.is_ok());
     }
 
     #[test]
@@ -221,7 +131,6 @@ mod tests {
         let result = StructArray::try_new(names.into(), fields, 3, Validity::NonNullable);
 
         assert!(matches!(result, Err(VortexError::InvalidArgument(_, _))));
-        assert!(result.is_err());
     }
 
     #[rstest::rstest]

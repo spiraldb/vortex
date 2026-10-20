@@ -4,6 +4,7 @@
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::mem::MaybeUninit;
+use std::ops::Range;
 
 use fastlanes::BitPacking;
 use vortex_array::ArrayRef;
@@ -39,6 +40,7 @@ mod tests;
 use crate::BitPackedArray;
 use crate::FL_CHUNK_SIZE;
 use crate::bitpack_compress::bitpack_encode;
+use crate::bitpack_compress::bitpack_encode_blocked;
 use crate::unpack_iter::BitPacked as BitPackedIter;
 use crate::unpack_iter::BitUnpackedChunks;
 
@@ -106,7 +108,7 @@ pub(crate) fn validate_block_offsets(
 
 /// Check that each block between `boundaries` is a whole number of 128-byte rows of at most
 /// `max_bit_width` bits, and that the boundaries span `packed_len` bytes.
-fn validate_primitive_offsets<T: Copy + Display>(
+fn validate_primitive_offsets<T: Copy>(
     boundaries: &[T],
     max_bit_width: u64,
     packed_len: usize,
@@ -114,14 +116,15 @@ fn validate_primitive_offsets<T: Copy + Display>(
 where
     u64: From<T>,
 {
+    let base = boundaries.first().map_or(0, |&first| u64::from(first));
     for pair in boundaries.windows(2) {
-        let size = u64::from(pair[1]).checked_sub(u64::from(pair[0]));
-        vortex_ensure!(
-            size.is_some_and(|size| size % 128 == 0 && size / 128 <= max_bit_width),
-            "Block boundaries {} and {} do not hold a supported bit width (at most {max_bit_width} bits)",
-            pair[0],
-            pair[1]
-        );
+        block_range(
+            base,
+            u64::from(pair[0]),
+            u64::from(pair[1]),
+            max_bit_width,
+            packed_len,
+        )?;
     }
     let span = match boundaries {
         [first, .., last] => u64::from(*last) - u64::from(*first),
@@ -132,6 +135,41 @@ where
         "Block offsets span {span} bytes, but the packed buffer has {packed_len}"
     );
     Ok(())
+}
+
+/// Return the bytes of the block between boundaries `start` and `end`, relative to the first
+/// boundary `base`.
+///
+/// The block must lie within `packed_len` bytes and be a whole number of 128-byte rows of at most
+/// `max_bit_width` bits.
+fn block_range(
+    base: u64,
+    start: u64,
+    end: u64,
+    max_bit_width: u64,
+    packed_len: usize,
+) -> VortexResult<Range<usize>> {
+    vortex_ensure!(
+        base <= start,
+        "Block boundary {start} is below the first boundary {base}"
+    );
+    vortex_ensure!(
+        start <= end,
+        "Block boundaries {start} and {end} are decreasing"
+    );
+    vortex_ensure!(
+        end - base <= packed_len as u64,
+        "Block boundaries {start} and {end} are outside the packed buffer (base {base})"
+    );
+    let size = end - start;
+    vortex_ensure!(
+        (start - base).is_multiple_of(128)
+            && size.is_multiple_of(128)
+            && size / 128 <= max_bit_width,
+        "Block boundaries {start} and {end} do not hold a supported bit width (at most {max_bit_width} bits)"
+    );
+    // Both differences are at most `packed_len`, so they fit in `usize`.
+    Ok((start - base) as usize..(end - base) as usize)
 }
 
 /// How the blocks of a [`BitPackedArray`] are packed, borrowing block offsets if present.
@@ -405,6 +443,29 @@ impl BitPackedData {
             .map_err(|a| vortex_err!(InvalidArgument: "Bitpacking can only encode primitive arrays, got {}", a.encoding_id()))?;
         bitpack_encode(&parray, bit_width, None, ctx)
     }
+
+    /// Bit-pack an array of primitive integers, packing each 1024-value block at its width in
+    /// `bit_widths`.
+    ///
+    /// Values wider than their block's width become patches.
+    ///
+    /// # Errors
+    ///
+    /// If the provided array is not a primitive integer array or contains negative values, or if
+    /// `bit_widths` does not hold one width per block of at most the array's bit width, an error
+    /// will be returned. Nonempty arrays must have at least one block narrower than the array's
+    /// native bit width.
+    pub fn encode_blocked(
+        array: &ArrayRef,
+        bit_widths: &[u8],
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<BitPackedArray> {
+        let parray: PrimitiveArray = array
+            .clone()
+            .try_downcast::<Primitive>()
+            .map_err(|a| vortex_err!(InvalidArgument: "Bitpacking can only encode primitive arrays, got {}", a.encoding_id()))?;
+        bitpack_encode_blocked(&parray, bit_widths, None, ctx)
+    }
 }
 
 pub trait BitPackedArrayExt: BitPackedArraySlotsExt {
@@ -435,15 +496,15 @@ pub trait BitPackedArrayExt: BitPackedArraySlotsExt {
     fn patches(&self) -> Option<Patches> {
         PatchesData::patches_from_slots(
             self.patches_data.as_ref(),
-            self.as_ref().len(),
-            self.as_ref().slots(),
+            self.len(),
+            self.slots(),
             PATCH_SLOTS,
         )
     }
 
     #[inline]
     fn validity(&self) -> Validity {
-        child_to_validity(self.validity_child(), self.as_ref().dtype().nullability())
+        child_to_validity(self.validity_child(), self.dtype().nullability())
     }
 
     #[inline]
@@ -456,12 +517,7 @@ pub trait BitPackedArrayExt: BitPackedArraySlotsExt {
         &'a self,
         scratch: &'a mut [MaybeUninit<T>; FL_CHUNK_SIZE],
     ) -> VortexResult<BitUnpackedChunks<'a, T>> {
-        BitPackedData::unpacked_chunks::<T>(
-            self,
-            self.as_ref().dtype(),
-            self.as_ref().len(),
-            scratch,
-        )
+        BitPackedData::unpacked_chunks::<T>(self, self.dtype(), self.len(), scratch)
     }
 }
 
@@ -502,12 +558,7 @@ mod test {
         let uncompressed = PrimitiveArray::from_option_iter(values);
         let packed = BitPackedData::encode(&uncompressed.into_array(), 1, &mut ctx).unwrap();
         let expected = PrimitiveArray::from_option_iter(values);
-        let packed_primitive = packed
-            .as_array()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
-        assert_arrays_eq!(packed_primitive, expected, &mut ctx);
+        assert_arrays_eq!(packed, expected, &mut ctx);
     }
 
     #[test]
@@ -529,13 +580,8 @@ mod test {
 
         let packed_with_patches = BitPackedData::encode(&parray, 9, &mut ctx).unwrap();
         assert!(packed_with_patches.patches().is_some());
-        let packed_primitive = packed_with_patches
-            .as_array()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
         assert_arrays_eq!(
-            packed_primitive,
+            packed_with_patches,
             PrimitiveArray::new(values, vortex_array::validity::Validity::NonNullable),
             &mut ctx
         );

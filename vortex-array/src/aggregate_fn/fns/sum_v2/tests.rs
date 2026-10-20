@@ -163,7 +163,7 @@ fn ignores_ambiguous_legacy_sum_stat() -> VortexResult<()> {
     let array = PrimitiveArray::from_option_iter([None::<i32>, None]).into_array();
     array
         .statistics()
-        .set(Stat::Sum, Precision::Exact(ScalarValue::from(42i64)));
+        .set(Stat::Sum, Precision::Exact(ScalarValue::from(0i64)));
 
     assert!(sum_v2(&array, &mut array_session().create_execution_ctx())?.is_null());
     Ok(())
@@ -292,7 +292,7 @@ fn merge_from_overflow_is_absorbing() -> VortexResult<()> {
 
     // The overflow flag survives the scalar round trip.
     let dtypes = AggregateDTypes::try_new(&SumV2, &options, dtype)?;
-    let propagated = SumV2.partial_from_scalar(dtypes.args(&options), overflow_partial)?;
+    let propagated = SumV2.partial_from_scalar(dtypes.args(&options), &overflow_partial)?;
     assert!(SumV2.is_saturated(dtypes.args(&options), &propagated));
     assert!(
         SumV2

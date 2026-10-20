@@ -164,11 +164,11 @@ impl AggregateFnVTable for GeometryAabb {
     fn partial_from_scalar(
         &self,
         _args: AggregateArgs<'_, Self::Options>,
-        scalar: Scalar,
+        scalar: &Scalar,
     ) -> VortexResult<Self::Partial> {
         // A null box is an empty group's AABB.
         Ok(AabbPartial {
-            rect: rect_from_storage(&scalar)?,
+            rect: rect_from_storage(scalar)?,
         })
     }
 
@@ -468,7 +468,15 @@ mod tests {
         acc.accumulate(&column, &mut ctx)?;
 
         let (xmin, ymin, xmax, ymax) = aabb(&acc.finish()?)?;
-        assert!(xmin <= xmax && ymin <= ymax);
+        assert_eq!(
+            (xmin, ymin, xmax, ymax),
+            (
+                f64::NEG_INFINITY,
+                f64::NEG_INFINITY,
+                f64::INFINITY,
+                f64::INFINITY
+            )
+        );
         Ok(())
     }
 

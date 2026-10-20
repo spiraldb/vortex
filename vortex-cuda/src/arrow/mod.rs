@@ -946,7 +946,11 @@ mod tests {
         let buffer = private.buffers[index]
             .as_ref()
             .ok_or_else(|| vortex_err!("missing exported buffer {index}"))?;
-        buffer.cuda_device_ptr()?;
+        assert!(index < usize::try_from(array.n_buffers)?);
+        assert!(!array.buffers.is_null());
+        // SAFETY: The live export exposes n_buffers readable buffer pointers.
+        let exported_ptr = unsafe { *array.buffers.add(index) } as u64;
+        assert_eq!(exported_ptr, buffer.cuda_device_ptr()?);
         buffer.try_to_host_sync()
     }
 
@@ -985,7 +989,7 @@ mod tests {
         };
         assert_eq!(status, 0);
         let field = arrow_schema::Field::try_from(&schema)?;
-        assert_eq!(field.data_type(), &DataType::UInt32);
+        assert_eq!(field, arrow_schema::Field::new("", DataType::UInt32, false));
 
         let get_next = device_stream
             .get_next
@@ -996,6 +1000,15 @@ mod tests {
         assert_eq!(first_array.device_type, ARROW_DEVICE_CUDA);
         assert_eq!(first_array.array.length, 5);
         assert!(first_array.array.release.is_some());
+
+        assert_eq!(
+            vortex::buffer::Buffer::<u32>::from_byte_buffer(private_data_buffer_bytes(
+                &first_array.array,
+                1
+            )?)
+            .as_slice(),
+            &[0, 1, 2, 3, 4],
+        );
 
         let mut eos = ArrowDeviceArray::empty();
         let status = unsafe { get_next(&raw mut device_stream, &raw mut eos) };
@@ -1037,7 +1050,7 @@ mod tests {
         };
         assert_eq!(status, 0);
         let field = arrow_schema::Field::try_from(&schema)?;
-        assert_eq!(field.data_type(), &DataType::UInt32);
+        assert_eq!(field, arrow_schema::Field::new("", DataType::UInt32, false));
 
         let get_next = device_stream
             .get_next

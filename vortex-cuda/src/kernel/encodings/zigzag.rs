@@ -157,11 +157,15 @@ mod tests {
             .execute(zigzag_array.clone(), &mut cuda_ctx)
             .await
             .vortex_expect("GPU decompression failed")
-            .into_host()
+            .into_host(cuda_ctx.execution_ctx())
             .await?
             .into_array();
 
-        assert_arrays_eq!(zigzag_array, gpu_result, &mut ctx);
+        assert_arrays_eq!(
+            gpu_result,
+            PrimitiveArray::from_iter([0i32, 1, 2, -1, -2]),
+            &mut ctx
+        );
 
         Ok(())
     }

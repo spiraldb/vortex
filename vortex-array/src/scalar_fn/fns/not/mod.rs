@@ -39,7 +39,7 @@ impl Not {
     ///
     /// Returns an error if `input` is not boolean data.
     pub fn try_new(input: ArrayRef) -> VortexResult<ScalarFnArray> {
-        ScalarFnArray::try_new(Not.bind(EmptyOptions), vec![input])
+        ScalarFnArray::try_new(Not.bind(EmptyOptions), [input])
     }
 }
 
@@ -127,7 +127,6 @@ mod tests {
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::array_session;
-    use crate::arrays::bool::BoolArrayExt;
     use crate::assert_arrays_eq;
     use crate::dtype::DType;
     use crate::dtype::Nullability;
@@ -167,15 +166,11 @@ mod tests {
         let mut ctx = array_session().create_execution_ctx();
         let not_expr = not(root());
         let bools = BoolArray::from_iter([false, true, false, false, true, true]);
-        let result = bools
-            .into_array()
-            .apply(&not_expr)
-            .unwrap()
-            .execute::<BoolArray>(&mut ctx)
-            .unwrap();
-        assert_eq!(
-            result.to_bit_buffer().iter().collect::<Vec<_>>(),
-            vec![true, false, true, true, false, false]
+        let result = bools.into_array().apply(&not_expr).unwrap();
+        assert_arrays_eq!(
+            result,
+            BoolArray::from_iter([true, false, true, true, false, false]),
+            &mut ctx
         );
     }
 

@@ -256,9 +256,9 @@ mod tests {
 
     #[rstest]
     #[case::u8((0u8..128u8).cycle().take(2048), 6)]
-    #[case::u32((0u16..128u16).cycle().take(2048), 6)]
-    #[case::u16((0u32..128u32).cycle().take(2048), 6)]
-    #[case::u16((0u64..128u64).cycle().take(2048), 6)]
+    #[case::u16((0u16..128u16).cycle().take(2048), 6)]
+    #[case::u32((0u32..128u32).cycle().take(2048), 6)]
+    #[case::u64((0u64..128u64).cycle().take(2048), 6)]
     #[crate::test]
     fn test_patched<T: NativePType>(
         #[case] iter: impl Iterator<Item = T>,
@@ -279,7 +279,7 @@ mod tests {
                 .execute(bp_with_patches.clone().into_array(), &mut cuda_ctx)
                 .await
                 .vortex_expect("GPU decompression failed")
-                .into_host()
+                .into_host(cuda_ctx.execution_ctx())
                 .await
                 .map(|a| a.into_array())
         })?;
@@ -309,7 +309,7 @@ mod tests {
                 .execute(bp_with_patches.clone().into_array(), &mut cuda_ctx)
                 .await
                 .vortex_expect("GPU decompression failed")
-                .into_host()
+                .into_host(cuda_ctx.execution_ctx())
                 .await
                 .map(|a| a.into_array())
         })?;
@@ -349,7 +349,7 @@ mod tests {
                 .execute(bitpacked_array.clone().into_array(), &mut cuda_ctx)
                 .await
                 .vortex_expect("GPU decompression failed")
-                .into_host()
+                .into_host(cuda_ctx.execution_ctx())
                 .await
                 .map(|a| a.into_array())
         })?;
@@ -397,7 +397,7 @@ mod tests {
                 .execute(bitpacked_array.clone().into_array(), &mut cuda_ctx)
                 .await
                 .vortex_expect("GPU decompression failed")
-                .into_host()
+                .into_host(cuda_ctx.execution_ctx())
                 .await
                 .map(|a| a.into_array())
         })?;
@@ -461,7 +461,7 @@ mod tests {
                 .execute(bitpacked_array.clone().into_array(), &mut cuda_ctx)
                 .await
                 .vortex_expect("GPU decompression failed")
-                .into_host()
+                .into_host(cuda_ctx.execution_ctx())
                 .await
                 .map(|a| a.into_array())
         })?;
@@ -557,7 +557,7 @@ mod tests {
                 .execute(bitpacked_array.clone().into_array(), &mut cuda_ctx)
                 .await
                 .vortex_expect("GPU decompression failed")
-                .into_host()
+                .into_host(cuda_ctx.execution_ctx())
                 .await
                 .map(|a| a.into_array())
         })?;
@@ -597,7 +597,7 @@ mod tests {
                 .execute(sliced_array.clone(), &mut cuda_ctx)
                 .await
                 .vortex_expect("GPU decompression failed")
-                .into_host()
+                .into_host(cuda_ctx.execution_ctx())
                 .await
                 .map(|a| a.into_array())
         })?;
@@ -612,7 +612,6 @@ mod tests {
     #[case::mid_chunk(Some(67..3969), 3902, Some(67..3969), 67, 4096 * 9 / 8)]
     #[case::chunk_aligned(Some(1024..3072), 2048, Some(1024..3072), 0, 2048 * 9 / 8)]
     #[case::tail_chunk(Some(3000..4096), 1096, Some(3000..4096), 952, 2048 * 9 / 8)]
-    #[crate::test]
     fn test_bitunpack_try_specialize_slices(
         #[case] range: Option<Range<usize>>,
         #[case] expected_len: usize,
@@ -675,7 +674,7 @@ mod tests {
                 .execute(sliced_array.clone(), &mut cuda_ctx)
                 .await
                 .vortex_expect("GPU decompression failed")
-                .into_host()
+                .into_host(cuda_ctx.execution_ctx())
                 .await
                 .map(|a| a.into_array())
         })?;
@@ -723,7 +722,7 @@ mod tests {
                 .execute(second_slice.clone(), &mut cuda_ctx)
                 .await
                 .vortex_expect("GPU decompression failed")
-                .into_host()
+                .into_host(cuda_ctx.execution_ctx())
                 .await
                 .map(|a| a.into_array())
         })?;
@@ -769,7 +768,7 @@ mod tests {
                 .execute(sliced_array.clone(), &mut cuda_ctx)
                 .await
                 .vortex_expect("GPU decompression failed")
-                .into_host()
+                .into_host(cuda_ctx.execution_ctx())
                 .await
                 .map(|a| a.into_array())
         })?;

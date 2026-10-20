@@ -267,6 +267,12 @@ mod tests {
         let struct_ = builder.finish();
         assert_eq!(struct_.len(), 1);
         assert_eq!(struct_.dtype(), &dtype);
+        assert_eq!(
+            struct_
+                .execute_scalar(0, &mut array_session().create_execution_ctx())
+                .unwrap(),
+            Scalar::struct_(dtype, vec![1i32.into(), 2i32.into()])
+        );
     }
 
     #[test]
@@ -294,6 +300,19 @@ mod tests {
                 .valid_count(&mut array_session().create_execution_ctx())
                 .unwrap(),
             1
+        );
+        let mut ctx = array_session().create_execution_ctx();
+        assert_eq!(
+            struct_.execute_scalar(0, &mut ctx).unwrap(),
+            Scalar::struct_(dtype.clone(), vec![1i32.into(), 2i32.into()])
+        );
+        assert_eq!(
+            struct_.execute_scalar(1, &mut ctx).unwrap(),
+            Scalar::null(dtype.clone())
+        );
+        assert_eq!(
+            struct_.execute_scalar(2, &mut ctx).unwrap(),
+            Scalar::null(dtype)
         );
     }
 

@@ -481,15 +481,8 @@ mod tests {
             ConstantArray::new(Scalar::primitive(42_i64, Nullability::Nullable), 1).into_array();
         let mut ctx = array_session().create_execution_ctx();
 
-        let planned = ScalarFnArray::try_new(BloomContains.bind(options), vec![filters, needle])?;
-        let expected_dtype = planned.dtype().clone();
-
-        // If the validity types are wrong (e.g. `bool? != bool`), `execute` will raise an error.
-        // The asserts that follow are just extra guards.
-        let actual = planned.into_array().execute::<BoolArray>(&mut ctx)?;
-
-        assert_eq!(actual.dtype(), &expected_dtype);
-        assert_arrays_eq!(actual, BoolArray::from_iter([Some(true)]), &mut ctx);
+        let planned = ScalarFnArray::try_new(BloomContains.bind(options), [filters, needle])?;
+        assert_arrays_eq!(planned, BoolArray::from_iter([Some(true)]), &mut ctx);
         Ok(())
     }
 

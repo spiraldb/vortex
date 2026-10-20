@@ -196,17 +196,17 @@ public:
     Validity validity() const;
 
     // Number of null/invalid elements in Array
-    size_t null_count() const;
+    size_t null_count(const Session &session) const;
 
     /**
-     * Get a Struct field by index. Throws if Array is not a Struct or if index
-     * is out of bounds.
+     * Get a Struct field by index. Throws if Array is not a canonical Struct
+     * or if index is out of bounds.
      */
     Array field(size_t index) const;
 
     /**
-     * Get a Struct field by name. Throws if Array is not a Struct or doesn't
-     * have this named field.
+     * Get a Struct field by name. Throws if Array is not a canonical Struct or
+     * doesn't have this named field.
      */
     Array field(std::string_view name) const;
 

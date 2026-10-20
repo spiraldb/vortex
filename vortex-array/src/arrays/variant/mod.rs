@@ -59,15 +59,17 @@ impl Array<Variant> {
         );
         let len = core_storage.len();
         let stats = core_storage.statistics().to_owned();
-        Ok(Array::try_from_parts(
-            ArrayParts::new(Variant, dtype, len, EmptyArrayData).with_slots(
-                VariantSlots {
-                    core_storage,
-                    shredded,
-                }
-                .into_slots(),
-            ),
-        )?
+        Ok(Array::try_from_parts(ArrayParts::new(
+            Variant,
+            dtype,
+            len,
+            EmptyArrayData,
+            VariantSlots {
+                core_storage,
+                shredded,
+            }
+            .into_slots(),
+        ))?
         .with_stats_set(stats))
     }
 }
@@ -153,7 +155,6 @@ mod tests {
             .shredded()
             .ok_or_else(|| vortex_err!("expected shredded child"))?;
         let mut ctx = array_session().create_execution_ctx();
-        let shredded = shredded.clone().execute::<PrimitiveArray>(&mut ctx)?;
         let expected_shredded_array = if let Some(values) = expected_shredded
             .iter()
             .copied()
@@ -202,6 +203,7 @@ mod tests {
         assert_eq!(variant.len(), 2);
         assert_eq!(variant.core_storage().dtype(), core_storage.dtype());
         assert!(variant.shredded().is_none());
+        assert_variant_core_rows(&variant, &[Some(1), Some(1)])?;
 
         Ok(())
     }
@@ -227,6 +229,7 @@ mod tests {
         );
         assert_eq!(variant.as_ref().slot_name(0), "core_storage");
         assert_eq!(variant.as_ref().slot_name(1), "shredded");
+        assert_variant_rows(&variant, &[Some(1); 3], &[Some(10), Some(20), Some(30)])?;
 
         Ok(())
     }
@@ -385,10 +388,7 @@ mod tests {
             Some(DType::Primitive(PType::I32, Nullability::NonNullable)),
         );
 
-        let result = variant
-            .into_array()
-            .apply(&expr)?
-            .execute::<PrimitiveArray>(&mut array_session().create_execution_ctx())?;
+        let result = variant.into_array().apply(&expr)?;
 
         assert_arrays_eq!(
             result,
@@ -419,11 +419,7 @@ mod tests {
             VariantPath::field("value"),
             Some(DType::Primitive(PType::I32, Nullability::NonNullable)),
         );
-        let value_result = variant
-            .clone()
-            .into_array()
-            .apply(&value_expr)?
-            .execute::<PrimitiveArray>(&mut array_session().create_execution_ctx())?;
+        let value_result = variant.clone().into_array().apply(&value_expr)?;
         assert_arrays_eq!(
             value_result,
             PrimitiveArray::from_option_iter([Some(10i32), Some(20), Some(30)]),
@@ -435,10 +431,7 @@ mod tests {
             VariantPath::field("typed_value"),
             Some(DType::Primitive(PType::I32, Nullability::NonNullable)),
         );
-        let typed_value_result = variant
-            .into_array()
-            .apply(&typed_value_expr)?
-            .execute::<PrimitiveArray>(&mut array_session().create_execution_ctx())?;
+        let typed_value_result = variant.into_array().apply(&typed_value_expr)?;
         assert_arrays_eq!(
             typed_value_result,
             PrimitiveArray::from_option_iter([Some(40i32), Some(50), Some(60)]),

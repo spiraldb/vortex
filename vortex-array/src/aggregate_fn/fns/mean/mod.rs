@@ -230,6 +230,7 @@ mod tests {
     use crate::arrays::DecimalArray;
     use crate::arrays::FixedSizeListArray;
     use crate::arrays::PrimitiveArray;
+    use crate::assert_arrays_eq;
     use crate::dtype::DecimalDType;
     use crate::validity::Validity;
 
@@ -359,6 +360,10 @@ mod tests {
             result.as_decimal().decimal_value(),
             Some(DecimalValue::I256(i256::from_i128(3_000_000)))
         );
+        assert_eq!(
+            result.dtype(),
+            &DType::Decimal(DecimalDType::new(10, 6), Nullability::Nullable)
+        );
         Ok(())
     }
 
@@ -377,6 +382,10 @@ mod tests {
             result.as_decimal().decimal_value(),
             Some(DecimalValue::I256(i256::from_i128(3_000_000)))
         );
+        assert_eq!(
+            result.dtype(),
+            &DType::Decimal(DecimalDType::new(10, 6), Nullability::Nullable)
+        );
         Ok(())
     }
 
@@ -391,6 +400,10 @@ mod tests {
         assert_eq!(
             result.as_decimal().decimal_value(),
             Some(DecimalValue::I256(i256::from_i128(333_333)))
+        );
+        assert_eq!(
+            result.dtype(),
+            &DType::Decimal(DecimalDType::new(10, 6), Nullability::Nullable)
         );
         Ok(())
     }
@@ -478,6 +491,10 @@ mod tests {
             let actual = result.execute_scalar(case, &mut ctx)?;
             assert_eq!(actual.as_primitive().as_::<f64>(), expected, "case {case}");
         }
+        let expected =
+            PrimitiveArray::from_option_iter([Some(1.0f64), Some(2.0), None, None, Some(2.0)])
+                .into_array();
+        assert_arrays_eq!(&result, &expected, &mut ctx);
         Ok(())
     }
 }

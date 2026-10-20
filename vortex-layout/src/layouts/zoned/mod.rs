@@ -27,6 +27,7 @@ pub(crate) use builder::aggregate_partials;
 use prost::Message;
 pub use schema::MAX_IS_TRUNCATED;
 pub use schema::MIN_IS_TRUNCATED;
+pub(crate) use schema::legacy_stats_to_aggregates;
 use vortex_array::DeserializeMetadata;
 use vortex_array::SerializeMetadata;
 use vortex_array::aggregate_fn::AggregateFnRef;
@@ -359,7 +360,24 @@ impl ZonedLayout {
 }
 
 impl ZonedData {
-    fn aggregate_fns(&self) -> Arc<[AggregateFnRef]> {
+    /// The stats a legacy zone table stores, or `None` when its fields are aggregate states.
+    pub(crate) fn legacy_stats(&self) -> Option<&Arc<[Stat]>> {
+        match &self.zone_map_schema {
+            ZoneMapSchema::LegacyStats(stats) => Some(stats),
+            ZoneMapSchema::AggregateFns(_) => None,
+        }
+    }
+
+    pub(crate) fn zone_len(&self) -> usize {
+        self.zone_len
+    }
+
+    /// The dtype of the zone table.
+    pub(crate) fn stats_table_dtype(&self) -> &DType {
+        &self.stats_table_dtype
+    }
+
+    pub(crate) fn aggregate_fns(&self) -> Arc<[AggregateFnRef]> {
         match &self.zone_map_schema {
             ZoneMapSchema::LegacyStats(stats) => stats
                 .iter()
@@ -489,8 +507,6 @@ impl SerializeMetadata for LegacyStatsMetadata {
 
 #[cfg(test)]
 mod tests {
-    use std::panic;
-
     use rstest::rstest;
     use vortex_array::aggregate_fn::AggregateFnRef;
     use vortex_array::aggregate_fn::AggregateFnVTableExt;
@@ -591,16 +607,6 @@ mod tests {
     #[case::malformed_proto(vec![ZONED_METADATA_PROTO_VERSION, 0])]
     fn test_deserialize_short_metadata_errors(#[case] metadata: Vec<u8>) {
         assert!(ZonedMetadata::deserialize(&metadata).is_err());
-    }
-
-    #[test]
-    fn test_deserialize_short_metadata_returns_error_not_panic() {
-        let result = panic::catch_unwind(|| ZonedMetadata::deserialize(&[]));
-        assert!(
-            result.is_ok(),
-            "deserialize should return an error, not panic"
-        );
-        assert!(result.unwrap().is_err());
     }
 
     #[test]

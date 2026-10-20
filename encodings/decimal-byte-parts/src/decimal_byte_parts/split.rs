@@ -290,8 +290,8 @@ mod tests {
         );
         let parts = split_decimal(&decimal, &mut ctx)?;
         assert_arrays_eq!(
-            PrimitiveArray::new(buffer![1i64, 0, -2], validity),
             parts.msp,
+            PrimitiveArray::new(buffer![1i64, 0, -2], validity),
             &mut ctx
         );
         assert_eq!(parts.lower_parts.len(), 3);
@@ -301,8 +301,8 @@ mod tests {
             buffer![3u64, 0, 7],
         ]) {
             assert_arrays_eq!(
-                PrimitiveArray::new(expected, Validity::NonNullable),
                 part,
+                PrimitiveArray::new(expected, Validity::NonNullable),
                 &mut ctx
             );
         }

@@ -751,11 +751,7 @@ mod test {
     fn cast_u32_f32() {
         let mut ctx = array_session().create_execution_ctx();
         let arr = buffer![0u32, 10, 200].into_array();
-        let u8arr = arr
-            .cast(PType::F32.into())
-            .unwrap()
-            .execute::<PrimitiveArray>(&mut ctx)
-            .unwrap();
+        let u8arr = arr.cast(PType::F32.into()).unwrap();
         assert_arrays_eq!(
             u8arr,
             PrimitiveArray::from_iter([0.0f32, 10., 200.]),
@@ -796,6 +792,15 @@ mod test {
 
         assert_eq!(casted.buffer::<i32>().as_ptr(), source_ptr);
         assert_eq!(casted.buffer::<i32>().as_ref(), &[42, -7]);
+        assert_arrays_eq!(
+            &casted,
+            DecimalArray::new(
+                buffer![42i32, -7],
+                DecimalDType::new(9, 0),
+                Validity::NonNullable
+            ),
+            &mut ctx
+        );
         Ok(())
     }
 
@@ -817,6 +822,15 @@ mod test {
             .execute::<DecimalArray>(&mut ctx)?;
 
         assert_eq!(casted.buffer::<i32>().as_ptr(), source_ptr);
+        assert_arrays_eq!(
+            &casted,
+            DecimalArray::new(
+                buffer![42i32, -7],
+                DecimalDType::new(9, 0),
+                Validity::NonNullable
+            ),
+            &mut ctx
+        );
         Ok(())
     }
 
@@ -837,6 +851,11 @@ mod test {
         assert_eq!(
             casted.validity()?.execute_mask(casted.len(), &mut ctx)?,
             Mask::from(BitBuffer::from(vec![false, true]))
+        );
+        assert_arrays_eq!(
+            &casted,
+            DecimalArray::from_option_iter([None, Some(42i32)], DecimalDType::new(9, 0)),
+            &mut ctx
         );
         Ok(())
     }
@@ -865,6 +884,10 @@ mod test {
             .cast(DType::Decimal(decimal_dtype, Nullability::NonNullable))?
             .execute::<DecimalArray>(&mut ctx)?;
 
+        assert_eq!(
+            casted.dtype(),
+            &DType::Decimal(decimal_dtype, Nullability::NonNullable)
+        );
         assert_eq!(casted.values_type(), DecimalType::I128);
         assert_eq!(casted.buffer::<i128>().as_ref(), &[i128::from(u64::MAX)]);
         Ok(())
@@ -896,6 +919,10 @@ mod test {
             .cast(DType::Decimal(decimal_dtype, Nullability::NonNullable))?
             .execute::<DecimalArray>(&mut ctx)?;
 
+        assert_eq!(
+            casted.dtype(),
+            &DType::Decimal(decimal_dtype, Nullability::NonNullable)
+        );
         assert_eq!(casted.values_type(), DecimalType::I8);
         assert_eq!(casted.buffer::<i8>().as_ref(), &[2]);
         Ok(())
@@ -910,6 +937,10 @@ mod test {
             .cast(DType::Decimal(decimal_dtype, Nullability::NonNullable))?
             .execute::<DecimalArray>(&mut ctx)?;
 
+        assert_eq!(
+            casted.dtype(),
+            &DType::Decimal(decimal_dtype, Nullability::NonNullable)
+        );
         assert_eq!(casted.values_type(), DecimalType::I8);
         assert_eq!(casted.buffer::<i8>().as_ref(), &[1]);
         Ok(())
@@ -924,6 +955,10 @@ mod test {
             .cast(DType::Decimal(decimal_dtype, Nullability::NonNullable))?
             .execute::<DecimalArray>(&mut ctx)?;
 
+        assert_eq!(
+            casted.dtype(),
+            &DType::Decimal(decimal_dtype, Nullability::NonNullable)
+        );
         assert_eq!(casted.values_type(), DecimalType::I256);
         assert_eq!(casted.buffer::<i256>().as_ref(), &[i256::from_i128(4_200)]);
         Ok(())
@@ -939,7 +974,11 @@ mod test {
             .execute::<DecimalArray>(&mut ctx)?;
 
         assert!(matches!(casted.validity(), Ok(Validity::AllInvalid)));
-        assert_eq!(casted.buffer::<i256>().as_ref(), &[i256::ZERO, i256::ZERO]);
+        assert_arrays_eq!(
+            &casted,
+            DecimalArray::from_option_iter([None::<i256>; 2], decimal_dtype),
+            &mut ctx
+        );
         Ok(())
     }
 
@@ -952,6 +991,10 @@ mod test {
             .cast(DType::Decimal(decimal_dtype, Nullability::NonNullable))?
             .execute::<DecimalArray>(&mut ctx)?;
 
+        assert_eq!(
+            casted.dtype(),
+            &DType::Decimal(decimal_dtype, Nullability::NonNullable)
+        );
         assert_eq!(casted.buffer::<i16>().as_ref(), &[12, -5]);
 
         let error = PrimitiveArray::from_iter([42i32])
@@ -972,6 +1015,10 @@ mod test {
             .cast(DType::Decimal(decimal_dtype, Nullability::NonNullable))?
             .execute::<DecimalArray>(&mut ctx)?;
 
+        assert_eq!(
+            casted.dtype(),
+            &DType::Decimal(decimal_dtype, Nullability::NonNullable)
+        );
         assert_eq!(casted.buffer::<i16>().as_ref(), &[0]);
         Ok(())
     }
@@ -985,6 +1032,10 @@ mod test {
             .cast(DType::Decimal(decimal_dtype, Nullability::Nullable))?
             .execute::<DecimalArray>(&mut ctx)?;
 
+        assert_eq!(
+            casted.dtype(),
+            &DType::Decimal(decimal_dtype, Nullability::Nullable)
+        );
         assert_eq!(casted.buffer::<i16>().as_ref()[1], 420);
         assert_eq!(
             casted.validity()?.execute_mask(casted.len(), &mut ctx)?,
@@ -1066,8 +1117,6 @@ mod test {
         let p = arr
             .into_array()
             .cast(DType::Primitive(PType::U32, Nullability::Nullable))
-            .unwrap()
-            .execute::<PrimitiveArray>(&mut ctx)
             .unwrap();
         assert_arrays_eq!(
             p,
@@ -1075,13 +1124,9 @@ mod test {
             &mut ctx
         );
         assert_eq!(
-            p.as_ref()
-                .validity()
+            p.validity()
                 .unwrap()
-                .execute_mask(
-                    p.as_ref().len(),
-                    &mut array_session().create_execution_ctx()
-                )
+                .execute_mask(p.len(), &mut array_session().create_execution_ctx())
                 .unwrap(),
             Mask::from(BitBuffer::from(vec![false, true, true]))
         );
@@ -1130,7 +1175,11 @@ mod test {
             .into_array()
             .cast(DType::Primitive(PType::I8, Nullability::Nullable))?
             .execute::<PrimitiveArray>(&mut ctx)?;
-        assert_eq!(casted.len(), 2);
+        assert_arrays_eq!(
+            &casted,
+            PrimitiveArray::from_option_iter([None::<i8>; 2]),
+            &mut ctx
+        );
         assert!(matches!(casted.validity(), Ok(Validity::AllInvalid)));
         Ok(())
     }
@@ -1148,8 +1197,7 @@ mod test {
         );
         let casted = arr
             .into_array()
-            .cast(DType::Primitive(PType::I32, Nullability::Nullable))?
-            .execute::<PrimitiveArray>(&mut ctx)?;
+            .cast(DType::Primitive(PType::I32, Nullability::Nullable))?;
         assert_arrays_eq!(
             casted,
             PrimitiveArray::from_option_iter([None, Some(0i32), Some(42)]),
@@ -1167,8 +1215,7 @@ mod test {
         );
         let casted = arr
             .into_array()
-            .cast(DType::Primitive(PType::U8, Nullability::Nullable))?
-            .execute::<PrimitiveArray>(&mut ctx)?;
+            .cast(DType::Primitive(PType::U8, Nullability::Nullable))?;
         assert_arrays_eq!(
             casted,
             PrimitiveArray::from_option_iter([None, Some(10u8), Some(42)]),

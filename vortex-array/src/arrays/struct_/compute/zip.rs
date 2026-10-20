@@ -6,6 +6,7 @@ use std::ops::BitOr;
 use std::ops::Not;
 
 use vortex_error::VortexResult;
+use vortex_mask::Mask;
 
 use crate::ArrayRef;
 use crate::ExecutionCtx;
@@ -48,7 +49,7 @@ impl ZipKernel for Struct {
             (Validity::AllInvalid, Validity::AllInvalid) => Validity::AllInvalid,
 
             (v1, v2) => {
-                let mask_mask = mask.clone().null_as_false().execute(ctx)?;
+                let mask_mask = mask.clone().fill_null(false)?.execute::<Mask>(ctx)?;
                 let v1m = v1.execute_mask(if_true.len(), ctx)?;
                 let v2m = v2.execute_mask(if_false.len(), ctx)?;
 
@@ -72,6 +73,8 @@ mod tests {
     use vortex_mask::Mask;
 
     use crate::IntoArray;
+    use crate::VortexSessionExecute;
+    use crate::array_session;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::StructArray;
     use crate::builtins::ArrayBuiltins;
@@ -80,6 +83,7 @@ mod tests {
 
     #[test]
     fn test_validity_zip_both_validity_array() {
+        let ctx = array_session().create_execution_ctx();
         // Both structs have Validity::Array
         let if_true = StructArray::new(
             FieldNames::from_iter(["field"]),
@@ -101,7 +105,7 @@ mod tests {
 
         let result = mask.into_array().zip(if_true, if_false).unwrap();
 
-        insta::assert_snapshot!(result.display_table(), @r"
+        insta::assert_snapshot!(result.display_table(&ctx), @r"
         ┌───────┐
         │ field │
         ├───────┤
@@ -118,6 +122,7 @@ mod tests {
 
     #[test]
     fn test_validity_zip_allvalid_and_array() {
+        let ctx = array_session().create_execution_ctx();
         let if_true = StructArray::new(
             FieldNames::from_iter(["a"]),
             vec![PrimitiveArray::from_iter([1, 2, 3, 4]).into_array()],
@@ -138,7 +143,7 @@ mod tests {
 
         let result = mask.into_array().zip(if_true, if_false).unwrap();
 
-        insta::assert_snapshot!(result.display_table(), @r"
+        insta::assert_snapshot!(result.display_table(&ctx), @r"
         ┌───────┐
         │   a   │
         ├───────┤

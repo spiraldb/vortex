@@ -25,6 +25,7 @@ use vortex::encodings::fastlanes::FoR;
 use vortex::encodings::fastlanes::FoRArray;
 use vortex::encodings::fastlanes::FoRArrayExt;
 use vortex::encodings::fastlanes::FoRArraySlotsExt;
+use vortex::encodings::fastlanes::FoRReferences;
 use vortex::error::VortexExpect;
 use vortex::error::VortexResult;
 use vortex::error::vortex_ensure;
@@ -60,10 +61,11 @@ impl CudaExecute for FoRExecutor {
         let array = Self::try_specialize(array).ok_or_else(|| vortex_err!("Expected FoRArray"))?;
 
         // Per-chunk references have no CUDA kernel yet, so decode them on the CPU.
-        // TODO(mk): implement CUDA FoR decoding for non-constant references.
-        let Some(reference) = array.constant_reference() else {
-            vortex_bail!("CUDA FoR decoding requires a constant reference")
+        // TODO(mk): implement CUDA FoR decoding for blocked references.
+        let FoRReferences::Global(reference) = array.references() else {
+            vortex_bail!("CUDA FoR decoding requires a global reference")
         };
+        let reference = reference.clone();
 
         // Fuse FOR + BP => FFOR
         if let Some(bitpacked) = array.encoded().as_opt::<BitPacked>()
@@ -105,9 +107,10 @@ where
     let array_len = array.encoded().len();
     vortex_ensure!(array_len > 0, "FoR encoded array must not be empty");
 
-    let reference: P = array
-        .constant_reference()
-        .ok_or_else(|| vortex_err!("CUDA FoR decoding requires a constant reference"))?
+    let FoRReferences::Global(reference) = array.references() else {
+        vortex_bail!("CUDA FoR decoding requires a global reference")
+    };
+    let reference: P = reference
         .as_primitive()
         .as_::<P>()
         .vortex_expect("Cannot have a null reference");
@@ -205,7 +208,7 @@ mod tests {
             .execute(for_array.clone().into_array(), &mut cuda_ctx)
             .await
             .vortex_expect("GPU decompression failed")
-            .into_host()
+            .into_host(cuda_ctx.execution_ctx())
             .await?
             .into_array();
 
@@ -234,7 +237,7 @@ mod tests {
             .execute(for_array.clone().into_array(), &mut cuda_ctx)
             .await
             .vortex_expect("GPU decompression failed")
-            .into_host()
+            .into_host(cuda_ctx.execution_ctx())
             .await
             .vortex_expect("copying to host failed")
             .into_array();
@@ -279,7 +282,7 @@ mod tests {
             .execute(for_array.clone().into_array(), &mut cuda_ctx)
             .await
             .vortex_expect("GPU decompression failed")
-            .into_host()
+            .into_host(cuda_ctx.execution_ctx())
             .await?
             .into_array();
 

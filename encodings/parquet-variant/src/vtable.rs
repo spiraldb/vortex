@@ -265,7 +265,13 @@ impl VTable for ParquetVariant {
             typed_value,
         }
         .into_slots();
-        Ok(ArrayParts::new(self.clone(), dtype.clone(), len, EmptyArrayData).with_slots(slots))
+        Ok(ArrayParts::new(
+            self.clone(),
+            dtype.clone(),
+            len,
+            EmptyArrayData,
+            slots,
+        ))
     }
 
     fn execute(array: Array<Self>, ctx: &mut ExecutionCtx) -> VortexResult<ExecutionResult> {
@@ -490,7 +496,6 @@ mod tests {
             shredded.dtype(),
             &DType::Primitive(PType::I32, Nullability::Nullable)
         );
-        let shredded = shredded.clone().execute::<PrimitiveArray>(&mut ctx)?;
         assert_arrays_eq!(
             shredded,
             PrimitiveArray::from_option_iter([Some(10), None, Some(30)]),
@@ -524,7 +529,7 @@ mod tests {
             .read_all()
             .await?;
 
-        assert_arrays_eq!(expected, actual, &mut SESSION.create_execution_ctx());
+        assert_arrays_eq!(actual, expected, &mut SESSION.create_execution_ctx());
         Ok(())
     }
 
@@ -554,7 +559,7 @@ mod tests {
             .read_all()
             .await?;
 
-        assert_arrays_eq!(expected, actual, &mut SESSION.create_execution_ctx());
+        assert_arrays_eq!(actual, expected, &mut SESSION.create_execution_ctx());
         Ok(())
     }
 

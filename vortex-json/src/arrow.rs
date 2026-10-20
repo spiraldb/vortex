@@ -17,6 +17,7 @@ use vortex_array::dtype::DType;
 use vortex_array::dtype::extension::ExtDType;
 use vortex_array::dtype::extension::ExtVTable;
 use vortex_arrow::ArrowExport;
+use vortex_arrow::ArrowExportOptions;
 use vortex_arrow::ArrowExportVTable;
 use vortex_arrow::ArrowImport;
 use vortex_arrow::ArrowImportVTable;
@@ -71,6 +72,7 @@ impl ArrowExportVTable for Json {
         &self,
         array: ArrayRef,
         target: &Field,
+        options: &ArrowExportOptions,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrowExport> {
         let is_json = array
@@ -93,9 +95,11 @@ impl ArrowExportVTable for Json {
         );
         let session = ctx.session().clone();
 
-        let storage = session
-            .arrow()
-            .execute_arrow(storage, Some(&storage_field), ctx)?;
+        let storage =
+            session
+                .arrow()
+                .exporter(options)
+                .execute_arrow(storage, Some(&storage_field), ctx)?;
 
         Ok(ArrowExport::Exported(storage))
     }
@@ -159,10 +163,14 @@ mod tests {
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
     use vortex_array::arrays::ExtensionArray;
+    use vortex_array::arrays::PrimitiveArray;
     use vortex_array::arrays::VarBinArray;
+    use vortex_array::arrays::VarBinViewArray;
     use vortex_array::dtype::Nullability;
     use vortex_array::dtype::extension::ExtDType;
+    use vortex_arrow::ArrowExportOptions;
     use vortex_arrow::ArrowSessionExt;
+    use vortex_arrow::CompactBuffers;
     use vortex_error::VortexExpect;
     use vortex_error::VortexResult;
 
@@ -182,14 +190,13 @@ mod tests {
         .into_array();
         let ext_dtype = ExtDType::<Json>::try_new(EmptyMetadata, storage.dtype().clone())?.erased();
 
-        dbg!(&ext_dtype);
         let array = ExtensionArray::new(ext_dtype, storage).into_array();
 
         let field = session.arrow().to_arrow_field("data", array.dtype())?;
         assert_eq!(field.extension_type_name(), Some(ArrowJson::NAME));
+        assert_eq!(field.name(), "data");
+        assert!(!field.is_nullable());
         ArrowJson::try_new_from_field_metadata(field.data_type(), field.metadata())?;
-
-        dbg!(&field);
 
         let exported = session.arrow().execute_arrow(
             array,
@@ -199,11 +206,11 @@ mod tests {
 
         assert!(exported.data_type().is_string());
 
-        dbg!(exported.data_type());
-
         let strings = exported.as_string_view();
-        assert_eq!(strings.value(0), "{\"id\":1}");
-        assert_eq!(strings.value(1), "{\"id\":2}");
+        assert_eq!(
+            strings.iter().collect::<Vec<_>>(),
+            [Some("{\"id\":1}"), Some("{\"id\":2}")]
+        );
         Ok(())
     }
 
@@ -223,6 +230,10 @@ mod tests {
             .as_extension_opt()
             .vortex_expect("expected JSON extension dtype");
         assert!(ext_dtype.is::<Json>());
+        assert_eq!(
+            ext_dtype.storage_dtype(),
+            &vortex_array::dtype::DType::Utf8(Nullability::NonNullable)
+        );
 
         let exported = session.arrow().execute_arrow(
             imported,
@@ -230,8 +241,59 @@ mod tests {
             &mut session.create_execution_ctx(),
         )?;
         let strings = exported.as_string::<i32>();
-        assert_eq!(strings.value(0), "{\"id\":1}");
-        assert_eq!(strings.value(1), "{\"id\":2}");
+        assert_eq!(
+            strings.iter().collect::<Vec<_>>(),
+            [Some("{\"id\":1}"), Some("{\"id\":2}")]
+        );
+        Ok(())
+    }
+
+    /// The plugin must forward export options to its storage export.
+    #[test]
+    fn export_options_reach_json_storage() -> VortexResult<()> {
+        let session = vortex_array::array_session();
+        initialize(&session);
+        let mut ctx = session.create_execution_ctx();
+
+        let views = VarBinViewArray::from_iter_str((0..64).map(|i| format!("{{\"id\":{i:>32}}}")));
+        let backing = views.data_buffers()[0].as_host().as_ptr();
+        // Rows far apart in one buffer, so compaction has to copy.
+        let storage = views
+            .into_array()
+            .take(PrimitiveArray::from_iter([0u32, 48]).into_array())?;
+        let ext_dtype = ExtDType::<Json>::try_new(EmptyMetadata, storage.dtype().clone())?.erased();
+        let array = ExtensionArray::new(ext_dtype, storage).into_array();
+        let field = session.arrow().to_arrow_field("data", array.dtype())?;
+
+        let retains_backing = |options: &ArrowExportOptions,
+                               ctx: &mut vortex_array::ExecutionCtx|
+         -> VortexResult<bool> {
+            let exported = session.arrow().exporter(options).execute_arrow(
+                array.clone(),
+                Some(&field),
+                ctx,
+            )?;
+            assert_eq!(
+                exported
+                    .as_string_view()
+                    .iter()
+                    .map(|v| v.map(str::to_owned))
+                    .collect::<Vec<_>>(),
+                [
+                    Some(format!("{{\"id\":{:>32}}}", 0)),
+                    Some(format!("{{\"id\":{:>32}}}", 48))
+                ]
+            );
+            Ok(exported
+                .as_string_view()
+                .data_buffers()
+                .iter()
+                .any(|buffer| buffer.as_ptr() == backing))
+        };
+
+        let uncompacted = ArrowExportOptions::default().with(CompactBuffers(false));
+        assert!(retains_backing(&uncompacted, &mut ctx)?);
+        assert!(!retains_backing(&ArrowExportOptions::default(), &mut ctx)?);
         Ok(())
     }
 }

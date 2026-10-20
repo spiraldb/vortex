@@ -171,7 +171,7 @@ pub(crate) fn from_arrow_data_type(
         | DataType::Decimal64(precision, scale)
         | DataType::Decimal128(precision, scale)
         | DataType::Decimal256(precision, scale) => {
-            DType::Decimal(DecimalDType::new(*precision, *scale), nullability)
+            DType::Decimal(DecimalDType::try_new(*precision, *scale)?, nullability)
         }
         DataType::Boolean => DType::Bool(nullability),
         DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => DType::Utf8(nullability),
@@ -612,6 +612,17 @@ mod test {
         assert_eq!(dtype.to_arrow_dtype().unwrap(), expected);
     }
 
+    #[rstest]
+    #[case::decimal32(DataType::Decimal32(1, 2))]
+    #[case::decimal64(DataType::Decimal64(1, 2))]
+    #[case::decimal128(DataType::Decimal128(1, 2))]
+    #[case::decimal256(DataType::Decimal256(1, 2))]
+    #[case::zero_precision(DataType::Decimal128(0, 0))]
+    #[case::excessive_precision(DataType::Decimal256(77, 0))]
+    fn test_malformed_decimal_dtype_from_arrow(#[case] data_type: DataType) {
+        assert!(from_arrow_data_type(&data_type, Nullability::Nullable).is_err());
+    }
+
     #[test]
     fn test_variant_dtype_to_arrow_dtype_errors() {
         let err = DType::Variant(Nullability::NonNullable)
@@ -692,15 +703,26 @@ mod test {
                 .map(|s| s.as_str()),
             Some("arrow.parquet.variant")
         );
-        assert!(matches!(field.data_type(), DataType::Struct(_)));
+        assert_eq!(field.name(), "v");
+        assert_eq!(
+            field.data_type(),
+            &DataType::Struct(Fields::from(vec![
+                Field::new("metadata", DataType::Binary, false),
+                Field::new("value", DataType::Binary, true)
+            ]))
+        );
         assert!(!field.is_nullable());
     }
 
     #[rstest]
-    #[should_panic]
-    fn test_schema_conversion_panics(the_struct: StructFields) {
+    fn test_schema_conversion_rejects_nullable_struct(the_struct: StructFields) {
         let schema_null = DType::Struct(the_struct, Nullability::Nullable);
-        schema_null.to_arrow_schema().unwrap();
+        let error = schema_null.to_arrow_schema().unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("top-level struct in Schema must be NonNullable")
+        );
     }
 
     #[test]
@@ -719,6 +741,14 @@ mod test {
         );
 
         let arrow_dtype = original_dtype.to_arrow_dtype().unwrap();
+        assert_eq!(
+            arrow_dtype,
+            DataType::Struct(Fields::from(vec![Field::new(
+                "\u{5}=A",
+                DataType::Int8,
+                true
+            )]))
+        );
         let roundtripped_dtype = DType::from_arrow((&arrow_dtype, Nullability::NonNullable));
 
         assert_eq!(original_dtype, roundtripped_dtype);
@@ -740,6 +770,18 @@ mod test {
             DType::struct_([("\u{7}=outer", inner_struct)], Nullability::NonNullable);
 
         let arrow_dtype = original_dtype.to_arrow_dtype().unwrap();
+        assert_eq!(
+            arrow_dtype,
+            DataType::Struct(Fields::from(vec![Field::new(
+                "\u{7}=outer",
+                DataType::Struct(Fields::from(vec![Field::new(
+                    "\u{6}=inner",
+                    DataType::Int32,
+                    true
+                )])),
+                true
+            )]))
+        );
         let roundtripped_dtype = DType::from_arrow((&arrow_dtype, Nullability::NonNullable));
 
         assert_eq!(original_dtype, roundtripped_dtype);

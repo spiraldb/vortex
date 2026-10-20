@@ -108,8 +108,12 @@ where
         .cast(DType::Primitive(T::Offset::PTYPE, Nullability::NonNullable))?
         .execute::<Canonical>(ctx)?
         .into_primitive()
-        .to_buffer::<T::Offset>()
-        .into_arrow_offset_buffer();
+        .to_buffer::<T::Offset>();
+
+    // SAFETY: `VarBinArray` guarantees its offsets are non-empty, non-negative and
+    // monotonically non-decreasing. The checked cast keeps every value, so the order stays the
+    // same.
+    let offsets = unsafe { offsets.into_arrow_offset_buffer_unchecked() };
 
     let data = array.bytes().clone().into_arrow_buffer();
 
@@ -234,6 +238,10 @@ mod tests {
         assert!(strings.is_null(1));
         assert_eq!(strings.value(0), "hello");
         assert_eq!(strings.value(2), "vortex");
+        assert_eq!(
+            strings.iter().collect::<Vec<_>>(),
+            [Some("hello"), None, Some("vortex")]
+        );
         Ok(())
     }
 
@@ -330,6 +338,18 @@ mod tests {
         assert!(!arrow.is_null(0));
         assert!(arrow.is_null(1));
         assert!(!arrow.is_null(2));
+        for (index, expected) in [(0, b"hello".as_slice()), (2, b"world".as_slice())] {
+            let actual = match target_dtype {
+                DataType::Binary => arrow.as_binary::<i32>().value(index),
+                DataType::LargeBinary => arrow.as_binary::<i64>().value(index),
+                DataType::Utf8 => arrow.as_string::<i32>().value(index).as_bytes(),
+                DataType::LargeUtf8 => arrow.as_string::<i64>().value(index).as_bytes(),
+                DataType::BinaryView => arrow.as_binary_view().value(index),
+                DataType::Utf8View => arrow.as_string_view().value(index).as_bytes(),
+                _ => unreachable!(),
+            };
+            assert_eq!(actual, expected);
+        }
     }
 
     #[rstest]
@@ -397,6 +417,8 @@ mod tests {
             .arrow()
             .execute_arrow(array.into_array(), Some(&field), &mut ctx)?;
 
+        assert_eq!(arrow.len(), 2);
+        assert_eq!(arrow.null_count(), 0);
         let values: Vec<&str> = match target_dtype {
             DataType::Utf8 => (0..2).map(|i| arrow.as_string::<i32>().value(i)).collect(),
             _ => (0..2).map(|i| arrow.as_string::<i64>().value(i)).collect(),
@@ -429,7 +451,12 @@ mod tests {
             .execute_arrow(array.into_array(), Some(&field), &mut ctx)?;
 
         assert_eq!(arrow.len(), 3);
-        assert!(arrow.is_null(1));
+        let values = match arrow.data_type() {
+            DataType::Utf8 => arrow.as_string::<i32>().iter().collect::<Vec<_>>(),
+            DataType::LargeUtf8 => arrow.as_string::<i64>().iter().collect::<Vec<_>>(),
+            _ => unreachable!(),
+        };
+        assert_eq!(values, [Some("hello"), None, Some("world")]);
         Ok(())
     }
 
@@ -472,6 +499,8 @@ mod tests {
             "filtered export retained unselected payload: {} bytes",
             arrow.get_array_memory_size()
         );
+        assert_eq!(arrow.len(), 1);
+        assert_eq!(arrow.null_count(), 0);
         Ok(())
     }
 }

@@ -77,6 +77,7 @@ mod tests {
     use crate::arrays::ListArray;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::VarBinArray;
+    use crate::assert_arrays_eq;
     use crate::builtins::ArrayBuiltins;
     use crate::compute::conformance::cast::test_cast_conformance;
     use crate::dtype::DType;
@@ -107,6 +108,12 @@ mod tests {
             .unwrap();
         assert_eq!(result.dtype(), &target_dtype);
         assert_eq!(result.len(), list.len());
+        let expected = ListArray::new(
+            PrimitiveArray::from_option_iter([Some(1u64), Some(2), Some(3)]).into_array(),
+            buffer![0u32, 2, 3].into_array(),
+            Validity::AllValid,
+        );
+        assert_arrays_eq!(result, expected, &mut SESSION.create_execution_ctx());
     }
 
     #[test]

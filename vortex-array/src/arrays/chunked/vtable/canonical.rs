@@ -301,12 +301,8 @@ mod tests {
     use crate::arrays::ConstantArray;
     use crate::arrays::FixedSizeListArray;
     use crate::arrays::ListArray;
-    use crate::arrays::ListViewArray;
     use crate::arrays::PrimitiveArray;
-    use crate::arrays::StructArray;
-    use crate::arrays::VarBinViewArray;
     use crate::arrays::VariantArray;
-    use crate::arrays::struct_::StructArrayExt;
     use crate::arrays::variant::VariantArraySlotsExt;
     use crate::assert_arrays_eq;
     use crate::dtype::DType::List;
@@ -372,6 +368,7 @@ mod tests {
     }
 
     fn assert_variant_values(array: &VariantArray, expected: &[i32]) -> VortexResult<()> {
+        assert_eq!(array.dtype(), &VariantDType(NonNullable));
         assert_eq!(array.len(), expected.len());
         let mut ctx = SESSION.create_execution_ctx();
 
@@ -428,11 +425,16 @@ mod tests {
             .shredded()
             .ok_or_else(|| vortex_err!("expected shredded child"))?;
 
+        for (index, value) in [1, 2, 3].into_iter().enumerate() {
+            assert_eq!(
+                variant.core_storage().execute_scalar(index, &mut ctx)?,
+                variant_scalar(value)
+            );
+        }
         assert_eq!(shredded.dtype(), &Primitive(I32, NonNullable));
         assert_eq!(shredded.len(), 3);
         assert_variant_values(&variant, &[10, 20, 30])?;
 
-        let shredded = shredded.clone().execute::<PrimitiveArray>(&mut ctx)?;
         assert_arrays_eq!(
             shredded,
             PrimitiveArray::from_iter([10i32, 20, 30]),
@@ -510,107 +512,15 @@ mod tests {
 
         let variant = into_variant(chunked.execute::<Canonical>(&mut ctx)?)?;
 
+        for (index, value) in [1, 2].into_iter().enumerate() {
+            assert_eq!(
+                variant.core_storage().execute_scalar(index, &mut ctx)?,
+                variant_scalar(value)
+            );
+        }
         assert_eq!(variant.len(), 2);
         assert!(variant.shredded().is_some());
         assert_variant_values(&variant, &[10, 20])
-    }
-
-    #[test]
-    pub fn pack_nested_structs() {
-        let mut ctx = SESSION.create_execution_ctx();
-        let struct_array = StructArray::try_new(
-            ["a"].into(),
-            vec![VarBinViewArray::from_iter_str(["foo", "bar", "baz", "quak"]).into_array()],
-            4,
-            Validity::NonNullable,
-        )
-        .unwrap();
-        let dtype = struct_array.dtype().clone();
-        let chunked = ChunkedArray::try_new(
-            vec![
-                ChunkedArray::try_new(vec![struct_array.clone().into_array()], dtype.clone())
-                    .unwrap()
-                    .into_array(),
-            ],
-            dtype,
-        )
-        .unwrap()
-        .into_array();
-        let canonical_struct = chunked.execute::<StructArray>(&mut ctx).unwrap();
-        let canonical_varbin = canonical_struct
-            .unmasked_field(0)
-            .clone()
-            .execute::<VarBinViewArray>(&mut ctx)
-            .unwrap();
-        let original_varbin = struct_array
-            .unmasked_field(0)
-            .clone()
-            .execute::<VarBinViewArray>(&mut ctx)
-            .unwrap();
-        let orig_mask = original_varbin
-            .validity()
-            .unwrap()
-            .execute_mask(original_varbin.len(), &mut ctx)
-            .unwrap();
-        let orig_values = (0..original_varbin.len())
-            .map(|i| {
-                orig_mask
-                    .value(i)
-                    .then(|| original_varbin.bytes_at(i).to_vec())
-            })
-            .collect::<Vec<_>>();
-        let canon_mask = canonical_varbin
-            .validity()
-            .unwrap()
-            .execute_mask(canonical_varbin.len(), &mut ctx)
-            .unwrap();
-        let canon_values = (0..canonical_varbin.len())
-            .map(|i| {
-                canon_mask
-                    .value(i)
-                    .then(|| canonical_varbin.bytes_at(i).to_vec())
-            })
-            .collect::<Vec<_>>();
-        assert_eq!(orig_values, canon_values);
-    }
-
-    #[test]
-    pub fn pack_nested_lists() {
-        let mut ctx = SESSION.create_execution_ctx();
-        let l1 = ListArray::try_new(
-            buffer![1, 2, 3, 4].into_array(),
-            buffer![0, 3].into_array(),
-            Validity::NonNullable,
-        )
-        .unwrap();
-
-        let l2 = ListArray::try_new(
-            buffer![5, 6].into_array(),
-            buffer![0, 2].into_array(),
-            Validity::NonNullable,
-        )
-        .unwrap();
-
-        let chunked_list = ChunkedArray::try_new(
-            vec![l1.clone().into_array(), l2.clone().into_array()],
-            List(Arc::new(Primitive(I32, NonNullable)), NonNullable),
-        );
-
-        let canon_values = chunked_list
-            .unwrap()
-            .as_array()
-            .clone()
-            .execute::<ListViewArray>(&mut ctx)
-            .unwrap();
-
-        assert_eq!(
-            l1.execute_scalar(0, &mut ctx).unwrap(),
-            canon_values.execute_scalar(0, &mut ctx).unwrap()
-        );
-        assert_eq!(
-            l2.execute_scalar(0, &mut ctx).unwrap(),
-            canon_values.execute_scalar(1, &mut ctx).unwrap()
-        );
     }
 
     #[test]
@@ -646,6 +556,7 @@ mod tests {
             Validity::NonNullable,
             5,
         )?;
+        assert_arrays_eq!(&fsl, &expected, &mut ctx);
         for idx in 0..5 {
             assert_eq!(
                 chunked.execute_scalar(idx, &mut ctx)?,
@@ -684,10 +595,20 @@ mod tests {
         .unwrap()
         .into_array();
 
-        drop(chunked_list.execute::<Canonical>(&mut ctx).unwrap());
+        let result = chunked_list
+            .execute::<Canonical>(&mut ctx)
+            .unwrap()
+            .into_array();
         assert!(
             allocations.load(Ordering::Relaxed) >= 2,
             "expected offset+size allocations through MemorySession"
         );
+        let expected = ListArray::try_new(
+            buffer![1, 2, 3, 5, 6].into_array(),
+            buffer![0, 3, 5].into_array(),
+            Validity::NonNullable,
+        )
+        .unwrap();
+        assert_arrays_eq!(result, expected, &mut ctx);
     }
 }

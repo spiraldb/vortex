@@ -419,18 +419,20 @@ mod tests {
     }
 
     #[rstest]
-    #[case::length_exceeds_capacity(16, 17)]
-    #[case::capacity_too_large(usize::MAX, 1)]
+    #[case::length_exceeds_capacity(16, 17, "exceeds capacity")]
+    #[case::capacity_too_large(usize::MAX, 1, "capacity is too large")]
     #[crate::test]
     fn rejects_invalid_allocation_size(
         #[case] capacity: usize,
         #[case] logical_len: usize,
+        #[case] expected_error: &str,
     ) -> VortexResult<()> {
         let (pool, _stream) = setup()?;
-        assert!(
+        let error =
             unsafe { PinnedByteBuffer::uninit_with_capacity(&pool.ctx, capacity, logical_len) }
-                .is_err()
-        );
+                .err()
+                .vortex_expect("invalid allocation must fail");
+        assert!(error.to_string().contains(expected_error), "{error}");
         Ok(())
     }
 
@@ -450,18 +452,18 @@ mod tests {
     }
 
     #[rstest]
-    #[case::nonzero_range(3, 9, 2..8, false)]
-    #[case::empty_at_end(10, 10, 4..4, false)]
-    #[case::reversed(6, 2, 2..6, true)]
-    #[case::end_past_logical_length(4, 11, 2..9, true)]
-    #[case::destination_too_short(2, 6, 2..5, true)]
-    #[case::destination_too_long(2, 6, 2..7, true)]
+    #[case::nonzero_range(3, 9, 2..8, None)]
+    #[case::empty_at_end(10, 10, 4..4, None)]
+    #[case::reversed(6, 2, 2..6, Some("invalid pinned host buffer range"))]
+    #[case::end_past_logical_length(4, 11, 2..9, Some("invalid pinned host buffer range"))]
+    #[case::destination_too_short(2, 6, 2..5, Some("range length does not match destination length"))]
+    #[case::destination_too_long(2, 6, 2..7, Some("range length does not match destination length"))]
     #[crate::test]
     fn copy_to_device_subview(
         #[case] start: usize,
         #[case] end: usize,
         #[case] destination_range: Range<usize>,
-        #[case] reject: bool,
+        #[case] expected_error: Option<&str>,
     ) -> VortexResult<()> {
         let (pool, stream) = setup()?;
         let data: Vec<u8> = (0..10).collect();
@@ -476,8 +478,9 @@ mod tests {
             start..end,
             &mut destination.slice_mut(destination_range.clone()),
         );
-        if reject {
-            assert!(result.is_err());
+        if let Some(expected_error) = expected_error {
+            let error = result.expect_err("invalid copy range must fail");
+            assert!(error.to_string().contains(expected_error), "{error}");
             assert!(pool.inflight.lock().is_empty());
             assert_eq!(pool.stats().puts, 1);
         } else {
@@ -567,7 +570,8 @@ mod tests {
 
         // A shorter request in the same size class reuses storage and updates the logical length.
         let mut reused = if try_get {
-            pool.try_get(300)?.expect("expected cached pinned buffer")
+            pool.try_get(300)?
+                .vortex_expect("expected cached pinned buffer")
         } else {
             pool.get(300)?
         };

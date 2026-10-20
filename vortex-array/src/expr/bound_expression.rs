@@ -389,11 +389,27 @@ mod tests {
 
     #[test]
     fn bind_agrees_with_return_dtype() -> VortexResult<()> {
-        for expr in [root(), col("a"), eq(col("a"), lit(1_i32)), lit(true)] {
+        for (expr, expected) in [
+            (root(), struct_dtype()),
+            (
+                col("a"),
+                DType::Primitive(PType::I32, Nullability::NonNullable),
+            ),
+            (
+                eq(col("a"), lit(1_i32)),
+                DType::Bool(Nullability::NonNullable),
+            ),
+            (lit(true), DType::Bool(Nullability::NonNullable)),
+        ] {
             assert_eq!(
                 expr.bind(&struct_dtype())?.dtype(),
-                &expr.return_dtype(&struct_dtype())?,
-                "disagreement for {expr}"
+                &expected,
+                "binding {expr}"
+            );
+            assert_eq!(
+                expr.return_dtype(&struct_dtype())?,
+                expected,
+                "return dtype of {expr}"
             );
         }
         Ok(())
@@ -455,7 +471,13 @@ mod tests {
         let shared = col("a");
         let bound = eq(shared.clone(), shared).bind_scope(&scope())?;
         let children = bound.children();
-        assert_eq!(children[0].dtype(), children[1].dtype());
+        assert_eq!(children.len(), 2);
+        for child in children {
+            assert_eq!(
+                child.dtype(),
+                &DType::Primitive(PType::I32, Nullability::NonNullable)
+            );
+        }
         Ok(())
     }
 

@@ -61,13 +61,10 @@ fn take_small_byte_table(#[case] len: usize) {
     );
 }
 
-// The bounds-check message is specific to the NEON table path; other targets reach a different
-// fallback with its own message.
-#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
 #[rstest]
 #[case::vector(64)]
 #[case::tail(128)]
-#[should_panic(expected = "take index")]
+#[should_panic]
 fn take_small_byte_table_rejects_out_of_bounds_index(#[case] offset: usize) {
     let mut indices = vec![0u8; 129];
     indices[offset] = 4;
@@ -119,7 +116,14 @@ fn take_variable_length_slices() -> VortexResult<()> {
 #[test]
 fn variable_length_slices_validate_output_length() {
     let values = buffer![10u8, 11, 12, 13].into_byte_buffer();
-    assert!(take_slices(&values, 1, 4, &[0u32, 2], &[1u32, 1], 3, &allocator(),).is_err());
+    let error = take_slices(&values, 1, 4, &[0u32, 2], &[1u32, 1], 3, &allocator())
+        .expect_err("expanded length differs from declared output length");
+    assert!(
+        error
+            .to_string()
+            .contains("expanded byte length does not match declared byte length"),
+        "{error}"
+    );
 }
 
 #[test]

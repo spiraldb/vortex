@@ -31,8 +31,8 @@ use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_ensure;
 
+use crate::ArrowExporter;
 use crate::executor::validity::to_arrow_null_buffer;
-use crate::session::ArrowSessionExt;
 
 /// Matches the encodings [`to_arrow_list`] requires for export.
 struct ArrowListExportable;
@@ -50,6 +50,7 @@ impl Matcher for ArrowListExportable {
 pub(super) fn to_arrow_list<O: OffsetSizeTrait + NativePType>(
     array: ArrayRef,
     elements_field: &FieldRef,
+    exporter: &ArrowExporter<'_>,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<ArrowArrayRef> {
     vortex_ensure!(
@@ -62,14 +63,19 @@ pub(super) fn to_arrow_list<O: OffsetSizeTrait + NativePType>(
 
     // If the Vortex array is already in List format, we can directly convert it.
     if let Some(list) = array.as_opt::<List>() {
-        return list_to_list::<O>(&list.into_owned(), elements_field, ctx);
+        return list_to_list::<O>(&list.into_owned(), elements_field, exporter, ctx);
     }
 
     // Converting each chunk individually, then using the fast concat logic from arrow
     if let Some(chunked) = array.as_opt::<Chunked>() {
         let mut arrow_chunks: Vec<ArrowArrayRef> = Vec::with_capacity(chunked.nchunks());
         for chunk in chunked.chunks() {
-            arrow_chunks.push(to_arrow_list::<O>(chunk.clone(), elements_field, ctx)?);
+            arrow_chunks.push(to_arrow_list::<O>(
+                chunk.clone(),
+                elements_field,
+                exporter,
+                ctx,
+            )?);
         }
 
         let refs = arrow_chunks.iter().map(|a| a.as_ref()).collect::<Vec<_>>();
@@ -90,7 +96,7 @@ pub(super) fn to_arrow_list<O: OffsetSizeTrait + NativePType>(
     } else {
         list_view.rebuild(ListViewRebuildMode::MakeZeroCopyToList, ctx)?
     };
-    list_view_zctl::<O>(zctl, elements_field, ctx)
+    list_view_zctl::<O>(zctl, elements_field, exporter, ctx)
 }
 
 #[allow(rustdoc::broken_intra_doc_links)]
@@ -98,6 +104,7 @@ pub(super) fn to_arrow_list<O: OffsetSizeTrait + NativePType>(
 fn list_to_list<O: OffsetSizeTrait + NativePType>(
     array: &ListArray,
     elements_field: &FieldRef,
+    exporter: &ArrowExporter<'_>,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<ArrowArrayRef> {
     // We must cast the offsets to the required offset type.
@@ -106,14 +113,14 @@ fn list_to_list<O: OffsetSizeTrait + NativePType>(
         .cast(DType::Primitive(O::PTYPE, Nullability::NonNullable))?
         .execute::<Canonical>(ctx)?
         .into_primitive()
-        .to_buffer::<O>()
-        .into_arrow_offset_buffer();
+        .to_buffer::<O>();
 
-    let elements = ctx.session().clone().arrow().execute_arrow(
-        array.elements().clone(),
-        Some(elements_field.as_ref()),
-        ctx,
-    )?;
+    // SAFETY: `ListArray` guarantees its offsets are non-empty, non-negative and sorted. The
+    // checked cast keeps every value, so the order stays the same.
+    let offsets = unsafe { offsets.into_arrow_offset_buffer_unchecked() };
+
+    let elements =
+        exporter.execute_arrow(array.elements().clone(), Some(elements_field.as_ref()), ctx)?;
     vortex_ensure!(
         elements_field.is_nullable() || elements.null_count() == 0,
         "Cannot convert to non-nullable Arrow array with null elements"
@@ -133,16 +140,14 @@ fn list_to_list<O: OffsetSizeTrait + NativePType>(
 fn list_view_zctl<O: OffsetSizeTrait + NativePType>(
     array: ListViewArray,
     elements_field: &FieldRef,
+    exporter: &ArrowExporter<'_>,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<ArrowArrayRef> {
     assert!(array.is_zero_copy_to_list());
 
     if array.is_empty() {
-        let elements = ctx.session().clone().arrow().execute_arrow(
-            array.elements().clone(),
-            Some(elements_field.as_ref()),
-            ctx,
-        )?;
+        let elements =
+            exporter.execute_arrow(array.elements().clone(), Some(elements_field.as_ref()), ctx)?;
         return Ok(Arc::new(GenericListArray::<O>::new(
             Arc::clone(elements_field),
             OffsetBuffer::new_empty(),
@@ -191,11 +196,7 @@ fn list_view_zctl<O: OffsetSizeTrait + NativePType>(
     });
 
     // Extract the elements array.
-    let elements = ctx.session().clone().arrow().execute_arrow(
-        elements,
-        Some(elements_field.as_ref()),
-        ctx,
-    )?;
+    let elements = exporter.execute_arrow(elements, Some(elements_field.as_ref()), ctx)?;
     vortex_ensure!(
         elements_field.is_nullable() || elements.null_count() == 0,
         "Cannot convert to non-nullable Arrow array with null elements"
@@ -203,9 +204,14 @@ fn list_view_zctl<O: OffsetSizeTrait + NativePType>(
 
     let null_buffer = to_arrow_null_buffer(validity, sizes.len(), ctx)?;
 
+    // SAFETY: zero-copy-to-list offsets are non-negative and sorted, and the final offset we
+    // pushed is the last offset plus a non-negative size. The array is not empty, so the buffer
+    // is not empty.
+    let offsets = unsafe { offsets.freeze().into_arrow_offset_buffer_unchecked() };
+
     Ok(Arc::new(GenericListArray::<O>::new(
         Arc::clone(elements_field),
-        offsets.freeze().into_arrow_offset_buffer(),
+        offsets,
         elements,
         null_buffer,
     )))
@@ -219,6 +225,7 @@ mod tests {
     use arrow_array::Array;
     use arrow_array::GenericListArray;
     use arrow_array::Int32Array;
+    use arrow_array::Int64Array;
     use arrow_schema::DataType;
     use arrow_schema::Field;
     use vortex_array::Canonical;
@@ -294,6 +301,17 @@ mod tests {
         let second_values = second_list.as_any().downcast_ref::<Int32Array>().unwrap();
         assert_eq!(second_values.value(0), 4);
         assert_eq!(second_values.value(1), 5);
+        let expected = [Some(vec![1, 2, 3]), Some(vec![4, 5])];
+        assert_eq!(list.len(), expected.len());
+        for (index, expected) in expected.into_iter().enumerate() {
+            assert_eq!(list.is_null(index), expected.is_none());
+            if let Some(expected) = expected {
+                assert_eq!(
+                    list.value(index).to_data(),
+                    Int32Array::from(expected).to_data()
+                );
+            }
+        }
         Ok(())
     }
 
@@ -334,6 +352,17 @@ mod tests {
         assert_eq!(list.len(), 2);
         assert!(!list.is_null(0));
         assert!(!list.is_null(1));
+        let expected = [Some(vec![10, 20]), Some(vec![30])];
+        assert_eq!(list.len(), expected.len());
+        for (index, expected) in expected.into_iter().enumerate() {
+            assert_eq!(list.is_null(index), expected.is_none());
+            if let Some(expected) = expected {
+                assert_eq!(
+                    list.value(index).to_data(),
+                    Int64Array::from(expected).to_data()
+                );
+            }
+        }
         Ok(())
     }
 
@@ -376,6 +405,17 @@ mod tests {
         assert_eq!(second.len(), 3);
         let second_vals = second.as_any().downcast_ref::<Int32Array>().unwrap();
         assert_eq!(second_vals.values(), &[2, 3, 4]);
+        let expected = [Some(vec![1, 2, 3]), Some(vec![2, 3, 4])];
+        assert_eq!(list.len(), expected.len());
+        for (index, expected) in expected.into_iter().enumerate() {
+            assert_eq!(list.is_null(index), expected.is_none());
+            if let Some(expected) = expected {
+                assert_eq!(
+                    list.value(index).to_data(),
+                    Int32Array::from(expected).to_data()
+                );
+            }
+        }
         Ok(())
     }
 
@@ -417,6 +457,17 @@ mod tests {
             .downcast_ref::<Int32Array>()
             .unwrap();
         assert_eq!(values.values().as_ptr(), elements_ptr);
+        let expected = [Some(vec![3]), Some(vec![4, 5, 6])];
+        assert_eq!(arrow_list.len(), expected.len());
+        for (index, expected) in expected.into_iter().enumerate() {
+            assert_eq!(arrow_list.is_null(index), expected.is_none());
+            if let Some(expected) = expected {
+                assert_eq!(
+                    arrow_list.value(index).to_data(),
+                    Int32Array::from(expected).to_data()
+                );
+            }
+        }
         Ok(())
     }
 
@@ -486,6 +537,7 @@ mod tests {
             .into_array()
             .execute_arrow(Some(&arrow_dt), &mut ctx)?;
         assert_eq!(arrow_array.len(), 0);
+        assert_eq!(arrow_array.data_type(), &arrow_dt);
         Ok(())
     }
 }

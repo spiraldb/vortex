@@ -39,6 +39,7 @@ use vortex_array::dtype::extension::ExtVTable;
 use vortex_array::scalar::ScalarValue;
 use vortex_array::validity::Validity;
 use vortex_arrow::ArrowExport;
+use vortex_arrow::ArrowExportOptions;
 use vortex_arrow::ArrowExportVTable;
 use vortex_arrow::ArrowImport;
 use vortex_arrow::ArrowImportVTable;
@@ -234,6 +235,7 @@ impl ArrowExportVTable for Rect {
         &self,
         array: ArrayRef,
         target: &Field,
+        options: &ArrowExportOptions,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrowExport> {
         let is_box = array
@@ -258,9 +260,11 @@ impl ArrowExportVTable for Rect {
             target.is_nullable(),
         );
         let session = ctx.session().clone();
-        let arrow_storage = session
-            .arrow()
-            .execute_arrow(storage, Some(&storage_field), ctx)?;
+        let arrow_storage =
+            session
+                .arrow()
+                .exporter(options)
+                .execute_arrow(storage, Some(&storage_field), ctx)?;
 
         // Round-trip through GeoArrow's rect array; `into_arrow` is concrete, so wrap in `Arc`.
         let rects = RectArray::try_from((arrow_storage.as_ref(), box_meta))
@@ -411,7 +415,10 @@ mod tests {
             .clone();
 
         let geometries = rect_geometries(&storage, &mut ctx)?;
-        assert!(matches!(geometries.as_slice(), [Geometry::Rect(_)]));
+        assert_eq!(
+            geometries,
+            vec![Geometry::Rect(geo_types::Rect::new((0.0, 0.0), (2.0, 3.0)))]
+        );
         Ok(())
     }
 }

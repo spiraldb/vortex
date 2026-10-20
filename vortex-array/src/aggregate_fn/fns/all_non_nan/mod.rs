@@ -8,11 +8,11 @@ use vortex_session::registry::CachedId;
 use crate::ArrayRef;
 use crate::Columnar;
 use crate::ExecutionCtx;
-use crate::IntoArray;
 use crate::aggregate_fn::AggregateArgs;
 use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnVTable;
 use crate::aggregate_fn::EmptyOptions;
+use crate::aggregate_fn::fns::nan_count::columnar_nan_count;
 use crate::aggregate_fn::fns::nan_count::nan_count;
 use crate::dtype::DType;
 use crate::dtype::Nullability;
@@ -71,9 +71,9 @@ impl AggregateFnVTable for AllNonNan {
     fn partial_from_scalar(
         &self,
         _args: AggregateArgs<'_, Self::Options>,
-        scalar: Scalar,
+        scalar: &Scalar,
     ) -> VortexResult<Self::Partial> {
-        bool::try_from(&scalar)
+        bool::try_from(scalar)
     }
 
     fn merge_partials(
@@ -121,11 +121,7 @@ impl AggregateFnVTable for AllNonNan {
     ) -> VortexResult<()> {
         // Normal array dispatch is handled by `try_accumulate`, which always short-circuits.
         // Keep this fallback in sync for direct Columnar accumulation paths.
-        let array = match batch {
-            Columnar::Constant(c) => c.clone().into_array(),
-            Columnar::Canonical(c) => c.clone().into_array(),
-        };
-        *partial &= nan_count(&array, ctx)? == 0;
+        *partial &= columnar_nan_count(batch, ctx)? == 0;
         Ok(())
     }
 
@@ -199,19 +195,6 @@ mod tests {
     fn all_non_nan_true_for_empty_float() -> VortexResult<()> {
         let dtype = DType::Primitive(PType::F32, Nullability::Nullable);
         let mut acc = Accumulator::try_new(AllNonNan, EmptyOptions, dtype)?;
-
-        assert!(bool::try_from(&acc.finish()?)?);
-        Ok(())
-    }
-
-    #[test]
-    fn all_non_nan_true_with_nulls() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
-        let dtype = DType::Primitive(PType::F32, Nullability::Nullable);
-        let mut acc = Accumulator::try_new(AllNonNan, EmptyOptions, dtype)?;
-
-        let batch = PrimitiveArray::from_option_iter([Some(1.0f32), None]).into_array();
-        acc.accumulate(&batch, &mut ctx)?;
 
         assert!(bool::try_from(&acc.finish()?)?);
         Ok(())

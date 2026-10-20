@@ -155,9 +155,13 @@ impl DecimalByteParts {
         let len = msp.len();
         let dtype = DType::Decimal(decimal_dtype, msp.dtype().nullability());
         let slots = DecimalBytePartsSlots { msp, lower_parts }.into_slots();
-        Array::try_from_parts(
-            ArrayParts::new(DecimalByteParts, dtype, len, DecimalBytePartsData).with_slots(slots),
-        )
+        Array::try_from_parts(ArrayParts::new(
+            DecimalByteParts,
+            dtype,
+            len,
+            DecimalBytePartsData,
+            slots,
+        ))
     }
 
     /// Construct a [`DecimalBytePartsArray`] from parts whose invariants are already established.
@@ -178,10 +182,13 @@ impl DecimalByteParts {
         // SAFETY: the caller guarantees the part types, lengths, and count. The slot builder
         // fills every required slot, and the length and nullability come from the MSP.
         unsafe {
-            Array::from_parts_unchecked(
-                ArrayParts::new(DecimalByteParts, dtype, len, DecimalBytePartsData)
-                    .with_slots(slots),
-            )
+            Array::from_parts_unchecked(ArrayParts::new(
+                DecimalByteParts,
+                dtype,
+                len,
+                DecimalBytePartsData,
+                slots,
+            ))
         }
     }
 }
@@ -629,11 +636,7 @@ mod tests {
                 )
             }
         };
-        let actual = encoded
-            .clone()
-            .into_array()
-            .execute::<DecimalArray>(&mut ctx)?;
-        assert_arrays_eq!(expected.clone(), actual, &mut ctx);
+        assert_arrays_eq!(encoded, expected, &mut ctx);
         for row in 0..expected.len() {
             assert_eq!(
                 encoded.execute_scalar(row, &mut ctx)?,
@@ -682,8 +685,8 @@ mod tests {
             DType::Decimal(DecimalDType::new(76, 2), Nullability::NonNullable),
             3,
             DecimalBytePartsData,
-        )
-        .with_slots(slots.into_iter().collect());
+            slots.into_iter().collect(),
+        );
         assert!(Array::try_from_parts(parts).is_err());
     }
 
@@ -746,8 +749,15 @@ mod tests {
             array.execute_scalar(0, &mut ctx)?,
             Scalar::null(array.dtype().clone())
         );
-        let canonical = array.clone().execute::<DecimalArray>(&mut ctx)?;
-        assert_arrays_eq!(array, canonical.into_array(), &mut ctx);
+        assert_arrays_eq!(
+            array,
+            DecimalArray::new(
+                buffer![0i128, 0, 11],
+                DecimalDType::new(38, 2),
+                Validity::from_iter([false, false, true]),
+            ),
+            &mut ctx
+        );
         Ok(())
     }
 }

@@ -3,6 +3,7 @@
 
 use std::fmt::Display;
 use std::fmt::Formatter;
+use std::slice;
 
 use prost::Message;
 use vortex_error::VortexResult;
@@ -33,7 +34,6 @@ use crate::scalar_fn::ReduceNode;
 use crate::scalar_fn::ScalarFnId;
 use crate::scalar_fn::ScalarFnVTable;
 use crate::scalar_fn::ScalarFnVTableExt;
-use crate::scalar_fn::fns::literal::Literal;
 use crate::scalar_fn::fns::mask::Mask;
 use crate::scalar_fn::fns::pack::Pack;
 
@@ -50,7 +50,57 @@ impl GetItem {
         input: ArrayRef,
         field_name: impl Into<FieldName>,
     ) -> VortexResult<ScalarFnArray> {
-        ScalarFnArray::try_new(GetItem.bind(field_name.into()), vec![input])
+        ScalarFnArray::try_new(GetItem.bind(field_name.into()), [input])
+    }
+
+    /// Read `field_name` out of `struct_node`, without a `get_item` node where possible.
+    ///
+    /// Rules that read a field out of their own child use this instead of building the
+    /// `get_item` node themselves. The optimizer visits children before their parent, so a
+    /// `get_item` that a rule introduces is never simplified again. Removing it here keeps the
+    /// output of the rule a fixed point.
+    pub(crate) fn apply_now<T: ReduceNode>(
+        struct_node: &T,
+        field_name: &FieldName,
+    ) -> VortexResult<T> {
+        if let Some(field) = Self::maybe_apply_now(struct_node, field_name)? {
+            return Ok(field);
+        }
+
+        struct_node.new_node(
+            GetItem.bind(field_name.clone()),
+            slice::from_ref(struct_node),
+        )
+    }
+
+    /// Read `field_name` straight out of a `pack` node, which holds each field as a child.
+    ///
+    /// Returns `None` if `struct_node` is not a `pack`, or does not hold `field_name`.
+    fn maybe_apply_now<T: ReduceNode>(
+        struct_node: &T,
+        field_name: &FieldName,
+    ) -> VortexResult<Option<T>> {
+        let Some(pack) = struct_node
+            .scalar_fn()
+            .and_then(|scalar_fn| scalar_fn.as_opt::<Pack>())
+        else {
+            return Ok(None);
+        };
+        let Some(idx) = pack.names.find(field_name) else {
+            return Ok(None);
+        };
+
+        let field = struct_node.child(idx);
+        if !pack.nullability.is_nullable() {
+            return Ok(Some(field));
+        }
+
+        // A nullable pack intersects its validity into the field, so mask the field with an
+        // all-true constant to make its dtype nullable.
+        Ok(Some(struct_node.new_node(
+            Mask.bind(EmptyOptions),
+            &[field, struct_node.new_constant(true.into())],
+        )?))
     }
 }
 
@@ -160,25 +210,7 @@ impl ScalarFnVTable for GetItem {
     }
 
     fn reduce<T: ReduceNode>(&self, field_name: &FieldName, node: &T) -> VortexResult<Option<T>> {
-        let child = node.child(0);
-        if let Some(child_fn) = child.scalar_fn()
-            && let Some(pack) = child_fn.as_opt::<Pack>()
-            && let Some(idx) = pack.names.find(field_name)
-        {
-            let mut field = child.child(idx);
-
-            // Possibly mask the field if the pack is nullable
-            if pack.nullability.is_nullable() {
-                field = node.new_node(
-                    Mask.bind(EmptyOptions),
-                    &[field, node.new_node(Literal.bind(true.into()), &[])?],
-                )?;
-            }
-
-            return Ok(Some(field));
-        }
-
-        Ok(None)
+        Self::maybe_apply_now(&node.child(0), field_name)
     }
 
     fn is_strict(&self, _field_name: &FieldName) -> bool {
@@ -204,8 +236,10 @@ mod tests {
     use crate::arrays::ConstantArray;
     use crate::arrays::Filter;
     use crate::arrays::Primitive;
+    use crate::arrays::PrimitiveArray;
     use crate::arrays::ScalarFn;
     use crate::arrays::Slice;
+    use crate::assert_arrays_eq;
     use crate::builtins::ArrayBuiltins;
     use crate::dtype::DType;
     use crate::dtype::FieldName;
@@ -241,7 +275,12 @@ mod tests {
                 .is_some_and(|f| f.signature().is_strict())
         );
         let item = st.into_array().apply(&get_item).unwrap();
-        assert_eq!(item.dtype(), &DType::from(PType::I32))
+        assert_eq!(item.dtype(), &DType::from(PType::I32));
+        assert_arrays_eq!(
+            item,
+            buffer![0i32, 1, 2].into_array(),
+            &mut crate::array_session().create_execution_ctx()
+        );
     }
 
     #[test]
@@ -269,6 +308,11 @@ mod tests {
             item.dtype(),
             &DType::Primitive(PType::I32, Nullability::Nullable)
         );
+        assert_arrays_eq!(
+            item,
+            PrimitiveArray::from_option_iter([None::<i32>]),
+            &mut crate::array_session().create_execution_ctx()
+        );
     }
 
     #[test]
@@ -285,6 +329,11 @@ mod tests {
         assert_eq!(
             item.dtype(),
             &DType::Primitive(PType::I32, Nullability::Nullable)
+        );
+        assert_arrays_eq!(
+            item,
+            PrimitiveArray::from_option_iter([Some(1i32)]),
+            &mut crate::array_session().create_execution_ctx()
         );
         Ok(())
     }
@@ -330,6 +379,11 @@ mod tests {
 
         assert!(item.is::<Filter>());
         assert!(!item.is::<ScalarFn>());
+        assert_arrays_eq!(
+            item,
+            buffer![0i32, 2].into_array(),
+            &mut crate::array_session().create_execution_ctx()
+        );
         Ok(())
     }
 
@@ -342,6 +396,11 @@ mod tests {
         assert!(item.is::<Primitive>());
         assert!(!item.is::<Slice>());
         assert!(!item.is::<ScalarFn>());
+        assert_arrays_eq!(
+            item,
+            buffer![1i32, 2].into_array(),
+            &mut crate::array_session().create_execution_ctx()
+        );
         Ok(())
     }
 
@@ -359,6 +418,11 @@ mod tests {
             &DType::Primitive(PType::I32, Nullability::Nullable)
         );
         assert!(!item.is::<ScalarFn>());
+        assert_arrays_eq!(
+            item,
+            PrimitiveArray::from_option_iter([Some(0i32), None, Some(2)]),
+            &mut crate::array_session().create_execution_ctx()
+        );
         Ok(())
     }
 
@@ -464,6 +528,17 @@ mod tests {
         )
         .unwrap();
 
-        st.into_array().apply(&get_item("data", root())).unwrap();
+        let result = st.into_array().apply(&get_item("data", root())).unwrap();
+        let expected = ListArray::try_new(
+            buffer![2f32, 3., 4., 5.].into_array(),
+            buffer![0u64, 2, 4].into_array(),
+            Validity::AllValid,
+        )
+        .unwrap();
+        assert_arrays_eq!(
+            result,
+            expected,
+            &mut crate::array_session().create_execution_ctx()
+        );
     }
 }

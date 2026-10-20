@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 mod cast;
+mod fill_null;
 mod mask;
 pub(crate) mod rules;
 mod slice;
@@ -10,42 +11,12 @@ mod zip;
 
 #[cfg(test)]
 mod tests {
-    use vortex_buffer::buffer;
-    use vortex_error::VortexResult;
-
-    use crate::IntoArray;
-    use crate::arrays::VarBinViewArray;
-    #[test]
-    fn take_nullable() -> VortexResult<()> {
-        let arr = VarBinViewArray::from_iter_nullable_str([
-            Some("one"),
-            None,
-            Some("three"),
-            Some("four"),
-            None,
-            Some("six"),
-        ]);
-
-        let taken = arr.take(buffer![0, 3].into_array())?;
-
-        assert!(taken.dtype().is_nullable());
-        let mut ctx = array_session().create_execution_ctx();
-        let taken = taken.execute::<VarBinViewArray>(&mut ctx)?;
-        let mask = taken.validity()?.execute_mask(taken.len(), &mut ctx)?;
-        let result = (0..taken.len())
-            .map(|i| {
-                mask.value(i)
-                    .then(|| unsafe { String::from_utf8_unchecked(taken.bytes_at(i).to_vec()) })
-            })
-            .collect::<Vec<_>>();
-        assert_eq!(result, [Some("one".to_string()), Some("four".to_string())]);
-        Ok(())
-    }
-    // Consistency tests
     use rstest::rstest;
 
+    use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::array_session;
+    use crate::arrays::VarBinViewArray;
     use crate::compute::conformance::consistency::test_array_consistency;
     use crate::dtype::DType;
     use crate::dtype::Nullability;

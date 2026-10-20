@@ -21,6 +21,8 @@ use vortex_layout::LayoutReader;
 use vortex_layout::scan::layout::LayoutReaderDataSource;
 use vortex_layout::scan::scan_builder::ScanBuilder;
 use vortex_layout::scan::split_by::SplitBy;
+use vortex_layout::scan::v2::ScanFile;
+use vortex_layout::scan::v2::SegmentLocation;
 use vortex_layout::segments::SegmentSource;
 use vortex_scan::DataSourceRef;
 use vortex_session::VortexSession;
@@ -219,6 +221,28 @@ impl VortexFile {
             self.session.clone(),
             self.layout_reader()?,
         ))
+    }
+
+    /// The parts of this file the planner-driven scan executor reads through: its root layout,
+    /// where each of its segments lives, and its segment source.
+    ///
+    /// Pass this to [`vortex_layout::scan::v2::ScanBuilder::new`] to build a V2 scan explicitly.
+    pub fn scan_file(&self) -> ScanFile {
+        let locations = self
+            .footer
+            .segment_specs_with_metadata()
+            .iter()
+            .map(|spec| SegmentLocation {
+                offset: spec.offset,
+                length: spec.length,
+                alignment: spec.alignment,
+            })
+            .collect();
+        ScanFile {
+            layout: Arc::clone(self.footer.layout()),
+            locations,
+            segments: Arc::clone(&self.segment_source),
+        }
     }
 
     /// Returns `true` if file-level statistics prove the expression cannot

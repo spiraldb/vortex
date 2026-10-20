@@ -77,7 +77,7 @@ impl Like {
         pattern: ArrayRef,
         options: LikeOptions,
     ) -> VortexResult<ScalarFnArray> {
-        ScalarFnArray::try_new(Like.bind(options), vec![input, pattern])
+        ScalarFnArray::try_new(Like.bind(options), [input, pattern])
     }
 }
 
@@ -484,7 +484,6 @@ mod tests {
     use crate::expr::get_item;
     use crate::expr::like;
     use crate::expr::lit;
-    use crate::expr::not;
     use crate::expr::not_ilike;
     use crate::expr::root;
     use crate::scalar::Scalar;
@@ -685,18 +684,6 @@ mod tests {
         assert_arrays_eq!(
             result,
             BoolArray::from_iter([Some(true), Some(false)]),
-            &mut ctx
-        );
-    }
-
-    #[test]
-    fn invert_booleans() {
-        let not_expr = not(root());
-        let bools = BoolArray::from_iter([false, true, false, false, true, true]);
-        let mut ctx = array_session().create_execution_ctx();
-        assert_arrays_eq!(
-            bools.into_array().apply(&not_expr).unwrap(),
-            BoolArray::from_iter([true, false, true, true, false, false]),
             &mut ctx
         );
     }

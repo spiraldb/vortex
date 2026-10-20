@@ -206,7 +206,7 @@ mod tests {
     }
 
     #[test]
-    fn unrelated_expressions_do_not_request_nan_count() -> VortexResult<()> {
+    fn unrelated_expressions_are_preserved() -> VortexResult<()> {
         let binder = TestBinder::new(false);
 
         let bound = bind_stats(is_null(col("f")).bind(&binder.input_scope)?, &binder)?;

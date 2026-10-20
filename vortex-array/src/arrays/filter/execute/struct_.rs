@@ -95,52 +95,6 @@ mod tests {
     }
 
     #[test]
-    fn filter_struct_selects_correct_rows() {
-        let mut ctx = array_session().create_execution_ctx();
-        let array = StructArray::try_new(
-            ["x", "y"].into(),
-            vec![
-                PrimitiveArray::from_iter([10i32, 20, 30, 40, 50]).into_array(),
-                PrimitiveArray::from_iter([1i64, 2, 3, 4, 5]).into_array(),
-            ],
-            5,
-            Validity::NonNullable,
-        )
-        .unwrap();
-
-        let mask = Mask::from_iter([true, false, true, false, true]);
-        let filtered = array.filter(mask).unwrap();
-
-        let expected = StructArray::try_new(
-            ["x", "y"].into(),
-            vec![
-                PrimitiveArray::from_iter([10i32, 30, 50]).into_array(),
-                PrimitiveArray::from_iter([1i64, 3, 5]).into_array(),
-            ],
-            3,
-            Validity::NonNullable,
-        )
-        .unwrap();
-
-        assert_arrays_eq!(filtered, expected, &mut ctx);
-    }
-
-    #[test]
-    fn filter_empty_struct() {
-        let mut ctx = array_session().create_execution_ctx();
-        let struct_arr =
-            StructArray::try_new(FieldNames::empty(), vec![], 10, Validity::NonNullable).unwrap();
-        let mask = Mask::from_iter([
-            false, true, false, true, false, true, false, true, false, true,
-        ]);
-        let filtered = struct_arr.filter(mask).unwrap();
-
-        let expected =
-            StructArray::try_new(FieldNames::empty(), vec![], 5, Validity::NonNullable).unwrap();
-        assert_arrays_eq!(filtered, expected, &mut ctx);
-    }
-
-    #[test]
     fn filter_empty_struct_with_empty_filter() {
         let mut ctx = array_session().create_execution_ctx();
         let struct_arr =

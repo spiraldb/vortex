@@ -460,6 +460,10 @@ mod tests {
 
         let list = builder.finish();
         assert_eq!(list.len(), 0);
+        assert_eq!(
+            list.dtype(),
+            &DType::List(Arc::new(I32.into()), NonNullable)
+        );
     }
 
     #[test]
@@ -503,6 +507,12 @@ mod tests {
 
         assert_eq!(list_array.list_elements_at(0).unwrap().len(), 3);
         assert_eq!(list_array.list_elements_at(1).unwrap().len(), 3);
+        let expected = ListArray::new(
+            buffer![1i32, 2, 3, 4, 5, 6].into_array(),
+            buffer![0u32, 3, 6].into_array(),
+            Validity::NonNullable,
+        );
+        assert_arrays_eq!(list_array, expected, &mut ctx);
     }
 
     #[test]
@@ -520,7 +530,17 @@ mod tests {
             builder
                 .append_value(Scalar::list_empty(dtype, NonNullable).as_list())
                 .is_ok()
-        )
+        );
+        let expected = ListArray::new(
+            buffer![0i32; 0].into_array(),
+            buffer![0u32, 0].into_array(),
+            Validity::NonNullable,
+        );
+        assert_arrays_eq!(
+            builder.finish(),
+            expected,
+            &mut array_session().create_execution_ctx()
+        );
     }
 
     #[test]
@@ -569,6 +589,12 @@ mod tests {
         assert_eq!(list_array.list_elements_at(0).unwrap().len(), 3);
         assert_eq!(list_array.list_elements_at(1).unwrap().len(), 0);
         assert_eq!(list_array.list_elements_at(2).unwrap().len(), 3);
+        let expected = ListArray::new(
+            buffer![1i32, 2, 3, 4, 5, 6].into_array(),
+            buffer![0u32, 3, 3, 6].into_array(),
+            Validity::AllValid,
+        );
+        assert_arrays_eq!(list_array, expected, &mut ctx);
     }
 
     fn test_extend_builder_gen<O: OffsetBuilderPType>() {
@@ -637,6 +663,12 @@ mod tests {
                 )
                 .unwrap(),
         );
+        let independent = ListArray::new(
+            buffer![0i32, 1, 2, 4, 5, 0, 1, 2, 4, 5, 4, 5].into_array(),
+            buffer![0u32, 3, 3, 5, 8, 8, 10, 10, 12].into_array(),
+            Validity::from_iter([true, false, true, true, false, true, false, true]),
+        );
+        assert_arrays_eq!(actual, independent, &mut ctx);
     }
 
     /// `append_to_builder` must handle any list builder kind without assuming the offset/size
@@ -823,6 +855,12 @@ mod tests {
             &mut ctx
         );
 
+        let expected = ListArray::new(
+            buffer![10i32, 20, 10, 60, 70].into_array(),
+            buffer![0u32, 2, 2, 3, 5].into_array(),
+            Validity::from_iter([true, false, true, true]),
+        );
+        assert_arrays_eq!(list, expected, &mut ctx);
         Ok(())
     }
 

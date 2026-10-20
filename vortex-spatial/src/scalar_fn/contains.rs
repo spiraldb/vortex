@@ -241,10 +241,10 @@ mod tests {
         let dtype = point_column(vec![0.0], vec![0.0])?.dtype().clone();
         let non_nullable =
             SpatialContains.return_dtype(&EmptyOptions, &[dtype.clone(), dtype.clone()])?;
-        assert!(!non_nullable.is_nullable());
+        assert_eq!(non_nullable, DType::Bool(Nullability::NonNullable));
         let nullable =
             SpatialContains.return_dtype(&EmptyOptions, &[dtype.as_nullable(), dtype])?;
-        assert!(nullable.is_nullable());
+        assert_eq!(nullable, DType::Bool(Nullability::Nullable));
         Ok(())
     }
 
