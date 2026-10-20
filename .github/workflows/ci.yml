@@ -1,6 +1,6 @@
 name: Linters and Tests
 
-# CI playground: measure each optimization against the unchanged baseline.
+# CI playground: establish an unchanged baseline before measuring optimizations.
 
 # Concurrency control:
 # - PRs: new commits on a feature branch will cancel in-progress (outdated) runs.
@@ -527,13 +527,6 @@ jobs:
       - uses: ./.github/actions/setup-prebuild
         with:
           enable-sccache: "true"
-      - name: Use bundled LLD for Rust linking
-        shell: pwsh
-        run: |
-          $sysroot = rustc --print sysroot
-          $linker = Join-Path $sysroot "lib/rustlib/x86_64-pc-windows-msvc/bin/rust-lld.exe"
-          if (-not (Test-Path $linker)) { throw "Bundled Rust linker not found: $linker" }
-          "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$linker" >> $env:GITHUB_ENV
       - name: Rust Tests (Windows)
         run: |
           cargo nextest run --cargo-profile ci --locked --workspace --all-features --no-fail-fast `
