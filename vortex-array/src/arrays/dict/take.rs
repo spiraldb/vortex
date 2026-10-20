@@ -14,7 +14,6 @@ use crate::array::VTable;
 use crate::arrays::Constant;
 use crate::arrays::ConstantArray;
 use crate::arrays::dict::DictArraySlotsExt;
-use crate::dtype::DType;
 use crate::expr::stats::Precision;
 use crate::expr::stats::Stat;
 use crate::expr::stats::StatsProvider;
@@ -80,22 +79,6 @@ fn short_circuit<V: VTable>(array: ArrayView<'_, V>, indices: &ArrayRef) -> Opti
     None
 }
 
-/// Takes from `values` with a constant `code` by expanding the one value it selects, rather than
-/// materializing the codes and gathering through them.
-pub(crate) fn take_constant_code(
-    values: &ArrayRef,
-    code: &Scalar,
-    dtype: &DType,
-    len: usize,
-    ctx: &mut ExecutionCtx,
-) -> VortexResult<ArrayRef> {
-    let value = match code.as_primitive().as_::<usize>() {
-        Some(code) => values.execute_scalar(code, ctx)?.cast(dtype)?,
-        None => Scalar::null(dtype.as_nullable()),
-    };
-    Ok(ConstantArray::new(value, len).into_array())
-}
-
 #[derive(Default, Debug)]
 pub struct TakeReduceAdaptor<V>(pub V);
 
@@ -149,16 +132,6 @@ where
         if let Some(result) = short_circuit::<V>(array, parent.codes()) {
             return Ok(Some(result));
         }
-        if let Some(code) = parent.codes().as_opt::<Constant>() {
-            return take_constant_code(
-                array.array(),
-                code.scalar(),
-                parent.dtype(),
-                parent.len(),
-                ctx,
-            )
-            .map(Some);
-        }
         let result = <V as TakeExecute>::take(array, parent.codes(), ctx)?;
         if let Some(taken) = &result {
             propagate_take_stats(array.array(), taken, parent.codes())?;
@@ -197,4 +170,36 @@ pub(crate) fn propagate_take_stats(
             &(unsafe { StatsSet::new_unchecked(inexact_min_max) }).as_typed_ref(source.dtype()),
         )
     })
+}
+
+/// Executes a dictionary whose codes are constant by expanding the one value they select, rather
+/// than materializing the codes and gathering through them.
+///
+/// The executor offers the codes child to its parent's kernels before the values child, so this
+/// runs ahead of the values' take kernel, whatever their encoding.
+#[derive(Debug)]
+pub(crate) struct DictConstantCodesKernel;
+
+impl ExecuteParentKernel<Constant> for DictConstantCodesKernel {
+    type Parent = Dict;
+
+    fn execute_parent(
+        &self,
+        array: ArrayView<'_, Constant>,
+        parent: <Self::Parent as Matcher>::Match<'_>,
+        child_idx: usize,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Option<ArrayRef>> {
+        if child_idx != 0 || parent.is_empty() {
+            return Ok(None);
+        }
+        let value = match array.scalar().as_primitive().as_::<usize>() {
+            Some(code) => parent
+                .values()
+                .execute_scalar(code, ctx)?
+                .cast(parent.dtype())?,
+            None => Scalar::null(parent.dtype().as_nullable()),
+        };
+        Ok(Some(ConstantArray::new(value, parent.len()).into_array()))
+    }
 }
