@@ -120,6 +120,10 @@ struct Args {
     #[arg(long, value_delimiter = ',', value_parser = value_parser!(Format))]
     formats: Vec<Format>,
 
+    /// Use the planner-driven V2 Vortex scan (defaults to true for TPC-H).
+    #[arg(long, action = clap::ArgAction::Set)]
+    scan_v2: Option<bool>,
+
     #[arg(long = "opt", value_delimiter = ',', value_parser = value_parser!(Opt))]
     options: Vec<Opt>,
 }
@@ -132,6 +136,10 @@ async fn main() -> anyhow::Result<()> {
     vortex_bench::configure_allocator();
     let args = Args::parse();
     let opts = Opts::from(args.options);
+    let scan_v2 = args.scan_v2.unwrap_or_else(|| {
+        matches!(args.benchmark, BenchmarkArg::TpcH)
+            && !std::env::var("VORTEX_SCAN_V2").is_ok_and(|v| v == "0")
+    });
 
     set_join_set_tracer(get_static_tracer())?;
     setup_logging_and_tracing(args.verbose, args.tracing)?;
@@ -191,7 +199,7 @@ async fn main() -> anyhow::Result<()> {
                         session.sql(&sql).await?.collect().await?;
                     }
                     datafusion_bench::make_object_store(&session, benchmark.data_url())?;
-                    register_benchmark_tables(&session, benchmark, format).await?;
+                    register_benchmark_tables(&session, benchmark, format, scan_v2).await?;
                     Ok((session, format))
                 }
             },
@@ -255,12 +263,14 @@ async fn register_benchmark_tables<B: Benchmark + ?Sized>(
     session: &SessionContext,
     benchmark: &B,
     format: Format,
+    scan_v2: bool,
 ) -> anyhow::Result<()> {
-    if use_scan_api() && matches!(format, Format::OnDiskVortex | Format::VortexCompact) {
+    if !scan_v2 && use_scan_api() && matches!(format, Format::OnDiskVortex | Format::VortexCompact)
+    {
         register_v2_tables(session, benchmark, format).await
     } else {
         let benchmark_base = benchmark.data_url().join(&format!("{}/", format.name()))?;
-        let file_format = format_to_df_format(format)?;
+        let file_format = format_to_df_format(format, scan_v2)?;
 
         for table in benchmark.table_specs().iter() {
             let pattern = benchmark.pattern(table.name, format);
