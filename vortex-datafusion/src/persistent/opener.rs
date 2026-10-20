@@ -56,6 +56,7 @@ use vortex::io::InstrumentedReadAt;
 use vortex::layout::LayoutReader;
 use vortex::layout::scan::scan_builder::ScanBuilder;
 use vortex::layout::scan::v2::ScanBuilder as V2ScanBuilder;
+use vortex::layout::segments::SegmentSource;
 use vortex::metrics::Label;
 use vortex::metrics::MetricsRegistry;
 use vortex::session::VortexSession;
@@ -104,6 +105,12 @@ pub(crate) struct VortexOpener {
     /// To save on the overhead of reparsing FlatBuffers and rebuilding the layout tree, we cache
     /// a file reader the first time we read a file.
     pub layout_readers: Arc<DashMap<Path, Weak<dyn LayoutReader>>>,
+    /// Shared V2 segment sources keyed by file path.
+    ///
+    /// Partitions of one file read through one source, so a chunk straddling a partition
+    /// boundary and the file's metadata segments are read once, as they are for V1 through the
+    /// shared layout reader.
+    pub segment_sources: Arc<DashMap<Path, Weak<dyn SegmentSource>>>,
     /// Shared full-file natural splits keyed by file path.
     pub natural_splits: Arc<DashMap<Path, Arc<NaturalSplits>>>,
     /// Shared physical Arrow schemas of each file, keyed by file path.
@@ -149,6 +156,7 @@ impl FileOpener for VortexOpener {
         let unified_file_schema = Arc::clone(self.table_schema.file_schema());
         let limit = self.limit;
         let layout_readers = Arc::clone(&self.layout_readers);
+        let segment_sources = Arc::clone(&self.segment_sources);
         let natural_splits = Arc::clone(&self.natural_splits);
         let file_schemas = Arc::clone(&self.file_schemas);
         let has_output_ordering = self.has_output_ordering;
@@ -478,7 +486,13 @@ impl FileOpener for VortexOpener {
                 Ok(RecordBatch::from(arrow.as_struct().clone()))
             };
             let stream = if scan_v2 {
-                let mut builder = V2ScanBuilder::new(vxf.session().clone(), vxf.scan_file())
+                let mut scan_file = vxf.scan_file();
+                scan_file.segments = shared_segment_source(
+                    &segment_sources,
+                    &file.object_meta.location,
+                    scan_file.segments,
+                );
+                let mut builder = V2ScanBuilder::new(vxf.session().clone(), scan_file)
                     .with_projection(scan_projection)
                     .with_some_filter(native_filter)
                     .with_ordered(has_output_ordering);
@@ -629,6 +643,30 @@ fn contains_lambda(projection: &ProjectionExprs) -> DFResult<bool> {
         }
     }
     Ok(false)
+}
+
+/// Returns the segment source other partitions of `path` are reading through, or registers
+/// `fresh` as that source. Like the layout readers, a source lives only as long as one scan.
+fn shared_segment_source(
+    segment_sources: &DashMap<Path, Weak<dyn SegmentSource>>,
+    path: &Path,
+    fresh: Arc<dyn SegmentSource>,
+) -> Arc<dyn SegmentSource> {
+    match segment_sources.entry(path.clone()) {
+        Entry::Occupied(mut entry) => {
+            if let Some(shared) = entry.get().upgrade() {
+                tracing::trace!("reusing segment source for {path}");
+                shared
+            } else {
+                entry.insert(Arc::downgrade(&fresh));
+                fresh
+            }
+        }
+        Entry::Vacant(entry) => {
+            entry.insert(Arc::downgrade(&fresh));
+            fresh
+        }
+    }
 }
 
 /// Return the cached [`NaturalSplits`] for `path`, computing and caching them on first use.
@@ -950,6 +988,7 @@ mod tests {
             metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
+            segment_sources: Default::default(),
             natural_splits: Default::default(),
             file_schemas: Default::default(),
             has_output_ordering: false,
@@ -1357,6 +1396,7 @@ mod tests {
             metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
+            segment_sources: Default::default(),
             natural_splits: Default::default(),
             file_schemas: Default::default(),
             has_output_ordering: false,
@@ -1446,6 +1486,7 @@ mod tests {
             metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
+            segment_sources: Default::default(),
             natural_splits: Default::default(),
             file_schemas: Default::default(),
             has_output_ordering: false,
@@ -1626,6 +1667,7 @@ mod tests {
             metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
+            segment_sources: Default::default(),
             natural_splits: Default::default(),
             file_schemas: Default::default(),
             has_output_ordering: false,
@@ -1688,6 +1730,7 @@ mod tests {
             metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
+            segment_sources: Default::default(),
             natural_splits: Default::default(),
             file_schemas: Default::default(),
             has_output_ordering: false,
@@ -1901,6 +1944,7 @@ mod tests {
             metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
+            segment_sources: Default::default(),
             natural_splits: Default::default(),
             file_schemas: Default::default(),
             has_output_ordering: false,
