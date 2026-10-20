@@ -620,10 +620,23 @@ impl ArrowSession {
             let importers = self.importers(&Id::new(extension_name));
             if !importers.is_empty() {
                 let dtype = self.from_arrow_field(field)?;
+                let len = array.len();
                 let mut current = array;
                 for plugin in importers.iter() {
                     match plugin.from_arrow_array(current, field, &dtype, self)? {
-                        ArrowImport::Imported(arr) => return Ok(arr),
+                        ArrowImport::Imported(arr) => {
+                            // Parents such as lists reuse the Arrow offsets into this array
+                            // without checking them again, so a plugin must preserve its length.
+                            vortex_ensure_eq!(
+                                arr.len(),
+                                len,
+                                "Arrow importer {} returned {} elements for an array of {}",
+                                plugin.arrow_ext_id(),
+                                arr.len(),
+                                len
+                            );
+                            return Ok(arr);
+                        }
                         ArrowImport::Unsupported(arr) => current = arr,
                     }
                 }
@@ -678,7 +691,12 @@ impl ArrowSession {
                     elem_field.as_ref(),
                 )?;
                 let validity = nulls(list.nulls(), field.is_nullable())?;
-                Ok(ListArray::try_new(elements, offsets.into_array(), validity)?.into_array())
+                // SAFETY: Arrow offsets are non-negative and sorted, and `trim_offsets` rebases
+                // them onto the referenced values. The validity has one entry per list.
+                Ok(
+                    unsafe { ListArray::new_unchecked(elements, offsets.into_array(), validity) }
+                        .into_array(),
+                )
             }
             DataType::LargeList(elem_field) => {
                 let list = array.as_list::<i64>();
@@ -688,7 +706,12 @@ impl ArrowSession {
                     elem_field.as_ref(),
                 )?;
                 let validity = nulls(list.nulls(), field.is_nullable())?;
-                Ok(ListArray::try_new(elements, offsets.into_array(), validity)?.into_array())
+                // SAFETY: Arrow offsets are non-negative and sorted, and `trim_offsets` rebases
+                // them onto the referenced values. The validity has one entry per list.
+                Ok(
+                    unsafe { ListArray::new_unchecked(elements, offsets.into_array(), validity) }
+                        .into_array(),
+                )
             }
             DataType::FixedSizeList(elem_field, list_size) => {
                 let fsl = array.as_fixed_size_list();
@@ -709,7 +732,12 @@ impl ArrowSession {
                 let offsets = list.offsets().clone().into_array();
                 let sizes = list.sizes().clone().into_array();
                 let validity = nulls(list.nulls(), field.is_nullable())?;
-                Ok(ListViewArray::try_new(elements, offsets, sizes, validity)?.into_array())
+                // SAFETY: Arrow list views share one integer type for offsets and sizes, and every
+                // view lies within the values. The validity has one entry per list.
+                Ok(
+                    unsafe { ListViewArray::new_unchecked(elements, offsets, sizes, validity) }
+                        .into_array(),
+                )
             }
             DataType::LargeListView(elem_field) => {
                 let list = array.as_list_view::<i64>();
@@ -718,7 +746,12 @@ impl ArrowSession {
                 let offsets = list.offsets().clone().into_array();
                 let sizes = list.sizes().clone().into_array();
                 let validity = nulls(list.nulls(), field.is_nullable())?;
-                Ok(ListViewArray::try_new(elements, offsets, sizes, validity)?.into_array())
+                // SAFETY: Arrow list views share one integer type for offsets and sizes, and every
+                // view lies within the values. The validity has one entry per list.
+                Ok(
+                    unsafe { ListViewArray::new_unchecked(elements, offsets, sizes, validity) }
+                        .into_array(),
+                )
             }
             DataType::Map(entries_field, keys_sorted) => {
                 let map = array.as_map();
@@ -896,13 +929,19 @@ mod tests {
 
     use arrow_array::DictionaryArray;
     use arrow_array::GenericListArray;
+    use arrow_array::GenericListViewArray;
     use arrow_array::Int32Array;
     use arrow_array::Int64Array;
+    use arrow_array::MapArray;
     use arrow_array::StringArray;
+    use arrow_array::StructArray;
     use arrow_array::types::Int32Type;
     use arrow_buffer::OffsetBuffer;
+    use arrow_buffer::ScalarBuffer;
     use arrow_schema::DataType;
     use arrow_schema::Field;
+    use arrow_schema::FieldRef;
+    use arrow_schema::Fields;
     use rstest::rstest;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute as _;
@@ -917,6 +956,7 @@ mod tests {
     use vortex_array::dtype::PType;
     use vortex_array::validity::Validity;
     use vortex_error::VortexResult;
+    use vortex_session::registry::CachedId;
 
     use super::*;
 
@@ -964,6 +1004,7 @@ mod tests {
             .into_array(),
             PrimitiveArray::from_iter((0..=len as u64).map(|row| row * 2)).into_array(),
             Validity::NonNullable,
+            &mut ctx,
         );
         assert_arrays_eq!(sliced, expected, &mut ctx);
         assert_arrays_eq!(fresh, expected, &mut ctx);
@@ -1039,5 +1080,109 @@ mod tests {
             &mut array_session().create_execution_ctx()
         );
         Ok(())
+    }
+
+    static TRUNCATE_ID: CachedId = CachedId::new("test.truncate");
+
+    /// An importer that drops the last element of every array it imports.
+    #[derive(Debug)]
+    struct TruncatingImporter;
+
+    impl ArrowImportVTable for TruncatingImporter {
+        fn arrow_ext_id(&self) -> Id {
+            *TRUNCATE_ID
+        }
+
+        fn from_arrow_field(
+            &self,
+            field: &Field,
+            session: &ArrowSession,
+        ) -> VortexResult<Option<DType>> {
+            session
+                .from_arrow_datatype(field.data_type(), field.is_nullable().into())
+                .map(Some)
+        }
+
+        fn from_arrow_array(
+            &self,
+            array: ArrowArrayRef,
+            field: &Field,
+            _dtype: &DType,
+            session: &ArrowSession,
+        ) -> VortexResult<ArrowImport> {
+            let truncated = array.slice(0, array.len() - 1);
+            session
+                .from_arrow_array(truncated, field.is_nullable())
+                .map(ArrowImport::Imported)
+        }
+    }
+
+    fn truncated_field(name: &str, data_type: DataType) -> FieldRef {
+        Arc::new(
+            Field::new(name, data_type, false).with_metadata(
+                [(
+                    EXTENSION_TYPE_NAME_KEY.to_string(),
+                    "test.truncate".to_string(),
+                )]
+                .into(),
+            ),
+        )
+    }
+
+    fn list_with_truncated_child() -> ArrowArrayRef {
+        Arc::new(GenericListArray::<i32>::new(
+            truncated_field("item", DataType::Int64),
+            OffsetBuffer::new(vec![0, 5].into()),
+            Arc::new(Int64Array::from_iter_values(0..5)),
+            None,
+        ))
+    }
+
+    fn list_view_with_truncated_child() -> ArrowArrayRef {
+        Arc::new(GenericListViewArray::<i32>::new(
+            truncated_field("item", DataType::Int64),
+            ScalarBuffer::from(vec![0]),
+            ScalarBuffer::from(vec![5]),
+            Arc::new(Int64Array::from_iter_values(0..5)),
+            None,
+        ))
+    }
+
+    fn map_with_truncated_child() -> ArrowArrayRef {
+        let key_field = Arc::new(Field::new("key", DataType::Int64, false));
+        let value_field = Arc::new(Field::new("value", DataType::Int64, false));
+        let entries = StructArray::new(
+            Fields::from(vec![key_field, value_field]),
+            vec![
+                Arc::new(Int64Array::from_iter_values(0..5)),
+                Arc::new(Int64Array::from_iter_values(5..10)),
+            ],
+            None,
+        );
+        Arc::new(MapArray::new(
+            truncated_field("entries", entries.data_type().clone()),
+            OffsetBuffer::new(vec![0, 5].into()),
+            entries,
+            None,
+            false,
+        ))
+    }
+
+    #[rstest]
+    #[case::list(list_with_truncated_child())]
+    #[case::list_view(list_view_with_truncated_child())]
+    #[case::map(map_with_truncated_child())]
+    fn test_rejects_importer_that_changes_child_length(#[case] array: ArrowArrayRef) {
+        let session = ArrowSession::default();
+        session.register_importer(Arc::new(TruncatingImporter));
+
+        let err = session
+            .from_arrow_array(array, false)
+            .expect_err("a child importer that drops elements must be rejected");
+        assert!(
+            err.to_string()
+                .contains("returned 4 elements for an array of 5"),
+            "unexpected error: {err}"
+        );
     }
 }

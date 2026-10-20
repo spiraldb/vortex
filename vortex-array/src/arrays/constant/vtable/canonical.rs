@@ -1179,6 +1179,7 @@ mod tests {
             buffer![0u64, 0].into_array(),
             buffer![size, size].into_array(),
             Validity::NonNullable,
+            &mut ctx,
         )?;
         assert_arrays_eq!(ConstantArray::new(list, 2), expected, &mut ctx);
         Ok(())

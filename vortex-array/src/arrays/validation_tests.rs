@@ -65,10 +65,11 @@ mod tests {
 
     #[test]
     fn test_list_array_validation_failure_offsets_out_of_bounds() {
+        let mut ctx = array_session().create_execution_ctx();
         // Invalid case: last offset exceeds elements length.
         let elements = buffer![1i32, 2, 3].into_array();
         let offsets = buffer![0i64, 2, 5].into_array(); // 5 > 3.
-        let result = ListArray::try_new(elements, offsets, Validity::NonNullable);
+        let result = ListArray::try_new(elements, offsets, Validity::NonNullable, &mut ctx);
 
         assert!(matches!(result, Err(VortexError::InvalidArgument(_, _))));
     }

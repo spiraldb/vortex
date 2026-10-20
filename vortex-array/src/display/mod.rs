@@ -780,11 +780,12 @@ mod test {
 
     #[test]
     fn test_list() {
-        let ctx = array_session().create_execution_ctx();
+        let mut ctx = array_session().create_execution_ctx();
         let x = ListArray::try_new(
             buffer![1, 2, 3, 4].into_array(),
             buffer![0, 0, 1, 1, 2, 4].into_array(),
             Validity::Array(BoolArray::from_iter([true, true, false, true, true]).into_array()),
+            &mut ctx,
         )
         .unwrap()
         .into_array();
