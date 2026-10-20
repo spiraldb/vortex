@@ -12,6 +12,7 @@ use vortex_error::vortex_bail;
 use vortex_mask::Mask;
 use vortex_session::registry::CachedId;
 
+use crate::plan::physical::ChildRows;
 use crate::plan::physical::Plan;
 use crate::plan::physical::PlanChildren;
 use crate::plan::physical::PlanId;
@@ -23,8 +24,6 @@ use crate::plan::physical::operators::EvalStage;
 use crate::plan::physical::optimizer::PlanReduceRule;
 use crate::plan::physical::pipeline::Chain;
 use crate::plan::physical::pipeline::Compiler;
-use crate::plan::physical::pipeline::Reach;
-use crate::segments::SegmentId;
 
 /// Applies an expression to the output of its child.
 #[derive(Clone, Debug)]
@@ -131,13 +130,8 @@ impl PlanVTable for Eval {
         Ok(chain.map(|chain| chain.with(EvalStage::new(plan.expression().clone()))))
     }
 
-    fn reach(
-        plan: &Plan<Self>,
-        rows: Range<u64>,
-        at: &Reach,
-        visit: &mut dyn FnMut(SegmentId, Range<u64>),
-    ) -> VortexResult<()> {
-        plan.child_plan()?.reach(rows, at, visit)
+    fn child_rows(plan: &Plan<Self>, _index: usize) -> ChildRows {
+        ChildRows::Rows(0..plan.row_count())
     }
 }
 

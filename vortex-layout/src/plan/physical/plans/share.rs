@@ -14,6 +14,7 @@ use vortex_mask::Mask;
 use vortex_session::registry::CachedId;
 
 use crate::arrays::shared::Shared;
+use crate::plan::physical::ChildRows;
 use crate::plan::physical::Plan;
 use crate::plan::physical::PlanChildren;
 use crate::plan::physical::PlanId;
@@ -26,8 +27,6 @@ use crate::plan::physical::operators::UNBOUNDED;
 use crate::plan::physical::operators::WholeSource;
 use crate::plan::physical::pipeline::Chain;
 use crate::plan::physical::pipeline::Compiler;
-use crate::plan::physical::pipeline::Reach;
-use crate::segments::SegmentId;
 
 /// Produces its child's whole value once per split, as a
 /// [`SharedArray`](crate::arrays::shared::SharedArray) that the split's later scans reuse.
@@ -134,14 +133,8 @@ impl PlanVTable for Share {
         Ok(Some(compiler.join_with(vec![chain], |_| UNBOUNDED, source)))
     }
 
-    fn reach(
-        plan: &Plan<Self>,
-        rows: Range<u64>,
-        at: &Reach,
-        visit: &mut dyn FnMut(SegmentId, Range<u64>),
-    ) -> VortexResult<()> {
-        plan.child_plan()?
-            .reach(0..plan.row_count(), &at.fixed(&rows), visit)
+    fn child_rows(_plan: &Plan<Self>, _index: usize) -> ChildRows {
+        ChildRows::Whole
     }
 }
 

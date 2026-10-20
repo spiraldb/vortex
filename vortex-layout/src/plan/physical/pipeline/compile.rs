@@ -25,6 +25,7 @@ use crate::plan::physical::operator::Source;
 use crate::plan::physical::operators::ConcatSource;
 use crate::plan::physical::operators::ScanSource;
 use crate::plan::physical::operators::SelectStage;
+use crate::plan::physical::visit_segments;
 use crate::segments::SegmentId;
 
 /// A pipeline under construction: a source and the stages after it, not yet given outlets, so a
@@ -291,7 +292,7 @@ impl Shares {
     /// then [`retain_shared`](Self::retain_shared).
     pub(crate) fn add(&mut self, plan: &PlanRef, rows: Range<u64>) -> VortexResult<()> {
         let reaches = &mut self.reaches;
-        plan.reach(rows, &Reach::Offset(0), &mut |segment, rows| {
+        visit_segments(plan, rows, None, &mut |segment, rows| {
             reaches.push((segment, rows))
         })
     }
@@ -340,38 +341,6 @@ impl Shares {
             .into_values()
             .flatten()
             .collect()
-    }
-}
-
-/// How a plan's rows map to the rows of the plan a scan's splits range over.
-#[derive(Clone, Debug)]
-pub enum Reach {
-    /// Row `r` is scanned row `r + offset`.
-    Offset(u64),
-    /// Every row is read for these scanned rows, as a dictionary's values are for its codes.
-    Fixed(Range<u64>),
-}
-
-impl Reach {
-    /// The scanned rows `rows` are read for.
-    pub fn root(&self, rows: &Range<u64>) -> Range<u64> {
-        match self {
-            Reach::Offset(offset) => rows.start + offset..rows.end + offset,
-            Reach::Fixed(root) => root.clone(),
-        }
-    }
-
-    /// The mapping of a child whose row zero is this plan's row `by`.
-    pub fn shift(&self, by: u64) -> Self {
-        match self {
-            Reach::Offset(offset) => Reach::Offset(offset + by),
-            Reach::Fixed(root) => Reach::Fixed(root.clone()),
-        }
-    }
-
-    /// The mapping of a child read whole for `rows` of this plan, as dictionary values are.
-    pub fn fixed(&self, rows: &Range<u64>) -> Self {
-        Reach::Fixed(self.root(rows))
     }
 }
 
