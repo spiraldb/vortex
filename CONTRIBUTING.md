@@ -201,6 +201,8 @@ At the time of writing, the following individuals serve as Committers (non-votin
 11. Mosha Pasumansky
 12. Onur Satici
 13. Xinyu Zeng
+14. Ashvin Agrawal
+15. Matthew Katz
 
 ### Maintainers
 
