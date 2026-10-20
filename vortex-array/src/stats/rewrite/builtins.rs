@@ -56,6 +56,7 @@ use crate::scalar_fn::fns::list_contains::ListContains;
 use crate::scalar_fn::fns::literal::Literal;
 use crate::scalar_fn::fns::operators::CompareOperator;
 use crate::scalar_fn::fns::operators::Operator;
+use crate::scalar_fn::fns::optional::Optional;
 use crate::scalar_fn::internal::row_count::RowCount;
 use crate::stats::bound::stat;
 use crate::stats::rewrite::StatsRewriteRule;
@@ -82,6 +83,7 @@ pub(crate) fn register_builtins(session: &StatsSession) {
     session.register_rewrite(DynamicComparisonNanCountStatsRewrite);
     session.register_rewrite(DynamicComparisonAllNonNanStatsRewrite);
     session.register_rewrite(DynamicExpressionStatsRewrite);
+    session.register_rewrite(OptionalStatsRewrite);
 }
 
 fn row_count() -> BoundExpression {
@@ -699,6 +701,32 @@ impl StatsRewriteRule for DynamicComparisonAllNonNanStatsRewrite {
         _session: &VortexSession,
     ) -> VortexResult<Option<BoundExpression>> {
         dynamic_comparison_falsify::<AllNonNanProof>(expr)
+    }
+}
+
+/// An optional predicate is its child, so the proofs of its child prove it.
+#[derive(Debug)]
+struct OptionalStatsRewrite;
+
+impl StatsRewriteRule for OptionalStatsRewrite {
+    fn scalar_fn_id(&self) -> ScalarFnId {
+        Optional.id()
+    }
+
+    fn falsify(
+        &self,
+        expr: &BoundExpression,
+        session: &VortexSession,
+    ) -> VortexResult<Option<BoundExpression>> {
+        falsify(expr.child(0), session)
+    }
+
+    fn satisfy(
+        &self,
+        expr: &BoundExpression,
+        session: &VortexSession,
+    ) -> VortexResult<Option<BoundExpression>> {
+        satisfy(expr.child(0), session)
     }
 }
 
