@@ -1412,6 +1412,13 @@ fn ree_dict_utf8(run_ends: DataType) -> DataType {
     )
 }
 
+fn ree_utf8(run_ends: DataType) -> DataType {
+    DataType::RunEndEncoded(
+        Arc::new(Field::new("run_ends", run_ends, false)),
+        Arc::new(Field::new("values", DataType::Utf8, true)),
+    )
+}
+
 fn contains_cast(expr: &Expression) -> bool {
     expr.is::<Cast>() || expr.children().iter().any(contains_cast)
 }
@@ -1479,6 +1486,7 @@ fn test_infallible_encoding_cast_is_dropped(
 #[case::ree_int64_run_ends(ree_dict_utf8(DataType::Int64), dict_utf8(DataType::UInt32))]
 #[case::ree_narrow_keys(ree_dict_utf8(DataType::Int32), dict_utf8(DataType::UInt8))]
 #[case::ree_decode(ree_dict_utf8(DataType::Int32), DataType::Utf8)]
+#[case::ree_plain_utf8(ree_utf8(DataType::Int32), DataType::Utf8)]
 #[case::dict_narrow_keys(dict_utf8(DataType::UInt32), dict_utf8(DataType::UInt8))]
 #[case::dict_decode(dict_utf8(DataType::UInt32), DataType::Utf8)]
 #[case::dict_encode(DataType::Utf8, dict_utf8(DataType::UInt8))]
