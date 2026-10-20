@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-use cudarc::driver::DeviceRepr;
 use vortex::array::Canonical;
 use vortex::array::arrays::PrimitiveArray;
 use vortex::array::arrays::primitive::PrimitiveDataParts;
@@ -9,6 +8,7 @@ use vortex::dtype::NativePType;
 use vortex::error::VortexResult;
 use vortex::mask::Mask;
 use vortex_cub::filter::CubFilterable;
+use vortex_cuda_driver::DeviceRepr;
 
 use crate::CudaExecutionCtx;
 use crate::kernel::filter::filter_sized;

@@ -1986,7 +1986,7 @@ checksum = "157a8ba7b480713b56f4c09fd13fc3e0a22a5dfab8097ba61cbc5feef950788a"
 dependencies = [
  "glob",
  "libc",
- "libloading 0.8.9",
+ "libloading",
 ]
 
 [[package]]
@@ -2618,16 +2618,6 @@ name = "cty"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b365fabc795046672053e29c954733ec3b05e4be654ab130fe8f1f94d7051f35"
-
-[[package]]
-name = "cudarc"
-version = "0.19.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7359bf1de037ddada72729c3acec9b040f3468400c6e9e740b01ba0cd2e89562"
-dependencies = [
- "half",
- "libloading 0.9.0",
-]
 
 [[package]]
 name = "custom-labels"
@@ -5110,8 +5100,6 @@ dependencies = [
  "cfg-if",
  "crunchy",
  "num-traits",
- "rand 0.9.5",
- "rand_distr 0.5.1",
  "zerocopy",
 ]
 
@@ -5927,7 +5915,7 @@ dependencies = [
  "java-locator",
  "jni-macros",
  "jni-sys",
- "libloading 0.8.9",
+ "libloading",
  "log",
  "simd_cesu8",
  "thiserror 2.0.21",
@@ -6733,16 +6721,6 @@ name = "libloading"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7c4b02199fee7c5d21a5ae7d8cfa79a6ef5bb2fc834d6e9058e89c825efdc55"
-dependencies = [
- "cfg-if",
- "windows-link",
-]
-
-[[package]]
-name = "libloading"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "754ca22de805bb5744484a5b151a9e1a8e837d5dc232c2d7d8c2e3492edc8b60"
 dependencies = [
  "cfg-if",
  "windows-link",
@@ -11399,7 +11377,6 @@ dependencies = [
  "bytes",
  "cfg-if",
  "codspeed-divan-compat",
- "cudarc",
  "enum-iterator",
  "fearless_simd",
  "fearless_simd_macros",
@@ -11443,6 +11420,7 @@ dependencies = [
  "vortex-bench-support",
  "vortex-buffer",
  "vortex-compute",
+ "vortex-cuda-driver",
  "vortex-error",
  "vortex-mask",
  "vortex-session",
@@ -11721,7 +11699,7 @@ name = "vortex-cub"
 version = "0.1.0"
 dependencies = [
  "bindgen",
- "libloading 0.8.9",
+ "libloading",
  "paste",
  "vortex-array",
  "vortex-cuda-macros",
@@ -11736,7 +11714,6 @@ dependencies = [
  "async-trait",
  "bindgen",
  "codspeed-criterion-compat-walltime",
- "cudarc",
  "fastlanes 0.7.2",
  "futures",
  "itertools 0.14.0",
@@ -11758,6 +11735,7 @@ dependencies = [
  "vortex-arrow",
  "vortex-cub",
  "vortex-cuda",
+ "vortex-cuda-driver",
  "vortex-cuda-macros",
  "vortex-error",
  "vortex-fsst",
@@ -11770,7 +11748,7 @@ name = "vortex-cuda-driver"
 version = "0.1.0"
 dependencies = [
  "half",
- "libloading 0.8.9",
+ "libloading",
  "parking_lot",
  "smallvec",
 ]
@@ -11781,12 +11759,12 @@ version = "0.1.0"
 dependencies = [
  "arrow-schema 59.3.1",
  "cbindgen",
- "cudarc",
  "futures",
  "tempfile",
  "vortex",
  "vortex-array",
  "vortex-cuda",
+ "vortex-cuda-driver",
  "vortex-cuda-macros",
  "vortex-ffi",
 ]
@@ -12256,7 +12234,7 @@ name = "vortex-nvcomp"
 version = "0.1.0"
 dependencies = [
  "bindgen",
- "libloading 0.8.9",
+ "libloading",
  "liblzma",
  "reqwest 0.13.5",
  "tar",

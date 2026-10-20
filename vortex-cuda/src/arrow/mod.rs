@@ -30,10 +30,6 @@ use arrow_schema::Schema;
 use arrow_schema::ffi::FFI_ArrowSchema;
 use async_trait::async_trait;
 pub(crate) use canonical::CanonicalDeviceArrayExport;
-use cudarc::driver::CudaEvent;
-use cudarc::driver::CudaStream;
-use cudarc::driver::DevicePtr;
-use cudarc::runtime::sys::cudaEvent_t;
 pub(crate) use offsets::I32Offsets;
 pub(crate) use offsets::i32_offsets_from_lengths;
 use vortex::array::ArrayRef;
@@ -62,6 +58,10 @@ use vortex::io::runtime::BlockingRuntime;
 use vortex::io::runtime::current::CurrentThreadRuntime;
 use vortex::session::VortexSession;
 use vortex_arrow::ArrowSessionExt;
+use vortex_cuda_driver::CudaEvent;
+use vortex_cuda_driver::CudaStream;
+use vortex_cuda_driver::DevicePtr;
+use vortex_cuda_driver::sys::CUevent as cudaEvent_t;
 
 use crate::CudaBufferExt;
 use crate::CudaExecutionCtx;
@@ -174,7 +174,7 @@ impl PrivateData {
                     }
                     Some(handle) => {
                         // The buffer may have been populated on a different stream (for example,
-                        // pooled file reads use a dedicated H2D stream). Access it through cudarc's
+                        // pooled file reads use a dedicated H2D stream). Access it through the driver's
                         // stream-aware API so this export stream waits for pending writes before
                         // its Arrow sync event is recorded.
                         let view = handle.cuda_view::<u8>()?;

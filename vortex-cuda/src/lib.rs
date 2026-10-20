@@ -3,9 +3,9 @@
 
 //! CUDA support for Vortex arrays.
 
-use cudarc::driver::CudaContext;
-use cudarc::driver::sys;
 use tracing::info;
+use vortex_cuda_driver::CudaContext;
+use vortex_cuda_driver::sys;
 
 pub mod arrow;
 mod canonical;
@@ -107,8 +107,8 @@ use crate::kernel::SliceExecutor;
 
 /// Checks if a CUDA driver and at least one CUDA device are available.
 ///
-/// cudarc loads `libcuda` lazily and panics if the driver library is absent, so we first probe
-/// for it with cudarc's own `is_culib_present`. Creating the context then fails gracefully with
+/// The driver crate loads `libcuda` lazily and panics if the driver library is absent, so we
+/// first probe for it with `is_culib_present`. Creating the context then fails gracefully with
 /// `Err`, rather than panicking, when the driver is present but no usable device is.
 pub fn cuda_available() -> bool {
     // SAFETY: `is_culib_present` only tries to dlopen the driver library to test for its

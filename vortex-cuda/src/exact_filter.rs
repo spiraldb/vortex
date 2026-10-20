@@ -16,11 +16,6 @@
 use std::env;
 use std::sync::Arc;
 
-use cudarc::driver::CudaSlice;
-use cudarc::driver::CudaView;
-use cudarc::driver::DeviceRepr;
-use cudarc::driver::LaunchConfig;
-use cudarc::driver::PushKernelArg;
 use futures::StreamExt;
 use vortex::array::ArrayRef;
 use vortex::array::ArrayView;
@@ -54,6 +49,11 @@ use vortex::error::VortexResult;
 use vortex::error::vortex_err;
 use vortex::scalar::PValue;
 use vortex::session::VortexSession;
+use vortex_cuda_driver::CudaSlice;
+use vortex_cuda_driver::CudaView;
+use vortex_cuda_driver::DeviceRepr;
+use vortex_cuda_driver::LaunchConfig;
+use vortex_cuda_driver::PushKernelArg;
 
 use crate::CudaBufferExt;
 use crate::CudaDeviceBuffer;

@@ -4,8 +4,6 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use cudarc::driver::DeviceRepr;
-use cudarc::driver::PushKernelArg;
 use tracing::instrument;
 use vortex::array::ArrayRef;
 use vortex::array::Canonical;
@@ -29,6 +27,8 @@ use vortex::error::vortex_err;
 use vortex::extension::datetime::TimeUnit;
 use vortex::extension::datetime::Timestamp;
 use vortex::scalar::Scalar;
+use vortex_cuda_driver::DeviceRepr;
+use vortex_cuda_driver::PushKernelArg;
 
 use crate::CudaBufferExt;
 use crate::CudaDeviceBuffer;

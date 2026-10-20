@@ -7,11 +7,6 @@ use std::ffi::c_void;
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use cudarc::driver::CudaSlice;
-use cudarc::driver::CudaView;
-use cudarc::driver::DevicePtr;
-use cudarc::driver::DevicePtrMut;
-use cudarc::driver::DeviceRepr;
 use vortex::array::buffer::BufferHandle;
 use vortex::error::VortexResult;
 use vortex::error::vortex_ensure;
@@ -20,6 +15,11 @@ use vortex_cub::filter::CubFilterable;
 use vortex_cub::onpair;
 use vortex_cub::scan;
 use vortex_cub::scan::cudaStream_t;
+use vortex_cuda_driver::CudaSlice;
+use vortex_cuda_driver::CudaView;
+use vortex_cuda_driver::DevicePtr;
+use vortex_cuda_driver::DevicePtrMut;
+use vortex_cuda_driver::DeviceRepr;
 
 use crate::CudaBufferExt;
 use crate::CudaDeviceBuffer;
@@ -202,8 +202,8 @@ mod tests {
         lens: Vec<u8>,
     ) -> VortexResult<(Vec<u64>, u32)>
     where
-        C: cudarc::driver::DeviceRepr
-            + cudarc::driver::ValidAsZeroBits
+        C: vortex_cuda_driver::DeviceRepr
+            + vortex_cuda_driver::ValidAsZeroBits
             + std::fmt::Debug
             + Send
             + Sync
