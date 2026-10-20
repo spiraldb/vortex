@@ -13,6 +13,7 @@ use vortex_array::expr::BoundLabels;
 use vortex_array::expr::ExactBoundExpr;
 use vortex_array::expr::label_bound_tree;
 use vortex_array::scalar_fn::fns::dynamic::DynamicComparison;
+use vortex_array::scalar_fn::fns::dynamic_expression::DynamicExpression;
 use vortex_array::scalar_fn::is_negative_cost;
 use vortex_error::VortexResult;
 use vortex_mask::Mask;
@@ -215,10 +216,12 @@ impl PlanParentReduceRule<Take> for ExpressionTakeRule {
         _child_idx: usize,
     ) -> VortexResult<Option<PlanRef>> {
         let expression = parent.expression();
-        // A dynamic comparison stays above the take: evaluated per batch it reads the latest
-        // bound, and the dictionary batches the take emits evaluate it over their values anyway.
-        // Values it never reaches can always be kept between scans.
-        if expression.contains::<DynamicComparison>()? {
+        // A dynamic comparison or expression stays above the take: evaluated per batch it reads
+        // the latest bound, and the dictionary batches the take emits evaluate it over their
+        // values anyway. Values it never reaches can always be kept between scans.
+        if expression.contains::<DynamicComparison>()?
+            || expression.contains::<DynamicExpression>()?
+        {
             return Ok(None);
         }
         // Strictness keeps a null code null. Without null codes every row takes its value's result.

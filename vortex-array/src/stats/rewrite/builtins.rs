@@ -44,6 +44,9 @@ use crate::scalar_fn::fns::binary::Binary;
 use crate::scalar_fn::fns::cast::Cast;
 use crate::scalar_fn::fns::dynamic::DynamicComparison;
 use crate::scalar_fn::fns::dynamic::DynamicComparisonExpr;
+use crate::scalar_fn::fns::dynamic_expression::DynamicExpression;
+use crate::scalar_fn::fns::dynamic_expression::StatsProof;
+use crate::scalar_fn::fns::dynamic_expression::dynamic_stats_proof;
 use crate::scalar_fn::fns::is_nan::IsNan;
 use crate::scalar_fn::fns::is_not_null::IsNotNull;
 use crate::scalar_fn::fns::is_null::IsNull;
@@ -78,6 +81,7 @@ pub(crate) fn register_builtins(session: &StatsSession) {
     session.register_rewrite(ListContainsAllNonNanStatsRewrite);
     session.register_rewrite(DynamicComparisonNanCountStatsRewrite);
     session.register_rewrite(DynamicComparisonAllNonNanStatsRewrite);
+    session.register_rewrite(DynamicExpressionStatsRewrite);
 }
 
 fn row_count() -> BoundExpression {
@@ -695,6 +699,31 @@ impl StatsRewriteRule for DynamicComparisonAllNonNanStatsRewrite {
         _session: &VortexSession,
     ) -> VortexResult<Option<BoundExpression>> {
         dynamic_comparison_falsify::<AllNonNanProof>(expr)
+    }
+}
+
+#[derive(Debug)]
+struct DynamicExpressionStatsRewrite;
+
+impl StatsRewriteRule for DynamicExpressionStatsRewrite {
+    fn scalar_fn_id(&self) -> ScalarFnId {
+        DynamicExpression.id()
+    }
+
+    fn falsify(
+        &self,
+        expr: &BoundExpression,
+        session: &VortexSession,
+    ) -> VortexResult<Option<BoundExpression>> {
+        dynamic_stats_proof(expr, session, StatsProof::Falsify)
+    }
+
+    fn satisfy(
+        &self,
+        expr: &BoundExpression,
+        session: &VortexSession,
+    ) -> VortexResult<Option<BoundExpression>> {
+        dynamic_stats_proof(expr, session, StatsProof::Satisfy)
     }
 }
 
