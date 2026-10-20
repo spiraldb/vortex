@@ -151,6 +151,28 @@ fn chunked_plan_exposes_chunks() -> VortexResult<()> {
 }
 
 #[test]
+fn optimize_preserves_unvisited_concat_children() -> VortexResult<()> {
+    let dtype = primitive(PType::I32, Nullability::NonNullable);
+    let layout = ChunkedLayout::new(
+        4,
+        dtype.clone(),
+        OwnedLayoutChildren::layout_children(vec![
+            flat(2, dtype.clone(), 0),
+            unsupported(2, dtype),
+        ]),
+    )
+    .into_layout();
+    let plan = optimize(make_plan(layout)?)?;
+    assert_eq!(child_of(&plan, 0)?.row_count(), 2);
+    assert_unsupported(
+        child_of(&plan, 1)
+            .err()
+            .ok_or_else(|| vortex_err!("unsupported child unexpectedly lowered"))?,
+    );
+    Ok(())
+}
+
+#[test]
 fn chunked_plan_lowers_each_chunk_on_access() -> VortexResult<()> {
     let dtype = primitive(PType::I32, Nullability::NonNullable);
     let layout = ChunkedLayout::new(
