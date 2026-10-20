@@ -12,6 +12,7 @@
 //! * Multi-threaded: work is driven on a pool of threads managed by Vortex.
 //! * Worker Pool: work is driven on a pool of threads provided by the caller.
 //! * Tokio: work is driven on a Tokio runtime provided by the caller.
+//! * io_uring (Linux): work is driven on a pool of threads that each own an io_uring.
 //! * WebAssembly: work is driven by `wasm_bindgen_futures`.
 //!
 //! Callers may also implement [`Executor`] themselves and install it with
@@ -39,6 +40,8 @@ mod smol;
 
 #[cfg(feature = "tokio")]
 pub mod tokio;
+#[cfg(all(target_os = "linux", feature = "io-uring"))]
+pub mod uring;
 // target_os = "unknown" matches browser WebAssembly, excluding WASI targets that do not use this
 // browser-specific runtime. Without `wasm-bindgen` there is no JavaScript event loop to schedule
 // onto, and callers should drive a `single::SingleThreadRuntime` instead.

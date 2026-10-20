@@ -15,16 +15,30 @@ CMSprovider, Euro2016, Food, HashTags), TPC-H `l_comment` variants, and syntheti
 data. This is the workload behind the `Compression` PR comment.
 
 See [`src/main.rs`](./src/main.rs) for the dataset list and CLI flags (`--formats`,
-`--datasets`, `--ops compress,decompress`).
+`--datasets`, `--ops compress,decompress`, `--runtime`, `--vortex-source`).
 
 ## CPU parallelism
 
 Vortex and Parquet get the same CPU budget, and each uses it the way its own default reader and
-writer would. The binary runs one multi-threaded Tokio runtime,
-sized by `--threads` (default: one worker per available core), and every timed Vortex and
-Parquet operation runs as a task on it, so neither format uses threads outside that pool and the
-main thread does none of the timed work. `--threads 1` compares single-worker decoders;
-the default compares them at full width.
+writer would. The binary runs one multi-threaded Tokio runtime, sized by `--threads` (default: one
+worker per available core), and every timed Parquet and Arrow operation runs as a task on it.
+Timed Vortex operations run as tasks on the runtime installed on the Vortex session, chosen by
+`--runtime`:
+
+- `io-uring` (the default on Linux): Vortex's own thread-per-core runtime, with as many workers as
+  the Tokio pool. Each worker owns an io_uring and parks on it when idle, a task woken by another
+  runs next on the waking worker, and idle workers steal queued tasks. The Tokio pool sits idle
+  while Vortex work is timed, so both formats still get the same number of threads. If the kernel
+  refuses to create a ring, the run logs a warning and falls back to Tokio.
+- `tokio`: the shared Tokio pool, as Parquet uses.
+
+Neither format uses threads outside its pool, and the main thread does none of the timed work.
+`--threads 1` compares single-worker decoders; the default compares them at full width.
+
+Decompression reads the file from memory for both formats. `--vortex-source file` instead writes
+the Vortex file to a temporary file, untimed, and reads it back from disk on every iteration:
+through the workers' rings on the io_uring runtime, and as blocking reads on Tokio's blocking pool
+otherwise. After the first iteration those reads come from the page cache.
 
 CI runs the timed benchmark on a fixed budget of 16 cores: `scripts/compress-split.py --cpus 16`
 (the default) pins the process to 16 CPUs through `scripts/bench-taskset.sh` and passes
@@ -61,6 +75,10 @@ single-threaded.
 cargo run -p compress-bench --profile release_debug
 # single-worker comparison
 cargo run -p compress-bench --profile release_debug -- --threads 1
+# Vortex on the shared Tokio pool instead of the io_uring runtime
+cargo run -p compress-bench --profile release_debug -- --runtime tokio
+# Vortex decompression read from a file on disk
+cargo run -p compress-bench --profile release_debug -- --ops decompress --vortex-source file
 ```
 
 ## GPU decompression
