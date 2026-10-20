@@ -134,7 +134,7 @@ fn reader(
         backend,
         handle: session.handle(),
         pool: Arc::clone(cuda.pinned_buffer_pool()),
-        stream: cuda.stream()?,
+        stream: cuda.copy_stream()?,
         read_slots: Arc::new(Semaphore::new(DEFAULT_FILE_CONCURRENCY)),
     };
     Ok((runtime, reader))

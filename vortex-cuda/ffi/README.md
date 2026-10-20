@@ -25,7 +25,9 @@ and receive an Arrow C Device stream. Reuse the same CUDA session across scans s
 pool and CUDA state are reused as well.
 
 Pooled data reads use fixed 8 MiB chunks and concurrency 32;
-scan row ranges and batch sizes are unchanged.
+scan row ranges and batch sizes are unchanged. Local file transfers use a shared session-scoped
+H2D stream separate from the four default execution streams, with buffer-event dependencies
+and pinned-source lifetime fences preserved.
 
 On Linux, use `vx_cuda_scan_path_arrow_device_stream_with_options` with
 `vx_cuda_scan_options.flags = VX_CUDA_SCAN_FLAG_DIRECT_IO` to bypass the operating system page

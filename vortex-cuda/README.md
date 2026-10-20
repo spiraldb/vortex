@@ -13,7 +13,12 @@ Key files:
 ## CUDA file scans
 
 Local pooled file reads use fixed 8 MiB chunks with concurrency 32. These are physical
-file-read/H2D chunks, independent of logical row ranges or scan batch sizes.
+file-read/H2D chunks, independent of logical row ranges or scan batch sizes. File transfers
+use one session-scoped H2D stream, separate from the execution pool (four streams by default).
+A reader keeps its allocation and chunk writes on the same H2D lane; device-buffer events
+order consumers on execution streams. Pinned source buffers stay fenced until DMA completion.
+Stream pools initialize each slot once, even under concurrent first use, while keeping the
+initialized access path lock-free.
 
 ## Building cuDF for Arrow Device interop
 
