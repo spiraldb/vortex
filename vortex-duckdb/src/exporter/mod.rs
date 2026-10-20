@@ -331,7 +331,7 @@ mod tests {
 
         assert!(all_null);
 
-        vector.flatten(len as u64);
+        vector.flatten();
 
         for i in 0..10 {
             assert!(vector.row_is_null(i));
