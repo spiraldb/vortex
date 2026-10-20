@@ -8,19 +8,20 @@ use std::mem::size_of;
 use std::mem::size_of_val;
 use std::ops::Deref;
 use std::sync::Arc;
+use std::sync::LazyLock;
+use std::sync::mpsc;
 
 use futures::future::BoxFuture;
 use kanal::Sender;
-use tracing::warn;
 use vortex::array::buffer::BufferHandle;
 use vortex::error::VortexResult;
 use vortex::error::vortex_ensure;
 use vortex::error::vortex_err;
+use vortex_cuda_driver::CudaEvent;
 use vortex_cuda_driver::CudaSlice;
 use vortex_cuda_driver::CudaStream;
 use vortex_cuda_driver::DeviceRepr;
 use vortex_cuda_driver::ValidAsZeroBits;
-use vortex_cuda_driver::result::stream;
 
 use crate::CudaDeviceBuffer;
 use crate::device_buffer::CUDF_VALIDITY_BUFFER_PADDING;
@@ -187,13 +188,13 @@ pub(crate) fn zero_padding<T: DeviceRepr + ValidAsZeroBits>(
         .map_err(|e| vortex_err!("Failed to zero device buffer padding: {}", e))
 }
 
-/// Registers a callback and asynchronously waits for its completion.
+/// Asynchronously waits for the work queued on `stream` so far to complete.
 ///
 /// This function can be used to asynchronously wait for events previously
 /// submitted to the stream to complete, e.g. async buffer allocations.
 ///
-/// Note: This is not equivalent to calling sync on a stream but only awaits
-/// the registered callback to complete.
+/// Note: This is not equivalent to calling sync on a stream: work queued after
+/// this call is not awaited.
 ///
 /// # Arguments
 ///
@@ -201,69 +202,97 @@ pub(crate) fn zero_padding<T: DeviceRepr + ValidAsZeroBits>(
 ///
 /// # Errors
 ///
-/// Returns an error if registering the stream callback fails or if the callback
-/// channel closes unexpectedly.
+/// Returns an error if recording the completion fails, if the awaited work
+/// failed, or if the completion channel closes unexpectedly.
 pub(crate) async fn await_stream_callback(stream: &CudaStream) -> VortexResult<()> {
     let rx = register_stream_callback(stream)?;
 
     rx.recv()
         .await
-        .map_err(|e| vortex_err!("CUDA stream callback channel closed unexpectedly: {}", e))
+        .map_err(|e| vortex_err!("CUDA stream completion channel closed unexpectedly: {}", e))?
 }
 
-/// Registers a host function callback on the stream.
+/// A future's wait for an event, polled by the completion thread.
+struct Completion {
+    event: CudaEvent,
+    done: Sender<VortexResult<()>>,
+}
+
+/// Completions of every stream, polled by one thread.
+///
+/// Host functions (`cuLaunchHostFunc`) would deliver completions without polling, but enqueueing
+/// one takes a driver lock that pageable copies hold for their whole duration, while querying an
+/// event does not wait for it. Recording uses pooled events, so it creates none either.
+static COMPLETIONS: LazyLock<Option<mpsc::Sender<Completion>>> = LazyLock::new(|| {
+    let (sender, receiver) = mpsc::channel::<Completion>();
+    std::thread::Builder::new()
+        .name("vortex-cuda-completion".to_string())
+        .spawn(move || poll_completions(&receiver))
+        .ok()
+        .map(|_| sender)
+});
+
+/// Reports each event's completion to its future, in any order.
+///
+/// Spins while events are pending, so completions wake futures within microseconds, and sleeps
+/// on the channel otherwise. Runs until the process exits: the sender is a process-wide static.
+fn poll_completions(receiver: &mpsc::Receiver<Completion>) {
+    let mut pending: Vec<Completion> = Vec::new();
+    loop {
+        if pending.is_empty() {
+            match receiver.recv() {
+                Ok(completion) => pending.push(completion),
+                Err(_) => return,
+            }
+        }
+        pending.extend(receiver.try_iter());
+        pending.retain(|completion| {
+            let result = match completion.event.try_is_complete() {
+                Ok(false) => return true,
+                Ok(true) => Ok(()),
+                Err(error) => Err(vortex_err!("CUDA stream work failed: {error}")),
+            };
+            // A dropped receiver means the future was cancelled; nobody waits for the result.
+            drop(completion.done.send(result));
+            false
+        });
+        if !pending.is_empty() {
+            std::thread::yield_now();
+        }
+    }
+}
+
+/// Registers a completion for the work queued on `stream` so far.
 ///
 /// # Returns
 ///
-/// An async receiver that receives a message when all preceding work on the
-/// stream completes.
+/// An async receiver that receives the result once all preceding work on the stream completes.
 ///
 /// # Errors
 ///
-/// Returns an error if registering the host callback function fails.
-fn register_stream_callback(stream: &CudaStream) -> VortexResult<kanal::AsyncReceiver<()>> {
-    let (tx, rx) = kanal::bounded::<()>(1);
-
-    let tx_ptr = Box::into_raw(Box::new(tx));
-
-    stream
-        .context()
-        .bind_to_thread()
-        .map_err(|e| vortex_err!("Failed to bind CUDA context: {}", e))?;
-
-    /// Called from CUDA driver thread when all preceding work on the stream completes.
-    unsafe extern "C" fn callback(user_data: *mut std::ffi::c_void) {
-        // SAFETY: The memory of `tx` is manually managed has not been freed
-        // before. We have unique ownership and can therefore free it.
-        let tx = unsafe { Box::from_raw(user_data as *mut Sender<()>) };
-
-        // Blocking send as we're in a callback invoked by the CUDA driver.
-        // NOTE: send can fail if the CudaEvent is dropped by the caller, in which case the receiver
-        //  is closed and sends will fail.
-        if let Err(_e) = tx.send(()) {
-            warn!(error = ?_e, "register_stream_callback send failed due to error");
+/// Returns an error if recording the event fails.
+fn register_stream_callback(
+    stream: &CudaStream,
+) -> VortexResult<kanal::AsyncReceiver<VortexResult<()>>> {
+    let event = stream
+        .record_event(None)
+        .map_err(|e| vortex_err!("Failed to record CUDA stream completion: {}", e))?;
+    let (done, receiver) = kanal::bounded::<VortexResult<()>>(1);
+    let completion = Completion { event, done };
+    match COMPLETIONS.as_ref() {
+        Some(completions) => completions
+            .send(completion)
+            .map_err(|_| vortex_err!("CUDA completion thread stopped"))?,
+        // Without the completion thread, wait here.
+        None => {
+            let result = completion
+                .event
+                .synchronize()
+                .map_err(|e| vortex_err!("CUDA stream work failed: {}", e));
+            drop(completion.done.send(result));
         }
     }
-
-    // SAFETY:
-    // 1. Valid handle from the borrowed `CudaStream`.
-    // 2. Valid function pointer with the the correct signature
-    // 3. Valid user data pointer which is consumed exactly once
-    unsafe {
-        stream::launch_host_function(
-            stream.cu_stream(),
-            callback,
-            tx_ptr as *mut std::ffi::c_void,
-        )
-        .map_err(|err| {
-            // SAFETY: Registration failed, so the callback will never run.
-            // We have unique ownership and can therefore free it.
-            drop(Box::from_raw(tx_ptr));
-            vortex_err!("Failed to register CUDA stream callback: {}", err)
-        })?;
-    }
-
-    Ok(rx.to_async())
+    Ok(receiver.to_async())
 }
 
 #[cfg(test)]
