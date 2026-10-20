@@ -13,7 +13,11 @@
 //! error; filters and limits are not part of this builder's API. Work is partitioned into fixed
 //! chunks of up to 65,536 rows, independently of the stored layout's chunk boundaries.
 //! Full-file projections use smaller 8,192-row multiples when serialized bytes per row are high.
+//!
+//! A [`ScanFile`] carrying a [`ScanCache`] shares its lowered plan, segment index, and dictionary
+//! values with every other scan of that file, like a cached layout reader does for V1 scans.
 
+mod cache;
 mod io;
 mod split;
 #[cfg(test)]
@@ -45,6 +49,7 @@ use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
 use vortex_utils::parallelism::get_available_parallelism;
 
+pub use self::cache::ScanCache;
 use crate::LayoutRef;
 use crate::layouts::chunked::Chunked;
 use crate::layouts::dict::Dict;
@@ -52,7 +57,6 @@ use crate::layouts::flat::Flat;
 use crate::layouts::struct_::Struct;
 use crate::layouts::zoned::LegacyStats;
 use crate::layouts::zoned::Zoned;
-use crate::plan::physical::lower;
 use crate::plan::physical::optimize;
 use crate::plan::physical::plan_row_idx_expression;
 use crate::scan::arrow::to_record_batch;
@@ -60,7 +64,6 @@ use crate::scan::execution::ScanPlans;
 pub use crate::scan::execution::SegmentLocation;
 use crate::scan::execution::plan_projection;
 use crate::scan::v2::io::SegmentScanIo;
-use crate::scan::v2::io::segment_ranges;
 use crate::scan::v2::split::SplitPlan;
 use crate::segments::SegmentSource;
 
@@ -105,6 +108,8 @@ pub struct ScanFile {
     pub locations: Arc<[SegmentLocation]>,
     /// Fetches segment bytes by id.
     pub segments: Arc<dyn SegmentSource>,
+    /// State shared by every scan of this file, or `None` to rebuild it for each scan.
+    pub cache: Option<ScanCache>,
 }
 
 /// Builds a projection scan on the planner-driven V2 executor.
@@ -284,11 +289,12 @@ impl<A: 'static + Send> PreparedScan<A> {
     /// fixed-size row chunks.
     fn try_new(builder: ScanBuilder<A>) -> VortexResult<Self> {
         let file = builder.file;
+        let cache = file.cache.unwrap_or_default();
         vortex_ensure!(
-            supports_layout(&file.layout, builder.projection.is_root())?,
+            cache.supports_layout(&file.layout, builder.projection.is_root())?,
             "V2 scans do not support this file's layout"
         );
-        let root = lower(&file.layout)?;
+        let root = cache.root(&file.layout)?;
         let row_count = root.row_count();
         // An identity projection needs no rewrites. Keep the lowered children lazy, including
         // statistics that a projection-only scan never reads.
@@ -306,7 +312,7 @@ impl<A: 'static + Send> PreparedScan<A> {
         let splits = row_chunks(builder.row_range.unwrap_or(0..row_count), chunk_rows);
         let io = Arc::new(SegmentScanIo::new(
             file.segments,
-            segment_ranges(&file.locations),
+            cache.ranges(&file.locations),
         ));
         Ok(Self {
             session: builder.session.clone(),
@@ -315,7 +321,7 @@ impl<A: 'static + Send> PreparedScan<A> {
                 locations: file.locations,
                 projection,
                 row_offset: builder.row_offset,
-                values: Default::default(),
+                values: cache.values(),
             },
             io,
             splits,
