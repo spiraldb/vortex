@@ -295,14 +295,17 @@ mod tests {
 
     use crate::ArrayRef;
     use crate::Canonical;
+    use crate::ExecutionCtx;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::arrays::ChunkedArray;
     use crate::arrays::ConstantArray;
     use crate::arrays::FixedSizeListArray;
     use crate::arrays::ListArray;
+    use crate::arrays::ListViewArray;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::VariantArray;
+    use crate::arrays::listview::list_from_list_view;
     use crate::arrays::variant::VariantArraySlotsExt;
     use crate::assert_arrays_eq;
     use crate::dtype::DType::List;
@@ -613,5 +616,46 @@ mod tests {
         )
         .unwrap();
         assert_arrays_eq!(result, expected, &mut ctx);
+    }
+
+    fn list_view(
+        elements: ArrayRef,
+        offsets: &[u32],
+        sizes: &[u32],
+        ctx: &mut ExecutionCtx,
+    ) -> ArrayRef {
+        ListViewArray::new(
+            elements,
+            PrimitiveArray::from_iter(offsets.iter().copied()).into_array(),
+            PrimitiveArray::from_iter(sizes.iter().copied()).into_array(),
+            Validity::NonNullable,
+            ctx,
+        )
+        .into_array()
+    }
+
+    #[test]
+    fn list_chunks_drop_an_empty_chunks_elements() -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let chunks = vec![
+            list_view(buffer![1i32, 2].into_array(), &[0], &[2], &mut ctx),
+            // No lists, but still an element.
+            list_view(buffer![99i32].into_array(), &[], &[], &mut ctx),
+            list_view(buffer![3i32].into_array(), &[0], &[1], &mut ctx),
+        ];
+        let dtype = chunks[0].dtype().clone();
+        let chunked = ChunkedArray::try_new(chunks, dtype)?.into_array();
+
+        // Converting to a list reads the elements back to back, so a leftover 99 would land in
+        // the first list.
+        let list = list_from_list_view(chunked.execute::<ListViewArray>(&mut ctx)?, &mut ctx)?;
+        let expected = ListArray::try_new(
+            buffer![1i32, 2, 3].into_array(),
+            buffer![0u32, 2, 3].into_array(),
+            Validity::NonNullable,
+            &mut ctx,
+        )?;
+        assert_arrays_eq!(list, expected, &mut ctx);
+        Ok(())
     }
 }

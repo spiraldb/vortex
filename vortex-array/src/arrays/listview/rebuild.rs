@@ -9,6 +9,7 @@ use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
 
+use crate::Canonical;
 use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::arrays::ConstantArray;
@@ -106,8 +107,8 @@ impl ListViewArray {
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<ListViewArray> {
         if self.is_empty() {
-            // SAFETY: An empty array is trivially zero-copyable to a `ListArray`.
-            return Ok(unsafe { self.clone().with_zero_copy_to_list(true) });
+            // An empty array uses none of its elements, so every mode drops them.
+            return Ok(Canonical::empty(self.dtype()).into_listview());
         }
 
         match mode {
@@ -453,6 +454,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
     use vortex_buffer::BitBuffer;
     use vortex_error::VortexResult;
 
@@ -586,6 +588,28 @@ mod tests {
             PrimitiveArray::from_iter([3i32, 4]),
             &mut ctx
         );
+        Ok(())
+    }
+
+    #[rstest]
+    #[case::zero_copy_to_list(ListViewRebuildMode::MakeZeroCopyToList)]
+    #[case::trim_elements(ListViewRebuildMode::TrimElements)]
+    #[case::make_exact(ListViewRebuildMode::MakeExact)]
+    fn test_rebuild_empty_drops_elements(#[case] mode: ListViewRebuildMode) -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        // No lists, but three elements left in the buffer.
+        let listview = ListViewArray::new(
+            PrimitiveArray::from_iter([1i32, 2, 3]).into_array(),
+            PrimitiveArray::from_iter::<[u32; 0]>([]).into_array(),
+            PrimitiveArray::from_iter::<[u32; 0]>([]).into_array(),
+            Validity::NonNullable,
+            &mut ctx,
+        );
+
+        let rebuilt = listview.rebuild(mode, &mut ctx)?;
+        assert!(rebuilt.is_empty());
+        assert_eq!(rebuilt.elements().len(), 0);
+        assert!(rebuilt.is_zero_copy_to_list());
         Ok(())
     }
 
