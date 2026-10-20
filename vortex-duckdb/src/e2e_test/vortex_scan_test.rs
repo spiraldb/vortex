@@ -732,6 +732,7 @@ fn test_vortex_scan_list_of_ints() {
             integers.into_array(),
             offsets.into_array(),
             Validity::AllValid,
+            &mut SESSION.create_execution_ctx(),
         )
         .unwrap();
 
@@ -812,6 +813,7 @@ fn test_vortex_scan_list_of_utf8() {
             strings.into_array(),
             offsets.into_array(),
             Validity::AllValid,
+            &mut SESSION.create_execution_ctx(),
         )
         .unwrap();
 
@@ -898,6 +900,7 @@ fn test_vortex_scan_ultra_deep_nesting() {
             level2_fsl.into_array(),
             level3_offsets.into_array(),
             Validity::AllValid,
+            &mut SESSION.create_execution_ctx(),
         )
         .unwrap();
 
@@ -915,6 +918,7 @@ fn test_vortex_scan_ultra_deep_nesting() {
             level4_fsl.into_array(),
             level5_offsets.into_array(),
             Validity::AllValid,
+            &mut SESSION.create_execution_ctx(),
         )
         .unwrap();
 
@@ -1039,6 +1043,7 @@ async fn write_vortex_file_with_encodings() -> NamedTempFile {
         list_values.into_array(),
         list_offsets.into_array(),
         Validity::NonNullable,
+        &mut SESSION.create_execution_ctx(),
     )
     .unwrap();
 
@@ -1270,6 +1275,7 @@ fn test_vortex_scan_list_length_projection() {
             integers.into_array(),
             offsets.into_array(),
             Validity::AllValid,
+            &mut SESSION.create_execution_ctx(),
         )
         .unwrap();
 
@@ -1309,6 +1315,7 @@ fn test_vortex_scan_list_length_filter() {
             integers.into_array(),
             offsets.into_array(),
             Validity::AllValid,
+            &mut SESSION.create_execution_ctx(),
         )
         .unwrap();
 

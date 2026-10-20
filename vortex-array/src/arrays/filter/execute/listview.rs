@@ -72,23 +72,30 @@ mod tests {
 
     #[test]
     fn test_filter_listview_conformance() {
+        let mut ctx = SESSION.create_execution_ctx();
         // 3 lists: [1,2], [3,4], [5,6]
         let elements = PrimitiveArray::from_iter([1i32, 2, 3, 4, 5, 6]);
         let offsets = buffer![0u32, 2, 4].into_array();
         let sizes = buffer![2u32, 2, 2].into_array();
-        let array =
-            ListViewArray::new(elements.into_array(), offsets, sizes, Validity::NonNullable);
+        let array = ListViewArray::new(
+            elements.into_array(),
+            offsets,
+            sizes,
+            Validity::NonNullable,
+            &mut ctx,
+        );
         test_filter_conformance(&array.into_array(), &mut SESSION.create_execution_ctx());
     }
 
     #[test]
     fn test_filter_listview_with_nulls_conformance() {
+        let mut ctx = SESSION.create_execution_ctx();
         // 3 lists with nullability: [1,2], null, [5,6]
         let elements = PrimitiveArray::from_iter([1i32, 2, 3, 4, 5, 6]);
         let offsets = buffer![0u32, 2, 4].into_array();
         let sizes = buffer![2u32, 2, 2].into_array();
         let validity = Validity::from_iter([true, false, true]);
-        let array = ListViewArray::new(elements.into_array(), offsets, sizes, validity);
+        let array = ListViewArray::new(elements.into_array(), offsets, sizes, validity, &mut ctx);
         test_filter_conformance(&array.into_array(), &mut SESSION.create_execution_ctx());
     }
 }

@@ -168,6 +168,7 @@ fn test_list_array_comparison() {
         values1.into_array(),
         offsets1.into_array(),
         Validity::NonNullable,
+        &mut ctx,
     )
     .unwrap();
 
@@ -177,6 +178,7 @@ fn test_list_array_comparison() {
         values2.into_array(),
         offsets2.into_array(),
         Validity::NonNullable,
+        &mut ctx,
     )
     .unwrap();
 
@@ -213,6 +215,7 @@ fn test_list_array_constant_comparison() {
         values.into_array(),
         offsets.into_array(),
         Validity::NonNullable,
+        &mut ctx,
     )
     .unwrap();
 
@@ -361,6 +364,7 @@ fn test_empty_list() {
         buffer![0i32, 0i32, 0i32].into_array(),
         buffer![0i32, 0i32, 0i32].into_array(),
         Validity::AllValid,
+        ctx,
     );
 
     let result = list

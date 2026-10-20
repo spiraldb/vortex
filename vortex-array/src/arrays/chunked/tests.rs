@@ -279,6 +279,7 @@ pub fn pack_nested_lists() {
         buffer![1, 2, 3, 4].into_array(),
         buffer![0, 3].into_array(),
         Validity::NonNullable,
+        &mut ctx,
     )
     .unwrap();
 
@@ -286,6 +287,7 @@ pub fn pack_nested_lists() {
         buffer![5, 6].into_array(),
         buffer![0, 2].into_array(),
         Validity::NonNullable,
+        &mut ctx,
     )
     .unwrap();
 
@@ -301,6 +303,7 @@ pub fn pack_nested_lists() {
         buffer![1, 2, 3, 5, 6].into_array(),
         buffer![0, 3, 5].into_array(),
         Validity::NonNullable,
+        &mut ctx,
     )
     .unwrap();
     assert_arrays_eq!(chunked_list.unwrap(), expected, &mut ctx);

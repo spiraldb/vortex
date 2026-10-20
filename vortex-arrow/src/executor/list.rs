@@ -380,6 +380,7 @@ mod tests {
             offsets.into_array(),
             sizes.into_array(),
             Validity::NonNullable,
+            &mut ctx,
         );
         assert!(!list_array.is_zero_copy_to_list());
 
@@ -430,6 +431,7 @@ mod tests {
             elements.into_array(),
             offsets.into_array(),
             Validity::NonNullable,
+            &mut ctx,
         )?;
         let sliced = SliceArray::new(list.into_array(), 1..3).into_array();
 
@@ -483,6 +485,7 @@ mod tests {
             elements.into_array(),
             offsets.into_array(),
             Validity::NonNullable,
+            &mut ctx,
         )?;
         let mask = BoolArray::from_iter([true, false, true]);
         let masked = Mask::try_new(list.into_array(), mask.into_array())?.into_array();

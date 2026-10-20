@@ -559,8 +559,10 @@ pub fn from_arrow_list<O: IntegerPType + OffsetSizeTrait>(
     )?;
     let nulls = nulls(value.nulls(), nullable)?;
 
-    // `offsets` are always non-nullable.
-    Ok(ListArray::try_new(elements, offsets.into_array(), nulls)?.into_array())
+    // SAFETY: Arrow offsets are non-negative and sorted, and `trim_offsets` rebases them onto
+    // the referenced values, so the last offset is the elements length. The validity comes from
+    // the same Arrow array, so it has one entry per list.
+    Ok(unsafe { ListArray::new_unchecked(elements, offsets.into_array(), nulls) }.into_array())
 }
 
 impl<O: IntegerPType + OffsetSizeTrait> FromArrowArray<&GenericListArray<O>> for ArrayRef {
@@ -588,7 +590,9 @@ pub fn from_arrow_list_view<O: OffsetSizeTrait + NativePType>(
     let sizes = array.sizes().clone().into_array();
     let nulls = nulls(array.nulls(), nullable)?;
 
-    Ok(ListViewArray::try_new(elements, offsets, sizes, nulls)?.into_array())
+    // SAFETY: Arrow list views share one integer type for offsets and sizes, and every view
+    // lies within the values. The validity comes from the same Arrow array.
+    Ok(unsafe { ListViewArray::new_unchecked(elements, offsets, sizes, nulls) }.into_array())
 }
 
 impl<O: OffsetSizeTrait + NativePType> FromArrowArray<&GenericListViewArray<O>> for ArrayRef {
@@ -668,7 +672,9 @@ pub(crate) fn map_from_arrow_parts(
         .into_array();
     let offsets = offsets.inner().slice(0, len).into_array();
     let validity = nulls(arrow_nulls, nullable)?;
-    let entries = ListViewArray::try_new(entries, offsets, sizes, validity)?;
+    // SAFETY: the sizes are the differences of sorted, non-negative Arrow Map offsets that lie
+    // within the entries, and share their integer type. The validity has one entry per map.
+    let entries = unsafe { ListViewArray::new_unchecked(entries, offsets, sizes, validity) };
     // SAFETY: Arrow Map offsets are sorted list offsets. Vortex sizes are adjacent offset
     // differences, so every view's end equals the next view's start. Sliced Arrow arrays may
     // leave leading or trailing entries unreferenced, which zero-copy-to-list permits.
@@ -1749,6 +1755,7 @@ mod tests {
     // Test list array conversions
     #[test]
     fn test_list_array_conversion() {
+        let mut ctx = array_session().create_execution_ctx();
         let mut builder = ListBuilder::new(Int32Builder::new());
         builder.append_value([Some(1), None, Some(3)]);
         builder.append_null();
@@ -1786,6 +1793,7 @@ mod tests {
             expected_elements.clone(),
             buffer![0u32, 3, 3, 5].into_array(),
             Validity::from_iter([true, false, true]),
+            &mut ctx,
         );
         assert_arrays_eq!(
             vortex_array,
@@ -1796,6 +1804,7 @@ mod tests {
             expected_elements,
             buffer![0u32, 3, 5].into_array(),
             Validity::NonNullable,
+            &mut ctx,
         );
         assert_arrays_eq!(
             vortex_array_non_null,
@@ -1837,6 +1846,7 @@ mod tests {
                 .into_array(),
             buffer![0u32, 2, 4].into_array(),
             Validity::NonNullable,
+            &mut ctx,
         );
         assert_arrays_eq!(sliced, expected, &mut ctx);
         assert_arrays_eq!(fresh, expected, &mut ctx);
@@ -1845,6 +1855,7 @@ mod tests {
 
     #[test]
     fn test_large_list_array_conversion() {
+        let mut ctx = array_session().create_execution_ctx();
         let mut builder = LargeListBuilder::new(Int32Builder::new());
         builder.append_value([Some(1), None, Some(3)]);
         builder.append_null();
@@ -1882,6 +1893,7 @@ mod tests {
             expected_elements.clone(),
             buffer![0u32, 3, 3, 5].into_array(),
             Validity::from_iter([true, false, true]),
+            &mut ctx,
         );
         assert_arrays_eq!(
             vortex_array,
@@ -1892,6 +1904,7 @@ mod tests {
             expected_elements,
             buffer![0u32, 3, 5].into_array(),
             Validity::NonNullable,
+            &mut ctx,
         );
         assert_arrays_eq!(
             vortex_array_non_null,
@@ -2013,6 +2026,7 @@ mod tests {
 
     #[test]
     fn test_list_view_array_conversion() {
+        let mut ctx = array_session().create_execution_ctx();
         // Create values array for the lists
         let values = Int32Array::from(vec![
             Some(1),
@@ -2095,12 +2109,13 @@ mod tests {
         assert_eq!(large_offsets_array.ptype(), PType::I64); // Large ListView uses I64 offsets
         assert_eq!(large_sizes_array.len(), 4);
         assert_eq!(large_sizes_array.ptype(), PType::I64); // Large ListView uses I64 sizes
-        let expected = |validity| {
+        let mut expected = |validity| {
             ListViewArray::new(
                 PrimitiveArray::from_option_iter((1i32..=10).map(Some)).into_array(),
                 buffer![0u32, 3, 5, 6].into_array(),
                 buffer![3u32, 2, 1, 4].into_array(),
                 validity,
+                &mut ctx,
             )
         };
         assert_arrays_eq!(
