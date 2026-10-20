@@ -660,7 +660,7 @@ mod tests {
         )?;
         let field = uuid_field.clone().with_data_type(dict.data_type().clone());
         let schema = Arc::new(Schema::new(vec![field]));
-        let batch = RecordBatch::try_new(schema.clone(), vec![Arc::new(dict)])?;
+        let batch = RecordBatch::try_new(Arc::clone(&schema), vec![Arc::new(dict)])?;
 
         let array = session.from_arrow_record_batch(batch, &schema)?;
         assert_eq!(array.dtype(), &session.from_arrow_schema(&schema)?);
