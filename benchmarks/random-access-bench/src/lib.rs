@@ -229,11 +229,7 @@ fn measurement_name(
     format: Format,
     remote: bool,
 ) -> String {
-    let fmt = if format == Format::VortexCompact {
-        format.name()
-    } else {
-        format.ext()
-    };
+    let fmt = format.ext();
     let suffix = source_suffix(remote);
     match pattern {
         Some(p) => format!("random-access/{}/{}/{}-{}", dataset, p.name(), fmt, suffix),
