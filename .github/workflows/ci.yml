@@ -507,8 +507,6 @@ jobs:
 
   rust-test-windows:
     name: "Rust tests (windows-x64)"
-    env:
-      CARGO_PROFILE_CI_CODEGEN_UNITS: "64"
     needs: duckdb-ready
     if: ${{ !cancelled() && needs.duckdb-ready.result == 'success' }}
     timeout-minutes: 30
