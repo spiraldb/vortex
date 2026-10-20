@@ -26,8 +26,8 @@ use parquet::arrow::async_reader::AsyncFileReader;
 use parquet::file::metadata::PageIndexPolicy;
 use stream::StreamExt;
 use tokio::fs::File;
+use vortex::array::Canonical;
 use vortex::array::IntoArray;
-use vortex::array::RecursiveCanonical;
 use vortex::array::VortexSessionExecute;
 use vortex::array::stream::ArrayStreamAdapter;
 use vortex::array::stream::ArrayStreamExt;
@@ -130,9 +130,9 @@ impl RandomAccessor for ArrowIpcRandomAccessor {
 
 /// Random accessor for Vortex format files.
 ///
-/// The file handle is opened at construction time and reused across `take()` calls. Reader and
-/// optional segment caches are disabled for both scan implementations. Set `VORTEX_BENCH_SCAN=v1`
-/// to compare with V1. V2 requires files without list layouts.
+/// The file handle is opened at construction time and reused across `take()` calls. Set
+/// `VORTEX_BENCH_SCAN=v1` to compare with V1 using the same open options and materialization.
+/// V2 requires files without list layouts.
 pub struct VortexRandomAccessor {
     name: String,
     format: Format,
@@ -149,7 +149,7 @@ impl VortexRandomAccessor {
     ) -> anyhow::Result<Self> {
         let file = SESSION
             .open_options()
-            .without_segment_cache()
+            .with_layout_reader_cache()
             .open_path(path.as_ref())
             .await?;
         Ok(Self {
@@ -169,7 +169,7 @@ impl VortexRandomAccessor {
     ) -> anyhow::Result<Self> {
         let file = SESSION
             .open_options()
-            .without_segment_cache()
+            .with_layout_reader_cache()
             .open_object_store(remote.store(), remote.key(path)?)
             .await?;
         Ok(Self {
@@ -209,12 +209,10 @@ impl RandomAccessor for VortexRandomAccessor {
                 .await?
         };
 
-        // We canonicalize / decompress for equivalence to Arrow's `RecordBatch`es.
+        // Keep the historical benchmark contract: canonicalize the outer array, leaving nested
+        // values lazy. Both scan implementations must perform the same materialization.
         let mut ctx = SESSION.create_execution_ctx();
-        let canonical = array
-            .execute::<RecursiveCanonical>(&mut ctx)?
-            .0
-            .into_array();
+        let canonical = array.execute::<Canonical>(&mut ctx)?.into_array();
         Ok(RandomAccessorRet::ArrayRef(canonical))
     }
 }
