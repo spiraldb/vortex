@@ -15,6 +15,7 @@ use vortex::dtype::NativeDType;
 use vortex::error::VortexError;
 use vortex::error::VortexExpect;
 use vortex::error::VortexResult;
+use vortex::error::vortex_bail;
 use vortex::error::vortex_err;
 use vortex::error::vortex_panic;
 
@@ -155,6 +156,21 @@ impl ValueRef {
                         .collect::<Vec<_>>(),
                 )
             }
+            DUCKDB_TYPE::DUCKDB_TYPE_ARRAY => {
+                let elem_count =
+                    usize::try_from(unsafe { cpp::duckdb_vx_value_get_array_size(self.as_ptr()) })
+                        .vortex_expect("Array size must fit usize");
+                ExtractedValue::List(
+                    (0..elem_count)
+                        .map(|i| unsafe {
+                            Value::own(cpp::duckdb_vx_value_get_array_child(
+                                self.as_ptr(),
+                                i as idx_t,
+                            ))
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            }
             DUCKDB_TYPE::DUCKDB_TYPE_STRUCT => ExtractedValue::List(
                 (0..self.logical_type().struct_type_child_count())
                     .map(|i| unsafe {
@@ -288,6 +304,22 @@ impl Value {
                 crs_ptr,
             ))
         })
+    }
+
+    /// Creates a DuckDB ARRAY value with elements of type `element_type`.
+    pub fn new_array(element_type: &LogicalTypeRef, elements: &[Value]) -> VortexResult<Self> {
+        let mut ptrs = elements.iter().map(|v| v.as_ptr()).collect::<Vec<_>>();
+        let ptr = unsafe {
+            cpp::duckdb_create_array_value(
+                element_type.as_ptr(),
+                ptrs.as_mut_ptr(),
+                ptrs.len() as idx_t,
+            )
+        };
+        if ptr.is_null() {
+            vortex_bail!("Failed to create DuckDB ARRAY value of {element_type:?}");
+        }
+        Ok(unsafe { Self::own(ptr) })
     }
 }
 

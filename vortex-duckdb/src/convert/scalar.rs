@@ -17,6 +17,7 @@
 //! | `Decimal` | `DECIMAL` |
 //! | `Utf8` | `VARCHAR` |
 //! | `Binary` | `BLOB` |
+//! | `FixedSizeList` | `ARRAY` |
 //! | `ExtScalar` (temporal) | `DATE`/`TIME`/`TIMESTAMP` |
 
 use vortex::array::match_each_native_simd_ptype;
@@ -30,6 +31,7 @@ use vortex::dtype::PType::I64;
 use vortex::dtype::half::f16;
 use vortex::encodings::uuid::Uuid;
 use vortex::error::VortexError;
+use vortex::error::VortexExpect;
 use vortex::error::VortexResult;
 use vortex::error::vortex_bail;
 use vortex::error::vortex_ensure_eq;
@@ -82,8 +84,16 @@ impl ToDuckDBScalar for Scalar {
             DType::Utf8(_) => self.as_utf8().try_to_duckdb_scalar(),
             DType::Binary(_) => self.as_binary().try_to_duckdb_scalar(),
             DType::List(..) => vortex_bail!("Vortex List scalars aren't supported"),
-            DType::FixedSizeList(..) => {
-                vortex_bail!("Vortex FixedSizeList scalars aren't supported")
+            DType::FixedSizeList(element_dtype, ..) => {
+                let element_type = LogicalType::try_from(element_dtype.as_ref())?;
+                let elements = self
+                    .as_list()
+                    .elements()
+                    .vortex_expect("non-null FixedSizeList scalar must have elements")
+                    .iter()
+                    .map(|element| element.try_to_duckdb_scalar())
+                    .collect::<VortexResult<Vec<_>>>()?;
+                Value::new_array(&element_type, &elements)
             }
             DType::Map(..) => vortex_bail!("Vortex Map scalars aren't supported"),
             DType::Variant(_) => vortex_bail!("Vortex Variant scalars aren't supported"),
@@ -405,6 +415,13 @@ impl<'a> TryFrom<&'a ValueRef> for Scalar {
                         .collect::<VortexResult<Vec<_>>>()?,
                     Nullable,
                 )),
+                DType::FixedSizeList(c, ..) => Ok(Scalar::fixed_size_list(
+                    c,
+                    vs.into_iter()
+                        .map(Scalar::try_from)
+                        .collect::<VortexResult<Vec<_>>>()?,
+                    Nullable,
+                )),
                 DType::Struct(..) => Ok(Scalar::struct_(
                     dtype,
                     vs.into_iter()
@@ -412,7 +429,7 @@ impl<'a> TryFrom<&'a ValueRef> for Scalar {
                         .collect::<VortexResult<Vec<_>>>()?,
                 )),
                 _ => {
-                    vortex_bail!("List value must be a list or struct dtype")
+                    vortex_bail!("List value must be a list, fixed-size list or struct dtype")
                 }
             },
             ExtractedValue::Unsupported(type_id) => {
@@ -429,6 +446,7 @@ mod tests {
     use vortex::dtype::Nullability;
     use vortex::dtype::PType;
     use vortex::dtype::extension::ExtDType;
+    use vortex::error::VortexResult;
     use vortex::extension::datetime::Date;
     use vortex::extension::datetime::Time;
     use vortex::extension::datetime::TimeUnit;
@@ -455,6 +473,62 @@ mod tests {
             assert_eq!(restored.dtype(), &value.dtype().as_nullable());
             assert_eq!(restored, value);
         }
+    }
+
+    #[rstest]
+    #[case::non_null_elements(Scalar::fixed_size_list(
+        DType::Primitive(PType::I32, Nullability::NonNullable),
+        vec![Scalar::from(1i32), Scalar::from(2i32), Scalar::from(3i32)],
+        Nullability::NonNullable,
+    ))]
+    #[case::null_element(Scalar::fixed_size_list(
+        DType::Primitive(PType::I64, Nullability::Nullable),
+        vec![
+            Scalar::primitive(1i64, Nullability::Nullable),
+            Scalar::null(DType::Primitive(PType::I64, Nullability::Nullable)),
+        ],
+        Nullability::Nullable,
+    ))]
+    #[case::utf8(Scalar::fixed_size_list(
+        DType::Utf8(Nullability::NonNullable),
+        vec![Scalar::from("a"), Scalar::from("bc")],
+        Nullability::NonNullable,
+    ))]
+    #[case::nested(Scalar::fixed_size_list(
+        DType::FixedSizeList(
+            DType::Primitive(PType::I32, Nullability::NonNullable).into(),
+            2,
+            Nullability::NonNullable,
+        ),
+        vec![
+            Scalar::fixed_size_list(
+                DType::Primitive(PType::I32, Nullability::NonNullable),
+                vec![Scalar::from(1i32), Scalar::from(2i32)],
+                Nullability::NonNullable,
+            ),
+            Scalar::fixed_size_list(
+                DType::Primitive(PType::I32, Nullability::NonNullable),
+                vec![Scalar::from(3i32), Scalar::from(4i32)],
+                Nullability::NonNullable,
+            ),
+        ],
+        Nullability::NonNullable,
+    ))]
+    #[case::null(Scalar::null(DType::FixedSizeList(
+        DType::Primitive(PType::I32, Nullability::Nullable).into(),
+        3,
+        Nullability::Nullable,
+    )))]
+    fn test_fixed_size_list_round_trip(#[case] value: Scalar) -> VortexResult<()> {
+        let duckdb_value = value.try_to_duckdb_scalar()?;
+        assert_eq!(
+            duckdb_value.logical_type().as_type_id(),
+            DUCKDB_TYPE::DUCKDB_TYPE_ARRAY
+        );
+
+        let restored = Scalar::try_from(duckdb_value)?;
+        assert_eq!(restored, value);
+        Ok(())
     }
 
     #[test]
