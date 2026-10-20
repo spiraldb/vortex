@@ -729,8 +729,9 @@ fn validate_zctl(
     });
     vortex_ensure!(offsets_sorted, "offsets must be sorted");
 
-    // Validate that offset[i] + size[i] <= offset[i+1] for all items
-    // This ensures views are non-overlapping and properly ordered for zero-copy-to-list
+    // Validate that offset[i] + size[i] == offset[i+1] for all items, including empty and null
+    // views. This ensures views are non-overlapping and properly ordered, and that no
+    // unreferenced elements sit between two views (where a `ListArray` would pick them up).
     fn validate_monotonic_ends<O: IntegerPType, S: IntegerPType>(
         offsets_slice: &[O],
         sizes_slice: &[S],
@@ -747,6 +748,17 @@ fn validate_zctl(
                 offset >= max_end,
                 "Zero-copy-to-list requires views to be non-overlapping and ordered: \
                  view[{}] starts at {} but previous views extend to {}",
+                i,
+                offset,
+                max_end
+            );
+
+            // Check that this view starts exactly where the previous view ended. Only leading
+            // unreferenced elements (before the first view) are allowed.
+            vortex_ensure!(
+                i == 0 || offset == max_end,
+                "Zero-copy-to-list requires adjacent views: view[{}] starts at {} but the \
+                 previous view ends at {}",
                 i,
                 offset,
                 max_end

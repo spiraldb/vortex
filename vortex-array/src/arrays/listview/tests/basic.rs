@@ -451,6 +451,23 @@ fn test_validate_monotonic_ends_with_nulls() {
 }
 
 #[test]
+#[should_panic(expected = "Zero-copy-to-list requires adjacent views")]
+fn test_verify_is_zero_copy_to_list_gap_after_empty_view() {
+    let mut ctx = array_session().create_execution_ctx();
+    // An empty view in front of an unreferenced element: logically `[[], [2]]`, but a `ListArray`
+    // built from these offsets would read `[[999], [2]]`.
+    let elements = buffer![999i32, 2].into_array();
+    let offsets = buffer![0u32, 1].into_array();
+    let sizes = buffer![0u32, 1].into_array();
+
+    let listview = ListViewArray::new(elements, offsets, sizes, Validity::NonNullable, &mut ctx);
+
+    unsafe {
+        let _zctl = listview.with_zero_copy_to_list(true);
+    }
+}
+
+#[test]
 fn test_validate_monotonic_ends_correct_nulls() {
     let mut ctx = array_session().create_execution_ctx();
     // Test that correctly placed NULLs pass validation

@@ -106,8 +106,23 @@ impl ListViewArray {
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<ListViewArray> {
         if self.is_empty() {
-            // SAFETY: An empty array is trivially zero-copyable to a `ListArray`.
-            return Ok(unsafe { self.clone().with_zero_copy_to_list(true) });
+            // A zero-row array may still hold elements that no view references. Every mode that
+            // removes unused data has to drop them, otherwise callers that concatenate rebuilt
+            // chunks (such as `swizzle_list_chunks`) would place them between the views of
+            // neighbouring chunks.
+            let elements = self.elements().slice(0..0)?;
+
+            // SAFETY: There are no views, so emptying `elements` keeps every view in bounds, and
+            // an array without views is trivially zero-copyable to a `ListArray`.
+            return Ok(unsafe {
+                ListViewArray::new_unchecked(
+                    elements,
+                    self.offsets().clone(),
+                    self.sizes().clone(),
+                    self.validity()?,
+                )
+                .with_zero_copy_to_list(true)
+            });
         }
 
         match mode {
@@ -468,6 +483,29 @@ mod tests {
     use crate::assert_arrays_eq;
     use crate::dtype::Nullability;
     use crate::validity::Validity;
+
+    #[test]
+    fn test_rebuild_empty_drops_unused_elements() -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        // A zero-row list view may still hold elements that no view references.
+        let elements = PrimitiveArray::from_iter(vec![999i32, 1000]).into_array();
+        let offsets = PrimitiveArray::empty::<u32>(Nullability::NonNullable).into_array();
+        let sizes = PrimitiveArray::empty::<u32>(Nullability::NonNullable).into_array();
+        let listview =
+            ListViewArray::new(elements, offsets, sizes, Validity::NonNullable, &mut ctx);
+
+        for mode in [
+            ListViewRebuildMode::MakeZeroCopyToList,
+            ListViewRebuildMode::TrimElements,
+            ListViewRebuildMode::MakeExact,
+        ] {
+            let rebuilt = listview.rebuild(mode, &mut ctx)?;
+            assert!(rebuilt.is_empty());
+            assert!(rebuilt.elements().is_empty());
+            assert!(rebuilt.is_zero_copy_to_list());
+        }
+        Ok(())
+    }
 
     #[test]
     fn test_rebuild_flatten_removes_overlaps() -> VortexResult<()> {

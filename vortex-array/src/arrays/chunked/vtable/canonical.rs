@@ -301,8 +301,10 @@ mod tests {
     use crate::arrays::ConstantArray;
     use crate::arrays::FixedSizeListArray;
     use crate::arrays::ListArray;
+    use crate::arrays::ListViewArray;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::VariantArray;
+    use crate::arrays::listview::list_from_list_view;
     use crate::arrays::variant::VariantArraySlotsExt;
     use crate::assert_arrays_eq;
     use crate::dtype::DType::List;
@@ -613,5 +615,56 @@ mod tests {
         )
         .unwrap();
         assert_arrays_eq!(result, expected, &mut ctx);
+    }
+
+    #[test]
+    fn pack_list_chunks_drops_unused_elements_of_empty_chunks() -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        // `[[]]`, then a zero-row chunk that still holds an unused element, then `[[2]]`.
+        let first = ListViewArray::try_new(
+            PrimitiveArray::empty::<i32>(NonNullable).into_array(),
+            buffer![0u32].into_array(),
+            buffer![0u32].into_array(),
+            Validity::NonNullable,
+            &mut ctx,
+        )?;
+        let empty = ListViewArray::try_new(
+            buffer![999i32].into_array(),
+            PrimitiveArray::empty::<u32>(NonNullable).into_array(),
+            PrimitiveArray::empty::<u32>(NonNullable).into_array(),
+            Validity::NonNullable,
+            &mut ctx,
+        )?;
+        let last = ListViewArray::try_new(
+            buffer![2i32].into_array(),
+            buffer![0u32].into_array(),
+            buffer![1u32].into_array(),
+            Validity::NonNullable,
+            &mut ctx,
+        )?;
+        let dtype = first.dtype().clone();
+
+        let chunked = ChunkedArray::try_new(
+            vec![first.into_array(), empty.into_array(), last.into_array()],
+            dtype,
+        )?
+        .into_array();
+
+        let list_view = match chunked.execute::<Canonical>(&mut ctx)? {
+            Canonical::List(list_view) => list_view,
+            other => vortex_bail!("expected List canonical array, got {other:?}"),
+        };
+        assert!(list_view.is_zero_copy_to_list());
+
+        // The zero-copy conversion must not pick up the element of the empty chunk.
+        let list = list_from_list_view(list_view, &mut ctx)?;
+        let expected = ListArray::try_new(
+            buffer![2i32].into_array(),
+            buffer![0u32, 0, 1].into_array(),
+            Validity::NonNullable,
+            &mut ctx,
+        )?;
+        assert_arrays_eq!(list, expected, &mut ctx);
+        Ok(())
     }
 }
