@@ -326,7 +326,7 @@ mod tests {
 
     #[fixture]
     fn session() -> VortexSession {
-        let session = vortex_array::array_session();
+        let session = VortexSession::empty();
         crate::initialize(&session);
         session
     }

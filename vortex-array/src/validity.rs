@@ -631,19 +631,23 @@ impl IntoArray for &MaskValues {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use rstest::rstest;
     use vortex_buffer::Buffer;
     use vortex_buffer::buffer;
     use vortex_mask::Mask;
+    use vortex_session::VortexSession;
 
     use crate::ArrayRef;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::PrimitiveArray;
     use crate::dtype::Nullability;
     use crate::validity::BoolArray;
     use crate::validity::Validity;
+
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     #[rstest]
     #[case(Validity::AllValid, 5, &[2, 4], Validity::AllValid, Validity::AllValid)]
@@ -708,7 +712,7 @@ mod tests {
         let indices =
             PrimitiveArray::new(Buffer::copy_from(positions), Validity::NonNullable).into_array();
 
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
 
         assert!(
             validity
@@ -735,7 +739,7 @@ mod tests {
         #[case] index: u64,
         #[case] message: &str,
     ) {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let error = validity
             .patch(
                 2,
@@ -788,7 +792,7 @@ mod tests {
         #[case] indices: ArrayRef,
         #[case] expected: Validity,
     ) {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let taken = validity.take(&indices).unwrap();
         assert_eq!(taken.nullability(), expected.nullability());
         assert!(taken.mask_eq(&expected, indices.len(), &mut ctx).unwrap());
@@ -831,7 +835,7 @@ mod tests {
         #[case] rhs: Validity,
         #[case] expected: bool,
     ) -> vortex_error::VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         assert_eq!(lhs.mask_eq(&rhs, 3, &mut ctx)?, expected);
         Ok(())
     }

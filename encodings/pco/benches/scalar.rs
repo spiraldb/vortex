@@ -12,7 +12,14 @@ use mimalloc::MiMalloc;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
+use vortex_array::aggregate_fn::session::AggregateFnSession;
 use vortex_array::arrays::PrimitiveArray;
+use vortex_array::dtype::session::DTypeSession;
+use vortex_array::memory::MemorySession;
+use vortex_array::optimizer::kernels::KernelSession;
+use vortex_array::scalar_fn::session::ScalarFnSession;
+use vortex_array::session::ArraySession;
+use vortex_array::stats::session::StatsSession;
 use vortex_array::validity::Validity;
 use vortex_error::VortexExpect;
 use vortex_pco::Pco;
@@ -22,6 +29,7 @@ use vortex_session::VortexSession;
 static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
+    LazyLock::force(&SESSION);
     divan::main();
 }
 
@@ -33,7 +41,16 @@ const CASES: &[(usize, bool, bool)] = &[
     (1024, false, true),
 ];
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
+    VortexSession::empty()
+        .with::<ArraySession>()
+        .with::<KernelSession>()
+        .with::<DTypeSession>()
+        .with::<ScalarFnSession>()
+        .with::<AggregateFnSession>()
+        .with::<MemorySession>()
+        .with::<StatsSession>()
+});
 
 fn pco(nullable: bool) -> ArrayRef {
     let validity = if nullable {

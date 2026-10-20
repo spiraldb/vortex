@@ -38,13 +38,15 @@ impl FilterReduce for Dict {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
     use vortex_mask::Mask;
+    use vortex_session::VortexSession;
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::ConstantArray;
     use crate::arrays::Dict;
     use crate::arrays::DictArray;
@@ -56,9 +58,11 @@ mod tests {
     use crate::expr::stats::StatsProviderExt;
     use crate::scalar::ScalarValue;
 
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
+
     #[test]
     fn filter_constant_valid_code_keeps_only_referenced_value() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let dict = DictArray::new(
             ConstantArray::new(1u8, 5).into_array(),
             buffer![10i32, 20, 30].into_array(),

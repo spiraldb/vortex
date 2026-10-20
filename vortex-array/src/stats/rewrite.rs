@@ -143,6 +143,8 @@ fn rewrite(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use vortex_error::VortexResult;
     use vortex_session::VortexSession;
 
@@ -158,6 +160,8 @@ mod tests {
     use crate::scalar_fn::ScalarFnVTable;
     use crate::scalar_fn::fns::not::Not;
     use crate::stats::session::StatsSessionExt;
+
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     #[derive(Debug)]
     struct StaticNotRule {
@@ -189,7 +193,7 @@ mod tests {
 
     #[test]
     fn combines_multiple_falsifiers_with_or() -> VortexResult<()> {
-        let session = crate::array_session();
+        let session = VortexSession::empty();
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
         session.stats().register_rewrite(StaticNotRule {
             falsifier: Some(lit(false).bind(&dtype)?),
@@ -209,7 +213,7 @@ mod tests {
 
     #[test]
     fn combines_multiple_satisfiers_with_or() -> VortexResult<()> {
-        let session = crate::array_session();
+        let session = VortexSession::empty();
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
         session.stats().register_rewrite(StaticNotRule {
             falsifier: None,
@@ -229,23 +233,21 @@ mod tests {
 
     #[test]
     fn unregistered_expression_has_no_rewrite() -> VortexResult<()> {
-        let session = crate::array_session();
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
 
         let expr = not(lit(true)).bind(&dtype)?;
-        assert_eq!(expr.falsify(&session)?, None);
-        assert_eq!(expr.satisfy(&session)?, None);
+        assert_eq!(expr.falsify(&SESSION)?, None);
+        assert_eq!(expr.satisfy(&SESSION)?, None);
         Ok(())
     }
 
     #[test]
     fn non_predicate_expression_errors() -> VortexResult<()> {
-        let session = crate::array_session();
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
 
         let expr = lit(7).bind(&dtype)?;
-        assert!(expr.falsify(&session).is_err());
-        assert!(expr.satisfy(&session).is_err());
+        assert!(expr.falsify(&SESSION).is_err());
+        assert!(expr.satisfy(&SESSION).is_err());
         Ok(())
     }
 }

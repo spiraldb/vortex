@@ -43,11 +43,12 @@ mod tests {
     use vortex_edition::EditionSessionExt;
     use vortex_edition::test_harness::validate_edition;
     use vortex_error::VortexResult;
+    use vortex_session::VortexSession;
 
     use super::*;
 
-    fn json_session() -> vortex_session::VortexSession {
-        let session = vortex_array::array_session();
+    fn json_session() -> VortexSession {
+        let session = VortexSession::empty();
         crate::initialize(&session);
         session
     }

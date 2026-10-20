@@ -44,6 +44,7 @@ const ROWS: usize = 64;
 const LARGE_HULL_ROWS: usize = 16;
 
 fn main() {
+    LazyLock::force(&SESSION);
     divan::main();
 }
 

@@ -18,13 +18,29 @@ mod benchmarks {
     use vortex_array::ArrayRef;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
+    use vortex_array::aggregate_fn::session::AggregateFnSession;
     use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::dtype::session::DTypeSession;
+    use vortex_array::memory::MemorySession;
+    use vortex_array::optimizer::kernels::KernelSession;
+    use vortex_array::scalar_fn::session::ScalarFnSession;
+    use vortex_array::session::ArraySession;
+    use vortex_array::stats::session::StatsSession;
     use vortex_btrblocks::BtrBlocksCompressorBuilder;
     use vortex_buffer::buffer_mut;
     use vortex_session::VortexSession;
     use vortex_utils::aliases::hash_set::HashSet;
 
-    static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::array_session);
+    pub(super) static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
+        VortexSession::empty()
+            .with::<ArraySession>()
+            .with::<KernelSession>()
+            .with::<DTypeSession>()
+            .with::<ScalarFnSession>()
+            .with::<AggregateFnSession>()
+            .with::<MemorySession>()
+            .with::<StatsSession>()
+    });
 
     fn make_clickbench_window_name() -> ArrayRef {
         // A test that's meant to mirror the WindowName column from ClickBench.
@@ -70,5 +86,7 @@ mod benchmarks {
 static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
+    #[cfg(not(codspeed))]
+    std::sync::LazyLock::force(&benchmarks::SESSION);
     divan::main()
 }

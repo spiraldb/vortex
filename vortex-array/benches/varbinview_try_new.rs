@@ -7,11 +7,17 @@ use std::sync::LazyLock;
 use divan::Bencher;
 use mimalloc::MiMalloc;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
+use vortex_array::aggregate_fn::session::AggregateFnSession;
 use vortex_array::arrays::VarBinViewArray;
 use vortex_array::arrays::varbinview::BinaryView;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability;
+use vortex_array::dtype::session::DTypeSession;
+use vortex_array::memory::MemorySession;
+use vortex_array::optimizer::kernels::KernelSession;
+use vortex_array::scalar_fn::session::ScalarFnSession;
+use vortex_array::session::ArraySession;
+use vortex_array::stats::session::StatsSession;
 use vortex_array::validity::Validity;
 use vortex_buffer::BitBuffer;
 use vortex_buffer::Buffer;
@@ -23,12 +29,22 @@ use vortex_session::VortexSession;
 static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
+    LazyLock::force(&SESSION);
     divan::main();
 }
 
 const SIZES: &[usize] = &[1 << 12, 1 << 16];
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
+    VortexSession::empty()
+        .with::<ArraySession>()
+        .with::<KernelSession>()
+        .with::<DTypeSession>()
+        .with::<ScalarFnSession>()
+        .with::<AggregateFnSession>()
+        .with::<MemorySession>()
+        .with::<StatsSession>()
+});
 
 fn garbage_view() -> BinaryView {
     BinaryView::new_ref(13, *b"AAAA", 0xDEAD_BEEF, 0xF000_0000)

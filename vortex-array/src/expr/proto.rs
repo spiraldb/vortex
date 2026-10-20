@@ -101,11 +101,12 @@ pub fn deserialize_expr_proto(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use prost::Message;
     use vortex_session::VortexSession;
 
     use super::ExprSerializeProtoExt;
-    use crate::array_session;
     use crate::expr::Expression;
     use crate::expr::and;
     use crate::expr::between;
@@ -118,6 +119,12 @@ mod tests {
     use crate::scalar_fn::fns::between::BetweenOptions;
     use crate::scalar_fn::fns::between::StrictComparison;
     use crate::scalar_fn::session::ScalarFnSession;
+
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
+        let session = VortexSession::empty().with::<ScalarFnSession>();
+        session.allow_unknown();
+        session
+    });
 
     #[test]
     fn expression_serde() {
@@ -140,23 +147,20 @@ mod tests {
         let s_expr = expr.serialize_proto().unwrap();
         let buf = s_expr.encode_to_vec();
         let s_expr = pb::Expr::decode(buf.as_slice()).unwrap();
-        let deser_expr = Expression::from_proto(&s_expr, &array_session()).unwrap();
+        let deser_expr = Expression::from_proto(&s_expr, &VortexSession::empty()).unwrap();
 
         assert_eq!(&deser_expr, &expr);
     }
 
     #[test]
     fn unknown_expression_id_allow_unknown() {
-        let session = VortexSession::empty().with::<ScalarFnSession>();
-        session.allow_unknown();
-
         let expr_proto = pb::Expr {
             id: "vortex.test.foreign_scalar_fn".to_string(),
             metadata: Some(vec![1, 2, 3, 4]),
             children: vec![root().serialize_proto().unwrap()],
         };
 
-        let expr = Expression::from_proto(&expr_proto, &session).unwrap();
+        let expr = Expression::from_proto(&expr_proto, &SESSION).unwrap();
         assert_eq!(
             expr.as_scalar().map(|f| f.id().as_ref().to_string()),
             Some("vortex.test.foreign_scalar_fn".to_string())

@@ -468,12 +468,13 @@ impl<'a> LikeVariant<'a> {
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
+    use std::sync::LazyLock;
 
     use rstest::rstest;
+    use vortex_session::VortexSession;
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::arrays::ConstantArray;
     use crate::arrays::VarBinArray;
@@ -492,6 +493,8 @@ mod tests {
     use crate::scalar_fn::fns::like::LikeVariant;
     use crate::scalar_fn::fns::like::is_ascii;
     use crate::scalar_fn::fns::like::suffix_bytes_unchecked;
+
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     const LONG: &str = "a value far too long to live inside its own view";
 
@@ -515,7 +518,7 @@ mod tests {
     #[case("%", [true, true, true, true])]
     #[case("_____", [true, true, false, true])]
     fn test_like_patterns(#[case] pattern: &str, #[case] expected: [bool; 4]) {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let array =
             VarBinViewArray::from_iter_str(["hello", "world", "help", "jello"]).into_array();
         let result = run_like(
@@ -528,7 +531,7 @@ mod tests {
 
     #[test]
     fn test_like_escapes() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let array = VarBinViewArray::from_iter_str(["100%", "100x", "a_b", "axb"]).into_array();
 
         let result = run_like(
@@ -556,7 +559,7 @@ mod tests {
 
     #[test]
     fn test_like_regex_meta_characters_are_literal() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let array = VarBinViewArray::from_iter_str(["a.c", "abc", "a$c"]).into_array();
         let result = run_like(
             array,
@@ -568,7 +571,7 @@ mod tests {
 
     #[test]
     fn test_like_unicode() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let array =
             VarBinViewArray::from_iter_str(["h\u{00a3}llo", "hxllo", "h\u{00a3}xllo"]).into_array();
         // `_` matches exactly one character of any byte width.
@@ -582,7 +585,7 @@ mod tests {
 
     #[test]
     fn test_nlike() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let array = VarBinViewArray::from_iter_str(["hello", "world"]).into_array();
         let result = run_like(
             array,
@@ -597,7 +600,7 @@ mod tests {
 
     #[test]
     fn test_ilike() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let ilike = LikeOptions {
             negated: false,
             case_insensitive: true,
@@ -616,7 +619,7 @@ mod tests {
 
     #[test]
     fn test_nilike() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let array = VarBinViewArray::from_iter_str(["HELLO", "world"]).into_array();
         let result = run_like(
             array,
@@ -631,7 +634,7 @@ mod tests {
 
     #[test]
     fn test_like_nullable_input() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let array = VarBinViewArray::from_iter_nullable_str([Some("hello"), None, Some("help")])
             .into_array();
         let result = run_like(
@@ -648,7 +651,7 @@ mod tests {
 
     #[test]
     fn test_like_null_pattern() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let array = VarBinViewArray::from_iter_str(["hello", "world"]).into_array();
         let result = run_like(
             array,
@@ -660,7 +663,7 @@ mod tests {
 
     #[test]
     fn test_like_per_row_patterns() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let array = VarBinViewArray::from_iter_str(["hello", "hello", "hello"]).into_array();
         let patterns = VarBinViewArray::from_iter_str(["he%", "%world", "h_llo"]).into_array();
         let result = run_like(array, patterns, LikeOptions::default());
@@ -669,7 +672,7 @@ mod tests {
 
     #[test]
     fn test_like_non_canonical_input() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         // VarBin (not the canonical VarBinView) is canonicalized before evaluation.
         let array = VarBinArray::from_iter(
             [Some("hello"), Some("world")],

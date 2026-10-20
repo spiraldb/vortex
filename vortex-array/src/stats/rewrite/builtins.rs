@@ -854,7 +854,6 @@ mod tests {
     use crate::aggregate_fn::AggregateFnVTableExt;
     use crate::aggregate_fn::EmptyOptions as AggregateEmptyOptions;
     use crate::aggregate_fn::fns::all_non_nan::AllNonNan;
-    use crate::array_session;
     use crate::dtype::DType;
     use crate::dtype::Nullability;
     use crate::dtype::PType;
@@ -897,7 +896,7 @@ mod tests {
     use crate::stats::rewrite::StatsRewriteRule;
     use crate::stats::session::StatsSessionExt;
 
-    static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     fn stat(expr: Expression, stat: Stat) -> Expression {
         let aggregate_fn = stat.aggregate_fn().expect("stat should have aggregate fn");
@@ -1047,7 +1046,7 @@ mod tests {
 
     #[test]
     fn or_chain_falsify_visits_each_node_once() -> VortexResult<()> {
-        let session = array_session();
+        let session = VortexSession::empty();
         let visits = Arc::new(AtomicUsize::new(0));
         session
             .stats()

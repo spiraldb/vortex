@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::sync::LazyLock;
+
 use vortex_buffer::buffer;
 use vortex_error::VortexResult;
+use vortex_session::VortexSession;
 
 use super::DictArray;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
-use crate::array_session;
 use crate::arrays::BoolArray;
 use crate::arrays::ConstantArray;
 use crate::arrays::FixedSizeListArray;
@@ -22,9 +24,11 @@ use crate::dtype::PType;
 use crate::scalar::Scalar;
 use crate::validity::Validity;
 
+static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
+
 #[test]
 fn test_scalar_at_null_code() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     let dict = DictArray::try_new(
         PrimitiveArray::from_option_iter(vec![None, Some(0u32), None]).into_array(),
         buffer![1i32].into_array(),
@@ -37,7 +41,7 @@ fn test_scalar_at_null_code() {
 
 #[test]
 fn test_canonicalize_dict_with_all_null_array_validity_codes() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     let codes = PrimitiveArray::new(
         buffer![0u32, 1],
         Validity::Array(BoolArray::from_iter([false, false]).into_array()),
@@ -78,7 +82,7 @@ fn test_canonicalize_dict_with_all_null_array_validity_codes() -> VortexResult<(
 
 #[test]
 fn test_dict_display() {
-    let ctx = array_session().create_execution_ctx();
+    let ctx = SESSION.create_execution_ctx();
     let x = DictArray::try_new(
         buffer![0u8, 0, 0, 1, 0, 3].into_array(),
         VarBinArray::from(vec!["Hello", "你好", "Bonjour", "Hola"]).into_array(),
@@ -94,7 +98,7 @@ fn test_dict_display() {
 
 #[test]
 fn test_dict_list_dict_display() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     let elements = DictArray::try_new(
         buffer![0u8, 0, 0, 1, 0, 3, 3, 2].into_array(),
         <VarBinArray as FromIterator<_>>::from_iter([
@@ -142,7 +146,7 @@ fn test_dict_list_dict_display() {
 
 #[test]
 fn canonicalize_constant_nullable_code_over_non_nullable_values() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     let code = Scalar::primitive(1u8, Nullability::Nullable);
     let dict = DictArray::try_new(
         ConstantArray::new(code, 3).into_array(),
@@ -162,7 +166,7 @@ fn canonicalize_constant_nullable_code_over_non_nullable_values() -> VortexResul
 
 #[test]
 fn canonicalize_constant_null_code() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     let dict = DictArray::try_new(
         ConstantArray::new(
             Scalar::null(DType::Primitive(PType::U8, Nullability::Nullable)),

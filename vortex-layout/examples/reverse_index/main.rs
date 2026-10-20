@@ -28,7 +28,6 @@ use vortex_array::Canonical;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinViewArray;
@@ -386,7 +385,7 @@ static DEMO_EDITION_DECLARATION: EditionDeclaration = EditionDeclaration {
 
 /// A session knowing the `vortex.indexed` layout and the reverse index.
 fn demo_session() -> VortexResult<VortexSession> {
-    let session = array_session()
+    let session = VortexSession::empty()
         .with::<LayoutSession>()
         .with::<RuntimeSession>()
         .with::<EditionSession>();

@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::sync::LazyLock;
+
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::ExtensionArray;
 use vortex_array::arrays::ListArray;
@@ -52,6 +53,8 @@ use super::DEFAULT_CORE_EDITION;
 use super::DEFAULT_PREVIEW_EDITION;
 use super::EDITION_DECLARATIONS;
 use super::PREVIEW_2026_08_0;
+
+static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
 fn session() -> VortexResult<EditionSession> {
     let session = EditionSession::empty();
@@ -380,7 +383,7 @@ static WRITER_TEST_DECLARATION: EditionDeclaration = EditionDeclaration {
 };
 
 fn writer_test_session() -> VortexResult<VortexSession> {
-    let session = array_session()
+    let session = VortexSession::empty()
         .with::<EditionSession>()
         .with::<LayoutSession>()
         .with::<RuntimeSession>();
@@ -392,7 +395,7 @@ fn writer_test_session() -> VortexResult<VortexSession> {
 
 #[tokio::test]
 async fn disabling_editions_allows_uneditioned_components() -> VortexResult<()> {
-    let enforced_session = array_session()
+    let enforced_session = VortexSession::empty()
         .with::<EditionSession>()
         .with::<LayoutSession>()
         .with::<RuntimeSession>();
@@ -419,7 +422,7 @@ async fn disabling_editions_allows_uneditioned_components() -> VortexResult<()> 
         "unexpected error: {error}"
     );
 
-    let uneditioned_session = array_session()
+    let uneditioned_session = VortexSession::empty()
         .with::<LayoutSession>()
         .with::<RuntimeSession>();
     vortex_file::register_default_encodings(&uneditioned_session);
@@ -486,7 +489,7 @@ fn session_declaring(members: &[(ComponentKind, Id)]) -> VortexResult<VortexSess
         "vortex.null_count",
     ];
 
-    let session = array_session()
+    let session = VortexSession::empty()
         .with::<EditionSession>()
         .with::<LayoutSession>()
         .with::<RuntimeSession>();
@@ -570,7 +573,7 @@ async fn writer_restricts_layouts_to_the_enabled_editions() -> VortexResult<()> 
 /// The writer emits the list layout exactly when the enabled editions include it.
 #[tokio::test]
 async fn list_layout_follows_enabled_editions() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     use crate::VortexSessionDefault;
 
     let list = ListArray::try_new(

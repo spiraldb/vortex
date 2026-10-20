@@ -20,7 +20,6 @@ use tempfile::tempdir;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::ConstantArray;
@@ -119,7 +118,7 @@ use crate::WriteOptionsSessionExt;
 use crate::flatbuffers::footer as fb;
 use crate::footer::SegmentSpec;
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-    let session = array_session()
+    let session = VortexSession::empty()
         .with::<LayoutSession>()
         .with::<RuntimeSession>();
 
@@ -251,7 +250,7 @@ async fn decimal_writer_uses_default_or_session_restrictions(
     #[case] custom_strategy: bool,
     #[case] explicit_compressor: bool,
 ) -> VortexResult<()> {
-    let session = array_session()
+    let session = VortexSession::empty()
         .with::<EditionSession>()
         .with::<LayoutSession>()
         .with::<RuntimeSession>();
@@ -1849,7 +1848,7 @@ async fn test_buffered_bytes_are_writer_scoped() -> VortexResult<()> {
 #[tokio::test]
 async fn test_encoding_registered_after_write_options() -> VortexResult<()> {
     // A session that does not know about ZigZag yet.
-    let session = array_session()
+    let session = VortexSession::empty()
         .with::<EditionSession>()
         .with::<LayoutSession>()
         .with::<RuntimeSession>();

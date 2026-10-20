@@ -348,7 +348,7 @@ mod tests {
     use crate::array::ParquetVariantArraySlotsExt;
 
     static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-        let session = vortex_array::array_session();
+        let session = VortexSession::empty();
         crate::initialize(&session);
         session
     });
@@ -357,7 +357,7 @@ mod tests {
         let dtype = array.dtype().clone();
         let len = array.len();
 
-        let session = vortex_array::array_session();
+        let session = VortexSession::empty();
         session.arrays().register(ParquetVariant);
 
         let ctx = ArrayContext::empty();
@@ -401,7 +401,7 @@ mod tests {
     fn parquet_variant_file_session() -> VortexResult<VortexSession> {
         const TEST_EDITION: EditionId = EditionId::new("test", 2026, 7, 0);
 
-        let session = vortex_array::array_session()
+        let session = VortexSession::empty()
             .with::<LayoutSession>()
             .with::<RuntimeSession>();
         vortex_file::register_default_encodings(&session);

@@ -462,7 +462,6 @@ mod tests {
     use super::ListViewRebuildMode;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::ListViewArray;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::listview::ListViewArrayExt;
@@ -473,7 +472,7 @@ mod tests {
 
     #[test]
     fn test_rebuild_flatten_removes_overlaps() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         // Create a list view with overlapping lists: [A, B, C]
         // List 0: offset=0, size=3 -> [A, B, C]
         // List 1: offset=1, size=2 -> [B, C] (overlaps with List 0)
@@ -514,7 +513,7 @@ mod tests {
 
     #[test]
     fn test_rebuild_flatten_with_nullable() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         use crate::arrays::BoolArray;
 
         // Create a nullable list view with a null list
@@ -596,7 +595,7 @@ mod tests {
     #[case::trim_elements(ListViewRebuildMode::TrimElements)]
     #[case::make_exact(ListViewRebuildMode::MakeExact)]
     fn test_rebuild_empty_drops_elements(#[case] mode: ListViewRebuildMode) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         // No lists, but three elements left in the buffer.
         let listview = ListViewArray::new(
             PrimitiveArray::from_iter([1i32, 2, 3]).into_array(),
@@ -615,7 +614,7 @@ mod tests {
 
     #[test]
     fn test_rebuild_trim_elements_basic() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         // Test trimming both leading and trailing unused elements while preserving gaps in the
         // middle.
         // Elements: [_, _, A, B, _, C, D, _, _]
@@ -697,7 +696,7 @@ mod tests {
 
     #[test]
     fn test_rebuild_with_trailing_nulls_regression() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         // Regression test for issue #5412
         // Tests that zero-copy-to-list arrays with trailing NULLs correctly calculate
         // offsets for NULL items to maintain no-overlap invariant
@@ -757,7 +756,7 @@ mod tests {
     /// u32 offsets exceed u16::MAX, so u16 sizes are widened to u32 for the add.
     #[test]
     fn test_rebuild_trim_elements_offsets_wider_than_sizes() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let mut elems = vec![0i32; 70_005];
         elems[70_000] = 10;
         elems[70_001] = 20;
@@ -783,7 +782,7 @@ mod tests {
     /// u32 sizes exceed u16::MAX, so u16 offsets are widened to u32 for the add.
     #[test]
     fn test_rebuild_trim_elements_sizes_wider_than_offsets() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let mut elems = vec![0i32; 70_001];
         elems[3] = 30;
         elems[4] = 40;
@@ -807,7 +806,7 @@ mod tests {
     /// the result offset/size dtypes preserve signedness (widened to >=32-bit for offsets).
     #[test]
     fn test_rebuild_preserves_signed_offset_and_size_types() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         use crate::arrays::listview::ListViewArraySlotsExt;
         use crate::dtype::PType;
 
@@ -853,7 +852,7 @@ mod tests {
     /// Both offsets and sizes are u8, and offset + size exceeds u8::MAX.
     #[test]
     fn test_rebuild_trim_elements_sum_overflows_type() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let elements = PrimitiveArray::from_iter(vec![0i32; 261]).into_array();
         let offsets = PrimitiveArray::from_iter(vec![215u8, 0]).into_array();
         let sizes = PrimitiveArray::from_iter(vec![46u8, 10]).into_array();

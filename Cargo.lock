@@ -11648,6 +11648,7 @@ dependencies = [
  "vortex-file",
  "vortex-io",
  "vortex-layout",
+ "vortex-session",
  "vortex-utils",
 ]
 

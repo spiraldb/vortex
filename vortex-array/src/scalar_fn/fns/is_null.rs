@@ -117,7 +117,6 @@ mod tests {
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::StructArray;
     use crate::dtype::DType;
@@ -134,6 +133,8 @@ mod tests {
     use crate::stats::StatsSession;
     use crate::stats::all_non_null;
     use crate::stats::null_count;
+
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     static STATS_SESSION: LazyLock<VortexSession> =
         LazyLock::new(|| VortexSession::empty().with::<StatsSession>());
@@ -162,7 +163,7 @@ mod tests {
         for (i, expected_value) in expected.iter().enumerate() {
             assert_eq!(
                 result
-                    .execute_scalar(i, &mut array_session().create_execution_ctx())
+                    .execute_scalar(i, &mut SESSION.create_execution_ctx())
                     .unwrap(),
                 Scalar::bool(*expected_value, Nullability::NonNullable)
             );
@@ -180,7 +181,7 @@ mod tests {
         for i in 0..result.len() {
             assert_eq!(
                 result
-                    .execute_scalar(i, &mut array_session().create_execution_ctx())
+                    .execute_scalar(i, &mut SESSION.create_execution_ctx())
                     .unwrap(),
                 Scalar::bool(false, Nullability::NonNullable)
             );
@@ -200,7 +201,7 @@ mod tests {
         for i in 0..result.len() {
             assert_eq!(
                 result
-                    .execute_scalar(i, &mut array_session().create_execution_ctx())
+                    .execute_scalar(i, &mut SESSION.create_execution_ctx())
                     .unwrap(),
                 Scalar::bool(true, Nullability::NonNullable)
             );
@@ -229,7 +230,7 @@ mod tests {
         for (i, expected_value) in expected.iter().enumerate() {
             assert_eq!(
                 result
-                    .execute_scalar(i, &mut array_session().create_execution_ctx())
+                    .execute_scalar(i, &mut SESSION.create_execution_ctx())
                     .unwrap(),
                 Scalar::bool(*expected_value, Nullability::NonNullable)
             );

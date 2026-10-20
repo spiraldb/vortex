@@ -22,7 +22,6 @@ use rstest::rstest;
 use tempfile::NamedTempFile;
 use vortex::array::IntoArray;
 use vortex::array::VortexSessionExecute;
-use vortex::array::array_session;
 use vortex::array::arrays::BoolArray;
 use vortex::array::arrays::ConstantArray;
 use vortex::array::arrays::DictArray;
@@ -1018,7 +1017,7 @@ async fn write_vortex_file_with_encodings() -> NamedTempFile {
     // 4. Run-End
     let run_ends = buffer![3u32, 5];
     let run_values = buffer![100i32, 200];
-    let mut rle_ctx = array_session().create_execution_ctx();
+    let mut rle_ctx = SESSION.create_execution_ctx();
     let rle_array =
         RunEnd::try_new(run_ends.into_array(), run_values.into_array(), &mut rle_ctx).unwrap();
 

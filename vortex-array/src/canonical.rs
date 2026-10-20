@@ -1223,7 +1223,7 @@ mod tests {
     use crate::scalar::Scalar;
 
     /// A shared session for these canonical tests, used to create execution contexts.
-    static SESSION: LazyLock<VortexSession> = LazyLock::new(crate::array_session);
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     fn variant_core_storage(len: usize) -> ArrayRef {
         ConstantArray::new(

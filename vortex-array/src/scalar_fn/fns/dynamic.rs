@@ -279,16 +279,17 @@ impl DynamicExprUpdates {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
     use std::sync::atomic::AtomicI32;
     use std::sync::atomic::Ordering;
 
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
+    use vortex_session::VortexSession;
 
     use super::*;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::assert_arrays_eq;
     use crate::dtype::DType;
@@ -296,6 +297,8 @@ mod tests {
     use crate::dtype::PType;
     use crate::expr::dynamic;
     use crate::expr::root;
+
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     #[test]
     fn is_not_strict() {
@@ -329,7 +332,7 @@ mod tests {
 
     #[test]
     fn execute_with_value() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let input = buffer![1i32, 5, 10].into_array();
         let expr = dynamic(
             CompareOperator::Lt,
@@ -345,7 +348,7 @@ mod tests {
 
     #[test]
     fn execute_without_value_default_true() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let input = buffer![1i32, 5, 10].into_array();
         let expr = dynamic(
             CompareOperator::Lt,
@@ -361,7 +364,7 @@ mod tests {
 
     #[test]
     fn execute_without_value_default_false() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let input = buffer![1i32, 5, 10].into_array();
         let expr = dynamic(
             CompareOperator::Lt,
@@ -381,7 +384,7 @@ mod tests {
 
     #[test]
     fn execute_value_flips() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let threshold = Arc::new(AtomicI32::new(5));
         let threshold_clone = Arc::clone(&threshold);
         let expr = dynamic(

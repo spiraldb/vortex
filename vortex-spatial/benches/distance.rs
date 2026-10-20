@@ -41,6 +41,7 @@ const POINT_ROWS: usize = 512;
 const POLYGON_ROWS: usize = 32;
 
 fn main() {
+    LazyLock::force(&SESSION);
     divan::main();
 }
 

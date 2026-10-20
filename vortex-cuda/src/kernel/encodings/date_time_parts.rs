@@ -200,6 +200,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use rstest::rstest;
     use vortex::array::IntoArray;
     use vortex::array::arrays::PrimitiveArray;
@@ -213,11 +215,14 @@ mod tests {
     use vortex::error::VortexExpect;
     use vortex::error::VortexResult;
     use vortex::extension::datetime::TimeUnit;
+    use vortex::session::VortexSession;
     use vortex_array::VortexSessionExecute;
 
     use super::*;
     use crate::CanonicalCudaExt;
     use crate::session::CudaSession;
+
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     fn make_datetimeparts_array(
         days: Vec<i32>,
@@ -279,7 +284,7 @@ mod tests {
         #[case] subseconds: Vec<i64>,
         #[case] time_unit: TimeUnit,
     ) -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -302,7 +307,7 @@ mod tests {
     /// entirely unsigned components, which is what panicked on `taxi`.
     #[crate::test]
     async fn test_cuda_datetimeparts_unsigned_components() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -343,7 +348,7 @@ mod tests {
     /// seconds, which is only decoded correctly if each component keeps its own signedness.
     #[crate::test]
     async fn test_cuda_datetimeparts_mixed_signedness() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -381,7 +386,7 @@ mod tests {
 
     #[crate::test]
     async fn test_cuda_datetimeparts_large_array() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -406,7 +411,7 @@ mod tests {
 
     #[crate::test]
     async fn test_cuda_datetimeparts_with_nulls() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
