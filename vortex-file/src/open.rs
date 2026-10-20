@@ -73,8 +73,8 @@ pub struct VortexOpenOptions {
     metrics_registry: Option<Arc<dyn MetricsRegistry>>,
     /// Default labels applied to all the file's metrics
     labels: Vec<Label>,
-    /// Whether to cache file's LayoutReader between scans
-    cache_layout_reader: bool,
+    /// Whether to cache the file's LayoutReader and V2 scan state between scans
+    scan_cache: bool,
 }
 
 /// Extension trait for constructing [`VortexOpenOptions`] from a session.
@@ -93,7 +93,7 @@ pub trait OpenOptionsSessionExt:
             include_metadata: false,
             metrics_registry: None,
             labels: Vec::default(),
-            cache_layout_reader: false,
+            scan_cache: false,
         }
     }
 }
@@ -124,8 +124,8 @@ impl VortexOpenOptions {
     /// This avoids rebuilding the reader tree or lowered scan plan, and re-reading dictionary
     /// values, for repeated scans of the same [`VortexFile`], at the cost of keeping that state
     /// alive for the lifetime of the file handle.
-    pub fn with_layout_reader_cache(mut self) -> Self {
-        self.cache_layout_reader = true;
+    pub fn with_scan_cache(mut self) -> Self {
+        self.scan_cache = true;
         self
     }
 
@@ -252,7 +252,7 @@ impl VortexOpenOptions {
             tracing::warn!("metrics registry is ignored for in-memory `open_buffer`");
         }
 
-        let cache_layout_reader = self.cache_layout_reader;
+        let scan_cache = self.scan_cache;
         let include_metadata = self.include_metadata;
         let mut opts = self.with_initial_read_size(0);
 
@@ -272,7 +272,7 @@ impl VortexOpenOptions {
             Arc::new(HashMap::new())
         };
         let file = VortexFile::new(footer, segment_source, opts.session).with_metadata(metadata);
-        Ok(if cache_layout_reader {
+        Ok(if scan_cache {
             file.with_caching()
         } else {
             file
@@ -350,7 +350,7 @@ impl VortexOpenOptions {
         };
         let file =
             VortexFile::new(footer, segment_source, self.session.clone()).with_metadata(metadata);
-        Ok(if self.cache_layout_reader {
+        Ok(if self.scan_cache {
             file.with_caching()
         } else {
             file

@@ -148,7 +148,7 @@ impl VortexRandomAccessor {
     ) -> anyhow::Result<Self> {
         let file = SESSION
             .open_options()
-            .with_layout_reader_cache()
+            .with_scan_cache()
             .open_path(path.as_ref())
             .await?;
         Ok(Self {
@@ -167,7 +167,7 @@ impl VortexRandomAccessor {
     ) -> anyhow::Result<Self> {
         let file = SESSION
             .open_options()
-            .with_layout_reader_cache()
+            .with_scan_cache()
             .open_object_store(remote.store(), remote.key(path)?)
             .await?;
         Ok(Self {
