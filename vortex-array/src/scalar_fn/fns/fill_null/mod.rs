@@ -13,6 +13,7 @@ use vortex_session::registry::CachedId;
 
 use crate::AnyColumnar;
 use crate::ArrayRef;
+use crate::Canonical;
 use crate::CanonicalView;
 use crate::ColumnarView;
 use crate::ExecutionCtx;
@@ -122,6 +123,14 @@ impl ScalarFnVTable for FillNull {
     ) -> VortexResult<ArrayRef> {
         let input = args.get(0)?;
         let fill_value = args.get(1)?;
+        // An empty input has no nulls to fill. Slicing a constant fill to an empty range yields
+        // an empty canonical array rather than a constant, so return before requiring a scalar.
+        if input.is_empty() {
+            let dtype = input
+                .dtype()
+                .with_nullability(fill_value.dtype().nullability());
+            return Ok(Canonical::empty(&dtype).into_array());
+        }
         // Parent kernels decline a fill that is not already constant. Materialize it here so a
         // lazy scalar, such as a literal `ScalarFnArray`, can still fill nulls.
         let fill_was_lazy = !fill_value.is::<Constant>();
@@ -400,6 +409,46 @@ mod tests {
             err.to_string()
                 .contains("fill_null fill_value must be a constant/scalar")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn empty_input_ignores_non_constant_fill() -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let input = PrimitiveArray::from_option_iter(Vec::<Option<i32>>::new()).into_array();
+        let fill = PrimitiveArray::from_iter(Vec::<i32>::new()).into_array();
+
+        let result = FillNull::try_new(input, fill)?
+            .into_array()
+            .execute::<ArrayRef>(&mut ctx)?;
+
+        assert_eq!(
+            result.dtype(),
+            &DType::Primitive(PType::I32, Nullability::NonNullable)
+        );
+        assert!(result.is_empty());
+        Ok(())
+    }
+
+    /// Filling a chunked array slices the constant fill per chunk, and an empty slice is a
+    /// canonical array rather than a constant. Stacked fills over an empty chunk must still run.
+    #[test]
+    fn repeated_fill_over_empty_chunk() -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let input = ChunkedArray::try_new(
+            vec![
+                PrimitiveArray::from_option_iter(Vec::<Option<u16>>::new()).into_array(),
+                PrimitiveArray::from_option_iter([Some(7u16), None]).into_array(),
+            ],
+            DType::Primitive(PType::U16, Nullability::Nullable),
+        )?
+        .into_array();
+
+        let result = input
+            .fill_null(Scalar::primitive(1u16, Nullability::Nullable))?
+            .fill_null(Scalar::primitive(2u16, Nullability::NonNullable))?;
+
+        assert_arrays_eq!(result, PrimitiveArray::from_iter([7u16, 1]), &mut ctx);
         Ok(())
     }
 
