@@ -341,7 +341,8 @@ fn default_pruning_aggregate_fns(dtype: &DType) -> Vec<AggregateFnRef> {
 /// them.
 ///
 /// Entries beneath a nullable struct are still emitted, but the writer records no aggregates for
-/// them (see [`StatsNode::Unrecorded`]).
+/// them until struct nulls are propagated into children
+/// (<https://github.com/vortex-data/vortex/issues/9205>).
 ///
 /// This function is the single source of truth for the number and order of stats entries, used
 /// both when accumulating stats at write time and when reconstructing them from the footer at

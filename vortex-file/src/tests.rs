@@ -1565,11 +1565,15 @@ async fn exclude_legacy_statistics_empties_legacy_but_keeps_nested() -> VortexRe
     // Readers that predate nested stats reject a file whose `field_stats` doesn't have one entry
     // per top-level field, so the excluded legacy stats are still written, empty.
     let bytes = stats.write_flatbuffer_bytes()?;
-    let fb = flatbuffers::root::<fb::FileStatistics>(bytes.as_ref())
-        .vortex_expect("valid flatbuffer");
+    let fb =
+        flatbuffers::root::<fb::FileStatistics>(bytes.as_ref()).vortex_expect("valid flatbuffer");
     let field_stats = fb.field_stats().vortex_expect("field_stats is written");
     assert_eq!(field_stats.len(), 2);
-    assert!(field_stats.iter().all(|stats| stats.min().is_none() && stats.null_count().is_none()));
+    assert!(
+        field_stats
+            .iter()
+            .all(|stats| stats.min().is_none() && stats.null_count().is_none())
+    );
 
     Ok(())
 }
