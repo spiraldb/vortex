@@ -231,8 +231,14 @@ impl BitBufferMut {
     /// Create a new mutable buffer with requested `len` and all bits set to `false`.
     #[inline]
     pub fn new_unset(len: usize) -> Self {
+        Self::new_unset_in(len, BufferAllocatorRef::statically_allocated())
+    }
+
+    /// Create an unset mutable bit buffer with the provided allocator.
+    #[inline]
+    pub fn new_unset_in(len: usize, allocator: BufferAllocatorRef) -> Self {
         Self {
-            buffer: BufferMut::zeroed(len.div_ceil(8)),
+            buffer: BufferMut::zeroed_in(len.div_ceil(8), allocator),
             offset: 0,
             len,
         }
