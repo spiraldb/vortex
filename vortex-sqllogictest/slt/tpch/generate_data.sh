@@ -20,7 +20,8 @@ DATA_DIR="${SCRIPT_DIR}/data"
 mkdir -p "${DATA_DIR}"
 
 echo "Generating TPC-H data (SF=0.1)..."
-uvx tpchgen-cli -s 0.1 --format=parquet --parquet-compression='ZSTD(3)' --output-dir "${DATA_DIR}/"
+# Pinned: tpchgen-cli 4.0.0 replaced --format with a subcommand, breaking the unpinned call.
+uvx tpchgen-cli@4.0.0 parquet -s 0.1 --compression='ZSTD(3)' --output-dir "${DATA_DIR}/"
 
 for f in "${DATA_DIR}"/*.parquet; do
   echo "Converting $(basename "$f") to Vortex..."
