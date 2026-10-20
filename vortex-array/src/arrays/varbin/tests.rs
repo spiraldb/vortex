@@ -22,6 +22,7 @@ use crate::validity::Validity;
 
 #[fixture]
 fn binary_array() -> ArrayRef {
+    let mut ctx = array_session().create_execution_ctx();
     let values = Buffer::copy_from("hello worldhello world this is a long string".as_bytes());
     let offsets = buffer![0, 11, 44].into_array();
 
@@ -30,6 +31,7 @@ fn binary_array() -> ArrayRef {
         values,
         DType::Utf8(Nullability::NonNullable),
         Validity::NonNullable,
+        &mut ctx,
     )
     .unwrap()
     .into_array()
@@ -87,6 +89,7 @@ fn test_offsets_tile_utf8_rejects_negative_offsets() {
 #[case::negative_first(buffer![-1i32, 2, 3].into_array())]
 #[case::beyond_bytes(buffer![0i32, 2, 6].into_array())]
 fn try_new_rejects_invalid_offsets(#[case] offsets: ArrayRef) {
+    let mut ctx = array_session().create_execution_ctx();
     let values = Buffer::copy_from("hello".as_bytes());
 
     let result = VarBinArray::try_new(
@@ -94,6 +97,7 @@ fn try_new_rejects_invalid_offsets(#[case] offsets: ArrayRef) {
         values,
         DType::Binary(Nullability::NonNullable),
         Validity::NonNullable,
+        &mut ctx,
     );
 
     assert!(result.is_err());
@@ -101,6 +105,7 @@ fn try_new_rejects_invalid_offsets(#[case] offsets: ArrayRef) {
 
 #[test]
 fn try_new_allows_nonzero_first_offset() -> VortexResult<()> {
+    let mut ctx = array_session().create_execution_ctx();
     let values = Buffer::copy_from("hello".as_bytes());
     let offsets = buffer![1i32, 3, 5].into_array();
 
@@ -109,6 +114,7 @@ fn try_new_allows_nonzero_first_offset() -> VortexResult<()> {
         values,
         DType::Binary(Nullability::NonNullable),
         Validity::NonNullable,
+        &mut ctx,
     )?;
 
     assert_arrays_eq!(
@@ -121,6 +127,7 @@ fn try_new_allows_nonzero_first_offset() -> VortexResult<()> {
 
 #[test]
 fn try_new_rejects_unsorted_utf8_offsets_at_null_row() {
+    let mut ctx = array_session().create_execution_ctx();
     // Every non-null string is valid UTF-8, so only the offsets check rejects the null row 3..1.
     let values = Buffer::copy_from("hello".as_bytes());
     let offsets = buffer![0i32, 3, 1, 5].into_array();
@@ -130,6 +137,7 @@ fn try_new_rejects_unsorted_utf8_offsets_at_null_row() {
         values,
         DType::Utf8(Nullability::Nullable),
         Validity::from_iter([true, false, true]),
+        &mut ctx,
     );
 
     assert!(result.is_err());

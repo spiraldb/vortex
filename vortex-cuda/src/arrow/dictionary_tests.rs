@@ -8,6 +8,7 @@ use std::task::Poll;
 use futures::stream;
 use rstest::rstest;
 use vortex::array::IntoArray;
+use vortex::array::VortexSessionExecute;
 use vortex::array::array_session;
 use vortex::array::arrays::Constant;
 use vortex::array::arrays::DictArray;
@@ -79,6 +80,7 @@ fn read_plain(array: &ArrowArray, dtype: &DType) -> VortexResult<ArrayRef> {
                 buffer(array, 2)?.slice_unaligned(..),
                 dtype.clone(),
                 validity,
+                &mut array_session().create_execution_ctx(),
             )?
             .into_array())
         }
