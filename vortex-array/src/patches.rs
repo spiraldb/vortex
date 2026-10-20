@@ -1141,7 +1141,11 @@ fn filter_patches_with_mask<T: IntegerPType>(
     // The mask rank of each kept patch, and a bitmap over the original patches marking them.
     let mut new_patch_indices =
         BufferMut::<u64>::with_capacity_in(expected_matches, allocator.clone());
-    let mut kept_patches = BitBufferMut::new_unset_in(patch_count, allocator.clone());
+    let mut kept_patches = BitBufferMut::from_buffer(
+        BufferMut::zeroed_in(patch_count.div_ceil(8), allocator.clone()),
+        0,
+        patch_count,
+    );
 
     if patch_count > true_count {
         gallop_patches_for_mask_indices(
