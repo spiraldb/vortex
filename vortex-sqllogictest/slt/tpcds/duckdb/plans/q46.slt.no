@@ -539,8 +539,8 @@ logical_opt [
                                                                 "children": [],
                                                                 "extra_info": {
                                                                     "Filters": [
-                                                                        "vortex.list.contains([6i64, 0i64], $.d_dow, opts=sql_null_semantics)",
-                                                                        "vortex.list.contains([1999i64, 2000i64, 2001i64], $.d_year, opts=sql_null_semantics)",
+                                                                        "vortex.list.contains([0i64, 6i64], $.d_dow, opts=sql_null_semantics)",
+                                                                        "(1999i64 <= $.d_year <= 2001i64)",
                                                                         "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                     ],
                                                                     "Function": "Vortex Scan",
@@ -766,8 +766,8 @@ physical_plan [
                                                                         "extra_info": {
                                                                             "Function": "Vortex Scan",
                                                                             "Filters": [
-                                                                                "vortex.list.contains([6i64, 0i64], $.d_dow, opts=sql_null_semantics)",
-                                                                                "vortex.list.contains([1999i64, 2000i64, 2001i64], $.d_year, opts=sql_null_semantics)",
+                                                                                "vortex.list.contains([0i64, 6i64], $.d_dow, opts=sql_null_semantics)",
+                                                                                "(1999i64 <= $.d_year <= 2001i64)",
                                                                                 "(2450816i64 <= $.d_date_sk <= 2452642i64)"
                                                                             ],
                                                                             "Projections": "d_date_sk",

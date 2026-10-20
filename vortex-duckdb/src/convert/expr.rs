@@ -4,7 +4,6 @@
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::fmt::Result;
-use std::sync::Arc;
 
 use tracing::debug;
 use vortex::aggregate_fn::Accumulator;
@@ -18,7 +17,6 @@ use vortex::aggregate_fn::fns::max::Max;
 use vortex::aggregate_fn::fns::mean::Mean;
 use vortex::aggregate_fn::fns::min::Min;
 use vortex::aggregate_fn::fns::sum_v2::SumV2;
-use vortex::arrow::ArrowSessionExt;
 use vortex::dtype::DType;
 use vortex::dtype::Nullability;
 use vortex::dtype::PType;
@@ -33,7 +31,7 @@ use vortex::expr::byte_length;
 use vortex::expr::cast;
 use vortex::expr::col;
 use vortex::expr::get_item;
-use vortex::expr::in_list;
+use vortex::expr::in_list_of;
 use vortex::expr::is_not_null;
 use vortex::expr::is_null;
 use vortex::expr::list_length;
@@ -159,7 +157,7 @@ fn spatial_operand(value: &ExpressionRef, ctx: ConvertCtx<'_>) -> VortexResult<O
             let Some(buf) = storage.as_binary_opt().and_then(|b| b.value()) else {
                 return Ok(None);
             };
-            Ok(native_geometry_scalar_from_wkb(buf.as_slice(), &SESSION.arrow())?.map(lit))
+            Ok(native_geometry_scalar_from_wkb(buf.as_slice(), &SESSION)?.map(lit))
         }
         Some(BoundColumnRef(col_ref))
             if is_native_spatial_column(ctx.fields, col_ref.name.as_ref()) =>
@@ -752,14 +750,8 @@ fn try_from_compare_in(
     else {
         return Ok(None);
     };
-    // The IN list itself is never null. Null values are elements, and in_list handles them.
-    let list = Scalar::list(
-        Arc::new(list_elements[0].dtype().clone()),
-        list_elements,
-        Nullability::NonNullable,
-    );
-
-    let expr = in_list(element, lit(list));
+    let element_dtype = list_elements[0].dtype().clone();
+    let expr = in_list_of(element, element_dtype, list_elements)?;
     Ok(Some(if not_in { not(expr) } else { expr }))
 }
 

@@ -296,6 +296,7 @@ mod tests {
             PrimitiveArray::from_iter([0i32, 2, 4]).into_array(),
             PrimitiveArray::from_iter([2i32, 2, 2]).into_array(),
             Validity::from_iter([true, false, true]),
+            &mut ctx,
         )
         .unwrap();
         assert_arrays_eq!(result, expected, &mut ctx);

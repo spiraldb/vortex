@@ -208,6 +208,7 @@ mod tests {
             offsets.into_array(),
             sizes.into_array(),
             Validity::AllValid,
+            &mut ctx,
         );
 
         // Convert to Arrow ListView with i32 offsets.

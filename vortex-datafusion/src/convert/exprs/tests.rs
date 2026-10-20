@@ -15,6 +15,7 @@ use arrow_schema::TimeUnit as ArrowTimeUnit;
 use arrow_schema::extension::Uuid as ArrowUuid;
 use datafusion_common::ScalarValue;
 use datafusion_common::arrow::buffer::NullBuffer;
+use datafusion_common::arrow::compute::cast;
 use datafusion_common::arrow::datatypes::i256 as arrow_i256;
 use datafusion_common::config::ConfigOptions;
 use datafusion_common::metadata::FieldMetadata;
@@ -34,7 +35,11 @@ use vortex::array::arrays::PrimitiveArray;
 use vortex::array::builtins::ArrayBuiltins;
 use vortex::dtype::PType;
 use vortex::encodings::uuid::Uuid;
+use vortex::expr::between;
 use vortex::scalar::Scalar;
+use vortex::scalar_fn::fns::between::BetweenOptions;
+use vortex::scalar_fn::fns::between::StrictComparison;
+use vortex::scalar_fn::fns::list_contains::ListContains;
 use vortex::scalar_fn::fns::literal::Literal;
 use vortex_array::assert_arrays_eq;
 
@@ -322,6 +327,71 @@ fn test_native_in_list_large(#[values(false, true)] negated: bool) -> anyhow::Re
         negated,
         batch,
     )
+}
+
+#[rstest]
+fn test_in_list_converts_to_set_lookup(#[values(false, true)] negated: bool) -> DFResult<()> {
+    let schema = Schema::new(vec![Field::new("a", DataType::Int32, true)]);
+    let expr = Arc::new(df_expr::InListExpr::try_new(
+        Arc::new(df_expr::Column::new("a", 0)),
+        int_literals([Some(1), Some(3), Some(7)]),
+        negated,
+        &schema,
+    )?);
+    let element_dtype = Arc::new(DType::Primitive(PType::I32, Nullability::NonNullable));
+    let list = Scalar::list(
+        element_dtype,
+        vec![1i32.into(), 3i32.into(), 7i32.into()],
+        Nullability::NonNullable,
+    );
+    let membership = vortex::expr::in_list(get_item("a", root()), lit(list));
+    let expected = if negated { not(membership) } else { membership };
+
+    assert_eq!(convert(expr, &schema)?, expected);
+    Ok(())
+}
+
+#[test]
+fn test_contiguous_in_list_converts_to_between() -> DFResult<()> {
+    let schema = Schema::new(vec![Field::new("a", DataType::Int32, true)]);
+    let expr = Arc::new(df_expr::InListExpr::try_new(
+        Arc::new(df_expr::Column::new("a", 0)),
+        int_literals([Some(3), Some(1), Some(2), Some(2)]),
+        false,
+        &schema,
+    )?);
+    let options = BetweenOptions {
+        lower_strict: StrictComparison::NonStrict,
+        upper_strict: StrictComparison::NonStrict,
+    };
+    assert_eq!(
+        convert(expr, &schema)?,
+        between(get_item("a", root()), lit(1i32), lit(3i32), options)
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case::utf8(DataType::Utf8)]
+#[case::utf8_view(DataType::Utf8View)]
+fn test_in_list_from_array_converts_to_set_lookup(#[case] data_type: DataType) -> DFResult<()> {
+    let schema = Schema::new(vec![Field::new("a", data_type.clone(), true)]);
+    let values = cast(
+        &arrow_array::StringArray::from(vec![Some("x"), None, Some("y"), Some("x")]),
+        &data_type,
+    )?;
+    let expr = Arc::new(df_expr::InListExpr::try_new_from_array(
+        Arc::new(df_expr::Column::new("a", 0)),
+        values,
+        false,
+        &schema,
+    )?);
+    let converted = convert(expr, &schema)?;
+    assert!(
+        converted.is::<ListContains>(),
+        "expected a set lookup, got {converted}"
+    );
+    Ok(())
 }
 
 #[rstest]

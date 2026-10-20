@@ -1057,6 +1057,7 @@ fn test_append_scalar_repeated_same_instance() {
         (0..CHUNK_LEN as u64).collect::<Buffer<_>>().into_array(),
         Buffer::full(1u64, CHUNK_LEN).into_array(),
         Validity::NonNullable,
+        &mut array_session().create_execution_ctx(),
     )
     .into_array(),
     |array: &ArrayRef| array.as_::<ListView>().elements().clone()
@@ -1249,11 +1250,13 @@ fn constant_i32() -> ArrayRef {
 
 /// Two lists of [`CHUNK_LEN`] elements each, so that appending them chunks the elements.
 fn two_lists_of_chunk_len() -> ListViewArray {
+    let mut ctx = array_session().create_execution_ctx();
     ListViewArray::new(
         iota(2 * CHUNK_LEN),
         u64s([0, CHUNK_LEN]),
         u64s([CHUNK_LEN, CHUNK_LEN]),
         Validity::NonNullable,
+        &mut ctx,
     )
 }
 
@@ -1286,6 +1289,7 @@ fn u64s(values: impl IntoIterator<Item = usize>) -> ArrayRef {
         iota(2 * CHUNK_LEN),
         u64s([0, CHUNK_LEN, 2 * CHUNK_LEN]),
         Validity::NonNullable,
+        &mut array_session().create_execution_ctx(),
     )
     .into_array()
 )]
@@ -1318,6 +1322,7 @@ fn test_list_offsets_are_rebased_across_element_chunks(
             .into_array(),
         buffer![0u32, 64, 128, 192, 256].into_array(),
         Validity::NonNullable,
+        &mut ctx,
     );
     assert_arrays_eq!(built, independent, &mut ctx);
     Ok(())
@@ -1352,6 +1357,7 @@ fn test_list_builder_offsets_are_rebased_across_element_chunks() -> VortexResult
             .into_array(),
         u64s((0..=3).map(|i| i * CHUNK_LEN)),
         Validity::NonNullable,
+        &mut ctx,
     );
     assert_arrays_eq!(&built, &expected, &mut ctx);
 
