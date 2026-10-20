@@ -13,6 +13,9 @@
 //! error; filters and limits are not part of this builder's API. Work is partitioned into fixed
 //! chunks of up to 65,536 rows, independently of the stored layout's chunk boundaries.
 //! Full-file projections use smaller 8,192-row multiples when serialized bytes per row are high.
+//! When a wide projection has too few row chunks to occupy every thread, each chunk is further
+//! divided into groups of columns that decode on their own tasks, and the groups' batches are
+//! zipped back into one batch per row chunk.
 //!
 //! A [`ScanFile`] carrying a [`ScanCache`] shares its lowered plan, segment index, and dictionary
 //! values with every other scan of that file, like a cached layout reader does for V1 scans.
@@ -29,27 +32,39 @@ use std::sync::Arc;
 use arrow_array::RecordBatch;
 use arrow_schema::ArrowError;
 use arrow_schema::Field;
+use arrow_schema::Fields;
 use arrow_schema::SchemaRef;
 use futures::Stream;
 use futures::StreamExt;
 use futures::TryStreamExt;
+use futures::future::try_join_all;
 use futures::stream;
 use futures::stream::BoxStream;
 use vortex_array::ArrayRef;
+use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
+use vortex_array::arrays::StructArray;
+use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::dtype::DType;
+use vortex_array::dtype::FieldNames;
 use vortex_array::expr::BoundExpression;
+use vortex_array::validity::Validity;
 use vortex_error::VortexResult;
+use vortex_error::vortex_ensure_eq;
+use vortex_error::vortex_err;
 use vortex_io::request::IoService;
 use vortex_io::session::RuntimeSessionExt;
 use vortex_scan::planning::planner::WorkScope;
 use vortex_scan::selection::Selection;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
+use vortex_utils::aliases::hash_map::HashMap;
+use vortex_utils::aliases::hash_set::HashSet;
 use vortex_utils::parallelism::get_available_parallelism;
 
 pub use self::cache::ScanCache;
 use crate::LayoutRef;
+use crate::plan::physical::Pack;
 use crate::plan::physical::lower;
 use crate::plan::physical::optimize;
 use crate::plan::physical::plan_row_idx_expression;
@@ -65,6 +80,12 @@ use crate::segments::SegmentSource;
 const ROW_BLOCK_SIZE: usize = 8192;
 const MAX_ROWS_PER_CHUNK: usize = 8 * ROW_BLOCK_SIZE;
 const TARGET_BYTES_PER_CHUNK: u64 = 8 * 1024 * 1024;
+/// The fewest fields a column group holds. Narrower groups cost more in per-task planning than
+/// they gain in parallelism.
+const MIN_FIELDS_PER_GROUP: usize = 16;
+/// Tasks per thread a scan aims for when it divides row chunks into column groups, so that
+/// uneven columns still leave every thread busy.
+const TASKS_PER_THREAD: usize = 2;
 
 /// Limit estimated bytes per task without changing the writer-aligned row granularity.
 fn rows_per_chunk(row_count: u64, locations: &[SegmentLocation]) -> usize {
@@ -78,6 +99,19 @@ fn rows_per_chunk(row_count: u64, locations: &[SegmentLocation]) -> usize {
     let bytes_per_row = bytes.div_ceil(row_count).max(1);
     let blocks = TARGET_BYTES_PER_CHUNK / bytes_per_row / ROW_BLOCK_SIZE as u64;
     blocks.clamp(1, 8) as usize * ROW_BLOCK_SIZE
+}
+
+/// The number of column groups each of `splits` row chunks of a projection with `nfields` fields
+/// divides into, so the scan has at least [`TASKS_PER_THREAD`] tasks per thread.
+fn column_group_count(nfields: usize, splits: usize, parallelism: usize) -> usize {
+    let target = TASKS_PER_THREAD * parallelism;
+    if splits == 0 || splits >= target {
+        return 1;
+    }
+    target
+        .div_ceil(splits)
+        .min(nfields / MIN_FIELDS_PER_GROUP)
+        .max(1)
 }
 
 /// Fixed boundaries in the file's row domain, clipped to the requested range.
@@ -120,12 +154,18 @@ pub struct ScanBuilder<A = ArrayRef> {
     selection: Selection,
     concurrency: usize,
     map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
+    /// Zips the mapped batches of a row chunk's column groups, in field order, into one batch.
+    zip_fn: ZipFn<A>,
     row_offset: u64,
 }
+
+/// Zips column-group batches covering the same rows into one batch.
+type ZipFn<A> = Arc<dyn Fn(Vec<A>) -> VortexResult<A> + Send + Sync>;
 
 impl ScanBuilder<ArrayRef> {
     /// Creates a V2 scan over the file's layout and segment source.
     pub fn new(session: VortexSession, file: ScanFile) -> Self {
+        let zip_session = session.clone();
         Self {
             projection: BoundExpression::new_root(file.layout.dtype().clone()),
             session,
@@ -135,6 +175,7 @@ impl ScanBuilder<ArrayRef> {
             selection: Selection::default(),
             concurrency: 4,
             map_fn: Arc::new(Ok),
+            zip_fn: Arc::new(move |parts| zip_struct_fields(parts, &zip_session)),
             row_offset: 0,
         }
     }
@@ -145,12 +186,39 @@ impl ScanBuilder<ArrayRef> {
         schema: SchemaRef,
     ) -> VortexResult<impl Stream<Item = Result<RecordBatch, ArrowError>> + Send + 'static> {
         let struct_field = Field::new_struct("", schema.fields().clone(), false);
+        let field_index: HashMap<String, usize> = schema
+            .fields()
+            .iter()
+            .enumerate()
+            .map(|(index, field)| (field.name().clone(), index))
+            .collect();
         let session = self.session.clone();
+        let zip_schema = Arc::clone(&schema);
         Ok(self
-            .map(move |chunk| {
-                let mut ctx = session.create_execution_ctx();
-                to_record_batch(chunk, &struct_field, &mut ctx)
-            })
+            .map(
+                move |chunk| {
+                    let mut ctx = session.create_execution_ctx();
+                    // A column group's batch converts with the schema of its own fields.
+                    let group_field = match chunk.dtype().as_struct_fields_opt() {
+                        Some(fields) if fields.nfields() != schema.fields().len() => {
+                            Some(group_struct_field(&schema, &field_index, fields.names())?)
+                        }
+                        _ => None,
+                    };
+                    to_record_batch(
+                        chunk,
+                        group_field.as_ref().unwrap_or(&struct_field),
+                        &mut ctx,
+                    )
+                },
+                move |parts| {
+                    let columns = parts
+                        .iter()
+                        .flat_map(|batch| batch.columns().iter().cloned())
+                        .collect();
+                    Ok(RecordBatch::try_new(Arc::clone(&zip_schema), columns)?)
+                },
+            )
             .into_stream()?
             .map_err(|error| ArrowError::ExternalError(Box::new(error))))
     }
@@ -204,10 +272,12 @@ impl<A: 'static + Send> ScanBuilder<A> {
         self
     }
 
-    /// Maps each output batch on its split's task.
+    /// Maps each output batch on its split's task. A batch of a column group is mapped on its own,
+    /// and `zip_fn` then joins the mapped batches of a row chunk's groups.
     fn map<B: 'static>(
         self,
         map_fn: impl Fn(A) -> VortexResult<B> + 'static + Send + Sync,
+        zip_fn: impl Fn(Vec<B>) -> VortexResult<B> + 'static + Send + Sync,
     ) -> ScanBuilder<B> {
         let old_map_fn = self.map_fn;
         ScanBuilder {
@@ -220,6 +290,7 @@ impl<A: 'static + Send> ScanBuilder<A> {
             concurrency: self.concurrency,
             row_offset: self.row_offset,
             map_fn: Arc::new(move |array| old_map_fn(array).and_then(&map_fn)),
+            zip_fn: Arc::new(zip_fn),
         }
     }
 
@@ -245,8 +316,12 @@ struct PreparedScan<A: 'static + Send> {
     io: Arc<dyn IoService>,
     /// The scan's splits, over the root row domain, in row order.
     splits: Vec<Range<u64>>,
+    /// Plans of disjoint column groups that together make up the projection, in field order.
+    /// Empty unless the scan divides its row chunks by column.
+    column_groups: Vec<ScanPlans>,
     selection: Selection,
     map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
+    zip_fn: ZipFn<A>,
     ordered: bool,
     concurrency: usize,
 }
@@ -283,43 +358,89 @@ impl<A: 'static + Send> PreparedScan<A> {
             MAX_ROWS_PER_CHUNK
         };
         let splits = row_chunks(builder.row_range.unwrap_or(0..row_count), chunk_rows);
+        // A wide struct projection with too few row chunks for every thread also splits by
+        // column. The groups' plans share the projection's children, so planning them is cheap.
+        // Arrow batches of the groups are matched to the schema by field name, so names must be
+        // unique.
+        let group_projections = match projection.as_opt::<Pack>() {
+            Some(pack)
+                if !pack.dtype().is_nullable() && has_unique_names(pack.fields().names()) =>
+            {
+                let nfields = pack.nfields();
+                let groups = column_group_count(
+                    nfields,
+                    splits.len(),
+                    get_available_parallelism().unwrap_or(1),
+                );
+                if groups > 1 {
+                    (0..groups)
+                        .map(|group| {
+                            pack.project_range(
+                                group * nfields / groups..(group + 1) * nfields / groups,
+                            )
+                        })
+                        .collect::<VortexResult<Vec<_>>>()?
+                } else {
+                    Vec::new()
+                }
+            }
+            _ => Vec::new(),
+        };
         let ranges = match cache.ranges() {
             Some(ranges) => ranges,
             None => cache.insert_ranges(segment_ranges(&file.locations)),
         };
         let io = Arc::new(SegmentScanIo::new(file.segments, ranges));
-        Ok(Self {
-            session: builder.session.clone(),
-            plans: ScanPlans {
-                session: builder.session,
-                locations: file.locations,
+        let plans = ScanPlans {
+            session: builder.session,
+            locations: file.locations,
+            projection,
+            row_offset: builder.row_offset,
+            values: cache.values(),
+        };
+        let column_groups = group_projections
+            .into_iter()
+            .map(|projection| ScanPlans {
                 projection,
-                row_offset: builder.row_offset,
-                values: cache.values(),
-            },
+                ..plans.clone()
+            })
+            .collect();
+        Ok(Self {
+            session: plans.session.clone(),
+            plans,
             io,
             splits,
+            column_groups,
             selection: builder.selection,
             map_fn: builder.map_fn,
+            zip_fn: builder.zip_fn,
             ordered: builder.ordered,
             concurrency: builder.concurrency,
         })
     }
 
-    /// The splits with selected rows, each ready to be admitted to a planning run.
-    fn split_plans(&self) -> Vec<SplitPlan> {
+    /// The splits with selected rows, each ready to be admitted to a planning run: one per row
+    /// chunk, or one per column group of each row chunk.
+    fn split_plans(&self) -> Vec<Vec<SplitPlan>> {
+        let groups = if self.column_groups.is_empty() {
+            std::slice::from_ref(&self.plans)
+        } else {
+            self.column_groups.as_slice()
+        };
         self.splits
             .iter()
             .filter_map(|rows| {
-                let (scope, root) = plan_selection(
-                    &self.plans,
-                    WorkScope {
-                        file_ordinal: 0,
-                        rows: rows.clone(),
-                    },
-                    &self.selection,
-                )?;
-                Some(SplitPlan { scope, root })
+                let scope = WorkScope {
+                    file_ordinal: 0,
+                    rows: rows.clone(),
+                };
+                groups
+                    .iter()
+                    .map(|plans| {
+                        let (scope, root) = plan_selection(plans, scope.clone(), &self.selection)?;
+                        Some(SplitPlan { scope, root })
+                    })
+                    .collect()
             })
             .collect()
     }
@@ -329,23 +450,34 @@ impl<A: 'static + Send> PreparedScan<A> {
     /// Like the default executor, up to `concurrency` splits per thread run at once, and their
     /// batches are yielded in row order when the scan is ordered.
     fn execute_stream(self) -> VortexResult<BoxStream<'static, VortexResult<A>>> {
-        let concurrency = self.concurrency * get_available_parallelism().unwrap_or(1);
+        let groups = self.column_groups.len().max(1);
+        let concurrency = (self.concurrency * get_available_parallelism().unwrap_or(1))
+            .div_ceil(groups)
+            .max(1);
         let handle = self.session.handle();
         let split_plans = self.split_plans();
         let io = self.io;
         let map_fn = self.map_fn;
-        // Spawned as the buffer pulls them, so at most `concurrency` splits read at once.
-        let tasks = stream::iter(split_plans).map(move |split| {
-            let io = Arc::clone(&io);
-            let map_fn = Arc::clone(&map_fn);
-            handle.spawn(async move {
-                split
-                    .run(io)
-                    .await?
-                    .into_iter()
-                    .map(|array| map_fn(array))
-                    .collect::<VortexResult<Vec<_>>>()
-            })
+        let zip_fn = self.zip_fn;
+        // Spawned as the buffer pulls them, so at most `concurrency` row chunks read at once.
+        let tasks = stream::iter(split_plans).map(move |groups| {
+            let parts = groups
+                .into_iter()
+                .map(|split| {
+                    let io = Arc::clone(&io);
+                    let map_fn = Arc::clone(&map_fn);
+                    handle.spawn(async move {
+                        split
+                            .run(io)
+                            .await?
+                            .into_iter()
+                            .map(|array| map_fn(array))
+                            .collect::<VortexResult<Vec<_>>>()
+                    })
+                })
+                .collect::<Vec<_>>();
+            let zip_fn = Arc::clone(&zip_fn);
+            async move { zip_column_groups(try_join_all(parts).await?, zip_fn.as_ref()) }
         });
         let batches = if self.ordered {
             tasks.buffered(concurrency).boxed()
@@ -357,4 +489,69 @@ impl<A: 'static + Send> PreparedScan<A> {
             .try_flatten()
             .boxed())
     }
+}
+
+fn has_unique_names(names: &FieldNames) -> bool {
+    let mut seen = HashSet::with_capacity(names.len());
+    names.iter().all(|name| seen.insert(name))
+}
+
+/// Zips the batches of a row chunk's column groups, batch by batch. Every group of a chunk
+/// projects the same rows, so each yields the same batches.
+fn zip_column_groups<A>(
+    mut groups: Vec<Vec<A>>,
+    zip_fn: &(dyn Fn(Vec<A>) -> VortexResult<A> + Send + Sync),
+) -> VortexResult<Vec<A>> {
+    if groups.len() == 1 {
+        return Ok(groups.remove(0));
+    }
+    let batches = groups.first().map_or(0, Vec::len);
+    for group in &groups {
+        vortex_ensure_eq!(
+            group.len(),
+            batches,
+            "column groups of one row chunk produced different numbers of batches"
+        );
+    }
+    let mut groups = groups.into_iter().map(Vec::into_iter).collect::<Vec<_>>();
+    (0..batches)
+        .map(|_| zip_fn(groups.iter_mut().filter_map(Iterator::next).collect()))
+        .collect()
+}
+
+/// Joins struct arrays over the same rows into one struct array of all their fields, in order.
+fn zip_struct_fields(parts: Vec<ArrayRef>, session: &VortexSession) -> VortexResult<ArrayRef> {
+    let mut ctx = session.create_execution_ctx();
+    let len = parts.first().map_or(0, |part| part.len());
+    let mut names = Vec::new();
+    let mut fields = Vec::new();
+    for part in parts {
+        vortex_ensure_eq!(part.len(), len, "column groups cover different rows");
+        // Groups chunked by the stored layout pack into one struct of chunked fields.
+        let part = part.execute::<StructArray>(&mut ctx)?;
+        names.extend(part.names().iter().cloned());
+        fields.extend(part.iter_unmasked_fields().cloned());
+    }
+    Ok(
+        StructArray::try_new(FieldNames::from(names), fields, len, Validity::NonNullable)?
+            .into_array(),
+    )
+}
+
+/// The Arrow struct field for a column group's batch: the fields of `schema` named `names`.
+fn group_struct_field(
+    schema: &SchemaRef,
+    field_index: &HashMap<String, usize>,
+    names: &FieldNames,
+) -> VortexResult<Field> {
+    let fields = names
+        .iter()
+        .map(|name| {
+            field_index
+                .get(name.as_ref())
+                .map(|&index| Arc::clone(&schema.fields()[index]))
+                .ok_or_else(|| vortex_err!("column {name} is not in the Arrow schema"))
+        })
+        .collect::<VortexResult<Fields>>()?;
+    Ok(Field::new_struct("", fields, false))
 }
