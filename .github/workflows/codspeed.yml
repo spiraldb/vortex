@@ -256,6 +256,7 @@ jobs:
         with:
           name: codspeed-cpu-benchmarks-${{ matrix.features }}
           path: codspeed-cpu-benchmarks.tar
+          compression-level: 1
           retention-days: 1
           if-no-files-found: error
 
