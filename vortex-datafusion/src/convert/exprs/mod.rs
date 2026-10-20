@@ -342,7 +342,7 @@ impl DefaultExpressionConverter {
         }
 
         if let Some(cast_expr) = expr.downcast_ref::<df_expr::CastExpr>() {
-            let pushdown = classify_cast(cast_expr, schema)?.ok_or(Unconverted::Unsupported)?;
+            let pushdown = classify_cast(cast_expr, schema)?;
             let child = self.convert_expr(cast_expr.expr(), schema, input_dtype)?;
             // DataFusion casts preserve input nulls even when the target field is declared
             // non-nullable. Match the expression's runtime nullability rather than narrowing
@@ -351,20 +351,20 @@ impl DefaultExpressionConverter {
                 .arrow_dtype(cast_expr.target_field())?
                 .with_nullability(Nullability::from(cast_expr.nullable(schema)?));
             let child_dtype = converted_dtype(&child, input_dtype)?;
-            if matches!(pushdown, CastPushdown::Drop) {
+            return match pushdown {
                 // Matching Arrow types do not imply matching Vortex dtypes, e.g. for extensions.
-                if !child_dtype.eq_ignore_nullability(&cast_dtype) {
-                    return Err(Unconverted::Unsupported);
+                CastPushdown::Drop if child_dtype.eq_ignore_nullability(&cast_dtype) => Ok(child),
+                CastPushdown::Drop => Err(Unconverted::Unsupported),
+                CastPushdown::Keep => {
+                    // Matching Arrow storage types do not imply matching extension semantics.
+                    if (child_dtype.is_extension() || cast_dtype.is_extension())
+                        && !child_dtype.eq_ignore_nullability(&cast_dtype)
+                    {
+                        return Err(Unconverted::Unsupported);
+                    }
+                    Ok(cast(child, cast_dtype))
                 }
-                return Ok(child);
-            }
-            // Matching Arrow storage types do not imply matching extension semantics.
-            if (child_dtype.is_extension() || cast_dtype.is_extension())
-                && !child_dtype.eq_ignore_nullability(&cast_dtype)
-            {
-                return Err(Unconverted::Unsupported);
-            }
-            return Ok(cast(child, cast_dtype));
+            };
         }
 
         if let Some(not_expr) = expr.downcast_ref::<df_expr::NotExpr>() {
@@ -613,39 +613,33 @@ enum CastPushdown {
     Keep,
 }
 
-/// Classifies a cast for pushdown; `None` leaves it in DataFusion.
-fn classify_cast(cast: &df_expr::CastExpr, schema: &Schema) -> DFResult<Option<CastPushdown>> {
+/// Classifies a cast for pushdown; unsupported casts stay in DataFusion.
+fn classify_cast(cast: &df_expr::CastExpr, schema: &Schema) -> Conversion<CastPushdown> {
     use DataType::*;
     let options = cast.cast_options();
     if options.safe || options.format_options != DEFAULT_FORMAT_OPTIONS {
-        return Ok(None);
+        return Err(Unconverted::Unsupported);
     }
     let source = cast.expr().data_type(schema)?;
     let target = cast.cast_type();
-    if source == *target {
-        return Ok(Some(CastPushdown::Drop));
-    }
-    // Arrow expands runs through `take` with `Int32` indices, which keeps the dictionary values
-    // and only gathers keys. `Int64` run ends may exceed those indices, and decoding offset-based
-    // values may overflow their offsets, so neither is dropped.
-    if let RunEndEncoded(run_ends, values) = &source
-        && matches!(run_ends.data_type(), Int16 | Int32)
-        && matches!(values.data_type(), Dictionary(..))
-        && values.data_type() == target
-    {
-        return Ok(Some(CastPushdown::Drop));
-    }
-    let widening = matches!(
-        (&source, target),
+    Ok(match (&source, target) {
+        _ if source == *target => CastPushdown::Drop,
+        // Arrow expands runs by gathering with `Int32` indices, which fit Int16/Int32 run ends.
+        // Gathering a dictionary only moves keys and reuses the values, so nothing can overflow.
+        (RunEndEncoded(run_ends, values), Dictionary(..))
+            if matches!(run_ends.data_type(), Int16 | Int32) && values.data_type() == target =>
+        {
+            CastPushdown::Drop
+        }
         (Int8, Int16 | Int32 | Int64)
-            | (Int16, Int32 | Int64)
-            | (Int32, Int64)
-            | (UInt8, UInt16 | UInt32 | UInt64)
-            | (UInt16, UInt32 | UInt64)
-            | (UInt32, UInt64)
-            | (Float32, Float64)
-    );
-    Ok(widening.then_some(CastPushdown::Keep))
+        | (Int16, Int32 | Int64)
+        | (Int32, Int64)
+        | (UInt8, UInt16 | UInt32 | UInt64)
+        | (UInt16, UInt32 | UInt64)
+        | (UInt32, UInt64)
+        | (Float32, Float64) => CastPushdown::Keep,
+        _ => return Err(Unconverted::Unsupported),
+    })
 }
 
 fn try_operator_from_df(value: &DFOperator) -> Option<Operator> {
