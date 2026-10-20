@@ -19,6 +19,11 @@
 //! Multiple plugins may register against the same key. They are tried in registration order;
 //! each may return [`ArrowExport::Unsupported`] / [`ArrowImport::Unsupported`] to defer to
 //! the next.
+//!
+//! The default extension export uses standard padded base64 for serialized Vortex metadata,
+//! marked by `vortex:extension:metadata:encoding = base64`. Import decodes marked metadata;
+//! unmarked Arrow metadata is preserved verbatim. Explicit Arrow plugins control their own
+//! metadata format, including canonical Arrow formats.
 
 use std::any::Any;
 use std::borrow::Cow;
@@ -41,6 +46,8 @@ use arrow_schema::Fields;
 use arrow_schema::Schema;
 use arrow_schema::extension::EXTENSION_TYPE_METADATA_KEY;
 use arrow_schema::extension::EXTENSION_TYPE_NAME_KEY;
+use base64::Engine as _;
+use base64::prelude::BASE64_STANDARD;
 use tracing::debug;
 use tracing::trace;
 use vortex_array::ArrayRef;
@@ -85,6 +92,8 @@ use crate::dtype::from_arrow_data_type;
 use crate::dtype::to_data_type_naive;
 use crate::executor::execute_arrow_naive;
 use crate::run_end_import::run_end_from_arrow;
+
+const VORTEX_METADATA_ENCODING_KEY: &str = "vortex:extension:metadata:encoding";
 
 /// Outcome of a successful call to [`ArrowExportVTable::execute_arrow`].
 ///
@@ -289,8 +298,9 @@ impl ArrowSession {
     ///
     /// For [`DType::Extension`]s, plugins registered against the extension's `Id`
     /// are tried in registration order; the first plugin to return `Some(field)` wins.
-    /// Otherwise, the storage field carries the Vortex extension ID and serialized metadata.
-    /// Metadata must be valid UTF-8, as required by Arrow Rust's field metadata representation.
+    /// Otherwise, the storage field carries the Vortex extension ID and serialized metadata
+    /// encoded using standard padded base64. The field metadata includes
+    /// `vortex:extension:metadata:encoding = base64` so import can recover arbitrary bytes.
     pub fn to_arrow_field(&self, name: &str, dtype: &DType) -> VortexResult<Field> {
         // Handle the structural encodings, which may have recursive types
         match dtype {
@@ -339,14 +349,16 @@ impl ArrowSession {
                         return Ok(field);
                     }
                 }
-                let metadata = String::from_utf8(ext.serialize_metadata()?).map_err(|err| {
-                    vortex_err!("Extension {ext} metadata cannot be represented as Arrow field metadata: {err}")
-                })?;
+                let metadata = BASE64_STANDARD.encode(ext.serialize_metadata()?);
                 let mut field = self.to_arrow_field(name, ext.storage_dtype())?;
                 field.set_metadata(
                     [
                         (EXTENSION_TYPE_NAME_KEY.to_string(), ext.id().to_string()),
                         (EXTENSION_TYPE_METADATA_KEY.to_string(), metadata),
+                        (
+                            VORTEX_METADATA_ENCODING_KEY.to_string(),
+                            "base64".to_string(),
+                        ),
                     ]
                     .into(),
                 );
@@ -415,6 +427,9 @@ impl ArrowSession {
     /// their name, metadata and storage, including nested extension fields. This follows Arrow's
     /// storage fallback rule independently of [`vortex_session::VortexSession::allow_unknown`],
     /// which controls Vortex deserialization rather than Arrow interoperability.
+    /// Metadata marked with `vortex:extension:metadata:encoding = base64` is decoded to its
+    /// original bytes; unmarked metadata is preserved as UTF-8 bytes. Malformed base64 or an
+    /// unsupported encoding marker returns an error. Registered plugins run before this fallback.
     #[expect(clippy::disallowed_methods, reason = "interning a dynamic id")]
     pub fn from_arrow_field(&self, field: &Field) -> VortexResult<DType> {
         if let Some(name) = field.metadata().get(EXTENSION_TYPE_NAME_KEY) {
@@ -439,13 +454,25 @@ impl ArrowSession {
     fn foreign_ext_dtype(&self, field: &Field, name: &str) -> VortexResult<ExtDTypeRef> {
         #[expect(clippy::disallowed_methods, reason = "interning a dynamic id")]
         let id = ExtId::new(name);
+        let metadata = field
+            .metadata()
+            .get(EXTENSION_TYPE_METADATA_KEY)
+            .map(String::as_str)
+            .unwrap_or_default();
+        let metadata = match field.metadata().get(VORTEX_METADATA_ENCODING_KEY) {
+            None => metadata.as_bytes().to_vec(),
+            Some(encoding) if encoding == "base64" => {
+                BASE64_STANDARD.decode(metadata).map_err(|err| {
+                    vortex_err!("Invalid base64 metadata for extension {name}: {err}")
+                })?
+            }
+            Some(encoding) => {
+                vortex_bail!("Unsupported metadata encoding for extension {name}: {encoding}")
+            }
+        };
         ForeignExtDType::from_parts(
             id,
-            field
-                .metadata()
-                .get(EXTENSION_TYPE_METADATA_KEY)
-                .map(|metadata| metadata.as_bytes().to_vec())
-                .unwrap_or_default(),
+            metadata,
             self.from_arrow_datatype(field.data_type(), field.is_nullable().into())?,
         )
     }
