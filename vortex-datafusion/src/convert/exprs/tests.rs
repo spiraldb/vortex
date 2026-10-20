@@ -4,15 +4,28 @@
 use std::sync::Arc;
 
 use arrow_array::Array;
+use arrow_array::DictionaryArray;
 use arrow_array::FixedSizeBinaryArray;
+use arrow_array::Int32Array;
 use arrow_array::RecordBatch;
+use arrow_array::RunArray;
+use arrow_array::StringArray;
 use arrow_array::StructArray;
+use arrow_array::UInt32Array;
+use arrow_array::types::Int32Type;
+use arrow_array::types::UInt32Type;
 use arrow_schema::DataType;
 use arrow_schema::Field;
 use arrow_schema::IntervalUnit;
 use arrow_schema::Schema;
 use arrow_schema::TimeUnit as ArrowTimeUnit;
 use arrow_schema::extension::Uuid as ArrowUuid;
+use datafusion::common::DFSchema;
+use datafusion::execution::context::ExecutionProps;
+use datafusion::logical_expr::simplify::SimplifyContext;
+use datafusion::optimizer::simplify_expressions::ExprSimplifier;
+use datafusion::physical_expr::create_physical_expr;
+use datafusion::prelude::SessionContext;
 use datafusion_common::ScalarValue;
 use datafusion_common::arrow::buffer::NullBuffer;
 use datafusion_common::arrow::datatypes::i256 as arrow_i256;
@@ -35,6 +48,7 @@ use vortex::array::builtins::ArrayBuiltins;
 use vortex::dtype::PType;
 use vortex::encodings::uuid::Uuid;
 use vortex::scalar::Scalar;
+use vortex::scalar_fn::fns::cast::Cast;
 use vortex::scalar_fn::fns::literal::Literal;
 use vortex_array::assert_arrays_eq;
 
@@ -1385,6 +1399,123 @@ fn test_cast_options_fall_back() -> DFResult<()> {
     ));
     assert!(!converts(&expr, &schema)?);
     Ok(())
+}
+
+fn dict_utf8(key: DataType) -> DataType {
+    DataType::Dictionary(Box::new(key), Box::new(DataType::Utf8))
+}
+
+fn ree_dict_utf8(run_ends: DataType) -> DataType {
+    DataType::RunEndEncoded(
+        Arc::new(Field::new("run_ends", run_ends, false)),
+        Arc::new(Field::new("values", dict_utf8(DataType::UInt32), true)),
+    )
+}
+
+fn contains_cast(expr: &Expression) -> bool {
+    expr.is::<Cast>() || expr.children().iter().any(contains_cast)
+}
+
+/// Plans `predicate` as DataFusion does: type coercion, simplification, then physical planning.
+fn plan_predicate(predicate: &str, schema: &Schema) -> DFResult<Arc<dyn PhysicalExpr>> {
+    let df_schema = Arc::new(DFSchema::try_from(schema.clone())?);
+    let simplifier = ExprSimplifier::new(
+        SimplifyContext::builder()
+            .with_schema(Arc::clone(&df_schema))
+            .build(),
+    );
+    let expr = SessionContext::new().parse_sql_expr(predicate, &df_schema)?;
+    let expr = simplifier.simplify(simplifier.coerce(expr, &df_schema)?)?;
+    create_physical_expr(
+        &expr,
+        &df_schema,
+        &ExecutionProps::new(),
+        &Default::default(),
+    )
+}
+
+/// Regression test for #10634: coercion casts `REE<Dict<Utf8>>` columns to `Dict<Utf8>` before
+/// comparing them, and the converter must drop that cast rather than decline the predicate.
+#[rstest]
+#[case::ree_eq("ree_dict = 'x'")]
+#[case::ree_or("ree_dict = 'x' OR ree_dict = 'y'")]
+#[case::ree_in("ree_dict IN ('x', 'y', 'z')")]
+#[case::dict_eq("dict = 'x'")]
+#[case::plain_eq("plain = 'x'")]
+fn test_coerced_string_comparison_drops_encoding_cast(#[case] predicate: &str) -> DFResult<()> {
+    let schema = Schema::new(vec![
+        Field::new("ree_dict", ree_dict_utf8(DataType::Int32), true),
+        Field::new("dict", dict_utf8(DataType::UInt32), true),
+        Field::new("plain", DataType::Utf8, true),
+    ]);
+    let converted = convert(plan_predicate(predicate, &schema)?, &schema)?;
+    assert!(!contains_cast(&converted), "{}", converted.display_tree());
+    Ok(())
+}
+
+#[rstest]
+#[case::ree_to_dict(ree_dict_utf8(DataType::Int32), dict_utf8(DataType::UInt32))]
+#[case::ree_int16_run_ends(ree_dict_utf8(DataType::Int16), dict_utf8(DataType::UInt32))]
+#[case::ree_identity(ree_dict_utf8(DataType::Int64), ree_dict_utf8(DataType::Int64))]
+#[case::int_identity(DataType::Int32, DataType::Int32)]
+fn test_infallible_encoding_cast_is_dropped(
+    #[case] source: DataType,
+    #[case] target: DataType,
+) -> DFResult<()> {
+    let schema = Schema::new(vec![Field::new("a", source, true)]);
+    let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::CastExpr::new(
+        Arc::new(df_expr::Column::new("a", 0)),
+        target,
+        None,
+    ));
+    let converted = convert(expr, &schema)?;
+    assert!(!contains_cast(&converted), "{}", converted.display_tree());
+    Ok(())
+}
+
+// Arrow expands runs with `Int32` indices and decodes offset-based values through `take`, which
+// may overflow; key changes may overflow the target keys.
+#[rstest]
+#[case::ree_int64_run_ends(ree_dict_utf8(DataType::Int64), dict_utf8(DataType::UInt32))]
+#[case::ree_narrow_keys(ree_dict_utf8(DataType::Int32), dict_utf8(DataType::UInt8))]
+#[case::ree_decode(ree_dict_utf8(DataType::Int32), DataType::Utf8)]
+#[case::dict_narrow_keys(dict_utf8(DataType::UInt32), dict_utf8(DataType::UInt8))]
+#[case::dict_decode(dict_utf8(DataType::UInt32), DataType::Utf8)]
+#[case::dict_encode(DataType::Utf8, dict_utf8(DataType::UInt8))]
+#[case::large_utf8(DataType::LargeUtf8, DataType::Utf8)]
+fn test_fallible_encoding_cast_falls_back(
+    #[case] source: DataType,
+    #[case] target: DataType,
+) -> DFResult<()> {
+    let schema = Schema::new(vec![Field::new("a", source, true)]);
+    let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::CastExpr::new(
+        Arc::new(df_expr::Column::new("a", 0)),
+        target,
+        None,
+    ));
+    assert!(!converts(&expr, &schema)?);
+    Ok(())
+}
+
+#[rstest]
+#[case::eq("ree_dict = 'x'")]
+#[case::not_eq("ree_dict <> 'x'")]
+#[case::or("ree_dict = 'x' OR ree_dict = 'y'")]
+#[case::in_list("ree_dict IN ('y', 'unused')")]
+fn test_ree_dict_comparison_matches_datafusion(#[case] predicate: &str) -> anyhow::Result<()> {
+    // Rows: x, x, NULL, y, y, x. The dictionary also holds a value no key references.
+    let values = DictionaryArray::<UInt32Type>::try_new(
+        UInt32Array::from(vec![Some(0), None, Some(1), Some(0)]),
+        Arc::new(StringArray::from(vec!["x", "y", "unused"])),
+    )?;
+    let ree = RunArray::<Int32Type>::try_new(&Int32Array::from(vec![2, 3, 5, 6]), &values)?;
+    let schema = Arc::new(Schema::new(vec![Field::new(
+        "ree_dict",
+        ree.data_type().clone(),
+        true,
+    )]));
+    let batch = RecordBatch::try_new(Arc::clone(&schema), vec![Arc::new(ree)])?;
+    assert_native_matches(plan_predicate(predicate, &schema)?, batch)
 }
 
 #[rstest]
