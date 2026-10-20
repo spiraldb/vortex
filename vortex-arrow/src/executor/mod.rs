@@ -33,15 +33,12 @@ use arrow_schema::Schema;
 use itertools::Itertools;
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
-use vortex_array::arrays::ExtensionArray;
 use vortex_array::arrays::List;
 use vortex_array::arrays::VarBin;
-use vortex_array::arrays::extension::ExtensionArrayExt;
 use vortex_array::arrays::list::ListArraySlotsExt;
 use vortex_array::arrays::varbin::VarBinArraySlotsExt;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::PType;
-use vortex_array::extension::datetime::AnyTemporal;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure_eq;
@@ -133,12 +130,6 @@ pub(crate) fn execute_arrow_naive(
     exporter: &ArrowExporter<'_>,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<ArrowArrayRef> {
-    if let DType::Extension(ext) = array.dtype()
-        && !ext.is::<AnyTemporal>()
-    {
-        let extension = array.execute::<ExtensionArray>(ctx)?;
-        return execute_arrow_naive(extension.storage_array().clone(), data_type, exporter, ctx);
-    }
     let len = array.len();
 
     let resolved_type: DataType = match data_type {

@@ -59,6 +59,7 @@ use vortex_array::arrays::FixedSizeListArray;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::ListViewArray;
 use vortex_array::arrays::StructArray;
+use vortex_array::arrays::extension::ExtensionArrayExt;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldName;
 use vortex_array::dtype::FieldNames;
@@ -996,10 +997,32 @@ impl ArrowExporter<'_> {
                 "unsupported Arrow extension type encountered, falling back to naive execution"
             );
 
-            return execute_arrow_naive(current, Some(target_field.data_type()), self, ctx);
+            return self.execute_arrow_fallback(current, Some(target_field.data_type()), ctx);
         }
 
-        execute_arrow_naive(array, target.map(|field| field.data_type()), self, ctx)
+        self.execute_arrow_fallback(array, target.map(|field| field.data_type()), ctx)
+    }
+
+    fn execute_arrow_fallback(
+        &self,
+        array: ArrayRef,
+        data_type: Option<&DataType>,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<ArrowArrayRef> {
+        // Only unwrap for a storage target. Other conversions must see the original logical
+        // dtype so their validators can reject incompatible extension semantics.
+        if let Some(target) = data_type
+            && let DType::Extension(ext) = array.dtype()
+            && self
+                .session
+                .from_arrow_datatype(target, ext.nullability())?
+                == *ext.storage_dtype()
+        {
+            let extension = array.execute::<ExtensionArray>(ctx)?;
+            return execute_arrow_naive(extension.storage_array().clone(), data_type, self, ctx);
+        }
+
+        execute_arrow_naive(array, data_type, self, ctx)
     }
 }
 

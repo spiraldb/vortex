@@ -13,6 +13,7 @@ use arrow_array::Int32Array;
 use arrow_array::types::Int32Type;
 use arrow_schema::DataType;
 use arrow_schema::Field;
+use arrow_schema::TimeUnit as ArrowTimeUnit;
 use arrow_schema::extension::EXTENSION_TYPE_METADATA_KEY;
 use arrow_schema::extension::EXTENSION_TYPE_NAME_KEY;
 use arrow_schema::extension::ExtensionType;
@@ -195,6 +196,61 @@ fn test_default_metadata_uses_standard_padded_base64() -> VortexResult<()> {
     let single_byte = foreign(buffer![1i32].into_array(), &[0xff])?;
     let field = session.to_arrow_field("opaque", single_byte.dtype())?;
     assert_eq!(field.metadata()[EXTENSION_TYPE_METADATA_KEY], "/w==");
+    Ok(())
+}
+
+#[rstest]
+#[case::date32(DataType::Date32)]
+#[case::date64(DataType::Date64)]
+#[case::time32(DataType::Time32(ArrowTimeUnit::Second))]
+#[case::time64(DataType::Time64(ArrowTimeUnit::Microsecond))]
+#[case::timestamp(DataType::Timestamp(ArrowTimeUnit::Millisecond, None))]
+fn test_foreign_extension_rejects_temporal_target(
+    #[case] target: DataType,
+    #[values(false, true)] annotated: bool,
+) -> VortexResult<()> {
+    let session = ArrowSession::default();
+    let source = foreign(buffer![42i64].into_array(), b"")?;
+    let field = if annotated {
+        session
+            .to_arrow_field("opaque", source.dtype())?
+            .with_data_type(target)
+    } else {
+        Field::new("opaque", target, false)
+    };
+    let error = session
+        .execute_arrow(
+            source,
+            Some(&field),
+            &mut array_session().create_execution_ctx(),
+        )
+        .expect_err("an opaque extension cannot be reinterpreted as a temporal type");
+    assert!(
+        error.to_string().contains("Cannot convert extension"),
+        "{error}"
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case::struct_storage(true)]
+#[case::list_storage(false)]
+fn test_foreign_extension_exports_to_explicit_storage_target(
+    #[case] struct_storage: bool,
+) -> VortexResult<()> {
+    let values = buffer![1i32, 2, 3].into_array();
+    let storage = if struct_storage {
+        StructArray::from_fields(&[("values", values)])?.into_array()
+    } else {
+        list(values)?
+    };
+    let source = foreign(storage.clone(), &[0xff])?;
+    let session = ArrowSession::default();
+    let field = session.to_arrow_field("storage", storage.dtype())?;
+    let mut ctx = array_session().create_execution_ctx();
+    let arrow = session.execute_arrow(source, Some(&field), &mut ctx)?;
+    let imported = session.from_arrow_array(arrow, &field)?;
+    assert_arrays_eq!(imported, storage, &mut ctx);
     Ok(())
 }
 
