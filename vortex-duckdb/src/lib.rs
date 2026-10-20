@@ -30,6 +30,7 @@ mod exporter;
 mod ffi;
 mod file_reader;
 mod projection;
+mod scan_statistics;
 mod table_function;
 
 pub use file_reader::enable_mmap_local_files;
@@ -50,8 +51,7 @@ static RUNTIME: LazyLock<CurrentThreadRuntime> = LazyLock::new(CurrentThreadRunt
 /// Process-wide registry, so repeated scans against the same bucket share one client.
 static REGISTRY: LazyLock<Registry> = LazyLock::new(Registry::new);
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-    let session = VortexSession::default()
-        .with_handle(RUNTIME.handle());
+    let session = VortexSession::default().with_handle(RUNTIME.handle());
     session
         .enable_edition(CORE_2026_08_3)
         .map_err(|error| vortex_err!("{error}"))

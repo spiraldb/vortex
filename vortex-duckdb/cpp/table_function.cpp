@@ -197,6 +197,57 @@ static vector<PartitionStatistics> get_partition_stats(ClientContext &, GetParti
     return result;
 }
 
+/// Statistics of a column of the scanned files.
+///
+/// DuckDB only reports statistics of a scan over several files when it reads them by name, as
+/// it would have to read the metadata of every file. Vortex scans cache the footers of the files
+/// they open, so once every file was opened the statistics are merged from the footers, which
+/// lets DuckDB plan with them as it plans its own tables: drop overflow checks from arithmetic,
+/// prune filters, and pack group keys.
+static unique_ptr<BaseStatistics>
+scan_statistics(ClientContext &context, const FunctionData *bind_data_p, column_t column_index) {
+    const MultiFileBindData &bind_data = bind_data_p->Cast<MultiFileBindData>();
+    if (bind_data.file_list->GetExpandResult() != FileExpandResult::MULTIPLE_FILES ||
+        bind_data.file_options.union_by_name) {
+        return MultiFileFunction<VortexReaderInterface>::MultiFileScanStats(context,
+                                                                            bind_data_p,
+                                                                            column_index);
+    }
+    if (!bind_data.initial_reader || IsVirtualColumn(column_index)) {
+        return nullptr;
+    }
+
+    const VortexBindData &bind = bind_data.bind_data->Cast<VortexBindData>();
+    const std::lock_guard<std::mutex> guard(bind.merged_statistics_lock);
+    if (!bind.merged_statistics_loaded) {
+        const vector<OpenFileInfo> files = bind_data.file_list->GetAllFiles();
+        vector<const char *> paths;
+        vector<size_t> path_lens;
+        paths.reserve(files.size());
+        path_lens.reserve(files.size());
+        for (const OpenFileInfo &file : files) {
+            paths.push_back(file.path.data());
+            path_lens.push_back(file.path.size());
+        }
+        duckdb_vx_data raw = duckdb_scan_merged_statistics(paths.data(), path_lens.data(), files.size());
+        bind.merged_statistics.reset(reinterpret_cast<CData *>(raw));
+        bind.merged_statistics_loaded = true;
+    }
+    if (!bind.merged_statistics) {
+        return nullptr;
+    }
+
+    const string &name = bind_data.names[column_index];
+    duckdb_column_statistics statistics = {};
+    if (!duckdb_merged_statistics_get(bind.merged_statistics->DataPtr(),
+                                      name.data(),
+                                      name.size(),
+                                      &statistics)) {
+        return nullptr;
+    }
+    return to_duckdb_statistics(statistics);
+}
+
 duckdb_state register_table_function(DatabaseInstance &db, LogicalType parameter, const std::string &name) {
     MultiFileFunction<VortexReaderInterface> fn(name);
     fn.arguments[0] = parameter;
@@ -222,7 +273,7 @@ duckdb_state register_table_function(DatabaseInstance &db, LogicalType parameter
         return {COLUMN_IDENTIFIER_FILE_INDEX, COLUMN_IDENTIFIER_FILE_ROW_NUMBER};
     };
 
-    fn.statistics = MultiFileFunction<VortexReaderInterface>::MultiFileScanStats;
+    fn.statistics = scan_statistics;
     fn.get_partition_stats = get_partition_stats;
     fn.get_multi_file_reader = get_multi_file_reader;
 
