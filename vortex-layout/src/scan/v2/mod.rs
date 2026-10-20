@@ -22,6 +22,7 @@ mod split;
 mod tests;
 
 use std::cmp::Ordering;
+use std::collections::VecDeque;
 use std::ops::Range;
 use std::sync::Arc;
 
@@ -29,9 +30,12 @@ use arrow_array::RecordBatch;
 use arrow_schema::ArrowError;
 use arrow_schema::Field;
 use arrow_schema::SchemaRef;
+use futures::FutureExt;
 use futures::Stream;
 use futures::StreamExt;
 use futures::TryStreamExt;
+use futures::future;
+use futures::future::BoxFuture;
 use futures::stream;
 use futures::stream::BoxStream;
 use vortex_array::ArrayRef;
@@ -45,7 +49,6 @@ use vortex_scan::planning::planner::WorkScope;
 use vortex_scan::selection::Selection;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
-use vortex_utils::aliases::hash_map::HashMap;
 use vortex_utils::parallelism::get_available_parallelism;
 
 use crate::LayoutRef;
@@ -317,112 +320,19 @@ impl<A: 'static + Send> PreparedScan<A> {
         })
     }
 
-    /// The rows each planner projects, as the pipeline splits that produce them, in row order.
-    ///
-    /// A fully selected chunk, or one selected in more than [`MAX_RUNS`] runs, is one split of
-    /// its own planner. Otherwise each selected run joins the planner before it, even across
-    /// chunk boundaries, while the two read a stored segment in common and the planner spans at
-    /// most [`MAX_PLANNER_ROWS`], so a stored segment is decoded by one planner unless it spans
-    /// more rows than that. A segment several planners read is still read once: the scan's IO
-    /// shares the read between them. Within a planner, a run extends the split before it when
-    /// both read exactly the same segments: every row between them then lies in those segments'
-    /// chunks, so the split visits no chunk the selection skips.
-    ///
-    /// A column's segments hold contiguous rows, so a run can only share a segment with an
-    /// earlier run of its planner if it shares one with the run just before it.
-    ///
-    /// Also returns how many planners read each segment that more than one of them reads.
-    fn split_rows(&self) -> VortexResult<(Vec<PlannerSplits>, HashMap<SegmentId, usize>)> {
-        let mut planners: Vec<PlannerSplits> = Vec::new();
-        // The segments the last selected run reads, or none once its planner is closed.
-        let mut previous = Vec::new();
-        // The segments the last planner reads, and how many planners read each segment.
-        let mut reached: Vec<SegmentId> = Vec::new();
-        let mut readers: HashMap<SegmentId, usize> = HashMap::default();
-        let mut close = |reached: &mut Vec<SegmentId>| {
-            reached.sort_unstable();
-            reached.dedup();
-            for segment in reached.drain(..) {
-                *readers.entry(segment).or_default() += 1;
-            }
-        };
-        for rows in &self.splits {
-            let row_mask = self.selection.row_mask(rows);
-            let mask = row_mask.mask();
-            let slices = match mask.slices() {
-                AllOr::None => continue,
-                AllOr::Some(slices) if slices.len() <= MAX_RUNS => slices,
-                AllOr::All | AllOr::Some(_) => {
-                    let span = mask.first().unwrap_or(0)..mask.last().map_or(0, |last| last + 1);
-                    let split = rows.start + span.start as u64..rows.start + span.end as u64;
-                    planners.push(vec![split]);
-                    previous.clear();
-                    close(&mut reached);
-                    continue;
-                }
-            };
-            for &(start, end) in slices {
-                let run = rows.start + start as u64..rows.start + end as u64;
-                let mut segments = Vec::new();
-                self.plans.projection.reach(
-                    run.clone(),
-                    &Reach::Offset(0),
-                    &mut |segment, _| segments.push(segment),
-                )?;
-                segments.sort_unstable();
-                segments.dedup();
-                let joins = planners.last().is_some_and(|splits| {
-                    splits
-                        .first()
-                        .is_some_and(|first| run.end - first.start <= MAX_PLANNER_ROWS)
-                        && shares_any(&previous, &segments)
-                });
-                match planners.last_mut() {
-                    Some(splits) if joins && segments == previous => {
-                        if let Some(split) = splits.last_mut() {
-                            split.end = run.end;
-                        }
-                    }
-                    Some(splits) if joins => splits.push(run),
-                    _ => {
-                        close(&mut reached);
-                        planners.push(vec![run]);
-                    }
-                }
-                reached.extend_from_slice(&segments);
-                previous = segments;
-            }
+    /// Plans the scan's planners one at a time, in row order.
+    fn planners(&self) -> Planners {
+        Planners {
+            plans: self.plans.clone(),
+            selection: self.selection.clone(),
+            io: Arc::clone(&self.io),
+            chunks: self.splits.clone().into_iter(),
+            runs: VecDeque::new(),
+            whole: None,
+            splits: Vec::new(),
+            last: Vec::new(),
+            reached: Vec::new(),
         }
-        close(&mut reached);
-        readers.retain(|_, count| *count > 1);
-        Ok((planners, readers))
-    }
-
-    /// The planners with selected rows, each ready to be admitted to a planning run.
-    fn split_plans(&self) -> VortexResult<Vec<SplitPlan>> {
-        let (planners, shared) = self.split_rows()?;
-        self.io.share(shared);
-        Ok(planners
-            .into_iter()
-            .filter_map(|ranges| {
-                let rows = ranges.first()?.start..ranges.last()?.end;
-                let splits = ranges
-                    .into_iter()
-                    .map(|rows| Split {
-                        mask: self.selection.row_mask(&rows).mask().clone(),
-                        rows,
-                    })
-                    .collect();
-                let scope = WorkScope {
-                    file_ordinal: 0,
-                    rows,
-                };
-                Some(SplitPlan {
-                    root: plan_projection(self.plans.clone(), scope.clone(), splits),
-                    scope,
-                })
-            })
-            .collect())
     }
 
     /// Runs every split as a task on the session's runtime and yields their mapped batches.
@@ -432,23 +342,31 @@ impl<A: 'static + Send> PreparedScan<A> {
     fn execute_stream(self) -> VortexResult<BoxStream<'static, VortexResult<A>>> {
         let concurrency = self.concurrency * get_available_parallelism().unwrap_or(1);
         let handle = self.session.handle();
-        let split_plans = self.split_plans()?;
+        let planners = self.planners();
         let io = self.io;
         let map_fn = self.map_fn;
-        // Spawned as the buffer pulls them, so at most `concurrency` splits read at once.
-        let mut tasks = split_plans.into_iter().map(move |split| {
+        // Each planner is spawned once planned, as the buffer pulls it, so at most `concurrency`
+        // run at once.
+        let mut tasks = planners.map(move |split| -> BoxFuture<'static, VortexResult<Vec<A>>> {
+            let split = match split {
+                Ok(split) => split,
+                Err(error) => return future::ready(Err(error)).boxed(),
+            };
             let io = Arc::clone(&io);
             let map_fn = Arc::clone(&map_fn);
-            handle.spawn(async move {
-                split
-                    .run(io)
-                    .await?
-                    .into_iter()
-                    .map(|array| map_fn(array))
-                    .collect::<VortexResult<Vec<_>>>()
-            })
+            handle
+                .spawn(async move {
+                    split
+                        .run(io)
+                        .await?
+                        .into_iter()
+                        .map(|array| map_fn(array))
+                        .collect::<VortexResult<Vec<_>>>()
+                })
+                .boxed()
         });
-        // The first are spawned now, so they run while the stream is handed back to its consumer.
+        // The first are planned and spawned now, each before the next is planned, so they run
+        // while the stream is handed back to its consumer.
         let started: Vec<_> = tasks.by_ref().take(concurrency).collect();
         let tasks = stream::iter(started).chain(stream::iter(tasks));
         let batches = if self.ordered {
@@ -460,5 +378,175 @@ impl<A: 'static + Send> PreparedScan<A> {
             .map_ok(|batches| stream::iter(batches.into_iter().map(Ok)))
             .try_flatten()
             .boxed())
+    }
+}
+
+/// What the next fixed chunk holds for planning.
+enum NextRun {
+    /// A selected run to group into a planner.
+    Run(Range<u64>),
+    /// The selected span of a chunk planned whole.
+    Whole(Range<u64>),
+    /// Every chunk has been visited.
+    Done,
+}
+
+/// Plans a scan's planners one at a time, in row order, so each can run on a task of its own as
+/// soon as it is planned, while the rest are still being planned.
+///
+/// A fully selected chunk, or one selected in more than [`MAX_RUNS`] runs, is one split of its
+/// own planner. Otherwise each selected run joins the planner before it, even across chunk
+/// boundaries, while the two read a stored segment in common and the planner spans at most
+/// [`MAX_PLANNER_ROWS`], so a stored segment is decoded by one planner unless it spans more rows
+/// than that. Within a planner, a run extends the split before it when both read exactly the
+/// same segments: every row between them then lies in those segments' chunks, so the split visits
+/// no chunk the selection skips.
+///
+/// A column's segments hold contiguous rows, so a run can only share a segment with an earlier
+/// run of its planner if it shares one with the run just before it, and a segment several
+/// planners read is read by neighbouring planners. So a planner is complete once the run after it
+/// is known, and the segments it shares with that run are all it shares with later planners: the
+/// scan's IO reads each of them once for both.
+struct Planners {
+    plans: ScanPlans,
+    selection: Selection,
+    io: Arc<SegmentScanIo>,
+    /// The fixed chunks not yet visited.
+    chunks: std::vec::IntoIter<Range<u64>>,
+    /// The selected runs of the last chunk visited, not yet grouped.
+    runs: VecDeque<Range<u64>>,
+    /// A chunk planned whole, waiting for the planner before it to be handed out.
+    whole: Option<Range<u64>>,
+    /// The pipeline splits of the planner being grouped.
+    splits: PlannerSplits,
+    /// The segments the last run of the planner reads, and those all its runs read.
+    last: Vec<SegmentId>,
+    reached: Vec<SegmentId>,
+}
+
+impl Planners {
+    /// The next planner, ready to be admitted to a planning run.
+    fn next_plan(&mut self) -> VortexResult<Option<SplitPlan>> {
+        let Some(ranges) = self.next_splits()? else {
+            return Ok(None);
+        };
+        let rows = ranges[0].start..ranges[ranges.len() - 1].end;
+        let splits = ranges
+            .into_iter()
+            .map(|rows| Split {
+                mask: self.selection.row_mask(&rows).mask().clone(),
+                rows,
+            })
+            .collect();
+        let scope = WorkScope {
+            file_ordinal: 0,
+            rows,
+        };
+        Ok(Some(SplitPlan {
+            root: plan_projection(self.plans.clone(), scope.clone(), splits),
+            scope,
+        }))
+    }
+
+    /// The pipeline splits of the next planner, in row order.
+    fn next_splits(&mut self) -> VortexResult<Option<PlannerSplits>> {
+        if let Some(whole) = self.whole.take() {
+            return Ok(Some(vec![whole]));
+        }
+        loop {
+            match self.next_run() {
+                NextRun::Done => {
+                    return Ok((!self.splits.is_empty()).then(|| self.close(&[])));
+                }
+                NextRun::Whole(span) => {
+                    if self.splits.is_empty() {
+                        return Ok(Some(vec![span]));
+                    }
+                    self.whole = Some(span);
+                    return Ok(Some(self.close(&[])));
+                }
+                NextRun::Run(run) => {
+                    let mut segments = Vec::new();
+                    self.plans.projection.reach(
+                        run.clone(),
+                        &Reach::Offset(0),
+                        &mut |segment, _| segments.push(segment),
+                    )?;
+                    segments.sort_unstable();
+                    segments.dedup();
+                    let joins = self.splits.first().is_some_and(|first| {
+                        run.end - first.start <= MAX_PLANNER_ROWS
+                            && shares_any(&self.last, &segments)
+                    });
+                    if joins {
+                        match self.splits.last_mut() {
+                            Some(split) if segments == self.last => split.end = run.end,
+                            _ => self.splits.push(run),
+                        }
+                        self.reached.extend_from_slice(&segments);
+                        self.last = segments;
+                        continue;
+                    }
+                    let planner = (!self.splits.is_empty()).then(|| self.close(&segments));
+                    self.splits.push(run);
+                    self.reached.extend_from_slice(&segments);
+                    self.last = segments;
+                    if planner.is_some() {
+                        return Ok(planner);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Hands out the planner being grouped. The segments it shares with `next`, those the run
+    /// after it reads, are read once for it and the planner that run starts.
+    fn close(&mut self, next: &[SegmentId]) -> PlannerSplits {
+        self.reached.sort_unstable();
+        self.reached.dedup();
+        self.io.share_with_next(
+            self.reached
+                .iter()
+                .filter(|segment| next.binary_search(segment).is_ok())
+                .copied(),
+        );
+        self.reached.clear();
+        self.last.clear();
+        std::mem::take(&mut self.splits)
+    }
+
+    fn next_run(&mut self) -> NextRun {
+        loop {
+            if let Some(run) = self.runs.pop_front() {
+                return NextRun::Run(run);
+            }
+            let Some(rows) = self.chunks.next() else {
+                return NextRun::Done;
+            };
+            let row_mask = self.selection.row_mask(&rows);
+            let mask = row_mask.mask();
+            match mask.slices() {
+                AllOr::None => {}
+                AllOr::Some(slices) if slices.len() <= MAX_RUNS => self.runs.extend(
+                    slices
+                        .iter()
+                        .map(|&(start, end)| rows.start + start as u64..rows.start + end as u64),
+                ),
+                AllOr::All | AllOr::Some(_) => {
+                    let span = mask.first().unwrap_or(0)..mask.last().map_or(0, |last| last + 1);
+                    return NextRun::Whole(
+                        rows.start + span.start as u64..rows.start + span.end as u64,
+                    );
+                }
+            }
+        }
+    }
+}
+
+impl Iterator for Planners {
+    type Item = VortexResult<SplitPlan>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next_plan().transpose()
     }
 }

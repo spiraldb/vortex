@@ -87,18 +87,19 @@ impl SegmentScanIo {
         }
     }
 
-    /// Reads each segment in `readers` once for as many sessions as it names, rather than once
-    /// per session.
-    pub(super) fn share(&self, readers: HashMap<SegmentId, usize>) {
+    /// Expects one more session, the next planner's, to read each of `segments`, which the
+    /// session of the planner handed out before it reads too. Each segment is read once for all
+    /// the sessions expected to read it.
+    pub(super) fn share_with_next(&self, segments: impl IntoIterator<Item = SegmentId>) {
         let mut shared = self.shared.lock();
-        for (segment, readers) in readers {
-            shared.insert(
-                segment,
-                SharedRead {
-                    readers,
+        for segment in segments {
+            shared
+                .entry(segment)
+                .or_insert(SharedRead {
+                    readers: 1,
                     read: None,
-                },
-            );
+                })
+                .readers += 1;
         }
     }
 }
@@ -329,7 +330,6 @@ mod tests {
     use vortex_io::request::IoService;
     use vortex_io::request::IoSource;
     use vortex_io::request::IoTarget;
-    use vortex_utils::aliases::hash_map::HashMap;
 
     use super::SegmentIoSource;
     use super::SegmentRanges;
@@ -447,7 +447,7 @@ mod tests {
             Arc::clone(&segments) as _,
             SegmentRanges::new([location(0, 4)].into()),
         );
-        io.share(HashMap::from_iter([(SegmentId::from(0), 2)]));
+        io.share_with_next([SegmentId::from(0)]);
         for reads in [1, 1, 2] {
             let session = io.session();
             session.submit(IoOwnerId(0), vec![request(IoIntent::Fetch, 0)])?;

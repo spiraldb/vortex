@@ -385,7 +385,7 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
     });
     let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
     let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?)?;
-    let splits = scan.split_plans()?;
+    let splits = scan.planners().collect::<VortexResult<Vec<_>>>()?;
     assert_eq!(
         splits.len(),
         (STORED_CHUNKS * STORED_CHUNK_ROWS).div_ceil(MAX_ROWS_PER_CHUNK)
@@ -467,12 +467,16 @@ async fn splits_read_each_stored_chunk_once(
             .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(rows.clone()))?),
     )?;
     // Runs reading the same stored chunk are one pipeline split, which visits no other chunk.
+    let mut planners = scan.planners();
+    let mut pipeline_splits = Vec::new();
+    while let Some(splits) = planners.next_splits()? {
+        pipeline_splits.extend(splits);
+    }
     assert_eq!(
-        scan.split_rows()?.0.concat(),
-        scopes,
+        pipeline_splits, scopes,
         "each planner here reads one stored chunk"
     );
-    let splits = scan.split_plans()?;
+    let splits = scan.planners().collect::<VortexResult<Vec<_>>>()?;
     assert_eq!(
         splits
             .iter()
