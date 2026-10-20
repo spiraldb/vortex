@@ -151,6 +151,7 @@ mod tests {
         #[case] validity: Validity,
         #[case] ok: bool,
     ) {
+        let mut ctx = array_session().create_execution_ctx();
         let nullability = if matches!(validity, Validity::NonNullable) {
             Nullability::NonNullable
         } else {
@@ -161,6 +162,7 @@ mod tests {
             ByteBuffer::from(bytes),
             DType::Utf8(nullability),
             validity,
+            &mut ctx,
         );
         assert_eq!(result.is_ok(), ok);
     }
