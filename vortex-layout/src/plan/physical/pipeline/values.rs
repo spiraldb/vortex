@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Whole values, such as dictionary values, kept between the scans of one split.
+//! Whole values, such as dictionary values, kept between the scans that share them.
 
 use std::sync::Arc;
 
@@ -15,9 +15,9 @@ use crate::plan::physical::PlanRef;
 /// Values a plan produces over its whole domain whatever rows it is compiled for, kept for the
 /// later scans that share this cache.
 ///
-/// A dictionary's values are read whole by every reader of its codes, so the filter and the
-/// projection of one split decode them once. The cache lives as long as the split that owns it
-/// and holds only the values that split read: nothing is kept for the rest of a scan.
+/// A dictionary's values are read whole by every reader of its codes, so readers sharing this
+/// cache can reuse them across filters, projections, and splits. The caller controls its lifetime;
+/// only whole values that a reader requested are retained.
 #[derive(Clone, Default)]
 pub struct ValueCache(Arc<Mutex<FxHashMap<PlanByPtr, ArrayRef>>>);
 

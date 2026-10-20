@@ -206,7 +206,7 @@ mod tests {
         let expected =
             BoolArray::from_indices(512, [509, 510, 511], Validity::NonNullable).into_array();
 
-        assert_arrays_eq!(expected, result, &mut ctx);
+        assert_arrays_eq!(result, expected, &mut ctx);
     }
 
     #[test]
@@ -239,7 +239,7 @@ mod tests {
 
         let expected = BoolArray::from_indices(502, [500, 501], Validity::NonNullable).into_array();
 
-        assert_arrays_eq!(expected, result, &mut ctx);
+        assert_arrays_eq!(result, expected, &mut ctx);
     }
 
     #[test]
@@ -276,7 +276,7 @@ mod tests {
 
         let expected = BoolArray::from_indices(512, [510], Validity::NonNullable).into_array();
 
-        assert_arrays_eq!(expected, result, &mut ctx);
+        assert_arrays_eq!(result, expected, &mut ctx);
         Ok(())
     }
 
@@ -310,7 +310,7 @@ mod tests {
 
         let expected = BoolArray::from_indices(10, [7], Validity::NonNullable).into_array();
 
-        assert_arrays_eq!(expected, result, &mut ctx);
+        assert_arrays_eq!(result, expected, &mut ctx);
 
         Ok(())
     }

@@ -225,6 +225,7 @@ mod tests {
     use arrow_array::Array;
     use arrow_array::GenericListArray;
     use arrow_array::Int32Array;
+    use arrow_array::Int64Array;
     use arrow_schema::DataType;
     use arrow_schema::Field;
     use vortex_array::Canonical;
@@ -300,6 +301,17 @@ mod tests {
         let second_values = second_list.as_any().downcast_ref::<Int32Array>().unwrap();
         assert_eq!(second_values.value(0), 4);
         assert_eq!(second_values.value(1), 5);
+        let expected = [Some(vec![1, 2, 3]), Some(vec![4, 5])];
+        assert_eq!(list.len(), expected.len());
+        for (index, expected) in expected.into_iter().enumerate() {
+            assert_eq!(list.is_null(index), expected.is_none());
+            if let Some(expected) = expected {
+                assert_eq!(
+                    list.value(index).to_data(),
+                    Int32Array::from(expected).to_data()
+                );
+            }
+        }
         Ok(())
     }
 
@@ -340,6 +352,17 @@ mod tests {
         assert_eq!(list.len(), 2);
         assert!(!list.is_null(0));
         assert!(!list.is_null(1));
+        let expected = [Some(vec![10, 20]), Some(vec![30])];
+        assert_eq!(list.len(), expected.len());
+        for (index, expected) in expected.into_iter().enumerate() {
+            assert_eq!(list.is_null(index), expected.is_none());
+            if let Some(expected) = expected {
+                assert_eq!(
+                    list.value(index).to_data(),
+                    Int64Array::from(expected).to_data()
+                );
+            }
+        }
         Ok(())
     }
 
@@ -382,6 +405,17 @@ mod tests {
         assert_eq!(second.len(), 3);
         let second_vals = second.as_any().downcast_ref::<Int32Array>().unwrap();
         assert_eq!(second_vals.values(), &[2, 3, 4]);
+        let expected = [Some(vec![1, 2, 3]), Some(vec![2, 3, 4])];
+        assert_eq!(list.len(), expected.len());
+        for (index, expected) in expected.into_iter().enumerate() {
+            assert_eq!(list.is_null(index), expected.is_none());
+            if let Some(expected) = expected {
+                assert_eq!(
+                    list.value(index).to_data(),
+                    Int32Array::from(expected).to_data()
+                );
+            }
+        }
         Ok(())
     }
 
@@ -423,6 +457,17 @@ mod tests {
             .downcast_ref::<Int32Array>()
             .unwrap();
         assert_eq!(values.values().as_ptr(), elements_ptr);
+        let expected = [Some(vec![3]), Some(vec![4, 5, 6])];
+        assert_eq!(arrow_list.len(), expected.len());
+        for (index, expected) in expected.into_iter().enumerate() {
+            assert_eq!(arrow_list.is_null(index), expected.is_none());
+            if let Some(expected) = expected {
+                assert_eq!(
+                    arrow_list.value(index).to_data(),
+                    Int32Array::from(expected).to_data()
+                );
+            }
+        }
         Ok(())
     }
 
@@ -492,6 +537,7 @@ mod tests {
             .into_array()
             .execute_arrow(Some(&arrow_dt), &mut ctx)?;
         assert_eq!(arrow_array.len(), 0);
+        assert_eq!(arrow_array.data_type(), &arrow_dt);
         Ok(())
     }
 }

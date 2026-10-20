@@ -207,6 +207,7 @@ mod test {
     use crate::array_session;
     use crate::arrays::ChunkedArray;
     use crate::arrays::PrimitiveArray;
+    use crate::assert_arrays_eq;
     use crate::compute::conformance::filter::test_filter_conformance;
     use crate::dtype::DType;
     use crate::dtype::Nullability;
@@ -242,7 +243,21 @@ mod test {
             true, false, false, true, true, true, true, true, true, true, true,
         ]);
         let filtered = chunked.filter(mask).unwrap();
-        assert_eq!(filtered.len(), 9);
+        assert_arrays_eq!(
+            filtered,
+            PrimitiveArray::from_iter([
+                f16::from_f32(0.1463623),
+                f16::from_f32(0.22497559),
+                f16::from_f32(0.22497559),
+                f16::from_f32(-36160.0),
+                f16::NAN,
+                f16::NAN,
+                f16::from_f32(0.22497559),
+                f16::from_f32(0.22497559),
+                f16::from_f32(3174.0),
+            ]),
+            &mut array_session().create_execution_ctx()
+        );
     }
 
     use rstest::rstest;

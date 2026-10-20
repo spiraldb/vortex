@@ -208,19 +208,38 @@ mod tests {
     }
 
     #[rstest]
-    #[case::u8(make_constant_array(42u8, 2050))]
-    #[case::u16(make_constant_array(1234u16, 2050))]
-    #[case::u32(make_constant_array(100000u32, 2050))]
-    #[case::u64(make_constant_array(1000000u64, 2050))]
-    #[case::i8(make_constant_array(-42i8, 2050))]
-    #[case::i16(make_constant_array(-1234i16, 2050))]
-    #[case::i32(make_constant_array(-100000i32, 2050))]
-    #[case::i64(make_constant_array(-1000000i64, 2050))]
-    #[case::f32(make_constant_array(1.23f32, 2050))]
-    #[case::f64(make_constant_array(4.56789f64, 2050))]
+    #[case::u8(
+        make_constant_array(42u8, 2050),
+        PrimitiveArray::from_iter(std::iter::repeat_n(42u8, 2050))
+    )]
+    #[case::u16(
+        make_constant_array(1234u16, 2050),
+        PrimitiveArray::from_iter(std::iter::repeat_n(1234u16, 2050))
+    )]
+    #[case::u32(
+        make_constant_array(100000u32, 2050),
+        PrimitiveArray::from_iter(std::iter::repeat_n(100000u32, 2050))
+    )]
+    #[case::u64(
+        make_constant_array(1000000u64, 2050),
+        PrimitiveArray::from_iter(std::iter::repeat_n(1000000u64, 2050))
+    )]
+    #[case::i8(make_constant_array(-42i8, 2050), PrimitiveArray::from_iter(std::iter::repeat_n(-42i8, 2050)))]
+    #[case::i16(make_constant_array(-1234i16, 2050), PrimitiveArray::from_iter(std::iter::repeat_n(-1234i16, 2050)))]
+    #[case::i32(make_constant_array(-100000i32, 2050), PrimitiveArray::from_iter(std::iter::repeat_n(-100000i32, 2050)))]
+    #[case::i64(make_constant_array(-1000000i64, 2050), PrimitiveArray::from_iter(std::iter::repeat_n(-1000000i64, 2050)))]
+    #[case::f32(
+        make_constant_array(1.23f32, 2050),
+        PrimitiveArray::from_iter(std::iter::repeat_n(1.23f32, 2050))
+    )]
+    #[case::f64(
+        make_constant_array(4.56789f64, 2050),
+        PrimitiveArray::from_iter(std::iter::repeat_n(4.56789f64, 2050))
+    )]
     #[crate::test]
     async fn test_cuda_constant_materialization(
         #[case] constant_array: ConstantArray,
+        #[case] expected: PrimitiveArray,
     ) -> VortexResult<()> {
         let mut ctx = vortex_array::array_session().create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
@@ -230,11 +249,11 @@ mod tests {
             .execute(constant_array.clone().into_array(), &mut cuda_ctx)
             .await
             .vortex_expect("GPU materialization failed")
-            .into_host()
+            .into_host(cuda_ctx.execution_ctx())
             .await?
             .into_array();
 
-        assert_arrays_eq!(constant_array, gpu_result, &mut ctx);
+        assert_arrays_eq!(gpu_result, expected, &mut ctx);
 
         Ok(())
     }
@@ -250,7 +269,7 @@ mod tests {
             .execute(constant_array.clone().into_array(), &mut cuda_ctx)
             .await
             .vortex_expect("GPU materialization failed")
-            .into_host()
+            .into_host(cuda_ctx.execution_ctx())
             .await?
             .into_array();
 
@@ -271,7 +290,7 @@ mod tests {
             .execute(constant_array.clone().into_array(), &mut cuda_ctx)
             .await
             .vortex_expect("GPU materialization failed")
-            .into_host()
+            .into_host(cuda_ctx.execution_ctx())
             .await?
             .into_array();
 

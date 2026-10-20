@@ -21,9 +21,10 @@ impl FilterReduce for Masked {
         // The child is guaranteed to have no nulls, so filtering it is straightforward
         let filtered_child = array.child().filter(mask.clone())?;
 
-        // Construct new MaskedArray
+        // SAFETY: filtering a null-free child keeps it null-free, and the child and validity are
+        // filtered by the same mask, so their lengths match.
         Ok(Some(
-            MaskedArray::try_new(filtered_child, filtered_validity)?.into_array(),
+            unsafe { MaskedArray::new_unchecked(filtered_child, filtered_validity) }.into_array(),
         ))
     }
 }
@@ -44,19 +45,22 @@ mod tests {
     #[case(
         MaskedArray::try_new(
             PrimitiveArray::from_iter([1i32, 2, 3, 4, 5]).into_array(),
-            Validity::from_iter([true, true, false, true, false])
+            Validity::from_iter([true, true, false, true, false]),
+            &mut array_session().create_execution_ctx(),
         ).unwrap()
     )]
     #[case(
         MaskedArray::try_new(
             PrimitiveArray::from_iter([10i32, 20, 30]).into_array(),
-            Validity::AllValid
+            Validity::AllValid,
+            &mut array_session().create_execution_ctx(),
         ).unwrap()
     )]
     #[case(
         MaskedArray::try_new(
             PrimitiveArray::from_iter(0..100).into_array(),
-            Validity::from_iter((0..100).map(|i| i % 3 != 0))
+            Validity::from_iter((0..100).map(|i| i % 3 != 0)),
+            &mut array_session().create_execution_ctx(),
         ).unwrap()
     )]
     fn test_filter_masked_conformance(#[case] array: MaskedArray) {

@@ -91,19 +91,11 @@ mod tests {
         let fill = Scalar::from(0i32);
 
         // Kernel path: fill_null pushes through the Sparse encoding.
-        let kernel = array
-            .fill_null(fill.clone())
-            .unwrap()
-            .execute::<Canonical>(&mut ctx)
-            .unwrap();
+        let kernel = array.fill_null(fill.clone()).unwrap();
 
         // Baseline: canonicalize first, then fill_null on the PrimitiveArray.
         let canonical_input = array.execute::<Canonical>(&mut ctx).unwrap().into_array();
-        let baseline = canonical_input
-            .fill_null(fill)
-            .unwrap()
-            .execute::<Canonical>(&mut ctx)
-            .unwrap();
+        let baseline = canonical_input.fill_null(fill).unwrap();
 
         assert_arrays_eq!(kernel, baseline, &mut ctx);
     }

@@ -694,7 +694,7 @@ bool vx_array_element_is_invalid(const vx_session *session,
 /**
  * Check how many items in the array are invalid (null).
  */
-size_t vx_array_invalid_count(const vx_array *array, vx_error **error_out);
+size_t vx_array_invalid_count(const vx_session *session, const vx_array *array, vx_error **error_out);
 
 /**
  * Increase reference count on vx_array

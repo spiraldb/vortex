@@ -111,7 +111,6 @@ mod test {
         let mut ctx = SESSION.create_execution_ctx();
         let compressed = zigzag_encode(input.as_view()).unwrap().into_array();
         assert!(compressed.is::<ZigZag>());
-        let decompressed = compressed.execute::<PrimitiveArray>(&mut ctx).unwrap();
-        assert_arrays_eq!(decompressed, input, &mut ctx);
+        assert_arrays_eq!(compressed, input, &mut ctx);
     }
 }

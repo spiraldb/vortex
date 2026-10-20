@@ -295,44 +295,6 @@ def read_latest_baseline_rows(
     return read_jsonl_rows_for_commit(path, baseline_commit_id)
 
 
-def select_latest_baseline_rows(
-    base: pd.DataFrame,
-    pr: pd.DataFrame,
-    reachable_commit_ids: set[str],
-) -> pd.DataFrame:
-    """Select rows from the latest reachable commit containing this benchmark.
-
-    The persisted benchmark history is append-only. A row only appears after
-    that benchmark job uploaded results, so the newest reachable commit with
-    matching row identities is the latest successful baseline for the benchmark
-    under test.
-    """
-
-    if base.empty or "commit_id" not in base.columns:
-        return base
-
-    base = base[base["commit_id"].isin(reachable_commit_ids)].copy()
-    if base.empty:
-        return base
-
-    commit_ids = base["commit_id"].dropna().unique()
-    if len(commit_ids) <= 1:
-        return base
-
-    pr_identities = set(benchmark_identity_rows(pr)["benchmark_identity"])
-    if not pr_identities:
-        return base
-
-    base_identities = benchmark_identity_rows(base)
-    matches = base_identities[base_identities["benchmark_identity"].isin(pr_identities)]
-    matches = matches[matches["commit_id"].notna()]
-    if matches.empty:
-        return base.iloc[0:0].copy()
-
-    baseline_commit_id = matches["commit_id"].iloc[-1]
-    return base[base["commit_id"] == baseline_commit_id].copy()
-
-
 def normalize_measurement_rows(df: pd.DataFrame) -> pd.DataFrame:
     """Add canonical comparison keys to benchmark measurement rows."""
 

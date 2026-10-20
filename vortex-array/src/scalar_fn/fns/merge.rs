@@ -280,7 +280,7 @@ mod tests {
     use crate::scalar_fn::fns::merge::StructArray;
     use crate::scalar_fn::fns::pack::Pack;
 
-    fn primitive_field(array: &ArrayRef, field_path: &[&str]) -> VortexResult<PrimitiveArray> {
+    fn field_array(array: &ArrayRef, field_path: &[&str]) -> VortexResult<ArrayRef> {
         let mut ctx = array_session().create_execution_ctx();
         let mut field_path = field_path.iter();
 
@@ -301,8 +301,7 @@ mod tests {
                 .clone();
             array = next;
         }
-        let result = array.execute::<PrimitiveArray>(&mut ctx)?;
-        Ok(result)
+        Ok(array)
     }
 
     #[test]
@@ -356,27 +355,27 @@ mod tests {
         );
 
         assert_arrays_eq!(
-            primitive_field(&actual_array, &["a"]).unwrap(),
+            field_array(&actual_array, &["a"]).unwrap(),
             PrimitiveArray::from_iter([0i32, 0, 0]),
             &mut ctx
         );
         assert_arrays_eq!(
-            primitive_field(&actual_array, &["b"]).unwrap(),
+            field_array(&actual_array, &["b"]).unwrap(),
             PrimitiveArray::from_iter([2i32, 2, 2]),
             &mut ctx
         );
         assert_arrays_eq!(
-            primitive_field(&actual_array, &["c"]).unwrap(),
+            field_array(&actual_array, &["c"]).unwrap(),
             PrimitiveArray::from_iter([3i32, 3, 3]),
             &mut ctx
         );
         assert_arrays_eq!(
-            primitive_field(&actual_array, &["d"]).unwrap(),
+            field_array(&actual_array, &["d"]).unwrap(),
             PrimitiveArray::from_iter([4i32, 4, 4]),
             &mut ctx
         );
         assert_arrays_eq!(
-            primitive_field(&actual_array, &["e"]).unwrap(),
+            field_array(&actual_array, &["e"]).unwrap(),
             PrimitiveArray::from_iter([5i32, 5, 5]),
             &mut ctx
         );
@@ -437,7 +436,18 @@ mod tests {
             .into_array();
         let actual_array = test_array.clone().apply(&expr).unwrap();
         assert_eq!(actual_array.len(), test_array.len());
-        assert_eq!(actual_array.nchildren(), 0);
+        let expected = StructArray::try_new(
+            Default::default(),
+            vec![],
+            3,
+            crate::validity::Validity::NonNullable,
+        )
+        .unwrap();
+        assert_arrays_eq!(
+            actual_array,
+            expected,
+            &mut array_session().create_execution_ctx()
+        );
     }
 
     #[test]
@@ -485,19 +495,21 @@ mod tests {
             .execute::<StructArray>(&mut ctx)
             .unwrap();
 
-        let inner_struct = actual_array
-            .unmasked_field_by_name("a")
-            .unwrap()
-            .clone()
-            .execute::<StructArray>(&mut ctx)
-            .unwrap();
+        let inner_struct = actual_array.unmasked_field_by_name("a").unwrap();
         assert_eq!(
             inner_struct
+                .dtype()
+                .as_struct_fields()
                 .names()
                 .iter()
                 .map(|name| name.as_ref())
                 .collect::<Vec<_>>(),
             vec!["x"]
+        );
+        assert_arrays_eq!(
+            inner_struct,
+            StructArray::from_fields(&[("x", buffer![0i32, 0, 0].into_array())]).unwrap(),
+            &mut ctx
         );
     }
 
@@ -528,13 +540,20 @@ mod tests {
         ])
         .unwrap()
         .into_array();
-        let actual_array = test_array
-            .apply(&expr)
-            .unwrap()
-            .execute::<StructArray>(&mut ctx)
-            .unwrap();
+        let actual_array = test_array.apply(&expr).unwrap();
 
-        assert_eq!(actual_array.names(), ["a", "c", "b", "d"]);
+        assert_eq!(
+            actual_array.dtype().as_struct_fields().names(),
+            ["a", "c", "b", "d"]
+        );
+        let expected = StructArray::from_fields(&[
+            ("a", buffer![0i32, 0, 0].into_array()),
+            ("c", buffer![1i32, 1, 1].into_array()),
+            ("b", buffer![2i32, 2, 2].into_array()),
+            ("d", buffer![3i32, 3, 3].into_array()),
+        ])
+        .unwrap();
+        assert_arrays_eq!(actual_array, expected, &mut ctx);
     }
 
     #[test]

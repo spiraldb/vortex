@@ -203,15 +203,21 @@ mod tests {
         // Create a channel to ensure the future doesn't complete immediately
         let (send, recv) = oneshot::channel::<()>();
 
+        let (done_send, done_recv) = oneshot::channel::<()>();
         let fut = async move {
+            let _done = done_send;
             let _ = recv.await;
             c.fetch_add(1, Ordering::SeqCst);
         };
         let task = runtime.handle().spawn(fut.boxed());
         drop(task);
 
-        // Now we release the channel to let the future proceed if it wasn't aborted
-        let _ = send.send(());
+        // Aborting is asynchronous. Keep the future blocked until cancellation finishes
+        // so it cannot complete during an in-flight poll.
+        tokio_rt
+            .block_on(done_recv)
+            .expect_err("task has terminated");
+        assert!(send.send(()).is_err());
         assert_eq!(counter.load(Ordering::SeqCst), 0);
     }
 }

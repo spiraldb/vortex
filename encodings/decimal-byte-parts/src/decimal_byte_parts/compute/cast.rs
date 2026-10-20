@@ -43,11 +43,13 @@ mod tests {
     use vortex_array::array_session;
     use vortex_array::arrays::DecimalArray;
     use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::assert_arrays_eq;
     use vortex_array::builtins::ArrayBuiltins;
     use vortex_array::compute::conformance::cast::test_cast_conformance;
     use vortex_array::dtype::DType;
     use vortex_array::dtype::DecimalDType;
     use vortex_array::dtype::Nullability;
+    use vortex_array::validity::Validity;
     use vortex_buffer::buffer;
 
     use crate::DecimalByteParts;
@@ -72,8 +74,15 @@ mod tests {
         );
 
         // Verify the values are preserved
-        let decoded = casted.execute::<DecimalArray>(&mut ctx).unwrap();
-        assert_eq!(decoded.len(), 4);
+        assert_arrays_eq!(
+            casted,
+            DecimalArray::new(
+                buffer![100i32, 200, 300, 400],
+                decimal_dtype,
+                Validity::AllValid
+            ),
+            &mut ctx
+        );
     }
 
     #[test]

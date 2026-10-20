@@ -135,9 +135,13 @@ fn scan_vortex_file_single_row<D, T: FromDuckDBValue<D>>(
     let formatted_query = query.replace('?', &format!("'{file_path}'"));
 
     let result = conn.query(&formatted_query).unwrap();
-    let mut chunk = result.into_iter().next().unwrap();
+    let mut chunks = result.into_iter();
+    let mut chunk = chunks.next().unwrap();
+    assert_eq!(chunk.len(), 1);
+    assert!(chunks.next().is_none());
     let len = chunk.len().as_();
     let vec = chunk.get_vector_mut(col_idx);
+    assert!(!vec.row_is_null(0));
     T::from_duckdb_value(&mut unsafe { vec.as_slice_mut::<D>(len) }[0])
 }
 
@@ -156,6 +160,7 @@ fn scan_vortex_file<D, T: FromDuckDBValue<D>>(
     for mut chunk in result {
         let len = chunk.len().as_();
         let vec = chunk.get_vector_mut(col_idx);
+        assert!((0..len).all(|i| !vec.row_is_null(i as u64)));
         values.extend(
             unsafe { vec.as_slice_mut::<D>(len) }
                 .iter_mut()
@@ -300,12 +305,7 @@ fn assert_membership_filter_pushed(
             plan.push_str(&String::from_duckdb_value(value));
         }
     }
-    // EXPLAIN wraps text inside a box, so search for a token that is short enough to stay on
-    // one line.
-    assert!(
-        plan.contains("sql_null_semantics"),
-        "missing membership filter:\n{plan}"
-    );
+    assert!(plan.contains("Read Vortex"), "missing Vortex scan:\n{plan}");
     assert!(!plan.contains("FILTER"), "filter was not pushed:\n{plan}");
     Ok(())
 }
@@ -361,7 +361,7 @@ fn test_large_membership_filter_pushdown() -> Result<()> {
 }
 
 #[test]
-fn test_membership_with_nonconstant_list_stays_in_duckdb() -> Result<()> {
+fn test_membership_with_nonconstant_list_evaluates_successfully() -> Result<()> {
     let file = RUNTIME.block_on(async {
         let numbers = buffer![1i32, 2, 3];
         write_single_column_vortex_file("number", numbers).await
@@ -593,13 +593,31 @@ fn test_vortex_scan_fixed_size_list_utf8() {
         .query(&format!("SELECT string_lists FROM '{file_path}'"))
         .unwrap();
 
-    let mut row_count = 0;
-    for chunk in result {
-        row_count += chunk.len();
-        // Accessing the structure should not cause a segfault.
-        let _vec = chunk.get_vector(0);
-    }
-    assert_eq!(row_count, 6, "Should have retrieved 6 lists");
+    let actual: Vec<_> = result
+        .into_iter()
+        .flat_map(|chunk| {
+            (0..chunk.len())
+                .map(|i| {
+                    chunk
+                        .get_vector(0)
+                        .get_value(i, chunk.len())
+                        .unwrap()
+                        .to_string()
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert_eq!(
+        actual,
+        [
+            "[first, second, third, fourth]",
+            "[fifth, sixth, first, second]",
+            "[third, fourth, fifth, sixth]",
+            "[first, second, third, fourth]",
+            "[fifth, sixth, first, second]",
+            "[third, fourth, fifth, sixth]"
+        ]
+    );
 }
 
 #[test]
@@ -651,13 +669,27 @@ fn test_vortex_scan_nested_fixed_size_list_utf8() {
         .query(&format!("SELECT nested_string_lists FROM '{file_path}'"))
         .unwrap();
 
-    let mut row_count = 0;
-    for chunk in result {
-        row_count += chunk.len();
-        // Accessing the nested structure should not cause a segfault.
-        let _vec = chunk.get_vector(0);
-    }
-    assert_eq!(row_count, 2, "Should have retrieved 2 outer lists");
+    let actual: Vec<_> = result
+        .into_iter()
+        .flat_map(|chunk| {
+            (0..chunk.len())
+                .map(|i| {
+                    chunk
+                        .get_vector(0)
+                        .get_value(i, chunk.len())
+                        .unwrap()
+                        .to_string()
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert_eq!(
+        actual,
+        [
+            "[[first, second, third, fourth], [fifth, sixth, first, second], [third, fourth, fifth, sixth]]",
+            "[[first, second, third, fourth], [fifth, sixth, first, second], [third, fourth, fifth, sixth]]"
+        ]
+    );
 }
 
 #[test]
@@ -704,12 +736,30 @@ fn test_vortex_scan_list_of_ints() {
         .query(&format!("SELECT int_list FROM '{file_path}'"))
         .unwrap();
 
-    let mut row_count = 0;
-    for chunk in result {
-        row_count += chunk.len();
-        let _vec = chunk.get_vector(0);
-    }
-    assert_eq!(row_count, 5, "Should have retrieved 5 rows");
+    let actual: Vec<_> = result
+        .into_iter()
+        .flat_map(|chunk| {
+            (0..chunk.len())
+                .map(|i| {
+                    chunk
+                        .get_vector(0)
+                        .get_value(i, chunk.len())
+                        .unwrap()
+                        .to_string()
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert_eq!(
+        actual,
+        [
+            "[10, 20, 30]",
+            "[40, 50, 60, 70]",
+            "[80]",
+            "[90, 100, 110, 120, 130]",
+            "[140, 150]"
+        ]
+    );
 }
 
 #[test]
@@ -766,12 +816,29 @@ fn test_vortex_scan_list_of_utf8() {
         .query(&format!("SELECT string_list FROM '{file_path}'"))
         .unwrap();
 
-    let mut row_count = 0;
-    for chunk in result {
-        row_count += chunk.len();
-        let _vec = chunk.get_vector(0);
-    }
-    assert_eq!(row_count, 4, "Should have retrieved 4 rows");
+    let actual: Vec<_> = result
+        .into_iter()
+        .flat_map(|chunk| {
+            (0..chunk.len())
+                .map(|i| {
+                    chunk
+                        .get_vector(0)
+                        .get_value(i, chunk.len())
+                        .unwrap()
+                        .to_string()
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert_eq!(
+        actual,
+        [
+            "[apple, banana, cherry]",
+            "[date, elderberry]",
+            "[fig, grape, honeydew, kiwi]",
+            "[lemon, mango, nectarine]"
+        ]
+    );
 }
 
 #[test]
@@ -860,12 +927,48 @@ fn test_vortex_scan_ultra_deep_nesting() {
         .query(&format!("SELECT ultra_deep FROM '{file_path}'"))
         .unwrap();
 
-    let mut row_count = 0;
-    for chunk in result {
-        row_count += chunk.len();
-        let _vec = chunk.get_vector(0);
-    }
-    assert_eq!(row_count, 1, "Should have retrieved 1 row");
+    let leaves = [
+        "[zero, one, two, three, four]",
+        "[five, six, seven, eight, nine]",
+    ];
+    let mut leaf = 0;
+    let lists: Vec<_> = [3, 3, 2, 4, 3, 3, 2, 4, 3, 3, 2, 4]
+        .into_iter()
+        .map(|len| {
+            let items: Vec<_> = (0..len)
+                .map(|_| {
+                    let item = leaves[leaf % 2];
+                    leaf += 1;
+                    item
+                })
+                .collect();
+            format!("[{}]", items.join(", "))
+        })
+        .collect();
+    let fixed: Vec<_> = lists
+        .chunks(3)
+        .map(|items| format!("[{}]", items.join(", ")))
+        .collect();
+    let outer: Vec<_> = fixed
+        .chunks(2)
+        .map(|items| format!("[{}]", items.join(", ")))
+        .collect();
+    let expected = format!("[{}]", outer.join(", "));
+    let actual: Vec<_> = result
+        .into_iter()
+        .flat_map(|chunk| {
+            (0..chunk.len())
+                .map(|i| {
+                    chunk
+                        .get_vector(0)
+                        .get_value(i, chunk.len())
+                        .unwrap()
+                        .to_string()
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert_eq!(actual, [expected]);
 }
 
 async fn write_vortex_file_with_encodings() -> NamedTempFile {
@@ -974,6 +1077,9 @@ fn test_vortex_encodings_roundtrip() {
     let len: usize = chunk.len().as_();
     assert_eq!(len, 5); // 5 rows
     assert_eq!(chunk.column_count(), 10); // 10 columns
+    for col in 0..10 {
+        assert!((0..len).all(|row| !chunk.get_vector(col).row_is_null(row as u64)));
+    }
 
     // Verify primitive i32 (column 0)
     let primitive_i32_vec = chunk.get_vector(0);
@@ -983,9 +1089,7 @@ fn test_vortex_encodings_roundtrip() {
     // Verify primitive f64 (column 1)
     let primitive_f64_vec = chunk.get_vector(1);
     let primitive_f64_slice = primitive_f64_vec.as_slice_with_len::<f64>(len);
-    assert!((primitive_f64_slice[0] - 1.1).abs() < f64::EPSILON);
-    assert!((primitive_f64_slice[1] - 2.2).abs() < f64::EPSILON);
-    assert!((primitive_f64_slice[2] - 3.3).abs() < f64::EPSILON);
+    assert_eq!(primitive_f64_slice, [1.1, 2.2, 3.3, 4.4, 5.5]);
 
     // Verify constant string (column 2)
     let constant_vec = chunk.get_vector_mut(2);
@@ -1063,13 +1167,6 @@ fn test_vortex_encodings_roundtrip() {
     assert_eq!(fixed_child_values, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 }
 
-// Spatial extension is not bundled with duckdb. If we're building from a
-// commit, don't run this test, since bundling spatial requires openssl-dev
-// which is an issue on macos runners.
-#[cfg_attr(
-    not(duckdb_release),
-    ignore = "spatial extension requires a release DuckDB build"
-)]
 #[test]
 fn test_fastlanes_rle_roundtrip() {
     let expected: Vec<i32> = (0i32..2048).map(|i| i / 256).collect();
@@ -1084,6 +1181,13 @@ fn test_fastlanes_rle_roundtrip() {
     assert_eq!(values, expected);
 }
 
+// Spatial extension is not bundled with duckdb. If we're building from a
+// commit, don't run this test, since bundling spatial requires openssl-dev
+// which is an issue on macos runners.
+#[cfg_attr(
+    not(duckdb_release),
+    ignore = "spatial extension requires a release DuckDB build"
+)]
 #[test]
 fn test_geometry() {
     let file = RUNTIME.block_on(async {

@@ -169,15 +169,20 @@ mod tests {
     }
 
     #[test]
-    fn search_sorted_probes_when_values_are_not_addressable() -> VortexResult<()> {
+    fn search_sorted_nullable_values_respects_validity() -> VortexResult<()> {
         let mut ctx = array_session().create_execution_ctx();
-        // Nullable: the buffer holds an arbitrary value wherever an element is null, so the
-        // search has to consult validity through the probe.
-        let array = PrimitiveArray::new(buffer![1i32, 2, 3, 4], Validity::AllValid).into_array();
+        let array = PrimitiveArray::new(
+            buffer![99i32, 2, 3, 4],
+            Validity::from_iter([false, true, true, true]),
+        )
+        .into_array();
         let searcher = SearchSortedPrimitiveArray::<i32>::new(&array, &mut ctx);
-        assert!(matches!(searcher.reader, Reader::Probe(_)));
         assert_eq!(
-            searcher.search_sorted(&3i32, SearchSortedSide::Left)?,
+            searcher.search_sorted(&None::<i32>, SearchSortedSide::Left)?,
+            SearchResult::Found(0)
+        );
+        assert_eq!(
+            searcher.search_sorted(&Some(3i32), SearchSortedSide::Left)?,
             SearchResult::Found(2)
         );
         Ok(())

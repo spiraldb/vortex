@@ -228,9 +228,9 @@ Validity Array::validity() const {
     return Access::adopt<Validity>(static_cast<ValidityType>(raw.type), raw.array);
 }
 
-size_t Array::null_count() const {
+size_t Array::null_count(const Session &session) const {
     vx_error *error = nullptr;
-    const size_t count = vx_array_invalid_count(handle_.get(), &error);
+    const size_t count = vx_array_invalid_count(Access::c_ptr(session), handle_.get(), &error);
     throw_on_error(error);
     return count;
 }

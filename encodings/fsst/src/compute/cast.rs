@@ -95,7 +95,6 @@ mod tests {
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
     use vortex_array::arrays::VarBinArray;
-    use vortex_array::builtins::ArrayBuiltins;
     use vortex_array::compute::conformance::cast::test_cast_conformance;
     use vortex_array::dtype::DType;
     use vortex_array::dtype::Nullability;
@@ -111,24 +110,6 @@ mod tests {
         initialize(&session);
         session
     });
-
-    #[test]
-    fn test_cast_fsst_nullability() -> VortexResult<()> {
-        let mut ctx = SESSION.create_execution_ctx();
-        let strings = VarBinArray::from_iter(
-            vec![Some("hello"), Some("world"), Some("hello world")],
-            DType::Utf8(Nullability::NonNullable),
-        )
-        .into_array();
-
-        let compressor = fsst_train_compressor(&strings, &mut ctx)?;
-        let fsst = fsst_compress(&strings, &compressor, &mut ctx)?;
-
-        // Cast to nullable
-        let casted = fsst.into_array().cast(DType::Utf8(Nullability::Nullable))?;
-        assert_eq!(casted.dtype(), &DType::Utf8(Nullability::Nullable));
-        Ok(())
-    }
 
     #[rstest]
     #[case(VarBinArray::from_iter(

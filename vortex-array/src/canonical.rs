@@ -1318,12 +1318,14 @@ mod tests {
     use crate::arrays::Constant;
     use crate::arrays::ConstantArray;
     use crate::arrays::Primitive;
+    use crate::arrays::PrimitiveArray;
     use crate::arrays::Struct;
     use crate::arrays::VarBinArray;
     use crate::arrays::Variant;
     use crate::arrays::VariantArray;
     use crate::arrays::struct_::StructArrayExt;
     use crate::arrays::variant::VariantArraySlotsExt;
+    use crate::assert_arrays_eq;
     use crate::canonical::AnyCanonical;
     use crate::canonical::StructArray;
     use crate::dtype::DType;
@@ -1470,6 +1472,7 @@ mod tests {
 
         assert!(value.is::<Primitive>());
         assert!(!value.is::<Constant>());
+        assert_arrays_eq!(value, PrimitiveArray::from_iter([10i32, 10]), &mut ctx);
 
         Ok(())
     }

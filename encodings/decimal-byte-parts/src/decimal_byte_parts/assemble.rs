@@ -260,7 +260,7 @@ mod tests {
         );
         let round_tripped = round_trip(decimal.clone())?;
         assert_eq!(round_tripped.values_type(), values_type);
-        assert_arrays_eq!(decimal, round_tripped, &mut ctx);
+        assert_arrays_eq!(round_tripped, decimal, &mut ctx);
         Ok(())
     }
 
@@ -303,9 +303,9 @@ mod tests {
             &DType::Primitive(PType::I64, decimal.dtype().nullability())
         );
         for lower in parts.lower_parts {
-            assert_arrays_eq!(expected.clone(), lower, &mut ctx);
+            assert_arrays_eq!(lower, expected.clone(), &mut ctx);
         }
-        assert_arrays_eq!(decimal.clone(), round_trip(decimal)?, &mut ctx);
+        assert_arrays_eq!(round_trip(decimal.clone())?, decimal, &mut ctx);
         Ok(())
     }
 
@@ -377,7 +377,7 @@ mod tests {
             msp.as_slice::<i32>().as_ptr(),
             decimal.buffer::<i32>().as_ptr()
         );
-        assert_arrays_eq!(decimal.clone(), round_trip(decimal)?, &mut ctx);
+        assert_arrays_eq!(round_trip(decimal.clone())?, decimal, &mut ctx);
         Ok(())
     }
 
@@ -452,8 +452,8 @@ mod tests {
             ]
         };
         assert_arrays_eq!(
-            DecimalArray::new(expected, dtype, Validity::NonNullable),
             actual,
+            DecimalArray::new(expected, dtype, Validity::NonNullable),
             &mut ctx
         );
         Ok(())

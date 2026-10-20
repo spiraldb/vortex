@@ -600,6 +600,8 @@ mod tests {
             Err(array) => array,
         };
 
-        assert_arrays_eq!(array, alias, &mut ctx);
+        let expected = PrimitiveArray::new(buffer![1i32, 2, 3], Validity::NonNullable);
+        assert_arrays_eq!(array, &expected, &mut ctx);
+        assert_arrays_eq!(alias, expected, &mut ctx);
     }
 }

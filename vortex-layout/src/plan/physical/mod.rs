@@ -19,6 +19,7 @@ mod optimize;
 pub mod optimizer;
 pub mod pipeline;
 mod plans;
+pub(crate) mod selection;
 mod typed;
 mod vtable;
 

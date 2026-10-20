@@ -904,12 +904,18 @@ mod tests {
     use arrow_schema::DataType;
     use arrow_schema::Field;
     use rstest::rstest;
+    use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute as _;
     use vortex_array::array_session;
     use vortex_array::arrays::Dict;
+    use vortex_array::arrays::ListArray;
+    use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::arrays::VarBinViewArray;
     use vortex_array::assert_arrays_eq;
     use vortex_array::dtype::DType;
     use vortex_array::dtype::Nullability;
+    use vortex_array::dtype::PType;
+    use vortex_array::validity::Validity;
     use vortex_error::VortexResult;
 
     use super::*;
@@ -951,7 +957,16 @@ mod tests {
         let fresh = session.from_arrow_array(lists(start as i64..(start + len) as i64), false)?;
         assert_eq!(sliced.nbytes(), fresh.nbytes());
         let mut ctx = array_session().create_execution_ctx();
-        assert_arrays_eq!(sliced, fresh, &mut ctx);
+        let expected = ListArray::new(
+            PrimitiveArray::from_iter(
+                (start as i64..(start + len) as i64).flat_map(|row| [row, row + 1]),
+            )
+            .into_array(),
+            PrimitiveArray::from_iter((0..=len as u64).map(|row| row * 2)).into_array(),
+            Validity::NonNullable,
+        );
+        assert_arrays_eq!(sliced, expected, &mut ctx);
+        assert_arrays_eq!(fresh, expected, &mut ctx);
         Ok(())
     }
 
@@ -964,6 +979,11 @@ mod tests {
         ]);
         let struct_fields = session.from_arrow_fields(&fields)?;
         let schema_dtype = session.from_arrow_schema(&Schema::new(fields))?;
+        let expected = StructFields::from_iter([
+            ("a", DType::Primitive(PType::I32, Nullability::NonNullable)),
+            ("b", DType::Utf8(Nullability::Nullable)),
+        ]);
+        assert_eq!(struct_fields, expected);
         assert_eq!(
             schema_dtype,
             DType::Struct(struct_fields, Nullability::NonNullable)
@@ -1013,6 +1033,11 @@ mod tests {
         assert!(array.is::<Dict>(), "expected a Dict encoding, got {array}");
         assert_eq!(array.dtype(), &dtype);
         assert_eq!(array.len(), 4);
+        assert_arrays_eq!(
+            array,
+            VarBinViewArray::from_iter_str(["a", "b", "a", "b"]),
+            &mut array_session().create_execution_ctx()
+        );
         Ok(())
     }
 }

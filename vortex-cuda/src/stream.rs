@@ -270,12 +270,16 @@ fn register_stream_callback(stream: &CudaStream) -> VortexResult<kanal::AsyncRec
 mod tests {
     use std::mem::size_of;
 
+    use vortex::array::Canonical;
     use vortex::array::IntoArray;
+    use vortex::array::VortexSessionExecute;
     use vortex::array::arrays::BoolArray;
+    use vortex::array::assert_arrays_eq;
     use vortex::array::validity::Validity;
     use vortex::error::VortexResult;
 
     use super::padded_device_allocation_len;
+    use crate::CanonicalCudaExt;
     use crate::CudaSession;
     use crate::device_buffer::CUDF_VALIDITY_BUFFER_PADDING;
     use crate::device_buffer::cuda_backing_allocation;
@@ -355,6 +359,16 @@ mod tests {
 
         assert_eq!(sliced.len(), 9);
         assert!(sliced.buffer_handles()[0].is_on_device());
+        let mut cpu_ctx = vortex_array::array_session().create_execution_ctx();
+        let host = sliced
+            .execute::<Canonical>(&mut cpu_ctx)?
+            .into_host(&mut cpu_ctx)
+            .await?;
+        assert_arrays_eq!(
+            host.into_array(),
+            BoolArray::from_iter([false, true, false, true, true, false, true, true, false]),
+            &mut cpu_ctx
+        );
         Ok(())
     }
 }

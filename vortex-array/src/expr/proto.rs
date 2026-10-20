@@ -161,6 +161,6 @@ mod tests {
         let roundtrip = expr.serialize_proto().unwrap();
         assert_eq!(roundtrip.id, expr_proto.id);
         assert_eq!(roundtrip.metadata(), expr_proto.metadata());
-        assert_eq!(roundtrip.children.len(), 1);
+        assert_eq!(roundtrip.children, expr_proto.children);
     }
 }

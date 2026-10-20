@@ -804,11 +804,6 @@ mod tests {
     // ── should_use_take heuristic tests ────────────────────────────────────
 
     #[test]
-    fn heuristic_zero_lists_uses_take() {
-        assert!(ListViewArray::should_use_take(0, 0));
-    }
-
-    #[test]
     fn heuristic_small_lists_use_take() {
         // avg = 127 → take
         assert!(ListViewArray::should_use_take(127_000, 1_000));

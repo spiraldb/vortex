@@ -496,7 +496,6 @@ mod tests {
             shredded.dtype(),
             &DType::Primitive(PType::I32, Nullability::Nullable)
         );
-        let shredded = shredded.clone().execute::<PrimitiveArray>(&mut ctx)?;
         assert_arrays_eq!(
             shredded,
             PrimitiveArray::from_option_iter([Some(10), None, Some(30)]),
@@ -530,7 +529,7 @@ mod tests {
             .read_all()
             .await?;
 
-        assert_arrays_eq!(expected, actual, &mut SESSION.create_execution_ctx());
+        assert_arrays_eq!(actual, expected, &mut SESSION.create_execution_ctx());
         Ok(())
     }
 
@@ -560,7 +559,7 @@ mod tests {
             .read_all()
             .await?;
 
-        assert_arrays_eq!(expected, actual, &mut SESSION.create_execution_ctx());
+        assert_arrays_eq!(actual, expected, &mut SESSION.create_execution_ctx());
         Ok(())
     }
 

@@ -360,7 +360,6 @@ mod tests {
     use rstest::rstest;
     use vortex_array::ArrayContext;
     use vortex_array::ArrayRef;
-    use vortex_array::Canonical;
     use vortex_array::IntoArray as _;
     use vortex_array::MaskFuture;
     use vortex_array::VortexSessionExecute;
@@ -389,7 +388,6 @@ mod tests {
     use vortex_array::expr::root;
     use vortex_array::validity::Validity;
     use vortex_btrblocks::BtrBlocksCompressorBuilder;
-    use vortex_error::VortexExpect;
     use vortex_error::VortexResult;
     use vortex_io::runtime::Handle;
     use vortex_io::runtime::single::block_on;
@@ -693,11 +691,7 @@ mod tests {
                 .execute_mask(array.len(), &mut ctx)
                 .unwrap()
                 .into_array();
-            let actual_canonical = actual
-                .execute::<Canonical>(&mut ctx)
-                .vortex_expect("to_canonical failed")
-                .into_array();
-            assert_arrays_eq!(actual_canonical, expected, &mut ctx);
+            assert_arrays_eq!(actual, expected, &mut ctx);
         })
     }
 

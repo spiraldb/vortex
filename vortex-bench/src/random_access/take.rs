@@ -29,10 +29,12 @@ use tokio::fs::File;
 use vortex::array::Canonical;
 use vortex::array::IntoArray;
 use vortex::array::VortexSessionExecute;
+use vortex::array::stream::ArrayStreamAdapter;
 use vortex::array::stream::ArrayStreamExt;
 use vortex::buffer::Buffer;
 use vortex::file::OpenOptionsSessionExt;
 use vortex::file::VortexFile;
+use vortex::layout::scan::v2::ScanBuilder;
 use vortex::scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex::utils::aliases::hash_map::HashMap;
 
@@ -128,7 +130,8 @@ impl RandomAccessor for ArrowIpcRandomAccessor {
 
 /// Random accessor for Vortex format files.
 ///
-/// The file handle is opened at construction time and reused across `take()` calls.
+/// The file handle is opened at construction time and reused across `take()` calls. Rows are
+/// read with the V2 scan, which requires files without list layouts.
 pub struct VortexRandomAccessor {
     name: String,
     format: Format,
@@ -142,11 +145,7 @@ impl VortexRandomAccessor {
         name: impl Into<String>,
         format: Format,
     ) -> anyhow::Result<Self> {
-        let file = SESSION
-            .open_options()
-            .with_layout_reader_cache()
-            .open_path(path.as_ref())
-            .await?;
+        let file = SESSION.open_options().open_path(path.as_ref()).await?;
         Ok(Self {
             name: name.into(),
             format,
@@ -163,7 +162,6 @@ impl VortexRandomAccessor {
     ) -> anyhow::Result<Self> {
         let file = SESSION
             .open_options()
-            .with_layout_reader_cache()
             .open_object_store(remote.store(), remote.key(path)?)
             .await?;
         Ok(Self {
@@ -185,16 +183,16 @@ impl RandomAccessor for VortexRandomAccessor {
     }
 
     async fn take(&self, indices: &[u64]) -> anyhow::Result<RandomAccessorRet> {
-        let indices_buf: Buffer<u64> = Buffer::from(indices.to_vec());
-        let array = self
-            .file
-            .scan()?
-            .with_row_indices(StrictSortedBuffer::try_new(indices_buf)?)
-            .into_array_stream()?
+        let indices = StrictSortedBuffer::try_new(Buffer::from(indices.to_vec()))?;
+        let stream = ScanBuilder::new(SESSION.clone(), self.file.scan_file())
+            .with_row_indices(indices)
+            .into_stream()?;
+        let array = ArrayStreamAdapter::new(self.file.dtype().clone(), stream)
             .read_all()
             .await?;
 
-        // We canonicalize / decompress for equivalence to Arrow's `RecordBatch`es.
+        // Keep the historical benchmark contract: canonicalize the outer array, leaving nested
+        // values lazy.
         let mut ctx = SESSION.create_execution_ctx();
         let canonical = array.execute::<Canonical>(&mut ctx)?.into_array();
         Ok(RandomAccessorRet::ArrayRef(canonical))

@@ -171,7 +171,7 @@ mod tests {
     use crate::scalar::Scalar;
     use crate::scalar_fn::TypedScalarFnInstance;
     use crate::scalar_fn::fns::binary::Binary;
-    use crate::scalar_fn::fns::literal::Literal;
+    use crate::scalar_fn::fns::list_contains::PreparedSet;
     use crate::scalar_fn::fns::operators::Operator;
     use crate::validity::Validity;
 
@@ -229,25 +229,23 @@ mod tests {
 
     #[test]
     fn test_filter_pushdown_without_children() -> VortexResult<()> {
-        let array = ScalarFnArray::try_new_with_len(
-            TypedScalarFnInstance::new(Literal, Scalar::from(7i32)).erased(),
-            vec![],
-            3,
-        )?;
-        let parent = FilterArray::try_new(
-            array.clone().into_array(),
-            Mask::from_iter([true, false, true]),
-        )?;
+        let list = Scalar::list(
+            DType::Primitive(PType::I32, Nullability::NonNullable),
+            vec![Scalar::from(7i32)],
+            Nullability::NonNullable,
+        );
+        let array = PreparedSet::try_new_array(list.clone(), 3)?;
+        let parent = FilterArray::try_new(array.clone(), Mask::from_iter([true, false, true]))?;
 
         let result = ScalarFilterPushdownRule
-            .reduce_parent(array.as_view(), parent.as_view(), 0)?
+            .reduce_parent(array.as_::<ScalarFn>(), parent.as_view(), 0)?
             .ok_or_else(|| vortex_err!("expected filter pushdown"))?;
 
         assert_eq!(result.as_::<ScalarFn>().nchildren(), 0);
         assert_eq!(result.len(), 2);
         assert_arrays_eq!(
             result,
-            ConstantArray::new(7i32, 2),
+            ConstantArray::new(list, 2),
             &mut array_session().create_execution_ctx()
         );
         Ok(())
@@ -272,7 +270,12 @@ mod tests {
         .into_array();
 
         let expr = is_null(root());
-        array.apply(&expr).vortex_expect("expr evaluation");
+        let result = array.apply(&expr).vortex_expect("expr evaluation");
+        assert_arrays_eq!(
+            result,
+            BoolArray::from_iter([false]),
+            &mut array_session().create_execution_ctx()
+        );
     }
 
     #[test]

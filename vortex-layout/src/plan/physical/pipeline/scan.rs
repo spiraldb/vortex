@@ -626,7 +626,7 @@ struct Active {
 /// reads of later splits are in flight while earlier ones compute.
 pub struct Scan {
     core: Core,
-    root: Root,
+    root: Option<Root>,
     splits: Vec<Split>,
     next: usize,
     active: Vec<Option<Active>>,
@@ -685,7 +685,7 @@ impl Scan {
         core.dirty_flags = vec![false; 1];
         Ok(Self {
             core,
-            root,
+            root: Some(root),
             splits,
             next: 0,
             active: vec![None],
@@ -766,12 +766,21 @@ impl Scan {
         let index = self.next;
         self.next += 1;
         let split = self.splits[index].clone();
-        let output = match &self.root {
+        let output = match self
+            .root
+            .as_ref()
+            .ok_or_else(|| vortex_err!("Scan has no plan for its next split"))?
+        {
             Root::Plan(plan) => {
                 self.core
                     .compile_stage(plan, split.rows.clone(), &split.mask, (slot, index))?
             }
         };
+        if self.next == self.splits.len() {
+            // Compiled operators own what they need. The last split no longer needs the
+            // lowering tree or the source layouts retained by its lazy children.
+            self.root = None;
+        }
         if output.is_none() {
             self.core.finish_split(index);
         } else {

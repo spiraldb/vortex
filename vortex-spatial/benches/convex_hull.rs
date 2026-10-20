@@ -92,9 +92,11 @@ fn sixty_four_points(bencher: Bencher) {
 
 #[divan::bench]
 fn nullable_eight_points(bencher: Bencher) {
+    let mut ctx = SESSION.create_execution_ctx();
     let input = MaskedArray::try_new(
         multipoints(ROWS, 8),
         Validity::from_iter((0..ROWS).map(|row| !row.is_multiple_of(8))),
+        &mut ctx,
     )
     .unwrap()
     .into_array();

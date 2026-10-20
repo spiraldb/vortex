@@ -298,12 +298,7 @@ mod tests {
             Validity::Array(BoolArray::from_iter([true, true, true, false, true]).into_array()),
         )
         .into_array();
-        let undict = dict_array
-            .as_array()
-            .clone()
-            .execute::<PrimitiveArray>(&mut ctx)?
-            .into_array();
-        assert_arrays_eq!(undict, expected, &mut ctx);
+        assert_arrays_eq!(dict_array, expected, &mut ctx);
         Ok(())
     }
 }

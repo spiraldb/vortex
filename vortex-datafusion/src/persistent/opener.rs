@@ -939,6 +939,7 @@ mod tests {
         let num_rows = data.iter().map(|rb| rb.num_rows()).sum::<usize>();
 
         assert_eq!((num_batches, num_rows), (1, 3));
+        assert_eq!(concat_batches(&batch.schema(), &data)?, batch);
 
         // filter doesn't matches partition value
         let filter = col("part").eq(lit(2));
@@ -1050,6 +1051,14 @@ mod tests {
             let batches = opener.open(file)?.await?.try_collect::<Vec<_>>().await?;
 
             assert!(!batches.is_empty());
+            let expected = RecordBatch::try_new(
+                Arc::clone(&expected_schema),
+                vec![
+                    Arc::new(Int32Array::from(vec![1, 2, 3])),
+                    Arc::new(Int32Array::from(vec![1, 1, 1])),
+                ],
+            )?;
+            assert_eq!(concat_batches(&expected_schema, &batches)?, expected);
             for batch in batches {
                 assert_eq!(batch.schema().as_ref(), expected_schema.as_ref());
             }
@@ -1081,6 +1090,11 @@ mod tests {
 
             assert_eq!(batches.len(), 1);
             assert_eq!(batches[0].schema().as_ref(), expected_schema.as_ref());
+            let expected = RecordBatch::try_new(
+                Arc::clone(&expected_schema),
+                vec![Arc::new(Int32Array::from(vec![1, 2, 3]))],
+            )?;
+            assert_eq!(concat_batches(&expected_schema, &batches)?, expected);
         }
 
         Ok(())
@@ -1104,6 +1118,7 @@ mod tests {
         let batches = opener.open(file)?.await?.try_collect::<Vec<_>>().await?;
 
         assert_eq!(batches.iter().map(RecordBatch::num_rows).sum::<usize>(), 3);
+        assert_eq!(concat_batches(&batch.schema(), &batches)?, batch);
         assert_eq!(
             df_metrics
                 .clone_inner()
@@ -1212,7 +1227,8 @@ mod tests {
 
         // The first open misses the cache and must write the parsed footer back.
         let stream = opener.open(file.clone())?.await?;
-        stream.try_collect::<Vec<_>>().await?;
+        let first = stream.try_collect::<Vec<_>>().await?;
+        assert_eq!(concat_batches(&batch.schema(), &first)?, batch);
 
         let entry = cache
             .get(file.path())
@@ -1230,6 +1246,7 @@ mod tests {
         let stream = opener.open(file.clone())?.await?;
         let data = stream.try_collect::<Vec<_>>().await?;
         assert_eq!(data.iter().map(|rb| rb.num_rows()).sum::<usize>(), 3);
+        assert_eq!(concat_batches(&batch.schema(), &data)?, batch);
 
         Ok(())
     }
@@ -1464,6 +1481,30 @@ mod tests {
 
         assert_eq!(data.len(), 1);
         assert_eq!(data[0].num_rows(), 3);
+        assert_eq!(
+            data[0].schema().as_ref(),
+            table_schema.table_schema().as_ref()
+        );
+        let fields = match table_schema.table_schema().field(0).data_type() {
+            DataType::Struct(fields) => fields.clone(),
+            _ => unreachable!(),
+        };
+        let expected_struct = StructArray::new(
+            fields,
+            vec![
+                Arc::new(DictionaryArray::<UInt32Type>::from_iter([
+                    "value1", "value2", "value3",
+                ])),
+                Arc::new(DictionaryArray::<UInt32Type>::from_iter(["a", "b", "c"])),
+                Arc::new(StringArray::from(vec![None::<&str>; 3])),
+            ],
+            None,
+        );
+        let expected = RecordBatch::try_new(
+            Arc::clone(table_schema.table_schema()),
+            vec![Arc::new(expected_struct)],
+        )?;
+        assert_eq!(concat_batches(&expected.schema(), &data)?, expected);
 
         Ok(())
     }
@@ -1710,6 +1751,8 @@ mod tests {
 
         let total_rows: usize = data.iter().map(|rb| rb.num_rows()).sum();
         assert_eq!(total_rows, 10);
+        let expected = batch.project(&[0])?;
+        assert_eq!(concat_batches(&expected.schema(), &data)?, expected);
 
         Ok(())
     }
@@ -1739,6 +1782,8 @@ mod tests {
 
         let total_rows: usize = data.iter().map(|rb| rb.num_rows()).sum();
         assert_eq!(total_rows, 10);
+        let expected = batch.project(&[0])?;
+        assert_eq!(concat_batches(&expected.schema(), &data)?, expected);
 
         Ok(())
     }
@@ -1847,7 +1892,8 @@ mod tests {
         let batch = RecordBatch::try_new(Arc::clone(&schema), vec![Arc::new(struct_array)])?;
 
         let file_path = "/test.vortex";
-        let data_size = write_arrow_to_vortex(Arc::clone(&object_store), file_path, batch).await?;
+        let data_size =
+            write_arrow_to_vortex(Arc::clone(&object_store), file_path, batch.clone()).await?;
 
         let opener = make_test_opener(
             Arc::clone(&object_store),
@@ -1860,6 +1906,7 @@ mod tests {
             .try_collect()
             .await?;
 
+        assert_eq!(concat_batches(&schema, &data)?, batch);
         assert_eq!(
             data[0].schema().field(0).data_type(),
             &DataType::Struct(struct_fields),

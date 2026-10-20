@@ -6,7 +6,6 @@ use vortex_error::VortexResult;
 use vortex_mask::Mask;
 
 use crate::IntoArray;
-use crate::RecursiveCanonical;
 use crate::VortexSessionExecute;
 use crate::arrays::BoolArray;
 use crate::arrays::DecimalArray;
@@ -65,7 +64,7 @@ fn test_take_execute_kernel_maps_indices_through_filter() -> VortexResult<()> {
         .expect("filter child should execute its take parent");
 
     assert_arrays_eq!(
-        result.execute::<RecursiveCanonical>(&mut ctx)?.0,
+        result,
         PrimitiveArray::from_option_iter([Some(40i32), None, Some(10)]).into_array(),
         &mut ctx
     );
@@ -95,7 +94,7 @@ fn test_take_execute_kernel_nullable_fast_path_maps_indices_through_filter() -> 
 
     assert!(result.as_opt::<Primitive>().is_some());
     assert_arrays_eq!(
-        result.execute::<RecursiveCanonical>(&mut ctx)?.0,
+        result,
         PrimitiveArray::from_option_iter([Some(40i32), None, Some(20)]).into_array(),
         &mut ctx
     );
@@ -117,7 +116,7 @@ fn test_take_execute_kernel_fast_path_maps_indices_through_filter() -> VortexRes
 
     assert!(result.as_opt::<Primitive>().is_some());
     assert_arrays_eq!(
-        result.execute::<RecursiveCanonical>(&mut ctx)?.0,
+        result,
         PrimitiveArray::from_iter([50i32, 20, 60]).into_array(),
         &mut ctx
     );
@@ -215,7 +214,7 @@ fn test_take_execute_kernel_handles_empty_sequential_take() -> VortexResult<()> 
         .expect("filter child should execute its take parent");
 
     assert_arrays_eq!(
-        result.execute::<RecursiveCanonical>(&mut ctx)?.0,
+        result,
         ListArray::try_new(
             PrimitiveArray::from_iter(std::iter::empty::<u32>()).into_array(),
             buffer![0u32].into_array(),
@@ -239,11 +238,7 @@ fn assert_take_execute_maps_child_dtype(
     let result = execute_parent(&filter, &parent, 1, &mut ctx)?
         .expect("filter child should execute its take parent");
 
-    assert_arrays_eq!(
-        result.execute::<RecursiveCanonical>(&mut ctx)?.0,
-        expected,
-        &mut ctx
-    );
+    assert_arrays_eq!(result, expected, &mut ctx);
     Ok(())
 }
 
@@ -267,6 +262,12 @@ fn execute_primitive_take(
     filter_mask: Mask,
     take_len: usize,
 ) -> VortexResult<Option<crate::ArrayRef>> {
+    let selected: Vec<_> = filter_mask
+        .iter()
+        .enumerate()
+        .filter_map(|(i, keep)| keep.then_some(u32::try_from(i).unwrap()))
+        .collect();
+    let expected = PrimitiveArray::from_iter((0..take_len).map(|i| selected[i % selected.len()]));
     let child_len = filter_mask.len();
     let filtered_len = filter_mask.true_count();
     let child_len_u32 = u32::try_from(child_len)?;
@@ -279,7 +280,10 @@ fn execute_primitive_take(
     let parent = DictArray::try_new(indices.into_array(), filter.clone())?.into_array();
     let mut ctx = crate::array_session().create_execution_ctx();
 
-    execute_parent(&filter, &parent, 1, &mut ctx)
+    let result = execute_parent(&filter, &parent, 1, &mut ctx)?;
+    let actual = result.as_ref().unwrap_or(&parent);
+    assert_arrays_eq!(actual, expected, &mut ctx);
+    Ok(result)
 }
 
 #[test]
@@ -349,10 +353,7 @@ fn test_take_execute_kernel_handles_nullable_primitive_filter_child() -> VortexR
     let result = execute_parent(&filter, &parent, 1, &mut ctx)?;
 
     assert_arrays_eq!(
-        result
-            .expect("filter child should execute its take parent")
-            .execute::<RecursiveCanonical>(&mut ctx)?
-            .0,
+        result.expect("filter child should execute its take parent"),
         PrimitiveArray::from_option_iter([Some(40i32), Some(10), None]).into_array(),
         &mut ctx
     );
@@ -374,7 +375,7 @@ fn test_take_execute_kernel_preserves_nullable_all_valid_fixed_width_child() -> 
 
     assert_eq!(result.dtype(), parent.dtype());
     assert_arrays_eq!(
-        result.execute::<RecursiveCanonical>(&mut ctx)?.0,
+        result,
         PrimitiveArray::new(buffer![10i32, 20], Validity::AllValid).into_array(),
         &mut ctx
     );
@@ -399,10 +400,7 @@ fn test_take_execute_kernel_handles_nullable_decimal_filter_child() -> VortexRes
     let result = execute_parent(&filter, &parent, 1, &mut ctx)?;
 
     assert_arrays_eq!(
-        result
-            .expect("filter child should execute its take parent")
-            .execute::<RecursiveCanonical>(&mut ctx)?
-            .0,
+        result.expect("filter child should execute its take parent"),
         DecimalArray::from_option_iter([Some(400i128), Some(100), None], decimal_dtype)
             .into_array(),
         &mut ctx
@@ -495,7 +493,7 @@ fn test_take_execute_kernel_preserves_nullable_indices_dtype_fast_path() -> Vort
 
     assert_eq!(result.dtype(), parent.dtype());
     assert_arrays_eq!(
-        result.execute::<RecursiveCanonical>(&mut ctx)?.0,
+        result,
         VarBinViewArray::from_iter_nullable_str([Some("a"), Some("b")]).into_array(),
         &mut ctx
     );

@@ -244,7 +244,9 @@ mod tests {
         let against_constant = SpatialIntersects::try_new(donut_probes()?, constant)?.into_array();
         let pairwise = SpatialIntersects::try_new(donut_probes()?, column)?.into_array();
 
-        assert_arrays_eq!(against_constant, pairwise, &mut ctx);
+        let expected = BoolArray::from_iter(DONUT_EXPECTED);
+        assert_arrays_eq!(against_constant, expected, &mut ctx);
+        assert_arrays_eq!(pairwise, expected, &mut ctx);
         Ok(())
     }
 
@@ -263,10 +265,10 @@ mod tests {
         let dtype = point_column(vec![0.0], vec![0.0])?.dtype().clone();
         let non_nullable =
             SpatialIntersects.return_dtype(&EmptyOptions, &[dtype.clone(), dtype.clone()])?;
-        assert!(!non_nullable.is_nullable());
+        assert_eq!(non_nullable, DType::Bool(Nullability::NonNullable));
         let nullable =
             SpatialIntersects.return_dtype(&EmptyOptions, &[dtype.as_nullable(), dtype])?;
-        assert!(nullable.is_nullable());
+        assert_eq!(nullable, DType::Bool(Nullability::Nullable));
         Ok(())
     }
 

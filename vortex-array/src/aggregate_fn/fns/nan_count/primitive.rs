@@ -69,7 +69,10 @@ mod tests {
 
     #[test]
     fn primitive_nan_count_with_nulls() -> VortexResult<()> {
-        let p = PrimitiveArray::from_option_iter([Some(f64::NAN), None, Some(f64::NAN), Some(1.0)]);
+        let p = PrimitiveArray::new(
+            buffer![f64::NAN, f64::NAN, f64::NAN, 1.0],
+            Validity::from_iter([true, false, true, true]),
+        );
         let mut ctx = array_session().create_execution_ctx();
         assert_eq!(nan_count(&p.into_array(), &mut ctx)?, 2);
         Ok(())

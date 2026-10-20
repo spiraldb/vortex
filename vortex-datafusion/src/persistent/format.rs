@@ -71,6 +71,7 @@ use crate::PrecisionExt as _;
 use crate::convert::ExpressionConverter;
 use crate::convert::TryToDataFusion;
 use crate::convert::stats::constant_distinct_count;
+use crate::convert::stats::is_nan_free;
 
 const DEFAULT_FOOTER_INITIAL_READ_SIZE_BYTES: usize = MAX_POSTSCRIPT_SIZE as usize + EOF_SIZE;
 
@@ -671,19 +672,16 @@ impl FileFormat for VortexFormat {
                 let column_size =
                     stats_set.get_as::<usize>(Stat::UncompressedSizeInBytes, &PType::U64.into());
 
-                let min = scalar_stat_to_df(
-                    Stat::Min,
-                    stats_set.get(Stat::Min),
-                    stats_dtype,
-                    field.data_type(),
-                );
-
-                let max = scalar_stat_to_df(
-                    Stat::Max,
-                    stats_set.get(Stat::Max),
-                    stats_dtype,
-                    field.data_type(),
-                );
+                let nan_free = is_nan_free(stats_set, stats_dtype);
+                let bound = |stat| {
+                    if nan_free {
+                        scalar_stat_to_df(stat, stats_set.get(stat), stats_dtype, field.data_type())
+                    } else {
+                        DFPrecision::Absent
+                    }
+                };
+                let min = bound(Stat::Min);
+                let max = bound(Stat::Max);
 
                 let null_count = stats_set
                     .get_as::<usize>(Stat::NullCount, &PType::U64.into())
@@ -797,6 +795,7 @@ mod tests {
     use arrow_schema::DataType;
     use arrow_schema::Field;
     use arrow_schema::TimeUnit;
+    use datafusion::datasource::listing::ListingTable;
     use datafusion_common::ScalarValue;
     use datafusion_common::config::ConfigOptions;
     use datafusion_expr::Operator;
@@ -1050,6 +1049,18 @@ mod tests {
             .collect()
             .await?;
 
+        let provider = ctx.session.table_provider("my_tbl").await?;
+        let table = provider
+            .downcast_ref::<ListingTable>()
+            .ok_or_else(|| anyhow::anyhow!("expected ListingTable"))?;
+        let format = table
+            .options()
+            .format
+            .downcast_ref::<VortexFormat>()
+            .ok_or_else(|| anyhow::anyhow!("expected VortexFormat"))?;
+        assert_eq!(format.options().footer_initial_read_size_bytes, 12345);
+        assert!(!format.options().predicate_pushdown);
+        assert_eq!(format.options().scan_concurrency, Some(3));
         Ok(())
     }
 
