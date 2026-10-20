@@ -213,8 +213,7 @@ pub trait ArrowImportVTable: 'static + Send + Sync + Debug {
     ///
     /// `session` is provided so plugins can convert storage or nested arrays through the
     /// session (e.g. [`ArrowSession::from_arrow_array`], passing a nullability rather than a
-    /// [`Field`] so the plugin is not dispatched again) instead of the deprecated
-    /// `FromArrowArray` trait.
+    /// [`Field`] so the plugin is not dispatched again).
     #[allow(clippy::wrong_self_convention)]
     fn from_arrow_array(
         &self,
