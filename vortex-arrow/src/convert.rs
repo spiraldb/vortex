@@ -224,12 +224,6 @@ pub fn from_arrow_decimal256(
     Ok(DecimalArray::new(buffer, decimal_type, validity).into_array())
 }
 
-// timestamp
-
-// time
-
-// date
-
 /// Conversion of an Arrow temporal array (timestamp/date/time) into a Vortex temporal
 /// extension array.
 pub fn from_arrow_temporal<T: ArrowPrimitiveType>(
