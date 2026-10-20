@@ -32,6 +32,7 @@ use object_store::ObjectStore;
 use object_store::path::Path;
 use vortex::file::VORTEX_FILE_EXTENSION;
 use vortex::layout::LayoutReader;
+use vortex::layout::scan::OptionalFilterBackoff;
 use vortex::metrics::DefaultMetricsRegistry;
 use vortex::metrics::MetricsRegistry;
 use vortex::session::VortexSession;
@@ -366,6 +367,13 @@ impl VortexSource {
             file_metadata_cache: self.file_metadata_cache.clone(),
             projection_pushdown: self.options.projection_pushdown,
             scan_concurrency: self.options.scan_concurrency,
+            optional_filter_backoff: self.options.optional_filter_backoff.then(|| {
+                OptionalFilterBackoff {
+                    max_selectivity: self.options.optional_filter_max_selectivity,
+                    backoff_rows: self.options.optional_filter_backoff_rows as u64,
+                    ..Default::default()
+                }
+            }),
         };
 
         Ok(opener)

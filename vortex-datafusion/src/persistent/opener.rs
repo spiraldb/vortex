@@ -51,9 +51,11 @@ use vortex::array::VortexSessionExecute;
 use vortex::error::VortexError;
 use vortex::error::VortexExpect;
 use vortex::expr::and_collect;
+use vortex::expr::optional;
 use vortex::file::OpenOptionsSessionExt;
 use vortex::io::InstrumentedReadAt;
 use vortex::layout::LayoutReader;
+use vortex::layout::scan::OptionalFilterBackoff;
 use vortex::layout::scan::scan_builder::ScanBuilder;
 use vortex::metrics::Label;
 use vortex::metrics::MetricsRegistry;
@@ -116,6 +118,8 @@ pub(crate) struct VortexOpener {
     /// Whether to enable expression pushdown into the underlying Vortex scan.
     pub projection_pushdown: bool,
     pub scan_concurrency: Option<usize>,
+    /// When the scan skips dynamic filter conjuncts that keep most rows.
+    pub optional_filter_backoff: Option<OptionalFilterBackoff>,
 }
 
 impl FileOpener for VortexOpener {
@@ -152,6 +156,7 @@ impl FileOpener for VortexOpener {
         let file_schemas = Arc::clone(&self.file_schemas);
         let has_output_ordering = self.has_output_ordering;
         let scan_concurrency = self.scan_concurrency;
+        let optional_filter_backoff = self.optional_filter_backoff;
 
         let expr_converter = Arc::clone(&self.expression_converter);
         let projection_pushdown = self.projection_pushdown;
@@ -331,7 +336,8 @@ impl FileOpener for VortexOpener {
                 }
             }
             // Dynamic filters only discard rows that cannot contribute to the result, so
-            // conjuncts Vortex cannot evaluate are dropped rather than evaluated as residuals.
+            // conjuncts Vortex cannot evaluate are dropped rather than evaluated as residuals,
+            // and the scan can skip conjuncts that keep most rows.
             for dynamic_filter in dynamic_filters {
                 let dynamic_filter = expr_adapter.rewrite(dynamic_filter)?;
                 if matches!(
@@ -347,17 +353,21 @@ impl FileOpener for VortexOpener {
                         if let Some(expr) = expr_converter.try_convert(expr, &this_file_schema)?
                             && !vxf.is_satisfied(&expr).unwrap_or(false)
                         {
-                            native_filters.push(expr);
+                            native_filters.push(optional(expr));
                         }
                     }
                 } else {
                     // A filter that can still change, such as a TopK threshold, is read again
                     // by the scan each time it changes.
-                    native_filters.push(DataFusionDynamicFilter::expression(
-                        dynamic_filter,
-                        Arc::clone(&expr_converter),
-                        Arc::clone(&this_file_schema),
-                    ));
+                    native_filters.extend(
+                        DataFusionDynamicFilter::expressions(
+                            dynamic_filter,
+                            Arc::clone(&expr_converter),
+                            Arc::clone(&this_file_schema),
+                        )
+                        .into_iter()
+                        .map(optional),
+                    );
                 }
             }
             let residual_filter = conjunction_opt(residual_filters);
@@ -446,7 +456,8 @@ impl FileOpener for VortexOpener {
                 }
             };
 
-            let mut scan_builder = ScanBuilder::new(session.clone(), Arc::clone(&layout_reader));
+            let mut scan_builder = ScanBuilder::new(session.clone(), Arc::clone(&layout_reader))
+                .with_optional_filter_backoff(optional_filter_backoff);
 
             if let Some(vortex_plan) = file.extensions.get::<VortexAccessPlan>() {
                 scan_builder = vortex_plan.apply_to_builder(scan_builder);
@@ -956,6 +967,7 @@ mod tests {
             file_metadata_cache: None,
             projection_pushdown: false,
             scan_concurrency: None,
+            optional_filter_backoff: None,
         }
     }
 
@@ -1353,6 +1365,7 @@ mod tests {
             file_metadata_cache: None,
             projection_pushdown: false,
             scan_concurrency: None,
+            optional_filter_backoff: None,
         };
 
         let filter = col("a").lt(lit(100_i32));
@@ -1441,6 +1454,7 @@ mod tests {
             file_metadata_cache: None,
             projection_pushdown: false,
             scan_concurrency: None,
+            optional_filter_backoff: None,
         };
 
         let stream = opener.open(file)?.await?;
@@ -1620,6 +1634,7 @@ mod tests {
             file_metadata_cache: None,
             projection_pushdown: false,
             scan_concurrency: None,
+            optional_filter_backoff: None,
         };
 
         // This should succeed and return the correctly projected and cast data
@@ -1681,6 +1696,7 @@ mod tests {
             file_metadata_cache: None,
             projection_pushdown: false,
             scan_concurrency: None,
+            optional_filter_backoff: None,
         }
     }
 
@@ -1893,6 +1909,7 @@ mod tests {
             file_metadata_cache: None,
             projection_pushdown: false,
             scan_concurrency: None,
+            optional_filter_backoff: None,
         };
 
         let file = PartitionedFile::new(file_path.to_string(), data_size);
