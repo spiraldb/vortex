@@ -12,6 +12,9 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
 
+[lib]
+test = false
+
 [dependencies]
 parking_lot = { workspace = true }
 sketches-ddsketch = { workspace = true }
