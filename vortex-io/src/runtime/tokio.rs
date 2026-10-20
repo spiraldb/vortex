@@ -218,4 +218,35 @@ mod tests {
         assert!(send.send(()).is_err());
         assert_eq!(counter.load(Ordering::SeqCst), 0);
     }
-}
+    #[test]
+    fn test_spawn_and_abort() {
+        let tokio_rt = TokioRt::new().unwrap();
+        let runtime = TokioRuntime::from(tokio_rt.handle());
+
+        let counter = Arc::new(AtomicUsize::new(0));
+        let task_counter = Arc::clone(&counter);
+
+        let (started_send, started_recv) = oneshot::channel::<()>();
+        let (mut release_send, release_recv) = oneshot::channel::<()>();
+
+        let future = async move {
+            started_send
+                .send(())
+                .expect("test retains the startup receiver");
+
+            let _ = release_recv.await;
+            task_counter.fetch_add(1, Ordering::SeqCst);
+        };
+        let task = runtime.handle().spawn(future.boxed());
+
+        tokio_rt
+            .block_on(started_recv)
+            .expect("spawned task must signal startup");
+
+        drop(task);
+
+        // Keeping the sender open without sending prevents normal completion.
+        tokio_rt.block_on(release_send.closed());
+
+        assert_eq!(counter.load(Ordering::SeqCst), 0);
+    }
