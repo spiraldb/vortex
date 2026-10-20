@@ -29,7 +29,7 @@ mod plugin;
 pub use plugin::*;
 
 mod foreign;
-pub(crate) use foreign::*;
+pub use foreign::*;
 
 mod typed;
 pub use typed::*;

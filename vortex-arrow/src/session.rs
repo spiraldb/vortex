@@ -19,6 +19,11 @@
 //! Multiple plugins may register against the same key. They are tried in registration order;
 //! each may return [`ArrowExport::Unsupported`] / [`ArrowImport::Unsupported`] to defer to
 //! the next.
+//!
+//! The default extension export uses standard padded base64 for serialized Vortex metadata,
+//! marked by `vortex:extension:metadata:encoding = base64`. Import decodes marked metadata;
+//! unmarked Arrow metadata is preserved verbatim. Explicit Arrow plugins control their own
+//! metadata format, including canonical Arrow formats.
 
 use std::any::Any;
 use std::borrow::Cow;
@@ -39,13 +44,17 @@ use arrow_schema::Field;
 use arrow_schema::FieldRef;
 use arrow_schema::Fields;
 use arrow_schema::Schema;
+use arrow_schema::extension::EXTENSION_TYPE_METADATA_KEY;
 use arrow_schema::extension::EXTENSION_TYPE_NAME_KEY;
+use base64::Engine as _;
+use base64::prelude::BASE64_STANDARD;
 use tracing::debug;
 use tracing::trace;
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::arrays::DictArray;
+use vortex_array::arrays::ExtensionArray;
 use vortex_array::arrays::FixedSizeListArray;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::ListViewArray;
@@ -56,7 +65,9 @@ use vortex_array::dtype::FieldNames;
 use vortex_array::dtype::NativePType;
 use vortex_array::dtype::Nullability;
 use vortex_array::dtype::StructFields;
+use vortex_array::dtype::extension::ExtDTypeRef;
 use vortex_array::dtype::extension::ExtId;
+use vortex_array::dtype::extension::ForeignExtDType;
 use vortex_array::extension::datetime::AnyTemporal;
 use vortex_array::validity::Validity;
 use vortex_error::VortexResult;
@@ -81,6 +92,8 @@ use crate::dtype::from_arrow_data_type;
 use crate::dtype::to_data_type_naive;
 use crate::executor::execute_arrow_naive;
 use crate::run_end_import::run_end_from_arrow;
+
+const VORTEX_METADATA_ENCODING_KEY: &str = "vortex:extension:metadata:encoding";
 
 /// Outcome of a successful call to [`ArrowExportVTable::execute_arrow`].
 ///
@@ -285,6 +298,9 @@ impl ArrowSession {
     ///
     /// For [`DType::Extension`]s, plugins registered against the extension's `Id`
     /// are tried in registration order; the first plugin to return `Some(field)` wins.
+    /// Otherwise, the storage field carries the Vortex extension ID and serialized metadata
+    /// encoded using standard padded base64. The field metadata includes
+    /// `vortex:extension:metadata:encoding = base64` so import can recover arbitrary bytes.
     pub fn to_arrow_field(&self, name: &str, dtype: &DType) -> VortexResult<Field> {
         // Handle the structural encodings, which may have recursive types
         match dtype {
@@ -333,7 +349,20 @@ impl ArrowSession {
                         return Ok(field);
                     }
                 }
-                vortex_bail!("extension type cannot be converted to Arrow without a plugin: {ext}");
+                let metadata = BASE64_STANDARD.encode(ext.serialize_metadata()?);
+                let mut field = self.to_arrow_field(name, ext.storage_dtype())?;
+                field.set_metadata(
+                    [
+                        (EXTENSION_TYPE_NAME_KEY.to_string(), ext.id().to_string()),
+                        (EXTENSION_TYPE_METADATA_KEY.to_string(), metadata),
+                        (
+                            VORTEX_METADATA_ENCODING_KEY.to_string(),
+                            "base64".to_string(),
+                        ),
+                    ]
+                    .into(),
+                );
+                Ok(field)
             }
             DType::Variant(_) => {
                 // TODO(Adam): This currently encodes information about parquet-variant
@@ -394,9 +423,13 @@ impl ArrowSession {
     /// Plugins registered against the field's Arrow extension name are tried in
     /// registration order; the first plugin to return `Some(dtype)` wins. If none
     /// match (or all return `None`), the builtin `arrow.parquet.variant` extension maps
-    /// to [`DType::Variant`], and any other field converts through
-    /// [`Self::from_arrow_datatype`] so extension metadata on nested element/struct
-    /// fields is preserved.
+    /// to [`DType::Variant`]. Other unknown extensions become [`ForeignExtDType`], preserving
+    /// their name, metadata and storage, including nested extension fields. This follows Arrow's
+    /// storage fallback rule independently of [`vortex_session::VortexSession::allow_unknown`],
+    /// which controls Vortex deserialization rather than Arrow interoperability.
+    /// Metadata marked with `vortex:extension:metadata:encoding = base64` is decoded to its
+    /// original bytes; unmarked metadata is preserved as UTF-8 bytes. Malformed base64 or an
+    /// unsupported encoding marker returns an error. Registered plugins run before this fallback.
     #[expect(clippy::disallowed_methods, reason = "interning a dynamic id")]
     pub fn from_arrow_field(&self, field: &Field) -> VortexResult<DType> {
         if let Some(name) = field.metadata().get(EXTENSION_TYPE_NAME_KEY) {
@@ -409,12 +442,39 @@ impl ArrowSession {
             if name == "arrow.parquet.variant" {
                 return Ok(DType::Variant(field.is_nullable().into()));
             }
+            return self.foreign_ext_dtype(field, name).map(DType::Extension);
         }
         if let DataType::Dictionary(_, value_type) = field.data_type() {
             return self
                 .from_arrow_field(&field.clone().with_data_type(value_type.as_ref().clone()));
         }
         self.from_arrow_datatype(field.data_type(), field.is_nullable().into())
+    }
+
+    fn foreign_ext_dtype(&self, field: &Field, name: &str) -> VortexResult<ExtDTypeRef> {
+        #[expect(clippy::disallowed_methods, reason = "interning a dynamic id")]
+        let id = ExtId::new(name);
+        let metadata = field
+            .metadata()
+            .get(EXTENSION_TYPE_METADATA_KEY)
+            .map(String::as_str)
+            .unwrap_or_default();
+        let metadata = match field.metadata().get(VORTEX_METADATA_ENCODING_KEY) {
+            None => metadata.as_bytes().to_vec(),
+            Some(encoding) if encoding == "base64" => {
+                BASE64_STANDARD.decode(metadata).map_err(|err| {
+                    vortex_err!("Invalid base64 metadata for extension {name}: {err}")
+                })?
+            }
+            Some(encoding) => {
+                vortex_bail!("Unsupported metadata encoding for extension {name}: {encoding}")
+            }
+        };
+        ForeignExtDType::from_parts(
+            id,
+            metadata,
+            self.from_arrow_datatype(field.data_type(), field.is_nullable().into())?,
+        )
     }
 
     /// Build the Vortex [`DType`] for an Arrow [`DataType`].
@@ -536,8 +596,9 @@ impl ArrowSession {
     /// If `target` carries an `ARROW:extension:name`, the plugin registry is probed for one that
     /// can support executing to the target extension type.
     ///
-    /// With `target = None` the fallback path picks the array's preferred Arrow physical type
-    /// and executes directly into that, ignoring extension types.
+    /// With `target = None`, infer a field through [`Self::to_arrow_field`], including extension
+    /// metadata. Retain that field separately when exporting a top-level extension: the returned
+    /// Arrow array only carries its storage data type.
     ///
     /// Uses the default [`ArrowExportOptions`]; see [`exporter`](Self::exporter) to
     /// change them.
@@ -594,7 +655,8 @@ impl ArrowSession {
     /// arrays ([`arrow_array::StructArray`], [`arrow_array::GenericListArray`],
     /// [`arrow_array::FixedSizeListArray`], [`arrow_array::GenericListViewArray`]) so
     /// extension fields nested inside containers reach their importers; leaf types fall
-    /// through to the canonical Arrow → Vortex array conversion.
+    /// through to the canonical Arrow → Vortex array conversion. Unhandled extension names
+    /// wrap the converted storage in a [`ForeignExtDType`].
     ///
     /// # Errors
     ///
@@ -654,10 +716,28 @@ impl ArrowSession {
                         }
                     }
                 }
-                return self.from_arrow_array_canonical(current.as_ref(), field);
+                return self.from_arrow_array_fallback(current.as_ref(), field);
             }
         }
-        self.from_arrow_array_canonical(array.as_ref(), field)
+        self.from_arrow_array_fallback(array.as_ref(), field)
+    }
+
+    #[allow(clippy::wrong_self_convention)]
+    fn from_arrow_array_fallback(
+        &self,
+        array: &dyn ArrowArray,
+        field: &Field,
+    ) -> VortexResult<ArrayRef> {
+        // Dictionary field metadata describes its values; canonical import routes it there.
+        if !matches!(field.data_type(), DataType::Dictionary(..))
+            && let Some(name) = field.metadata().get(EXTENSION_TYPE_NAME_KEY)
+            && name != "arrow.parquet.variant"
+        {
+            let dtype = self.foreign_ext_dtype(field, name)?;
+            let storage = self.from_arrow_array_canonical(array, field)?;
+            return Ok(ExtensionArray::try_new(dtype, storage)?.into_array());
+        }
+        self.from_arrow_array_canonical(array, field)
     }
 
     /// Recurse into Arrow container arrays so nested fields with extension metadata reach
