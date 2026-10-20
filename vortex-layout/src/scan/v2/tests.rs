@@ -565,22 +565,29 @@ async fn selected_split_scope_is_bounded_before_projection() -> VortexResult<()>
     Ok(())
 }
 
-/// Optimizing a projection builds new plans over the dictionary values on every scan, so their
-/// values are only ever kept for that scan, never accumulated in the shared cache.
+/// A repeated projection reuses its optimized plan, so the values it keeps are found again rather
+/// than kept anew by every scan.
 #[tokio::test]
-async fn projected_scans_keep_no_values_in_the_shared_cache() -> VortexResult<()> {
+async fn repeated_projections_reuse_their_values() -> VortexResult<()> {
     let session = new_session().with_tokio();
     let segments = Arc::new(TestSegments::default());
     let values = chunked_ints(&session, &segments).await?;
     let codes = chunked_ints(&session, &segments).await?;
     let layout = DictLayout::new(values, codes).into_layout();
-    let segments = segments as Arc<dyn SegmentSource>;
+    let counted = Arc::new(CountingSegments {
+        inner: segments,
+        reads: AtomicUsize::new(0),
+    });
+    let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
     let cache = ScanCache::default();
     let mut file = scan_file(&segments, &layout)?;
     file.cache = Some(cache.clone());
 
     let projection = gt(root(), lit(15i32)).bind(layout.dtype())?;
+    let mut reads = Vec::new();
+    let mut kept = Vec::new();
     for _ in 0..3 {
+        let before = counted.reads.load(Ordering::Relaxed);
         let scan = ScanBuilder::new(session.clone(), file.clone())
             .with_projection(projection.clone())
             .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(vec![12u64, 18]))?);
@@ -590,7 +597,10 @@ async fn projected_scans_keep_no_values_in_the_shared_cache() -> VortexResult<()
             vortex_array::arrays::BoolArray::from_iter([false, true]),
             &mut session.create_execution_ctx()
         );
+        reads.push(counted.reads.load(Ordering::Relaxed) - before);
+        kept.push(cache.values_len());
     }
-    assert_eq!(cache.values_len(), 0);
+    assert_eq!(reads, vec![4, 1, 1]);
+    assert_eq!(kept[1..], kept[..2]);
     Ok(())
 }

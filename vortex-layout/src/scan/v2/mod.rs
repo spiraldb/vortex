@@ -50,9 +50,6 @@ use vortex_utils::parallelism::get_available_parallelism;
 
 pub use self::cache::ScanCache;
 use crate::LayoutRef;
-use crate::plan::physical::optimize;
-use crate::plan::physical::pipeline::ValueCache;
-use crate::plan::physical::plan_row_idx_expression;
 use crate::scan::arrow::to_record_batch;
 use crate::scan::execution::ScanPlans;
 pub use crate::scan::execution::SegmentLocation;
@@ -264,14 +261,7 @@ impl<A: 'static + Send> PreparedScan<A> {
         let projection = if identity {
             root
         } else {
-            optimize(plan_row_idx_expression(builder.projection, root)?)?
-        };
-        // Values are cached by the plan that produced them. Only the cached root is the same plan
-        // in every scan: an optimized projection builds new plans over the values each time.
-        let values = if identity {
-            cache.values()
-        } else {
-            ValueCache::default()
+            cache.projection(builder.projection, root)?
         };
         let chunk_rows = if identity {
             rows_per_chunk(row_count, &file.locations)
@@ -290,7 +280,7 @@ impl<A: 'static + Send> PreparedScan<A> {
                 locations: file.locations,
                 projection,
                 row_offset: builder.row_offset,
-                values,
+                values: cache.values(),
             },
             io,
             splits,
