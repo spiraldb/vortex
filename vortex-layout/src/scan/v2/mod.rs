@@ -436,7 +436,7 @@ impl<A: 'static + Send> PreparedScan<A> {
         let io = self.io;
         let map_fn = self.map_fn;
         // Spawned as the buffer pulls them, so at most `concurrency` splits read at once.
-        let tasks = stream::iter(split_plans).map(move |split| {
+        let mut tasks = split_plans.into_iter().map(move |split| {
             let io = Arc::clone(&io);
             let map_fn = Arc::clone(&map_fn);
             handle.spawn(async move {
@@ -448,6 +448,9 @@ impl<A: 'static + Send> PreparedScan<A> {
                     .collect::<VortexResult<Vec<_>>>()
             })
         });
+        // The first are spawned now, so they run while the stream is handed back to its consumer.
+        let started: Vec<_> = tasks.by_ref().take(concurrency).collect();
+        let tasks = stream::iter(started).chain(stream::iter(tasks));
         let batches = if self.ordered {
             tasks.buffered(concurrency).boxed()
         } else {
