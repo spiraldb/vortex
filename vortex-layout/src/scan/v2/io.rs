@@ -75,11 +75,31 @@ impl SegmentRanges {
 pub(super) struct SegmentScanIo {
     segments: Arc<dyn SegmentSource>,
     ranges: SegmentRanges,
+    shared: SharedReads,
 }
 
 impl SegmentScanIo {
     pub(super) fn new(segments: Arc<dyn SegmentSource>, ranges: SegmentRanges) -> Self {
-        Self { segments, ranges }
+        Self {
+            segments,
+            ranges,
+            shared: SharedReads::default(),
+        }
+    }
+
+    /// Reads each segment in `readers` once for as many sessions as it names, rather than once
+    /// per session.
+    pub(super) fn share(&self, readers: HashMap<SegmentId, usize>) {
+        let mut shared = self.shared.lock();
+        for (segment, readers) in readers {
+            shared.insert(
+                segment,
+                SharedRead {
+                    readers,
+                    read: None,
+                },
+            );
+        }
     }
 }
 
@@ -88,8 +108,19 @@ impl IoService for SegmentScanIo {
         Arc::new(SegmentIoSource::new(
             Arc::clone(&self.segments),
             self.ranges.clone(),
+            Arc::clone(&self.shared),
         ))
     }
+}
+
+/// Reads several sessions of one scan make of the same segment, by segment id.
+type SharedReads = Arc<Mutex<HashMap<SegmentId, SharedRead>>>;
+
+/// A segment read for several sessions: started by the first and dropped once each has taken it.
+struct SharedRead {
+    /// Sessions still to take the read.
+    readers: usize,
+    read: Option<Prefetched>,
 }
 
 /// Serves a split's range requests from a segment source, without blocking.
@@ -104,6 +135,7 @@ impl IoService for SegmentScanIo {
 pub(super) struct SegmentIoSource {
     segments: Arc<dyn SegmentSource>,
     ranges: SegmentRanges,
+    shared: SharedReads,
     reads: Mutex<FuturesUnordered<BoxFuture<'static, Completion>>>,
     ready: Mutex<VecDeque<Completion>>,
     /// Reads started by prefetches, consumed by the next fetch of their segment.
@@ -116,15 +148,40 @@ pub(super) struct SegmentIoSource {
 type Prefetched = Shared<BoxFuture<'static, Result<BufferHandle, Arc<VortexError>>>>;
 
 impl SegmentIoSource {
-    pub(super) fn new(segments: Arc<dyn SegmentSource>, ranges: SegmentRanges) -> Self {
+    fn new(segments: Arc<dyn SegmentSource>, ranges: SegmentRanges, shared: SharedReads) -> Self {
         Self {
             segments,
             ranges,
+            shared,
             reads: Mutex::new(FuturesUnordered::new()),
             ready: Mutex::default(),
             prefetched: Mutex::default(),
             announced: Mutex::default(),
         }
+    }
+
+    /// Requests `segment`, from the read other sessions share when the scan shares it.
+    fn request(&self, segment: SegmentId) -> SegmentFuture {
+        let mut shared = self.shared.lock();
+        let Some(entry) = shared.get_mut(&segment) else {
+            return self.segments.request(segment);
+        };
+        let read = entry
+            .read
+            .get_or_insert_with(|| {
+                self.segments
+                    .request(segment)
+                    .map_err(Arc::new)
+                    .boxed()
+                    .shared()
+            })
+            .clone();
+        entry.readers = entry.readers.saturating_sub(1);
+        if entry.readers == 0 {
+            shared.remove(&segment);
+        }
+        read.map_err(move |err| vortex_err!("shared read of segment {segment} failed: {err}"))
+            .boxed()
     }
 }
 
@@ -149,7 +206,7 @@ impl IoSource for SegmentIoSource {
                     .lock()
                     .entry(segment)
                     .or_default()
-                    .push_back(self.segments.request(segment));
+                    .push_back(self.request(segment));
                 continue;
             }
             if request.intent == IoIntent::Prefetch {
@@ -159,7 +216,7 @@ impl IoSource for SegmentIoSource {
                         .lock()
                         .get_mut(&segment)
                         .and_then(VecDeque::pop_front)
-                        .unwrap_or_else(|| self.segments.request(segment))
+                        .unwrap_or_else(|| self.request(segment))
                         .map_err(Arc::new)
                         .boxed()
                         .shared();
@@ -183,7 +240,7 @@ impl IoSource for SegmentIoSource {
                     .lock()
                     .get_mut(&segment)
                     .and_then(VecDeque::pop_front)
-                    .unwrap_or_else(|| self.segments.request(segment)),
+                    .unwrap_or_else(|| self.request(segment)),
             };
             let id = request.request;
             // In-memory and cached segments need no allocated asynchronous task. A pending
@@ -269,11 +326,15 @@ mod tests {
     use vortex_io::request::IoOwnerId;
     use vortex_io::request::IoRequest;
     use vortex_io::request::IoRequestId;
+    use vortex_io::request::IoService;
     use vortex_io::request::IoSource;
     use vortex_io::request::IoTarget;
+    use vortex_utils::aliases::hash_map::HashMap;
 
     use super::SegmentIoSource;
     use super::SegmentRanges;
+    use super::SegmentScanIo;
+    use super::SharedReads;
     use crate::scan::execution::SegmentLocation;
     use crate::segments::SegmentFuture;
     use crate::segments::SegmentId;
@@ -350,7 +411,11 @@ mod tests {
             length: 4,
             alignment: Alignment::none(),
         });
-        let io = SegmentIoSource::new(segments, SegmentRanges::new(locations.into()));
+        let io = SegmentIoSource::new(
+            segments,
+            SegmentRanges::new(locations.into()),
+            SharedReads::default(),
+        );
         let mut pending = request(IoIntent::Fetch, 1);
         pending.target = IoTarget::range(4, 4);
         io.submit(IoOwnerId(0), vec![pending, request(IoIntent::Fetch, 0)])?;
@@ -373,6 +438,26 @@ mod tests {
         Ok(())
     }
 
+    /// Sessions of a scan that share a segment read it once, and a later session reads it again
+    /// once every expected reader has taken it.
+    #[tokio::test]
+    async fn sessions_share_a_segment_read() -> VortexResult<()> {
+        let segments = Arc::new(CountingSegments::default());
+        let io = SegmentScanIo::new(
+            Arc::clone(&segments) as _,
+            SegmentRanges::new([location(0, 4)].into()),
+        );
+        io.share(HashMap::from_iter([(SegmentId::from(0), 2)]));
+        for reads in [1, 1, 2] {
+            let session = io.session();
+            session.submit(IoOwnerId(0), vec![request(IoIntent::Fetch, 0)])?;
+            let completion = std::future::poll_fn(|cx| session.poll_completion(cx)).await?;
+            assert!(completion.result.is_ok());
+            assert_eq!(segments.0.load(Ordering::Relaxed), reads);
+        }
+        Ok(())
+    }
+
     /// A fetch of a prefetched segment waits on the prefetch's read rather than reading again,
     /// and only the fetch is delivered.
     #[tokio::test]
@@ -386,6 +471,7 @@ mod tests {
         let io = SegmentIoSource::new(
             Arc::clone(&segments) as _,
             SegmentRanges::new([location].into()),
+            SharedReads::default(),
         );
 
         io.submit(IoOwnerId(0), vec![request(IoIntent::Prefetch, 0)])?;
@@ -417,6 +503,7 @@ mod tests {
         let io = SegmentIoSource::new(
             Arc::clone(&segments) as _,
             SegmentRanges::new([location].into()),
+            SharedReads::default(),
         );
         io.submit(
             IoOwnerId(0),

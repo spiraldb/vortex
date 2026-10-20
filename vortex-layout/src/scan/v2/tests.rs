@@ -393,7 +393,7 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
     for (index, split) in splits.into_iter().enumerate() {
         let rows = split.scope.rows.clone();
         let before = counted.reads.load(Ordering::Relaxed);
-        let arrays = split.run(Arc::clone(&scan.io)).await?;
+        let arrays = split.run(Arc::clone(&scan.io) as _).await?;
         let reads = counted.reads.load(Ordering::Relaxed) - before;
         let code_chunks =
             (rows.end - 1) / STORED_CHUNK_ROWS as u64 - rows.start / STORED_CHUNK_ROWS as u64 + 1;
@@ -468,7 +468,7 @@ async fn splits_read_each_stored_chunk_once(
     )?;
     // Runs reading the same stored chunk are one pipeline split, which visits no other chunk.
     assert_eq!(
-        scan.split_rows()?.concat(),
+        scan.split_rows()?.0.concat(),
         scopes,
         "each planner here reads one stored chunk"
     );
@@ -482,7 +482,7 @@ async fn splits_read_each_stored_chunk_once(
     );
     let mut arrays = Vec::new();
     for split in splits {
-        arrays.extend(split.run(Arc::clone(&scan.io)).await?);
+        arrays.extend(split.run(Arc::clone(&scan.io) as _).await?);
     }
     // Splits read only the stored chunks holding their selected rows, each chunk once.
     assert_eq!(counted.reads.load(Ordering::Relaxed), reads);
