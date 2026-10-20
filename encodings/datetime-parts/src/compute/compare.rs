@@ -5,7 +5,9 @@ use vortex_array::ArrayRef;
 use vortex_array::ArrayView;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
+use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ConstantArray;
+use vortex_array::arrays::bool::BoolArrayExt;
 use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability;
@@ -16,6 +18,7 @@ use vortex_array::scalar_fn::fns::operators::CompareOperator;
 use vortex_array::scalar_fn::fns::operators::Operator;
 use vortex_array::validity::Validity;
 use vortex_error::VortexResult;
+use vortex_mask::Mask;
 
 use crate::array::DateTimeParts;
 use crate::array::DateTimePartsArraySlotsExt;
@@ -87,9 +90,10 @@ fn compare_eq(
     nullability: Nullability,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<ArrayRef> {
-    let mut comparison = compare_dtp(lhs.days(), ts_parts.days, CompareOperator::Eq, nullability)?;
-    if comparison.statistics().compute_max::<bool>(ctx) == Some(false) {
-        return Ok(comparison);
+    let mut comparison = compare_dtp(lhs.days(), ts_parts.days, CompareOperator::Eq, nullability)?
+        .execute::<BoolArray>(ctx)?;
+    if valid_rows_all(&comparison, false, ctx)? {
+        return Ok(comparison.into_array());
     }
 
     comparison = compare_dtp(
@@ -98,10 +102,11 @@ fn compare_eq(
         CompareOperator::Eq,
         nullability,
     )?
-    .binary(comparison, Operator::And)?;
+    .binary(comparison.into_array(), Operator::And)?
+    .execute::<BoolArray>(ctx)?;
 
-    if comparison.statistics().compute_max::<bool>(ctx) == Some(false) {
-        return Ok(comparison);
+    if valid_rows_all(&comparison, false, ctx)? {
+        return Ok(comparison.into_array());
     }
 
     compare_dtp(
@@ -110,7 +115,7 @@ fn compare_eq(
         CompareOperator::Eq,
         nullability,
     )?
-    .binary(comparison, Operator::And)
+    .binary(comparison.into_array(), Operator::And)
 }
 
 fn compare_ne(
@@ -124,9 +129,10 @@ fn compare_ne(
         ts_parts.days,
         CompareOperator::NotEq,
         nullability,
-    )?;
-    if comparison.statistics().compute_min::<bool>(ctx) == Some(true) {
-        return Ok(comparison);
+    )?
+    .execute::<BoolArray>(ctx)?;
+    if valid_rows_all(&comparison, true, ctx)? {
+        return Ok(comparison.into_array());
     }
 
     comparison = compare_dtp(
@@ -135,10 +141,11 @@ fn compare_ne(
         CompareOperator::NotEq,
         nullability,
     )?
-    .binary(comparison, Operator::Or)?;
+    .binary(comparison.into_array(), Operator::Or)?
+    .execute::<BoolArray>(ctx)?;
 
-    if comparison.statistics().compute_min::<bool>(ctx) == Some(true) {
-        return Ok(comparison);
+    if valid_rows_all(&comparison, true, ctx)? {
+        return Ok(comparison.into_array());
     }
 
     compare_dtp(
@@ -147,7 +154,7 @@ fn compare_ne(
         CompareOperator::NotEq,
         nullability,
     )?
-    .binary(comparison, Operator::Or)
+    .binary(comparison.into_array(), Operator::Or)
 }
 
 /// Orders timestamps by their parts.
@@ -170,14 +177,17 @@ fn compare_ordered(
         }
     };
 
-    let days_strict = compare_dtp(lhs.days(), ts_parts.days, strict, nullability)?;
-    if days_strict.statistics().compute_min::<bool>(ctx) == Some(true) {
-        return Ok(days_strict);
+    let days_strict =
+        compare_dtp(lhs.days(), ts_parts.days, strict, nullability)?.execute::<BoolArray>(ctx)?;
+    if valid_rows_all(&days_strict, true, ctx)? {
+        return Ok(days_strict.into_array());
     }
-    let days_eq = compare_dtp(lhs.days(), ts_parts.days, CompareOperator::Eq, nullability)?;
-    if days_eq.statistics().compute_max::<bool>(ctx) == Some(false) {
-        return Ok(days_strict);
+    let days_eq = compare_dtp(lhs.days(), ts_parts.days, CompareOperator::Eq, nullability)?
+        .execute::<BoolArray>(ctx)?;
+    if valid_rows_all(&days_eq, false, ctx)? {
+        return Ok(days_strict.into_array());
     }
+    let (days_strict, days_eq) = (days_strict.into_array(), days_eq.into_array());
 
     let seconds_strict = compare_dtp(lhs.seconds(), ts_parts.seconds, strict, nullability)?;
     let seconds_eq = compare_dtp(
@@ -191,6 +201,29 @@ fn compare_ordered(
     let within_day =
         seconds_strict.binary(seconds_eq.binary(subseconds, Operator::And)?, Operator::Or)?;
     days_strict.binary(days_eq.binary(within_day, Operator::And)?, Operator::Or)
+}
+
+/// Whether every valid row of `comparison` is `value`. This is `false` when no row is valid, as the
+/// min and max statistics of such an array are unknown.
+///
+/// The comparison is already evaluated, so a population count answers this, where the min and max
+/// statistics of a lazy comparison would evaluate it again.
+fn valid_rows_all(
+    comparison: &BoolArray,
+    value: bool,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<bool> {
+    let valid = comparison.validity()?.execute_mask(comparison.len(), ctx)?;
+    let valid_count = valid.true_count();
+    if valid_count == 0 {
+        return Ok(false);
+    }
+    let true_count = (&Mask::from_buffer(comparison.to_bit_buffer()) & &valid).true_count();
+    Ok(if value {
+        true_count == valid_count
+    } else {
+        true_count == 0
+    })
 }
 
 fn compare_dtp(
