@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: Copyright the Vortex contributors
+
 //! Write-time assembly: forward chunks to the data child while feeding index builders, then write
 //! each index's content after all data segments.
 
@@ -132,8 +135,12 @@ pub(crate) struct TypedIndexWriter<V: IndexVTable> {
 /// One partition's builder, with the kind's types erased. This is where a kind's content and
 /// options become bytes, through [`IndexVTable::encode`] and [`IndexVTable::serialize_options`].
 pub(crate) trait PartitionBuilder: Send {
-    fn push(&mut self, chunk: &ArrayRef, row_offset: u64, ctx: &mut ExecutionCtx)
-    -> VortexResult<()>;
+    fn push(
+        &mut self,
+        chunk: &ArrayRef,
+        row_offset: u64,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<()>;
 
     fn finish(self: Box<Self>) -> VortexResult<PartitionOutput>;
 
@@ -183,7 +190,8 @@ impl<V: IndexVTable> PartitionBuilder for TypedPartitionBuilder<V> {
             })
             .collect::<VortexResult<Vec<_>>>()?;
 
-        let content = ArrayStreamAdapter::new(index_dtype, stream::iter(arrays.into_iter().map(Ok)));
+        let content =
+            ArrayStreamAdapter::new(index_dtype, stream::iter(arrays.into_iter().map(Ok)));
         Ok(Some((
             ArrayStreamExt::boxed(content),
             vtable.serialize_options(&options),

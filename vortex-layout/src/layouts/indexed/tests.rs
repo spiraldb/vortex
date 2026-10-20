@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: Copyright the Vortex contributors
+
 //! End-to-end tests for the generic wrapper.
 //!
 //! Concrete index kinds live elsewhere (see the `reverse_index` example under
@@ -39,8 +42,8 @@ use vortex_session::VortexSession;
 use super::INDEXED_LAYOUT_ID;
 use super::IndexConfig;
 use super::IndexPartitioning;
-use super::IndexSpec;
 use super::IndexSessionExt;
+use super::IndexSpec;
 use super::Indexed;
 use super::IndexedLayout;
 use super::IndexedStrategy;
@@ -1290,6 +1293,7 @@ mod exact_value {
             chunks: &[Arc<Entries>],
             _data_row_count: u64,
             _options: &(),
+            _ctx: &mut ExecutionCtx,
         ) -> VortexResult<RowLocator> {
             for chunk in chunks {
                 if let Ok(idx) = chunk.keys.binary_search(query) {
@@ -1409,11 +1413,21 @@ mod exact_value {
             Ok(None)
         }
 
-        fn encode(&self, _chunk: &(), _options: &(), _ctx: &mut ExecutionCtx) -> VortexResult<ArrayRef> {
+        fn encode(
+            &self,
+            _chunk: &(),
+            _options: &(),
+            _ctx: &mut ExecutionCtx,
+        ) -> VortexResult<ArrayRef> {
             vortex_bail!("a declining index never builds content to encode")
         }
 
-        fn decode(&self, _chunk: ArrayRef, _options: &(), _ctx: &mut ExecutionCtx) -> VortexResult<()> {
+        fn decode(
+            &self,
+            _chunk: ArrayRef,
+            _options: &(),
+            _ctx: &mut ExecutionCtx,
+        ) -> VortexResult<()> {
             Ok(())
         }
 
@@ -1423,6 +1437,7 @@ mod exact_value {
             _chunks: &[Arc<()>],
             _data_row_count: u64,
             _options: &(),
+            _ctx: &mut ExecutionCtx,
         ) -> VortexResult<RowLocator> {
             Ok(RowLocator::empty_rows())
         }
@@ -1501,7 +1516,11 @@ mod fixed_superset {
 
     impl FixedSupersetIndex {
         pub fn new_ref(id: &'static str, rows: RoaringBitmap) -> IndexVTableRef {
-            Self::declaring(id, rows, DType::Primitive(PType::I32, Nullability::NonNullable))
+            Self::declaring(
+                id,
+                rows,
+                DType::Primitive(PType::I32, Nullability::NonNullable),
+            )
         }
 
         /// A kind that declares `declared` as its index dtype, standing in for a builder that
@@ -1574,11 +1593,21 @@ mod fixed_superset {
             }))
         }
 
-        fn encode(&self, _chunk: &(), _options: &(), _ctx: &mut ExecutionCtx) -> VortexResult<ArrayRef> {
+        fn encode(
+            &self,
+            _chunk: &(),
+            _options: &(),
+            _ctx: &mut ExecutionCtx,
+        ) -> VortexResult<ArrayRef> {
             Ok(PrimitiveArray::from_iter(0..INDEX_ROWS).into_array())
         }
 
-        fn decode(&self, _chunk: ArrayRef, _options: &(), _ctx: &mut ExecutionCtx) -> VortexResult<()> {
+        fn decode(
+            &self,
+            _chunk: ArrayRef,
+            _options: &(),
+            _ctx: &mut ExecutionCtx,
+        ) -> VortexResult<()> {
             Ok(())
         }
 
@@ -1588,6 +1617,7 @@ mod fixed_superset {
             _chunks: &[Arc<()>],
             _data_row_count: u64,
             _options: &(),
+            _ctx: &mut ExecutionCtx,
         ) -> VortexResult<RowLocator> {
             Ok(RowLocator::Rows(query.clone()))
         }

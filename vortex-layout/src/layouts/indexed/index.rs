@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: Copyright the Vortex contributors
+
 //! The pluggable index-kind contract: what a kind must implement to be built at write time and
 //! probed at read time.
 
@@ -142,6 +145,7 @@ pub trait IndexVTable: 'static + Send + Sync + Debug {
         chunks: &[Arc<Self::Chunk>],
         data_row_count: u64,
         options: &Self::Options,
+        ctx: &mut ExecutionCtx,
     ) -> VortexResult<RowLocator>;
 }
 
@@ -172,7 +176,10 @@ impl IndexVTableRef {
 
     /// Parse a spec's options once for reading, or `None` if its stored dtype is not what the
     /// kind now declares.
-    pub(crate) fn open_reader(&self, args: OpenArgs<'_>) -> VortexResult<Option<Arc<dyn OpenIndex>>> {
+    pub(crate) fn open_reader(
+        &self,
+        args: OpenArgs<'_>,
+    ) -> VortexResult<Option<Arc<dyn OpenIndex>>> {
         Arc::clone(&self.0).open_reader(args)
     }
 }
@@ -194,7 +201,8 @@ pub(crate) trait DynIndexVTable: 'static + Send + Sync + Debug {
 
     fn open_writer(self: Arc<Self>, options: &[u8]) -> VortexResult<Arc<dyn IndexWriter>>;
 
-    fn open_reader(self: Arc<Self>, args: OpenArgs<'_>) -> VortexResult<Option<Arc<dyn OpenIndex>>>;
+    fn open_reader(self: Arc<Self>, args: OpenArgs<'_>)
+    -> VortexResult<Option<Arc<dyn OpenIndex>>>;
 }
 
 impl<V: IndexVTable> DynIndexVTable for V {
@@ -210,10 +218,19 @@ impl<V: IndexVTable> DynIndexVTable for V {
         Ok(Arc::new(TypedIndexWriter::try_new(self, options)?))
     }
 
-    fn open_reader(self: Arc<Self>, args: OpenArgs<'_>) -> VortexResult<Option<Arc<dyn OpenIndex>>> {
+    fn open_reader(
+        self: Arc<Self>,
+        args: OpenArgs<'_>,
+    ) -> VortexResult<Option<Arc<dyn OpenIndex>>> {
         open_index(self, args)
     }
 }
+
+/// What an [`IndexBuilder`] emits on finishing: its chunks in order, and its final options.
+pub type BuiltIndex<B> = (
+    Vec<<B as IndexBuilder>::Chunk>,
+    <B as IndexBuilder>::Options,
+);
 
 /// Accumulates index content while the data stream is written.
 pub trait IndexBuilder: Send {
@@ -242,7 +259,7 @@ pub trait IndexBuilder: Send {
     /// only point at which size can be judged — a builder is constructed before the first chunk
     /// arrives, so row count and cardinality are not knowable earlier. Declining is always safe: an
     /// absent index reads exactly like an unregistered one.
-    fn finish(self) -> VortexResult<Option<(Vec<Self::Chunk>, Self::Options)>>;
+    fn finish(self) -> VortexResult<Option<BuiltIndex<Self>>>;
 
     /// Bytes currently buffered, reported up through the write context's buffered-bytes tracker.
     fn buffered_bytes(&self) -> u64;

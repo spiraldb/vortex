@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: Copyright the Vortex contributors
+
 //! Read-time probing: answer or prune a conjunct from an index child, else defer to the data
 //! child.
 
@@ -369,11 +372,13 @@ impl<V: IndexVTable> Prober for TypedProber<V> {
                 }
             }
             let decoded = try_join_all(surviving).await?;
+            let mut ctx = index.session.create_execution_ctx();
             let locator = index.vtable.resolve(
                 &query,
                 &decoded,
                 data_rows.end - data_rows.start,
                 &index.options,
+                &mut ctx,
             )?;
             Ok(Arc::new(locator))
         }

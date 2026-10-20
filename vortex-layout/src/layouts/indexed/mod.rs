@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: Copyright the Vortex contributors
+
 //! A prototype of the `vortex.indexed` layout proposed in
 //! [vortex-data/vortex#9024](https://github.com/vortex-data/vortex/issues/9024).
 //!
@@ -53,7 +56,7 @@
 //!
 //! - **Data child.** Slot 0 can be any layout — chunked, zoned, struct, flat, or another
 //!   `vortex.indexed` — since [`writer::IndexedStrategy`] writes it through a plain
-//!   `Arc<dyn LayoutStrategy>` and [`reader::IndexedReader`] reads it back through the generic
+//!   `Arc<dyn LayoutStrategy>` and `IndexedReader` reads it back through the generic
 //!   reader trait rather than assuming a concrete kind. A data child that is itself wrapped in
 //!   `vortex.indexed` prunes with its own indexes when the outer wrapper delegates a
 //!   `pruning_evaluation`/`filter_evaluation` call to it, so a struct layout whose fields are
@@ -74,7 +77,7 @@
 //!
 //! # What ships here
 //!
-//! The generic wrapper only: [`Indexed`], [`writer::IndexedStrategy`] and [`reader::IndexedReader`],
+//! The generic wrapper only: [`Indexed`], [`writer::IndexedStrategy`] and `IndexedReader`,
 //! plus the [`IndexVTable`] contract that index kinds implement. Concrete kinds are registered into
 //! an [`session::IndexSession`] — see the `reverse_index` example (`examples/reverse_index/`) for
 //! a worked example, a minimal equality index over any column.
@@ -103,6 +106,7 @@ use vortex_error::vortex_panic;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
 
+pub use self::index::BuiltIndex;
 pub use self::index::IndexBuilder;
 pub use self::index::IndexExactness;
 pub use self::index::IndexId;
@@ -266,7 +270,7 @@ impl IndexSpec {
 /// Layout-specific data for the [`IndexedLayout`].
 ///
 /// Child 0 is the data, sharing this layout's dtype and row space. Children 1.. are index content,
-/// one per entry in [`IndexedData::indexes`].
+/// one per entry in `IndexedData::indexes`.
 #[derive(Clone, Debug)]
 pub struct IndexedData {
     indexes: Arc<[IndexSpec]>,

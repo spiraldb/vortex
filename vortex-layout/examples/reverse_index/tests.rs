@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: Copyright the Vortex contributors
+
 //! End-to-end tests: write a column indexed by [`ReverseIndex`], then probe it.
 
 use std::io::Write;
@@ -6,17 +9,16 @@ use std::sync::Arc;
 use goldenfile::Mint;
 use roaring::RoaringBitmap;
 use rstest::rstest;
-
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::MaskFuture;
 use vortex_array::VortexSessionExecute;
 use vortex_array::array_session;
-use vortex_array::assert_arrays_eq;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinViewArray;
 use vortex_array::arrays::struct_::StructArrayExt;
+use vortex_array::assert_arrays_eq;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldPath;
 use vortex_array::dtype::Nullability;
@@ -407,7 +409,6 @@ fn reverse_index_roundtrips(
 
     let mut mint = Mint::new("goldenfiles/");
     let mut file = mint.new_goldenfile(golden)?;
-    writeln!(file, "{}", encoded.display_values())?;
+    writeln!(file, "{}", encoded.display_values(&ctx))?;
     Ok(())
 }
-

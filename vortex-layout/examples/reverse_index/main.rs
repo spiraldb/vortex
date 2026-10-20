@@ -50,6 +50,7 @@ use vortex_array::scalar_fn::fns::binary::Binary;
 use vortex_array::scalar_fn::fns::literal::Literal;
 use vortex_array::scalar_fn::fns::operators::Operator;
 use vortex_array::search_sorted::SearchSorted;
+use vortex_array::search_sorted::SearchSortedArray;
 use vortex_array::search_sorted::SearchSortedSide;
 use vortex_array::stream::ArrayStreamExt;
 use vortex_array::validity::Validity;
@@ -263,11 +264,11 @@ impl IndexVTable for ReverseIndex {
         chunks: &[Arc<Entries>],
         _data_row_count: u64,
         _options: &(),
+        ctx: &mut ExecutionCtx,
     ) -> VortexResult<RowLocator> {
         // Keys are unique and sorted across the partition, so at most one chunk holds the target.
         for chunk in chunks {
-            if let Some(idx) = chunk
-                .keys
+            if let Some(idx) = SearchSortedArray::new(&chunk.keys, ctx)
                 .search_sorted(target, SearchSortedSide::Left)?
                 .to_found()
             {

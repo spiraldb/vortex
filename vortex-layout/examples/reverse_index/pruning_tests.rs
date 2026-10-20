@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: Copyright the Vortex contributors
+
 //! Verifies that a registered index actually skips reading pruned blocks, not just that it
 //! returns the right rows.
 //!
