@@ -24,8 +24,6 @@ use vortex_mask::Mask;
 use crate::ArrayRef;
 use crate::ArraySlots;
 use crate::ExecutionCtx;
-#[cfg(debug_assertions)]
-use crate::VortexSessionExecute;
 use crate::array::Array;
 use crate::array::ArrayParts;
 use crate::array::TypedArrayRef;
@@ -40,8 +38,6 @@ use crate::builders::ArrayBuilder;
 use crate::builders::VarBinViewBuilder;
 use crate::dtype::DType;
 use crate::dtype::Nullability;
-#[cfg(debug_assertions)]
-use crate::legacy_session;
 use crate::validity::Validity;
 
 #[array_slots(VarBinView)]
@@ -312,17 +308,6 @@ impl VarBinViewData {
         dtype: DType,
         validity: Validity,
     ) -> Self {
-        #[cfg(debug_assertions)]
-        #[expect(clippy::disallowed_methods)]
-        Self::validate(
-            &views,
-            &buffers,
-            &dtype,
-            &validity,
-            &mut legacy_session().create_execution_ctx(),
-        )
-        .vortex_expect("[Debug Assertion]: Invalid `VarBinViewArray` parameters");
-
         let handles: Vec<BufferHandle> = buffers
             .iter()
             .cloned()

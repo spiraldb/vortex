@@ -271,6 +271,33 @@ extern "C" duckdb_blob duckdb_vx_value_get_geometry(duckdb_value value) {
     return {buf, size};
 }
 
+extern "C" idx_t duckdb_vx_value_get_array_size(duckdb_value value) {
+    if (value == nullptr) {
+        return 0;
+    }
+    const auto val = reinterpret_cast<Value *>(value);
+    if (val->type().id() != LogicalTypeId::ARRAY || val->IsNull()) {
+        return 0;
+    }
+    return ArrayValue::GetChildren(*val).size();
+}
+
+extern "C" duckdb_value duckdb_vx_value_get_array_child(duckdb_value value, idx_t index) {
+    if (value == nullptr) {
+        return nullptr;
+    }
+    const auto val = reinterpret_cast<Value *>(value);
+    if (val->type().id() != LogicalTypeId::ARRAY || val->IsNull()) {
+        return nullptr;
+    }
+    const auto &children = ArrayValue::GetChildren(*val);
+    if (index >= children.size()) {
+        return nullptr;
+    }
+    auto child = make_uniq<Value>(children[index]);
+    return reinterpret_cast<duckdb_value>(child.release());
+}
+
 static void VortexOptimizeFunction(OptimizerExtensionInput &input, unique_ptr<LogicalOperator> &plan) {
     plan = TryPushdownAggregateFunctions(input.context, std::move(plan));
 }

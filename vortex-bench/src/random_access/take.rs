@@ -130,8 +130,9 @@ impl RandomAccessor for ArrowIpcRandomAccessor {
 
 /// Random accessor for Vortex format files.
 ///
-/// The file handle is opened at construction time and reused across `take()` calls. Rows are
-/// read with the V2 scan unless `VORTEX_BENCH_SCAN=v1` selects the layout-reader scan.
+/// The file handle is opened at construction time and reused across `take()` calls, sharing its
+/// V2 [`ScanCache`](vortex::layout::scan::v2::ScanCache). Rows are read with the V2 scan, which
+/// requires files without list layouts.
 pub struct VortexRandomAccessor {
     name: String,
     format: Format,
@@ -189,23 +190,15 @@ impl RandomAccessor for VortexRandomAccessor {
 
     async fn take(&self, indices: &[u64]) -> anyhow::Result<RandomAccessorRet> {
         let indices = StrictSortedBuffer::try_new(Buffer::from(indices.to_vec()))?;
-        let array = if std::env::var("VORTEX_BENCH_SCAN").as_deref() == Ok("v1") {
-            self.file
-                .scan()?
-                .with_row_indices(indices)
-                .into_array_stream()?
-                .read_all()
-                .await?
-        } else {
-            let stream = ScanBuilder::new(SESSION.clone(), self.file.scan_file())
-                .with_row_indices(indices)
-                .into_stream()?;
-            ArrayStreamAdapter::new(self.file.dtype().clone(), stream)
-                .read_all()
-                .await?
-        };
+        let stream = ScanBuilder::new(SESSION.clone(), self.file.scan_file())
+            .with_row_indices(indices)
+            .into_stream()?;
+        let array = ArrayStreamAdapter::new(self.file.dtype().clone(), stream)
+            .read_all()
+            .await?;
 
-        // We canonicalize / decompress for equivalence to Arrow's `RecordBatch`es.
+        // Keep the historical benchmark contract: canonicalize the outer array, leaving nested
+        // values lazy.
         let mut ctx = SESSION.create_execution_ctx();
         let canonical = array.execute::<Canonical>(&mut ctx)?.into_array();
         Ok(RandomAccessorRet::ArrayRef(canonical))

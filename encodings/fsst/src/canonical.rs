@@ -390,6 +390,40 @@ mod tests {
     }
 
     #[test]
+    fn test_rejects_out_of_bounds_non_primitive_codes_offsets() -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let input = VarBinViewArray::from_iter_str(["alpha"]).into_array();
+        let encoded = fsst_compress(&input, &fsst_train_compressor(&input, &mut ctx)?, &mut ctx)?;
+        let past_end = u32::try_from(encoded.codes_bytes().len())? + 1;
+        let offsets = ChunkedArray::from_iter([
+            PrimitiveArray::from_iter([0u32]).into_array(),
+            PrimitiveArray::from_iter([past_end]).into_array(),
+        ])
+        .into_array();
+        // SAFETY: the out-of-bounds offset is what FSST validation is expected to reject.
+        let codes = unsafe {
+            VarBinArray::new_unchecked(
+                offsets,
+                encoded.codes_bytes().clone(),
+                DType::Binary(Nullability::NonNullable),
+                Validity::NonNullable,
+            )
+        };
+
+        assert!(
+            FSST::try_new_with_symbol_table(
+                encoded.dtype().clone(),
+                encoded.symbol_table(),
+                codes,
+                encoded.uncompressed_lengths().clone(),
+                &mut ctx,
+            )
+            .is_err()
+        );
+        Ok(())
+    }
+
+    #[test]
     fn test_rejects_incorrect_uncompressed_lengths() -> VortexResult<()> {
         let input = VarBinViewArray::from_iter_str(["hello"]).into_array();
         let mut ctx = SESSION.create_execution_ctx();

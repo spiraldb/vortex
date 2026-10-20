@@ -415,6 +415,24 @@ fn test_vortex_scan_constant() {
 }
 
 #[test]
+fn test_vortex_scan_constant_fixed_size_list() {
+    let file = RUNTIME.block_on(async {
+        let scalar = Scalar::fixed_size_list(
+            DType::Primitive(PType::I32, Nullability::NonNullable),
+            vec![Scalar::from(1i32), Scalar::from(2i32), Scalar::from(3i32)],
+            Nullability::NonNullable,
+        );
+        write_single_column_vortex_file("constant", ConstantArray::new(scalar, 100)).await
+    });
+    let count: i64 = scan_vortex_file_single_row::<i64, _>(
+        file,
+        "SELECT COUNT(*) FROM ? WHERE constant[2] = 2 AND constant = [1, 2, 3]::INTEGER[3]",
+        0,
+    );
+    assert_eq!(count, 100);
+}
+
+#[test]
 fn test_vortex_scan_booleans() {
     let file = RUNTIME.block_on(async {
         let flags = vec![true, false, true, true, false];

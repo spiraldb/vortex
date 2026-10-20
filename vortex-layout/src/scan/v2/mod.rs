@@ -40,7 +40,6 @@ use vortex_array::VortexSessionExecute;
 use vortex_array::dtype::DType;
 use vortex_array::expr::BoundExpression;
 use vortex_error::VortexResult;
-use vortex_error::vortex_ensure;
 use vortex_io::request::IoService;
 use vortex_io::session::RuntimeSessionExt;
 use vortex_scan::planning::planner::WorkScope;
@@ -51,18 +50,12 @@ use vortex_utils::parallelism::get_available_parallelism;
 
 pub use self::cache::ScanCache;
 use crate::LayoutRef;
-use crate::layouts::chunked::Chunked;
-use crate::layouts::dict::Dict;
-use crate::layouts::flat::Flat;
-use crate::layouts::struct_::Struct;
-use crate::layouts::zoned::LegacyStats;
-use crate::layouts::zoned::Zoned;
 use crate::plan::physical::optimize;
 use crate::plan::physical::plan_row_idx_expression;
 use crate::scan::arrow::to_record_batch;
 use crate::scan::execution::ScanPlans;
 pub use crate::scan::execution::SegmentLocation;
-use crate::scan::execution::plan_projection;
+use crate::scan::execution::plan_selection;
 use crate::scan::v2::io::SegmentScanIo;
 use crate::scan::v2::split::SplitPlan;
 use crate::segments::SegmentSource;
@@ -242,34 +235,6 @@ impl<A: 'static + Send> ScanBuilder<A> {
     }
 }
 
-/// Whether every required layout lowers to plans with a pipeline implementation.
-///
-/// List layouts lower to a list assembly, which cannot compile before its offsets are read.
-fn supports_layout(layout: &LayoutRef, identity: bool) -> VortexResult<bool> {
-    if !(layout.is::<Flat>()
-        || layout.is::<Chunked>()
-        || layout.is::<Struct>()
-        || layout.is::<Dict>()
-        || layout.is::<Zoned>()
-        || layout.is::<LegacyStats>())
-    {
-        return Ok(false);
-    }
-    // An identity projection cannot use zone statistics. Leave their layouts uninitialized.
-    if identity && (layout.is::<Zoned>() || layout.is::<LegacyStats>()) {
-        return match layout.slot(0)? {
-            Some(data) => supports_layout(&data, identity),
-            None => Ok(false),
-        };
-    }
-    for child in layout.children()? {
-        if !supports_layout(&child, identity)? {
-            return Ok(false);
-        }
-    }
-    Ok(true)
-}
-
 /// A scan planned over its file, ready to run its splits.
 struct PreparedScan<A: 'static + Send> {
     session: VortexSession,
@@ -290,10 +255,6 @@ impl<A: 'static + Send> PreparedScan<A> {
     fn try_new(builder: ScanBuilder<A>) -> VortexResult<Self> {
         let file = builder.file;
         let cache = file.cache.unwrap_or_default();
-        vortex_ensure!(
-            cache.supports_layout(&file.layout, builder.projection.is_root())?,
-            "V2 scans do not support this file's layout"
-        );
         let root = cache.root(&file.layout)?;
         let row_count = root.row_count();
         // An identity projection needs no rewrites. Keep the lowered children lazy, including
@@ -337,22 +298,15 @@ impl<A: 'static + Send> PreparedScan<A> {
         self.splits
             .iter()
             .filter_map(|rows| {
-                let row_mask = self.selection.row_mask(rows);
-                if row_mask.mask().all_false() {
-                    return None;
-                }
-                let scope = WorkScope {
-                    file_ordinal: 0,
-                    rows: row_mask.row_range(),
-                };
-                Some(SplitPlan {
-                    root: plan_projection(
-                        self.plans.clone(),
-                        scope.clone(),
-                        row_mask.mask().clone(),
-                    ),
-                    scope,
-                })
+                let (scope, root) = plan_selection(
+                    &self.plans,
+                    WorkScope {
+                        file_ordinal: 0,
+                        rows: rows.clone(),
+                    },
+                    &self.selection,
+                )?;
+                Some(SplitPlan { scope, root })
             })
             .collect()
     }

@@ -223,7 +223,7 @@ These CI checks are the ones most often missed when adding files rather than edi
   default to Snappy.
   - parquet-rs: `Compression::ZSTD(ZstdLevel::try_new(3)?)`
   - DuckDB: `(FORMAT parquet, COMPRESSION zstd, COMPRESSION_LEVEL 3)`
-  - tpchgen-cli: `--parquet-compression='ZSTD(3)'`
+  - tpchgen-cli: `parquet --compression='ZSTD(3)'`
 - Benchmarks that deliberately compare Parquet codecs, such as the GPU compress benchmark's
   `--codec`, are exempt.
 
