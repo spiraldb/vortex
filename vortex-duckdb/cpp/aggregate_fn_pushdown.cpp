@@ -52,6 +52,11 @@ LogicalOperatorPtr TryReplaceAggregate(ClientContext &context,
     if (get == nullptr) {
         return op;
     }
+    // DuckDB hands table filters to the scan by the position of their column
+    // among the scanned columns, and the scan of pushed aggregates scans none.
+    if (!get->table_filters.filters.empty()) {
+        return op;
+    }
 
     vector<std::pair<TableColumnScanIndex, const Expression &>> input;
     const idx_t aggregates_len = agg.expressions.size();
