@@ -228,10 +228,6 @@ harness = false
 required-features = ["_test-harness"]
 
 [[bench]]
-name = "dict_filter"
-harness = false
-
-[[bench]]
 name = "dict_mask"
 harness = false
 
