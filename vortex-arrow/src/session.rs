@@ -624,9 +624,10 @@ impl ArrowSession {
                 let mut current = array;
                 for plugin in importers.iter() {
                     match plugin.from_arrow_array(current, field, &dtype, self)? {
+                        // Parents such as lists reuse the Arrow offsets into this array without
+                        // checking them again, so a plugin must preserve its length, both in what
+                        // it imports and in what it hands back when it declines.
                         ArrowImport::Imported(arr) => {
-                            // Parents such as lists reuse the Arrow offsets into this array
-                            // without checking them again, so a plugin must preserve its length.
                             vortex_ensure_eq!(
                                 arr.len(),
                                 len,
@@ -637,7 +638,17 @@ impl ArrowSession {
                             );
                             return Ok(arr);
                         }
-                        ArrowImport::Unsupported(arr) => current = arr,
+                        ArrowImport::Unsupported(arr) => {
+                            vortex_ensure_eq!(
+                                arr.len(),
+                                len,
+                                "Arrow importer {} declined and returned {} elements for an array of {}",
+                                plugin.arrow_ext_id(),
+                                arr.len(),
+                                len
+                            );
+                            current = arr;
+                        }
                     }
                 }
                 return self.from_arrow_array_canonical(current.as_ref(), field);
@@ -1084,9 +1095,12 @@ mod tests {
 
     static TRUNCATE_ID: CachedId = CachedId::new("test.truncate");
 
-    /// An importer that drops the last element of every array it imports.
+    /// An importer that drops the last element of every array it is given, then either imports
+    /// it or declines and hands it back.
     #[derive(Debug)]
-    struct TruncatingImporter;
+    struct TruncatingImporter {
+        decline: bool,
+    }
 
     impl ArrowImportVTable for TruncatingImporter {
         fn arrow_ext_id(&self) -> Id {
@@ -1111,6 +1125,9 @@ mod tests {
             session: &ArrowSession,
         ) -> VortexResult<ArrowImport> {
             let truncated = array.slice(0, array.len() - 1);
+            if self.decline {
+                return Ok(ArrowImport::Unsupported(truncated));
+            }
             session
                 .from_arrow_array(truncated, field.is_nullable())
                 .map(ArrowImport::Imported)
@@ -1172,9 +1189,12 @@ mod tests {
     #[case::list(list_with_truncated_child())]
     #[case::list_view(list_view_with_truncated_child())]
     #[case::map(map_with_truncated_child())]
-    fn test_rejects_importer_that_changes_child_length(#[case] array: ArrowArrayRef) {
+    fn test_rejects_importer_that_changes_child_length(
+        #[case] array: ArrowArrayRef,
+        #[values(false, true)] decline: bool,
+    ) {
         let session = ArrowSession::default();
-        session.register_importer(Arc::new(TruncatingImporter));
+        session.register_importer(Arc::new(TruncatingImporter { decline }));
 
         let err = session
             .from_arrow_array(array, false)
