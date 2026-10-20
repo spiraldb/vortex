@@ -29,10 +29,12 @@ use tokio::fs::File;
 use vortex::array::Canonical;
 use vortex::array::IntoArray;
 use vortex::array::VortexSessionExecute;
+use vortex::array::stream::ArrayStreamAdapter;
 use vortex::array::stream::ArrayStreamExt;
 use vortex::buffer::Buffer;
 use vortex::file::OpenOptionsSessionExt;
 use vortex::file::VortexFile;
+use vortex::layout::scan::v2::ScanBuilder;
 use vortex::scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex::utils::aliases::hash_map::HashMap;
 
@@ -128,7 +130,8 @@ impl RandomAccessor for ArrowIpcRandomAccessor {
 
 /// Random accessor for Vortex format files.
 ///
-/// The file handle is opened at construction time and reused across `take()` calls.
+/// The file handle is opened at construction time and reused across `take()` calls. Rows are
+/// read with the V2 scan unless `VORTEX_BENCH_SCAN=v1` selects the layout-reader scan.
 pub struct VortexRandomAccessor {
     name: String,
     format: Format,
@@ -185,14 +188,22 @@ impl RandomAccessor for VortexRandomAccessor {
     }
 
     async fn take(&self, indices: &[u64]) -> anyhow::Result<RandomAccessorRet> {
-        let indices_buf: Buffer<u64> = Buffer::from(indices.to_vec());
-        let array = self
-            .file
-            .scan()?
-            .with_row_indices(StrictSortedBuffer::try_new(indices_buf)?)
-            .into_array_stream()?
-            .read_all()
-            .await?;
+        let indices = StrictSortedBuffer::try_new(Buffer::from(indices.to_vec()))?;
+        let array = if std::env::var("VORTEX_BENCH_SCAN").as_deref() == Ok("v1") {
+            self.file
+                .scan()?
+                .with_row_indices(indices)
+                .into_array_stream()?
+                .read_all()
+                .await?
+        } else {
+            let stream = ScanBuilder::new(SESSION.clone(), self.file.scan_file())
+                .with_row_indices(indices)
+                .into_stream()?;
+            ArrayStreamAdapter::new(self.file.dtype().clone(), stream)
+                .read_all()
+                .await?
+        };
 
         // We canonicalize / decompress for equivalence to Arrow's `RecordBatch`es.
         let mut ctx = SESSION.create_execution_ctx();
