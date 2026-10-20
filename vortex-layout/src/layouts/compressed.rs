@@ -6,7 +6,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use futures::StreamExt as _;
 use vortex_array::ArrayRef;
+use vortex_array::CanonicalValidity;
 use vortex_array::ExecutionCtx;
+use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::aggregate_fn::fns::uncompressed_size_in_bytes::UncompressedSizeInBytes;
 use vortex_array::aggregate_fn::fns::uncompressed_size_in_bytes::UncompressedSizeOpts;
@@ -32,11 +34,22 @@ use crate::sequence::SequentialStreamExt;
 /// API consumers are free to implement this trait to provide new plugin compressors.
 pub trait CompressorPlugin: Send + Sync + 'static {
     fn compress_chunk(&self, chunk: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<ArrayRef>;
+
+    /// Whether [`compress_chunk`](Self::compress_chunk) starts by executing its input into
+    /// canonical form. The writer then canonicalizes each chunk once, before computing its
+    /// statistics, rather than once for every statistic and again in the compressor.
+    fn canonicalizes_input(&self) -> bool {
+        false
+    }
 }
 
 impl CompressorPlugin for Arc<dyn CompressorPlugin> {
     fn compress_chunk(&self, chunk: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<ArrayRef> {
         self.as_ref().compress_chunk(chunk, ctx)
+    }
+
+    fn canonicalizes_input(&self) -> bool {
+        self.as_ref().canonicalizes_input()
     }
 }
 
@@ -52,6 +65,10 @@ where
 impl CompressorPlugin for BtrBlocksCompressor {
     fn compress_chunk(&self, chunk: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<ArrayRef> {
         self.compress(chunk, ctx)
+    }
+
+    fn canonicalizes_input(&self) -> bool {
+        true
     }
 }
 
@@ -113,6 +130,13 @@ impl LayoutStrategy for CompressingStrategy {
                 handle.spawn_cpu(move || {
                     let (sequence_id, chunk) = chunk?;
                     let mut ctx = session.create_execution_ctx();
+                    // Statistics and the compressor would each execute a non-canonical chunk,
+                    // such as variable-width strings, on their own.
+                    let chunk = if compressor.canonicalizes_input() {
+                        chunk.execute::<CanonicalValidity>(&mut ctx)?.0.into_array()
+                    } else {
+                        chunk
+                    };
                     // Compute the stats for the chunk prior to compression. The exact
                     // uncompressed size is measured once here and cached for the compressor.
                     chunk.statistics().compute_all(&stats, &mut ctx)?;
