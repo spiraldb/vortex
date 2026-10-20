@@ -190,12 +190,26 @@ impl LayoutReader for ZonedReader {
 
             let pruning_mask = pruning_mask_future.await?.mask()?;
 
-            let mut builder = BitBufferMut::with_capacity(mask.len());
-            for (zone_idx, &zone_length) in zone_range.clone().zip_eq(&zone_lengths) {
-                builder.append_n(!pruning_mask.value(usize::try_from(zone_idx)?), zone_length);
-            }
-
-            let stats_mask = Mask::from(builder.freeze());
+            let zone_range = usize::try_from(zone_range.start)?..usize::try_from(zone_range.end)?;
+            let pruned_count = match &pruning_mask {
+                Mask::AllTrue(_) => zone_range.len(),
+                Mask::AllFalse(_) => 0,
+                Mask::Values(values) => values
+                    .bit_buffer()
+                    .count_range(zone_range.start, zone_range.end),
+            };
+            // Uniform zone decisions need neither a temporary zone mask nor per-row bits.
+            let stats_mask = if pruned_count == 0 {
+                Mask::new_true(mask.len())
+            } else if pruned_count == zone_range.len() {
+                Mask::new_false(mask.len())
+            } else {
+                let mut builder = BitBufferMut::with_capacity(mask.len());
+                for (zone_idx, &zone_length) in zone_range.zip_eq(&zone_lengths) {
+                    builder.append_n(!pruning_mask.value(zone_idx), zone_length);
+                }
+                Mask::from(builder.freeze())
+            };
             assert_eq!(stats_mask.len(), mask.len(), "Mask length mismatch");
 
             // Intersect the masks.
@@ -245,6 +259,7 @@ impl LayoutReader for ZonedReader {
 #[cfg(test)]
 mod test {
     use std::num::NonZeroUsize;
+    use std::ops::Range;
     use std::sync::Arc;
 
     use rstest::fixture;
@@ -361,33 +376,44 @@ mod test {
     }
 
     #[rstest]
+    #[case::mixed(
+        0..9,
+        7,
+        Mask::new_true(9),
+        Mask::from_iter([false, false, false, false, false, false, true, true, true])
+    )]
+    #[case::all_kept(0..9, 0, Mask::new_true(9), Mask::new_true(9))]
+    #[case::all_pruned(0..9, 9, Mask::new_true(9), Mask::new_false(9))]
+    #[case::pruned_subrange(0..6, 7, Mask::new_true(6), Mask::new_false(6))]
+    #[case::kept_subrange(6..9, 7, Mask::new_true(3), Mask::new_true(3))]
+    #[case::partial_zones(
+        2..8,
+        7,
+        Mask::new_true(6),
+        Mask::from_iter([false, false, false, false, true, true])
+    )]
+    #[case::input_mask(
+        6..9,
+        7,
+        Mask::from_iter([true, false, true]),
+        Mask::from_iter([true, false, true])
+    )]
+    #[case::empty(0..0, 7, Mask::new_true(0), Mask::new_true(0))]
+    #[case::empty_at_end(9..9, 7, Mask::new_true(0), Mask::new_true(0))]
     fn test_stats_pruning_mask(
         #[from(stats_layout)] (segments, layout): (Arc<dyn SegmentSource>, LayoutRef),
-    ) {
+        #[case] row_range: Range<u64>,
+        #[case] threshold: i32,
+        #[case] mask: Mask,
+        #[case] expected: Mask,
+    ) -> VortexResult<()> {
         block_on(|handle| async {
-            let row_count = layout.row_count();
             let session = session_with_handle(handle);
-            let reader = layout
-                .new_reader("".into(), segments, &session, &Default::default())
-                .unwrap();
-
-            // Choose a prune-able expression
-            let expr = gt(root(), lit(7)).bind(reader.dtype()).unwrap();
-
-            let result = reader
-                .pruning_evaluation(
-                    &(0..row_count),
-                    &expr,
-                    Mask::new_true(row_count.try_into().unwrap()),
-                )
-                .unwrap()
-                .await
-                .unwrap();
-
-            assert_eq!(
-                result,
-                Mask::from_iter([false, false, false, false, false, false, true, true, true])
-            );
+            let reader = layout.new_reader("".into(), segments, &session, &Default::default())?;
+            let expr = gt(root(), lit(threshold)).bind(reader.dtype())?;
+            let result = reader.pruning_evaluation(&row_range, &expr, mask)?.await?;
+            assert_eq!(result, expected);
+            Ok(())
         })
     }
 
