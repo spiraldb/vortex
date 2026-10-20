@@ -5,31 +5,23 @@
 
 use std::sync::Arc;
 
-use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 use vortex_array::expr::BoundExpression;
 use vortex_array::expr::ExactBoundExpr;
-use vortex_error::VortexResult;
 
 use super::io::SegmentRanges;
-use super::io::segment_ranges;
-use crate::LayoutRef;
 use crate::plan::physical::PlanRef;
-use crate::plan::physical::lower;
-use crate::plan::physical::optimize;
 use crate::plan::physical::pipeline::ValueCache;
-use crate::plan::physical::plan_row_idx_expression;
-use crate::scan::execution::SegmentLocation;
 
 /// Reusable state for repeated V2 scans of one file, the V2 counterpart of a cached
 /// [`LayoutReader`](crate::LayoutReader) tree.
 ///
 /// Every scan otherwise lowers the layout into a fresh physical plan, optimizes its projection
-/// over it, indexes every segment's byte range, and decodes the dictionary values it needs. Scans
-/// sharing a cache do each of those at most once: the lowered plan keeps the children it has
-/// initialized, each distinct projection keeps its optimized plan, and dictionary values stay
-/// keyed by the cached plan that produced them.
+/// over it, indexes every segment's byte range, and decodes the dictionary values it needs. A scan
+/// that finds an entry here reuses it, and one that misses builds the entry and keeps it for later
+/// scans. The lowered plan keeps the children it has initialized, each distinct projection keeps
+/// its optimized plan, and dictionary values stay keyed by the cached plan that produced them.
 ///
 /// A cache describes one file's layout, segment locations, and segment source. Use a new cache
 /// when any of them changes. Cached plans and values live as long as the cache, one set per
@@ -39,35 +31,53 @@ pub struct ScanCache(Arc<Inner>);
 
 #[derive(Default)]
 struct Inner {
-    root: OnceCell<PlanRef>,
+    root: Mutex<Option<PlanRef>>,
     /// Optimized plans of non-identity projections. Values are cached by the plan that produced
     /// them, so a projection must reuse its plan for its values to be found again.
     projections: Mutex<FxHashMap<ExactBoundExpr, PlanRef>>,
-    ranges: OnceCell<SegmentRanges>,
+    ranges: Mutex<Option<SegmentRanges>>,
     values: ValueCache,
 }
 
 impl ScanCache {
-    pub(super) fn root(&self, layout: &LayoutRef) -> VortexResult<PlanRef> {
-        self.0.root.get_or_try_init(|| lower(layout)).cloned()
+    /// The lowered root plan an earlier scan kept.
+    pub(super) fn root(&self) -> Option<PlanRef> {
+        self.0.root.lock().clone()
     }
 
-    /// The optimized plan of `projection` over `root`, which must be this cache's root.
-    pub(super) fn projection(
-        &self,
-        projection: BoundExpression,
-        root: PlanRef,
-    ) -> VortexResult<PlanRef> {
-        let key = ExactBoundExpr(projection.clone());
-        if let Some(plan) = self.0.projections.lock().get(&key) {
-            return Ok(plan.clone());
-        }
-        let plan = optimize(plan_row_idx_expression(projection, root)?)?;
-        Ok(self.0.projections.lock().entry(key).or_insert(plan).clone())
+    /// Keeps `root`, returning the plan already kept if another scan got there first.
+    pub(super) fn insert_root(&self, root: PlanRef) -> PlanRef {
+        self.0.root.lock().get_or_insert(root).clone()
     }
 
-    pub(super) fn ranges(&self, locations: &[SegmentLocation]) -> SegmentRanges {
-        Arc::clone(self.0.ranges.get_or_init(|| segment_ranges(locations)))
+    /// The optimized plan of `projection` an earlier scan kept.
+    pub(super) fn projection(&self, projection: &BoundExpression) -> Option<PlanRef> {
+        self.0
+            .projections
+            .lock()
+            .get(&ExactBoundExpr(projection.clone()))
+            .cloned()
+    }
+
+    /// Keeps the optimized plan of `projection`, returning the plan already kept if another scan
+    /// got there first.
+    pub(super) fn insert_projection(&self, projection: BoundExpression, plan: PlanRef) -> PlanRef {
+        self.0
+            .projections
+            .lock()
+            .entry(ExactBoundExpr(projection))
+            .or_insert(plan)
+            .clone()
+    }
+
+    /// The segment byte-range index an earlier scan kept.
+    pub(super) fn ranges(&self) -> Option<SegmentRanges> {
+        self.0.ranges.lock().clone()
+    }
+
+    /// Keeps `ranges`, returning the index already kept if another scan got there first.
+    pub(super) fn insert_ranges(&self, ranges: SegmentRanges) -> SegmentRanges {
+        Arc::clone(self.0.ranges.lock().get_or_insert(ranges))
     }
 
     pub(super) fn values(&self) -> ValueCache {

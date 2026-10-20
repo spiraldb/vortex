@@ -50,11 +50,15 @@ use vortex_utils::parallelism::get_available_parallelism;
 
 pub use self::cache::ScanCache;
 use crate::LayoutRef;
+use crate::plan::physical::lower;
+use crate::plan::physical::optimize;
+use crate::plan::physical::plan_row_idx_expression;
 use crate::scan::arrow::to_record_batch;
 use crate::scan::execution::ScanPlans;
 pub use crate::scan::execution::SegmentLocation;
 use crate::scan::execution::plan_selection;
 use crate::scan::v2::io::SegmentScanIo;
+use crate::scan::v2::io::segment_ranges;
 use crate::scan::v2::split::SplitPlan;
 use crate::segments::SegmentSource;
 
@@ -253,7 +257,10 @@ impl<A: 'static + Send> PreparedScan<A> {
     fn try_new(builder: ScanBuilder<A>) -> VortexResult<Self> {
         let file = builder.file;
         let cache = file.cache.unwrap_or_default();
-        let root = cache.root(&file.layout)?;
+        let root = match cache.root() {
+            Some(root) => root,
+            None => cache.insert_root(lower(&file.layout)?),
+        };
         let row_count = root.row_count();
         // An identity projection needs no rewrites. Keep the lowered children lazy, including
         // statistics that a projection-only scan never reads.
@@ -261,7 +268,14 @@ impl<A: 'static + Send> PreparedScan<A> {
         let projection = if identity {
             root
         } else {
-            cache.projection(builder.projection, root)?
+            match cache.projection(&builder.projection) {
+                Some(plan) => plan,
+                None => {
+                    let plan =
+                        optimize(plan_row_idx_expression(builder.projection.clone(), root)?)?;
+                    cache.insert_projection(builder.projection, plan)
+                }
+            }
         };
         let chunk_rows = if identity {
             rows_per_chunk(row_count, &file.locations)
@@ -269,10 +283,11 @@ impl<A: 'static + Send> PreparedScan<A> {
             MAX_ROWS_PER_CHUNK
         };
         let splits = row_chunks(builder.row_range.unwrap_or(0..row_count), chunk_rows);
-        let io = Arc::new(SegmentScanIo::new(
-            file.segments,
-            cache.ranges(&file.locations),
-        ));
+        let ranges = match cache.ranges() {
+            Some(ranges) => ranges,
+            None => cache.insert_ranges(segment_ranges(&file.locations)),
+        };
+        let io = Arc::new(SegmentScanIo::new(file.segments, ranges));
         Ok(Self {
             session: builder.session.clone(),
             plans: ScanPlans {
