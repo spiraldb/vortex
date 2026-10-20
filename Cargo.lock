@@ -8415,7 +8415,7 @@ version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "044b1fa4f259f4df9ad5078e587b208f5d288a25407575fcddb9face30c7c692"
 dependencies = [
- "rand 0.9.5",
+ "rand 0.8.8",
  "socket2",
  "thiserror 2.0.21",
 ]
@@ -11018,15 +11018,15 @@ dependencies = [
 
 [[package]]
 name = "tpchgen"
-version = "3.0.0"
+version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e26c6d047694183517044ea72d2e0337b05b43d40809f0958f603a7e5a286855"
+checksum = "dc60dc766636c350180e7df4f430673b6ebd95ad4bc2ce298315e6f9eac73bcc"
 
 [[package]]
 name = "tpchgen-arrow"
-version = "3.0.0"
+version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c64c19d707b783f219883549268da8ea98f91e7aaec3b626563044a21c2b37aa"
+checksum = "04ff3310b8912141795ea51adbabb4f790ec5a389157acfc494b6f50aff1d402"
 dependencies = [
  "arrow 59.3.1",
  "tpchgen",
