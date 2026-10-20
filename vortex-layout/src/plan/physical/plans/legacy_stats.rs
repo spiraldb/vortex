@@ -15,6 +15,7 @@ use vortex_mask::Mask;
 use vortex_session::registry::CachedId;
 
 use crate::layouts::zoned::legacy_stats_to_aggregates;
+use crate::plan::physical::ChildRows;
 use crate::plan::physical::EvalPlan;
 use crate::plan::physical::Plan;
 use crate::plan::physical::PlanChildren;
@@ -29,8 +30,6 @@ use crate::plan::physical::optimizer::PlanParentReduceRule;
 use crate::plan::physical::optimizer::PlanReduceRule;
 use crate::plan::physical::pipeline::Chain;
 use crate::plan::physical::pipeline::Compiler;
-use crate::plan::physical::pipeline::Reach;
-use crate::segments::SegmentId;
 
 const DATA: usize = 0;
 const ZONES: usize = 1;
@@ -147,13 +146,12 @@ impl PlanVTable for LegacyStats {
         compiler.compile(&plan.data_plan()?, rows, mask)
     }
 
-    fn reach(
-        plan: &Plan<Self>,
-        rows: Range<u64>,
-        at: &Reach,
-        visit: &mut dyn FnMut(SegmentId, Range<u64>),
-    ) -> VortexResult<()> {
-        plan.data_plan()?.reach(rows, at, visit)
+    fn child_rows(plan: &Plan<Self>, index: usize) -> ChildRows {
+        if index == DATA {
+            ChildRows::Rows(0..plan.row_count())
+        } else {
+            ChildRows::Opaque
+        }
     }
 }
 

@@ -21,6 +21,7 @@ pub mod pipeline;
 mod plans;
 pub(crate) mod selection;
 mod typed;
+mod visit;
 mod vtable;
 
 pub use children::PlanChildren;
@@ -70,6 +71,8 @@ pub use typed::Plan;
 pub(crate) use typed::PlanByPtr;
 pub use typed::PlanParts;
 pub use typed::PlanRef;
+pub use visit::ChildRows;
+pub use visit::visit_segments;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 pub use vtable::PlanId;

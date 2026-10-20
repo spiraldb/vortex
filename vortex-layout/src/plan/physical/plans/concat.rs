@@ -14,6 +14,7 @@ use vortex_error::vortex_err;
 use vortex_mask::Mask;
 use vortex_session::registry::CachedId;
 
+use crate::plan::physical::ChildRows;
 use crate::plan::physical::Eval;
 use crate::plan::physical::EvalPlan;
 use crate::plan::physical::Plan;
@@ -26,10 +27,8 @@ use crate::plan::physical::operators::ConcatSource;
 use crate::plan::physical::optimizer::PlanParentReduceRule;
 use crate::plan::physical::pipeline::Chain;
 use crate::plan::physical::pipeline::Compiler;
-use crate::plan::physical::pipeline::Reach;
 use crate::plan::physical::pipeline::overlapping;
 use crate::plan::physical::selection::selected_slice;
-use crate::segments::SegmentId;
 
 /// Concatenates its children row-wise.
 #[derive(Clone, Debug)]
@@ -219,20 +218,14 @@ impl PlanVTable for Concat {
         })
     }
 
-    fn reach(
-        plan: &Plan<Self>,
-        rows: Range<u64>,
-        at: &Reach,
-        visit: &mut dyn FnMut(SegmentId, Range<u64>),
-    ) -> VortexResult<()> {
-        for (index, start, local) in overlapping(plan, &rows) {
-            plan.child_required(index)?.reach(
-                local.start - start..local.end - start,
-                &at.shift(start),
-                visit,
-            )?;
-        }
-        Ok(())
+    fn child_rows(plan: &Plan<Self>, index: usize) -> ChildRows {
+        let offsets = plan.row_offsets();
+        let start = offsets[index];
+        let end = offsets
+            .get(index + 1)
+            .copied()
+            .unwrap_or_else(|| plan.row_count());
+        ChildRows::Rows(start..end)
     }
 }
 

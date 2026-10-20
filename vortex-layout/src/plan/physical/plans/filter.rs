@@ -11,6 +11,7 @@ use vortex_error::vortex_err;
 use vortex_mask::Mask;
 use vortex_session::registry::CachedId;
 
+use crate::plan::physical::ChildRows;
 use crate::plan::physical::Plan;
 use crate::plan::physical::PlanChildren;
 use crate::plan::physical::PlanId;
@@ -22,8 +23,6 @@ use crate::plan::physical::check_child_count;
 use crate::plan::physical::operators::MaskStage;
 use crate::plan::physical::pipeline::Chain;
 use crate::plan::physical::pipeline::Compiler;
-use crate::plan::physical::pipeline::Reach;
-use crate::segments::SegmentId;
 
 /// Keeps only the selected rows of its child.
 ///
@@ -122,12 +121,7 @@ impl PlanVTable for Filter {
         }))
     }
 
-    fn reach(
-        plan: &Plan<Self>,
-        rows: Range<u64>,
-        at: &Reach,
-        visit: &mut dyn FnMut(SegmentId, Range<u64>),
-    ) -> VortexResult<()> {
-        plan.child_plan()?.reach(rows, at, visit)
+    fn child_rows(plan: &Plan<Self>, _index: usize) -> ChildRows {
+        ChildRows::Rows(0..plan.row_count())
     }
 }
