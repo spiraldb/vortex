@@ -13,7 +13,11 @@
 //! error; filters and limits are not part of this builder's API. Work is partitioned into fixed
 //! chunks of up to 65,536 rows, independently of the stored layout's chunk boundaries.
 //! Full-file projections use smaller 8,192-row multiples when serialized bytes per row are high.
+//!
+//! A [`ScanFile`] carrying a [`ScanCache`] shares its lowered plan, segment index, and dictionary
+//! values with every other scan of that file, like a cached layout reader does for V1 scans.
 
+mod cache;
 mod io;
 mod split;
 #[cfg(test)]
@@ -44,6 +48,7 @@ use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
 use vortex_utils::parallelism::get_available_parallelism;
 
+pub use self::cache::ScanCache;
 use crate::LayoutRef;
 use crate::plan::physical::lower;
 use crate::plan::physical::optimize;
@@ -98,6 +103,8 @@ pub struct ScanFile {
     pub locations: Arc<[SegmentLocation]>,
     /// Fetches segment bytes by id.
     pub segments: Arc<dyn SegmentSource>,
+    /// State shared by every scan of this file, or `None` to rebuild it for each scan.
+    pub cache: Option<ScanCache>,
 }
 
 /// Builds a projection scan on the planner-driven V2 executor.
@@ -249,7 +256,11 @@ impl<A: 'static + Send> PreparedScan<A> {
     /// fixed-size row chunks.
     fn try_new(builder: ScanBuilder<A>) -> VortexResult<Self> {
         let file = builder.file;
-        let root = lower(&file.layout)?;
+        let cache = file.cache.unwrap_or_default();
+        let root = match cache.root() {
+            Some(root) => root,
+            None => cache.insert_root(lower(&file.layout)?),
+        };
         let row_count = root.row_count();
         // An identity projection needs no rewrites. Keep the lowered children lazy, including
         // statistics that a projection-only scan never reads.
@@ -257,7 +268,14 @@ impl<A: 'static + Send> PreparedScan<A> {
         let projection = if identity {
             root
         } else {
-            optimize(plan_row_idx_expression(builder.projection, root)?)?
+            match cache.projection(&builder.projection) {
+                Some(plan) => plan,
+                None => {
+                    let plan =
+                        optimize(plan_row_idx_expression(builder.projection.clone(), root)?)?;
+                    cache.insert_projection(builder.projection, plan)
+                }
+            }
         };
         let chunk_rows = if identity {
             rows_per_chunk(row_count, &file.locations)
@@ -265,10 +283,11 @@ impl<A: 'static + Send> PreparedScan<A> {
             MAX_ROWS_PER_CHUNK
         };
         let splits = row_chunks(builder.row_range.unwrap_or(0..row_count), chunk_rows);
-        let io = Arc::new(SegmentScanIo::new(
-            file.segments,
-            segment_ranges(&file.locations),
-        ));
+        let ranges = match cache.ranges() {
+            Some(ranges) => ranges,
+            None => cache.insert_ranges(segment_ranges(&file.locations)),
+        };
+        let io = Arc::new(SegmentScanIo::new(file.segments, ranges));
         Ok(Self {
             session: builder.session.clone(),
             plans: ScanPlans {
@@ -276,7 +295,7 @@ impl<A: 'static + Send> PreparedScan<A> {
                 locations: file.locations,
                 projection,
                 row_offset: builder.row_offset,
-                values: Default::default(),
+                values: cache.values(),
             },
             io,
             splits,

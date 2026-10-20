@@ -130,8 +130,9 @@ impl RandomAccessor for ArrowIpcRandomAccessor {
 
 /// Random accessor for Vortex format files.
 ///
-/// The file handle is opened at construction time and reused across `take()` calls. Rows are
-/// read with the V2 scan, which requires files without list layouts.
+/// The file handle is opened at construction time and reused across `take()` calls, sharing its
+/// V2 [`ScanCache`](vortex::layout::scan::v2::ScanCache). Rows are read with the V2 scan, which
+/// requires files without list layouts.
 pub struct VortexRandomAccessor {
     name: String,
     format: Format,
@@ -145,7 +146,11 @@ impl VortexRandomAccessor {
         name: impl Into<String>,
         format: Format,
     ) -> anyhow::Result<Self> {
-        let file = SESSION.open_options().open_path(path.as_ref()).await?;
+        let file = SESSION
+            .open_options()
+            .with_layout_reader_cache()
+            .open_path(path.as_ref())
+            .await?;
         Ok(Self {
             name: name.into(),
             format,
@@ -162,6 +167,7 @@ impl VortexRandomAccessor {
     ) -> anyhow::Result<Self> {
         let file = SESSION
             .open_options()
+            .with_layout_reader_cache()
             .open_object_store(remote.store(), remote.key(path)?)
             .await?;
         Ok(Self {
