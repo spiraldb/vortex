@@ -27,23 +27,23 @@ use vortex::array::VortexSessionExecute;
 use vortex::dtype::DType;
 use vortex::dtype::Nullability;
 use vortex::expr::Expression;
-use vortex::expr::and_collect;
 use vortex::expr::byte_length;
 use vortex::expr::cast;
 use vortex::expr::get_item;
+use vortex::expr::in_list_of;
 use vortex::expr::is_not_null;
 use vortex::expr::is_null;
 use vortex::expr::list_length;
 use vortex::expr::lit;
 use vortex::expr::nested_case_when;
 use vortex::expr::not;
-use vortex::expr::or_collect;
 use vortex::expr::pack;
 use vortex::expr::root;
 use vortex::scalar_fn::ScalarFnVTableExt;
 use vortex::scalar_fn::fns::binary::Binary;
 use vortex::scalar_fn::fns::like::Like;
 use vortex::scalar_fn::fns::like::LikeOptions;
+use vortex::scalar_fn::fns::literal::Literal;
 use vortex::scalar_fn::fns::operators::Operator;
 use vortex::session::VortexSession;
 use vortex_arrow::ArrowSessionExt;
@@ -441,30 +441,27 @@ impl DefaultExpressionConverter {
             return Err(Unconverted::Unsupported);
         }
         let value_dtype = converted_dtype(&value, input_dtype)?;
-        let operator = if in_list.negated() {
-            Operator::NotEq
+
+        let elements = in_list
+            .list()
+            .iter()
+            .map(|element| {
+                let element = self.convert_expr(element, schema, input_dtype)?;
+                element
+                    .as_opt::<Literal>()
+                    .cloned()
+                    .ok_or(Unconverted::Unsupported)
+            })
+            .collect::<Conversion<Vec<_>>>()?;
+
+        // An element of another type than the value declines the pushdown: no implicit casts.
+        let membership =
+            in_list_of(value, value_dtype, elements).map_err(|_| Unconverted::Unsupported)?;
+        Ok(if in_list.negated() {
+            not(membership)
         } else {
-            Operator::Eq
-        };
-        let mut comparisons = Vec::with_capacity(in_list.len());
-        for element in in_list.list() {
-            let element = self.convert_expr(element, schema, input_dtype)?;
-            let element_dtype = converted_dtype(&element, input_dtype)?;
-            if element_dtype == DType::Null {
-                comparisons.push(lit(None::<bool>));
-            } else if value_dtype.eq_ignore_nullability(&element_dtype) {
-                comparisons.push(Binary.new_expr(operator, [value.clone(), element]));
-            } else {
-                return Err(Unconverted::Unsupported);
-            }
-        }
-        // Kleene AND/OR preserve SQL IN/NOT IN nulls; list_contains does not.
-        let membership = if in_list.negated() {
-            and_collect(comparisons)
-        } else {
-            or_collect(comparisons)
-        };
-        membership.ok_or(Unconverted::Unsupported)
+            membership
+        })
     }
 
     fn convert_scalar_function(

@@ -1257,7 +1257,7 @@ logical_opt [
                                                                                                                                                 "children": [],
                                                                                                                                                 "extra_info": {
                                                                                                                                                     "Filters": [
-                                                                                                                                                        "vortex.list.contains([\"purple\", \"burlywood\", \"indian\", \"spring\", \"floral\", \"medium\"], $.i_color, opts=sql_null_semantics)",
+                                                                                                                                                        "vortex.list.contains([\"burlywood\", \"floral\", \"indian\", \"medium\", \"purple\", \"spring\"], $.i_color, opts=sql_null_semantics)",
                                                                                                                                                         "(decimal128(6500, precision=7, scale=2) <= $.i_current_price <= decimal128(7400, precision=7, scale=2))"
                                                                                                                                                     ],
                                                                                                                                                     "Function": "Vortex Scan",
@@ -2158,7 +2158,7 @@ physical_plan [
                                                                                                                                                 "extra_info": {
                                                                                                                                                     "Function": "Vortex Scan",
                                                                                                                                                     "Filters": [
-                                                                                                                                                        "vortex.list.contains([\"purple\", \"burlywood\", \"indian\", \"spring\", \"floral\", \"medium\"], $.i_color, opts=sql_null_semantics)",
+                                                                                                                                                        "vortex.list.contains([\"burlywood\", \"floral\", \"indian\", \"medium\", \"purple\", \"spring\"], $.i_color, opts=sql_null_semantics)",
                                                                                                                                                         "(decimal128(6500, precision=7, scale=2) <= $.i_current_price <= decimal128(7400, precision=7, scale=2))"
                                                                                                                                                     ],
                                                                                                                                                     "Projections": [
