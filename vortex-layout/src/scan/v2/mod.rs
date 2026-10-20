@@ -4,9 +4,11 @@
 //! The planner-driven scan executor.
 //!
 //! A V2 scan lowers the file's layout once into a physical plan and runs every split of it
-//! through the planning protocol: the [`Run`](vortex_scan::planning::driver::Run) driver advances
-//! the split's planners and morsels, and every segment read is a protocol request served from the
-//! file's [`SegmentSource`]. The layout reader is never asked to evaluate anything.
+//! through the planning protocol. A single file planner hands out the scan's units one at a time
+//! to a [`Pool`] of workers, each advancing the planners and morsels of the units it claimed on a
+//! [`Run`](vortex_scan::planning::driver::Run) of its own, and every segment read is a protocol
+//! request served from the file's [`SegmentSource`]. The layout reader is never asked to evaluate
+//! anything.
 //!
 //! Import this module's [`ScanBuilder`] to select V2 explicitly. It accepts a [`ScanFile`]
 //! directly and supports projection, row ranges, and selections. Layouts without a pipeline
@@ -17,7 +19,6 @@
 //! segment is read once and rows between selected runs are never visited.
 
 mod io;
-mod split;
 #[cfg(test)]
 mod tests;
 
@@ -30,12 +31,10 @@ use arrow_array::RecordBatch;
 use arrow_schema::ArrowError;
 use arrow_schema::Field;
 use arrow_schema::SchemaRef;
-use futures::FutureExt;
 use futures::Stream;
 use futures::StreamExt;
 use futures::TryStreamExt;
 use futures::future;
-use futures::future::BoxFuture;
 use futures::stream;
 use futures::stream::BoxStream;
 use vortex_array::ArrayRef;
@@ -43,9 +42,18 @@ use vortex_array::VortexSessionExecute;
 use vortex_array::dtype::DType;
 use vortex_array::expr::BoundExpression;
 use vortex_error::VortexResult;
+use vortex_io::request::IoConsumer;
+use vortex_io::request::IoRequestId;
+use vortex_io::request::IoResult;
 use vortex_io::session::RuntimeSessionExt;
 use vortex_mask::AllOr;
+use vortex_scan::planning::planner::Planner;
+use vortex_scan::planning::planner::PlannerOutput;
+use vortex_scan::planning::planner::State;
 use vortex_scan::planning::planner::WorkScope;
+use vortex_scan::planning::pool::Pool;
+use vortex_scan::planning::pool::PoolOptions;
+use vortex_scan::planning::pool::Spawn;
 use vortex_scan::selection::Selection;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
@@ -63,7 +71,6 @@ pub use crate::scan::execution::SegmentLocation;
 use crate::scan::execution::plan_projection;
 use crate::scan::v2::io::SegmentRanges;
 use crate::scan::v2::io::SegmentScanIo;
-use crate::scan::v2::split::SplitPlan;
 use crate::segments::SegmentId;
 use crate::segments::SegmentSource;
 
@@ -249,135 +256,138 @@ impl<A: 'static + Send> ScanBuilder<A> {
         }
     }
 
-    /// Runs the scan on the session's runtime, preparing it on the first poll.
-    /// Preparation errors are returned as stream items.
+    /// Runs the scan on a [`Pool`] of workers on the session's runtime, starting it on the first
+    /// poll. Errors, including those preparing the scan, are returned as stream items.
+    ///
+    /// The scan's [`FilePlanner`] hands out its units one at a time, and each is run by the next
+    /// spare worker while the file planner plans the next. Up to `concurrency` units run at once
+    /// per worker thread, and their batches are yielded in row order when the scan is ordered.
     pub fn into_stream(self) -> VortexResult<BoxStream<'static, VortexResult<A>>> {
         let handle = self.session.handle();
-        Ok(stream::once(async move {
-            handle
-                .spawn_cpu(move || PreparedScan::try_new(self)?.execute_stream())
-                .await
-        })
-        .try_flatten()
+        let spawn: Spawn = Arc::new(move |worker| handle.spawn(worker).detach());
+        let io = Arc::new(SegmentScanIo::new(
+            Arc::clone(&self.file.segments),
+            SegmentRanges::new(Arc::clone(&self.file.locations)),
+        ));
+        let options = PoolOptions {
+            max_workers: get_available_parallelism().unwrap_or(1),
+            units_per_worker: self.concurrency,
+            ordered: self.ordered,
+        };
+        let map = self.map_fn;
+        let root = FilePlanner {
+            scan: Some(ScanRequest {
+                session: self.session,
+                file: self.file,
+                projection: self.projection,
+                row_range: self.row_range,
+                selection: self.selection,
+                row_offset: self.row_offset,
+            }),
+            io: Arc::clone(&io),
+            planners: None,
+        };
+        let scope = WorkScope {
+            file_ordinal: 0,
+            rows: 0..0,
+        };
+        Ok(stream::once(future::lazy(move |_| {
+            Pool::stream(Box::new(root), scope, io, map, spawn, options)
+        }))
+        .flatten()
         .boxed())
     }
 }
 
-/// A scan planned over its file, ready to run its splits.
-struct PreparedScan<A: 'static + Send> {
+/// What a scan reads, before it is planned.
+struct ScanRequest {
     session: VortexSession,
-    plans: ScanPlans,
-    /// Serves the splits' reads.
-    io: Arc<SegmentScanIo>,
-    /// The scan's splits, over the root row domain, in row order.
-    splits: Vec<Range<u64>>,
+    file: ScanFile,
+    projection: BoundExpression,
+    row_range: Option<Range<u64>>,
     selection: Selection,
-    map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
-    ordered: bool,
-    concurrency: usize,
+    row_offset: u64,
 }
 
-impl<A: 'static + Send> PreparedScan<A> {
+impl ScanRequest {
     /// Lowers the file's layout, plans the projection, and partitions the selected range into
-    /// fixed-size row chunks.
-    fn try_new(builder: ScanBuilder<A>) -> VortexResult<Self> {
-        let file = builder.file;
+    /// fixed-size row chunks, to plan units over.
+    fn plan(self, io: Arc<SegmentScanIo>) -> VortexResult<Planners> {
+        let file = self.file;
         let root = lower(&file.layout)?;
         let row_count = root.row_count();
         // An identity projection needs no rewrites. Keep the lowered children lazy, including
         // statistics that a projection-only scan never reads.
-        let identity = builder.projection.is_root() && builder.projection.dtype() == root.dtype();
+        let identity = self.projection.is_root() && self.projection.dtype() == root.dtype();
         let projection = if identity {
             root
         } else {
-            optimize(plan_row_idx_expression(builder.projection, root)?)?
+            optimize(plan_row_idx_expression(self.projection, root)?)?
         };
         let chunk_rows = if identity {
             rows_per_chunk(row_count, &file.locations)
         } else {
             MAX_ROWS_PER_CHUNK
         };
-        let splits = row_chunks(builder.row_range.unwrap_or(0..row_count), chunk_rows);
-        let io = Arc::new(SegmentScanIo::new(
-            file.segments,
-            SegmentRanges::new(Arc::clone(&file.locations)),
-        ));
-        Ok(Self {
-            session: builder.session.clone(),
+        let chunks = row_chunks(self.row_range.unwrap_or(0..row_count), chunk_rows);
+        Ok(Planners {
             plans: ScanPlans {
-                session: builder.session,
+                session: self.session,
                 locations: file.locations,
                 projection,
-                row_offset: builder.row_offset,
+                row_offset: self.row_offset,
                 values: Default::default(),
             },
+            selection: self.selection,
             io,
-            splits,
-            selection: builder.selection,
-            map_fn: builder.map_fn,
-            ordered: builder.ordered,
-            concurrency: builder.concurrency,
-        })
-    }
-
-    /// Plans the scan's planners one at a time, in row order.
-    fn planners(&self) -> Planners {
-        Planners {
-            plans: self.plans.clone(),
-            selection: self.selection.clone(),
-            io: Arc::clone(&self.io),
-            chunks: self.splits.clone().into_iter(),
+            chunks: chunks.into_iter(),
             runs: VecDeque::new(),
             whole: None,
             splits: Vec::new(),
             last: Vec::new(),
             reached: Vec::new(),
+        })
+    }
+}
+
+/// The scan's root planner: plans the scan on its first step, and hands out one unit per step
+/// after that, in row order. Each unit is a planner that projects its splits.
+struct FilePlanner {
+    /// The scan, until it is planned.
+    scan: Option<ScanRequest>,
+    io: Arc<SegmentScanIo>,
+    /// The scan's units, once it is planned, until every one has been handed out.
+    planners: Option<Planners>,
+}
+
+impl IoConsumer for FilePlanner {
+    // The file planner publishes no requests.
+    fn set_io_result(&mut self, _request: IoRequestId, _result: IoResult) {}
+}
+
+impl Planner for FilePlanner {
+    fn state(&self) -> State {
+        if self.scan.is_some() || self.planners.is_some() {
+            State::NeedsCompute
+        } else {
+            State::Done
         }
     }
 
-    /// Runs every split as a task on the session's runtime and yields their mapped batches.
-    ///
-    /// Like the default executor, up to `concurrency` splits per thread run at once, and their
-    /// batches are yielded in row order when the scan is ordered.
-    fn execute_stream(self) -> VortexResult<BoxStream<'static, VortexResult<A>>> {
-        let concurrency = self.concurrency * get_available_parallelism().unwrap_or(1);
-        let handle = self.session.handle();
-        let planners = self.planners();
-        let io = self.io;
-        let map_fn = self.map_fn;
-        // Each planner is spawned once planned, as the buffer pulls it, so at most `concurrency`
-        // run at once.
-        let mut tasks = planners.map(move |split| -> BoxFuture<'static, VortexResult<Vec<A>>> {
-            let split = match split {
-                Ok(split) => split,
-                Err(error) => return future::ready(Err(error)).boxed(),
-            };
-            let io = Arc::clone(&io);
-            let map_fn = Arc::clone(&map_fn);
-            handle
-                .spawn(async move {
-                    split
-                        .run(io)
-                        .await?
-                        .into_iter()
-                        .map(|array| map_fn(array))
-                        .collect::<VortexResult<Vec<_>>>()
-                })
-                .boxed()
-        });
-        // The first are planned and spawned now, each before the next is planned, so they run
-        // while the stream is handed back to its consumer.
-        let started: Vec<_> = tasks.by_ref().take(concurrency).collect();
-        let tasks = stream::iter(started).chain(stream::iter(tasks));
-        let batches = if self.ordered {
-            tasks.buffered(concurrency).boxed()
-        } else {
-            tasks.buffer_unordered(concurrency).boxed()
+    fn compute(&mut self) -> VortexResult<PlannerOutput> {
+        if let Some(scan) = self.scan.take() {
+            self.planners = Some(scan.plan(Arc::clone(&self.io))?);
+        }
+        let Some(planners) = &mut self.planners else {
+            return Ok(PlannerOutput::Done);
         };
-        Ok(batches
-            .map_ok(|batches| stream::iter(batches.into_iter().map(Ok)))
-            .try_flatten()
-            .boxed())
+        match planners.next_plan()? {
+            Some((scope, root)) => Ok(PlannerOutput::Planner(scope, root)),
+            None => {
+                self.planners = None;
+                Ok(PlannerOutput::Done)
+            }
+        }
     }
 }
 
@@ -391,8 +401,8 @@ enum NextRun {
     Done,
 }
 
-/// Plans a scan's planners one at a time, in row order, so each can run on a task of its own as
-/// soon as it is planned, while the rest are still being planned.
+/// Plans a scan's units one at a time, in row order, so each can be handed to a worker as soon
+/// as it is planned, while the rest are still being planned.
 ///
 /// A fully selected chunk, or one selected in more than [`MAX_RUNS`] runs, is one split of its
 /// own planner. Otherwise each selected run joins the planner before it, even across chunk
@@ -425,8 +435,8 @@ struct Planners {
 }
 
 impl Planners {
-    /// The next planner, ready to be admitted to a planning run.
-    fn next_plan(&mut self) -> VortexResult<Option<SplitPlan>> {
+    /// The next unit, with the rows it covers.
+    fn next_plan(&mut self) -> VortexResult<Option<(WorkScope, Box<dyn Planner>)>> {
         let Some(ranges) = self.next_splits()? else {
             return Ok(None);
         };
@@ -442,10 +452,8 @@ impl Planners {
             file_ordinal: 0,
             rows,
         };
-        Ok(Some(SplitPlan {
-            root: plan_projection(self.plans.clone(), scope.clone(), splits),
-            scope,
-        }))
+        let root = plan_projection(self.plans.clone(), scope.clone(), splits);
+        Ok(Some((scope, root)))
     }
 
     /// The pipeline splits of the next planner, in row order.
@@ -540,13 +548,5 @@ impl Planners {
                 }
             }
         }
-    }
-}
-
-impl Iterator for Planners {
-    type Item = VortexResult<SplitPlan>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.next_plan().transpose()
     }
 }

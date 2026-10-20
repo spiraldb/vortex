@@ -503,6 +503,9 @@ fn drain(run: &mut Run) -> VortexResult<Vec<String>> {
         events.push(match run.advance()? {
             Progress::Batch(batch) => format!("batch {:?} {:?}", batch.root, batch.scope.rows),
             Progress::RootDone(root) => format!("done {root:?}"),
+            Progress::Handoff(handoff) => {
+                format!("handoff {:?} {:?}", handoff.root, handoff.scope.rows)
+            }
             Progress::Waiting => {
                 events.push("waiting".to_string());
                 return Ok(events);
@@ -513,6 +516,59 @@ fn drain(run: &mut Run) -> VortexResult<Vec<String>> {
             }
         });
     }
+}
+
+/// A distributing root hands off the planners and morsels it emits, unvisited and in emission
+/// order, and another run admits each as a root of its own.
+#[test]
+fn a_distributing_root_hands_off_its_children() -> VortexResult<()> {
+    let log = Log::default();
+    let file = ScriptedPlanner::boxed(
+        "file",
+        vec![
+            PlannerStep::Planner(
+                scope(0..1),
+                vec![one_batch_morsel(scope(0..1), 1), PlannerStep::Done],
+            ),
+            one_batch_morsel(scope(1..3), 2),
+            PlannerStep::Done,
+        ],
+        &log,
+    );
+    let source = source();
+    let mut distributing = Run::new();
+    distributing.admit_distributing(file, scope(0..3), Arc::clone(&source) as Arc<dyn IoSource>);
+    let mut handoffs = Vec::new();
+    loop {
+        match distributing.advance()? {
+            Progress::Handoff(handoff) => handoffs.push(handoff),
+            Progress::RootDone(_) => break,
+            _ => vortex_bail!("expected a handoff or the root to finish"),
+        }
+    }
+    let scopes: Vec<_> = handoffs.iter().map(|h| h.scope.rows.clone()).collect();
+    assert_eq!(scopes, vec![0..1, 1..3]);
+    assert_eq!(log.events(), vec!["compute file"; 3]);
+
+    let mut run = Run::new();
+    for handoff in handoffs {
+        run.admit_child(
+            handoff.child,
+            handoff.scope,
+            Arc::clone(&source) as Arc<dyn IoSource>,
+        );
+    }
+    assert_eq!(
+        drain(&mut run)?,
+        vec![
+            "batch RootId(0) 0..1",
+            "done RootId(0)",
+            "batch RootId(1) 1..3",
+            "done RootId(1)",
+            "idle",
+        ]
+    );
+    Ok(())
 }
 
 /// Roots run side by side: a root with ready work finishes while another waits for its read, and

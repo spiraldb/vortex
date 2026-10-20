@@ -15,6 +15,11 @@
 //! for IO, and the caller decides how to wait, by awaiting [`Run::poll_completion`] or by handing
 //! a completion it took from a source to [`Run::complete`]. [`Driver::run`] is the blocking
 //! convenience for one root.
+//!
+//! A root admitted with [`Run::admit_distributing`] runs nothing it emits: each child is handed
+//! back as a [`Progress::Handoff`], for another run to admit with [`Run::admit_child`]. A
+//! [`Pool`](crate::planning::pool::Pool) uses this to hand a file planner's units to whichever
+//! worker is spare.
 
 use std::collections::BTreeMap;
 use std::collections::VecDeque;
@@ -59,10 +64,30 @@ pub struct Batch {
     pub array: ArrayRef,
 }
 
+/// A planner or morsel, run as the root of a run.
+pub enum Child {
+    /// A planner.
+    Planner(Box<dyn Planner>),
+    /// A morsel.
+    Morsel(Box<dyn Morsel>),
+}
+
+/// A child a distributing root emitted, for another run to admit.
+pub struct Handoff {
+    /// The distributing root that emitted the child.
+    pub root: RootId,
+    /// The scope the child covers.
+    pub scope: WorkScope,
+    /// The child, which has not been visited.
+    pub child: Child,
+}
+
 /// What a call to [`Run::advance`] left behind.
 pub enum Progress {
     /// A morsel's batch. One morsel's batches arrive in the order it emitted them.
     Batch(Batch),
+    /// A child of a root admitted with [`Run::admit_distributing`], in emission order.
+    Handoff(Handoff),
     /// Every item descended from the root has retired, and its IO session was cleared.
     RootDone(RootId),
     /// Every live item waits for IO. Await [`Run::poll_completion`], or pass the next completion
@@ -70,11 +95,6 @@ pub enum Progress {
     Waiting,
     /// Nothing is live: every admitted root has finished.
     Idle,
-}
-
-enum Item {
-    Planner(Box<dyn Planner>),
-    Morsel(Box<dyn Morsel>),
 }
 
 /// What one item's `compute()` produced.
@@ -89,7 +109,7 @@ struct Work {
     id: IoOwnerId,
     root: RootId,
     scope: WorkScope,
-    item: Item,
+    item: Child,
     /// Stable child-ordinal path, beginning with the root's admission ordinal.
     path: Vec<u64>,
     /// The parent continuation sorts after all previously emitted child subtrees.
@@ -115,15 +135,15 @@ impl Work {
 
     fn state(&self) -> State {
         match &self.item {
-            Item::Planner(planner) => planner.state(),
-            Item::Morsel(morsel) => morsel.state(),
+            Child::Planner(planner) => planner.state(),
+            Child::Morsel(morsel) => morsel.state(),
         }
     }
 
     fn consumer(&mut self) -> &mut dyn IoConsumer {
         match &mut self.item {
-            Item::Planner(planner) => &mut **planner,
-            Item::Morsel(morsel) => &mut **morsel,
+            Child::Planner(planner) => &mut **planner,
+            Child::Morsel(morsel) => &mut **morsel,
         }
     }
 
@@ -179,6 +199,8 @@ const IO_POLL_INTERVAL: usize = 64;
 struct Root {
     io: Arc<dyn IoSource>,
     live: usize,
+    /// Whether the children the root emits are handed off instead of run.
+    distributes: bool,
 }
 
 /// A set of root planners advanced by its caller on one thread at a time.
@@ -230,10 +252,43 @@ impl Run {
         scope: WorkScope,
         io: Arc<dyn IoSource>,
     ) -> RootId {
+        self.admit_child(Child::Planner(root), scope, io)
+    }
+
+    /// Admits a planner or morsel, such as one handed off by another run, as a root.
+    pub fn admit_child(&mut self, child: Child, scope: WorkScope, io: Arc<dyn IoSource>) -> RootId {
+        self.admit_root(child, scope, io, false)
+    }
+
+    /// Admits `root` without running what it emits: each child it emits is handed back by
+    /// [`advance`](Self::advance) as a [`Progress::Handoff`], in emission order.
+    pub fn admit_distributing(
+        &mut self,
+        root: Box<dyn Planner>,
+        scope: WorkScope,
+        io: Arc<dyn IoSource>,
+    ) -> RootId {
+        self.admit_root(Child::Planner(root), scope, io, true)
+    }
+
+    fn admit_root(
+        &mut self,
+        root: Child,
+        scope: WorkScope,
+        io: Arc<dyn IoSource>,
+        distributes: bool,
+    ) -> RootId {
         let id = RootId(self.next_root);
         self.next_root += 1;
-        self.roots.insert(id, Root { io, live: 0 });
-        self.spawn(id, scope, Item::Planner(root), vec![id.0]);
+        self.roots.insert(
+            id,
+            Root {
+                io,
+                live: 0,
+                distributes,
+            },
+        );
+        self.spawn(id, scope, root, vec![id.0]);
         id
     }
 
@@ -375,7 +430,7 @@ impl Run {
         Ok(())
     }
 
-    fn spawn(&mut self, root: RootId, scope: WorkScope, item: Item, path: Vec<u64>) {
+    fn spawn(&mut self, root: RootId, scope: WorkScope, item: Child, path: Vec<u64>) {
         let id = IoOwnerId(self.next_owner);
         self.next_owner += 1;
         if let Some(root) = self.roots.get_mut(&root) {
@@ -431,11 +486,11 @@ impl Run {
     /// Visits one item: computes once if it is ready, and settles it otherwise.
     fn visit(&mut self, mut work: Box<Work>) -> VortexResult<()> {
         let output = match &mut work.item {
-            Item::Planner(planner) => match planner.state() {
+            Child::Planner(planner) => match planner.state() {
                 State::NeedsCompute => Output::Planner(planner.compute()?),
                 _ => return self.settle(work),
             },
-            Item::Morsel(morsel) => match morsel.state() {
+            Child::Morsel(morsel) => match morsel.state() {
                 State::NeedsCompute => Output::Morsel(morsel.compute()?),
                 _ => return self.settle(work),
             },
@@ -453,13 +508,11 @@ impl Run {
                 self.settle(work)?;
             }
             Output::Planner(PlannerOutput::Planner(scope, child)) => {
-                let path = work.child_path();
-                self.spawn(work.root, scope, Item::Planner(child), path);
+                self.emit(&mut work, scope, Child::Planner(child));
                 self.queue.insert(work);
             }
             Output::Planner(PlannerOutput::Morsel(scope, morsel)) => {
-                let path = work.child_path();
-                self.spawn(work.root, scope, Item::Morsel(morsel), path);
+                self.emit(&mut work, scope, Child::Morsel(morsel));
                 self.queue.insert(work);
             }
             Output::Morsel(MorselOutput::Batch(array)) => {
@@ -475,6 +528,25 @@ impl Run {
             }
         }
         Ok(())
+    }
+
+    /// Spawns a child `work` emitted, or hands it off if `work` is a distributing root.
+    fn emit(&mut self, work: &mut Work, scope: WorkScope, child: Child) {
+        let distributes = work.path.len() == 1
+            && self
+                .roots
+                .get(&work.root)
+                .is_some_and(|root| root.distributes);
+        if distributes {
+            self.events.push_back(Progress::Handoff(Handoff {
+                root: work.root,
+                scope,
+                child,
+            }));
+        } else {
+            let path = work.child_path();
+            self.spawn(work.root, scope, child, path);
+        }
     }
 
     /// Registers the requests an item published with its root's session.
@@ -540,6 +612,7 @@ impl Driver {
         loop {
             match run.advance()? {
                 Progress::Batch(batch) => batches.push(batch),
+                Progress::Handoff(_) => vortex_bail!("a driver root cannot hand off children"),
                 Progress::RootDone(_) | Progress::Idle => return Ok(batches),
                 Progress::Waiting => run.complete(self.io.wait()?)?,
             }
