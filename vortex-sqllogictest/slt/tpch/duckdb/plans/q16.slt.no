@@ -255,7 +255,7 @@ logical_opt [
                                                                                                                                 "extra_info": {
                                                                                                                                     "Filters": [
                                                                                                                                         "vortex.not($.p_type like \"MEDIUM POLISHED%\")",
-                                                                                                                                        "vortex.list.contains([49i32, 14i32, 23i32, 45i32, 19i32, 3i32, 36i32, 9i32], $.p_size, opts=sql_null_semantics)",
+                                                                                                                                        "vortex.list.contains([3i32, 9i32, 14i32, 19i32, 23i32, 36i32, 45i32, 49i32], $.p_size, opts=sql_null_semantics)",
                                                                                                                                         "($.p_brand != \"Brand#45\")"
                                                                                                                                     ],
                                                                                                                                     "Function": "Vortex Scan",
@@ -506,7 +506,7 @@ physical_plan [
                                                                                                                                     "Function": "Vortex Scan",
                                                                                                                                     "Filters": [
                                                                                                                                         "vortex.not($.p_type like \"MEDIUM POLISHED%\")",
-                                                                                                                                        "vortex.list.contains([49i32, 14i32, 23i32, 45i32, 19i32, 3i32, 36i32, 9i32], $.p_size, opts=sql_null_semantics)",
+                                                                                                                                        "vortex.list.contains([3i32, 9i32, 14i32, 19i32, 23i32, 36i32, 45i32, 49i32], $.p_size, opts=sql_null_semantics)",
                                                                                                                                         "($.p_brand != \"Brand#45\")"
                                                                                                                                     ],
                                                                                                                                     "Projections": [

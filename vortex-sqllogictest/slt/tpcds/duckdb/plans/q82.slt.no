@@ -299,7 +299,7 @@ logical_opt [
                                                         "children": [],
                                                         "extra_info": {
                                                             "Filters": [
-                                                                "vortex.list.contains([129i64, 270i64, 821i64, 423i64], $.i_manufact_id, opts=sql_null_semantics)",
+                                                                "vortex.list.contains([129i64, 270i64, 423i64, 821i64], $.i_manufact_id, opts=sql_null_semantics)",
                                                                 "(decimal128(6200, precision=7, scale=2) <= $.i_current_price <= decimal128(9200, precision=7, scale=2))"
                                                             ],
                                                             "Function": "Vortex Scan",
@@ -414,7 +414,7 @@ physical_plan [
                                                         "extra_info": {
                                                             "Function": "Vortex Scan",
                                                             "Filters": [
-                                                                "vortex.list.contains([129i64, 270i64, 821i64, 423i64], $.i_manufact_id, opts=sql_null_semantics)",
+                                                                "vortex.list.contains([129i64, 270i64, 423i64, 821i64], $.i_manufact_id, opts=sql_null_semantics)",
                                                                 "(decimal128(6200, precision=7, scale=2) <= $.i_current_price <= decimal128(9200, precision=7, scale=2))"
                                                             ],
                                                             "Projections": [

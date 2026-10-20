@@ -348,15 +348,16 @@ fn test_large_membership_filter_pushdown() -> Result<()> {
         write_single_column_vortex_file("number", numbers).await
     });
     let conn = database_connection();
+    // Even numbers, so that the list is no range.
     let members = (0..1000)
-        .map(|value| value.to_string())
+        .map(|value| (value * 2).to_string())
         .collect::<Vec<_>>()
         .join(",");
     assert_membership_filter_pushed(
         &conn,
         &format!("'{}'", file.path().to_string_lossy()),
         &format!("number IN ({members})"),
-        2,
+        1,
     )
 }
 
