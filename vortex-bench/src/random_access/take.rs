@@ -130,14 +130,12 @@ impl RandomAccessor for ArrowIpcRandomAccessor {
 
 /// Random accessor for Vortex format files.
 ///
-/// The file handle is opened at construction time and reused across `take()` calls. Set
-/// `VORTEX_BENCH_SCAN=v1` to compare with V1 using the same open options and materialization.
-/// V2 requires files without list layouts.
+/// The file handle is opened at construction time and reused across `take()` calls. Rows are
+/// read with the V2 scan, which requires files without list layouts.
 pub struct VortexRandomAccessor {
     name: String,
     format: Format,
     file: VortexFile,
-    v2: bool,
 }
 
 impl VortexRandomAccessor {
@@ -149,13 +147,11 @@ impl VortexRandomAccessor {
     ) -> anyhow::Result<Self> {
         let file = SESSION
             .open_options()
-            .with_layout_reader_cache()
             .open_path(path.as_ref())
             .await?;
         Ok(Self {
             name: name.into(),
             format,
-            v2: !std::env::var("VORTEX_BENCH_SCAN").is_ok_and(|scan| scan == "v1"),
             file,
         })
     }
@@ -169,13 +165,11 @@ impl VortexRandomAccessor {
     ) -> anyhow::Result<Self> {
         let file = SESSION
             .open_options()
-            .with_layout_reader_cache()
             .open_object_store(remote.store(), remote.key(path)?)
             .await?;
         Ok(Self {
             name: name.into(),
             format,
-            v2: !std::env::var("VORTEX_BENCH_SCAN").is_ok_and(|scan| scan == "v1"),
             file,
         })
     }
@@ -193,24 +187,15 @@ impl RandomAccessor for VortexRandomAccessor {
 
     async fn take(&self, indices: &[u64]) -> anyhow::Result<RandomAccessorRet> {
         let indices = StrictSortedBuffer::try_new(Buffer::from(indices.to_vec()))?;
-        let array = if self.v2 {
-            let stream = ScanBuilder::new(SESSION.clone(), self.file.scan_file())
-                .with_row_indices(indices)
-                .into_stream()?;
-            ArrayStreamAdapter::new(self.file.dtype().clone(), stream)
-                .read_all()
-                .await?
-        } else {
-            self.file
-                .scan()?
-                .with_row_indices(indices)
-                .into_array_stream()?
-                .read_all()
-                .await?
-        };
+        let stream = ScanBuilder::new(SESSION.clone(), self.file.scan_file())
+            .with_row_indices(indices)
+            .into_stream()?;
+        let array = ArrayStreamAdapter::new(self.file.dtype().clone(), stream)
+            .read_all()
+            .await?;
 
         // Keep the historical benchmark contract: canonicalize the outer array, leaving nested
-        // values lazy. Both scan implementations must perform the same materialization.
+        // values lazy.
         let mut ctx = SESSION.create_execution_ctx();
         let canonical = array.execute::<Canonical>(&mut ctx)?.into_array();
         Ok(RandomAccessorRet::ArrayRef(canonical))
