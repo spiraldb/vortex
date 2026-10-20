@@ -410,6 +410,10 @@ impl ArrowSession {
                 return Ok(DType::Variant(field.is_nullable().into()));
             }
         }
+        if let DataType::Dictionary(_, value_type) = field.data_type() {
+            return self
+                .from_arrow_field(&field.clone().with_data_type(value_type.as_ref().clone()));
+        }
         self.from_arrow_datatype(field.data_type(), field.is_nullable().into())
     }
 
@@ -788,13 +792,12 @@ impl ArrowSession {
             }
             DataType::Dictionary(..) => {
                 let dict = array.as_any_dictionary();
-                // Arrow models dictionary values as a bare `DataType`, so there is no field
-                // metadata to carry an extension name for the values themselves. Fields *nested
-                // inside* that data type (list elements, struct fields, map entries) do keep
-                // their metadata, so importing the values by nullability alone still routes them
-                // back through the plugin-aware conversion.
-                let values = self
-                    .from_arrow_array(ArrowArrayRef::clone(dict.values()), field.is_nullable())?;
+                // Extension metadata on the dictionary field describes its values.
+                let values_field = field
+                    .clone()
+                    .with_data_type(dict.values().data_type().clone());
+                let values =
+                    self.from_arrow_array(ArrowArrayRef::clone(dict.values()), &values_field)?;
                 let codes = dict.keys();
                 let codes = from_arrow_dyn(codes, codes.is_nullable())?;
                 // SAFETY: arrow-rs enforces the dictionary invariants on construction, so the
