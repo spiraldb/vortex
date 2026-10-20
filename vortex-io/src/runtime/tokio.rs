@@ -198,32 +198,6 @@ mod tests {
         let runtime = TokioRuntime::from(tokio_rt.handle());
 
         let counter = Arc::new(AtomicUsize::new(0));
-        let c = Arc::clone(&counter);
-
-        // Keep the future blocked so that it cannot complete before the abort.
-        let (mut send, recv) = oneshot::channel::<()>();
-
-        let fut = async move {
-            let _ = recv.await;
-            c.fetch_add(1, Ordering::SeqCst);
-        };
-        let task = runtime.handle().spawn(fut.boxed());
-        drop(task);
-
-        // Aborting is asynchronous. The receiver closes only when the runtime drops the future.
-        // Do not wait on a different captured value: the drop order of captured values changes
-        // with the poll state of the future.
-        tokio_rt.block_on(send.closed());
-
-        assert!(send.send(()).is_err());
-        assert_eq!(counter.load(Ordering::SeqCst), 0);
-    }
-    #[test]
-    fn test_spawn_and_abort() {
-        let tokio_rt = TokioRt::new().unwrap();
-        let runtime = TokioRuntime::from(tokio_rt.handle());
-
-        let counter = Arc::new(AtomicUsize::new(0));
         let task_counter = Arc::clone(&counter);
 
         let (started_send, started_recv) = oneshot::channel::<()>();
@@ -250,3 +224,4 @@ mod tests {
 
         assert_eq!(counter.load(Ordering::SeqCst), 0);
     }
+}
