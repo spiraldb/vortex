@@ -200,23 +200,21 @@ mod tests {
         let counter = Arc::new(AtomicUsize::new(0));
         let c = Arc::clone(&counter);
 
-        // Create a channel to ensure the future doesn't complete immediately
-        let (send, recv) = oneshot::channel::<()>();
+        // Keep the future blocked so that it cannot complete before the abort.
+        let (mut send, recv) = oneshot::channel::<()>();
 
-        let (done_send, done_recv) = oneshot::channel::<()>();
         let fut = async move {
-            let _done = done_send;
             let _ = recv.await;
             c.fetch_add(1, Ordering::SeqCst);
         };
         let task = runtime.handle().spawn(fut.boxed());
         drop(task);
 
-        // Aborting is asynchronous. Keep the future blocked until cancellation finishes
-        // so it cannot complete during an in-flight poll.
-        tokio_rt
-            .block_on(done_recv)
-            .expect_err("task has terminated");
+        // Aborting is asynchronous. The receiver closes only when the runtime drops the future.
+        // Do not wait on a different captured value: the drop order of captured values changes
+        // with the poll state of the future.
+        tokio_rt.block_on(send.closed());
+
         assert!(send.send(()).is_err());
         assert_eq!(counter.load(Ordering::SeqCst), 0);
     }
