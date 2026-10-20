@@ -45,6 +45,7 @@ use vortex::error::vortex_err;
 use crate::CudaBufferExt;
 use crate::CudaDeviceBuffer;
 use crate::executor::CudaExecutionCtx;
+use crate::kernel::GPUPatches;
 
 pub(crate) mod plan_builder;
 pub use plan_builder::DispatchPlan;
@@ -175,20 +176,40 @@ impl CudaDispatchPlan {
         I: IntoIterator,
         I::Item: Borrow<MaterializedStage>,
     {
+        Self::with_patches(stages, output_ptype, &[])
+    }
+
+    /// Byte size of a plan's header and stages, given each stage's scalar op count. Patch
+    /// descriptors start at this offset.
+    pub(crate) fn stages_size(scalar_op_counts: impl IntoIterator<Item = usize>) -> usize {
+        let size = scalar_op_counts
+            .into_iter()
+            .fold(size_of::<PlanHeader>(), |size, ops| {
+                size + size_of::<PackedStage>() + ops * size_of::<ScalarOp>()
+            });
+        // Descriptors after the stages hold device pointers and must stay 8-byte aligned.
+        assert_eq!(size % align_of::<GPUPatches>(), 0);
+        size
+    }
+
+    /// Build a packed plan from stages, followed by serialized patch descriptors (see
+    /// [`gpu_patches_bytes`]) that their ops refer to by byte offset from [`Self::stages_size`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `stages` is empty or the serialized plan exceeds 65535 bytes.
+    pub(crate) fn with_patches<I>(stages: I, output_ptype: PTypeTag, patches: &[u8]) -> Self
+    where
+        I: IntoIterator,
+        I::Item: Borrow<MaterializedStage>,
+    {
         let stages: Vec<MaterializedStage> =
             stages.into_iter().map(|s| s.borrow().clone()).collect();
         assert!(!stages.is_empty());
 
-        let header_size = size_of::<PlanHeader>();
-        let stage_header_size = size_of::<PackedStage>();
-        let scalar_op_size = size_of::<ScalarOp>();
-
-        // Calculate total size and validate.
-        let mut total_size = header_size;
-        for stage in &stages {
-            total_size += stage_header_size;
-            total_size += stage.scalar_ops.len() * scalar_op_size;
-        }
+        let stages_size = Self::stages_size(stages.iter().map(|stage| stage.scalar_ops.len()));
+        assert_eq!(patches.len() % size_of::<GPUPatches>(), 0);
+        let total_size = stages_size + patches.len();
         assert!(
             total_size <= u16::MAX as usize,
             "packed plan size {total_size} exceeds u16::MAX"
@@ -217,6 +238,8 @@ impl CudaDispatchPlan {
                 buffer.extend_from_slice(op.as_packed_bytes());
             }
         }
+        assert_eq!(buffer.len(), stages_size);
+        buffer.extend_from_slice(patches);
 
         assert_eq!(buffer.len(), total_size);
         Self {
@@ -369,6 +392,17 @@ impl ScalarOp {
                 },
             },
         }
+    }
+}
+
+/// The bytes of a patch descriptor, as embedded in a packed plan.
+pub(crate) fn gpu_patches_bytes(patches: &GPUPatches) -> &[u8] {
+    // SAFETY: `GPUPatches` is plain C data, built with zeroed padding by `build_gpu_patches`.
+    unsafe {
+        std::slice::from_raw_parts(
+            std::ptr::from_ref(patches).cast::<u8>(),
+            size_of::<GPUPatches>(),
+        )
     }
 }
 
