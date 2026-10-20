@@ -20,7 +20,7 @@ use vortex_mask::Mask;
 use vortex_scan::planning::planner::WorkScope;
 use vortex_session::VortexSession;
 
-pub(super) use self::selection::plan_selection;
+pub(super) use self::selection::FilePlanner;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::pipeline::ValueCache;
 
