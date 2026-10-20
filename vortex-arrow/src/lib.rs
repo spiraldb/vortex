@@ -16,7 +16,6 @@
 //! The [`ArrowSession`] session variable is created lazily on first use of
 //! [`ArrowSessionExt::arrow`], so no explicit registration is required for plain conversions.
 
-use vortex_error::VortexResult;
 use vortex_session::VortexSession;
 
 pub mod convert;
@@ -52,35 +51,4 @@ pub use session::*;
 /// This eagerly registers the [`ArrowSession`], which is otherwise created lazily on first use.
 pub fn initialize(session: &VortexSession) {
     session.register(ArrowSession::default());
-}
-
-/// Construct a Vortex array from an Arrow array (or other Arrow container) of type `A`.
-///
-/// Implementations reuse the underlying Arrow buffers without copying wherever the Arrow and
-/// Vortex memory layouts allow it.
-#[deprecated(note = "Use `ArrowSession` (`from_arrow_array`, `from_arrow_record_batch`) instead")]
-pub trait FromArrowArray<A> {
-    /// Convert `array` into a Vortex array whose [`DType`](vortex_array::dtype::DType) has the requested
-    /// `nullable` [`Nullability`](vortex_array::dtype::Nullability).
-    ///
-    /// An Arrow array can carry a validity (null) buffer regardless of whether its schema declares
-    /// the field nullable, so the desired nullability is supplied separately by the caller
-    /// (typically from the corresponding Arrow `Field`'s `is_nullable`). This flag is reconciled
-    /// with the array's physical nulls as follows:
-    ///
-    /// - `nullable == true`: the resulting validity is derived from the array's null buffer, or
-    ///   all-valid when the array has none.
-    /// - `nullable == false`: the array must contain no nulls, and the result is non-nullable.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if `nullable` is `false` but `array` physically contains one or more nulls
-    /// (including an Arrow `NullArray`, which is entirely null), or if the Arrow data type is not
-    /// supported.
-    #[deprecated(
-        note = "Use `ArrowSession` (`from_arrow_array`, `from_arrow_record_batch`) instead"
-    )]
-    fn from_arrow(array: A, nullable: bool) -> VortexResult<Self>
-    where
-        Self: Sized;
 }
