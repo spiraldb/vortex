@@ -15,11 +15,16 @@ LitData (https://github.com/Lightning-AI/litdata) has no Rust binding, so
 The timed loop mirrors the Rust harness: cached mode warms one reused `StreamingDataset` before
 timing, reopen mode constructs a new one inside every timed iteration, and iterations repeat
 until the time limit has elapsed. Interpreter start and `import litdata` are not timed.
+
+LitData's defaults are tuned for streaming whole chunks through a training loop. Both the layout
+written here and the reader configuration below are chosen for point lookups instead; see
+`benchmarks/random-access-bench/README.md` for what each setting costs when left at its default.
 """
 
 import argparse
 import contextlib
 import json
+import os
 import random
 import shutil
 import sys
@@ -33,10 +38,15 @@ import pyarrow.parquet as pq
 from litdata import StreamingDataset, optimize
 from litdata.streaming.serializers import JsonLeaf
 
-# LitData stores a row as a tree of typed leaves and picks each leaf's serializer from the
-# first item only, so a null in a column whose first value is a float is silently written as
-# 0.0. Columns with nulls, and variable-length lists, are therefore stored as `JsonLeaf`
-# values, LitData's own encoding for leaves whose type or shape varies between items.
+# Rows are written as tuples in schema order. LitData writes a dict of plain values as an Arrow
+# IPC footer of 256-row record batches, so every point lookup would convert a whole batch with
+# `to_pylist`. Any other tree gets LitData's per-item layout: an offset table and one
+# serialized record per row, read with a single slice.
+#
+# LitData picks each leaf's serializer from the first item only, so a null in a column whose
+# first value is a float is silently written as 0.0. Columns with nulls, and variable-length
+# lists, are therefore stored as `JsonLeaf` values, LitData's own encoding for leaves whose type
+# or shape varies between items.
 ENCODE_NATIVE = "native"
 ENCODE_JSON = "json"
 ENCODE_NUMPY = "numpy"
@@ -47,6 +57,15 @@ Plan = str | tuple[str, object]
 
 CHUNK_BYTES = "64MB"
 VERIFY_SAMPLES = 1_000
+
+# Reader settings for point lookups, applied before any dataset is opened.
+READER_ENV = {
+    # In POSIX-fast mode LitData slices each item out of a "page" spanning this many bytes of
+    # neighboring items, found by walking the offset table in Python on every lookup.
+    "LITDATA_POSIX_PAGE_BYTES": "0",
+    # Asks the kernel to read ahead the whole chunk (64MB) whenever a lookup maps a new one.
+    "LITDATA_POSIX_WILLNEED": "0",
+}
 
 
 def column_plan(field: pa.Field, column: pa.ChunkedArray) -> Plan:
@@ -106,26 +125,45 @@ def encode(value: object, plan: Plan) -> object:
     kind, detail = plan
     if kind == ENCODE_NUMPY:
         return np.asarray(value, dtype=detail)
-    return {name: encode(value[name], field_plan) for name, field_plan in detail.items()}
+    return encode_fields(value, detail)
 
 
-def normalize(value: object) -> object:
-    """Converts a decoded item to plain Python values for comparison with `to_pylist`."""
-    if isinstance(value, np.ndarray):
+def encode_fields(values: dict[str, object], plans: dict[str, Plan]) -> tuple[object, ...]:
+    return tuple(encode(values[name], plan) for name, plan in plans.items())
+
+
+def decode(value: object, plan: Plan) -> object:
+    """Converts a decoded item back to the plain Python values `to_pylist` returns."""
+    if plan == ENCODE_NATIVE or plan == ENCODE_JSON:
+        return value
+    kind, detail = plan
+    if kind == ENCODE_NUMPY:
         return value.tolist()
-    if isinstance(value, dict):
-        return {name: normalize(field) for name, field in value.items()}
-    if isinstance(value, list):
-        return [normalize(element) for element in value]
-    return value
+    return decode_fields(value, detail)
 
 
-def write_row_group(task: tuple[str, int, dict[str, Plan]]) -> Iterator[dict[str, object]]:
+def decode_fields(values: tuple[object, ...], plans: dict[str, Plan]) -> dict[str, object]:
+    return {name: decode(value, plan) for (name, plan), value in zip(plans.items(), values, strict=True)}
+
+
+def write_row_group(task: tuple[str, int, dict[str, Plan]]) -> Iterator[tuple[object, ...]]:
     """Yields the encoded rows of one Parquet row group, in row order."""
     path, row_group, plan = task
     table = plain_table(pq.ParquetFile(path).read_row_group(row_group))
     for row in table.to_pylist():
-        yield {name: encode(row[name], column_plan) for name, column_plan in plan.items()}
+        yield encode_fields(row, plan)
+
+
+def open_dataset(path: Path) -> StreamingDataset:
+    """Opens `path` configured for point lookups.
+
+    `batch_decode=0` decodes only the requested item instead of the 256 around it, and a
+    `max_pre_download` of at least the chunk count keeps every chunk mapped. LitData otherwise
+    keeps four, so lookups spread over more chunks unmap and remap one on almost every row.
+    """
+    with open(path / "index.json", encoding="utf-8") as index:
+        num_chunks = len(json.load(index)["chunks"])
+    return StreamingDataset(str(path), batch_decode=0, max_pre_download=max(num_chunks, 2))
 
 
 def prepare(parquet: Path, output: Path) -> None:
@@ -143,14 +181,14 @@ def prepare(parquet: Path, output: Path) -> None:
         num_workers=1,
     )
 
-    dataset = StreamingDataset(str(output))
+    dataset = open_dataset(output)
     if len(dataset) != table.num_rows:
         raise RuntimeError(f"LitData dataset has {len(dataset)} items, expected {table.num_rows} rows")
     rng = random.Random(42)
     samples = {0, table.num_rows - 1, *(rng.randrange(table.num_rows) for _ in range(VERIFY_SAMPLES))}
     for index in sorted(samples):
         expected = table.slice(index, 1).to_pylist()[0]
-        actual = normalize(dataset[index])
+        actual = decode_fields(dataset[index], plan)
         if actual != expected:
             raise RuntimeError(f"LitData item {index} does not match the Parquet row: {actual!r} != {expected!r}")
 
@@ -161,7 +199,7 @@ def take(dataset: StreamingDataset, indices: list[int]) -> list[object]:
 
 def bench(path: Path, indices: list[int], time_limit: float, warmup: float, reopen: bool) -> list[int]:
     # Match the Rust harness, which opens the file once before timing in both modes.
-    dataset = StreamingDataset(str(path))
+    dataset = open_dataset(path)
     take(dataset, indices)
 
     if not reopen:
@@ -176,7 +214,7 @@ def bench(path: Path, indices: list[int], time_limit: float, warmup: float, reop
     while True:
         start = time.perf_counter_ns()
         if reopen:
-            rows = take(StreamingDataset(str(path)), indices)
+            rows = take(open_dataset(path), indices)
         else:
             rows = take(dataset, indices)
         runs_ns.append(time.perf_counter_ns() - start)
@@ -203,6 +241,7 @@ def main() -> int:
     bench_parser.add_argument("--reopen", action="store_true", help="open the dataset in every iteration")
 
     args = parser.parse_args()
+    os.environ.update(READER_ENV)
     # LitData logs progress on stdout, which carries only the JSON report.
     with contextlib.redirect_stdout(sys.stderr):
         if args.command == "prepare":

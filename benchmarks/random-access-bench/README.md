@@ -43,6 +43,24 @@ so it inherits the CPU affinity and NUMA memory binding that
 [`scripts/bench-taskset.sh`](../../scripts/bench-taskset.sh) applies to it in CI. OS page caches
 are dropped before each run for every format.
 
+LitData's defaults target streaming whole chunks into a training loop, and several of them make
+point lookups far slower. The script changes these:
+
+| Setting | Default behavior on a point lookup | Cost at the default |
+| --- | --- | --- |
+| Rows written as tuples, not dicts | A dict of plain values is stored as an Arrow IPC footer of 256-row batches, and each lookup runs `to_pylist` on a whole batch | ~20× on uniform lookups |
+| `batch_decode=0` | Decodes the 256 items around the requested one | ~7× on feature vectors |
+| `max_pre_download` ≥ chunk count | Keeps 4 chunks mapped, so lookups spread over more chunks unmap and remap one per row | ~8× on feature vectors |
+| `LITDATA_POSIX_PAGE_BYTES=0` | Finds a 256KB "page" of neighboring items by walking the offset table in Python | ~15× on small rows |
+| `LITDATA_POSIX_WILLNEED=0` | Reads ahead the whole 64MB chunk whenever a new one is mapped | wasted I/O on cold reads |
+
+Lookups stay single-threaded in one process. LitData parallelizes with `DataLoader` worker
+processes, and threads contend on the GIL while decoding. Both were slower or no faster for one
+100-row lookup, because the per-row cost is a few microseconds and moving rows between processes
+costs more. Reopen mode stays expensive: mapping a chunk converts its whole offset table into a
+Python list, one entry per row. Smaller chunks only help when the lookups touch few chunks, so
+chunks stay at LitData's recommended 64MB.
+
 LitData is not in the default `--formats`. The interpreter comes from `LITDATA_PYTHON`, or
 `python3` if that is unset. LitData is only benchmarked from local disk.
 
