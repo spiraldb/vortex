@@ -10,17 +10,17 @@
 
 mod adaptor;
 mod projection;
+mod selection;
 
 use std::sync::Arc;
 
 use vortex_buffer::Alignment;
 use vortex_io::request::IoTarget;
 use vortex_mask::Mask;
-use vortex_scan::planning::planner::Planner;
 use vortex_scan::planning::planner::WorkScope;
 use vortex_session::VortexSession;
 
-use self::projection::ProjectionPlanner;
+pub(super) use self::selection::plan_selection;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::pipeline::ValueCache;
 
@@ -68,9 +68,4 @@ struct SelectedRows {
     scope: WorkScope,
     /// Which rows of `scope.rows` are selected.
     mask: Mask,
-}
-
-/// The work for one split: project the rows of `scope` selected by `mask`.
-pub(super) fn plan_projection(plans: ScanPlans, scope: WorkScope, mask: Mask) -> Box<dyn Planner> {
-    Box::new(ProjectionPlanner::new(plans, SelectedRows { scope, mask }))
 }

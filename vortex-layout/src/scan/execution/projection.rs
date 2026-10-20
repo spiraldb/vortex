@@ -10,6 +10,7 @@ use vortex_error::vortex_bail;
 use vortex_io::request::IoConsumer;
 use vortex_io::request::IoRequestId;
 use vortex_io::request::IoResult;
+use vortex_mask::Mask;
 use vortex_scan::planning::morsel::Morsel;
 use vortex_scan::planning::morsel::MorselOutput;
 use vortex_scan::planning::planner::Planner;
@@ -18,6 +19,7 @@ use vortex_scan::planning::planner::State;
 
 use crate::plan::physical::pipeline::Scan;
 use crate::plan::physical::pipeline::Split;
+use crate::plan::physical::selection::selected;
 use crate::scan::execution::ScanPlans;
 use crate::scan::execution::SelectedRows;
 use crate::scan::execution::adaptor::AdaptorStep;
@@ -137,10 +139,14 @@ impl Morsel for ProjectionMorsel {
                 .vortex_expect("an uncompiled projection still has its plans");
             let scan = Scan::try_new(
                 plans.session,
-                plans.projection,
+                selected(
+                    plans.projection,
+                    self.selected.scope.rows.clone(),
+                    self.selected.mask.clone(),
+                ),
                 vec![Split {
                     rows: self.selected.scope.rows.clone(),
-                    mask: self.selected.mask.clone(),
+                    mask: Mask::new_true(self.selected.mask.len()),
                 }],
             )?
             .with_row_offset(plans.row_offset)
