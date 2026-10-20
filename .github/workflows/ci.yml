@@ -1,5 +1,7 @@
 name: Linters and Tests
 
+# CI playground: establish an unchanged baseline before measuring optimizations.
+
 # Concurrency control:
 # - PRs: new commits on a feature branch will cancel in-progress (outdated) runs.
 # - Push to develop: runs queue sequentially, never cancelled.
