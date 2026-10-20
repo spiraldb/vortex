@@ -11,6 +11,8 @@ pub mod string;
 pub mod decimal;
 pub mod temporal;
 
+mod varbin;
+
 pub(crate) mod patches;
 
 use vortex_compressor::builtins::BinaryDictScheme;
