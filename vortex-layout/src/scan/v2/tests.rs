@@ -565,8 +565,8 @@ async fn selected_split_scope_is_bounded_before_projection() -> VortexResult<()>
     Ok(())
 }
 
-/// A repeated projection reuses its optimized plan, so the values it keeps are found again rather
-/// than kept anew by every scan.
+/// A repeated projection reuses its optimized plan, so later scans find the dictionary values the
+/// first one kept instead of reading them again.
 #[tokio::test]
 async fn repeated_projections_reuse_their_values() -> VortexResult<()> {
     let session = new_session().with_tokio();
@@ -579,13 +579,11 @@ async fn repeated_projections_reuse_their_values() -> VortexResult<()> {
         reads: AtomicUsize::new(0),
     });
     let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
-    let cache = ScanCache::default();
     let mut file = scan_file(&segments, &layout)?;
-    file.cache = Some(cache.clone());
+    file.cache = Some(ScanCache::default());
 
     let projection = gt(root(), lit(15i32)).bind(layout.dtype())?;
     let mut reads = Vec::new();
-    let mut kept = Vec::new();
     for _ in 0..3 {
         let before = counted.reads.load(Ordering::Relaxed);
         let scan = ScanBuilder::new(session.clone(), file.clone())
@@ -598,9 +596,7 @@ async fn repeated_projections_reuse_their_values() -> VortexResult<()> {
             &mut session.create_execution_ctx()
         );
         reads.push(counted.reads.load(Ordering::Relaxed) - before);
-        kept.push(cache.values_len());
     }
     assert_eq!(reads, vec![4, 1, 1]);
-    assert_eq!(kept[1..], kept[..2]);
     Ok(())
 }

@@ -70,11 +70,6 @@ impl ScanCache {
         Arc::clone(self.0.ranges.get_or_init(|| segment_ranges(locations)))
     }
 
-    #[cfg(test)]
-    pub(super) fn values_len(&self) -> usize {
-        self.0.values.len()
-    }
-
     pub(super) fn values(&self) -> ValueCache {
         self.0.values.clone()
     }
