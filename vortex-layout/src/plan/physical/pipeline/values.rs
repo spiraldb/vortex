@@ -27,6 +27,12 @@ impl ValueCache {
         self.0.lock().get(&PlanByPtr(plan.clone())).cloned()
     }
 
+    /// The number of plans whose values are kept.
+    #[cfg(test)]
+    pub(crate) fn len(&self) -> usize {
+        self.0.lock().len()
+    }
+
     /// Records the values of `plan`, keeping the first when two race.
     pub(crate) fn insert(&self, plan: &PlanRef, values: ArrayRef) -> ArrayRef {
         self.0

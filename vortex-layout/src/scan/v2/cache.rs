@@ -22,7 +22,9 @@ use crate::scan::execution::SegmentLocation;
 /// Every scan otherwise lowers the layout into a fresh physical plan, indexes every segment's byte
 /// range, and decodes the dictionary values it needs.
 /// Scans sharing a cache do each of those at most once: the lowered plan keeps the children it
-/// has initialized, and dictionary values stay keyed by the cached plan that produced them.
+/// has initialized, and dictionary values stay keyed by the cached plan that produced them. Only
+/// identity projections share values; other projections plan new nodes over the values in every
+/// scan, so they keep their values for that scan alone.
 ///
 /// A cache describes one file's layout, segment locations, and segment source. Use a new cache
 /// when any of them changes. Cached values live as long as the cache.
@@ -43,6 +45,11 @@ impl ScanCache {
 
     pub(super) fn ranges(&self, locations: &[SegmentLocation]) -> SegmentRanges {
         Arc::clone(self.0.ranges.get_or_init(|| segment_ranges(locations)))
+    }
+
+    #[cfg(test)]
+    pub(super) fn values_len(&self) -> usize {
+        self.0.values.len()
     }
 
     pub(super) fn values(&self) -> ValueCache {

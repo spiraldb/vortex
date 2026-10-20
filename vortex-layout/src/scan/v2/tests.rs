@@ -564,3 +564,33 @@ async fn selected_split_scope_is_bounded_before_projection() -> VortexResult<()>
     assert_eq!(splits[0].scope.rows, 7..2002);
     Ok(())
 }
+
+/// Optimizing a projection builds new plans over the dictionary values on every scan, so their
+/// values are only ever kept for that scan, never accumulated in the shared cache.
+#[tokio::test]
+async fn projected_scans_keep_no_values_in_the_shared_cache() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let segments = Arc::new(TestSegments::default());
+    let values = chunked_ints(&session, &segments).await?;
+    let codes = chunked_ints(&session, &segments).await?;
+    let layout = DictLayout::new(values, codes).into_layout();
+    let segments = segments as Arc<dyn SegmentSource>;
+    let cache = ScanCache::default();
+    let mut file = scan_file(&segments, &layout)?;
+    file.cache = Some(cache.clone());
+
+    let projection = gt(root(), lit(15i32)).bind(layout.dtype())?;
+    for _ in 0..3 {
+        let scan = ScanBuilder::new(session.clone(), file.clone())
+            .with_projection(projection.clone())
+            .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(vec![12u64, 18]))?);
+        let actual = collect(projection.dtype().clone(), scan.into_stream()?).await?;
+        assert_arrays_eq!(
+            actual,
+            vortex_array::arrays::BoolArray::from_iter([false, true]),
+            &mut session.create_execution_ctx()
+        );
+    }
+    assert_eq!(cache.values_len(), 0);
+    Ok(())
+}
