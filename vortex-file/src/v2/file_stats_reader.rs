@@ -16,6 +16,7 @@ use vortex_array::dtype::FieldMask;
 use vortex_array::dtype::StructFields;
 use vortex_array::expr::BoundExpression;
 use vortex_array::expr::ExactBoundExpr;
+use vortex_array::expr::ExactKey;
 use vortex_error::VortexResult;
 use vortex_layout::ArrayFuture;
 use vortex_layout::LayoutReader;
@@ -116,10 +117,8 @@ impl LayoutReader for FileStatsLayoutReader {
         expr: &BoundExpression,
         mask: Mask,
     ) -> VortexResult<MaskFuture> {
-        let key = ExactBoundExpr(expr.clone());
-
         // Check cache first with read-only lock.
-        if let Some(pruned) = self.prune_cache.get(&key) {
+        if let Some(pruned) = self.prune_cache.get(expr as &dyn ExactKey) {
             if *pruned {
                 return Ok(MaskFuture::ready(Mask::new_false(mask.len())));
             }
@@ -128,7 +127,8 @@ impl LayoutReader for FileStatsLayoutReader {
 
         // Evaluate and cache.
         let pruned = self.evaluate_file_stats(expr)?;
-        self.prune_cache.insert(key, pruned);
+        self.prune_cache
+            .insert(ExactBoundExpr(expr.clone()), pruned);
 
         if pruned {
             Ok(MaskFuture::ready(Mask::new_false(mask.len())))
