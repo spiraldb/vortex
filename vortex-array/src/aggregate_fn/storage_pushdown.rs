@@ -16,7 +16,6 @@ use crate::ArrayRef;
 use crate::Canonical;
 use crate::Columnar;
 use crate::ExecutionCtx;
-use crate::IntoArray;
 use crate::aggregate_fn::Accumulator;
 use crate::aggregate_fn::AggregateArgs;
 use crate::aggregate_fn::AggregateDTypes;
@@ -275,12 +274,14 @@ impl<A: AggregateFnVTable, E: ExtVTable> AggregateFnVTable for ExtensionStorageP
             Columnar::Canonical(Canonical::Extension(array)) => {
                 self.accumulate_storage(args, state, array.storage_array(), ctx)
             }
+            // A constant storage array has no encoding to dispatch on and no statistics worth
+            // caching, so it goes straight to `A` rather than through a nested accumulator.
             Columnar::Constant(constant) => {
                 let storage = constant.scalar().as_extension().to_storage_scalar();
-                self.accumulate_storage(
+                self.aggregate.accumulate(
                     args,
                     state,
-                    &ConstantArray::new(storage, constant.len()).into_array(),
+                    &Columnar::Constant(ConstantArray::new(storage, constant.len())),
                     ctx,
                 )
             }
@@ -328,6 +329,7 @@ mod tests {
     use crate::aggregate_fn::fns::is_sorted::IsSortedOptions;
     use crate::aggregate_fn::fns::min_max::MinMax;
     use crate::aggregate_fn::session::AggregateFnSessionExt;
+    use crate::arrays::ConstantArray;
     use crate::arrays::ExtensionArray;
     use crate::arrays::PrimitiveArray;
     use crate::dtype::DType;
@@ -336,6 +338,7 @@ mod tests {
     use crate::extension::datetime::Time;
     use crate::extension::datetime::TimeUnit;
     use crate::extension::datetime::Timestamp;
+    use crate::scalar::Scalar;
 
     #[test]
     fn pushes_down_into_storage() -> VortexResult<()> {
@@ -404,6 +407,44 @@ mod tests {
         expected.accumulate(&batch([Some(1_000), Some(500)]), &mut ctx)?;
 
         assert_eq!(first.finish()?, expected.finish()?);
+        Ok(())
+    }
+
+    #[test]
+    fn accumulates_constant_batches() -> VortexResult<()> {
+        let session = crate::array_session();
+        let mut ctx = session.create_execution_ctx();
+        let ext_dtype = Timestamp::new(TimeUnit::Milliseconds, Nullability::Nullable).erased();
+        let constant = |value: i64| {
+            ConstantArray::new(
+                Scalar::extension_ref(
+                    ext_dtype.clone(),
+                    Scalar::primitive(value, Nullability::Nullable),
+                ),
+                3,
+            )
+            .into_array()
+        };
+
+        let mut acc = Accumulator::try_new(
+            ExtensionStoragePushdown::new(MinMax, Timestamp),
+            NumericalAggregateOpts::default(),
+            DType::Extension(ext_dtype.clone()),
+        )?;
+        acc.accumulate(&constant(2_000), &mut ctx)?;
+        acc.accumulate(&constant(1_000), &mut ctx)?;
+
+        let mut expected = Accumulator::try_new(
+            MinMax,
+            NumericalAggregateOpts::default(),
+            ext_dtype.storage_dtype().clone(),
+        )?;
+        expected.accumulate(
+            &PrimitiveArray::from_option_iter([Some(2_000i64), Some(1_000)]).into_array(),
+            &mut ctx,
+        )?;
+
+        assert_eq!(acc.finish()?, expected.finish()?);
         Ok(())
     }
 

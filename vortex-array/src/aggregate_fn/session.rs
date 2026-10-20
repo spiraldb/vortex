@@ -168,7 +168,8 @@ impl AggregateFnSession {
     /// extension type `ext`, through [`ExtensionStoragePushdown`].
     ///
     /// Only call this when comparing two values of `ext` is the same as comparing their storage,
-    /// as for the temporal types. See [`ExtensionStoragePushdown`] for how to check.
+    /// as for the temporal types and for UUIDs, which are stored big-endian. See
+    /// [`ExtensionStoragePushdown`] for how to check.
     pub fn register_storage_ordered<E: ExtVTable>(&self, ext: E) {
         self.register(ExtensionStoragePushdown::new(IsSorted, ext.clone()));
         self.register(ExtensionStoragePushdown::new(MinMax, ext));
