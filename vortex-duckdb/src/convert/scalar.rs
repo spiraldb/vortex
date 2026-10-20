@@ -181,7 +181,8 @@ impl ToDuckDBScalar for ListScalar<'_> {
     /// Converts a list or fixed-size list scalar to a DuckDB LIST or ARRAY value.
     fn try_to_duckdb_scalar(&self) -> VortexResult<Value> {
         let Some(elements) = self.elements() else {
-            return Ok(Value::null(&LogicalType::try_from(self.dtype())?));
+            let list_type = LogicalType::try_from(self.dtype())?;
+            return Ok(Value::null(&list_type));
         };
         let element_type = LogicalType::try_from(self.element_dtype())?;
         let elements = elements
