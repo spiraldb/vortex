@@ -17,7 +17,10 @@
 //! | `Decimal` | `DECIMAL` |
 //! | `Utf8` | `VARCHAR` |
 //! | `Binary` | `BLOB` |
+//! | `List` | `LIST` |
 //! | `FixedSizeList` | `ARRAY` |
+//! | `Struct` | `STRUCT` |
+//! | `Map` | `MAP` |
 //! | `ExtScalar` (temporal) | `DATE`/`TIME`/`TIMESTAMP` |
 
 use vortex::array::match_each_native_simd_ptype;
@@ -31,7 +34,6 @@ use vortex::dtype::PType::I64;
 use vortex::dtype::half::f16;
 use vortex::encodings::uuid::Uuid;
 use vortex::error::VortexError;
-use vortex::error::VortexExpect;
 use vortex::error::VortexResult;
 use vortex::error::vortex_bail;
 use vortex::error::vortex_ensure_eq;
@@ -48,9 +50,12 @@ use vortex::scalar::BoolScalar;
 use vortex::scalar::DecimalScalar;
 use vortex::scalar::DecimalValue;
 use vortex::scalar::ExtScalar;
+use vortex::scalar::ListScalar;
+use vortex::scalar::MapScalar;
 use vortex::scalar::PrimitiveScalar;
 use vortex::scalar::Scalar;
 use vortex::scalar::ScalarValue;
+use vortex::scalar::StructScalar;
 use vortex::scalar::Utf8Scalar;
 use vortex_spatial::extension::WellKnownBinary;
 
@@ -66,10 +71,6 @@ pub trait ToDuckDBScalar {
 
 impl ToDuckDBScalar for Scalar {
     /// Converts a generic Vortex scalar to a DuckDB value.
-    ///
-    /// # Note
-    ///
-    /// Struct and List scalars are not yet implemented and cause a panic.
     fn try_to_duckdb_scalar(&self) -> VortexResult<Value> {
         if self.is_null() {
             let lt = LogicalType::try_from(self.dtype())?;
@@ -83,21 +84,10 @@ impl ToDuckDBScalar for Scalar {
             DType::Decimal(..) => self.as_decimal().try_to_duckdb_scalar(),
             DType::Utf8(_) => self.as_utf8().try_to_duckdb_scalar(),
             DType::Binary(_) => self.as_binary().try_to_duckdb_scalar(),
-            DType::List(..) => vortex_bail!("Vortex List scalars aren't supported"),
-            DType::FixedSizeList(element_dtype, ..) => {
-                let element_type = LogicalType::try_from(element_dtype.as_ref())?;
-                let elements = self
-                    .as_list()
-                    .elements()
-                    .vortex_expect("non-null FixedSizeList scalar must have elements")
-                    .iter()
-                    .map(|element| element.try_to_duckdb_scalar())
-                    .collect::<VortexResult<Vec<_>>>()?;
-                Value::new_array(&element_type, &elements)
-            }
-            DType::Map(..) => vortex_bail!("Vortex Map scalars aren't supported"),
+            DType::List(..) | DType::FixedSizeList(..) => self.as_list().try_to_duckdb_scalar(),
+            DType::Map(..) => self.as_map().try_to_duckdb_scalar(),
             DType::Variant(_) => vortex_bail!("Vortex Variant scalars aren't supported"),
-            DType::Struct(..) => vortex_bail!("Vortex Struct scalars aren't supported"),
+            DType::Struct(..) => self.as_struct().try_to_duckdb_scalar(),
             // TODO(connor): Union
             DType::Union(..) => vortex_bail!("Vortex Union scalars aren't supported"),
             DType::Extension(..) => self.as_extension().try_to_duckdb_scalar(),
@@ -184,6 +174,60 @@ impl ToDuckDBScalar for BinaryScalar<'_> {
             Some(value) => Value::from(value.as_slice()),
             None => Value::null(&LogicalType::blob()),
         })
+    }
+}
+
+impl ToDuckDBScalar for ListScalar<'_> {
+    /// Converts a list or fixed-size list scalar to a DuckDB LIST or ARRAY value.
+    fn try_to_duckdb_scalar(&self) -> VortexResult<Value> {
+        let Some(elements) = self.elements() else {
+            return Ok(Value::null(&LogicalType::try_from(self.dtype())?));
+        };
+        let element_type = LogicalType::try_from(self.element_dtype())?;
+        let elements = elements
+            .iter()
+            .map(Scalar::try_to_duckdb_scalar)
+            .collect::<VortexResult<Vec<_>>>()?;
+
+        if self.dtype().is_fixed_size_list() {
+            Value::new_array(&element_type, &elements)
+        } else {
+            Value::new_list(&element_type, &elements)
+        }
+    }
+}
+
+impl ToDuckDBScalar for StructScalar<'_> {
+    /// Converts a struct scalar to a DuckDB STRUCT value.
+    fn try_to_duckdb_scalar(&self) -> VortexResult<Value> {
+        let struct_type = LogicalType::try_from(self.dtype())?;
+        let Some(fields) = self.fields_iter() else {
+            return Ok(Value::null(&struct_type));
+        };
+        let fields = fields
+            .map(|field| field.try_to_duckdb_scalar())
+            .collect::<VortexResult<Vec<_>>>()?;
+
+        Value::new_struct(&struct_type, &fields)
+    }
+}
+
+impl ToDuckDBScalar for MapScalar<'_> {
+    /// Converts a map scalar to a DuckDB MAP value, preserving entry order.
+    fn try_to_duckdb_scalar(&self) -> VortexResult<Value> {
+        let map_type = LogicalType::try_from(self.dtype())?;
+        if self.is_null() {
+            return Ok(Value::null(&map_type));
+        }
+
+        let mut keys = Vec::with_capacity(self.len());
+        let mut values = Vec::with_capacity(self.len());
+        for (key, value) in self.entries() {
+            keys.push(key.try_to_duckdb_scalar()?);
+            values.push(value.try_to_duckdb_scalar()?);
+        }
+
+        Value::new_map(&map_type, &keys, &values)
     }
 }
 
@@ -441,10 +485,14 @@ impl<'a> TryFrom<&'a ValueRef> for Scalar {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use rstest::rstest;
     use vortex::dtype::DType;
+    use vortex::dtype::MapDType;
     use vortex::dtype::Nullability;
     use vortex::dtype::PType;
+    use vortex::dtype::StructFields;
     use vortex::dtype::extension::ExtDType;
     use vortex::error::VortexResult;
     use vortex::extension::datetime::Date;
@@ -812,6 +860,138 @@ mod tests {
             value.logical_type().as_type_id(),
             DUCKDB_TYPE::DUCKDB_TYPE_TIMESTAMP
         );
+        assert!(matches!(value.extract(), ExtractedValue::Null));
+    }
+
+    fn nullable_i32() -> DType {
+        DType::Primitive(PType::I32, Nullability::Nullable)
+    }
+
+    fn struct_dtype() -> DType {
+        DType::Struct(
+            StructFields::new(
+                ["a", "b"].into(),
+                vec![nullable_i32(), DType::Utf8(Nullability::Nullable)],
+            ),
+            Nullability::NonNullable,
+        )
+    }
+
+    fn map_dtype() -> DType {
+        DType::Map(
+            MapDType::try_new(DType::Utf8(Nullability::NonNullable), nullable_i32(), false)
+                .unwrap(),
+            Nullability::NonNullable,
+        )
+    }
+
+    #[test]
+    fn test_list_round_trip() {
+        let list = Scalar::list(
+            Arc::new(nullable_i32()),
+            vec![
+                Scalar::primitive(1i32, Nullability::Nullable),
+                Scalar::null(nullable_i32()),
+                Scalar::primitive(3i32, Nullability::Nullable),
+            ],
+            Nullability::NonNullable,
+        );
+
+        let value = list.try_to_duckdb_scalar().unwrap();
+        assert_eq!(
+            value.logical_type().as_type_id(),
+            DUCKDB_TYPE::DUCKDB_TYPE_LIST
+        );
+        assert_eq!(value.to_string(), "[1, NULL, 3]");
+
+        let restored: Scalar = value.try_into().unwrap();
+        assert_eq!(restored, list);
+    }
+
+    #[test]
+    fn test_empty_list_round_trip() {
+        let list = Scalar::list_empty(Arc::new(nullable_i32()), Nullability::NonNullable);
+
+        let restored: Scalar = list.try_to_duckdb_scalar().unwrap().try_into().unwrap();
+        assert_eq!(restored, list);
+    }
+
+    #[test]
+    fn test_struct_round_trip() {
+        let scalar = Scalar::struct_(
+            struct_dtype(),
+            [
+                Scalar::primitive(7i32, Nullability::Nullable),
+                Scalar::utf8("seven", Nullability::Nullable),
+            ],
+        );
+
+        let value = scalar.try_to_duckdb_scalar().unwrap();
+        assert_eq!(
+            value.logical_type().as_type_id(),
+            DUCKDB_TYPE::DUCKDB_TYPE_STRUCT
+        );
+
+        let restored: Scalar = value.try_into().unwrap();
+        assert_eq!(restored, scalar);
+    }
+
+    #[test]
+    fn test_list_of_structs_round_trip() {
+        let element = Scalar::struct_(
+            struct_dtype(),
+            [
+                Scalar::null(nullable_i32()),
+                Scalar::utf8("x", Nullability::Nullable),
+            ],
+        );
+        let list = Scalar::list(
+            Arc::new(struct_dtype()),
+            vec![element.clone(), element],
+            Nullability::NonNullable,
+        );
+
+        let restored: Scalar = list.try_to_duckdb_scalar().unwrap().try_into().unwrap();
+        assert_eq!(restored, list);
+    }
+
+    #[test]
+    fn test_map_to_duckdb_scalar() {
+        let map = Scalar::map(
+            map_dtype(),
+            [
+                (
+                    Scalar::utf8("a", Nullability::NonNullable),
+                    Scalar::primitive(1i32, Nullability::Nullable),
+                ),
+                (
+                    Scalar::utf8("b", Nullability::NonNullable),
+                    Scalar::null(nullable_i32()),
+                ),
+            ],
+        );
+
+        let value = map.try_to_duckdb_scalar().unwrap();
+        let logical_type = value.logical_type();
+        assert_eq!(logical_type.as_type_id(), DUCKDB_TYPE::DUCKDB_TYPE_MAP);
+        assert_eq!(
+            logical_type.map_key_type().as_type_id(),
+            DUCKDB_TYPE::DUCKDB_TYPE_VARCHAR
+        );
+        assert_eq!(
+            logical_type.map_value_type().as_type_id(),
+            DUCKDB_TYPE::DUCKDB_TYPE_INTEGER
+        );
+        assert_eq!(value.to_string(), "{a=1, b=NULL}");
+    }
+
+    #[rstest]
+    #[case::list(DType::List(Arc::new(nullable_i32()), Nullability::Nullable), DUCKDB_TYPE::DUCKDB_TYPE_LIST)]
+    #[case::struct_(struct_dtype().as_nullable(), DUCKDB_TYPE::DUCKDB_TYPE_STRUCT)]
+    #[case::map(map_dtype().as_nullable(), DUCKDB_TYPE::DUCKDB_TYPE_MAP)]
+    fn test_null_nested_to_duckdb_scalar(#[case] dtype: DType, #[case] expected: DUCKDB_TYPE) {
+        let value = Scalar::null(dtype).try_to_duckdb_scalar().unwrap();
+        assert_eq!(value.logical_type().as_type_id(), expected);
         assert!(matches!(value.extract(), ExtractedValue::Null));
     }
 }
