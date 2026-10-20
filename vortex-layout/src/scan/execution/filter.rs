@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::ops::Range;
 use std::sync::Arc;
 
 use bit_vec::BitVec;
@@ -11,6 +12,7 @@ use vortex_array::expr::transform::find_between;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_ensure_eq;
+use vortex_io::request::IoBatch;
 use vortex_io::request::IoConsumer;
 use vortex_io::request::IoIntent;
 use vortex_io::request::IoRequest;
@@ -23,6 +25,7 @@ use vortex_scan::planning::planner::State;
 use vortex_session::VortexSession;
 
 use super::ScanPlans;
+use super::SegmentLocation;
 use super::SelectedRows;
 use super::adaptor::AdaptorStep;
 use super::adaptor::ScanAdaptor;
@@ -32,11 +35,12 @@ use crate::plan::physical::PlanRef;
 use crate::plan::physical::SegmentScan;
 use crate::plan::physical::Zoned;
 use crate::plan::physical::optimize;
-use crate::plan::physical::pipeline::Reach;
 use crate::plan::physical::pipeline::Scan;
 use crate::plan::physical::pipeline::Split;
 use crate::plan::physical::plan_row_idx_expression;
+use crate::plan::physical::visit_segments;
 use crate::scan::filter::FilterExpr;
+use crate::segments::SegmentId;
 
 /// Plans and adaptive conjunct ordering shared by all splits of a scan.
 pub(in crate::scan) struct FilterPlans {
@@ -104,6 +108,10 @@ fn metadata_only(plan: &PlanRef) -> VortexResult<bool> {
 }
 
 /// Proves zone exclusions, evaluates conjuncts over survivors, then hands the mask to projection.
+///
+/// Reads are started ahead of the stage that needs them: zone maps on the first compute, and
+/// the conjuncts' segments for the rows pruning kept once the proofs are in. Stages then run
+/// back to back instead of each waiting a round trip for its reads.
 pub(super) struct FilterPlanner {
     plans: ScanPlans,
     selected: Option<SelectedRows>,
@@ -113,6 +121,24 @@ pub(super) struct FilterPlanner {
     active: Option<(usize, bool, ScanAdaptor)>,
     pieces: Vec<Mask>,
     announced: bool,
+    prefetched: bool,
+    /// Ids for hints, counting down from `u32::MAX` so they never meet an adaptor's fetch ids.
+    next_hint: u32,
+}
+
+/// The segments `plans` read over `rows`, under `mask`, each once, in plan order.
+fn segments_read<'a>(
+    plans: impl Iterator<Item = &'a PlanRef>,
+    rows: Range<u64>,
+    mask: Option<&Mask>,
+) -> VortexResult<Vec<SegmentId>> {
+    let mut segments = Vec::new();
+    for plan in plans {
+        visit_segments(plan, rows.clone(), mask, &mut |id, _| segments.push(id))?;
+    }
+    segments.sort_unstable();
+    segments.dedup();
+    Ok(segments)
 }
 
 impl FilterPlanner {
@@ -127,7 +153,31 @@ impl FilterPlanner {
             active: None,
             pieces: Vec::new(),
             announced: false,
+            prefetched: false,
+            next_hint: u32::MAX,
         }
+    }
+}
+
+/// Publishes a hint for each of `segments` not already in `batch`.
+fn hint(
+    locations: &[SegmentLocation],
+    next_hint: &mut u32,
+    intent: IoIntent,
+    segments: &[SegmentId],
+    batch: &mut IoBatch,
+) {
+    for segment in segments {
+        let target = locations[**segment as usize].target();
+        if batch.iter().any(|request| request.target == target) {
+            continue;
+        }
+        batch.push(IoRequest {
+            intent,
+            request: IoRequestId(*next_hint),
+            target,
+        });
+        *next_hint -= 1;
     }
 }
 
@@ -156,31 +206,34 @@ impl Planner for FilterPlanner {
         };
         if !self.announced {
             self.announced = true;
+            let rows = selected.scope.rows.clone();
+            // Pruning proofs read only zone maps and run first: start those reads now. The rest
+            // is announced so the proofs' reads can coalesce with it.
+            let proofs = segments_read(self.filter.pruning.iter().flatten(), rows.clone(), None)?;
+            let rest = segments_read(
+                self.filter
+                    .predicates
+                    .iter()
+                    .chain(std::iter::once(&self.plans.projection)),
+                rows,
+                None,
+            )?;
             let mut batch = Vec::new();
-            for plan in self
-                .filter
-                .pruning
-                .iter()
-                .flatten()
-                .chain(self.filter.predicates.iter())
-                .chain(std::iter::once(&self.plans.projection))
-            {
-                let mut segments = Vec::new();
-                plan.reach(
-                    selected.scope.rows.clone(),
-                    &Reach::Offset(0),
-                    &mut |id, _| segments.push(id),
-                )?;
-                segments.sort_unstable();
-                segments.dedup();
-                for segment in segments {
-                    batch.push(IoRequest {
-                        intent: IoIntent::Announce,
-                        request: IoRequestId(u32::MAX - u32::try_from(batch.len())?),
-                        target: self.plans.locations[*segment as usize].target(),
-                    });
-                }
-            }
+            let locations = &self.plans.locations;
+            hint(
+                locations,
+                &mut self.next_hint,
+                IoIntent::Prefetch,
+                &proofs,
+                &mut batch,
+            );
+            hint(
+                locations,
+                &mut self.next_hint,
+                IoIntent::Announce,
+                &rest,
+                &mut batch,
+            );
             if !batch.is_empty() {
                 return Ok(PlannerOutput::NeedsIO(batch));
             }
@@ -223,6 +276,39 @@ impl Planner for FilterPlanner {
         if selected.mask.all_false() {
             self.selected = None;
             return Ok(PlannerOutput::Done);
+        }
+        if !self.prefetched
+            && !self.filter.pruning[self.prune_index..]
+                .iter()
+                .any(Option::is_some)
+        {
+            // Every proof is in: start the conjuncts' reads over the chunks that survived, so
+            // each conjunct finds its bytes ready. The projection's reads wait for its morsels,
+            // which fetch together once the conjuncts have settled which chunks they need.
+            self.prefetched = true;
+            let rows = selected.scope.rows.clone();
+            let mask = (!selected.mask.all_true()).then_some(&selected.mask);
+            let predicates = segments_read(
+                self.filter
+                    .predicates
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| self.remaining[*index])
+                    .map(|(_, plan)| plan),
+                rows,
+                mask,
+            )?;
+            let mut batch = Vec::new();
+            hint(
+                &self.plans.locations,
+                &mut self.next_hint,
+                IoIntent::Prefetch,
+                &predicates,
+                &mut batch,
+            );
+            if !batch.is_empty() {
+                return Ok(PlannerOutput::NeedsIO(batch));
+            }
         }
 
         let mut next = None;
