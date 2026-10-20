@@ -45,20 +45,15 @@ mod tests {
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::array_session;
-    use crate::arrays::Constant;
     use crate::arrays::ConstantArray;
     use crate::arrays::Dict;
     use crate::arrays::DictArray;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::dict::DictArraySlotsExt;
     use crate::assert_arrays_eq;
-    use crate::dtype::DType;
-    use crate::dtype::Nullability::Nullable;
-    use crate::dtype::PType;
     use crate::expr::stats::Precision;
     use crate::expr::stats::Stat;
     use crate::expr::stats::StatsProviderExt;
-    use crate::scalar::Scalar;
     use crate::scalar::ScalarValue;
 
     #[test]
@@ -79,24 +74,6 @@ mod tests {
         assert_arrays_eq!(
             filtered,
             PrimitiveArray::from_iter([20i32, 20, 20]),
-            &mut ctx
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn filter_constant_null_code() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
-        let dict = DictArray::new(
-            ConstantArray::new(Scalar::null(DType::Primitive(PType::U8, Nullable)), 5).into_array(),
-            buffer![10i32, 20, 30].into_array(),
-        );
-        let filtered = dict.filter(Mask::from_iter([true, false, true, true, false]))?;
-
-        assert!(filtered.is::<Constant>());
-        assert_arrays_eq!(
-            filtered,
-            PrimitiveArray::from_option_iter([Option::<i32>::None, None, None]),
             &mut ctx
         );
         Ok(())

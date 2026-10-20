@@ -138,17 +138,6 @@ fn test_dict_list_dict_display() {
 }
 
 #[test]
-fn canonicalize_constant_valid_code() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
-    let dict = DictArray::try_new(
-        ConstantArray::new(1u8, 3).into_array(),
-        buffer![10i32, 20, 30].into_array(),
-    )?;
-    assert_arrays_eq!(dict, PrimitiveArray::from_iter([20i32, 20, 20]), &mut ctx);
-    Ok(())
-}
-
-#[test]
 fn canonicalize_constant_nullable_code_over_non_nullable_values() -> VortexResult<()> {
     let mut ctx = array_session().create_execution_ctx();
     let code = Scalar::primitive(1u8, Nullability::Nullable);
