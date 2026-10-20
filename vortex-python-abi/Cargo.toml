@@ -13,8 +13,5 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
 
-[lib]
-test = false
-
 [lints]
 workspace = true

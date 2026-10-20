@@ -16,7 +16,6 @@ version = { workspace = true }
 workspace = true
 
 [lib]
-test = false
 proc-macro = true
 
 [dependencies]
