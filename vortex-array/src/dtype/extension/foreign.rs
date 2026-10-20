@@ -14,8 +14,12 @@ use crate::dtype::extension::ExtId;
 use crate::dtype::extension::ExtVTable;
 use crate::scalar::ScalarValue;
 
+/// Opaque serialized metadata for an extension without a registered dtype plugin.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ForeignExtMetadata(pub Vec<u8>);
+pub struct ForeignExtMetadata(
+    /// The extension's original serialized metadata bytes.
+    pub Vec<u8>,
+);
 
 impl Display for ForeignExtMetadata {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -23,17 +27,19 @@ impl Display for ForeignExtMetadata {
     }
 }
 
-/// Placeholder extension dtype used when deserializing an unknown extension ID.
+/// Placeholder extension dtype used when deserializing or importing an unknown extension ID.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ForeignExtDType {
     id: ExtId,
 }
 
 impl ForeignExtDType {
+    /// Creates a vtable for the given unknown extension ID.
     pub fn new(id: ExtId) -> Self {
         Self { id }
     }
 
+    /// Preserves an unknown extension's ID, serialized metadata and storage dtype.
     pub fn from_parts(
         id: ExtId,
         metadata: Vec<u8>,

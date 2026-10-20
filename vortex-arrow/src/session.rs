@@ -39,6 +39,7 @@ use arrow_schema::Field;
 use arrow_schema::FieldRef;
 use arrow_schema::Fields;
 use arrow_schema::Schema;
+use arrow_schema::extension::EXTENSION_TYPE_METADATA_KEY;
 use arrow_schema::extension::EXTENSION_TYPE_NAME_KEY;
 use tracing::debug;
 use tracing::trace;
@@ -46,6 +47,7 @@ use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::arrays::DictArray;
+use vortex_array::arrays::ExtensionArray;
 use vortex_array::arrays::FixedSizeListArray;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::ListViewArray;
@@ -56,7 +58,9 @@ use vortex_array::dtype::FieldNames;
 use vortex_array::dtype::NativePType;
 use vortex_array::dtype::Nullability;
 use vortex_array::dtype::StructFields;
+use vortex_array::dtype::extension::ExtDTypeRef;
 use vortex_array::dtype::extension::ExtId;
+use vortex_array::dtype::extension::ForeignExtDType;
 use vortex_array::extension::datetime::AnyTemporal;
 use vortex_array::validity::Validity;
 use vortex_error::VortexResult;
@@ -285,6 +289,8 @@ impl ArrowSession {
     ///
     /// For [`DType::Extension`]s, plugins registered against the extension's `Id`
     /// are tried in registration order; the first plugin to return `Some(field)` wins.
+    /// Otherwise, the storage field carries the Vortex extension ID and serialized metadata.
+    /// Metadata must be valid UTF-8, as required by Arrow Rust's field metadata representation.
     pub fn to_arrow_field(&self, name: &str, dtype: &DType) -> VortexResult<Field> {
         // Handle the structural encodings, which may have recursive types
         match dtype {
@@ -333,7 +339,18 @@ impl ArrowSession {
                         return Ok(field);
                     }
                 }
-                vortex_bail!("extension type cannot be converted to Arrow without a plugin: {ext}");
+                let metadata = String::from_utf8(ext.serialize_metadata()?).map_err(|err| {
+                    vortex_err!("Extension {ext} metadata cannot be represented as Arrow field metadata: {err}")
+                })?;
+                let mut field = self.to_arrow_field(name, ext.storage_dtype())?;
+                field.set_metadata(
+                    [
+                        (EXTENSION_TYPE_NAME_KEY.to_string(), ext.id().to_string()),
+                        (EXTENSION_TYPE_METADATA_KEY.to_string(), metadata),
+                    ]
+                    .into(),
+                );
+                Ok(field)
             }
             DType::Variant(_) => {
                 // TODO(Adam): This currently encodes information about parquet-variant
@@ -394,9 +411,10 @@ impl ArrowSession {
     /// Plugins registered against the field's Arrow extension name are tried in
     /// registration order; the first plugin to return `Some(dtype)` wins. If none
     /// match (or all return `None`), the builtin `arrow.parquet.variant` extension maps
-    /// to [`DType::Variant`], and any other field converts through
-    /// [`Self::from_arrow_datatype`] so extension metadata on nested element/struct
-    /// fields is preserved.
+    /// to [`DType::Variant`]. Other unknown extensions become [`ForeignExtDType`], preserving
+    /// their name, metadata and storage, including nested extension fields. This follows Arrow's
+    /// storage fallback rule independently of [`vortex_session::VortexSession::allow_unknown`],
+    /// which controls Vortex deserialization rather than Arrow interoperability.
     #[expect(clippy::disallowed_methods, reason = "interning a dynamic id")]
     pub fn from_arrow_field(&self, field: &Field) -> VortexResult<DType> {
         if let Some(name) = field.metadata().get(EXTENSION_TYPE_NAME_KEY) {
@@ -409,12 +427,27 @@ impl ArrowSession {
             if name == "arrow.parquet.variant" {
                 return Ok(DType::Variant(field.is_nullable().into()));
             }
+            return self.foreign_ext_dtype(field, name).map(DType::Extension);
         }
         if let DataType::Dictionary(_, value_type) = field.data_type() {
             return self
                 .from_arrow_field(&field.clone().with_data_type(value_type.as_ref().clone()));
         }
         self.from_arrow_datatype(field.data_type(), field.is_nullable().into())
+    }
+
+    fn foreign_ext_dtype(&self, field: &Field, name: &str) -> VortexResult<ExtDTypeRef> {
+        #[expect(clippy::disallowed_methods, reason = "interning a dynamic id")]
+        let id = ExtId::new(name);
+        ForeignExtDType::from_parts(
+            id,
+            field
+                .metadata()
+                .get(EXTENSION_TYPE_METADATA_KEY)
+                .map(|metadata| metadata.as_bytes().to_vec())
+                .unwrap_or_default(),
+            self.from_arrow_datatype(field.data_type(), field.is_nullable().into())?,
+        )
     }
 
     /// Build the Vortex [`DType`] for an Arrow [`DataType`].
@@ -536,8 +569,9 @@ impl ArrowSession {
     /// If `target` carries an `ARROW:extension:name`, the plugin registry is probed for one that
     /// can support executing to the target extension type.
     ///
-    /// With `target = None` the fallback path picks the array's preferred Arrow physical type
-    /// and executes directly into that, ignoring extension types.
+    /// With `target = None`, infer a field through [`Self::to_arrow_field`], including extension
+    /// metadata. Retain that field separately when exporting a top-level extension: the returned
+    /// Arrow array only carries its storage data type.
     ///
     /// Uses the default [`ArrowExportOptions`]; see [`exporter`](Self::exporter) to
     /// change them.
@@ -594,7 +628,8 @@ impl ArrowSession {
     /// arrays ([`arrow_array::StructArray`], [`arrow_array::GenericListArray`],
     /// [`arrow_array::FixedSizeListArray`], [`arrow_array::GenericListViewArray`]) so
     /// extension fields nested inside containers reach their importers; leaf types fall
-    /// through to the canonical Arrow → Vortex array conversion.
+    /// through to the canonical Arrow → Vortex array conversion. Unhandled extension names
+    /// wrap the converted storage in a [`ForeignExtDType`].
     ///
     /// # Errors
     ///
@@ -654,10 +689,28 @@ impl ArrowSession {
                         }
                     }
                 }
-                return self.from_arrow_array_canonical(current.as_ref(), field);
+                return self.from_arrow_array_fallback(current.as_ref(), field);
             }
         }
-        self.from_arrow_array_canonical(array.as_ref(), field)
+        self.from_arrow_array_fallback(array.as_ref(), field)
+    }
+
+    #[allow(clippy::wrong_self_convention)]
+    fn from_arrow_array_fallback(
+        &self,
+        array: &dyn ArrowArray,
+        field: &Field,
+    ) -> VortexResult<ArrayRef> {
+        // Dictionary field metadata describes its values; canonical import routes it there.
+        if !matches!(field.data_type(), DataType::Dictionary(..))
+            && let Some(name) = field.metadata().get(EXTENSION_TYPE_NAME_KEY)
+            && name != "arrow.parquet.variant"
+        {
+            let dtype = self.foreign_ext_dtype(field, name)?;
+            let storage = self.from_arrow_array_canonical(array, field)?;
+            return Ok(ExtensionArray::try_new(dtype, storage)?.into_array());
+        }
+        self.from_arrow_array_canonical(array, field)
     }
 
     /// Recurse into Arrow container arrays so nested fields with extension metadata reach
