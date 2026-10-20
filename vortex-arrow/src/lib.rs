@@ -32,12 +32,6 @@ mod session;
 pub use convert::IntoVortexArray;
 pub use convert::nulls;
 pub use datum::*;
-#[allow(deprecated)]
-pub use dtype::FromArrowType;
-#[allow(deprecated)]
-pub use dtype::ToArrowType;
-#[allow(deprecated)]
-pub use dtype::TryFromArrowType;
 pub use executor::*;
 pub use iter::*;
 pub use null_buffer::to_arrow_null_buffer;
