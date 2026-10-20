@@ -8,7 +8,7 @@ use std::hash::Hash;
 use std::hash::Hasher;
 use std::sync::Arc;
 
-use parking_lot::Mutex;
+use parking_lot::RwLock;
 use vortex_error::VortexResult;
 use vortex_error::vortex_ensure;
 use vortex_session::VortexSession;
@@ -44,6 +44,7 @@ use crate::scalar_fn::ScalarFnId;
 use crate::scalar_fn::ScalarFnVTable;
 use crate::scalar_fn::ScalarFnVTableExt;
 use crate::scalar_fn::fns::get_item::GetItem;
+use crate::scalar_fn::fns::literal::Literal;
 use crate::scalar_fn::fns::stat::StatFn;
 use crate::scalar_fn::internal::row_count::RowCount;
 use crate::stats::bound::stat;
@@ -137,14 +138,17 @@ impl ScalarFnVTable for DynamicExpression {
 #[derive(Clone)]
 pub struct DynamicExpressionOptions {
     source: Arc<dyn DynamicExpressionSource>,
-    bound: Arc<Mutex<Option<BoundPredicate>>>,
+    bound: Arc<RwLock<BoundPredicates>>,
 }
 
-/// A predicate of the source, bound against a scope, as of a generation of the source.
-struct BoundPredicate {
+/// The predicate of the source as of a generation, bound against each scope it was read with.
+///
+/// A scan reads the predicate with the dtypes of the bound inputs and executes it with the dtypes
+/// of the input arrays, which can differ, so each scope keeps its own binding.
+#[derive(Default)]
+struct BoundPredicates {
     generation: u64,
-    scope: DType,
-    predicate: BoundExpression,
+    by_scope: Vec<(DType, BoundExpression)>,
 }
 
 impl DynamicExpressionOptions {
@@ -152,7 +156,7 @@ impl DynamicExpressionOptions {
     pub fn new(source: Arc<dyn DynamicExpressionSource>) -> Self {
         Self {
             source,
-            bound: Arc::new(Mutex::new(None)),
+            bound: Arc::new(RwLock::new(BoundPredicates::default())),
         }
     }
 
@@ -163,15 +167,32 @@ impl DynamicExpressionOptions {
 
     /// The current predicate of the source, bound against `scope`.
     ///
-    /// A predicate is bound once for each generation of the source.
+    /// A predicate is bound once for each generation of the source and scope.
     pub fn current(&self, scope: &DType) -> VortexResult<BoundExpression> {
         let generation = self.source.generation();
-        let mut bound = self.bound.lock();
-        if let Some(cached) = bound.as_ref()
-            && cached.generation == generation
-            && &cached.scope == scope
         {
-            return Ok(cached.predicate.clone());
+            let bound = self.bound.read();
+            if bound.generation == generation
+                && let Some((_, predicate)) = bound
+                    .by_scope
+                    .iter()
+                    .find(|(bound_scope, _)| bound_scope == scope)
+            {
+                return Ok(predicate.clone());
+            }
+        }
+
+        let mut bound = self.bound.write();
+        if bound.generation != generation {
+            bound.generation = generation;
+            bound.by_scope.clear();
+        }
+        if let Some((_, predicate)) = bound
+            .by_scope
+            .iter()
+            .find(|(bound_scope, _)| bound_scope == scope)
+        {
+            return Ok(predicate.clone());
         }
 
         let predicate = self.source.current(scope)?;
@@ -181,11 +202,7 @@ impl DynamicExpressionOptions {
             self.source,
             predicate.dtype()
         );
-        *bound = Some(BoundPredicate {
-            generation,
-            scope: scope.clone(),
-            predicate: predicate.clone(),
-        });
+        bound.by_scope.push((scope.clone(), predicate.clone()));
         Ok(predicate)
     }
 }
@@ -218,6 +235,31 @@ impl Hash for DynamicExpressionOptions {
     fn hash<H: Hasher>(&self, state: &mut H) {
         Arc::as_ptr(&self.source).cast::<()>().hash(state);
     }
+}
+
+/// Whether `expr` is a dynamic expression whose current predicate is the literal `true`, such as
+/// a filter of an engine that has no value yet. A scan can skip such a predicate for free.
+pub fn is_currently_true(expr: &BoundExpression) -> bool {
+    let Some(options) = expr.as_opt::<DynamicExpression>() else {
+        return false;
+    };
+    let scope = DType::Struct(
+        StructFields::new(
+            (0..expr.children().len())
+                .map(input_field_name)
+                .collect::<FieldNames>(),
+            expr.children()
+                .iter()
+                .map(|child| child.dtype().clone())
+                .collect(),
+        ),
+        Nullability::NonNullable,
+    );
+    options.current(&scope).is_ok_and(|predicate| {
+        predicate
+            .as_opt::<Literal>()
+            .is_some_and(|value| value.as_bool_opt().and_then(|value| value.value()) == Some(true))
+    })
 }
 
 /// Which stats proof a [`StatsProofSource`] builds.
@@ -466,6 +508,24 @@ mod tests {
             BoolArray::from_iter([Some(true), Some(true), Some(false)]),
             &mut ctx
         );
+        Ok(())
+    }
+
+    #[test]
+    fn is_currently_true_follows_the_source() -> VortexResult<()> {
+        let threshold = Arc::new(Threshold::default());
+        let scope = DType::Struct(
+            StructFields::new(
+                FieldNames::from(vec!["a"]),
+                vec![DType::Primitive(PType::I32, Nullability::NonNullable)],
+            ),
+            Nullability::NonNullable,
+        );
+        let expr = dynamic_expression(threshold.clone(), [col("a")]).bind(&scope)?;
+        assert!(is_currently_true(&expr));
+
+        threshold.set(6);
+        assert!(!is_currently_true(&expr));
         Ok(())
     }
 
