@@ -503,7 +503,7 @@ logical_opt [
                                                                                                 "name": "READ_VORTEX",
                                                                                                 "children": [],
                                                                                                 "extra_info": {
-                                                                                                    "Filters": "vortex.list.contains([1i64, 6i64, 8i64, 9i64, 12i64, 2i64], $.c_birth_month, opts=sql_null_semantics)",
+                                                                                                    "Filters": "vortex.list.contains([1i64, 2i64, 6i64, 8i64, 9i64, 12i64], $.c_birth_month, opts=sql_null_semantics)",
                                                                                                     "Function": "Vortex Scan",
                                                                                                     "Estimated Cardinality": "2000"
                                                                                                 }
@@ -512,7 +512,7 @@ logical_opt [
                                                                                                 "name": "READ_VORTEX",
                                                                                                 "children": [],
                                                                                                 "extra_info": {
-                                                                                                    "Filters": "vortex.list.contains([\"MS\", \"IN\", \"ND\", \"OK\", \"NM\", \"VA\", \"MS\"], $.ca_state, opts=sql_null_semantics)",
+                                                                                                    "Filters": "vortex.list.contains([\"IN\", \"MS\", \"MS\", \"ND\", \"NM\", \"OK\", \"VA\"], $.ca_state, opts=sql_null_semantics)",
                                                                                                     "Function": "Vortex Scan",
                                                                                                     "Estimated Cardinality": "1000"
                                                                                                 }
@@ -1156,7 +1156,7 @@ physical_plan [
                                                                                         "children": [],
                                                                                         "extra_info": {
                                                                                             "Function": "Vortex Scan",
-                                                                                            "Filters": "vortex.list.contains([1i64, 6i64, 8i64, 9i64, 12i64, 2i64], $.c_birth_month, opts=sql_null_semantics)",
+                                                                                            "Filters": "vortex.list.contains([1i64, 2i64, 6i64, 8i64, 9i64, 12i64], $.c_birth_month, opts=sql_null_semantics)",
                                                                                             "Projections": [
                                                                                                 "c_customer_sk",
                                                                                                 "c_current_cdemo_sk",
@@ -1171,7 +1171,7 @@ physical_plan [
                                                                                         "children": [],
                                                                                         "extra_info": {
                                                                                             "Function": "Vortex Scan",
-                                                                                            "Filters": "vortex.list.contains([\"MS\", \"IN\", \"ND\", \"OK\", \"NM\", \"VA\", \"MS\"], $.ca_state, opts=sql_null_semantics)",
+                                                                                            "Filters": "vortex.list.contains([\"IN\", \"MS\", \"MS\", \"ND\", \"NM\", \"OK\", \"VA\"], $.ca_state, opts=sql_null_semantics)",
                                                                                             "Projections": [
                                                                                                 "ca_address_sk",
                                                                                                 "ca_county",

@@ -548,7 +548,7 @@ logical_opt [
                                                                                         "children": [],
                                                                                         "extra_info": {
                                                                                             "Filters": [
-                                                                                                "((vortex.list.contains([\"IN\", \"OH\", \"NJ\"], $.ca_state, opts=sql_null_semantics) or vortex.list.contains([\"WI\", \"CT\", \"KY\"], $.ca_state, opts=sql_null_semantics)) or vortex.list.contains([\"LA\", \"IA\", \"AR\"], $.ca_state, opts=sql_null_semantics))",
+                                                                                                "((vortex.list.contains([\"IN\", \"NJ\", \"OH\"], $.ca_state, opts=sql_null_semantics) or vortex.list.contains([\"CT\", \"KY\", \"WI\"], $.ca_state, opts=sql_null_semantics)) or vortex.list.contains([\"AR\", \"IA\", \"LA\"], $.ca_state, opts=sql_null_semantics))",
                                                                                                 "($.ca_country = \"United States\")"
                                                                                             ],
                                                                                             "Function": "Vortex Scan",
@@ -787,7 +787,7 @@ physical_plan [
                                                                                                 "extra_info": {
                                                                                                     "Function": "Vortex Scan",
                                                                                                     "Filters": [
-                                                                                                        "((vortex.list.contains([\"IN\", \"OH\", \"NJ\"], $.ca_state, opts=sql_null_semantics) or vortex.list.contains([\"WI\", \"CT\", \"KY\"], $.ca_state, opts=sql_null_semantics)) or vortex.list.contains([\"LA\", \"IA\", \"AR\"], $.ca_state, opts=sql_null_semantics))",
+                                                                                                        "((vortex.list.contains([\"IN\", \"NJ\", \"OH\"], $.ca_state, opts=sql_null_semantics) or vortex.list.contains([\"CT\", \"KY\", \"WI\"], $.ca_state, opts=sql_null_semantics)) or vortex.list.contains([\"AR\", \"IA\", \"LA\"], $.ca_state, opts=sql_null_semantics))",
                                                                                                         "($.ca_country = \"United States\")"
                                                                                                     ],
                                                                                                     "Projections": [
