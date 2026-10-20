@@ -4,14 +4,17 @@
 //! Contracts and execution context for pipeline sources and operators.
 
 use std::collections::VecDeque;
+use std::ops::Range;
 
 use smallvec::SmallVec;
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::buffer::BufferHandle;
 use vortex_error::VortexResult;
+use vortex_mask::Mask;
 use vortex_session::VortexSession;
 
+use super::PlanRef;
 use super::pipeline::Arena;
 use super::pipeline::Inlet;
 use super::pipeline::PortId;
@@ -138,12 +141,25 @@ impl InletSet {
         &self.indices
     }
 
+    /// Makes room for one more inlet, not in the set.
+    pub(super) fn grow(&mut self) {
+        self.positions.push(usize::MAX);
+    }
+
     pub(super) fn clear(&mut self) {
         for &index in &self.indices {
             self.positions[index] = usize::MAX;
         }
         self.indices.clear();
     }
+}
+
+/// A plan a source asked to have compiled while the scan runs, read as a new inlet of the
+/// source's pipeline.
+pub(crate) struct SubCompile {
+    pub(crate) plan: PlanRef,
+    pub(crate) rows: Range<u64>,
+    pub(crate) mask: Mask,
 }
 
 /// What a source or stage may touch during one call: its pipeline's inlets, the bytes the
@@ -153,6 +169,7 @@ pub struct Cx<'a> {
     pub(super) inlets: &'a [PortId],
     pub(super) bytes: &'a mut VecDeque<(SegmentId, BufferHandle)>,
     pub(super) reads: &'a mut SmallVec<[SegmentId; 1]>,
+    pub(super) compiles: &'a mut Vec<SubCompile>,
     pub(super) session: &'a VortexSession,
     pub(super) exec: &'a mut ExecutionCtx,
     pub(super) touched: &'a mut InletSet,
@@ -173,6 +190,20 @@ impl Cx<'_> {
     /// this call.
     pub fn request_read(&mut self, segment: SegmentId) {
         self.reads.push(segment);
+    }
+
+    /// Queues `plan`, over `rows` of its domain restricted to `mask`, to be compiled once this
+    /// run of the pipeline returns, and returns the index of the inlet that reads it.
+    ///
+    /// For a source whose input rows are known only from data it has read, as a list's
+    /// element rows are from its offsets. Call it during [`Source::ready`] and return
+    /// `SourceReady::Blocked(SourceBlocked::Inlet(index))`: the inlet exists from the next
+    /// readiness check on, which follows at once. A plan selecting no rows compiles to a
+    /// closed inlet.
+    pub fn compile(&mut self, plan: PlanRef, rows: Range<u64>, mask: Mask) -> usize {
+        let index = self.inlets.len() + self.compiles.len();
+        self.compiles.push(SubCompile { plan, rows, mask });
+        index
     }
 
     /// Whether a requested segment has arrived and can be taken.

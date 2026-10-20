@@ -15,6 +15,10 @@
 //! The driver also blocks a pipeline when an outlet is full. The scheduler re-runs a blocked
 //! pipeline when that one condition clears.
 //!
+//! A source whose input rows are known only from data it has read, as a list's elements are
+//! from its offsets, asks for a plan to be compiled while the scan runs: the plan becomes a new
+//! pipeline writing a new inlet of the source, which it reads like any other.
+//!
 //! The owner of a scan answers reads: [`Scan::step`] returns each read as a [`Turn::Read`], and
 //! [`Scan::deliver`] hands its bytes back. Nothing in a scan awaits.
 //!

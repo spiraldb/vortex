@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use std::borrow::Cow;
+use std::ops::Range;
 use std::sync::Arc;
 
 use vortex_array::EmptyMetadata;
@@ -10,14 +11,20 @@ use vortex_array::dtype::Nullability;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
+use vortex_mask::Mask;
 use vortex_session::registry::CachedId;
 
+use crate::plan::physical::ChildRows;
 use crate::plan::physical::Plan;
 use crate::plan::physical::PlanChildren;
 use crate::plan::physical::PlanId;
 use crate::plan::physical::PlanParts;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::PlanVTable;
+use crate::plan::physical::operators::ListSource;
+use crate::plan::physical::operators::UNBOUNDED;
+use crate::plan::physical::pipeline::Chain;
+use crate::plan::physical::pipeline::Compiler;
 
 const ELEMENTS: usize = 0;
 const OFFSETS: usize = 1;
@@ -122,6 +129,55 @@ impl PlanVTable for ListPack {
             OFFSETS => Cow::Borrowed("offsets"),
             VALIDITY => Cow::Borrowed("validity"),
             _ => Cow::Owned(format!("child[{index}]")),
+        }
+    }
+
+    /// Compiles the offsets over the rows from the first selected list to the last, one more
+    /// for the last list's end, and the validity over the selected lists. The elements are
+    /// compiled once the offsets have been read, over the rows they select.
+    fn compile(
+        plan: &Plan<Self>,
+        rows: Range<u64>,
+        mask: &Mask,
+        compiler: &mut Compiler<'_>,
+    ) -> VortexResult<Option<Chain>> {
+        let (Some(first), Some(last)) = (mask.first(), mask.last()) else {
+            return Ok(None);
+        };
+        let mask = mask.slice(first..last + 1);
+        let rows = rows.start + first as u64..rows.start + last as u64 + 1;
+        let offsets_plan = plan.offsets()?;
+        let offsets_rows = rows.start..rows.end + 1;
+        let offsets = compiler
+            .compile(
+                &offsets_plan,
+                offsets_rows,
+                &Mask::new_true(mask.len() + 1),
+            )?
+            .ok_or_else(|| vortex_err!("List offsets compiled to no rows"))?;
+        let mut chains = vec![offsets];
+        if let Some(validity) = plan.validity()? {
+            chains.push(
+                compiler
+                    .compile(&validity, rows, &mask)?
+                    .ok_or_else(|| vortex_err!("List validity compiled to no rows"))?,
+            );
+        }
+        let source = ListSource::new(
+            plan.elements()?,
+            offsets_plan.dtype().clone(),
+            mask,
+            plan.dtype().is_nullable(),
+        );
+        Ok(Some(compiler.join_with(chains, |_| UNBOUNDED, source)))
+    }
+
+    /// The elements are found from the offsets, so they are read by each reader alone.
+    fn child_rows(plan: &Plan<Self>, index: usize) -> ChildRows {
+        match index {
+            OFFSETS => ChildRows::Rows(0..plan.row_count() + 1),
+            VALIDITY => ChildRows::Rows(0..plan.row_count()),
+            _ => ChildRows::Opaque,
         }
     }
 }

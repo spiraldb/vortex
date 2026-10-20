@@ -39,6 +39,7 @@ use crate::plan::physical::operator::Source;
 use crate::plan::physical::operator::SourceBlocked;
 use crate::plan::physical::operator::SourceReady;
 use crate::plan::physical::operator::Step;
+use crate::plan::physical::operator::SubCompile;
 use crate::segments::SegmentId;
 
 #[cfg(debug_assertions)]
@@ -141,6 +142,7 @@ fn drive(
     session: &VortexSession,
     exec: &mut ExecutionCtx,
     reads: &mut SmallVec<[SegmentId; 1]>,
+    compiles: &mut Vec<SubCompile>,
 ) -> VortexResult<Progress> {
     let Pipeline {
         source,
@@ -160,6 +162,7 @@ fn drive(
         inlets,
         bytes,
         reads,
+        compiles,
         session,
         exec,
         touched,
@@ -405,15 +408,30 @@ impl Core {
             .ok_or_else(|| vortex_err!("Pipeline {id} is not live"))?;
         pipe.queued = false;
         let mut reads = SmallVec::new();
+        let mut compiles = Vec::new();
         let progress = drive(
             pipe,
             &mut self.arena,
             &self.session,
             &mut self.exec,
             &mut reads,
+            &mut compiles,
         )?;
         for segment_id in reads {
             self.ask(id, segment_id);
+        }
+        if !compiles.is_empty() {
+            vortex_ensure!(
+                !matches!(progress, Progress::Done),
+                "Pipeline {id} finished with plans still to compile"
+            );
+            for compile in compiles {
+                self.attach(id, compile)?;
+            }
+            // Its source checks the new inlets at once: one may already have closed.
+            self.make_runnable(id);
+            self.wake_neighbours(id);
+            return Ok(());
         }
         #[cfg(debug_assertions)]
         self.validate_progress(id, &progress);
@@ -431,6 +449,34 @@ impl Core {
         self.wake_neighbours(id);
         if matches!(progress, Progress::Done) {
             self.retire(id);
+        }
+        Ok(())
+    }
+
+    /// Compiles a plan pipeline `id`'s source asked for while running into pipelines writing a
+    /// new inlet of it, closed at once when the plan selects no row.
+    fn attach(&mut self, id: PipelineId, compile: SubCompile) -> VortexResult<()> {
+        let inlet = self.pipeline(id).inlets.len();
+        let port = self.arena.create(
+            DEFAULT_CAPACITY,
+            None,
+            SourceEnd::Pipeline { id, inlet },
+        );
+        let pipe = self.pipeline_mut(id);
+        pipe.inlets.push(port);
+        pipe.touched.grow();
+        pipe.changed.grow();
+        pipe.changed.insert(inlet);
+        // A share is claimed by the split compiling a stage; a plan compiled while the scan
+        // runs reads for no split.
+        let split = std::mem::replace(&mut self.split, usize::MAX);
+        let chain = self.compile(&compile.plan, compile.rows, &compile.mask);
+        self.split = split;
+        match chain? {
+            Some(chain) => {
+                self.add_pipeline(chain, smallvec::smallvec![port]);
+            }
+            None => self.arena.close(port),
         }
         Ok(())
     }
