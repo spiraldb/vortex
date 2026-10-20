@@ -3,13 +3,28 @@
 
 use std::fs::File;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::anyhow;
+use anyhow::ensure;
 use async_trait::async_trait;
+use futures::TryStreamExt;
 use lance::Dataset;
-use lance::dataset::ProjectionRequest;
+use lance::cache::LanceCache;
 use lance::dataset::WriteParams;
+use lance::deps::arrow_array::UInt32Array;
+use lance::deps::arrow_schema::Schema as ArrowSchema;
+use lance::deps::datafusion::arrow::compute::concat_batches;
+use lance_encoding::decoder::DecoderPlugins;
+use lance_encoding::decoder::FilterExpression;
+use lance_file::reader::FileReader;
+use lance_file::reader::FileReaderOptions;
 use lance_file::version::LanceFileVersion;
+use lance_io::ReadBatchParams;
+use lance_io::object_store::ObjectStore;
+use lance_io::scheduler::ScanScheduler;
+use lance_io::scheduler::SchedulerConfig;
+use lance_io::utils::CachedFileSize;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use vortex_bench::Format;
 use vortex_bench::datasets::feature_vectors;
@@ -30,7 +45,12 @@ async fn parquet_to_lance_file(parquet_path: PathBuf, lance_path: &str) -> anyho
         let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
         let reader = builder.build()?;
 
-        let write_params = WriteParams::with_storage_version(LanceFileVersion::V2_1);
+        // Write Lance's current stable format into a single fragment, so a take reads one file
+        // like the Vortex and Parquet accessors do instead of opening a reader per fragment.
+        let write_params = WriteParams {
+            max_rows_per_file: usize::MAX,
+            ..WriteParams::with_storage_version(LanceFileVersion::Stable)
+        };
         Dataset::write(
             reader,
             output_fname
@@ -77,13 +97,18 @@ pub async fn nested_structs_lance() -> anyhow::Result<PathBuf> {
     .await
 }
 
+/// Capacity of the cache holding the Lance file's decoded page metadata across takes.
+const FILE_CACHE_BYTES: usize = 1 << 30;
+
 /// Random accessor for Lance format files.
 ///
-/// The dataset handle is opened at construction time and reused across `take()` calls.
+/// Like the Vortex and Parquet accessors, this reads the dataset's single data file directly
+/// through an open [`FileReader`] whose metadata is parsed once at construction and reused across
+/// `take()` calls. Going through `Dataset::take` would instead rebuild a projection plan and open a
+/// fragment reader, with its own I/O scheduler, on every call.
 pub struct LanceRandomAccessor {
     name: String,
-    dataset: Dataset,
-    projection: ProjectionRequest,
+    reader: FileReader,
 }
 
 impl LanceRandomAccessor {
@@ -100,11 +125,47 @@ impl LanceRandomAccessor {
     /// Open a Lance dataset from any URI (local path, `s3://...`, ...).
     pub async fn open_uri(uri: &str, name: impl Into<String>) -> anyhow::Result<Self> {
         let dataset = Dataset::open(uri).await?;
-        let projection = ProjectionRequest::from_schema(dataset.schema().clone());
+        let fragments = dataset.get_fragments();
+        let [fragment] = fragments.as_slice() else {
+            anyhow::bail!(
+                "Lance random access expects one fragment, found {}",
+                fragments.len()
+            );
+        };
+        let metadata = fragment.metadata();
+        ensure!(
+            metadata.deletion_file.is_none(),
+            "Lance random access does not support deletions"
+        );
+        let [data_file] = metadata.files.as_slice() else {
+            anyhow::bail!(
+                "Lance random access expects one data file, found {}",
+                metadata.files.len()
+            );
+        };
+
+        let (object_store, _) = ObjectStore::from_uri(uri).await?;
+        let scheduler = ScanScheduler::new(
+            Arc::clone(&object_store),
+            SchedulerConfig::max_bandwidth(&object_store),
+        );
+        let file = scheduler
+            .open_file(
+                &dataset.data_dir().join(data_file.path.as_str()),
+                &CachedFileSize::unknown(),
+            )
+            .await?;
+        let reader = FileReader::try_open(
+            file,
+            None,
+            Arc::<DecoderPlugins>::default(),
+            &LanceCache::with_capacity(FILE_CACHE_BYTES),
+            FileReaderOptions::default(),
+        )
+        .await?;
         Ok(Self {
             name: name.into(),
-            dataset,
-            projection,
+            reader,
         })
     }
 }
@@ -120,7 +181,24 @@ impl RandomAccessor for LanceRandomAccessor {
     }
 
     async fn take(&self, indices: &[u64]) -> anyhow::Result<RandomAccessorRet> {
-        let batch = self.dataset.take(indices, self.projection.clone()).await?;
+        let indices = indices
+            .iter()
+            .map(|&idx| u32::try_from(idx))
+            .collect::<Result<UInt32Array, _>>()?;
+        let batch_size = u32::try_from(indices.len())?.max(1);
+        let batches: Vec<_> = self
+            .reader
+            .read_stream(
+                ReadBatchParams::Indices(indices),
+                batch_size,
+                1,
+                FilterExpression::no_filter(),
+            )
+            .await?
+            .try_collect()
+            .await?;
+        let schema = Arc::new(ArrowSchema::from(self.reader.schema().as_ref()));
+        let batch = concat_batches(&schema, &batches)?;
         Ok(RandomAccessorRet::Native(Box::new(batch)))
     }
 }
