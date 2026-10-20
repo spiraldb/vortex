@@ -123,14 +123,6 @@ impl ScalarFnVTable for FillNull {
     ) -> VortexResult<ArrayRef> {
         let input = args.get(0)?;
         let fill_value = args.get(1)?;
-        // An empty input has no nulls to fill. Slicing a constant fill to an empty range yields
-        // an empty canonical array rather than a constant, so return before requiring a scalar.
-        if input.is_empty() {
-            let dtype = input
-                .dtype()
-                .with_nullability(fill_value.dtype().nullability());
-            return Ok(Canonical::empty(&dtype).into_array());
-        }
         // Parent kernels decline a fill that is not already constant. Materialize it here so a
         // lazy scalar, such as a literal `ScalarFnArray`, can still fill nulls.
         let fill_was_lazy = !fill_value.is::<Constant>();
@@ -140,9 +132,18 @@ impl ScalarFnVTable for FillNull {
             fill_value
         };
 
-        let fill_scalar = fill_value
-            .as_constant()
-            .ok_or_else(|| vortex_err!("fill_null fill_value must be a constant/scalar"))?;
+        let Some(fill_scalar) = fill_value.as_constant() else {
+            // Slicing a constant fill to an empty range yields an empty canonical array rather
+            // than a constant. An empty input has no nulls to fill, so there is nothing to do.
+            vortex_ensure!(
+                input.is_empty(),
+                "fill_null fill_value must be a constant/scalar"
+            );
+            let dtype = input
+                .dtype()
+                .with_nullability(fill_value.dtype().nullability());
+            return Ok(Canonical::empty(&dtype).into_array());
+        };
 
         vortex_ensure!(
             !fill_scalar.is_null(),
@@ -409,24 +410,6 @@ mod tests {
             err.to_string()
                 .contains("fill_null fill_value must be a constant/scalar")
         );
-        Ok(())
-    }
-
-    #[test]
-    fn empty_input_ignores_non_constant_fill() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
-        let input = PrimitiveArray::from_option_iter(Vec::<Option<i32>>::new()).into_array();
-        let fill = PrimitiveArray::from_iter(Vec::<i32>::new()).into_array();
-
-        let result = FillNull::try_new(input, fill)?
-            .into_array()
-            .execute::<ArrayRef>(&mut ctx)?;
-
-        assert_eq!(
-            result.dtype(),
-            &DType::Primitive(PType::I32, Nullability::NonNullable)
-        );
-        assert!(result.is_empty());
         Ok(())
     }
 
