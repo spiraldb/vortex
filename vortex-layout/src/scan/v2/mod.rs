@@ -259,7 +259,7 @@ impl<A: 'static + Send> ScanBuilder<A> {
     /// Runs the scan on a [`Pool`] of workers on the session's runtime, starting it on the first
     /// poll. Errors, including those preparing the scan, are returned as stream items.
     ///
-    /// The scan's [`FilePlanner`] hands out its units one at a time, and each is run by the next
+    /// The scan's file planner hands out its units one at a time, and each is run by the next
     /// spare worker while the file planner plans the next. Up to `concurrency` units run at once
     /// per worker thread, and their batches are yielded in row order when the scan is ordered.
     pub fn into_stream(self) -> VortexResult<BoxStream<'static, VortexResult<A>>> {
