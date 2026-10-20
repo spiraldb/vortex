@@ -986,7 +986,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::list(DType::List(Arc::new(nullable_i32()), Nullability::Nullable), DUCKDB_TYPE::DUCKDB_TYPE_LIST)]
+    #[case::list(
+        DType::List(Arc::new(nullable_i32()), Nullability::Nullable),
+        DUCKDB_TYPE::DUCKDB_TYPE_LIST
+    )]
     #[case::struct_(struct_dtype().as_nullable(), DUCKDB_TYPE::DUCKDB_TYPE_STRUCT)]
     #[case::map(map_dtype().as_nullable(), DUCKDB_TYPE::DUCKDB_TYPE_MAP)]
     fn test_null_nested_to_duckdb_scalar(#[case] dtype: DType, #[case] expected: DUCKDB_TYPE) {

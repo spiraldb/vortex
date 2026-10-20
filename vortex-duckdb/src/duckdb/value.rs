@@ -342,24 +342,29 @@ impl Value {
             "struct value field count must match its logical type"
         );
         let mut ptrs = value_ptrs(fields);
-        let ptr = unsafe { cpp::duckdb_create_struct_value(struct_type.as_ptr(), ptrs.as_mut_ptr()) };
+        let ptr =
+            unsafe { cpp::duckdb_create_struct_value(struct_type.as_ptr(), ptrs.as_mut_ptr()) };
         Self::try_own(ptr, "struct")
     }
 
     /// Creates a DuckDB MAP value of `map_type` from parallel key and value slices.
-    pub fn new_map(map_type: &LogicalTypeRef, keys: &[Value], values: &[Value]) -> VortexResult<Self> {
+    pub fn new_map(
+        map_type: &LogicalTypeRef,
+        keys: &[Value],
+        values: &[Value],
+    ) -> VortexResult<Self> {
         vortex_ensure_eq!(
             keys.len(),
             values.len(),
             "map value must have as many keys as values"
         );
         let mut key_ptrs = value_ptrs(keys);
-        let mut value_ptrs = value_ptrs(values);
+        let mut val_ptrs = value_ptrs(values);
         let ptr = unsafe {
             cpp::duckdb_create_map_value(
                 map_type.as_ptr(),
                 key_ptrs.as_mut_ptr(),
-                value_ptrs.as_mut_ptr(),
+                val_ptrs.as_mut_ptr(),
                 key_ptrs.len() as idx_t,
             )
         };
