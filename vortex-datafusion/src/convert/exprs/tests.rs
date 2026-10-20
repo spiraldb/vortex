@@ -391,7 +391,7 @@ fn test_contiguous_in_list_converts_to_between() -> DFResult<()> {
 fn test_in_list_from_array_converts_to_set_lookup(#[case] data_type: DataType) -> DFResult<()> {
     let schema = Schema::new(vec![Field::new("a", data_type.clone(), true)]);
     let values = cast(
-        &arrow_array::StringArray::from(vec![Some("x"), None, Some("y"), Some("x")]),
+        &StringArray::from(vec![Some("x"), None, Some("y"), Some("x")]),
         &data_type,
     )?;
     let expr = Arc::new(df_expr::InListExpr::try_new_from_array(
@@ -1274,9 +1274,7 @@ fn test_case_when_datafusion_vortex_equivalence() -> anyhow::Result<()> {
             DataType::Int32,
             false,
         )])),
-        vec![Arc::new(arrow_array::Int32Array::from(vec![
-            1, 5, 10, 15, 20,
-        ]))],
+        vec![Arc::new(Int32Array::from(vec![1, 5, 10, 15, 20]))],
     )?;
     let value: Arc<dyn PhysicalExpr> = Arc::new(df_expr::Column::new("value", 0));
     let int32 =
@@ -1793,7 +1791,7 @@ fn test_native_nested_get_field(
     }
     let inner = Arc::new(StructArray::new(
         vec![Field::new("leaf", DataType::Int32, nullable_leaf)].into(),
-        vec![Arc::new(arrow_array::Int32Array::from(values))],
+        vec![Arc::new(Int32Array::from(values))],
         inner_validity.map(NullBuffer::from),
     ));
     let outer = Arc::new(StructArray::new(
