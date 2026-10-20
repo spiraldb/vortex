@@ -9,6 +9,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use anyhow::anyhow;
 use arrow_array::RecordBatch;
+use arrow_array::RecordBatchReader;
 use arrow_schema::SchemaRef;
 use futures::FutureExt;
 use futures::StreamExt;
@@ -27,7 +28,6 @@ use tpchgen::generators::PartGenerator;
 use tpchgen::generators::PartSuppGenerator;
 use tpchgen::generators::RegionGenerator;
 use tpchgen::generators::SupplierGenerator;
-use tpchgen_arrow::RecordBatchIterator;
 use tracing::info;
 use vortex::array::ArrayRef;
 use vortex::array::stream::ArrayStreamAdapter;
@@ -193,7 +193,7 @@ fn generate_table_file(
             let iter = create_batch_iterator(generator, &options)?;
 
             // Create generator and process batches in streaming fashion
-            let schema = Arc::clone(iter.schema());
+            let schema = iter.schema();
 
             // Create writer based on format
             let mut writer: Box<dyn FileWriter + Send> = match write_format {
@@ -212,7 +212,7 @@ fn generate_table_file(
             };
 
             for batch in iter {
-                writer.write_batch(&batch).await?;
+                writer.write_batch(&batch?).await?;
             }
 
             writer.finalize().await?;
@@ -230,13 +230,13 @@ fn generate_table_file(
 fn create_batch_iterator(
     generator: TableGenerator,
     options: &TpchGenOptions,
-) -> Result<Box<dyn RecordBatchIterator>> {
+) -> Result<Box<dyn RecordBatchReader + Send>> {
     let scale_factor = options.scale_factor.parse::<f64>()?;
     let part = 1;
     let num_parts = 1;
     let batch_size = options.batch_size;
 
-    let iterator: Box<dyn RecordBatchIterator> = match generator {
+    let iterator: Box<dyn RecordBatchReader + Send> = match generator {
         TableGenerator::Nation => Box::new(
             tpchgen_arrow::NationArrow::new(NationGenerator::new(scale_factor, part, num_parts))
                 .with_batch_size(batch_size),
