@@ -80,6 +80,7 @@ use crate::metrics::PARTITION_LABEL;
 use crate::metrics::PATH_LABEL;
 use crate::persistent::cache::CachedVortexMetadata;
 use crate::persistent::dynamic_filter::DynamicRowFilter;
+use crate::persistent::list_sum::push_list_sums;
 use crate::persistent::reader::VortexReaderFactory;
 use crate::persistent::stream::PrunableStream;
 
@@ -309,7 +310,13 @@ impl FileOpener for VortexOpener {
             let projection =
                 projection.try_map_exprs(|p| simplifier.simplify(expr_adapter.rewrite(p)?))?;
 
-            // TODO: support lambda pushdown.
+            // A V2 scan computes the projection's list sums, lambdas included; anything else
+            // with a lambda is evaluated by DataFusion.
+            let list_sums = if scan_v2 && projection_pushdown {
+                push_list_sums(&projection, &this_file_schema, expr_converter.as_ref())?
+            } else {
+                None
+            };
             let projection_pushdown = projection_pushdown && !contains_lambda(&projection)?;
             let projected_columns = projection.column_indices();
 
@@ -375,6 +382,8 @@ impl FileOpener for VortexOpener {
                     scan_reference_schema,
                     leftover_projection: projection,
                 }
+            } else if let Some(list_sums) = list_sums {
+                list_sums
             } else if projection_pushdown {
                 expr_converter.split_projection(
                     projection,

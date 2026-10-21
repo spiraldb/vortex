@@ -26,6 +26,7 @@ mod access_plan;
 mod cache;
 mod dynamic_filter;
 mod format;
+mod list_sum;
 pub mod metrics;
 mod opener;
 pub mod reader;

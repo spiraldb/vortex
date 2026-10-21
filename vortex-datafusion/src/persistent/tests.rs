@@ -878,3 +878,83 @@ async fn hash_join_dynamic_filter(#[values(false, true)] scan_v2: bool) -> anyho
     );
     Ok(())
 }
+
+/// Runs `sql` over a table of lists on V1, where DataFusion evaluates every list function, and
+/// on V2, whose scan computes the list sums it can, and returns both results.
+async fn list_sums_on_both_scans(sql: &str) -> anyhow::Result<(String, String)> {
+    let mut results = Vec::new();
+    for scan_v2 in [false, true] {
+        let ctx = TestSessionContext::new_with_factory(Arc::new(
+            VortexFormatFactory::new().with_options(crate::VortexTableOptions {
+                scan_v2,
+                projection_pushdown: true,
+                ..Default::default()
+            }),
+        ));
+        datafusion_functions_nested::register_all(&mut *ctx.session.state_ref().write())?;
+        ctx.session
+            .sql(
+                "CREATE EXTERNAL TABLE lists \
+                    (id INT NOT NULL, xs INT[], us BIGINT UNSIGNED[], ds DOUBLE[], bs BOOLEAN[]) \
+                 STORED AS vortex LOCATION '/sums/'",
+            )
+            .await?;
+        ctx.session
+            .sql(
+                "INSERT INTO lists VALUES \
+                    (1, make_array(1, NULL, 2), make_array(1, 2), make_array(0.1, 0.2, 0.3), make_array(true, NULL)), \
+                    (2, make_array(0, 0), make_array(18446744073709551615, 1), make_array(1e300, -1e300, 1.0), make_array(false)), \
+                    (3, NULL, NULL, NULL, NULL), \
+                    (4, make_array(), make_array(), make_array(), make_array()), \
+                    (5, make_array(NULL, NULL), make_array(NULL), make_array(NULL), make_array(NULL)), \
+                    (6, make_array(3, -1, 4, -1, 5, -9, 2, 6), make_array(0, 1, 2, 2), make_array(-0.5), make_array(true, true, false))",
+            )
+            .await?
+            .collect()
+            .await?;
+        ctx.session
+            .sql("SET datafusion.sql_parser.dialect = 'duckdb'")
+            .await?
+            .collect()
+            .await?;
+        let batches = ctx.session.sql(sql).await?.collect().await?;
+        results.push(pretty_format_batches(&batches)?.to_string());
+    }
+    let v2 = results.pop().ok_or_else(|| anyhow!("V2 result"))?;
+    let v1 = results.pop().ok_or_else(|| anyhow!("V1 result"))?;
+    Ok((v1, v2))
+}
+
+/// A V2 scan's list sums equal DataFusion's: the valid values cast to `Float64` and added in
+/// order, null for null, empty, and all-null lists, through transforms and the arithmetic
+/// around them.
+#[rstest]
+#[case::sum("array_sum(xs)")]
+#[case::unsigned("array_sum(us)")]
+#[case::doubles("array_sum(ds)")]
+#[case::booleans("array_sum(bs)")]
+#[case::not_null("array_sum(array_transform(xs, lambda x: x IS NOT NULL))")]
+#[case::null("array_sum(array_transform(us, lambda x: x IS NULL))")]
+#[case::equal("array_sum(array_transform(xs, lambda x: x = -1))")]
+#[case::frequency(
+    "1.0 - CAST(array_sum(xs) AS DOUBLE) / (2 * array_sum(array_transform(xs, lambda x: x IS NOT NULL)))"
+)]
+#[case::unsupported_transform("array_sum(array_transform(xs, lambda x: x * 2))")]
+#[tokio::test]
+async fn list_sums_match_datafusion(#[case] sum: &str) -> anyhow::Result<()> {
+    let (v1, v2) =
+        list_sums_on_both_scans(&format!("SELECT id, {sum} AS sum FROM lists ORDER BY id")).await?;
+    assert_eq!(v2, v1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn list_sums_beside_other_columns_and_filters() -> anyhow::Result<()> {
+    let (v1, v2) = list_sums_on_both_scans(
+        "SELECT id, xs, array_sum(xs) AS a, array_sum(array_transform(us, lambda u: u = 2)) AS b \
+         FROM lists WHERE id > 1 ORDER BY id",
+    )
+    .await?;
+    assert_eq!(v2, v1);
+    Ok(())
+}
