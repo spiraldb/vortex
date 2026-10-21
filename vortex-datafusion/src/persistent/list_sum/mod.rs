@@ -81,6 +81,8 @@ use crate::convert::exprs::ExpressionConverter;
 use crate::convert::exprs::ProcessedProjection;
 use crate::convert::schema::calculate_physical_schema;
 
+mod encoded;
+
 /// The field of the one-field struct an element transform is evaluated over.
 pub(crate) const ELEMENT: &str = "element";
 
@@ -136,6 +138,15 @@ impl ScalarFnVTable for ListSumF64 {
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrayRef> {
         let lists = Lists::new(args.get(0)?, ctx)?;
+        if options.element.is_none()
+            && let Some((sums, validity)) = encoded::sum_runs(&lists, ctx)?
+        {
+            return Ok(PrimitiveArray::new(
+                sums,
+                Validity::from_bit_buffer(validity, Nullability::Nullable),
+            )
+            .into_array());
+        }
         let mut sums = Vec::with_capacity(lists.starts.len());
         let mut validity = Vec::with_capacity(lists.starts.len());
         // A transform runs over whole encoded elements: its kernels over sliced ones, or over
@@ -209,7 +220,7 @@ fn sum_lists(
 
 /// Elements a group of lists decodes and sums at once, so the decoded values are still in
 /// cache when they are added rather than written out to memory and read back.
-const ELEMENTS_PER_GROUP: u64 = 1 << 20;
+const ELEMENTS_PER_GROUP: u64 = 1 << 18;
 
 /// Where each list's elements are, which lists are valid, and the elements.
 #[derive(Clone)]
@@ -259,12 +270,9 @@ impl Lists {
         })
     }
 
-    /// The lists in groups of consecutive lists holding about [`ELEMENTS_PER_GROUP`] elements,
-    /// each with only its elements, or all of them in one group when the lists' elements are
-    /// not in list order.
-    fn groups(&self) -> VortexResult<Vec<Lists>> {
-        let ordered = self
-            .starts
+    /// Whether each list's elements follow the previous list's.
+    fn ordered(&self) -> bool {
+        self.starts
             .iter()
             .zip(self.ends.iter())
             .all(|(s, e)| s <= e)
@@ -272,7 +280,14 @@ impl Lists {
                 .ends
                 .iter()
                 .zip(self.starts.iter().skip(1))
-                .all(|(end, next)| end <= next);
+                .all(|(end, next)| end <= next)
+    }
+
+    /// The lists in groups of consecutive lists holding about [`ELEMENTS_PER_GROUP`] elements,
+    /// each with only its elements, or all of them in one group when the lists' elements are
+    /// not in list order.
+    fn groups(&self) -> VortexResult<Vec<Lists>> {
+        let ordered = self.ordered();
         let len = self.starts.len();
         if !ordered || len == 0 {
             return Ok(vec![self.clone()]);
@@ -297,16 +312,7 @@ impl Lists {
     /// around it, when their elements are in list order.
     fn trimmed(self) -> VortexResult<Lists> {
         let len = self.starts.len();
-        let ordered = self
-            .starts
-            .iter()
-            .zip(self.ends.iter())
-            .all(|(s, e)| s <= e)
-            && self
-                .ends
-                .iter()
-                .zip(self.starts.iter().skip(1))
-                .all(|(end, next)| end <= next);
+        let ordered = self.ordered();
         if len == 0 || !ordered {
             return Ok(self);
         }
@@ -373,9 +379,10 @@ impl Lists {
 
     /// Sums unsigned `values` as [`sum`](Self::sum) does, by adding them exactly.
     ///
-    /// Every partial sum of unsigned values is at most the total, so while the total is an
-    /// integer `f64` holds exactly, adding the values as `f64` in order gives it exactly too.
-    /// A list past that is added as `f64` in order.
+    /// Every value is at most the bitwise or of them all, so while that times the list's length
+    /// is an integer `f64` holds exactly, the wrapping sum does not wrap, and every partial sum,
+    /// at most the total, is exact too: adding the values as `f64` in order gives the same sum.
+    /// A list past that bound is added as `f64` in order.
     fn sum_unsigned<T: Copy>(
         &self,
         values: &[T],
@@ -392,8 +399,8 @@ impl Lists {
                 0.0
             } else {
                 let list = &values[start..end];
-                let sum = valid.sum_unsigned(list, start, widen);
-                if sum <= EXACT {
+                let (sum, any) = valid.sum_unsigned(list, start, widen);
+                if u128::from(any) * list.len() as u128 <= EXACT {
                     sum as f64
                 } else {
                     sum_in_order(list, &valid, start, &|value| widen(value) as f64)
@@ -831,26 +838,34 @@ impl<'a> Valid<'a> {
         }
     }
 
-    /// The sum of the valid elements of `values`, the elements from `start`, masked 64 at a
-    /// time without branching.
-    fn sum_unsigned<T: Copy>(&self, values: &[T], start: usize, widen: impl Fn(T) -> u64) -> u128 {
-        let mut sum = 0u128;
+    /// The wrapping sum of the valid elements of `values`, the elements from `start`, and the
+    /// bitwise or of them, masked 64 at a time without branching so the additions vectorize.
+    fn sum_unsigned<T: Copy>(
+        &self,
+        values: &[T],
+        start: usize,
+        widen: impl Fn(T) -> u64,
+    ) -> (u64, u64) {
+        let mut sum = 0u64;
+        let mut any = 0u64;
         let (chunks, remainder) = values.as_chunks::<64>();
         let mut index = start;
         for chunk in chunks {
             let word = self.word(index);
-            let mut block = 0u128;
             for (lane, &value) in chunk.iter().enumerate() {
-                block += u128::from(widen(value) & 0u64.wrapping_sub((word >> lane) & 1));
+                let value = widen(value) & 0u64.wrapping_sub((word >> lane) & 1);
+                sum = sum.wrapping_add(value);
+                any |= value;
             }
-            sum += block;
             index += 64;
         }
         let word = self.word(index);
         for (lane, &value) in remainder.iter().enumerate() {
-            sum += u128::from(widen(value) & 0u64.wrapping_sub((word >> lane) & 1));
+            let value = widen(value) & 0u64.wrapping_sub((word >> lane) & 1);
+            sum = sum.wrapping_add(value);
+            any |= value;
         }
-        sum
+        (sum, any)
     }
 
     /// The wrapping sum of the `bits` of the valid elements of `values`, the elements from
