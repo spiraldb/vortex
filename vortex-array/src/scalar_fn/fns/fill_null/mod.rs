@@ -13,6 +13,7 @@ use vortex_session::registry::CachedId;
 
 use crate::AnyColumnar;
 use crate::ArrayRef;
+use crate::Canonical;
 use crate::CanonicalView;
 use crate::ColumnarView;
 use crate::ExecutionCtx;
@@ -131,9 +132,18 @@ impl ScalarFnVTable for FillNull {
             fill_value
         };
 
-        let fill_scalar = fill_value
-            .as_constant()
-            .ok_or_else(|| vortex_err!("fill_null fill_value must be a constant/scalar"))?;
+        let Some(fill_scalar) = fill_value.as_constant() else {
+            // Slicing a constant fill to an empty range yields an empty canonical array rather
+            // than a constant. An empty input has no nulls to fill, so there is nothing to do.
+            vortex_ensure!(
+                input.is_empty(),
+                "fill_null fill_value must be a constant/scalar"
+            );
+            let dtype = input
+                .dtype()
+                .with_nullability(fill_value.dtype().nullability());
+            return Ok(Canonical::empty(&dtype).into_array());
+        };
 
         vortex_ensure!(
             !fill_scalar.is_null(),
@@ -400,6 +410,28 @@ mod tests {
             err.to_string()
                 .contains("fill_null fill_value must be a constant/scalar")
         );
+        Ok(())
+    }
+
+    /// Filling a chunked array slices the constant fill per chunk, and an empty slice is a
+    /// canonical array rather than a constant. Stacked fills over an empty chunk must still run.
+    #[test]
+    fn repeated_fill_over_empty_chunk() -> VortexResult<()> {
+        let mut ctx = array_session().create_execution_ctx();
+        let input = ChunkedArray::try_new(
+            vec![
+                PrimitiveArray::from_option_iter(Vec::<Option<u16>>::new()).into_array(),
+                PrimitiveArray::from_option_iter([Some(7u16), None]).into_array(),
+            ],
+            DType::Primitive(PType::U16, Nullability::Nullable),
+        )?
+        .into_array();
+
+        let result = input
+            .fill_null(Scalar::primitive(1u16, Nullability::Nullable))?
+            .fill_null(Scalar::primitive(2u16, Nullability::NonNullable))?;
+
+        assert_arrays_eq!(result, PrimitiveArray::from_iter([7u16, 1]), &mut ctx);
         Ok(())
     }
 
