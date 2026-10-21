@@ -1329,7 +1329,7 @@ physical_plan [
                                                                 "children": [],
                                                                 "extra_info": {
                                                                     "Function": "Vortex Scan",
-                                                                    "Filters": "s_gmt_offset=-5.00",
+                                                                    "Filters": "($.s_gmt_offset = decimal128(-500, precision=5, scale=2))",
                                                                     "Projections": "s_store_sk",
                                                                     "Estimated Cardinality": "1"
                                                                 }
@@ -1483,7 +1483,7 @@ physical_plan [
                                                         "children": [],
                                                         "extra_info": {
                                                             "Function": "Vortex Scan",
-                                                            "Filters": "s_gmt_offset=-5.00",
+                                                            "Filters": "($.s_gmt_offset = decimal128(-500, precision=5, scale=2))",
                                                             "Projections": "s_store_sk",
                                                             "Estimated Cardinality": "1"
                                                         }

@@ -396,7 +396,7 @@ logical_opt [
                                                             }
                                                         ],
                                                         "extra_info": {
-                                                            "Expressions": "(IN (...) OR (cs_sales_price > 500.00) OR ((ca_state = 'CA') OR (ca_state = 'WA') OR (ca_state = 'GA')))",
+                                                            "Expressions": "(IN (...) OR ((ca_state = 'CA') OR (ca_state = 'WA') OR (ca_state = 'GA')) OR constant_or_null(false, cs_sales_price, 500.00))",
                                                             "Estimated Cardinality": "28731"
                                                         }
                                                     },
@@ -570,7 +570,7 @@ physical_plan [
                                                             }
                                                         ],
                                                         "extra_info": {
-                                                            "Expression": "(IN (...) OR (cs_sales_price > 500.00) OR ((ca_state = 'CA') OR (ca_state = 'WA') OR (ca_state = 'GA')))",
+                                                            "Expression": "(IN (...) OR ((ca_state = 'CA') OR (ca_state = 'WA') OR (ca_state = 'GA')) OR constant_or_null(false, cs_sales_price, 500.00))",
                                                             "Estimated Cardinality": "28731"
                                                         }
                                                     }

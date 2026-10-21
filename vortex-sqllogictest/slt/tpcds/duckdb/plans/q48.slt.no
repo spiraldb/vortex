@@ -426,7 +426,7 @@ logical_opt [
                                                     }
                                                 ],
                                                 "extra_info": {
-                                                    "Expressions": "((((ss_net_profit >= 0.00) AND (ss_net_profit <= 2000.00)) AND ((ca_state = 'CO') OR (ca_state = 'OH') OR (ca_state = 'TX'))) OR (((ss_net_profit >= 150.00) AND (ss_net_profit <= 3000.00)) AND ((ca_state = 'OR') OR (ca_state = 'MN') OR (ca_state = 'KY'))) OR (((ss_net_profit >= 50.00) AND (ss_net_profit <= 25000.00)) AND ((ca_state = 'VA') OR (ca_state = 'CA') OR (ca_state = 'MS'))))",
+                                                    "Expressions": "((((ss_net_profit >= 0.00) AND (ss_net_profit <= 2000.00)) AND ((ca_state = 'CO') OR (ca_state = 'OH') OR (ca_state = 'TX'))) OR (((ss_net_profit >= 150.00) AND (ss_net_profit <= 3000.00)) AND ((ca_state = 'OR') OR (ca_state = 'MN') OR (ca_state = 'KY'))) OR (((ca_state = 'VA') OR (ca_state = 'CA') OR (ca_state = 'MS')) AND ((ss_net_profit >= 50.00) AND constant_or_null(true, ss_net_profit, 25000.00))))",
                                                     "Estimated Cardinality": "11535"
                                                 }
                                             },
@@ -464,7 +464,7 @@ logical_opt [
                             }
                         ],
                         "extra_info": {
-                            "Expressions": "((((ss_sales_price >= 100.00) AND (ss_sales_price <= 150.00)) AND (cd_marital_status = 'M') AND (cd_education_status = '4 yr Degree')) OR (((ss_sales_price >= 50.00) AND (ss_sales_price <= 100.00)) AND (cd_marital_status = 'D') AND (cd_education_status = '2 yr Degree')) OR (((ss_sales_price >= 150.00) AND (ss_sales_price <= 200.00)) AND (cd_marital_status = 'S') AND (cd_education_status = 'College')))",
+                            "Expressions": "((((ss_sales_price >= 100.00) AND (ss_sales_price <= 150.00)) AND (cd_marital_status = 'M') AND (cd_education_status = '4 yr Degree')) OR (((ss_sales_price >= 50.00) AND (ss_sales_price <= 100.00)) AND (cd_marital_status = 'D') AND (cd_education_status = '2 yr Degree')) OR ((cd_marital_status = 'S') AND (cd_education_status = 'College') AND ((ss_sales_price >= 150.00) AND constant_or_null(true, ss_sales_price, 200.00))))",
                             "Estimated Cardinality": "11535"
                         }
                     }
@@ -583,7 +583,7 @@ physical_plan [
                                                                     }
                                                                 ],
                                                                 "extra_info": {
-                                                                    "Expression": "((((ss_net_profit >= 0.00) AND (ss_net_profit <= 2000.00)) AND ((ca_state = 'CO') OR (ca_state = 'OH') OR (ca_state = 'TX'))) OR (((ss_net_profit >= 150.00) AND (ss_net_profit <= 3000.00)) AND ((ca_state = 'OR') OR (ca_state = 'MN') OR (ca_state = 'KY'))) OR (((ss_net_profit >= 50.00) AND (ss_net_profit <= 25000.00)) AND ((ca_state = 'VA') OR (ca_state = 'CA') OR (ca_state = 'MS'))))",
+                                                                    "Expression": "((((ss_net_profit >= 0.00) AND (ss_net_profit <= 2000.00)) AND ((ca_state = 'CO') OR (ca_state = 'OH') OR (ca_state = 'TX'))) OR (((ss_net_profit >= 150.00) AND (ss_net_profit <= 3000.00)) AND ((ca_state = 'OR') OR (ca_state = 'MN') OR (ca_state = 'KY'))) OR (((ca_state = 'VA') OR (ca_state = 'CA') OR (ca_state = 'MS')) AND ((ss_net_profit >= 50.00) AND constant_or_null(true, ss_net_profit, 25000.00))))",
                                                                     "Estimated Cardinality": "11535"
                                                                 }
                                                             }
@@ -623,7 +623,7 @@ physical_plan [
                                     }
                                 ],
                                 "extra_info": {
-                                    "Expression": "((((ss_sales_price >= 100.00) AND (ss_sales_price <= 150.00)) AND (cd_marital_status = 'M') AND (cd_education_status = '4 yr Degree')) OR (((ss_sales_price >= 50.00) AND (ss_sales_price <= 100.00)) AND (cd_marital_status = 'D') AND (cd_education_status = '2 yr Degree')) OR (((ss_sales_price >= 150.00) AND (ss_sales_price <= 200.00)) AND (cd_marital_status = 'S') AND (cd_education_status = 'College')))",
+                                    "Expression": "((((ss_sales_price >= 100.00) AND (ss_sales_price <= 150.00)) AND (cd_marital_status = 'M') AND (cd_education_status = '4 yr Degree')) OR (((ss_sales_price >= 50.00) AND (ss_sales_price <= 100.00)) AND (cd_marital_status = 'D') AND (cd_education_status = '2 yr Degree')) OR ((cd_marital_status = 'S') AND (cd_education_status = 'College') AND ((ss_sales_price >= 150.00) AND constant_or_null(true, ss_sales_price, 200.00))))",
                                     "Estimated Cardinality": "11535"
                                 }
                             }

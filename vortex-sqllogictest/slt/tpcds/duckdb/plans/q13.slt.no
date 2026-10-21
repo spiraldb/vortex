@@ -540,7 +540,7 @@ logical_opt [
                             }
                         ],
                         "extra_info": {
-                            "Expressions": "(((hd_dep_count = 3) AND ((ss_sales_price >= 100.00) AND (ss_sales_price <= 150.00)) AND (cd_marital_status = 'M') AND (cd_education_status = 'Advanced Degree')) OR ((hd_dep_count = 1) AND ((ss_sales_price >= 50.00) AND (ss_sales_price <= 100.00)) AND (cd_marital_status = 'S') AND (cd_education_status = 'College')) OR ((hd_dep_count = 1) AND ((ss_sales_price >= 150.00) AND (ss_sales_price <= 200.00)) AND (cd_marital_status = 'W') AND (cd_education_status = '2 yr Degree')))",
+                            "Expressions": "(((hd_dep_count = 3) AND ((ss_sales_price >= 100.00) AND (ss_sales_price <= 150.00)) AND (cd_marital_status = 'M') AND (cd_education_status = 'Advanced Degree')) OR ((hd_dep_count = 1) AND ((ss_sales_price >= 50.00) AND (ss_sales_price <= 100.00)) AND (cd_marital_status = 'S') AND (cd_education_status = 'College')) OR ((hd_dep_count = 1) AND (cd_marital_status = 'W') AND (cd_education_status = '2 yr Degree') AND ((ss_sales_price >= 150.00) AND constant_or_null(true, ss_sales_price, 200.00))))",
                             "Estimated Cardinality": "11535"
                         }
                     }
@@ -737,7 +737,7 @@ physical_plan [
                                     }
                                 ],
                                 "extra_info": {
-                                    "Expression": "(((hd_dep_count = 3) AND ((ss_sales_price >= 100.00) AND (ss_sales_price <= 150.00)) AND (cd_marital_status = 'M') AND (cd_education_status = 'Advanced Degree')) OR ((hd_dep_count = 1) AND ((ss_sales_price >= 50.00) AND (ss_sales_price <= 100.00)) AND (cd_marital_status = 'S') AND (cd_education_status = 'College')) OR ((hd_dep_count = 1) AND ((ss_sales_price >= 150.00) AND (ss_sales_price <= 200.00)) AND (cd_marital_status = 'W') AND (cd_education_status = '2 yr Degree')))",
+                                    "Expression": "(((hd_dep_count = 3) AND ((ss_sales_price >= 100.00) AND (ss_sales_price <= 150.00)) AND (cd_marital_status = 'M') AND (cd_education_status = 'Advanced Degree')) OR ((hd_dep_count = 1) AND ((ss_sales_price >= 50.00) AND (ss_sales_price <= 100.00)) AND (cd_marital_status = 'S') AND (cd_education_status = 'College')) OR ((hd_dep_count = 1) AND (cd_marital_status = 'W') AND (cd_education_status = '2 yr Degree') AND ((ss_sales_price >= 150.00) AND constant_or_null(true, ss_sales_price, 200.00))))",
                                     "Estimated Cardinality": "11535"
                                 }
                             }
