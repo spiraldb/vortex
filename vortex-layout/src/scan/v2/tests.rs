@@ -822,3 +822,26 @@ async fn selected_split_scope_is_bounded_before_projection() -> VortexResult<()>
     assert_eq!(splits[0].scope.rows, 7..2002);
     Ok(())
 }
+
+/// Scans of one file through one plan cache plan each projection and filter once and return
+/// the same rows as scans planning alone.
+#[tokio::test]
+async fn plan_cache_is_shared_between_scans() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, zoned_table().as_ref()).await?;
+    let cache = super::PlanCache::default();
+    let projection = pack([("strings", get_item("strings", root()))], false.into());
+    let filter = gt(get_item("ints", root()), lit(1_500i32));
+    for rows in [0..2_000, 2_000..4_000, 0..2_000] {
+        assert_same_as_v1(&session, || {
+            Ok(builder(&session, &segments, &layout)?
+                .with_plan_cache(cache.clone())
+                .with_projection(projection.bind(layout.dtype())?)
+                .with_some_filter(Some(filter.bind(layout.dtype())?))
+                .with_row_range(rows.clone()))
+        })
+        .await?;
+    }
+    assert_eq!(cache.planned(), 1);
+    Ok(())
+}

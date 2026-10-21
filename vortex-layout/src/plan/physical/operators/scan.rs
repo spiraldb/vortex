@@ -11,6 +11,7 @@ use vortex_array::IntoArray;
 use vortex_array::arrays::Chunked;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::List;
+use vortex_array::arrays::ListArray;
 use vortex_array::arrays::ListView;
 use vortex_array::arrays::Struct;
 use vortex_array::arrays::StructArray;
@@ -55,18 +56,35 @@ fn decode(
 }
 
 /// Slices a whole decoded segment to `slice`, then keeps the rows `filter` selects.
+///
+/// The slice is narrowed first to the rows from the first selected to the last, so a filter
+/// keeping one run of rows is a slice, and a filtered list holds only the elements around the
+/// rows it keeps.
 fn select(
     array: ArrayRef,
     slice: Option<&Range<usize>>,
     filter: Option<&Mask>,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<ArrayRef> {
-    let array = match slice {
-        Some(slice) => trim_elements(array.slice(slice.clone())?, ctx)?,
-        None => array,
+    let mut range = slice.cloned().unwrap_or(0..array.len());
+    let filter = match filter {
+        Some(filter) => {
+            let (Some(first), Some(last)) = (filter.first(), filter.last()) else {
+                return array.slice(0..0);
+            };
+            range = range.start + first..range.start + last + 1;
+            let filter = filter.slice(first..last + 1);
+            (!filter.all_true()).then_some(filter)
+        }
+        None => None,
+    };
+    let array = if range.start == 0 && range.end == array.len() {
+        array
+    } else {
+        trim_elements(array.slice(range)?, ctx)?
     };
     match filter {
-        Some(filter) => array.filter(filter.clone()),
+        Some(filter) => array.filter(filter),
         None => Ok(array),
     }
 }
@@ -113,27 +131,38 @@ pub(crate) fn slice_trimmed(
 }
 
 /// A slice of a list keeps every element of the lists around it, and exporting the slice
-/// would decode and copy them all. Keeps only the elements the sliced lists hold.
+/// would decode and copy them all. Keeps only the elements the sliced lists hold, and of
+/// elements that are lists themselves, only theirs.
 fn trim_elements(array: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<ArrayRef> {
     if array.is_empty() {
         return Ok(array);
     }
-    if let Some(list) = array.as_opt::<List>() {
+    let list = if let Some(list) = array.as_opt::<List>() {
         let list = list.into_owned();
         let start = list.offset_at(0, ctx)?;
         let end = list.offset_at(list.len(), ctx)?;
         if start == 0 && end == list.elements().len() {
-            return Ok(array);
+            list
+        } else {
+            list.reset_offsets(false, ctx)?
         }
-        return Ok(list.reset_offsets(false, ctx)?.into_array());
-    }
-    if let Some(list) = array.as_opt::<ListView>() {
-        let list = list.into_owned();
+    } else if let Some(list) = array.as_opt::<ListView>() {
         return Ok(list
+            .into_owned()
             .rebuild(ListViewRebuildMode::TrimElements, ctx)?
             .into_array());
+    } else {
+        return Ok(array);
+    };
+    if !list.elements().dtype().is_list() {
+        return Ok(list.into_array());
     }
-    Ok(array)
+    let elements = trim_elements(list.elements().clone(), ctx)?;
+    // SAFETY: trimming keeps the elements' rows, so the offsets still index them.
+    Ok(
+        unsafe { ListArray::new_unchecked(elements, list.offsets().clone(), list.validity()?) }
+            .into_array(),
+    )
 }
 
 /// Reads one segment, decodes it, and emits its rows of `slice`, filtered by `filter`.

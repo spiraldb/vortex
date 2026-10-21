@@ -15,6 +15,7 @@
 //! layout's chunk boundaries.
 //! Full-file projections use smaller 8,192-row multiples when serialized bytes per row are high.
 
+mod cache;
 mod io;
 mod split;
 #[cfg(test)]
@@ -47,16 +48,13 @@ use vortex_session::VortexSession;
 use vortex_utils::parallelism::get_available_parallelism;
 
 use crate::LayoutRef;
-use crate::plan::physical::lower;
-use crate::plan::physical::optimize;
-use crate::plan::physical::plan_row_idx_expression;
 use crate::scan::arrow::to_record_batch;
-use crate::scan::execution::FilterPlans;
 use crate::scan::execution::ScanPlans;
+pub use self::cache::PlanCache;
 pub use crate::scan::execution::SegmentLocation;
 use crate::scan::execution::plan_selection;
+use crate::scan::v2::cache::Planned;
 use crate::scan::v2::io::SegmentScanIo;
-use crate::scan::v2::io::segment_ranges;
 use crate::scan::v2::split::SplitPlan;
 use crate::segments::SegmentSource;
 
@@ -119,6 +117,7 @@ pub struct ScanBuilder<A = ArrayRef> {
     concurrency: usize,
     map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
     row_offset: u64,
+    plan_cache: Option<PlanCache>,
 }
 
 impl ScanBuilder<ArrayRef> {
@@ -135,6 +134,7 @@ impl ScanBuilder<ArrayRef> {
             concurrency: 4,
             map_fn: Arc::new(Ok),
             row_offset: 0,
+            plan_cache: None,
         }
     }
 
@@ -202,6 +202,13 @@ impl<A: 'static + Send> ScanBuilder<A> {
         self
     }
 
+    /// Plans through `cache`, sharing plans and whole values with the other scans of the file
+    /// given it.
+    pub fn with_plan_cache(mut self, cache: PlanCache) -> Self {
+        self.plan_cache = Some(cache);
+        self
+    }
+
     /// Sets the number of active splits per worker thread. Must be greater than zero.
     pub fn with_concurrency(mut self, concurrency: usize) -> Self {
         assert!(concurrency > 0);
@@ -225,6 +232,7 @@ impl<A: 'static + Send> ScanBuilder<A> {
             selection: self.selection,
             concurrency: self.concurrency,
             row_offset: self.row_offset,
+            plan_cache: self.plan_cache,
             map_fn: Arc::new(move |array| old_map_fn(array).and_then(&map_fn)),
         }
     }
@@ -262,41 +270,41 @@ impl<A: 'static + Send> PreparedScan<A> {
     /// fixed-size row chunks.
     fn try_new(builder: ScanBuilder<A>) -> VortexResult<Self> {
         let file = builder.file;
-        let root = lower(&file.layout)?;
-        let row_count = root.row_count();
-        let filter = builder
-            .filter
-            .map(|filter| FilterPlans::new(filter, &root, &builder.session).map(Arc::new))
-            .transpose()?;
-        // An identity projection needs no rewrites. Keep the lowered children lazy, including
-        // statistics that a projection-only scan never reads.
-        let identity = builder.projection.is_root() && builder.projection.dtype() == root.dtype();
-        let projection = if identity {
-            root
-        } else {
-            optimize(plan_row_idx_expression(builder.projection, root)?)?
+        let planned = match &builder.plan_cache {
+            Some(cache) => cache.get(
+                &file.layout,
+                &file.locations,
+                builder.projection,
+                builder.filter,
+                &builder.session,
+            )?,
+            None => Planned::uncached(
+                &file.layout,
+                &file.locations,
+                builder.projection,
+                builder.filter,
+                &builder.session,
+            )?,
         };
-        let chunk_rows = if filter.is_some() {
+        let row_count = planned.root.row_count();
+        let chunk_rows = if planned.filter.is_some() {
             FILTERED_ROWS_PER_CHUNK
-        } else if identity {
+        } else if planned.identity {
             rows_per_chunk(row_count, &file.locations)
         } else {
             MAX_ROWS_PER_CHUNK
         };
         let splits = row_chunks(builder.row_range.unwrap_or(0..row_count), chunk_rows);
-        let io = Arc::new(SegmentScanIo::new(
-            file.segments,
-            segment_ranges(&file.locations),
-        ));
+        let io = Arc::new(SegmentScanIo::new(file.segments, planned.ranges));
         Ok(Self {
             session: builder.session.clone(),
             plans: ScanPlans {
                 session: builder.session,
                 locations: file.locations,
-                projection,
-                filter,
+                projection: planned.projection,
+                filter: planned.filter,
                 row_offset: builder.row_offset,
-                values: Default::default(),
+                values: planned.values,
             },
             io,
             splits,

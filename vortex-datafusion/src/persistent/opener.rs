@@ -55,6 +55,7 @@ use vortex::file::OpenOptionsSessionExt;
 use vortex::io::InstrumentedReadAt;
 use vortex::layout::LayoutReader;
 use vortex::layout::scan::scan_builder::ScanBuilder;
+use vortex::layout::scan::v2::PlanCache;
 use vortex::layout::scan::v2::ScanBuilder as V2ScanBuilder;
 use vortex::layout::segments::SegmentSource;
 use vortex::metrics::Label;
@@ -111,6 +112,8 @@ pub(crate) struct VortexOpener {
     /// boundary and the file's metadata segments are read once, as they are for V1 through the
     /// shared layout reader.
     pub segment_sources: Arc<DashMap<Path, Weak<dyn SegmentSource>>>,
+    /// Shared V2 plans keyed by file path, so partitions of one file plan a scan once.
+    pub plan_caches: Arc<DashMap<Path, PlanCache>>,
     /// Shared full-file natural splits keyed by file path.
     pub natural_splits: Arc<DashMap<Path, Arc<NaturalSplits>>>,
     /// Shared physical Arrow schemas of each file, keyed by file path.
@@ -157,6 +160,7 @@ impl FileOpener for VortexOpener {
         let limit = self.limit;
         let layout_readers = Arc::clone(&self.layout_readers);
         let segment_sources = Arc::clone(&self.segment_sources);
+        let plan_caches = Arc::clone(&self.plan_caches);
         let natural_splits = Arc::clone(&self.natural_splits);
         let file_schemas = Arc::clone(&self.file_schemas);
         let has_output_ordering = self.has_output_ordering;
@@ -492,7 +496,12 @@ impl FileOpener for VortexOpener {
                     &file.object_meta.location,
                     scan_file.segments,
                 );
+                let plan_cache = plan_caches
+                    .entry(file.object_meta.location.clone())
+                    .or_default()
+                    .clone();
                 let mut builder = V2ScanBuilder::new(vxf.session().clone(), scan_file)
+                    .with_plan_cache(plan_cache)
                     .with_projection(scan_projection)
                     .with_some_filter(native_filter)
                     .with_ordered(has_output_ordering);
@@ -989,6 +998,7 @@ mod tests {
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             segment_sources: Default::default(),
+            plan_caches: Default::default(),
             natural_splits: Default::default(),
             file_schemas: Default::default(),
             has_output_ordering: false,
@@ -1397,6 +1407,7 @@ mod tests {
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             segment_sources: Default::default(),
+            plan_caches: Default::default(),
             natural_splits: Default::default(),
             file_schemas: Default::default(),
             has_output_ordering: false,
@@ -1487,6 +1498,7 @@ mod tests {
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             segment_sources: Default::default(),
+            plan_caches: Default::default(),
             natural_splits: Default::default(),
             file_schemas: Default::default(),
             has_output_ordering: false,
@@ -1668,6 +1680,7 @@ mod tests {
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             segment_sources: Default::default(),
+            plan_caches: Default::default(),
             natural_splits: Default::default(),
             file_schemas: Default::default(),
             has_output_ordering: false,
@@ -1731,6 +1744,7 @@ mod tests {
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             segment_sources: Default::default(),
+            plan_caches: Default::default(),
             natural_splits: Default::default(),
             file_schemas: Default::default(),
             has_output_ordering: false,
@@ -1945,6 +1959,7 @@ mod tests {
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             segment_sources: Default::default(),
+            plan_caches: Default::default(),
             natural_splits: Default::default(),
             file_schemas: Default::default(),
             has_output_ordering: false,
