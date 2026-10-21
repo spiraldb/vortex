@@ -7,16 +7,9 @@ use std::fs;
 use std::fs::File;
 use std::path::Path;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use anyhow::Result;
-use arrow_array::RecordBatch;
-use arrow_cast::CastOptions;
-use arrow_cast::cast_with_options;
-use arrow_schema::DataType;
-use arrow_schema::Field;
-use arrow_schema::Schema;
-use arrow_schema::SchemaRef;
+use arrow_array::RecordBatchReader;
 use futures::StreamExt;
 use futures::stream;
 use parquet::arrow::ArrowWriter;
@@ -37,7 +30,6 @@ use tpcdsgen_arrow::InventoryArrow;
 use tpcdsgen_arrow::ItemArrow;
 use tpcdsgen_arrow::PromotionArrow;
 use tpcdsgen_arrow::ReasonArrow;
-use tpcdsgen_arrow::RecordBatchIterator;
 use tpcdsgen_arrow::ShipModeArrow;
 use tpcdsgen_arrow::StoreArrow;
 use tpcdsgen_arrow::StoreReturnsArrow;
@@ -62,16 +54,15 @@ const ROW_GROUP_SIZE: usize = 122_880;
 
 /// Generate every TPC-DS table as a single Parquet file per table under `base_dir/parquet`.
 ///
-/// The files use the column names and types of the TPC-DS specification (and of DuckDB's
-/// `dsdgen`). Each table is generated on its own blocking thread. Already generated tables are
-/// skipped.
+/// The files hold the same data and schema as `tpcgen-cli tpcds parquet` of the same `tpcdsgen`
+/// version, which generates the SQL logic test data. Each table is generated on its own blocking
+/// thread. Already generated tables are skipped.
 pub async fn generate_tpcds(base_dir: PathBuf, scale_factor: String) -> Result<PathBuf> {
     let output_dir = base_dir.join(Format::Parquet.name());
     fs::create_dir_all(&output_dir)?;
 
     let scale_factor: f64 = scale_factor.parse()?;
-    // Follow the C `dsdgen` reference rather than the Trino Java port. The generated values
-    // still differ from DuckDB's bundled `dsdgen`, which is a different version of the C tool.
+    // Follow the C `dsdgen` reference rather than the Trino Java port, like `tpcgen-cli` does.
     let session = SessionBuilder::new()
         .with_scale_factor(scale_factor)
         .with_compat_mode(CompatMode::C)
@@ -125,7 +116,7 @@ const TABLES: [&str; 24] = [
     "web_site",
 ];
 
-fn table_batches(table: &str, session: Session) -> Box<dyn RecordBatchIterator> {
+fn table_batches(table: &str, session: Session) -> Box<dyn RecordBatchReader + Send> {
     match table {
         "call_center" => Box::new(CallCenterArrow::new(session).with_batch_size(BATCH_SIZE)),
         "catalog_page" => Box::new(CatalogPageArrow::new(session).with_batch_size(BATCH_SIZE)),
@@ -163,67 +154,14 @@ fn table_batches(table: &str, session: Session) -> Box<dyn RecordBatchIterator> 
     }
 }
 
-fn write_parquet(path: &Path, batches: Box<dyn RecordBatchIterator>) -> Result<()> {
-    let schema = spec_schema(batches.schema());
+fn write_parquet(path: &Path, batches: Box<dyn RecordBatchReader + Send>) -> Result<()> {
     let props = parquet_writer_properties()
         .set_max_row_group_row_count(Some(ROW_GROUP_SIZE))
         .build();
-    let mut writer = ArrowWriter::try_new(File::create(path)?, Arc::clone(&schema), Some(props))?;
-    // Fail on values that do not fit the narrower spec types instead of silently nulling them.
-    let options = CastOptions {
-        safe: false,
-        ..Default::default()
-    };
+    let mut writer = ArrowWriter::try_new(File::create(path)?, batches.schema(), Some(props))?;
     for batch in batches {
-        let columns = batch
-            .columns()
-            .iter()
-            .zip(schema.fields())
-            .map(|(column, field)| cast_with_options(column, field.data_type(), &options))
-            .collect::<Result<Vec<_>, _>>()?;
-        writer.write(&RecordBatch::try_new(Arc::clone(&schema), columns)?)?;
+        writer.write(&batch?)?;
     }
     writer.close()?;
     Ok(())
-}
-
-/// Columns that `tpcdsgen-arrow` names after the Trino Java port instead of the specification.
-const RENAMED_COLUMNS: [(&str, &str); 5] = [
-    ("cr_return_amount_inc_tax", "cr_return_amt_inc_tax"),
-    ("ib_income_band_id", "ib_income_band_sk"),
-    ("r_reason_description", "r_reason_desc"),
-    ("s_tax_precentage", "s_tax_percentage"),
-    ("wr_store_credit", "wr_account_credit"),
-];
-
-/// Integer columns that DuckDB declares as `INTEGER`. All other integers are `BIGINT`.
-const INT32_COLUMNS: [&str; 6] = [
-    "c_last_review_date_sk",
-    "cd_dep_college_count",
-    "hd_vehicle_count",
-    "ib_upper_bound",
-    "inv_quantity_on_hand",
-    "wp_max_ad_count",
-];
-
-/// Map a `tpcdsgen-arrow` schema onto the column names and types of the TPC-DS specification.
-fn spec_schema(schema: &SchemaRef) -> SchemaRef {
-    let fields = schema.fields().iter().map(|field| {
-        let name = RENAMED_COLUMNS
-            .iter()
-            .find(|(from, _)| *from == field.name())
-            .map_or_else(|| field.name().as_str(), |(_, to)| to);
-        let data_type = match field.data_type() {
-            _ if name.ends_with("_street_number") => DataType::Utf8,
-            _ if name.ends_with("_gmt_offset") || name.ends_with("_tax_percentage") => {
-                DataType::Decimal128(5, 2)
-            }
-            DataType::Decimal128(..) if name == "p_cost" => DataType::Decimal128(15, 2),
-            DataType::Decimal128(..) => DataType::Decimal128(7, 2),
-            DataType::Int32 if !INT32_COLUMNS.contains(&name) => DataType::Int64,
-            data_type => data_type.clone(),
-        };
-        Field::new(name, data_type, true)
-    });
-    Arc::new(Schema::new(fields.collect::<Vec<_>>()))
 }
