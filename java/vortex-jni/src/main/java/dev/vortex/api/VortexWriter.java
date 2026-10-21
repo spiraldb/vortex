@@ -86,6 +86,7 @@ public final class VortexWriter implements AutoCloseable {
         private final BufferAllocator allocator;
         private final Map<String, String> options = new HashMap<>();
         private final Map<String, byte[]> metadata = new HashMap<>();
+        private boolean compact;
 
         private Builder(
                 Session session, String uri, NativeWritable writable, Schema arrowSchema, BufferAllocator allocator) {
@@ -140,6 +141,15 @@ public final class VortexWriter implements AutoCloseable {
         }
 
         /**
+         * Select the compact encodings, which make the file smaller and reads slower. The default encodings balance
+         * size, read throughput and read latency.
+         */
+        public Builder compact(boolean compact) {
+            this.compact = compact;
+            return this;
+        }
+
+        /**
          * Open the writer.
          *
          * @throws IOException if the writer cannot be opened, including when the native side rejects the configured
@@ -152,9 +162,10 @@ public final class VortexWriter implements AutoCloseable {
                 final long pointer;
                 try {
                     pointer = uri != null
-                            ? NativeWriter.create(session.nativePointer(), uri, ffi.memoryAddress(), options, metadata)
-                            : NativeWriter.createStream(
-                                    session.nativePointer(), writable, ffi.memoryAddress(), metadata);
+                            ? NativeWriter.createWithEncodings(
+                                    session.nativePointer(), uri, ffi.memoryAddress(), options, metadata, compact)
+                            : NativeWriter.createStreamWithEncodings(
+                                    session.nativePointer(), writable, ffi.memoryAddress(), metadata, compact);
                 } catch (RuntimeException e) {
                     // Native failures arrive as RuntimeException. Wrap them so callers can handle every
                     // failure to open a writer as an IOException, as writeBatch and finish already do.

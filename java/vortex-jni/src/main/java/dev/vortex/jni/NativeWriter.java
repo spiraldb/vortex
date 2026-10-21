@@ -36,6 +36,29 @@ public final class NativeWriter {
             long sessionPointer, Object writable, long arrowSchemaAddress, Map<String, byte[]> metadata);
 
     /**
+     * Like {@link #create}, and {@code compact} selects the compact encodings, which make the file smaller and reads
+     * slower.
+     */
+    public static native long createWithEncodings(
+            long sessionPointer,
+            String uri,
+            long arrowSchemaAddress,
+            Map<String, String> options,
+            Map<String, byte[]> metadata,
+            boolean compact);
+
+    /**
+     * Like {@link #createStream}, and {@code compact} selects the compact encodings, which make the file smaller and
+     * reads slower.
+     */
+    public static native long createStreamWithEncodings(
+            long sessionPointer,
+            Object writable,
+            long arrowSchemaAddress,
+            Map<String, byte[]> metadata,
+            boolean compact);
+
+    /**
      * Write a batch directly from Arrow C Data Interface addresses.
      *
      * @param writerPointer pointer from {@link #create}

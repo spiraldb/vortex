@@ -39,6 +39,7 @@ use vortex::array::scalar::Scalar;
 use vortex::array::scalar::ScalarValue;
 use vortex::array::stats::StatsSet;
 use vortex::array::stream::ArrayStreamAdapter;
+use vortex::compressor::BtrBlocksCompressorBuilder;
 use vortex::dtype::DType;
 use vortex::error::VortexError;
 use vortex::error::VortexResult;
@@ -46,7 +47,9 @@ use vortex::error::vortex_err;
 use vortex::expr::stats::Stat;
 use vortex::expr::stats::StatsProvider;
 use vortex::file::CountingVortexWrite;
+use vortex::file::VortexWriteOptions;
 use vortex::file::WriteOptionsSessionExt;
+use vortex::file::WriteStrategyBuilder;
 use vortex::file::WriteSummary;
 use vortex::file::multi::parse_uri_or_path;
 use vortex::io::VortexWrite;
@@ -92,6 +95,24 @@ fn resolve_store(
         let (store, path) = make_object_store(&url, properties)?;
         Ok(ResolvedStore::ObjectStore(store, path))
     }
+}
+
+/// Selects the compact encodings when `compact` is set. They make files smaller and reads
+/// slower, like `VortexWriteOptions.compact()` in Python.
+fn with_encodings(
+    session: &VortexSession,
+    options: VortexWriteOptions,
+    compact: bool,
+) -> VortexWriteOptions {
+    if !compact {
+        return options;
+    }
+    let compressor = BtrBlocksCompressorBuilder::from_session(session).with_compact();
+    options.with_strategy(
+        WriteStrategyBuilder::from_session(session)
+            .with_btrblocks_builder(compressor)
+            .build(),
+    )
 }
 
 /// Native writer holding a write-task handle and a sender that Java pushes batches into.
@@ -360,7 +381,51 @@ pub extern "system" fn Java_dev_vortex_jni_NativeWriter_create(
     options: JObject,
     metadata: JObject,
 ) -> jlong {
-    try_or_throw(&mut env, |env| {
+    create_writer(
+        &mut env,
+        session_ptr,
+        uri,
+        arrow_schema_addr,
+        options,
+        metadata,
+        false,
+    )
+}
+
+/// Like `create`, and `compact` selects the compact encodings, which make the file smaller
+/// and reads slower.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_vortex_jni_NativeWriter_createWithEncodings(
+    mut env: EnvUnowned,
+    _class: JClass,
+    session_ptr: jlong,
+    uri: JString,
+    arrow_schema_addr: jlong,
+    options: JObject,
+    metadata: JObject,
+    compact: jboolean,
+) -> jlong {
+    create_writer(
+        &mut env,
+        session_ptr,
+        uri,
+        arrow_schema_addr,
+        options,
+        metadata,
+        compact,
+    )
+}
+
+fn create_writer(
+    env: &mut EnvUnowned,
+    session_ptr: jlong,
+    uri: JString,
+    arrow_schema_addr: jlong,
+    options: JObject,
+    metadata: JObject,
+    compact: bool,
+) -> jlong {
+    try_or_throw(env, |env| {
         if session_ptr == 0 {
             throw_runtime!("null session pointer");
         }
@@ -379,7 +444,11 @@ pub extern "system" fn Java_dev_vortex_jni_NativeWriter_create(
         let resolved = resolve_store(&file_path, &properties)?;
         let (tx, rx) = mpsc::channel(WRITE_CHANNEL_CAPACITY);
         let stream = ArrayStreamAdapter::new(write_schema.clone(), rx);
-        let write_options = session.write_options().with_metadata_segments(metadata);
+        let write_options = with_encodings(
+            session,
+            session.write_options().with_metadata_segments(metadata),
+            compact,
+        );
         // The same check runs inside `write`, but only once the write task is under way, where
         // it would surface as an opaque send failure on the first batch.
         write_options.validate_metadata()?;
@@ -444,7 +513,47 @@ pub extern "system" fn Java_dev_vortex_jni_NativeWriter_createStream(
     arrow_schema_addr: jlong,
     metadata: JObject,
 ) -> jlong {
-    try_or_throw(&mut env, |env| {
+    create_stream_writer(
+        &mut env,
+        session_ptr,
+        writable,
+        arrow_schema_addr,
+        metadata,
+        false,
+    )
+}
+
+/// Like `createStream`, and `compact` selects the compact encodings, which make the file
+/// smaller and reads slower.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_vortex_jni_NativeWriter_createStreamWithEncodings(
+    mut env: EnvUnowned,
+    _class: JClass,
+    session_ptr: jlong,
+    writable: JObject,
+    arrow_schema_addr: jlong,
+    metadata: JObject,
+    compact: jboolean,
+) -> jlong {
+    create_stream_writer(
+        &mut env,
+        session_ptr,
+        writable,
+        arrow_schema_addr,
+        metadata,
+        compact,
+    )
+}
+
+fn create_stream_writer(
+    env: &mut EnvUnowned,
+    session_ptr: jlong,
+    writable: JObject,
+    arrow_schema_addr: jlong,
+    metadata: JObject,
+    compact: bool,
+) -> jlong {
+    try_or_throw(env, |env| {
         if session_ptr == 0 {
             throw_runtime!("null session pointer");
         }
@@ -465,7 +574,11 @@ pub extern "system" fn Java_dev_vortex_jni_NativeWriter_createStream(
         let writable = Arc::new(env.new_global_ref(&writable)?);
         let (tx, rx) = mpsc::channel(WRITE_CHANNEL_CAPACITY);
         let stream = ArrayStreamAdapter::new(write_schema.clone(), rx);
-        let write_options = session.write_options().with_metadata_segments(metadata);
+        let write_options = with_encodings(
+            session,
+            session.write_options().with_metadata_segments(metadata),
+            compact,
+        );
         // See the note in `create`: validate before the write task can start.
         write_options.validate_metadata()?;
         let buffered_bytes = write_options.buffered_bytes_tracker();
