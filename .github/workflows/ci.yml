@@ -183,8 +183,8 @@ jobs:
           PYO3_ENVIRONMENT_SIGNATURE: "cpython3"
           # Also applies to host proc-macro links when Cargo receives an explicit target.
           LINK: /Brepro
-          CC: 'C:\Program Files\LLVMin\clang-cl.exe'
-          CXX: 'C:\Program Files\LLVMin\clang-cl.exe'
+          CC: "C:\\Program Files\\LLVM\\bin\\clang-cl.exe"
+          CXX: "C:\\Program Files\\LLVM\\bin\\clang-cl.exe"
 
       # rust-test-windows excludes vortex-python, so this is the only check that the
       # win_amd64 wheel imports and can round-trip a file. Runs outside the checkout so
