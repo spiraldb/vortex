@@ -8,6 +8,7 @@ use bit_vec::BitVec;
 use vortex_array::ArrayRef;
 use vortex_array::VortexSessionExecute;
 use vortex_array::builtins::ArrayBuiltins;
+use vortex_array::dtype::FieldNames;
 use vortex_array::expr::BoundExpression;
 use vortex_array::expr::transform::find_between;
 use vortex_error::VortexExpect;
@@ -60,6 +61,21 @@ pub trait RowFilter: Send + Sync + 'static {
     /// Selects rows of `array`, the filter's projection over rows the scan kept, returning a
     /// mask as long as `array`.
     fn evaluate(&self, array: ArrayRef) -> VortexResult<Mask>;
+}
+
+/// A predicate over values a scan's projection computes anyway, such as list sums it returns,
+/// evaluated on the projected rows before they are emitted, so the values are computed once.
+///
+/// The projection runs over every row the scan's own filter keeps, but it decodes only the
+/// fields the predicate reads before the predicate removes rows: the others stay lazy, and are
+/// decoded for the rows kept alone.
+pub trait ProjectedFilter: Send + Sync + 'static {
+    /// The fields of the projection the filter reads.
+    fn fields(&self) -> &FieldNames;
+
+    /// Selects rows of `fields`, a struct of [`fields`](Self::fields) of projected rows,
+    /// executed, returning a mask of their length.
+    fn evaluate(&self, fields: ArrayRef) -> VortexResult<Mask>;
 }
 
 /// Plans and adaptive conjunct ordering shared by all splits of a scan.

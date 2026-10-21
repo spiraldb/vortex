@@ -4,6 +4,7 @@
 //! Cutting a projection's output into batches its consumer processes in cache.
 
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 use vortex_array::ArrayRef;
 use vortex_array::Canonical;
@@ -22,9 +23,13 @@ use vortex_array::arrays::listview::ListViewArraySlotsExt;
 use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::dtype::DType;
 use vortex_error::VortexResult;
+use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
+use vortex_mask::Mask;
 
+use crate::plan::physical::operators::list_views;
 use crate::plan::physical::operators::slice_trimmed;
+use crate::scan::execution::ProjectedFilter;
 
 /// Rows a batch gathers before it is emitted. The plan produces rows in pieces at the stored
 /// chunks' boundaries; pieces at least this long are emitted as they are, since joining them
@@ -144,6 +149,69 @@ fn narrow_fields(piece: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<ArrayR
         .clone();
     // SAFETY: executing a field keeps its rows and dtype.
     Ok(unsafe { StructArray::new_unchecked(fields, dtype, piece.len(), validity) }.into_array())
+}
+
+/// The rows of `piece`, a struct of projected fields, that `filters` keep, or `None` when they
+/// keep none.
+///
+/// The fields the filters read are executed once, for the filters and the rows kept alike.
+/// The other fields are filtered lazily, and the lists among them viewed when the filters keep
+/// most of their rows, so only the rows kept are decoded.
+pub(super) fn filter_projected(
+    piece: ArrayRef,
+    filters: &[Arc<dyn ProjectedFilter>],
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<Option<ArrayRef>> {
+    let Some(structs) = piece.as_opt::<Struct>() else {
+        vortex_bail!("A projected filter over a {} projection", piece.dtype());
+    };
+    let dtype = piece
+        .dtype()
+        .as_struct_fields_opt()
+        .ok_or_else(|| vortex_err!("A struct array without struct fields"))?
+        .clone();
+    let mut fields: Vec<ArrayRef> = structs.iter_unmasked_fields().cloned().collect();
+    let mut mask = Mask::new_true(piece.len());
+    for filter in filters {
+        let mut read = Vec::with_capacity(filter.fields().len());
+        for name in filter.fields().iter() {
+            let index = dtype
+                .find(name)
+                .ok_or_else(|| vortex_err!("A projected filter reads no field {name}"))?;
+            if !fields[index].is_canonical() {
+                fields[index] = fields[index]
+                    .clone()
+                    .execute::<Canonical>(ctx)?
+                    .into_array();
+            }
+            read.push((name.clone(), fields[index].clone()));
+        }
+        mask = mask & &filter.evaluate(StructArray::from_fields(&read)?.into_array())?;
+        if mask.all_false() {
+            return Ok(None);
+        }
+    }
+    let validity = structs.struct_validity();
+    if mask.all_true() {
+        // SAFETY: executing a field keeps its rows and dtype.
+        return Ok(Some(
+            unsafe { StructArray::new_unchecked(fields, dtype, piece.len(), validity) }
+                .into_array(),
+        ));
+    }
+    let fields = fields
+        .into_iter()
+        .map(|field| match list_views(&field, &mask, ctx)? {
+            Some(views) => Ok(views),
+            None => field.filter(mask.clone()),
+        })
+        .collect::<VortexResult<Vec<_>>>()?;
+    let validity = validity.filter(&mask)?;
+    // SAFETY: every field and the validity keep the same rows, those of the mask.
+    Ok(Some(
+        unsafe { StructArray::new_unchecked(fields, dtype, mask.true_count(), validity) }
+            .into_array(),
+    ))
 }
 
 /// About the bytes `array` takes once exported: fixed-width values by their width, lists by

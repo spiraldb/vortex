@@ -108,7 +108,7 @@ const DENSE_LIST_FILTER: f64 = 0.5;
 /// it and its export, filters nearly all of them again. Views of the kept lists over the
 /// unfiltered elements filter only the offsets. `None` when `array` is not a list of offsets or
 /// `mask` is sparse, where filtering crops the elements to the few lists kept.
-fn list_views(
+pub(crate) fn list_views(
     array: &ArrayRef,
     mask: &Mask,
     ctx: &mut ExecutionCtx,

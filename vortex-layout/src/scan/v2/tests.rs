@@ -26,8 +26,10 @@ use vortex_array::arrays::ListArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinArray;
+use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::assert_arrays_eq;
 use vortex_array::dtype::DType;
+use vortex_array::dtype::FieldNames;
 use vortex_array::dtype::PType;
 use vortex_array::expr::BoundExpression;
 use vortex_array::expr::Expression;
@@ -54,6 +56,7 @@ use vortex_session::VortexSession;
 
 use super::MAX_ROWS_PER_CHUNK;
 use super::PreparedScan;
+use super::ProjectedFilter;
 use super::RowFilter;
 use super::ScanBuilder;
 use super::ScanFile;
@@ -812,6 +815,93 @@ async fn row_filters_run_on_the_rows_the_filter_kept(
         1 => assert_eq!(evaluated, 1),
         _ => assert!(evaluated > 1, "the split is evaluated in several batches"),
     }
+    Ok(())
+}
+
+/// Keeps the projected rows whose `ints` are multiples of `every`, or not when `negate`.
+struct ProjectedInts {
+    fields: FieldNames,
+    every: i32,
+    negate: bool,
+}
+
+impl ProjectedInts {
+    fn keeps(&self, int: i32) -> bool {
+        (int % self.every == 0) != self.negate
+    }
+}
+
+impl ProjectedFilter for ProjectedInts {
+    fn fields(&self) -> &FieldNames {
+        &self.fields
+    }
+
+    fn evaluate(&self, fields: ArrayRef) -> VortexResult<Mask> {
+        let mut ctx = array_session().create_execution_ctx();
+        let fields = fields.execute::<StructArray>(&mut ctx)?;
+        let ints = fields
+            .unmasked_field_by_name("ints")?
+            .clone()
+            .execute::<PrimitiveArray>(&mut ctx)?;
+        Ok(ints
+            .as_slice::<i32>()
+            .iter()
+            .map(|&int| self.keeps(int))
+            .collect())
+    }
+}
+
+/// A projected filter keeps the projected rows it selects, with the lists beside them, whether
+/// it keeps most rows, few, or none.
+#[rstest]
+#[case::dense(3, true)]
+#[case::sparse(50, false)]
+#[case::none(1, true)]
+#[tokio::test]
+async fn projected_filters_keep_the_rows_they_select(
+    #[values(false, true)] zoned: bool,
+    #[case] every: i32,
+    #[case] negate: bool,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write_varied_lists(&session, &list_table(zoned)).await?;
+    let projection = pack(
+        [
+            ("ints", get_item("ints", root())),
+            ("lists", get_item("lists", root())),
+        ],
+        false.into(),
+    )
+    .bind(layout.dtype())?;
+    let dtype = projection.dtype().clone();
+    let filter = Arc::new(ProjectedInts {
+        fields: FieldNames::from_iter(["ints"]),
+        every,
+        negate,
+    });
+    let actual = collect(
+        dtype.clone(),
+        builder(&session, &segments, &layout)?
+            .with_projection(projection.clone())
+            .with_projected_filter(Arc::<ProjectedInts>::clone(&filter))
+            .into_stream()?,
+    )
+    .await?;
+    let all = collect(
+        dtype,
+        builder(&session, &segments, &layout)?
+            .with_projection(projection)
+            .into_stream()?,
+    )
+    .await?;
+    let keep: Mask = (0..all.len())
+        .map(|row| filter.keeps(i32::try_from(row).unwrap_or(i32::MAX)))
+        .collect();
+    assert_arrays_eq!(
+        actual,
+        all.filter(keep)?,
+        &mut session.create_execution_ctx()
+    );
     Ok(())
 }
 

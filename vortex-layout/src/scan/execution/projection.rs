@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::sync::Arc;
 use std::vec::IntoIter;
 
 use vortex_array::ExecutionCtx;
@@ -22,11 +23,13 @@ use vortex_scan::planning::planner::WorkScope;
 use crate::plan::physical::pipeline::Scan;
 use crate::plan::physical::pipeline::Split;
 use crate::plan::physical::selection::selected;
+use crate::scan::execution::ProjectedFilter;
 use crate::scan::execution::ScanPlans;
 use crate::scan::execution::SelectedRows;
 use crate::scan::execution::adaptor::AdaptorStep;
 use crate::scan::execution::adaptor::ScanAdaptor;
 use crate::scan::execution::batches::Batcher;
+use crate::scan::execution::batches::filter_projected;
 
 const MAX_OUTPUT_ROWS: usize = 65_536;
 
@@ -100,6 +103,7 @@ impl Planner for ProjectionPlanner {
 /// batches a [`Batcher`] cuts. A selection that projects to no rows finishes without a batch.
 struct ProjectionMorsel {
     plans: Option<ScanPlans>,
+    filters: Arc<[Arc<dyn ProjectedFilter>]>,
     selected: SelectedRows,
     adaptor: Option<ScanAdaptor>,
     batches: Batcher,
@@ -113,6 +117,7 @@ impl ProjectionMorsel {
         Self {
             batches: Batcher::new(plans.projection.dtype().clone()),
             ctx: plans.session.create_execution_ctx(),
+            filters: Arc::clone(&plans.projected_filters),
             plans: Some(plans),
             selected,
             adaptor: None,
@@ -189,8 +194,15 @@ impl Morsel for ProjectionMorsel {
             AdaptorStep::Yield => MorselOutput::Continue,
             AdaptorStep::NeedsIO(batch) => MorselOutput::NeedsIO(batch),
             AdaptorStep::Piece(piece) => {
+                let piece = if self.filters.is_empty() {
+                    Some(piece)
+                } else {
+                    filter_projected(piece, &self.filters, &mut self.ctx)?
+                };
                 // A scan of one split produces its pieces in row order.
-                self.batches.push(piece, &mut self.ctx)?;
+                if let Some(piece) = piece {
+                    self.batches.push(piece, &mut self.ctx)?;
+                }
                 match self.batches.pop() {
                     Some(array) => MorselOutput::Batch(array),
                     None => MorselOutput::Continue,

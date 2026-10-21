@@ -52,6 +52,7 @@ pub use self::cache::PlanCache;
 use crate::LayoutRef;
 use crate::scan::arrow::to_record_batch;
 use crate::scan::execution::FilterPlans;
+pub use crate::scan::execution::ProjectedFilter;
 pub use crate::scan::execution::RowFilter;
 use crate::scan::execution::ScanPlans;
 pub use crate::scan::execution::SegmentLocation;
@@ -127,6 +128,7 @@ pub struct ScanBuilder<A = ArrayRef> {
     projection: BoundExpression,
     filter: Option<BoundExpression>,
     row_filters: Vec<Arc<dyn RowFilter>>,
+    projected_filters: Vec<Arc<dyn ProjectedFilter>>,
     ordered: bool,
     row_range: Option<Range<u64>>,
     selection: Selection,
@@ -143,6 +145,7 @@ impl ScanBuilder<ArrayRef> {
             projection: BoundExpression::new_root(file.layout.dtype().clone()),
             filter: None,
             row_filters: Vec::new(),
+            projected_filters: Vec::new(),
             session,
             file,
             ordered: true,
@@ -193,6 +196,12 @@ impl<A: 'static + Send> ScanBuilder<A> {
     /// Runs `filter` on the rows the scan's own filter keeps, before projecting them.
     pub fn with_row_filter(mut self, filter: Arc<dyn RowFilter>) -> Self {
         self.row_filters.push(filter);
+        self
+    }
+
+    /// Runs `filter` on the projected rows, before they are emitted.
+    pub fn with_projected_filter(mut self, filter: Arc<dyn ProjectedFilter>) -> Self {
+        self.projected_filters.push(filter);
         self
     }
 
@@ -253,6 +262,7 @@ impl<A: 'static + Send> ScanBuilder<A> {
             projection: self.projection,
             filter: self.filter,
             row_filters: self.row_filters,
+            projected_filters: self.projected_filters,
             ordered: self.ordered,
             row_range: self.row_range,
             selection: self.selection,
@@ -344,6 +354,7 @@ impl<A: 'static + Send> PreparedScan<A> {
                 locations: file.locations,
                 projection: planned.projection,
                 filter,
+                projected_filters: builder.projected_filters.into(),
                 row_offset: builder.row_offset,
                 values: planned.values,
             },

@@ -60,6 +60,7 @@ use vortex::io::InstrumentedReadAt;
 use vortex::layout::LayoutReader;
 use vortex::layout::scan::scan_builder::ScanBuilder;
 use vortex::layout::scan::v2::PlanCache;
+use vortex::layout::scan::v2::ProjectedFilter;
 use vortex::layout::scan::v2::RowFilter;
 use vortex::layout::scan::v2::ScanBuilder as V2ScanBuilder;
 use vortex::layout::scan::v2::ScanFile;
@@ -81,6 +82,8 @@ use crate::metrics::PATH_LABEL;
 use crate::persistent::cache::CachedVortexMetadata;
 use crate::persistent::dynamic_filter::DynamicRowFilter;
 use crate::persistent::list_sum::ListSumRowFilter;
+use crate::persistent::list_sum::ProjectedListSumFilter;
+use crate::persistent::list_sum::project_list_sum_filters;
 use crate::persistent::list_sum::push_list_sums;
 use crate::persistent::reader::VortexReaderFactory;
 use crate::persistent::stream::PrunableStream;
@@ -357,9 +360,8 @@ impl FileOpener for VortexOpener {
                     };
                     match converted {
                         Some(expr) => native_filters.push(expr),
-                        None if let Some(filter) = list_sum_filter => {
-                            list_sum_filters.push(Arc::new(filter) as Arc<dyn RowFilter>)
-                        }
+                        None if let Some(filter) = list_sum_filter => list_sum_filters
+                            .push((Arc::clone(expr), Arc::new(filter) as Arc<dyn RowFilter>)),
                         None if scan_v2
                             && DynamicFilterTracking::classify(expr).contains_dynamic_filter() =>
                         {
@@ -370,6 +372,30 @@ impl FileOpener for VortexOpener {
                 }
             }
             let residual_filter = conjunction_opt(residual_filters);
+            // When the filters compute every list sum the projection does, the scan computes
+            // them once, for both, and filters the rows it projects on them.
+            let projected_list_sums = match &list_sums {
+                Some(_) if residual_filter.is_none() && !list_sum_filters.is_empty() => {
+                    let filters: Vec<_> = list_sum_filters
+                        .iter()
+                        .map(|(expr, _)| Arc::clone(expr))
+                        .collect();
+                    project_list_sum_filters(
+                        &projection,
+                        &filters,
+                        &this_file_schema,
+                        expr_converter.as_ref(),
+                    )?
+                }
+                _ => None,
+            };
+            let (projected_list_sums, projected_list_sum_filters) = match projected_list_sums {
+                Some(projected) => {
+                    list_sum_filters.clear();
+                    (Some(projected.projection), projected.filters)
+                }
+                None => (None, Vec::new()),
+            };
             let native_filter = and_collect(native_filters)
                 .map(|filter| filter.bind(vxf.dtype())?.optimize_recursive())
                 .transpose()
@@ -398,6 +424,8 @@ impl FileOpener for VortexOpener {
                     scan_reference_schema,
                     leftover_projection: projection,
                 }
+            } else if let Some(projected) = projected_list_sums {
+                projected
             } else if let Some(list_sums) = list_sums {
                 list_sums
             } else if projection_pushdown {
@@ -429,6 +457,13 @@ impl FileOpener for VortexOpener {
                 .map(|expr| reassign_expr_columns(expr, &stream_schema))
                 .transpose()?;
             let projector = leftover_projection.make_projector(&stream_schema)?;
+            let projected_list_sum_filters = projected_list_sum_filters
+                .iter()
+                .map(|filter| {
+                    ProjectedListSumFilter::try_new(filter, &stream_schema, vxf.session())
+                        .map(|filter| Arc::new(filter) as Arc<dyn ProjectedFilter>)
+                })
+                .collect::<DFResult<Vec<_>>>()?;
 
             // We share our layout readers with others partitions in the scan, so we can only need to read each layout in each file once.
             let layout_reader = match layout_readers.entry(file.object_meta.location.clone()) {
@@ -560,8 +595,11 @@ impl FileOpener for VortexOpener {
                 if let Some(concurrency) = scan_concurrency {
                     builder = builder.with_concurrency(concurrency);
                 }
-                for filter in list_sum_filters {
+                for (_, filter) in list_sum_filters {
                     builder = builder.with_row_filter(filter);
+                }
+                for filter in projected_list_sum_filters {
+                    builder = builder.with_projected_filter(filter);
                 }
                 for filter in dynamic_filters {
                     if let Some(filter) =

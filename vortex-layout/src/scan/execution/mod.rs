@@ -23,6 +23,7 @@ use vortex_scan::planning::planner::WorkScope;
 use vortex_session::VortexSession;
 
 pub(super) use self::filter::FilterPlans;
+pub use self::filter::ProjectedFilter;
 pub use self::filter::RowFilter;
 pub(super) use self::selection::plan_selection;
 use crate::plan::physical::PlanRef;
@@ -60,6 +61,8 @@ pub(super) struct ScanPlans {
     /// The optimized projection plan, over the scan's root row domain.
     pub(super) projection: PlanRef,
     pub(super) filter: Option<Arc<FilterPlans>>,
+    /// Filters evaluated on the projected rows.
+    pub(super) projected_filters: Arc<[Arc<dyn ProjectedFilter>]>,
     /// The global row index of the root row domain's first row.
     pub(super) row_offset: u64,
     /// Whole values, such as dictionary values, shared by the splits of this scan. Their plans

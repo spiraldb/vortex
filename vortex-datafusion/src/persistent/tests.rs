@@ -959,14 +959,16 @@ async fn list_sums_beside_other_columns_and_filters() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// A filter on list sums is evaluated by a V2 scan's row filter, where a null sum keeps no row,
-/// and the lists kept beside it are those of the rows it keeps.
+/// A filter on list sums is evaluated by a V2 scan, before it projects or on the sums it
+/// projects, where a null sum keeps no row, and the lists kept beside it are those of the rows
+/// it keeps.
 #[rstest]
 #[case::sum("array_sum(xs) > 0")]
 #[case::frequency(
     "CAST(array_sum(xs) AS DOUBLE) / (2 * array_sum(array_transform(xs, lambda x: x IS NOT NULL))) < 0.6"
 )]
 #[case::null_sums("array_sum(us) IS NULL")]
+#[case::beside_column("array_sum(xs) > id - 3")]
 #[case::with_column("array_sum(array_transform(xs, lambda x: x = -1)) = 0 AND id > 1")]
 #[tokio::test]
 async fn list_sums_filter_rows(#[case] predicate: &str) -> anyhow::Result<()> {
