@@ -569,6 +569,56 @@ async fn selected_split_scope_is_bounded_before_projection() -> VortexResult<()>
     Ok(())
 }
 
+/// A sparse selection splits at stored chunk boundaries, grouping stored chunks smaller than a
+/// work chunk.
+#[rstest]
+#[tokio::test]
+async fn sparse_selections_split_at_stored_chunks(
+    #[values(Strategy::Flat, Strategy::Table, Strategy::ZonedTable)] strategy: Strategy,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, strategy.get().as_ref()).await?;
+    let scan = PreparedScan::try_new(
+        builder(&session, &segments, &layout)?
+            .with_row_range(500..3_500)
+            .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(vec![
+                600u64, 1_200, 3_400,
+            ]))?),
+    )?;
+    // Every stored chunk is smaller than a work chunk, so they group into one split.
+    assert_eq!(scan.splits, vec![500..3_500]);
+    Ok(())
+}
+
+#[rstest]
+#[case::inside(&[0, 10, 20, 30], 5..25, 1, vec![5..10, 10..20, 20..25])]
+#[case::aligned(&[0, 10, 20], 0..20, 1, vec![0..10, 10..20])]
+#[case::empty(&[0, 10], 4..4, 1, vec![])]
+#[case::small_chunks_grouped(&[0, 4, 8, 12, 16, 20], 0..20, 8, vec![0..8, 8..16, 16..20])]
+#[case::large_chunks_alone(&[0, 30, 40, 70], 0..70, 8, vec![0..30, 30..40, 40..70])]
+fn boundary_chunks_clip_to_the_rows(
+    #[case] boundaries: &[u64],
+    #[case] rows: Range<u64>,
+    #[case] min_rows: u64,
+    #[case] expected: Vec<Range<u64>>,
+) {
+    assert_eq!(super::boundary_chunks(rows, boundaries, min_rows), expected);
+}
+
+/// Chunks nested below fields and transparent children count, at their absolute rows.
+#[tokio::test]
+async fn layout_boundaries_cover_every_stored_chunk() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    for strategy in [Strategy::Flat, Strategy::Table, Strategy::ZonedTable] {
+        let (_, layout) = write(&session, strategy.get().as_ref()).await?;
+        assert_eq!(
+            super::layout_boundaries(&layout)?,
+            (0..=CHUNKS).map(|chunk| (chunk * CHUNK_ROWS) as u64).collect::<Vec<_>>()
+        );
+    }
+    Ok(())
+}
+
 /// A repeated projection reuses its optimized plan, so later scans find the dictionary values the
 /// first one kept instead of reading them again.
 #[tokio::test]
@@ -646,13 +696,15 @@ async fn write_wide(
 #[test]
 fn column_groups_fill_the_threads_only_for_few_wide_row_chunks() {
     // One row chunk on four threads: eight tasks, as far as the fields allow.
-    assert_eq!(super::column_group_count(10_000, 1, 4), 8);
-    assert_eq!(super::column_group_count(64, 1, 4), 4);
-    assert_eq!(super::column_group_count(64, 3, 4), 3);
+    assert_eq!(super::column_group_count(10_000, 1, 4, 16), 8);
+    assert_eq!(super::column_group_count(64, 1, 4, 16), 4);
+    assert_eq!(super::column_group_count(64, 3, 4, 16), 3);
+    // Sparse selections accept narrower groups.
+    assert_eq!(super::column_group_count(19, 3, 4, 4), 3);
     // Enough row chunks, or too few fields, leave the columns together.
-    assert_eq!(super::column_group_count(10_000, 8, 4), 1);
-    assert_eq!(super::column_group_count(31, 1, 4), 1);
-    assert_eq!(super::column_group_count(10_000, 0, 4), 1);
+    assert_eq!(super::column_group_count(10_000, 8, 4, 16), 1);
+    assert_eq!(super::column_group_count(31, 1, 4, 16), 1);
+    assert_eq!(super::column_group_count(10_000, 0, 4, 16), 1);
 }
 
 #[rstest]

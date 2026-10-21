@@ -63,6 +63,7 @@ use vortex_utils::aliases::hash_set::HashSet;
 use vortex_utils::parallelism::get_available_parallelism;
 
 pub use self::cache::ScanCache;
+use crate::LayoutChildType;
 use crate::LayoutRef;
 use crate::plan::physical::Pack;
 use crate::plan::physical::lower;
@@ -83,6 +84,9 @@ const TARGET_BYTES_PER_CHUNK: u64 = 8 * 1024 * 1024;
 /// The fewest fields a column group holds. Narrower groups cost more in per-task planning than
 /// they gain in parallelism.
 const MIN_FIELDS_PER_GROUP: usize = 16;
+/// The fewest fields a column group of a sparse selection holds. Such a scan decodes only a few
+/// rows of each chunk it reads, so planning a group costs little next to reading its segments.
+const SPARSE_MIN_FIELDS_PER_GROUP: usize = 4;
 /// Tasks per thread a scan aims for when it divides row chunks into column groups, so that
 /// uneven columns still leave every thread busy.
 const TASKS_PER_THREAD: usize = 2;
@@ -102,15 +106,21 @@ fn rows_per_chunk(row_count: u64, locations: &[SegmentLocation]) -> usize {
 }
 
 /// The number of column groups each of `splits` row chunks of a projection with `nfields` fields
-/// divides into, so the scan has at least [`TASKS_PER_THREAD`] tasks per thread.
-fn column_group_count(nfields: usize, splits: usize, parallelism: usize) -> usize {
+/// divides into, so the scan has at least [`TASKS_PER_THREAD`] tasks per thread, with at least
+/// `min_fields` fields in each group.
+fn column_group_count(
+    nfields: usize,
+    splits: usize,
+    parallelism: usize,
+    min_fields: usize,
+) -> usize {
     let target = TASKS_PER_THREAD * parallelism;
     if splits == 0 || splits >= target {
         return 1;
     }
     target
         .div_ceil(splits)
-        .min(nfields / MIN_FIELDS_PER_GROUP)
+        .min(nfields / min_fields)
         .max(1)
 }
 
@@ -126,6 +136,62 @@ fn row_chunks(rows: Range<u64>, rows_per_chunk: usize) -> Vec<Range<u64>> {
             start.max(rows.start)..start.saturating_add(rows_per_chunk as u64).min(rows.end)
         })
         .collect()
+}
+
+/// The rows at which `layout` starts a new chunk, ascending and unique, from `0` to the layout's
+/// row count.
+///
+/// Fields and transparent children are followed down to the first chunked layout on each path.
+/// Its chunks are not opened: their offsets come from the chunked layout itself, and a reopened
+/// file would otherwise deserialize every chunk of every column for each scan. Chunks nested
+/// inside a chunk are rare, and missing them only leaves a split wider than it could be.
+fn layout_boundaries(layout: &LayoutRef) -> VortexResult<Vec<u64>> {
+    fn collect(layout: &LayoutRef, base: u64, out: &mut Vec<u64>) -> VortexResult<()> {
+        for slot in 0..layout.nslots() {
+            match layout.slot_type(slot) {
+                Some(LayoutChildType::Chunk((_, offset))) => out.push(base + offset),
+                Some(LayoutChildType::Field(_) | LayoutChildType::Transparent(_)) => {
+                    if let Some(child) = layout.slot(slot)? {
+                        collect(&child, base, out)?;
+                    }
+                }
+                Some(LayoutChildType::Auxiliary(_)) | None => {}
+            }
+        }
+        Ok(())
+    }
+
+    let mut boundaries = vec![0, layout.row_count()];
+    collect(layout, 0, &mut boundaries)?;
+    boundaries.sort_unstable();
+    boundaries.dedup();
+    Ok(boundaries)
+}
+
+/// Spans of `rows` that start and end on `boundaries`, each covering consecutive spans between
+/// boundaries until it holds at least `min_rows` rows.
+///
+/// A stored chunk larger than `min_rows` gets a span of its own, so no two spans read it. Smaller
+/// stored chunks are grouped, so that a file of many small chunks is not cut into as many spans.
+fn boundary_chunks(rows: Range<u64>, boundaries: &[u64], min_rows: u64) -> Vec<Range<u64>> {
+    let mut spans = Vec::new();
+    let mut start = rows.start;
+    for &boundary in boundaries {
+        if boundary <= start {
+            continue;
+        }
+        if boundary >= rows.end {
+            break;
+        }
+        if boundary - start >= min_rows {
+            spans.push(start..boundary);
+            start = boundary;
+        }
+    }
+    if start < rows.end {
+        spans.push(start..rows.end);
+    }
+    spans
 }
 
 /// The parts of a file the planner-driven executor reads through.
@@ -357,7 +423,21 @@ impl<A: 'static + Send> PreparedScan<A> {
         } else {
             MAX_ROWS_PER_CHUNK
         };
-        let splits = row_chunks(builder.row_range.unwrap_or(0..row_count), chunk_rows);
+        let rows = builder.row_range.unwrap_or(0..row_count);
+        // A sparse selection reads few rows from each stored chunk it touches. Splitting at the
+        // stored chunk boundaries reads and decodes each of those chunks once, where fixed row
+        // chunks narrower than the stored ones would each read and decode the whole chunk again.
+        // Stored chunks narrower than a work chunk are grouped up to its size.
+        let sparse = matches!(builder.selection, Selection::IncludeByIndex(_));
+        let splits = if sparse {
+            let boundaries = match cache.boundaries() {
+                Some(boundaries) => boundaries,
+                None => cache.insert_boundaries(layout_boundaries(&file.layout)?.into()),
+            };
+            boundary_chunks(rows, &boundaries, chunk_rows as u64)
+        } else {
+            row_chunks(rows, chunk_rows)
+        };
         // A wide struct projection with too few row chunks for every thread also splits by
         // column. The groups' plans share the projection's children, so planning them is cheap.
         // Arrow batches of the groups are matched to the schema by field name, so names must be
@@ -371,6 +451,11 @@ impl<A: 'static + Send> PreparedScan<A> {
                     nfields,
                     splits.len(),
                     get_available_parallelism().unwrap_or(1),
+                    if sparse {
+                        SPARSE_MIN_FIELDS_PER_GROUP
+                    } else {
+                        MIN_FIELDS_PER_GROUP
+                    },
                 );
                 if groups > 1 {
                     (0..groups)
