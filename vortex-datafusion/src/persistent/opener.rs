@@ -56,6 +56,8 @@ use vortex::io::InstrumentedReadAt;
 use vortex::layout::LayoutReader;
 use vortex::layout::scan::scan_builder::ScanBuilder;
 use vortex::layout::scan::v2::ScanBuilder as V2ScanBuilder;
+use vortex::layout::scan::v2::ScanCache;
+use vortex::layout::scan::v2::WeakScanCache;
 use vortex::layout::segments::SegmentSource;
 use vortex::metrics::Label;
 use vortex::metrics::MetricsRegistry;
@@ -111,6 +113,9 @@ pub(crate) struct VortexOpener {
     /// boundary and the file's metadata segments are read once, as they are for V1 through the
     /// shared layout reader.
     pub segment_sources: Arc<DashMap<Path, Weak<dyn SegmentSource>>>,
+    /// The V2 scan cache each open file's partitions share: its lowered layout, filter and
+    /// projection plans, proved zones and dictionary values, built once per file.
+    pub scan_caches: Arc<DashMap<Path, WeakScanCache>>,
     /// Shared full-file natural splits keyed by file path.
     pub natural_splits: Arc<DashMap<Path, Arc<NaturalSplits>>>,
     /// Shared physical Arrow schemas of each file, keyed by file path.
@@ -157,6 +162,7 @@ impl FileOpener for VortexOpener {
         let limit = self.limit;
         let layout_readers = Arc::clone(&self.layout_readers);
         let segment_sources = Arc::clone(&self.segment_sources);
+        let scan_caches = Arc::clone(&self.scan_caches);
         let natural_splits = Arc::clone(&self.natural_splits);
         let file_schemas = Arc::clone(&self.file_schemas);
         let has_output_ordering = self.has_output_ordering;
@@ -506,6 +512,7 @@ impl FileOpener for VortexOpener {
                     &file.object_meta.location,
                     scan_file.segments,
                 );
+                scan_file.cache = Some(shared_scan_cache(&scan_caches, &file.object_meta.location));
                 let mut builder = V2ScanBuilder::new(vxf.session().clone(), scan_file)
                     .with_projection(scan_projection)
                     .with_some_filter(native_filter)
@@ -663,6 +670,28 @@ fn contains_lambda(projection: &ProjectionExprs) -> DFResult<bool> {
         }
     }
     Ok(false)
+}
+
+/// Returns the scan cache other partitions of `path` are planning with, or registers a new one.
+/// A scan holds its cache until its stream ends, so the cache lives as long as one scan.
+fn shared_scan_cache(scan_caches: &DashMap<Path, WeakScanCache>, path: &Path) -> ScanCache {
+    match scan_caches.entry(path.clone()) {
+        Entry::Occupied(mut entry) => {
+            if let Some(shared) = entry.get().upgrade() {
+                tracing::trace!("reusing scan cache for {path}");
+                shared
+            } else {
+                let fresh = ScanCache::default();
+                entry.insert(fresh.downgrade());
+                fresh
+            }
+        }
+        Entry::Vacant(entry) => {
+            let fresh = ScanCache::default();
+            entry.insert(fresh.downgrade());
+            fresh
+        }
+    }
 }
 
 /// Returns the segment source other partitions of `path` are reading through, or registers
@@ -1102,6 +1131,7 @@ mod tests {
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             segment_sources: Default::default(),
+            scan_caches: Default::default(),
             natural_splits: Default::default(),
             file_schemas: Default::default(),
             has_output_ordering: false,
@@ -1510,6 +1540,7 @@ mod tests {
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             segment_sources: Default::default(),
+            scan_caches: Default::default(),
             natural_splits: Default::default(),
             file_schemas: Default::default(),
             has_output_ordering: false,
@@ -1600,6 +1631,7 @@ mod tests {
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             segment_sources: Default::default(),
+            scan_caches: Default::default(),
             natural_splits: Default::default(),
             file_schemas: Default::default(),
             has_output_ordering: false,
@@ -1781,6 +1813,7 @@ mod tests {
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             segment_sources: Default::default(),
+            scan_caches: Default::default(),
             natural_splits: Default::default(),
             file_schemas: Default::default(),
             has_output_ordering: false,
@@ -1844,6 +1877,7 @@ mod tests {
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             segment_sources: Default::default(),
+            scan_caches: Default::default(),
             natural_splits: Default::default(),
             file_schemas: Default::default(),
             has_output_ordering: false,
@@ -2058,6 +2092,7 @@ mod tests {
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             segment_sources: Default::default(),
+            scan_caches: Default::default(),
             natural_splits: Default::default(),
             file_schemas: Default::default(),
             has_output_ordering: false,

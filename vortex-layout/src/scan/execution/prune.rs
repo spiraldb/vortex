@@ -18,6 +18,7 @@ use vortex_mask::Mask;
 use vortex_scan::planning::planner::Planner;
 use vortex_scan::planning::planner::PlannerOutput;
 use vortex_scan::planning::planner::State;
+use vortex_session::VortexSession;
 
 use super::ScanPlans;
 use super::adaptor::AdaptorStep;
@@ -26,6 +27,7 @@ use super::filter::hint;
 use super::filter::piece_mask;
 use super::filter::segments_read;
 use crate::plan::physical::PlanRef;
+use crate::plan::physical::Zoned;
 use crate::plan::physical::pipeline::Scan;
 use crate::plan::physical::pipeline::Split;
 
@@ -46,6 +48,21 @@ pub(in crate::scan) struct PrunePlanner {
     next_hint: u32,
     kept: Arc<Mutex<Option<Mask>>>,
     done: bool,
+}
+
+/// Whether every zone proof in `plan` has already been proved, so compiling it reads no zones.
+fn is_proved(plan: &PlanRef, session: &VortexSession) -> VortexResult<bool> {
+    if let Some(zoned) = plan.as_opt::<Zoned>()
+        && zoned.is_pruning()
+    {
+        return zoned.is_proved(session);
+    }
+    for child in plan.children().iter() {
+        if !is_proved(&child?, session)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 impl PrunePlanner {
@@ -102,7 +119,20 @@ impl Planner for PrunePlanner {
         }
         if !self.announced {
             self.announced = true;
-            let proofs = segments_read(self.proofs.as_slice().iter(), self.rows.clone(), None)?;
+            // A proof whose zones an earlier scan of the file proved reads nothing: a shared
+            // plan keeps its proved zones, so only unproved proofs need their zone maps.
+            let unproved = self
+                .proofs
+                .as_slice()
+                .iter()
+                .map(|proof| Ok((proof, !is_proved(proof, &self.plans.session)?)))
+                .filter_map(|proof| match proof {
+                    Ok((proof, true)) => Some(Ok(proof)),
+                    Ok((_, false)) => None,
+                    Err(error) => Some(Err(error)),
+                })
+                .collect::<VortexResult<Vec<_>>>()?;
+            let proofs = segments_read(unproved.into_iter(), self.rows.clone(), None)?;
             let mut batch = Vec::new();
             hint(
                 &self.plans.locations,

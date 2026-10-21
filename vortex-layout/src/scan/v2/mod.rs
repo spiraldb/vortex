@@ -15,7 +15,7 @@
 //! layout's chunk boundaries.
 //! Full-file projections use smaller 8,192-row multiples when serialized bytes per row are high.
 //!
-//! A [`ScanFile`] carrying a [`ScanCache`] shares its lowered plan, segment index, and dictionary
+//! A [`ScanFile`] carrying a [`ScanCache`] shares its lowered plan, filter plans, segment index, and dictionary
 //! values with every other scan of that file, like a cached layout reader does for V1 scans.
 
 mod cache;
@@ -27,6 +27,7 @@ mod tests;
 use std::future;
 use std::ops::Range;
 use std::sync::Arc;
+use std::task::Poll;
 
 use arrow_array::RecordBatch;
 use arrow_schema::ArrowError;
@@ -59,6 +60,7 @@ use vortex_session::VortexSession;
 use vortex_utils::parallelism::get_available_parallelism;
 
 pub use self::cache::ScanCache;
+pub use self::cache::WeakScanCache;
 use crate::LayoutRef;
 use crate::plan::physical::lower;
 use crate::plan::physical::optimize;
@@ -105,6 +107,19 @@ fn row_chunks(rows: Range<u64>, rows_per_chunk: usize) -> Vec<Range<u64>> {
             start.max(rows.start)..start.saturating_add(rows_per_chunk as u64).min(rows.end)
         })
         .collect()
+}
+
+/// Holds `cache` until `stream` ends, so a scan of the same file that starts meanwhile finds it.
+fn keep_alive<T: Send + 'static>(
+    stream: BoxStream<'static, T>,
+    cache: ScanCache,
+) -> BoxStream<'static, T> {
+    stream
+        .chain(stream::poll_fn(move |_| {
+            let _ = &cache;
+            Poll::Ready(None)
+        }))
+        .boxed()
 }
 
 /// The rows a byte range of the file stands for when an engine splits the file by bytes before
@@ -288,6 +303,8 @@ struct PreparedScan<A: 'static + Send> {
     splits: Vec<Range<u64>>,
     /// The rows of `row_range` zone pruning kept, once it has run.
     kept: Option<Mask>,
+    /// Held until the output stream ends, so scans of the file that start meanwhile share it.
+    cache: ScanCache,
     selection: Selection,
     map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
     ordered: bool,
@@ -307,7 +324,16 @@ impl<A: 'static + Send> PreparedScan<A> {
         let row_count = root.row_count();
         let filter = builder
             .filter
-            .map(|filter| FilterPlans::new(filter, &root, &builder.session).map(Arc::new))
+            .map(|filter| -> VortexResult<_> {
+                match cache.filter_plans(&filter) {
+                    Some(plans) => Ok(plans),
+                    None => {
+                        let plans =
+                            Arc::new(FilterPlans::new(filter.clone(), &root, &builder.session)?);
+                        Ok(cache.insert_filter_plans(filter, plans))
+                    }
+                }
+            })
             .transpose()?;
         // An identity projection needs no rewrites. Keep the lowered children lazy, including
         // statistics that a projection-only scan never reads.
@@ -352,6 +378,7 @@ impl<A: 'static + Send> PreparedScan<A> {
             row_range,
             splits,
             kept: None,
+            cache,
             selection: builder.selection,
             map_fn: builder.map_fn,
             ordered: builder.ordered,
@@ -433,6 +460,7 @@ impl<A: 'static + Send> PreparedScan<A> {
         let split_plans = self.split_plans();
         let io = self.io;
         let map_fn = self.map_fn;
+        let cache = self.cache;
         if !self.ordered
             && split_plans.iter().any(|split| {
                 split.scope.rows.end - split.scope.rows.start > MAX_ROWS_PER_CHUNK as u64
@@ -446,7 +474,10 @@ impl<A: 'static + Send> PreparedScan<A> {
                     stream::once(task).filter_map(|result| future::ready(result.err().map(Err)));
                 stream::select(recv, errors)
             });
-            return Ok(streams.flatten_unordered(concurrency).boxed());
+            return Ok(keep_alive(
+                streams.flatten_unordered(concurrency).boxed(),
+                cache,
+            ));
         }
         // Spawned as the buffer pulls them, so at most `concurrency` splits read at once.
         let tasks = stream::iter(split_plans).map(move |split| {
@@ -466,9 +497,12 @@ impl<A: 'static + Send> PreparedScan<A> {
         } else {
             tasks.buffer_unordered(concurrency).boxed()
         };
-        Ok(batches
-            .map_ok(|batches| stream::iter(batches.into_iter().map(Ok)))
-            .try_flatten()
-            .boxed())
+        Ok(keep_alive(
+            batches
+                .map_ok(|batches| stream::iter(batches.into_iter().map(Ok)))
+                .try_flatten()
+                .boxed(),
+            cache,
+        ))
     }
 }
