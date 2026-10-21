@@ -11,6 +11,7 @@
 mod adaptor;
 mod filter;
 mod projection;
+mod prune;
 mod selection;
 
 use std::sync::Arc;
@@ -22,6 +23,7 @@ use vortex_scan::planning::planner::WorkScope;
 use vortex_session::VortexSession;
 
 pub(super) use self::filter::FilterPlans;
+pub(super) use self::prune::PrunePlanner;
 pub(super) use self::selection::plan_selection;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::pipeline::ValueCache;

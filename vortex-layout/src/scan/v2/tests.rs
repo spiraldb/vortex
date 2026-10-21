@@ -776,3 +776,55 @@ async fn repeated_projections_reuse_their_values() -> VortexResult<()> {
     assert_eq!(reads, vec![4, 1, 1]);
     Ok(())
 }
+
+#[test]
+fn partition_rows_tile_the_file_on_row_blocks() {
+    let (file_size, row_count) = (1_000u64, 100_000u64);
+    let bytes = [0..300, 300..600, 600..1_000];
+    let rows: Vec<_> = bytes
+        .iter()
+        .map(|bytes| super::partition_row_range(bytes.clone(), file_size, row_count))
+        .collect();
+    assert_eq!(rows[0].start, 0);
+    assert_eq!(rows[2].end, row_count);
+    for pair in rows.windows(2) {
+        assert_eq!(pair[0].end, pair[1].start);
+        assert_eq!(pair[0].end % super::ROW_BLOCK_SIZE as u64, 0);
+    }
+    assert!(rows.iter().all(|rows| !rows.is_empty()));
+    assert_eq!(
+        super::partition_row_range(1..2, file_size, row_count),
+        0..0,
+        "a range inside one block owns no rows"
+    );
+}
+
+/// Zone pruning runs once before the splits are planned: rows every zone proof excludes are
+/// never given a split, and a scan whose zones all fail plans nothing.
+#[rstest]
+#[case::tail(2_999, Some(3_000..4_000))]
+#[case::nothing(10_000, None)]
+#[tokio::test]
+async fn pruned_rows_get_no_split(
+    #[case] above: i32,
+    #[case] expected: Option<Range<u64>>,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, zoned_table().as_ref()).await?;
+    let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?.with_some_filter(
+        Some(gt(get_item("ints", root()), lit(above)).bind(layout.dtype())?),
+    ))?
+    .prune()
+    .await?;
+    let kept = scan.kept.as_ref().expect("zone proofs ran");
+    assert_eq!(kept.len(), CHUNKS * CHUNK_ROWS);
+    let splits = scan.split_plans();
+    assert_eq!(
+        splits
+            .iter()
+            .map(|split| split.scope.rows.clone())
+            .collect::<Vec<_>>(),
+        expected.into_iter().collect::<Vec<_>>()
+    );
+    Ok(())
+}

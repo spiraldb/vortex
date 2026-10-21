@@ -15,12 +15,27 @@ use super::filter::FilterPlanner;
 use super::projection::ProjectionPlanner;
 
 /// Plans only the selected span, retaining one projection planner and IO session per work chunk.
+///
+/// `kept` is the mask zone pruning left over the scan's rows, with the row its first bit
+/// stands for. A chunk none of whose rows were kept is not planned.
 pub(crate) fn plan_selection(
     plans: &ScanPlans,
     scope: WorkScope,
     selection: &Selection,
+    kept: Option<(&Mask, u64)>,
 ) -> Option<(WorkScope, Box<dyn Planner>)> {
-    let selected = select_rows(scope, selection)?;
+    let mut selected = select_rows(scope, selection)?;
+    if let Some((kept, first_row)) = kept {
+        let offset = usize::try_from(selected.scope.rows.start - first_row)
+            .vortex_expect("a work chunk fits usize");
+        let kept = kept.slice(offset..offset + selected.mask.len());
+        let mask = &selected.mask & &kept;
+        let first = mask.first()?;
+        let end = mask.last()? + 1;
+        selected.scope.rows =
+            selected.scope.rows.start + first as u64..selected.scope.rows.start + end as u64;
+        selected.mask = mask.slice(first..end);
+    }
     let scope = selected.scope.clone();
     let planner: Box<dyn Planner> = if plans.filter.is_some() {
         Box::new(FilterPlanner::new(plans.clone(), selected))

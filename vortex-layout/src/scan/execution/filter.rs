@@ -28,6 +28,7 @@ use super::ScanPlans;
 use super::SegmentLocation;
 use super::SelectedRows;
 use super::adaptor::AdaptorStep;
+use super::adaptor::Piece;
 use super::adaptor::ScanAdaptor;
 use super::projection::ProjectionPlanner;
 use crate::plan::physical::FilterPlan;
@@ -46,6 +47,7 @@ use crate::segments::SegmentId;
 pub(in crate::scan) struct FilterPlans {
     expression: FilterExpr,
     predicates: Vec<PlanRef>,
+    /// A metadata-only proof per conjunct, where the conjunct has one.
     pruning: Vec<Option<PlanRef>>,
 }
 
@@ -86,6 +88,11 @@ impl FilterPlans {
             pruning,
         })
     }
+
+    /// The pruning proofs, run once over a scan's rows before its splits are planned.
+    pub(in crate::scan) fn proofs(&self) -> impl Iterator<Item = &PlanRef> {
+        self.pruning.iter().flatten()
+    }
 }
 
 /// A pruning proof must not fetch data when its requested statistics are unavailable.
@@ -107,27 +114,26 @@ fn metadata_only(plan: &PlanRef) -> VortexResult<bool> {
     Ok(true)
 }
 
-/// Proves zone exclusions, evaluates conjuncts over survivors, then hands the mask to projection.
+/// Evaluates a split's conjuncts over the rows that survived pruning, then hands the mask to
+/// projection.
 ///
-/// Reads are started ahead of the stage that needs them: zone maps on the first compute, and
-/// the conjuncts' segments for the rows pruning kept once the proofs are in. Stages then run
-/// back to back instead of each waiting a round trip for its reads.
+/// The first compute starts the reads of every conjunct's segments for the surviving rows and
+/// announces the projection's, so the conjuncts run back to back and the projection's reads
+/// coalesce with them. Conjuncts run in the order the shared [`FilterExpr`] picks.
 pub(super) struct FilterPlanner {
     plans: ScanPlans,
     selected: Option<SelectedRows>,
     filter: Arc<FilterPlans>,
     remaining: BitVec,
-    prune_index: usize,
-    active: Option<(usize, bool, ScanAdaptor)>,
+    active: Option<(usize, ScanAdaptor)>,
     pieces: Vec<Mask>,
     announced: bool,
-    prefetched: bool,
     /// Ids for hints, counting down from `u32::MAX` so they never meet an adaptor's fetch ids.
     next_hint: u32,
 }
 
 /// The segments `plans` read over `rows`, under `mask`, each once, in plan order.
-fn segments_read<'a>(
+pub(super) fn segments_read<'a>(
     plans: impl Iterator<Item = &'a PlanRef>,
     rows: Range<u64>,
     mask: Option<&Mask>,
@@ -149,18 +155,16 @@ impl FilterPlanner {
             plans,
             selected: Some(selected),
             filter,
-            prune_index: 0,
             active: None,
             pieces: Vec::new(),
             announced: false,
-            prefetched: false,
             next_hint: u32::MAX,
         }
     }
 }
 
 /// Publishes a hint for each of `segments` not already in `batch`.
-fn hint(
+pub(super) fn hint(
     locations: &[SegmentLocation],
     next_hint: &mut u32,
     intent: IoIntent,
@@ -181,9 +185,15 @@ fn hint(
     }
 }
 
+/// Executes a scan's boolean piece to a mask, nulls as false.
+pub(super) fn piece_mask(session: &VortexSession, piece: Piece) -> VortexResult<Mask> {
+    let mut ctx = session.create_execution_ctx();
+    piece.array.fill_null(false)?.execute::<Mask>(&mut ctx)
+}
+
 impl IoConsumer for FilterPlanner {
     fn set_io_result(&mut self, request: IoRequestId, result: IoResult) {
-        if let Some((_, _, adaptor)) = &mut self.active {
+        if let Some((_, adaptor)) = &mut self.active {
             adaptor.set_io_result(request, result);
         }
     }
@@ -195,7 +205,7 @@ impl Planner for FilterPlanner {
             return State::Done;
         }
         match &self.active {
-            Some((_, _, adaptor)) if adaptor.state() != State::Done => adaptor.state(),
+            Some((_, adaptor)) if adaptor.state() != State::Done => adaptor.state(),
             _ => State::NeedsCompute,
         }
     }
@@ -207,46 +217,36 @@ impl Planner for FilterPlanner {
         if !self.announced {
             self.announced = true;
             let rows = selected.scope.rows.clone();
-            // Pruning proofs read only zone maps and run first: start those reads now. The rest
-            // is announced so the proofs' reads can coalesce with it.
-            let proofs = segments_read(self.filter.pruning.iter().flatten(), rows.clone(), None)?;
-            let rest = segments_read(
-                self.filter
-                    .predicates
-                    .iter()
-                    .chain(std::iter::once(&self.plans.projection)),
-                rows,
-                None,
-            )?;
+            let mask = (!selected.mask.all_true()).then_some(&selected.mask);
+            let predicates = segments_read(self.filter.predicates.iter(), rows.clone(), mask)?;
+            let projection = segments_read(std::iter::once(&self.plans.projection), rows, mask)?;
             let mut batch = Vec::new();
             let locations = &self.plans.locations;
             hint(
                 locations,
                 &mut self.next_hint,
                 IoIntent::Prefetch,
-                &proofs,
+                &predicates,
                 &mut batch,
             );
             hint(
                 locations,
                 &mut self.next_hint,
                 IoIntent::Announce,
-                &rest,
+                &projection,
                 &mut batch,
             );
             if !batch.is_empty() {
                 return Ok(PlannerOutput::NeedsIO(batch));
             }
         }
-        if let Some((index, pruning, adaptor)) = &mut self.active {
+        if let Some((index, adaptor)) = &mut self.active {
             if adaptor.state() != State::Done {
                 return Ok(match adaptor.compute()? {
                     AdaptorStep::Yield => PlannerOutput::Continue,
                     AdaptorStep::NeedsIO(batch) => PlannerOutput::NeedsIO(batch),
                     AdaptorStep::Piece(piece) => {
-                        let mut ctx = self.plans.session.create_execution_ctx();
-                        let mask = piece.array.fill_null(false)?.execute::<Mask>(&mut ctx)?;
-                        self.pieces.push(mask);
+                        self.pieces.push(piece_mask(&self.plans.session, piece)?);
                         PlannerOutput::Continue
                     }
                 });
@@ -254,22 +254,18 @@ impl Planner for FilterPlanner {
             let input = selected.mask.true_count();
             let result = Mask::concat(self.pieces.iter())?;
             vortex_ensure_eq!(result.len(), input);
-            let result = if *pruning { !result } else { result };
             selected.mask = selected.mask.intersect_by_rank(&result);
             tracing::debug!(
                 row_start = selected.scope.rows.start,
                 row_end = selected.scope.rows.end,
                 input_rows = input,
                 output_rows = selected.mask.true_count(),
-                pruning = *pruning,
                 conjunct = *index,
                 "v2 filter conjunct evaluated"
             );
-            if !*pruning {
-                self.filter
-                    .expression
-                    .report_selectivity(*index, selected.mask.true_count() as f64 / input as f64);
-            }
+            self.filter
+                .expression
+                .report_selectivity(*index, selected.mask.true_count() as f64 / input as f64);
             self.active = None;
             self.pieces.clear();
         }
@@ -277,59 +273,11 @@ impl Planner for FilterPlanner {
             self.selected = None;
             return Ok(PlannerOutput::Done);
         }
-        if !self.prefetched
-            && !self.filter.pruning[self.prune_index..]
-                .iter()
-                .any(Option::is_some)
-        {
-            // Every proof is in: start the conjuncts' reads over the chunks that survived, so
-            // each conjunct finds its bytes ready. The projection's reads wait for its morsels,
-            // which fetch together once the conjuncts have settled which chunks they need.
-            self.prefetched = true;
-            let rows = selected.scope.rows.clone();
-            let mask = (!selected.mask.all_true()).then_some(&selected.mask);
-            let predicates = segments_read(
-                self.filter
-                    .predicates
-                    .iter()
-                    .enumerate()
-                    .filter(|(index, _)| self.remaining[*index])
-                    .map(|(_, plan)| plan),
-                rows,
-                mask,
-            )?;
-            let mut batch = Vec::new();
-            hint(
-                &self.plans.locations,
-                &mut self.next_hint,
-                IoIntent::Prefetch,
-                &predicates,
-                &mut batch,
-            );
-            if !batch.is_empty() {
-                return Ok(PlannerOutput::NeedsIO(batch));
-            }
-        }
-
-        let mut next = None;
-        while self.prune_index < self.filter.pruning.len() {
-            let index = self.prune_index;
-            self.prune_index += 1;
-            if let Some(plan) = &self.filter.pruning[index] {
-                next = Some((index, true, plan.clone()));
-                break;
-            }
-        }
-        if next.is_none()
-            && let Some(index) = self.filter.expression.next_conjunct(&self.remaining)
-        {
+        if let Some(index) = self.filter.expression.next_conjunct(&self.remaining) {
             self.remaining.set(index, false);
-            next = Some((index, false, self.filter.predicates[index].clone()));
-        }
-        if let Some((index, pruning, plan)) = next {
             let scan = Scan::try_new(
                 self.plans.session.clone(),
-                plan,
+                self.filter.predicates[index].clone(),
                 vec![Split {
                     rows: selected.scope.rows.clone(),
                     mask: selected.mask.clone(),
@@ -339,7 +287,6 @@ impl Planner for FilterPlanner {
             .with_value_cache(self.plans.values.clone());
             self.active = Some((
                 index,
-                pruning,
                 ScanAdaptor::new(scan, Arc::clone(&self.plans.locations)),
             ));
             return Ok(PlannerOutput::Continue);

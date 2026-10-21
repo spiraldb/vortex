@@ -24,6 +24,7 @@ mod split;
 #[cfg(test)]
 mod tests;
 
+use std::future;
 use std::ops::Range;
 use std::sync::Arc;
 
@@ -37,13 +38,20 @@ use futures::TryStreamExt;
 use futures::channel::mpsc;
 use futures::stream;
 use futures::stream::BoxStream;
+use parking_lot::Mutex;
 use vortex_array::ArrayRef;
 use vortex_array::VortexSessionExecute;
 use vortex_array::dtype::DType;
 use vortex_array::expr::BoundExpression;
+use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
+use vortex_error::vortex_bail;
+use vortex_error::vortex_err;
 use vortex_io::request::IoService;
 use vortex_io::session::RuntimeSessionExt;
+use vortex_mask::Mask;
+use vortex_scan::planning::driver::Progress;
+use vortex_scan::planning::driver::Run;
 use vortex_scan::planning::planner::WorkScope;
 use vortex_scan::selection::Selection;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
@@ -57,6 +65,7 @@ use crate::plan::physical::optimize;
 use crate::plan::physical::plan_row_idx_expression;
 use crate::scan::arrow::to_record_batch;
 use crate::scan::execution::FilterPlans;
+use crate::scan::execution::PrunePlanner;
 use crate::scan::execution::ScanPlans;
 pub use crate::scan::execution::SegmentLocation;
 use crate::scan::execution::plan_selection;
@@ -96,6 +105,22 @@ fn row_chunks(rows: Range<u64>, rows_per_chunk: usize) -> Vec<Range<u64>> {
             start.max(rows.start)..start.saturating_add(rows_per_chunk as u64).min(rows.end)
         })
         .collect()
+}
+
+/// The rows a byte range of the file stands for when an engine splits the file by bytes before
+/// opening it. Consecutive byte ranges give consecutive row ranges that tile the file, with
+/// boundaries on the grid's 8,192-row blocks so the executor's cells stay block aligned.
+pub fn partition_row_range(bytes: Range<u64>, file_size: u64, row_count: u64) -> Range<u64> {
+    let row = |byte: u64| -> u64 {
+        if byte >= file_size {
+            return row_count;
+        }
+        let row = u128::from(byte) * u128::from(row_count) / u128::from(file_size);
+        let row = u64::try_from(row).vortex_expect("a row of the file fits u64");
+        row / ROW_BLOCK_SIZE as u64 * ROW_BLOCK_SIZE as u64
+    };
+    let start = row(bytes.start);
+    start..row(bytes.end).max(start)
 }
 
 /// The parts of a file the planner-driven executor reads through.
@@ -241,9 +266,10 @@ impl<A: 'static + Send> ScanBuilder<A> {
     pub fn into_stream(self) -> VortexResult<BoxStream<'static, VortexResult<A>>> {
         let handle = self.session.handle();
         Ok(stream::once(async move {
-            handle
-                .spawn_cpu(move || PreparedScan::try_new(self)?.execute_stream())
-                .await
+            let prepared = handle
+                .spawn_cpu(move || PreparedScan::try_new(self))
+                .await?;
+            prepared.prune().await?.execute_stream()
         })
         .try_flatten()
         .boxed())
@@ -256,8 +282,12 @@ struct PreparedScan<A: 'static + Send> {
     plans: ScanPlans,
     /// Serves the splits' reads.
     io: Arc<dyn IoService>,
+    /// The rows of the root row domain the scan covers.
+    row_range: Range<u64>,
     /// The scan's splits, over the root row domain, in row order.
     splits: Vec<Range<u64>>,
+    /// The rows of `row_range` zone pruning kept, once it has run.
+    kept: Option<Mask>,
     selection: Selection,
     map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
     ordered: bool,
@@ -301,7 +331,8 @@ impl<A: 'static + Send> PreparedScan<A> {
         } else {
             MAX_ROWS_PER_CHUNK
         };
-        let splits = row_chunks(builder.row_range.unwrap_or(0..row_count), chunk_rows);
+        let row_range = builder.row_range.unwrap_or(0..row_count);
+        let splits = row_chunks(row_range.clone(), chunk_rows);
         let ranges = match cache.ranges() {
             Some(ranges) => ranges,
             None => cache.insert_ranges(segment_ranges(&file.locations)),
@@ -318,7 +349,9 @@ impl<A: 'static + Send> PreparedScan<A> {
                 values: cache.values(),
             },
             io,
+            row_range,
             splits,
+            kept: None,
             selection: builder.selection,
             map_fn: builder.map_fn,
             ordered: builder.ordered,
@@ -326,8 +359,53 @@ impl<A: 'static + Send> PreparedScan<A> {
         })
     }
 
+    /// Proves the filter's zone-map proofs once over the scan's rows, so splits are planned
+    /// only for rows no proof excludes and never run a proof themselves. The zone maps are
+    /// the only reads, started together.
+    async fn prune(mut self) -> VortexResult<Self> {
+        let proofs: Vec<_> = self
+            .plans
+            .filter
+            .iter()
+            .flat_map(|filter| filter.proofs().cloned())
+            .collect();
+        if proofs.is_empty() || self.row_range.is_empty() {
+            return Ok(self);
+        }
+        let kept = Arc::new(Mutex::new(None));
+        let planner = PrunePlanner::new(
+            self.plans.clone(),
+            self.row_range.clone(),
+            proofs,
+            Arc::clone(&kept),
+        );
+        let mut run = Run::new();
+        run.admit(
+            Box::new(planner),
+            WorkScope {
+                file_ordinal: 0,
+                rows: self.row_range.clone(),
+            },
+            self.io.session(),
+        );
+        loop {
+            match run.advance()? {
+                Progress::Batch(_) => vortex_bail!("zone pruning produced a batch"),
+                Progress::RootDone(_) | Progress::Idle => break,
+                Progress::Waiting => future::poll_fn(|cx| run.poll_completion(cx)).await?,
+            }
+        }
+        let kept = kept
+            .lock()
+            .take()
+            .ok_or_else(|| vortex_err!("zone pruning finished without a mask"))?;
+        self.kept = Some(kept);
+        Ok(self)
+    }
+
     /// The splits with selected rows, each ready to be admitted to a planning run.
     fn split_plans(&self) -> Vec<SplitPlan> {
+        let kept = self.kept.as_ref().map(|kept| (kept, self.row_range.start));
         self.splits
             .iter()
             .filter_map(|rows| {
@@ -338,6 +416,7 @@ impl<A: 'static + Send> PreparedScan<A> {
                         rows: rows.clone(),
                     },
                     &self.selection,
+                    kept,
                 )?;
                 Some(SplitPlan { scope, root })
             })
@@ -363,8 +442,8 @@ impl<A: 'static + Send> PreparedScan<A> {
                 let (send, recv) = mpsc::channel(1);
                 let task =
                     handle.spawn(split.run_unordered(Arc::clone(&io), Arc::clone(&map_fn), send));
-                let errors = stream::once(task)
-                    .filter_map(|result| std::future::ready(result.err().map(Err)));
+                let errors =
+                    stream::once(task).filter_map(|result| future::ready(result.err().map(Err)));
                 stream::select(recv, errors)
             });
             return Ok(streams.flatten_unordered(concurrency).boxed());

@@ -9,12 +9,16 @@ use arrow_schema::SchemaRef;
 use datafusion_common::Result as DFResult;
 use datafusion_common::config::ConfigOptions;
 use datafusion_common::tree_node::TreeNodeRecursion;
+use datafusion_datasource::PartitionedFile;
 use datafusion_datasource::TableSchema;
 use datafusion_datasource::file::FileSource;
+use datafusion_datasource::file_groups::FileGroup;
+use datafusion_datasource::file_groups::FileGroupPartitioner;
 use datafusion_datasource::file_scan_config::FileScanConfig;
 use datafusion_datasource::file_stream::FileOpener;
 use datafusion_execution::cache::cache_manager::FileMetadataCache;
 use datafusion_physical_expr::EquivalenceProperties;
+use datafusion_physical_expr::LexOrdering;
 use datafusion_physical_expr::PhysicalExprRef;
 use datafusion_physical_expr::PhysicalSortExpr;
 use datafusion_physical_expr::conjunction;
@@ -32,13 +36,16 @@ use object_store::ObjectStore;
 use object_store::path::Path;
 use vortex::file::VORTEX_FILE_EXTENSION;
 use vortex::layout::LayoutReader;
+use vortex::layout::scan::v2::partition_row_range;
 use vortex::layout::segments::SegmentSource;
 use vortex::metrics::DefaultMetricsRegistry;
 use vortex::metrics::MetricsRegistry;
 use vortex::session::VortexSession;
 use vortex_utils::aliases::dash_map::DashMap;
 
+use super::cache::CachedVortexMetadata;
 use super::opener::NaturalSplits;
+use super::opener::PartitionRows;
 use super::opener::VortexOpener;
 use crate::VortexTableOptions;
 use crate::convert::exprs::DefaultExpressionConverter;
@@ -378,6 +385,35 @@ impl VortexSource {
     }
 }
 
+impl VortexSource {
+    /// Attaches the rows `file`'s byte range stands for, when its footer is cached.
+    fn with_partition_rows(&self, mut file: PartitionedFile) -> PartitionedFile {
+        let Some(range) = &file.range else {
+            return file;
+        };
+        let Some(row_count) = self.file_metadata_cache.as_ref().and_then(|cache| {
+            cache
+                .get(&file.object_meta.location)
+                .filter(|entry| entry.is_valid_for(&file.object_meta))
+                .and_then(|entry| {
+                    entry
+                        .file_metadata
+                        .as_any()
+                        .downcast_ref::<CachedVortexMetadata>()
+                        .map(|metadata| metadata.footer().row_count())
+                })
+        }) else {
+            return file;
+        };
+        let (Ok(start), Ok(end)) = (u64::try_from(range.start), u64::try_from(range.end)) else {
+            return file;
+        };
+        let rows = partition_row_range(start..end, file.object_meta.size, row_count);
+        file.extensions.insert(PartitionRows(rows));
+        file
+    }
+}
+
 impl FileSource for VortexSource {
     fn create_file_opener(
         &self,
@@ -449,6 +485,43 @@ impl FileSource for VortexSource {
 
     fn supports_repartitioning(&self) -> bool {
         true
+    }
+
+    /// Splits files by bytes as DataFusion does, then attaches to each piece the rows it stands
+    /// for, from the cached footer's row count, so a V2 scan reads a row range directly. A file
+    /// whose footer is not cached keeps only its byte range, which the opener translates.
+    fn repartitioned(
+        &self,
+        target_partitions: usize,
+        repartition_file_min_size: usize,
+        output_ordering: Option<LexOrdering>,
+        config: &FileScanConfig,
+    ) -> DFResult<Option<FileScanConfig>> {
+        if config.file_compression_type.is_compressed() {
+            return Ok(None);
+        }
+        let Some(file_groups) = FileGroupPartitioner::new()
+            .with_target_partitions(target_partitions)
+            .with_repartition_file_min_size(repartition_file_min_size)
+            .with_preserve_order_within_groups(output_ordering.is_some())
+            .repartition_file_groups(&config.file_groups)
+        else {
+            return Ok(None);
+        };
+        let mut repartitioned = config.clone();
+        repartitioned.file_groups = file_groups
+            .into_iter()
+            .map(|group| {
+                FileGroup::new(
+                    group
+                        .into_inner()
+                        .into_iter()
+                        .map(|file| self.with_partition_rows(file))
+                        .collect(),
+                )
+            })
+            .collect();
+        Ok(Some(repartitioned))
     }
 
     fn try_pushdown_filters(
