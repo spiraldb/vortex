@@ -183,6 +183,8 @@ jobs:
           PYO3_ENVIRONMENT_SIGNATURE: "cpython3"
           # Also applies to host proc-macro links when Cargo receives an explicit target.
           LINK: /Brepro
+          CC: 'C:\Program Files\LLVMin\clang-cl.exe'
+          CXX: 'C:\Program Files\LLVMin\clang-cl.exe'
 
       # rust-test-windows excludes vortex-python, so this is the only check that the
       # win_amd64 wheel imports and can round-trip a file. Runs outside the checkout so
@@ -286,7 +288,7 @@ jobs:
     timeout-minutes: 30
     runs-on: >-
       ${{ github.repository == 'vortex-data/vortex'
-          && format('runs-on={0}/runner=amd64-ci-small/cpu=8/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=rust-docs', github.run_id)
+          && format('runs-on={0}/runner=amd64-ci-medium/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=rust-docs', github.run_id)
           || 'ubuntu-latest' }}
     steps:
       - parallel:
