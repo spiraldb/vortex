@@ -10,6 +10,8 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use arrow_array::PrimitiveArray;
+use arrow_array::RecordBatch;
+use arrow_array::cast::AsArray;
 use arrow_array::types::Int64Type;
 use arrow_ipc::reader::FileReader;
 use arrow_select::concat::concat_batches;
@@ -17,6 +19,7 @@ use arrow_select::take::take_record_batch;
 use async_trait::async_trait;
 use futures::stream;
 use itertools::Itertools;
+use object_store::ObjectStoreExt;
 use parking_lot::Mutex;
 use parquet::arrow::ParquetRecordBatchStreamBuilder;
 use parquet::arrow::arrow_reader::ArrowReaderMetadata;
@@ -31,6 +34,7 @@ use vortex::array::IntoArray;
 use vortex::array::VortexSessionExecute;
 use vortex::array::stream::ArrayStreamAdapter;
 use vortex::array::stream::ArrayStreamExt;
+use vortex::arrow::ArrowSessionExt;
 use vortex::buffer::Buffer;
 use vortex::file::OpenOptionsSessionExt;
 use vortex::file::VortexFile;
@@ -167,11 +171,15 @@ impl VortexRandomAccessor {
         name: impl Into<String>,
         format: Format,
     ) -> anyhow::Result<Self> {
-        let file = SESSION
+        let mut options = SESSION
             .open_options()
-            .with_layout_reader_cache()
-            .open_object_store(remote.store(), remote.key(path)?)
-            .await?;
+            .with_layout_reader_cache();
+        let key = remote.key(path)?;
+        // Reproduce the former HEAD + bounded footer GET for paired transport measurements.
+        if std::env::var("VORTEX_BENCH_SIZE_THEN_READ").is_ok_and(|value| value == "1") {
+            options = options.with_file_size(remote.store().head(&key).await?.size);
+        }
+        let file = options.open_object_store(remote.store(), key).await?;
         Ok(Self {
             name: name.into(),
             format,
@@ -195,7 +203,8 @@ impl RandomAccessor for VortexRandomAccessor {
         let indices = StrictSortedBuffer::try_new(Buffer::from(indices.to_vec()))?;
         let array = if self.v2 {
             let stream = ScanBuilder::new(SESSION.clone(), self.file.scan_file())
-                .with_row_indices(indices)
+                .with_row_indices(indices.clone())
+                .with_subsegment_reads(!std::env::var("VORTEX_BENCH_SUBSEGMENTS").is_ok_and(|value| value == "0"))
                 .into_stream()?;
             ArrayStreamAdapter::new(self.file.dtype().clone(), stream)
                 .read_all()
@@ -203,15 +212,32 @@ impl RandomAccessor for VortexRandomAccessor {
         } else {
             self.file
                 .scan()?
-                .with_row_indices(indices)
+                .with_row_indices(indices.clone())
                 .into_array_stream()?
                 .read_all()
                 .await?
         };
 
-        // Keep the historical benchmark contract: canonicalize the outer array, leaving nested
-        // values lazy. Both scan implementations must perform the same materialization.
+        let reference = if std::env::var("VORTEX_BENCH_VERIFY").is_ok_and(|value| value == "1") {
+            let stream = ScanBuilder::new(SESSION.clone(), self.file.scan_file())
+                .with_row_indices(indices)
+                .with_subsegment_reads(false)
+                .into_stream()?;
+            Some(ArrayStreamAdapter::new(self.file.dtype().clone(), stream).read_all().await?)
+        } else {
+            None
+        };
         let mut ctx = SESSION.create_execution_ctx();
+        if reference.is_some() || std::env::var("VORTEX_BENCH_MATERIALIZE").is_ok_and(|value| value == "arrow") {
+            let arrow = SESSION.arrow().execute_arrow(array, None, &mut ctx)?;
+            let batch = RecordBatch::from(arrow.as_struct().clone());
+            if let Some(reference) = reference {
+                let expected = SESSION.arrow().execute_arrow(reference, None, &mut ctx)?;
+                anyhow::ensure!(batch == RecordBatch::from(expected.as_struct().clone()), "Sparse read differs from whole-segment reference");
+            }
+            return Ok(RandomAccessorRet::RecordBatch(batch));
+        }
+        // Keep the historical default: canonicalize the outer array, leaving nested values lazy.
         let canonical = array.execute::<Canonical>(&mut ctx)?.into_array();
         Ok(RandomAccessorRet::ArrayRef(canonical))
     }

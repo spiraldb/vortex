@@ -10,6 +10,7 @@
 
 mod adaptor;
 mod projection;
+mod primitive;
 mod selection;
 
 use std::sync::Arc;
@@ -60,6 +61,8 @@ pub(super) struct ScanPlans {
     /// Whole values, such as dictionary values, shared by the splits of this scan. Their plans
     /// always read the same complete row domain, independently of a split's selection.
     pub(super) values: ValueCache,
+    /// Whether sparse primitive requests may omit unselected bytes.
+    pub(super) subsegment_reads: bool,
 }
 
 /// The rows of a split selected for projection.

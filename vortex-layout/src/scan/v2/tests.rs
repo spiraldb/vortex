@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::Int32Type;
+use futures::FutureExt;
 use futures::TryStreamExt;
 use futures::stream;
 use parking_lot::Condvar;
@@ -73,6 +74,83 @@ use crate::test::new_session;
 
 const CHUNK_ROWS: usize = 1000;
 const CHUNKS: usize = 4;
+
+struct RangeCountingSource {
+    inner: Arc<dyn SegmentSource>,
+    bytes: Arc<AtomicUsize>,
+}
+
+impl SegmentSource for RangeCountingSource {
+    fn supports_ranges(&self) -> bool {
+        true
+    }
+
+    fn request(&self, id: SegmentId) -> SegmentFuture {
+        let read = self.inner.request(id);
+        let bytes = Arc::clone(&self.bytes);
+        async move {
+            let buffer = read.await?;
+            bytes.fetch_add(buffer.len(), Ordering::Relaxed);
+            Ok(buffer)
+        }.boxed()
+    }
+
+    fn request_range(&self, id: SegmentId, range: Range<usize>) -> SegmentFuture {
+        self.bytes.fetch_add(range.len(), Ordering::Relaxed);
+        self.inner.request_range(id, range)
+    }
+}
+
+#[rstest]
+#[case(false, vec![0, 1, 65535, 65536, 131071, 199999], true)]
+#[case(true, vec![0, 65535, 199999], false)]
+#[case(false, (0..50000).collect(), false)]
+#[tokio::test]
+async fn sparse_primitive_reads_preserve_rows_and_skip_bytes(
+    #[case] nullable: bool,
+    #[case] indices: Vec<u64>,
+    #[case] sparse: bool,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let values: Vec<i64> = (0..200000_i64).map(|value| value.wrapping_mul(7919) - 12345).collect();
+    let expected = PrimitiveArray::new(
+        Buffer::from_iter(indices.iter().map(|&index| values[index as usize])),
+        if nullable { Validity::AllValid } else { Validity::NonNullable },
+    );
+    let array = PrimitiveArray::new(
+        Buffer::from(values),
+        if nullable { Validity::AllValid } else { Validity::NonNullable },
+    ).into_array();
+    let segments = Arc::new(TestSegments::default());
+    let (sequence, eof) = SequenceId::root().split();
+    let layout = FlatLayoutStrategy::default().write_stream(
+        ArrayContext::empty().into(),
+        Arc::clone(&segments) as _,
+        SequentialStreamAdapter::new(array.dtype().clone(), stream::iter([Ok((sequence, array))])).sendable(),
+        eof,
+        &session,
+    ).await?;
+    let id = layout.segment_ids()[0];
+    let length = segments.request(id).await?.len();
+    let bytes = Arc::new(AtomicUsize::new(0));
+    let source = Arc::new(RangeCountingSource { inner: segments, bytes: Arc::clone(&bytes) });
+    let file = ScanFile {
+        layout,
+        locations: Arc::from([SegmentLocation { offset: 8, length: u32::try_from(length)?, alignment: Alignment::new(8) }]),
+        segments: source,
+    };
+    let dtype = file.layout.dtype().clone();
+    let actual = collect(dtype, ScanBuilder::new(session.clone(), file)
+        .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(indices))?)
+        .into_stream()?).await?;
+    assert_arrays_eq!(actual, expected, &mut session.create_execution_ctx());
+    if sparse {
+        assert!(bytes.load(Ordering::Relaxed) < length / 8);
+    } else {
+        assert!(bytes.load(Ordering::Relaxed) >= length);
+    }
+    Ok(())
+}
 
 /// A table chunk of `CHUNK_ROWS` rows starting at row `start`: an integer, a nullable string and a
 /// list column.

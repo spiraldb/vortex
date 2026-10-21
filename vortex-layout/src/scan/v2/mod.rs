@@ -101,6 +101,7 @@ pub struct ScanBuilder<A = ArrayRef> {
     concurrency: usize,
     map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
     row_offset: u64,
+    subsegment_reads: bool,
 }
 
 impl ScanBuilder<ArrayRef> {
@@ -116,6 +117,7 @@ impl ScanBuilder<ArrayRef> {
             concurrency: 4,
             map_fn: Arc::new(Ok),
             row_offset: 0,
+            subsegment_reads: true,
         }
     }
 
@@ -184,6 +186,12 @@ impl<A: 'static + Send> ScanBuilder<A> {
         self
     }
 
+    /// Enables verified sparse reads within supported primitive segments.
+    pub fn with_subsegment_reads(mut self, enabled: bool) -> Self {
+        self.subsegment_reads = enabled;
+        self
+    }
+
     /// Maps each output batch on its split's task.
     fn map<B: 'static>(
         self,
@@ -199,6 +207,7 @@ impl<A: 'static + Send> ScanBuilder<A> {
             selection: self.selection,
             concurrency: self.concurrency,
             row_offset: self.row_offset,
+            subsegment_reads: self.subsegment_reads,
             map_fn: Arc::new(move |array| old_map_fn(array).and_then(&map_fn)),
         }
     }
@@ -250,6 +259,7 @@ impl<A: 'static + Send> PreparedScan<A> {
         } else {
             MAX_ROWS_PER_CHUNK
         };
+        let subsegment_reads = builder.subsegment_reads && file.segments.supports_ranges();
         let io = Arc::new(SegmentScanIo::new(
             file.segments,
             segment_ranges(&file.locations),
@@ -262,6 +272,7 @@ impl<A: 'static + Send> PreparedScan<A> {
                 projection,
                 row_offset: builder.row_offset,
                 values: Default::default(),
+                subsegment_reads,
             },
             io,
             rows: builder.row_range.unwrap_or(0..row_count),
