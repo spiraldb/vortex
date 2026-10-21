@@ -45,6 +45,7 @@ use super::opener::VortexOpener;
 use crate::VortexTableOptions;
 use crate::convert::exprs::DefaultExpressionConverter;
 use crate::convert::exprs::ExpressionConverter;
+use crate::persistent::list_sum::ListSums;
 use crate::persistent::reader::DefaultVortexReaderFactory;
 use crate::persistent::reader::VortexReaderFactory;
 
@@ -497,15 +498,26 @@ impl FileSource for VortexSource {
                 {
                     return Ok(PushedDownPredicate::supported(expr));
                 }
+                let schema = self.table_schema.table_schema();
                 if self
                     .expression_converter
-                    .try_convert(&expr, self.table_schema.table_schema())?
+                    .try_convert(&expr, schema)?
                     .is_some()
                 {
-                    Ok(PushedDownPredicate::supported(expr))
-                } else {
-                    Ok(PushedDownPredicate::unsupported(expr))
+                    return Ok(PushedDownPredicate::supported(expr));
                 }
+                // A V2 scan computes the filter's list sums and evaluates the rest over them.
+                if self.options.scan_v2
+                    && ListSums::extract(
+                        std::slice::from_ref(&expr),
+                        schema,
+                        self.expression_converter.as_ref(),
+                    )?
+                    .is_some()
+                {
+                    return Ok(PushedDownPredicate::supported(expr));
+                }
+                Ok(PushedDownPredicate::unsupported(expr))
             })
             .collect::<DFResult<Vec<_>>>()?;
 

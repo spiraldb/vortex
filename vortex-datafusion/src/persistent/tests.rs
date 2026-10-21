@@ -959,6 +959,25 @@ async fn list_sums_beside_other_columns_and_filters() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// A filter on list sums is evaluated by a V2 scan's row filter, where a null sum keeps no row,
+/// and the lists kept beside it are those of the rows it keeps.
+#[rstest]
+#[case::sum("array_sum(xs) > 0")]
+#[case::frequency(
+    "CAST(array_sum(xs) AS DOUBLE) / (2 * array_sum(array_transform(xs, lambda x: x IS NOT NULL))) < 0.6"
+)]
+#[case::null_sums("array_sum(us) IS NULL")]
+#[case::with_column("array_sum(array_transform(xs, lambda x: x = -1)) = 0 AND id > 1")]
+#[tokio::test]
+async fn list_sums_filter_rows(#[case] predicate: &str) -> anyhow::Result<()> {
+    let (v1, v2) = list_sums_on_both_scans(&format!(
+        "SELECT id, xs, us, array_sum(xs) AS s FROM lists WHERE {predicate} ORDER BY id"
+    ))
+    .await?;
+    assert_eq!(v2, v1);
+    Ok(())
+}
+
 /// Wide lists read beside their sums are cut into small batches; each batch still sums only
 /// its own lists.
 #[tokio::test]

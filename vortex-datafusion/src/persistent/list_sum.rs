@@ -16,6 +16,9 @@ use std::fmt::Formatter;
 use std::ops::Range;
 use std::sync::Arc;
 
+use arrow_array::Array;
+use arrow_array::RecordBatch;
+use arrow_array::cast::AsArray;
 use arrow_schema::DataType;
 use arrow_schema::Field;
 use arrow_schema::FieldRef;
@@ -35,9 +38,11 @@ use datafusion_physical_expr::expressions::LambdaVariable;
 use datafusion_physical_expr::projection::ProjectionExpr;
 use datafusion_physical_expr::projection::ProjectionExprs;
 use datafusion_physical_expr::utils::collect_columns;
+use datafusion_physical_expr::utils::reassign_expr_columns;
 use vortex::array::ArrayRef;
 use vortex::array::ExecutionCtx;
 use vortex::array::IntoArray;
+use vortex::array::VortexSessionExecute;
 use vortex::array::arrays::BoolArray;
 use vortex::array::arrays::List;
 use vortex::array::arrays::ListViewArray;
@@ -54,10 +59,13 @@ use vortex::dtype::Nullability;
 use vortex::dtype::PType;
 use vortex::error::VortexResult;
 use vortex::error::vortex_bail;
+use vortex::error::vortex_err;
+use vortex::expr::BoundExpression;
 use vortex::expr::Expression;
 use vortex::expr::get_item;
 use vortex::expr::pack;
 use vortex::expr::root;
+use vortex::layout::scan::v2::RowFilter;
 use vortex::mask::Mask;
 use vortex::scalar_fn::Arity;
 use vortex::scalar_fn::ChildName;
@@ -65,10 +73,13 @@ use vortex::scalar_fn::ExecutionArgs;
 use vortex::scalar_fn::ScalarFnId;
 use vortex::scalar_fn::ScalarFnVTable;
 use vortex::scalar_fn::ScalarFnVTableExt;
+use vortex::session::VortexSession;
 use vortex::session::registry::CachedId;
+use vortex_arrow::ArrowSessionExt;
 
 use crate::convert::exprs::ExpressionConverter;
 use crate::convert::exprs::ProcessedProjection;
+use crate::convert::schema::calculate_physical_schema;
 
 /// The field of the one-field struct an element transform is evaluated over.
 pub(crate) const ELEMENT: &str = "element";
@@ -483,68 +494,174 @@ pub(crate) fn list_sum_f64(list: Expression, element: Option<Expression>) -> Exp
     ListSumF64.new_expr(ListSumF64Options { element }, [list])
 }
 
-/// Rewrites `projection` over `schema` so a V2 scan computes its list sums: every
-/// `array_sum(CAST(list AS List(Float64)))`, where `list` is a list column or
-/// `array_transform` of one by a lambda Vortex can evaluate, becomes a column of the scan.
-/// DataFusion evaluates the rest over those columns and the raw columns the rest reads.
-///
-/// `None` when the projection holds no such sum.
+/// Expressions over a file with their list sums replaced by columns a V2 scan computes, and
+/// what the scan reads for them.
+pub(crate) struct ListSums {
+    /// The expressions, reading the raw columns and the sums by name.
+    pub(crate) exprs: Vec<Arc<dyn PhysicalExpr>>,
+    /// The raw columns the expressions read, then the sums: what the scan produces.
+    pub(crate) scan: Expression,
+    /// The Arrow schema of what the scan produces.
+    pub(crate) schema: Schema,
+}
+
+impl ListSums {
+    /// `exprs` over `schema` with every `array_sum(CAST(list AS List(Float64)))`, where `list`
+    /// is a list column or `array_transform` of one by a lambda Vortex can evaluate, replaced
+    /// by a column, or `None` when they hold no such sum.
+    pub(crate) fn extract(
+        exprs: &[Arc<dyn PhysicalExpr>],
+        schema: &Schema,
+        converter: &dyn ExpressionConverter,
+    ) -> DFResult<Option<Self>> {
+        let mut sums: Vec<(String, Expression)> = Vec::new();
+        let mut rewritten = Vec::with_capacity(exprs.len());
+        for expr in exprs {
+            let expr = Arc::clone(expr)
+                .transform_down(|node| {
+                    let Some(sum) = list_sum(&node, schema, converter)? else {
+                        return Ok(Transformed::no(node));
+                    };
+                    let name = format!("{SUM_PREFIX}{}", sums.len());
+                    sums.push((name.clone(), sum));
+                    let column: Arc<dyn PhysicalExpr> = Arc::new(Column::new(&name, 0));
+                    Ok(Transformed::new(column, true, TreeNodeRecursion::Jump))
+                })?
+                .data;
+            rewritten.push(expr);
+        }
+        if sums.is_empty() {
+            return Ok(None);
+        }
+        let mut indices: Vec<usize> = rewritten
+            .iter()
+            .flat_map(collect_columns)
+            .filter(|column| !column.name().starts_with(SUM_PREFIX))
+            .map(|column| column.index())
+            .collect();
+        indices.sort_unstable();
+        indices.dedup();
+        let mut fields: Vec<FieldRef> = Vec::with_capacity(indices.len() + sums.len());
+        let mut columns = Vec::with_capacity(indices.len() + sums.len());
+        for index in indices {
+            let field = schema.fields().get(index).ok_or_else(|| {
+                exec_datafusion_err!(
+                    "An expression reads column {index} of a {}-column file",
+                    schema.fields().len()
+                )
+            })?;
+            columns.push((
+                field.name().clone(),
+                get_item(field.name().as_str(), root()),
+            ));
+            fields.push(Arc::clone(field));
+        }
+        for (name, sum) in sums {
+            fields.push(Arc::new(Field::new(&name, DataType::Float64, true)));
+            columns.push((name, sum));
+        }
+        Ok(Some(Self {
+            exprs: rewritten,
+            scan: pack(columns, Nullability::NonNullable),
+            schema: Schema::new(fields),
+        }))
+    }
+}
+
+/// The names of the columns the scan computes the sums into.
+const SUM_PREFIX: &str = "__vortex_list_sum_";
+
+/// Rewrites `projection` over `schema` so a V2 scan computes its list sums, and DataFusion
+/// the rest over those sums and the raw columns the rest reads. `None` when the projection
+/// holds no list sum. See [`ListSums::extract`].
 pub(crate) fn push_list_sums(
     projection: &ProjectionExprs,
     schema: &Schema,
     converter: &dyn ExpressionConverter,
 ) -> DFResult<Option<ProcessedProjection>> {
-    let mut sums: Vec<(String, Expression)> = Vec::new();
-    let mut rewritten = Vec::with_capacity(projection.as_ref().len());
-    for projected in projection.iter() {
-        let expr = Arc::clone(&projected.expr)
-            .transform_down(|node| {
-                let Some(sum) = list_sum(&node, schema, converter)? else {
-                    return Ok(Transformed::no(node));
-                };
-                let name = format!("__vortex_list_sum_{}", sums.len());
-                sums.push((name.clone(), sum));
-                let column: Arc<dyn PhysicalExpr> = Arc::new(Column::new(&name, 0));
-                Ok(Transformed::new(column, true, TreeNodeRecursion::Jump))
-            })?
-            .data;
-        rewritten.push(ProjectionExpr::new(expr, projected.alias.clone()));
-    }
-    if sums.is_empty() {
+    let exprs: Vec<_> = projection.iter().map(|p| Arc::clone(&p.expr)).collect();
+    let Some(sums) = ListSums::extract(&exprs, schema, converter)? else {
         return Ok(None);
-    }
-    let mut indices: Vec<usize> = rewritten
-        .iter()
-        .flat_map(|projected| collect_columns(&projected.expr))
-        .filter(|column| !column.name().starts_with("__vortex_list_sum_"))
-        .map(|column| column.index())
-        .collect();
-    indices.sort_unstable();
-    indices.dedup();
-    let mut fields: Vec<FieldRef> = Vec::with_capacity(indices.len() + sums.len());
-    let mut columns = Vec::with_capacity(indices.len() + sums.len());
-    for index in indices {
-        let field = schema.fields().get(index).ok_or_else(|| {
-            exec_datafusion_err!(
-                "Projection reads column {index} of a {}-column file",
-                schema.fields().len()
-            )
-        })?;
-        columns.push((
-            field.name().clone(),
-            get_item(field.name().as_str(), root()),
-        ));
-        fields.push(Arc::clone(field));
-    }
-    for (name, sum) in sums {
-        fields.push(Arc::new(Field::new(&name, DataType::Float64, true)));
-        columns.push((name, sum));
-    }
+    };
+    let leftover = sums
+        .exprs
+        .into_iter()
+        .zip(projection.iter())
+        .map(|(expr, projected)| ProjectionExpr::new(expr, projected.alias.clone()));
     Ok(Some(ProcessedProjection {
-        scan_projection: pack(columns, Nullability::NonNullable),
-        scan_reference_schema: Schema::new(fields),
-        leftover_projection: ProjectionExprs::new(rewritten),
+        scan_projection: sums.scan,
+        scan_reference_schema: sums.schema,
+        leftover_projection: ProjectionExprs::new(leftover),
     }))
+}
+
+/// A filter holding list sums, evaluated by a V2 scan: the scan computes the sums and the raw
+/// columns the filter reads, and DataFusion's own evaluator the rest of it over them, so the
+/// rows it keeps are exactly those DataFusion's filter would.
+pub(crate) struct ListSumRowFilter {
+    projection: BoundExpression,
+    target: Field,
+    expr: Arc<dyn PhysicalExpr>,
+    session: VortexSession,
+}
+
+impl ListSumRowFilter {
+    /// A row filter for `filter` over `schema`, the file's Arrow schema, or `None` when it
+    /// holds no list sum.
+    pub(crate) fn try_new(
+        filter: &Arc<dyn PhysicalExpr>,
+        schema: &Schema,
+        converter: &dyn ExpressionConverter,
+        file_dtype: &DType,
+        session: &VortexSession,
+    ) -> DFResult<Option<Self>> {
+        let Some(sums) = ListSums::extract(std::slice::from_ref(filter), schema, converter)? else {
+            return Ok(None);
+        };
+        let projection = sums
+            .scan
+            .bind(file_dtype)
+            .and_then(|projection| projection.optimize_recursive())
+            .map_err(|e| exec_datafusion_err!("Couldn't bind list sum filter columns: {e}"))?;
+        let physical =
+            calculate_physical_schema(projection.dtype(), &sums.schema, &session.arrow())?;
+        let [expr] = <[_; 1]>::try_from(sums.exprs)
+            .map_err(|_| exec_datafusion_err!("One filter rewrites to one expression"))?;
+        let expr = reassign_expr_columns(expr, &physical)?;
+        Ok(Some(Self {
+            projection,
+            target: Field::new_struct("", physical.fields().clone(), false),
+            expr,
+            session: session.clone(),
+        }))
+    }
+}
+
+impl RowFilter for ListSumRowFilter {
+    fn projection(&self) -> &BoundExpression {
+        &self.projection
+    }
+
+    fn evaluate(&self, array: ArrayRef) -> VortexResult<Mask> {
+        let mut ctx = self.session.create_execution_ctx();
+        let columns = self
+            .session
+            .arrow()
+            .execute_arrow(array, Some(&self.target), &mut ctx)?;
+        let columns = RecordBatch::from(columns.as_struct().clone());
+        let mask = self
+            .expr
+            .evaluate(&columns)
+            .and_then(|mask| mask.into_array(columns.num_rows()))
+            .map_err(|e| vortex_err!("Failed to evaluate filter {}: {e}", self.expr))?;
+        let mask = mask.as_boolean();
+        // A null result removes the row, as it does in a filter.
+        let mask = match mask.nulls() {
+            Some(nulls) => mask.values() & nulls.inner(),
+            None => mask.values().clone(),
+        };
+        Ok(Mask::from_buffer(BitBuffer::from(mask)))
+    }
 }
 
 /// The Vortex expression for `expr` when it is a list sum this function evaluates.

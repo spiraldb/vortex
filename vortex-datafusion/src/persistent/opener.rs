@@ -80,6 +80,7 @@ use crate::metrics::PARTITION_LABEL;
 use crate::metrics::PATH_LABEL;
 use crate::persistent::cache::CachedVortexMetadata;
 use crate::persistent::dynamic_filter::DynamicRowFilter;
+use crate::persistent::list_sum::ListSumRowFilter;
 use crate::persistent::list_sum::push_list_sums;
 use crate::persistent::reader::VortexReaderFactory;
 use crate::persistent::stream::PrunableStream;
@@ -326,6 +327,8 @@ impl FileOpener for VortexOpener {
             let mut residual_filters = Vec::new();
             // Dynamic filters a V2 scan evaluates on their keys, before decoding the projection.
             let mut dynamic_filters = Vec::new();
+            // Filters holding list sums a V2 scan computes, evaluated before it projects.
+            let mut list_sum_filters = Vec::new();
             if let Some(filter) = &filter {
                 if filter.data_type(&this_file_schema)? != DataType::Boolean {
                     return Err(exec_datafusion_err!(
@@ -342,8 +345,21 @@ impl FileOpener for VortexOpener {
                                 file.path()
                             )
                         })?;
+                    let list_sum_filter = match &converted {
+                        None if scan_v2 => ListSumRowFilter::try_new(
+                            expr,
+                            &this_file_schema,
+                            expr_converter.as_ref(),
+                            vxf.dtype(),
+                            vxf.session(),
+                        )?,
+                        _ => None,
+                    };
                     match converted {
                         Some(expr) => native_filters.push(expr),
+                        None if let Some(filter) = list_sum_filter => {
+                            list_sum_filters.push(Arc::new(filter) as Arc<dyn RowFilter>)
+                        }
                         None if scan_v2
                             && DynamicFilterTracking::classify(expr).contains_dynamic_filter() =>
                         {
@@ -543,6 +559,9 @@ impl FileOpener for VortexOpener {
                 }
                 if let Some(concurrency) = scan_concurrency {
                     builder = builder.with_concurrency(concurrency);
+                }
+                for filter in list_sum_filters {
+                    builder = builder.with_row_filter(filter);
                 }
                 for filter in dynamic_filters {
                     if let Some(filter) =

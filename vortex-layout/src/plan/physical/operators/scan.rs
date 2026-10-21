@@ -13,17 +13,24 @@ use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::List;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::ListView;
+use vortex_array::arrays::ListViewArray;
+use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::Struct;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::chunked::ChunkedArrayExt;
 use vortex_array::arrays::list::ListArrayExt;
 use vortex_array::arrays::list::ListArraySlotsExt;
+use vortex_array::arrays::listview::ListViewArraySlotsExt;
 use vortex_array::arrays::listview::ListViewRebuildMode;
 use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::buffer::BufferHandle;
+use vortex_array::dtype::IntegerPType;
+use vortex_array::match_each_integer_ptype;
 use vortex_array::serde::SerializedArray;
+use vortex_buffer::BufferMut;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
+use vortex_mask::AllOr;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
 
@@ -84,9 +91,60 @@ fn select(
         trim_elements(array.slice(range)?, ctx)?
     };
     match filter {
-        Some(filter) => array.filter(filter),
+        Some(filter) => match list_views(&array, &filter, ctx)? {
+            Some(views) => Ok(views),
+            None => array.filter(filter),
+        },
         None => Ok(array),
     }
+}
+
+/// The fraction of a list's rows a filter keeps from which [`list_views`] views them.
+const DENSE_LIST_FILTER: f64 = 0.5;
+
+/// The lists of `array` that a dense `mask` keeps, as views of their elements.
+///
+/// Filtering a list filters its elements, lazily, so every reader of the result, each sum of
+/// it and its export, filters nearly all of them again. Views of the kept lists over the
+/// unfiltered elements filter only the offsets. `None` when `array` is not a list of offsets or
+/// `mask` is sparse, where filtering crops the elements to the few lists kept.
+fn list_views(
+    array: &ArrayRef,
+    mask: &Mask,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<Option<ArrayRef>> {
+    let Some(list) = array.as_opt::<List>() else {
+        return Ok(None);
+    };
+    if mask.density() < DENSE_LIST_FILTER {
+        return Ok(None);
+    }
+    let offsets = list.offsets().clone().execute::<PrimitiveArray>(ctx)?;
+    let (starts, sizes) = match_each_integer_ptype!(offsets.ptype(), |O| {
+        let offsets = offsets.as_slice::<O>();
+        let mut starts = BufferMut::<O>::with_capacity(mask.true_count());
+        let mut sizes = BufferMut::<O>::with_capacity(mask.true_count());
+        let mut keep = |row: usize| {
+            starts.push(offsets[row]);
+            sizes.push(offsets[row + 1] - offsets[row]);
+        };
+        match mask.slices() {
+            AllOr::All => (0..list.len()).for_each(&mut keep),
+            AllOr::None => {}
+            AllOr::Some(slices) => slices
+                .iter()
+                .flat_map(|&(start, end)| start..end)
+                .for_each(&mut keep),
+        }
+        (starts.freeze().into_array(), sizes.freeze().into_array())
+    });
+    let validity = list.validity()?.filter(mask)?;
+    // SAFETY: every view is a kept list's own offset and size, within the elements, and the
+    // offsets and sizes share their integer type; the validity is filtered by the same mask.
+    Ok(Some(
+        unsafe { ListViewArray::new_unchecked(list.elements().clone(), starts, sizes, validity) }
+            .into_array(),
+    ))
 }
 
 /// Slices `array` to `range`, keeping of every list in it, at any depth of structs and chunks,
@@ -148,8 +206,11 @@ fn trim_elements(array: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<ArrayR
             list.reset_offsets(false, ctx)?
         }
     } else if let Some(list) = array.as_opt::<ListView>() {
+        let list = list.into_owned();
+        if let Some(list) = views_to_list(&list, ctx)? {
+            return Ok(list);
+        }
         return Ok(list
-            .into_owned()
             .rebuild(ListViewRebuildMode::TrimElements, ctx)?
             .into_array());
     } else {
@@ -164,6 +225,65 @@ fn trim_elements(array: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<ArrayR
         unsafe { ListArray::new_unchecked(elements, list.offsets().clone(), list.validity()?) }
             .into_array(),
     )
+}
+
+/// `views` as a list of offsets holding only their elements, when they are in order and do not
+/// overlap, as the [`list_views`] of a filter's kept lists are; `None` otherwise.
+///
+/// Exporting views with gaps between them gathers their elements one index at a time. A list
+/// of offsets over its elements filtered to the views is exported as a slice of them.
+fn views_to_list(views: &ListViewArray, ctx: &mut ExecutionCtx) -> VortexResult<Option<ArrayRef>> {
+    let offsets = views.offsets().clone().execute::<PrimitiveArray>(ctx)?;
+    let sizes = views.sizes().clone().execute::<PrimitiveArray>(ctx)?;
+    if offsets.ptype() != sizes.ptype() || views.elements().dtype().is_list() {
+        return Ok(None);
+    }
+    match_each_integer_ptype!(offsets.ptype(), |O| {
+        typed_views_to_list(views, offsets.as_slice::<O>(), sizes.as_slice::<O>())
+    })
+}
+
+fn typed_views_to_list<O: IntegerPType>(
+    views: &ListViewArray,
+    starts: &[O],
+    sizes: &[O],
+) -> VortexResult<Option<ArrayRef>> {
+    let mut slices: Vec<(usize, usize)> = Vec::with_capacity(starts.len());
+    let mut ends = BufferMut::<O>::with_capacity(starts.len() + 1);
+    let mut total = O::zero();
+    ends.push(total);
+    for (&start, &size) in starts.iter().zip(sizes) {
+        let (from, to): (usize, usize) = (start.as_(), (start + size).as_());
+        match slices.last_mut() {
+            Some(last) if last.1 > from => return Ok(None),
+            Some(last) if last.1 == from => last.1 = to,
+            _ if from < to => slices.push((from, to)),
+            _ => {}
+        }
+        total += size;
+        ends.push(total);
+    }
+    let (Some(&(low, _)), Some(&(_, high))) = (slices.first(), slices.last()) else {
+        return Ok(None);
+    };
+    let elements = views.elements().slice(low..high)?;
+    let elements = if slices.len() == 1 {
+        elements
+    } else {
+        let slices = slices
+            .iter()
+            .map(|&(from, to)| (from - low, to - low))
+            .collect();
+        elements.filter(Mask::from_slices(high - low, slices))?
+    };
+    // SAFETY: the elements are those of the views in order, and `ends` their running lengths,
+    // from zero to the elements' length.
+    Ok(Some(
+        unsafe {
+            ListArray::new_unchecked(elements, ends.freeze().into_array(), views.validity()?)
+        }
+        .into_array(),
+    ))
 }
 
 /// Reads one segment, decodes it, and emits its rows of `slice`, filtered by `filter`.
@@ -249,5 +369,52 @@ impl Operator for SelectStage {
             self.filter.as_ref(),
             cx.exec(),
         )?))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+    use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
+    use vortex_array::arrays::List;
+    use vortex_array::arrays::ListViewArray;
+    use vortex_array::assert_arrays_eq;
+    use vortex_array::validity::Validity;
+    use vortex_buffer::Buffer;
+    use vortex_buffer::buffer;
+    use vortex_error::VortexResult;
+
+    use super::views_to_list;
+    use crate::test::new_session;
+
+    /// Ordered views become a list of only their elements; overlapping or empty ones do not.
+    #[rstest]
+    #[case::contiguous(&[1, 3], &[2, 3], true)]
+    #[case::gaps(&[0, 3, 7], &[2, 1, 3], true)]
+    #[case::empty_between(&[0, 2, 5], &[2, 0, 1], true)]
+    #[case::overlapping(&[0, 1], &[3, 2], false)]
+    #[case::out_of_order(&[4, 0], &[2, 2], false)]
+    #[case::all_empty(&[3, 5], &[0, 0], false)]
+    fn views_become_lists(
+        #[case] offsets: &[u32],
+        #[case] sizes: &[u32],
+        #[case] converted: bool,
+    ) -> VortexResult<()> {
+        let mut ctx = new_session().create_execution_ctx();
+        let views = ListViewArray::new(
+            buffer![0i64, 1, 2, 3, 4, 5, 6, 7, 8, 9].into_array(),
+            Buffer::copy_from(offsets).into_array(),
+            Buffer::copy_from(sizes).into_array(),
+            Validity::AllValid,
+            &mut ctx,
+        );
+        let list = views_to_list(&views, &mut ctx)?;
+        assert_eq!(list.is_some(), converted);
+        if let Some(list) = list {
+            assert!(list.is::<List>());
+            assert_arrays_eq!(list, views.into_array(), &mut ctx);
+        }
+        Ok(())
     }
 }

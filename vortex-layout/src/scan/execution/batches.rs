@@ -120,7 +120,8 @@ impl Batcher {
     }
 }
 
-/// `piece` with every field of it that is not a list executed.
+/// `piece` with every field of it executed but its lists, and those of them that are not
+/// lists of offsets or views executed into views, so a cut of them keeps only its elements.
 fn narrow_fields(piece: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<ArrayRef> {
     let Some(structs) = piece.as_opt::<Struct>() else {
         return Ok(piece);
@@ -128,7 +129,7 @@ fn narrow_fields(piece: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<ArrayR
     let fields = structs
         .iter_unmasked_fields()
         .map(|field| {
-            if field.dtype().is_list() || field.is_canonical() {
+            if field.is_canonical() || field.is::<List>() {
                 Ok(field.clone())
             } else {
                 Ok(field.clone().execute::<Canonical>(ctx)?.into_array())
