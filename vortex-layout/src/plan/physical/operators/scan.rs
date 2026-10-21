@@ -231,7 +231,7 @@ fn trim_elements(array: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<ArrayR
 /// overlap, as the [`list_views`] of a filter's kept lists are; `None` otherwise.
 ///
 /// Exporting views with gaps between them gathers their elements one index at a time. A list
-/// of offsets over its elements filtered to the views is exported as a slice of them.
+/// of offsets over the runs of elements the views hold is exported a run at a time.
 fn views_to_list(views: &ListViewArray, ctx: &mut ExecutionCtx) -> VortexResult<Option<ArrayRef>> {
     let offsets = views.offsets().clone().execute::<PrimitiveArray>(ctx)?;
     let sizes = views.sizes().clone().execute::<PrimitiveArray>(ctx)?;
@@ -266,15 +266,16 @@ fn typed_views_to_list<O: IntegerPType>(
     let (Some(&(low, _)), Some(&(_, high))) = (slices.first(), slices.last()) else {
         return Ok(None);
     };
-    let elements = views.elements().slice(low..high)?;
+    // Each run decodes straight into the export, where a filter of the elements between the
+    // runs would build and apply a mask first.
     let elements = if slices.len() == 1 {
-        elements
+        views.elements().slice(low..high)?
     } else {
         let slices = slices
             .iter()
-            .map(|&(from, to)| (from - low, to - low))
-            .collect();
-        elements.filter(Mask::from_slices(high - low, slices))?
+            .map(|&(from, to)| views.elements().slice(from..to))
+            .collect::<VortexResult<Vec<_>>>()?;
+        ChunkedArray::try_new(slices, views.elements().dtype().clone())?.into_array()
     };
     // SAFETY: the elements are those of the views in order, and `ends` their running lengths,
     // from zero to the elements' length.
