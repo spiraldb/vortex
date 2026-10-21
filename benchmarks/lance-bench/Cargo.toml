@@ -16,9 +16,7 @@ publish = false
 [dependencies]
 # `aws` registers Lance's s3:// object store provider, needed to benchmark against remote data.
 lance = { version = "13", default-features = false, features = ["aws"] }
-lance-encoding = { version = "13", default-features = false }
 lance-file = { version = "13", default-features = false }
-lance-io = { version = "13", default-features = false }
 
 anyhow = { workspace = true }
 arrow-cast = { version = "58" }

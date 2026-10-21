@@ -19,10 +19,10 @@ Two access patterns are generated with a fixed seed (see [`src/main.rs`](./src/m
 Each pattern runs over four datasets (`taxi`, `feature-vectors`, `nested-lists`,
 `nested-structs`) in Arrow IPC, Parquet, Lance, and Vortex. Cached mode performs a one-second
 untimed warm-up, then reuses the open file handle. Reopen mode includes file open and metadata
-work in each timed iteration. Every format is read from a single file through its file-level
+work in each timed iteration. Every format is read from a single file through its own
 reader: Lance datasets are written in Lance's stable file format as one fragment, and rows are
-taken from that fragment's data file with an open Lance `FileReader`, as Vortex reuses an open
-`VortexFile` and Parquet reuses its parsed footer. CI drives the full matrix via
+taken from that fragment directly, opened once like Vortex reuses an open `VortexFile` and
+Parquet reuses its parsed footer. CI drives the full matrix via
 [`scripts/random-access-split.py`](../../scripts/random-access-split.py).
 
 ## Running locally
