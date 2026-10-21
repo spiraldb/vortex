@@ -148,11 +148,8 @@ impl VortexRandomAccessor {
         name: impl Into<String>,
         format: Format,
     ) -> anyhow::Result<Self> {
-        let file = SESSION
-            .open_options()
-            .with_layout_reader_cache()
-            .open(runtime::open_local(path)?)
-            .await?;
+        let file =
+            runtime::open_file(path, SESSION.open_options().with_layout_reader_cache()).await?;
         Ok(Self {
             name: name.into(),
             format,

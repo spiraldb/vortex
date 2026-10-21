@@ -30,11 +30,18 @@ core, each owning an io_uring it parks on when idle; `tokio` uses the benchmark'
 which every other format runs on. If the kernel refuses to create a ring, the run falls back to
 Tokio with a warning.
 
-`--vortex-reader` picks how Vortex reads local files. `blocking` (the default) runs positional
-reads on the runtime's blocking pool. `io-uring` submits them to the ring of the worker that issues
-them. The files sit in the page cache after the warm-up, and there reads that many blocking threads
-copy in parallel finish sooner than ring reads, which copy on the submitting worker or hand off to
-the kernel's io_uring workers.
+`--vortex-reader` picks how Vortex reads local files:
+
+- `mmap` (the default) memory-maps the file, as the Vortex Python bindings open local files.
+  Segments are slices of the page cache, so nothing is copied and no read is waited on.
+- `blocking` runs positional reads on the runtime's blocking pool, the reader `open_path` uses.
+- `io-uring` submits reads to the ring of the worker that issues them, merging reads only across
+  gaps of up to 64 KiB, since a batch of reads costs one syscall however many it holds.
+
+The files sit in the page cache after the warm-up. There, copying segment bytes out of the page
+cache dominates a take, which is why mapping the file is several times faster than either read
+path, and why blocking threads copying in parallel beat ring reads, which copy on the submitting
+worker or hand larger reads to the kernel's io_uring workers.
 
 ## Running locally
 

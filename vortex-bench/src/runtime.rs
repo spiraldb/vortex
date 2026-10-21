@@ -11,8 +11,12 @@ use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering;
 
 use clap::ValueEnum;
+use memmap2::Mmap;
 use vortex::array::memory::MemorySessionExt;
+use vortex::buffer::ByteBuffer;
 use vortex::error::VortexResult;
+use vortex::file::VortexFile;
+use vortex::file::VortexOpenOptions;
 use vortex::io::VortexReadAt;
 #[cfg(target_os = "linux")]
 use vortex::io::runtime::BlockingRuntime;
@@ -40,20 +44,23 @@ pub enum VortexRuntime {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 #[repr(u8)]
 pub enum VortexReader {
-    /// Positional reads on the runtime's blocking thread pool. Fastest for files the page cache
-    /// holds, as the benchmarks' files are after their warm-up: many threads copy at once.
-    #[default]
+    /// Positional reads on the runtime's blocking thread pool.
     Blocking,
     /// Reads submitted to the io_uring of the worker that issues them. Needs the io_uring
     /// runtime, and otherwise falls back to blocking reads.
     IoUring,
+    /// The whole file memory-mapped, as the Python bindings open local files. Segments are slices
+    /// of the page cache: nothing is copied, and no read is ever waited on. The fastest choice for
+    /// files the page cache holds, as the benchmarks' files are after their warm-up.
+    #[default]
+    Mmap,
 }
 
 /// Whether [`SESSION`] runs on the io_uring runtime.
 static URING: AtomicBool = AtomicBool::new(false);
 
 /// The [`VortexReader`] [`open_local`] uses.
-static READER: AtomicU8 = AtomicU8::new(VortexReader::Blocking as u8);
+static READER: AtomicU8 = AtomicU8::new(VortexReader::Mmap as u8);
 
 /// Chooses how [`open_local`] reads files.
 pub fn set_reader(reader: VortexReader) {
@@ -100,8 +107,24 @@ pub fn uring_active() -> bool {
     URING.load(Ordering::Relaxed)
 }
 
+/// Opens a Vortex file on local disk with `options`, read the way [`set_reader`] chose.
+pub async fn open_file(
+    path: impl AsRef<Path>,
+    options: VortexOpenOptions,
+) -> VortexResult<VortexFile> {
+    if READER.load(Ordering::Relaxed) == VortexReader::Mmap as u8 {
+        let file = std::fs::File::open(path)?;
+        // SAFETY: benchmark files are immutable once written. A file changed or truncated while
+        // mapped gives wrong data or SIGBUS, as with any memory-mapped reader.
+        let mmap = unsafe { Mmap::map(&file)? };
+        return options.open_buffer(ByteBuffer::from(mmap));
+    }
+    options.open(open_local(path)?).await
+}
+
 /// Opens a local file for Vortex to read, with the reader chosen by [`set_reader`]: through the
-/// workers' rings, or as blocking reads on the runtime's blocking pool.
+/// workers' rings, or as blocking reads on the runtime's blocking pool. A memory-mapped reader
+/// has no [`VortexReadAt`], so it reads as blocking here; [`open_file`] maps the file instead.
 pub fn open_local(path: impl AsRef<Path>) -> VortexResult<Arc<dyn VortexReadAt>> {
     #[cfg(target_os = "linux")]
     if uring_active() && READER.load(Ordering::Relaxed) == VortexReader::IoUring as u8 {

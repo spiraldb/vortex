@@ -11509,6 +11509,7 @@ dependencies = [
  "insta",
  "itertools 0.14.0",
  "libmimalloc-sys",
+ "memmap2",
  "mimalloc",
  "noodles-bgzf",
  "noodles-vcf",

@@ -35,7 +35,7 @@ use vortex_bench::compress::Compressor;
 use vortex_bench::compress::Uncompressed;
 use vortex_bench::compress::read_projection;
 use vortex_bench::conversions::parquet_to_vortex_chunks;
-use vortex_bench::runtime::open_local;
+use vortex_bench::runtime::open_file;
 
 /// Where Vortex decompression reads the compressed file from.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
@@ -134,7 +134,7 @@ impl Source {
     async fn open(self) -> Result<VortexFile> {
         Ok(match self {
             Source::Memory(data) => SESSION.open_options().open_buffer(data)?,
-            Source::File(path) => SESSION.open_options().open(open_local(path)?).await?,
+            Source::File(path) => open_file(path, SESSION.open_options()).await?,
         })
     }
 }

@@ -19,6 +19,9 @@ use crate::VortexReadAt;
 use crate::runtime::Handle;
 use crate::std_file::read_exact_at;
 
+/// The widest gap between two reads that are still merged into one.
+const COALESCE_DISTANCE: u64 = 64 << 10;
+
 /// Concurrent reads a single file keeps in flight. A ring absorbs many more than a thread pool
 /// would, and each costs only a submission queue entry.
 const CONCURRENCY: usize = 128;
@@ -63,7 +66,12 @@ impl VortexReadAt for UringFileReadAt {
     }
 
     fn coalesce_config(&self) -> Option<CoalesceConfig> {
-        Some(CoalesceConfig::file())
+        // A batch of reads costs one `io_uring_enter` however many there are, so merging reads
+        // across wide gaps only copies bytes nobody asked for.
+        Some(CoalesceConfig::new(
+            COALESCE_DISTANCE,
+            CoalesceConfig::file().max_size,
+        ))
     }
 
     fn concurrency(&self) -> usize {

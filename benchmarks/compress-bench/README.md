@@ -37,9 +37,9 @@ Neither format uses threads outside its pool, and the main thread does none of t
 
 Decompression reads the file from memory for both formats. `--vortex-source file` instead writes
 the Vortex file to a temporary file, untimed, and reads it back from disk on every iteration. After
-the first iteration those reads come from the page cache. `--vortex-reader` picks how: `blocking`
-(the default) runs positional reads on the runtime's blocking pool, and `io-uring` submits them to
-the rings of the io_uring runtime's workers.
+the first iteration those reads come from the page cache. `--vortex-reader` picks how: `mmap` (the
+default) memory-maps the file, `blocking` runs positional reads on the runtime's blocking pool, and
+`io-uring` submits them to the rings of the io_uring runtime's workers.
 
 CI runs the timed benchmark on a fixed budget of 16 cores: `scripts/compress-split.py --cpus 16`
 (the default) pins the process to 16 CPUs through `scripts/bench-taskset.sh` and passes

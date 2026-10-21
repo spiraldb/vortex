@@ -22,6 +22,7 @@ workspace = true
 vortex = { workspace = true, features = [
     "files",
     "io-uring",
+    "memmap2",
     "object_store",
     "tokio",
     "zstd",
@@ -51,6 +52,7 @@ humansize = { workspace = true }
 indicatif = { workspace = true, features = ["futures"] }
 itertools = { workspace = true }
 libmimalloc-sys = { workspace = true }
+memmap2 = { workspace = true }
 mimalloc = { workspace = true }
 noodles-bgzf = { workspace = true, features = ["async"] }
 noodles-vcf = { workspace = true, features = ["async"] }
