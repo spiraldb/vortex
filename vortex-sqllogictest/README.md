@@ -38,11 +38,18 @@ working directory accordingly.
 TPC-H scripts live under `slt/tpch/datafusion/` and `slt/tpch/duckdb/`, TPC-DS scripts under
 `slt/tpcds/datafusion/` and `slt/tpcds/duckdb/`, ClickBench scripts under
 `slt/clickbench/datafusion/` and `slt/clickbench/duckdb/`. Each engine has its own
-`create.slt.no`, `results/q*.slt.no` (`q1` to `q22` for TPC-H, `q1` to `q99` for TPC-DS, `q0` to
-`q42` for ClickBench, matching the upstream numbering), and `drop.slt.no`. Its
-`tpch.slt`/`tpcds.slt`/`clickbench.slt` runs these against Vortex and asserts EXPLAIN output from
-the matching `plans/q*.slt.no`. Its `parquet.slt` runs the same queries against the original
-Parquet fixtures and checks the same expected results.
+`create.slt.no` and `drop.slt.no`. The query results, `results/q*.slt.no` (`q1` to `q22` for
+TPC-H, `q1` to `q99` for TPC-DS, `q0` to `q42` for ClickBench, matching the upstream numbering),
+are shared by both engines in `slt/tpch/results/` and `slt/tpcds/results/`. ClickBench keeps one
+`results/` directory for each engine. Each engine's `tpch.slt`/`tpcds.slt`/`clickbench.slt` runs
+the queries against Vortex and asserts EXPLAIN output from the matching `plans/q*.slt.no`. Its
+`parquet.slt` runs the same queries against the original Parquet fixtures and checks the same
+expected results.
+
+DataFusion truncates decimal division and `avg` to the scale of the result type, while DuckDB
+calculates them as `DOUBLE`. Thus the DuckDB validator accepts a value with more fractional digits
+when it truncates to the expected value. Use `onlyif datafusion`/`onlyif duckdb` records when the
+engines differ more than that, as TPC-DS q66 does.
 DataFusion uses external tables; DuckDB uses views over files. The `FILE_FORMAT` substitution
 variable selects the format in each engine's table setup.
 

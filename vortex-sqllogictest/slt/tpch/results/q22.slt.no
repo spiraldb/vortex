@@ -3,6 +3,7 @@
 
 # common_subplan drops the c_acctbal > 0 filter when merging Vortex scans.
 # Disable it for Q22 until it preserves pushed filters.
+onlyif duckdb
 statement ok
 SET disabled_optimizers = 'common_subplan';
 
@@ -53,6 +54,6 @@ order by
 30 87 646748.02
 31 87 647372.5
 
-
+onlyif duckdb
 statement ok
 SET disabled_optimizers = '';
