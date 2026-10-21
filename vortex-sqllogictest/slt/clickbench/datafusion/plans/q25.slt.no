@@ -12,4 +12,4 @@ logical_plan
 physical_plan
 01)SortPreservingMergeExec: [SearchPhrase@0 ASC NULLS LAST], fetch=10
 02)--SortExec: TopK(fetch=10), expr=[SearchPhrase@0 ASC NULLS LAST], preserve_partitioning=[true]
-03)----DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex]]}, projection=[SearchPhrase], file_type=vortex, predicate: SearchPhrase@39 != 
+03)----DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[SearchPhrase], file_type=vortex, predicate: SearchPhrase@39 != 

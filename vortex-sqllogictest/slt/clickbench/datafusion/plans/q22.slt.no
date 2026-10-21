@@ -18,4 +18,4 @@ physical_plan
 04)------AggregateExec: mode=FinalPartitioned, gby=[SearchPhrase@0 as SearchPhrase], aggr=[min(hits.URL), min(hits.Title), count(Int64(1)), count(DISTINCT hits.UserID)]
 05)--------RepartitionExec: partitioning=Hash([SearchPhrase@0], 4), input_partitions=4
 06)----------AggregateExec: mode=Partial, gby=[SearchPhrase@3 as SearchPhrase], aggr=[min(hits.URL), min(hits.Title), count(Int64(1)), count(DISTINCT hits.UserID)]
-07)------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex]]}, projection=[Title, UserID, URL, SearchPhrase], file_type=vortex, predicate: SearchPhrase@39 !=  AND Title@2 LIKE %Google% AND URL@13 NOT LIKE %.google.%
+07)------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[Title, UserID, URL, SearchPhrase], file_type=vortex, predicate: SearchPhrase@39 !=  AND Title@2 LIKE %Google% AND URL@13 NOT LIKE %.google.%

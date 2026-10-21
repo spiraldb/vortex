@@ -22,4 +22,4 @@ physical_plan
 07)------------AggregateExec: mode=FinalPartitioned, gby=[MobilePhoneModel@0 as MobilePhoneModel, alias1@1 as alias1], aggr=[]
 08)--------------RepartitionExec: partitioning=Hash([MobilePhoneModel@0, alias1@1], 4), input_partitions=4
 09)----------------AggregateExec: mode=Partial, gby=[MobilePhoneModel@1 as MobilePhoneModel, UserID@0 as alias1], aggr=[]
-10)------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex]]}, projection=[UserID, MobilePhoneModel], file_type=vortex, predicate: MobilePhoneModel@34 != 
+10)------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[UserID, MobilePhoneModel], file_type=vortex, predicate: MobilePhoneModel@34 != 

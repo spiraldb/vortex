@@ -22,4 +22,4 @@ physical_plan
 07)------------AggregateExec: mode=FinalPartitioned, gby=[SearchPhrase@0 as SearchPhrase, alias1@1 as alias1], aggr=[]
 08)--------------RepartitionExec: partitioning=Hash([SearchPhrase@0, alias1@1], 4), input_partitions=4
 09)----------------AggregateExec: mode=Partial, gby=[SearchPhrase@1 as SearchPhrase, UserID@0 as alias1], aggr=[]
-10)------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex]]}, projection=[UserID, SearchPhrase], file_type=vortex, predicate: SearchPhrase@39 != 
+10)------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[UserID, SearchPhrase], file_type=vortex, predicate: SearchPhrase@39 != 

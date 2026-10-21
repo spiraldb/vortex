@@ -16,4 +16,4 @@ physical_plan
 02)--SortPreservingMergeExec: [EventTime@1 ASC NULLS LAST], fetch=10
 03)----ProjectionExec: expr=[SearchPhrase@1 as SearchPhrase, EventTime@0 as EventTime]
 04)------SortExec: TopK(fetch=10), expr=[EventTime@0 ASC NULLS LAST], preserve_partitioning=[true]
-05)--------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex]]}, projection=[EventTime, SearchPhrase], file_type=vortex, predicate: SearchPhrase@39 != 
+05)--------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[EventTime, SearchPhrase], file_type=vortex, predicate: SearchPhrase@39 != 

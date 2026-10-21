@@ -12,4 +12,4 @@ physical_plan
 01)AggregateExec: mode=Final, gby=[], aggr=[avg(hits.UserID)]
 02)--CoalescePartitionsExec
 03)----AggregateExec: mode=Partial, gby=[], aggr=[avg(hits.UserID)]
-04)------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex]]}, projection=[UserID], file_type=vortex
+04)------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[UserID], file_type=vortex

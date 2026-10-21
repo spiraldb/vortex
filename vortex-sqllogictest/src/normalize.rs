@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Output normalization of scratch paths and file byte ranges.
+//! Output normalization of scratch paths.
 //!
 //! Tests reference a per-test working directory through the `${WORK_DIR}`
 //! substitution variable; the runner sets `WORK_DIR` (via `Runner::set_var`) to
@@ -9,17 +9,11 @@
 //! directory back to the `${WORK_DIR}` token in query output. Normalizing at the
 //! source keeps comparisons stable and makes `--complete` write the portable token
 //! rather than a machine-specific path.
-//!
-//! DataFusion plans also show the byte range of each file split, such as
-//! `data.vortex:0..2119578`. These ranges change with every change to the file
-//! size, so [`PathNormalizing`] removes them too.
 
 use std::process::Command;
-use std::sync::LazyLock;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use regex::Regex;
 use sqllogictest::DBOutput;
 use sqllogictest::runner::AsyncDB;
 
@@ -43,20 +37,8 @@ pub fn normalize_work_dir(cell: &str, work_dir: &str) -> String {
     normalized
 }
 
-/// Matches the byte range after a data file in a DataFusion file group, such as
-/// `:0..2119578` in `data.vortex:0..2119578`. The file extension is group 1.
-#[expect(clippy::expect_used, reason = "the pattern is a constant")]
-static BYTE_RANGE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(\.(?:vortex|parquet)):\d+\.\.\d+").expect("byte range regex is valid")
-});
-
-/// Removes the byte ranges of file splits from `cell`.
-pub fn strip_byte_ranges(cell: &str) -> String {
-    BYTE_RANGE.replace_all(cell, "$1").into_owned()
-}
-
 /// Wraps an [`AsyncDB`] and rewrites this test's scratch path in query output back
-/// to `${WORK_DIR}`. It also removes the byte ranges of file splits.
+/// to `${WORK_DIR}`.
 ///
 /// `--complete` writes raw query rows, so normalizing here (rather than only in the
 /// comparison normalizer) is what keeps completed expected output stable.
@@ -88,9 +70,7 @@ impl<D: AsyncDB + Send> AsyncDB for PathNormalizing<D> {
                     .into_iter()
                     .map(|row| {
                         row.iter()
-                            .map(|cell| {
-                                strip_byte_ranges(&normalize_work_dir(cell, &self.work_dir))
-                            })
+                            .map(|cell| normalize_work_dir(cell, &self.work_dir))
                             .collect()
                     })
                     .collect(),
@@ -125,7 +105,6 @@ mod tests {
     use rstest::rstest;
 
     use super::normalize_work_dir;
-    use super::strip_byte_ranges;
 
     #[rstest]
     #[case("no paths here", "no paths here")]
@@ -160,16 +139,5 @@ mod tests {
             normalize_work_dir(input, "/repo/scratch/123/df_create.slt"),
             expected
         );
-    }
-
-    #[rstest]
-    #[case::vortex(
-        "file_groups={2 groups: [[${WORK_DIR}/a.vortex:0..100], [${WORK_DIR}/a.vortex:100..200]]}",
-        "file_groups={2 groups: [[${WORK_DIR}/a.vortex], [${WORK_DIR}/a.vortex]]}"
-    )]
-    #[case::parquet("[[data/a.parquet:0..42]]", "[[data/a.parquet]]")]
-    #[case::other_range("RANGE 0..10 in a.vortex", "RANGE 0..10 in a.vortex")]
-    fn strips_byte_ranges(#[case] input: &str, #[case] expected: &str) {
-        assert_eq!(strip_byte_ranges(input), expected);
     }
 }

@@ -57,4 +57,4 @@ physical_plan
 12)----------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/item.vortex]]}, projection=[i_item_sk, i_class, i_category], file_type=vortex
 13)----------------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(d_date_sk@0, ws_sold_date_sk@0)], projection=[ws_item_sk@2, ws_net_paid@3]
 14)------------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/date_dim.vortex]]}, projection=[d_date_sk], file_type=vortex, predicate: d_month_seq@3 >= 1200 AND d_month_seq@3 <= 1211
-15)------------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/web_sales.vortex], [${WORK_DIR}/web_sales.vortex], [${WORK_DIR}/web_sales.vortex], [${WORK_DIR}/web_sales.vortex]]}, projection=[ws_sold_date_sk, ws_item_sk, ws_net_paid], file_type=vortex
+15)------------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/web_sales.vortex:<slt:ignore>], [${WORK_DIR}/web_sales.vortex:<slt:ignore>], [${WORK_DIR}/web_sales.vortex:<slt:ignore>], [${WORK_DIR}/web_sales.vortex:<slt:ignore>]]}, projection=[ws_sold_date_sk, ws_item_sk, ws_net_paid], file_type=vortex

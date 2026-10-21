@@ -50,4 +50,4 @@ physical_plan
 09)--------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/time_dim.vortex]]}, projection=[t_time_sk], file_type=vortex, predicate: t_hour@3 = 20 AND t_minute@4 >= 30
 10)--------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(hd_demo_sk@0, ss_hdemo_sk@1)], projection=[ss_sold_time_sk@1, ss_store_sk@3]
 11)----------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/household_demographics.vortex]]}, projection=[hd_demo_sk], file_type=vortex, predicate: hd_dep_count@3 = 7
-12)----------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/store_sales.vortex], [${WORK_DIR}/store_sales.vortex], [${WORK_DIR}/store_sales.vortex], [${WORK_DIR}/store_sales.vortex]]}, projection=[ss_sold_time_sk, ss_hdemo_sk, ss_store_sk], file_type=vortex
+12)----------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/store_sales.vortex:<slt:ignore>], [${WORK_DIR}/store_sales.vortex:<slt:ignore>], [${WORK_DIR}/store_sales.vortex:<slt:ignore>], [${WORK_DIR}/store_sales.vortex:<slt:ignore>]]}, projection=[ss_sold_time_sk, ss_hdemo_sk, ss_store_sk], file_type=vortex

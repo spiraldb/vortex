@@ -61,7 +61,7 @@ physical_plan
 14)------------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/customer_address.vortex]]}, projection=[ca_address_sk], file_type=vortex, predicate: ca_city@6 = Edgewood
 15)------------------------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
 16)--------------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/customer.vortex]]}, projection=[c_customer_id, c_current_cdemo_sk, c_current_hdemo_sk, c_current_addr_sk, c_first_name, c_last_name], file_type=vortex
-17)--------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/customer_demographics.vortex], [${WORK_DIR}/customer_demographics.vortex], [${WORK_DIR}/customer_demographics.vortex], [${WORK_DIR}/customer_demographics.vortex]]}, projection=[cd_demo_sk], file_type=vortex
+17)--------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/customer_demographics.vortex:<slt:ignore>], [${WORK_DIR}/customer_demographics.vortex:<slt:ignore>], [${WORK_DIR}/customer_demographics.vortex:<slt:ignore>], [${WORK_DIR}/customer_demographics.vortex:<slt:ignore>]]}, projection=[cd_demo_sk], file_type=vortex
 18)----------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/household_demographics.vortex]]}, projection=[hd_demo_sk, hd_income_band_sk], file_type=vortex
 19)--------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
 20)----------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/store_returns.vortex]]}, projection=[sr_cdemo_sk], file_type=vortex

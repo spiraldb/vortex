@@ -17,4 +17,4 @@ physical_plan
 04)------AggregateExec: mode=FinalPartitioned, gby=[UserID@0 as UserID, date_part(Utf8("MINUTE"),hits.EventTime)@1 as date_part(Utf8("MINUTE"),hits.EventTime), SearchPhrase@2 as SearchPhrase], aggr=[count(Int64(1))]
 05)--------RepartitionExec: partitioning=Hash([UserID@0, date_part(Utf8("MINUTE"),hits.EventTime)@1, SearchPhrase@2], 4), input_partitions=4
 06)----------AggregateExec: mode=Partial, gby=[UserID@1 as UserID, date_part(MINUTE, EventTime@0) as date_part(Utf8("MINUTE"),hits.EventTime), SearchPhrase@2 as SearchPhrase], aggr=[count(Int64(1))]
-07)------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex]]}, projection=[EventTime, UserID, SearchPhrase], file_type=vortex
+07)------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[EventTime, UserID, SearchPhrase], file_type=vortex
