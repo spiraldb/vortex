@@ -9,6 +9,11 @@ optional buffer compression, so it provides the established constant-time access
 Parquet provides the established reference for a compressed columnar representation. Together,
 they let the suite compare Vortex and Lance against both ends of the storage trade-off.
 
+Each format reads only the rows it is asked for. Parquet turns the requested indices of every
+touched row group into a `RowSelection`, so with the page index parquet-rs fetches and decodes
+only the pages holding those rows; row groups are read concurrently, and local files go through
+`object_store`'s `LocalFileSystem`, as DataFusion reads them.
+
 Two access patterns are generated with a fixed seed (see [`src/main.rs`](./src/main.rs)):
 
 - **correlated**: several clusters of consecutive indices scattered across the dataset,
