@@ -67,6 +67,7 @@ use crate::footer::FileStatistics;
 use crate::footer::MAX_METADATA_KEY_BYTES;
 use crate::footer::MAX_METADATA_SEGMENTS;
 use crate::segments::writer::BufferedSegmentSink;
+use crate::sort_key::SortKeyRef;
 use crate::sort_key::validate_sort_key;
 
 /// Configure a new writer, which can eventually be used to write an [`ArrayStream`] into a sink
@@ -86,7 +87,7 @@ pub struct VortexWriteOptions {
     exclude_dtype: bool,
     max_variable_length_statistics_size: usize,
     file_statistics: Vec<Stat>,
-    sort_key: Option<Arc<[FieldPath]>>,
+    sort_keys: Arc<[SortKeyRef]>,
     metadata: HashMap<String, ByteBuffer>,
 }
 
@@ -109,7 +110,7 @@ impl VortexWriteOptions {
             session,
             exclude_dtype: false,
             file_statistics: PRUNING_STATS.to_vec(),
-            sort_key: None,
+            sort_keys: Arc::from([]),
             max_variable_length_statistics_size: 64,
             metadata: HashMap::default(),
         }
@@ -165,7 +166,7 @@ impl VortexWriteOptions {
         self
     }
 
-    /// Set the file's sort key, in comparison order.
+    /// Set the file's compound sort keys, with each key's fields listed in comparison order.
     /// Empty or invalid keys fail before any bytes are written.
     ///
     /// Sort keys are unrelated to `IsSorted` or `IsStrictSorted` statistics, and they have
@@ -174,11 +175,11 @@ impl VortexWriteOptions {
     ///
     /// **NOTICE**
     ///
-    /// The writer doesn't assert that rows are in order. It only checks that the fields
-    /// exist. Rows must already be sorted by this key, ascending with nulls first,
+    /// The writer doesn't assert that rows are in order. It validates the key field paths.
+    /// Rows must already be sorted by every declared key, ascending with nulls first,
     /// across all chunks. A null struct row has null values for every sort field.
-    pub fn with_sort_key(mut self, fields: impl IntoIterator<Item = FieldPath>) -> Self {
-        self.sort_key = Some(fields.into_iter().collect());
+    pub fn with_sort_keys(mut self, keys: impl IntoIterator<Item = impl Into<SortKeyRef>>) -> Self {
+        self.sort_keys = keys.into_iter().map(Into::into).collect();
         self
     }
 
@@ -284,7 +285,7 @@ impl VortexWriteOptions {
             validate_dtype_editions(&self.session, &dtype)?;
         }
 
-        if let Some(fields) = &self.sort_key {
+        for fields in self.sort_keys.iter() {
             validate_sort_key(&dtype, fields)?;
         }
 
@@ -357,7 +358,7 @@ impl VortexWriteOptions {
             statistics,
             ReadContext::new(ctx.array_ctx().to_ids()),
         )
-        .with_sort_key(self.sort_key);
+        .with_sort_keys(self.sort_keys);
 
         // Emit the footer buffers and EOF.
         let (footer_buffers, metadata, approx_byte_size) = footer
