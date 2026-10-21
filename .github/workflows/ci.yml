@@ -327,7 +327,7 @@ jobs:
             runner: amd64-ci-large
             args: "--all-targets"
           - name: "with tokio dispatcher"
-            runner: amd64-ci-small
+            runner: amd64-ci-medium
             # Only build the crates that have the tokio features, not re-building other crates with no-default-features
             args: "--no-default-features --features tokio --all-targets -p vortex -p vortex-io -p vortex-file -p vortex-layout"
           - name: "wasm32 with default features"
