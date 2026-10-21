@@ -15,12 +15,14 @@ use vortex_array::VortexSessionExecute;
 use vortex_array::array_session;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ChunkedArray;
+use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::DictArray;
 use vortex_array::arrays::InterleaveArray;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::ListViewArray;
 use vortex_array::arrays::MapArray;
 use vortex_array::arrays::Patched;
+use vortex_array::arrays::PiecewiseSequenceArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinViewArray;
@@ -47,6 +49,7 @@ fn main() {
 
 const LEN: usize = 65_536;
 const VALUES: usize = 1_024;
+const PIECES: usize = LEN / 8;
 // Sized to keep the CodSpeed simulation short per benchmark.
 const ACCESSES: usize = 256;
 
@@ -206,6 +209,28 @@ fn patched_with_chunked_indices() -> ArrayRef {
     unsafe { array.with_slots(slots.into_slots()) }.vortex_expect("patched with chunked indices")
 }
 
+fn piecewise(variable_lengths: bool) -> ArrayRef {
+    let starts = PrimitiveArray::from_iter(
+        (0..PIECES).map(|i| u64::try_from(i * 16).vortex_expect("piece start fits u64")),
+    )
+    .into_array();
+    let lengths = if variable_lengths {
+        PrimitiveArray::from_iter((0..PIECES).map(|i| if i % 2 == 0 { 4u16 } else { 12u16 }))
+            .into_array()
+    } else {
+        ConstantArray::new(8u16, PIECES).into_array()
+    };
+    let multipliers = ConstantArray::new(1u8, PIECES).into_array();
+    PiecewiseSequenceArray::try_new(starts, lengths, multipliers, LEN)
+        .vortex_expect("piecewise fixture")
+        .into_array()
+}
+
+fn same_piece_indices(variable_lengths: bool) -> Vec<usize> {
+    let length = if variable_lengths { 4 } else { 8 };
+    (0..ACCESSES).map(|i| LEN / 2 + i % length).collect()
+}
+
 fn same_lane_indices() -> Vec<usize> {
     (0..ACCESSES).map(|i| (i % 32) * 32).collect()
 }
@@ -230,7 +255,11 @@ const ARRAYS: &[&str] = &[
     "interleave",
     "map",
     "patched",
+    "piecewise_variable",
+    "piecewise_constant",
 ];
+
+const PIECEWISE_ARRAYS: &[&str] = &["piecewise_variable", "piecewise_constant"];
 
 fn array(name: &str) -> ArrayRef {
     match name {
@@ -239,6 +268,8 @@ fn array(name: &str) -> ArrayRef {
         "interleave" => nullable_interleave(),
         "map" => nullable_map(),
         "patched" => patched(),
+        "piecewise_variable" => piecewise(true),
+        "piecewise_constant" => piecewise(false),
         "dict" => dict_over_nullable_values(),
         "struct" => nullable_struct(),
         "bool" => {
@@ -332,6 +363,40 @@ fn patched_same_lane_repeated(bencher: Bencher) {
 fn patched_chunked_indices_same_lane_repeated(bencher: Bencher) {
     let array = patched_with_chunked_indices();
     let indices = same_lane_indices();
+    bencher
+        .with_inputs(|| (SESSION.create_execution_ctx(), array.repeated_probe()))
+        .bench_refs(|(ctx, probe)| {
+            for &index in &indices {
+                divan::black_box(
+                    probe
+                        .execute_scalar(index, ctx)
+                        .vortex_expect("in-bounds read"),
+                );
+            }
+        });
+}
+
+#[divan::bench(args = PIECEWISE_ARRAYS)]
+fn piecewise_same_piece_once(bencher: Bencher, name: &str) {
+    let array = array(name);
+    let indices = same_piece_indices(name == "piecewise_variable");
+    bencher
+        .with_inputs(|| SESSION.create_execution_ctx())
+        .bench_refs(|ctx| {
+            for &index in &indices {
+                divan::black_box(
+                    array
+                        .execute_scalar(index, ctx)
+                        .vortex_expect("in-bounds read"),
+                );
+            }
+        });
+}
+
+#[divan::bench(args = PIECEWISE_ARRAYS)]
+fn piecewise_same_piece_repeated(bencher: Bencher, name: &str) {
+    let array = array(name);
+    let indices = same_piece_indices(name == "piecewise_variable");
     bencher
         .with_inputs(|| (SESSION.create_execution_ctx(), array.repeated_probe()))
         .bench_refs(|(ctx, probe)| {
