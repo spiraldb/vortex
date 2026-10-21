@@ -170,7 +170,6 @@ impl std::fmt::Debug for PinnedByteBufferPool {
 }
 
 struct InflightPinnedBuffer {
-    event: CudaEvent,
     buffer: PinnedByteBuffer,
 }
 
@@ -256,7 +255,7 @@ impl PinnedByteBufferPool {
             .map_err(|e| vortex_err!("Failed to bind CUDA context: {e}"))?;
         let mut idx = 0usize;
         while idx < inflight.len() {
-            if !inflight[idx].event.is_complete() {
+            if !inflight[idx].buffer.event.is_complete() {
                 idx += 1;
                 continue;
             }
@@ -401,28 +400,25 @@ impl PooledPinnedBuffer {
         stream: &VortexCudaStream,
         completion: Result<(), result::DriverError>,
     ) -> VortexResult<()> {
-        let event = match completion.and_then(|()| stream.record_event(None)) {
-            Ok(event) => event,
-            Err(error) => {
-                // A failed record can leave an old event behind after DMA was already submitted.
-                // Fence the actual stream before recycling, independently of event tracking.
-                if let Err(sync_error) = stream.synchronize() {
-                    // Completion is unknown: leaking is safer than freeing an active DMA source.
-                    let _leaked =
-                        ManuallyDrop::new(self.inner.take().vortex_expect("buffer already consumed"));
-                    return Err(vortex_err!(
-                        "H2D transfer fence failed: {error}; stream synchronization failed: {sync_error}"
-                    ));
-                }
-                return Err(vortex_err!("H2D transfer fence failed: {error}"));
+        if let Err(error) = completion {
+            // A failed record can leave an old event behind after DMA was already submitted.
+            // Fence the actual stream before recycling, independently of event tracking.
+            if let Err(sync_error) = stream.synchronize() {
+                // Completion is unknown: leaking is safer than freeing an active DMA source.
+                let _leaked =
+                    ManuallyDrop::new(self.inner.take().vortex_expect("buffer already consumed"));
+                return Err(vortex_err!(
+                    "H2D transfer fence failed: {error}; stream synchronization failed: {sync_error}"
+                ));
             }
-        };
+            return Err(vortex_err!("H2D transfer fence failed: {error}"));
+        }
 
         let inner = self.inner.take().vortex_expect("buffer already consumed");
-        self.pool.inflight.lock().push(InflightPinnedBuffer {
-            event,
-            buffer: inner,
-        });
+        self.pool
+            .inflight
+            .lock()
+            .push(InflightPinnedBuffer { buffer: inner });
         Ok(())
     }
 }
