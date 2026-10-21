@@ -9,8 +9,12 @@ use vortex_mask::MaskValuesRef;
 use super::super::RowFnExecutionArgs;
 use super::super::args::BorrowedRowFnArgs;
 use crate::ArrayRef;
+use crate::Canonical;
 use crate::ExecutionCtx;
+use crate::IntoArray;
+use crate::arrays::masked::mask_validity_canonical;
 use crate::builtins::ArrayBuiltins;
+use crate::canonical::AnyCanonical;
 use crate::scalar_fn::unstable::row::execute::DenseAttempt;
 use crate::validity::Validity;
 
@@ -18,10 +22,26 @@ impl RowFnExecutionArgs {
     /// Run every stored payload, then attach the input validity without materializing its mask.
     pub(super) fn execute_dense(
         &self,
-        kernel: impl Fn(BorrowedRowFnArgs<'_>, &mut ExecutionCtx) -> VortexResult<ArrayRef>,
+        kernel: impl FnOnce(
+            BorrowedRowFnArgs<'_>,
+            &mut Option<Validity>,
+            &mut ExecutionCtx,
+        ) -> VortexResult<ArrayRef>,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrayRef> {
-        let values = kernel(self.execution_args(&self.inputs, self.row_count), ctx)?;
+        // Offer a partial validity to the kernel. A collector that takes it builds the output with
+        // that validity attached, so the output needs neither a second construction nor an
+        // all-valid check.
+        let mut validity =
+            matches!(self.validity, Validity::Array(_)).then(|| self.validity.clone());
+        let values = kernel(
+            self.execution_args(&self.inputs, self.row_count),
+            &mut validity,
+            ctx,
+        )?;
+        if validity.is_none() && matches!(self.validity, Validity::Array(_)) {
+            return self.finalize_output(values, self.row_count);
+        }
 
         self.finalize_dense_output(values, ctx)
     }
@@ -107,7 +127,20 @@ impl RowFnExecutionArgs {
             Validity::NonNullable | Validity::AllValid => {
                 self.finalize_output(values, self.row_count)
             }
-            Validity::Array(valid) => self.finalize_output(values.mask(valid)?, self.row_count),
+            // A canonical kernel output takes the validity directly. Masking it lazily would add
+            // a scalar-function node that the caller must execute again just to attach it.
+            Validity::Array(valid) => {
+                let values = match values.as_opt::<AnyCanonical>() {
+                    Some(canonical) => mask_validity_canonical(
+                        Canonical::from(canonical),
+                        Validity::Array(valid),
+                        ctx,
+                    )?
+                    .into_array(),
+                    None => values.mask(valid)?,
+                };
+                self.finalize_output(values, self.row_count)
+            }
             Validity::AllInvalid => {
                 unreachable!("all-invalid validity is handled before dense row execution")
             }
