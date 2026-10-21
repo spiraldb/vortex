@@ -20,4 +20,4 @@ physical_plan
 05)--------AggregateExec: mode=FinalPartitioned, gby=[CounterID@0 as CounterID], aggr=[avg(octet_length(hits.URL)), count(Int64(1))]
 06)----------RepartitionExec: partitioning=Hash([CounterID@0], 4), input_partitions=4
 07)------------AggregateExec: mode=Partial, gby=[CounterID@0 as CounterID], aggr=[avg(octet_length(hits.URL)), count(Int64(1))]
-08)--------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[CounterID, URL], file_type=vortex, predicate: URL@13 != 
+08)--------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex]]}, projection=[CounterID, URL], file_type=vortex, predicate: URL@13 != 

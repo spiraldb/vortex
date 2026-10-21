@@ -97,7 +97,7 @@ physical_plan
 10)--------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/supplier.vortex]]}, projection=[s_suppkey, s_name, s_address, s_nationkey, s_phone, s_acctbal, s_comment], file_type=vortex
 11)--------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(p_partkey@0, ps_partkey@0)], projection=[p_partkey@0, p_mfgr@1, ps_suppkey@3, ps_supplycost@4]
 12)----------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/part.vortex]]}, projection=[p_partkey, p_mfgr], file_type=vortex, predicate: p_size@5 = 15 AND p_type@4 LIKE %BRASS
-13)----------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/partsupp.vortex:<slt:ignore>], [${WORK_DIR}/partsupp.vortex:<slt:ignore>], [${WORK_DIR}/partsupp.vortex:<slt:ignore>], [${WORK_DIR}/partsupp.vortex:<slt:ignore>]]}, projection=[ps_partkey, ps_suppkey, ps_supplycost], file_type=vortex
+13)----------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/partsupp.vortex], [${WORK_DIR}/partsupp.vortex], [${WORK_DIR}/partsupp.vortex], [${WORK_DIR}/partsupp.vortex]]}, projection=[ps_partkey, ps_suppkey, ps_supplycost], file_type=vortex
 14)------ProjectionExec: expr=[min(partsupp.ps_supplycost)@1 as min(partsupp.ps_supplycost), ps_partkey@0 as ps_partkey]
 15)--------AggregateExec: mode=FinalPartitioned, gby=[ps_partkey@0 as ps_partkey], aggr=[min(partsupp.ps_supplycost)]
 16)----------RepartitionExec: partitioning=Hash([ps_partkey@0], 4), input_partitions=4
@@ -108,4 +108,4 @@ physical_plan
 21)------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/nation.vortex]]}, projection=[n_nationkey, n_regionkey], file_type=vortex
 22)------------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(s_suppkey@0, ps_suppkey@1)], projection=[ps_partkey@2, ps_supplycost@4, s_nationkey@1]
 23)--------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/supplier.vortex]]}, projection=[s_suppkey, s_nationkey], file_type=vortex
-24)--------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/partsupp.vortex:<slt:ignore>], [${WORK_DIR}/partsupp.vortex:<slt:ignore>], [${WORK_DIR}/partsupp.vortex:<slt:ignore>], [${WORK_DIR}/partsupp.vortex:<slt:ignore>]]}, projection=[ps_partkey, ps_suppkey, ps_supplycost], file_type=vortex
+24)--------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/partsupp.vortex], [${WORK_DIR}/partsupp.vortex], [${WORK_DIR}/partsupp.vortex], [${WORK_DIR}/partsupp.vortex]]}, projection=[ps_partkey, ps_suppkey, ps_supplycost], file_type=vortex

@@ -80,7 +80,9 @@ the test passed, failed, or panicked (cleanup errors are logged, not fatal).
 
 Query output is passed through a normalization step that rewrites the scratch path back to the
 `${WORK_DIR}` token. This keeps expected output stable across machines and runs, and is what lets
-`--complete` (below) write portable expected values instead of machine-specific paths.
+`--complete` (below) write portable expected values instead of machine-specific paths. The same
+step removes the byte range of each file split in DataFusion plans (`data.vortex:0..2119578`
+becomes `data.vortex`), because these ranges change with the file size.
 
 ## Selecting which engine runs a test
 

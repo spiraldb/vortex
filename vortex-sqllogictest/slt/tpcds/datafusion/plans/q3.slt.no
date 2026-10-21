@@ -49,4 +49,4 @@ physical_plan
 08)--------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/item.vortex]]}, projection=[i_item_sk, i_brand_id, i_brand], file_type=vortex, predicate: i_manufact_id@13 = 128
 09)--------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(d_date_sk@0, ss_sold_date_sk@0)], projection=[d_year@1, ss_item_sk@3, ss_ext_sales_price@4]
 10)----------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/date_dim.vortex]]}, projection=[d_date_sk, d_year], file_type=vortex, predicate: d_moy@8 = 11
-11)----------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/store_sales.vortex:0..2119578], [${WORK_DIR}/store_sales.vortex:2119578..4239156], [${WORK_DIR}/store_sales.vortex:4239156..6358734], [${WORK_DIR}/store_sales.vortex:6358734..8478312]]}, projection=[ss_sold_date_sk, ss_item_sk, ss_ext_sales_price], file_type=vortex
+11)----------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/store_sales.vortex], [${WORK_DIR}/store_sales.vortex], [${WORK_DIR}/store_sales.vortex], [${WORK_DIR}/store_sales.vortex]]}, projection=[ss_sold_date_sk, ss_item_sk, ss_ext_sales_price], file_type=vortex

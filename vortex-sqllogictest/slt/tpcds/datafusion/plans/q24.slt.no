@@ -130,7 +130,7 @@ physical_plan
 20)--------------------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/store.vortex]]}, projection=[s_store_sk, s_store_name, s_state, s_zip], file_type=vortex, predicate: s_market_id@10 = 8
 21)--------------------------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(sr_ticket_number@1, ss_ticket_number@3), (sr_item_sk@0, ss_item_sk@0)], projection=[ss_item_sk@2, ss_customer_sk@3, ss_store_sk@4, ss_net_paid@6]
 22)----------------------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/store_returns.vortex]]}, projection=[sr_item_sk, sr_ticket_number], file_type=vortex
-23)----------------------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/store_sales.vortex:0..2119578], [${WORK_DIR}/store_sales.vortex:2119578..4239156], [${WORK_DIR}/store_sales.vortex:4239156..6358734], [${WORK_DIR}/store_sales.vortex:6358734..8478312]]}, projection=[ss_item_sk, ss_customer_sk, ss_store_sk, ss_ticket_number, ss_net_paid], file_type=vortex
+23)----------------------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/store_sales.vortex], [${WORK_DIR}/store_sales.vortex], [${WORK_DIR}/store_sales.vortex], [${WORK_DIR}/store_sales.vortex]]}, projection=[ss_item_sk, ss_customer_sk, ss_store_sk, ss_ticket_number, ss_net_paid], file_type=vortex
 24)--ProjectionExec: expr=[CAST(0.05 * CAST(avg(ssales.netpaid)@0 AS Float64) AS Decimal128(38, 15)) as Float64(0.05) * avg(ssales.netpaid)]
 25)----AggregateExec: mode=Final, gby=[], aggr=[avg(ssales.netpaid)]
 26)------CoalescePartitionsExec
@@ -149,4 +149,4 @@ physical_plan
 39)--------------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/store.vortex]]}, projection=[s_store_sk, s_store_name, s_state, s_zip], file_type=vortex, predicate: s_market_id@10 = 8
 40)--------------------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(sr_ticket_number@1, ss_ticket_number@3), (sr_item_sk@0, ss_item_sk@0)], projection=[ss_item_sk@2, ss_customer_sk@3, ss_store_sk@4, ss_net_paid@6]
 41)----------------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/store_returns.vortex]]}, projection=[sr_item_sk, sr_ticket_number], file_type=vortex
-42)----------------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/store_sales.vortex:0..2119578], [${WORK_DIR}/store_sales.vortex:2119578..4239156], [${WORK_DIR}/store_sales.vortex:4239156..6358734], [${WORK_DIR}/store_sales.vortex:6358734..8478312]]}, projection=[ss_item_sk, ss_customer_sk, ss_store_sk, ss_ticket_number, ss_net_paid], file_type=vortex
+42)----------------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/store_sales.vortex], [${WORK_DIR}/store_sales.vortex], [${WORK_DIR}/store_sales.vortex], [${WORK_DIR}/store_sales.vortex]]}, projection=[ss_item_sk, ss_customer_sk, ss_store_sk, ss_ticket_number, ss_net_paid], file_type=vortex

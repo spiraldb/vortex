@@ -19,4 +19,4 @@ physical_plan
 04)------AggregateExec: mode=FinalPartitioned, gby=[URL@0 as URL], aggr=[count(Int64(1))]
 05)--------RepartitionExec: partitioning=Hash([URL@0], 4), input_partitions=4
 06)----------AggregateExec: mode=Partial, gby=[URL@0 as URL], aggr=[count(Int64(1))]
-07)------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[URL], file_type=vortex, predicate: CounterID@6 = 62 AND EventDate@5 >= 1372636800000000 AND EventDate@5 <= 1375228800000000 AND DontCountHits@61 = 0 AND IsRefresh@15 = 0 AND URL@13 != 
+07)------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex], [${WORK_DIR}/hits.vortex]]}, projection=[URL], file_type=vortex, predicate: CounterID@6 = 62 AND EventDate@5 >= 1372636800000000 AND EventDate@5 <= 1375228800000000 AND DontCountHits@61 = 0 AND IsRefresh@15 = 0 AND URL@13 != 
