@@ -19,6 +19,8 @@ mod optimize;
 pub mod optimizer;
 pub mod pipeline;
 mod plans;
+#[cfg(test)]
+pub(crate) use plans::struct_partitioning::struct_partition_rules;
 mod typed;
 mod vtable;
 
