@@ -83,6 +83,8 @@ use crate::convert::schema::calculate_physical_schema;
 
 mod encoded;
 
+use encoded::Transform;
+
 /// The field of the one-field struct an element transform is evaluated over.
 pub(crate) const ELEMENT: &str = "element";
 
@@ -138,8 +140,8 @@ impl ScalarFnVTable for ListSumF64 {
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrayRef> {
         let lists = Lists::new(args.get(0)?, ctx)?;
-        if options.element.is_none()
-            && let Some((sums, validity)) = encoded::sum_runs(&lists, ctx)?
+        if let Some(transform) = Transform::of(options.element.as_ref())
+            && let Some((sums, validity)) = encoded::sum_runs(&lists, transform, ctx)?
         {
             return Ok(PrimitiveArray::new(
                 sums,
