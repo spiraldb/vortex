@@ -38,6 +38,7 @@ use vortex_array::ArrayRef;
 use vortex_array::VortexSessionExecute;
 use vortex_array::dtype::DType;
 use vortex_array::expr::BoundExpression;
+use vortex_buffer::ByteBuffer;
 use vortex_error::VortexResult;
 use vortex_io::request::IoService;
 use vortex_io::session::RuntimeSessionExt;
@@ -54,6 +55,7 @@ use crate::scan::execution::ScanPlans;
 pub use crate::scan::execution::SegmentLocation;
 use crate::scan::execution::plan_selection;
 use crate::scan::v2::cache::Planned;
+use crate::scan::v2::io::FileBytesSource;
 use crate::scan::v2::io::SegmentScanIo;
 use crate::scan::v2::split::SplitPlan;
 use crate::segments::SegmentSource;
@@ -102,6 +104,17 @@ pub struct ScanFile {
     pub segments: Arc<dyn SegmentSource>,
 }
 
+impl ScanFile {
+    /// Reads every segment from `bytes`, the whole file, such as a memory map of a local file.
+    ///
+    /// Each read is then a zero-copy slice that completes as it is requested, so a split never
+    /// waits between its stages.
+    pub fn with_file_bytes(mut self, bytes: ByteBuffer) -> VortexResult<Self> {
+        self.segments = Arc::new(FileBytesSource::try_new(bytes, &self.locations)?);
+        Ok(self)
+    }
+}
+
 /// Builds a projection scan on the planner-driven V2 executor.
 ///
 /// This builder reads the file's layout and segments directly. Unsupported layouts return an
@@ -131,7 +144,7 @@ impl ScanBuilder<ArrayRef> {
             ordered: true,
             row_range: None,
             selection: Selection::default(),
-            concurrency: 4,
+            concurrency: 2,
             map_fn: Arc::new(Ok),
             row_offset: 0,
             plan_cache: None,
@@ -209,7 +222,9 @@ impl<A: 'static + Send> ScanBuilder<A> {
         self
     }
 
-    /// Sets the number of active splits per worker thread. Must be greater than zero.
+    /// Sets how far the scan decodes ahead of its consumer, in 65,536-row splits per worker
+    /// thread. A larger split counts for as many of these as it holds rows, and at least one
+    /// split always runs. Defaults to 2. Must be greater than zero.
     pub fn with_concurrency(mut self, concurrency: usize) -> Self {
         assert!(concurrency > 0);
         self.concurrency = concurrency;
@@ -335,28 +350,43 @@ impl<A: 'static + Send> PreparedScan<A> {
 
     /// Runs every split as a task on the session's runtime and yields their mapped batches.
     ///
-    /// Like the default executor, up to `concurrency` splits per thread run at once, and their
-    /// batches are yielded in row order when the scan is ordered.
+    /// The scan decodes ahead of its consumer by up to `concurrency` × 65,536 rows per worker
+    /// thread, and always by at least one split: eight 65,536-row splits, or one filtered
+    /// split of 1,048,576 rows, with `concurrency` 2 on four threads. Batches are yielded in
+    /// row order when the scan is ordered.
     fn execute_stream(self) -> VortexResult<BoxStream<'static, VortexResult<A>>> {
-        let concurrency = self.concurrency * get_available_parallelism().unwrap_or(1);
+        let rows_ahead =
+            self.concurrency * get_available_parallelism().unwrap_or(1) * MAX_ROWS_PER_CHUNK;
         let handle = self.session.handle();
         let split_plans = self.split_plans();
         let io = self.io;
         let map_fn = self.map_fn;
+        let split_rows = split_plans
+            .iter()
+            .map(|split| {
+                usize::try_from(split.scope.rows.end - split.scope.rows.start).unwrap_or(usize::MAX)
+            })
+            .max()
+            .unwrap_or(0);
+        let concurrency = (rows_ahead / split_rows.max(1)).max(1);
         // An unordered scan hands each batch on as it is mapped, so a split holds no more than
-        // the batch its consumer has not taken.
+        // the batches its consumer has not taken.
         if !self.ordered {
             let streams = stream::iter(split_plans).map(move |split| {
                 let (send, recv) = mpsc::channel(1);
-                let task =
-                    handle.spawn(split.run_unordered(Arc::clone(&io), Arc::clone(&map_fn), send));
+                let task = handle.spawn(split.run_unordered(
+                    Arc::clone(&io),
+                    Arc::clone(&map_fn),
+                    handle.clone(),
+                    send,
+                ));
                 let errors = stream::once(task)
                     .filter_map(|result| std::future::ready(result.err().map(Err)));
                 stream::select(recv, errors)
             });
             return Ok(streams.flatten_unordered(concurrency).boxed());
         }
-        // Spawned as the buffer pulls them, so at most `concurrency` splits read at once.
+        // Spawned as the buffer pulls them, so at most `concurrency` splits run at once.
         let tasks = stream::iter(split_plans).map(move |split| {
             let io = Arc::clone(&io);
             let map_fn = Arc::clone(&map_fn);

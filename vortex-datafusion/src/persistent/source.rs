@@ -377,7 +377,6 @@ impl VortexSource {
             projection_pushdown: self.options.projection_pushdown,
             scan_concurrency: self.options.scan_concurrency,
             scan_v2: self.options.scan_v2,
-            local_files: base_config.object_store_url.as_str().starts_with("file://"),
         };
 
         Ok(opener)
