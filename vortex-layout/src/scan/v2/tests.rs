@@ -41,6 +41,7 @@ use vortex_io::session::RuntimeSessionExt;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
 
+use super::MIN_SPLIT_ROWS;
 use super::PreparedScan;
 use super::ScanBuilder;
 use super::ScanCache;
@@ -62,7 +63,6 @@ use crate::layouts::zoned::writer::ZonedLayoutOptions;
 use crate::layouts::zoned::writer::ZonedStrategy;
 use crate::scan::execution::SegmentLocation;
 use crate::scan::scan_builder::ScanBuilder as V1ScanBuilder;
-use crate::scan::split_by::MIN_SPLIT_ROWS;
 use crate::segments::SegmentFuture;
 use crate::segments::SegmentId;
 use crate::segments::SegmentSource;

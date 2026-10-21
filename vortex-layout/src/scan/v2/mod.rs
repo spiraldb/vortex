@@ -13,7 +13,7 @@
 //! error; filters and limits are not part of this builder's API. Work is partitioned into fixed
 //! chunks of up to 65,536 rows, independently of the stored layout's chunk boundaries.
 //! Full-file projections use smaller 8,192-row multiples when serialized bytes per row are high,
-//! and files of a few hundred thousand rows are split evenly as [`max_split_rows`] describes.
+//! and files of a few hundred thousand rows are split evenly into 16 splits.
 //! When there are still fewer splits than worker threads, a struct projection is also split into
 //! column groups, so every split runs one task per group and wide tables decode in parallel.
 //!
@@ -65,7 +65,6 @@ use crate::scan::arrow::to_record_batch;
 use crate::scan::execution::ScanPlans;
 pub use crate::scan::execution::SegmentLocation;
 use crate::scan::execution::plan_selection;
-use crate::scan::split_by::max_split_rows;
 use crate::scan::v2::columns::Column;
 use crate::scan::v2::columns::ColumnOutput;
 use crate::scan::v2::columns::ColumnSplit;
@@ -78,6 +77,12 @@ use crate::segments::SegmentSource;
 const ROW_BLOCK_SIZE: usize = 8192;
 const MAX_ROWS_PER_CHUNK: usize = 8 * ROW_BLOCK_SIZE;
 const TARGET_BYTES_PER_CHUNK: u64 = 8 * 1024 * 1024;
+/// Files with at least this many rows are scanned in at least [`SPLITS_PER_FILE`] splits.
+const MIN_ROWS_TO_SPLIT_EVENLY: u64 = 200_000;
+/// The number of splits that files of a few hundred thousand rows are scanned in.
+const SPLITS_PER_FILE: u64 = 16;
+/// The fewest rows of a split of a file that is split evenly.
+const MIN_SPLIT_ROWS: u64 = 2 * ROW_BLOCK_SIZE as u64;
 
 /// Limit estimated bytes per task without changing the writer-aligned row granularity.
 fn rows_per_chunk(row_count: u64, locations: &[SegmentLocation]) -> usize {
@@ -93,17 +98,20 @@ fn rows_per_chunk(row_count: u64, locations: &[SegmentLocation]) -> usize {
     blocks.clamp(1, 8) as usize * ROW_BLOCK_SIZE
 }
 
-/// The rows per chunk of a file of `row_count` rows, which splits it evenly when
-/// [`max_split_rows`] asks for more splits than chunks of `chunk_rows`, in multiples of
-/// [`ROW_BLOCK_SIZE`] so that chunks stay aligned to the writer's blocks.
+/// The rows per chunk of a file of `row_count` rows, at most `chunk_rows`.
+///
+/// Scans get their parallelism from rows first. A file of a few hundred thousand rows in chunks
+/// of `chunk_rows` leaves only a few splits, so it is split evenly into [`SPLITS_PER_FILE`]
+/// splits of at least [`MIN_SPLIT_ROWS`] rows instead, in multiples of [`ROW_BLOCK_SIZE`] so that
+/// chunks stay aligned to the writer's blocks. Smaller files keep their chunks; a scan whose row
+/// splits still leave threads idle splits its columns too.
 fn even_chunk_rows(row_count: u64, chunk_rows: usize) -> usize {
-    match max_split_rows(row_count, chunk_rows as u64) {
-        Some(max_rows) => {
-            let blocks = usize::try_from(max_rows).unwrap_or(usize::MAX) / ROW_BLOCK_SIZE;
-            blocks.max(1) * ROW_BLOCK_SIZE
-        }
-        None => chunk_rows,
+    if row_count < MIN_ROWS_TO_SPLIT_EVENLY {
+        return chunk_rows;
     }
+    let rows = (row_count / SPLITS_PER_FILE).max(MIN_SPLIT_ROWS);
+    let blocks = usize::try_from(rows).unwrap_or(usize::MAX) / ROW_BLOCK_SIZE;
+    (blocks * ROW_BLOCK_SIZE).min(chunk_rows)
 }
 
 /// Fixed boundaries in the file's row domain, clipped to the requested range.
