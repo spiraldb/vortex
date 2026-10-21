@@ -11,12 +11,17 @@ use crate::ArrayRef;
 use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::builtins::ArrayBuiltins;
+use crate::validity::Validity;
 
 impl RowFnExecutionArgs<'_> {
     /// Resolve validity and try direct valid-row execution before filtered execution.
     pub(super) fn execute_valid_only(
         &self,
-        kernel: impl Fn(BorrowedRowFnArgs<'_>, &mut ExecutionCtx) -> VortexResult<ArrayRef>,
+        kernel: impl FnOnce(
+            BorrowedRowFnArgs<'_>,
+            &mut Option<Validity>,
+            &mut ExecutionCtx,
+        ) -> VortexResult<ArrayRef>,
         try_valid_rows: impl FnOnce(
             BorrowedRowFnArgs<'_>,
             MaskValuesRef,
@@ -40,6 +45,7 @@ impl RowFnExecutionArgs<'_> {
             Mask::AllTrue(_) | Mask::AllFalse(0) => {
                 let values = kernel(
                     self.execution_args(&self.batch.inputs, self.batch.row_count),
+                    &mut None,
                     ctx,
                 )?;
                 let values = self.validate_kernel_output(values, self.batch.row_count, ctx)?;

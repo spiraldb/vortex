@@ -72,7 +72,7 @@ pub(crate) fn finalize_kernel_output(
 ) -> VortexResult<ArrayRef> {
     validate_output(id, result_dtype, expected_len, &values)?;
     vortex_ensure!(
-        values.all_valid(ctx)?,
+        !values.dtype().is_nullable() || values.all_valid(ctx)?,
         "the {id} row kernel must produce only valid rows, got at least one null row",
     );
 

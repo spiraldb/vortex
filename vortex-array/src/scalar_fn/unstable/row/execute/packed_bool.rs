@@ -28,10 +28,11 @@ use crate::scalar_fn::unstable::row::IndexedElementTuple;
 use crate::scalar_fn::unstable::row::types::decoded_source;
 use crate::validity::Validity;
 
-/// Decode every input column, then pack infallible Boolean outputs.
+/// Decode every input column, then pack infallible Boolean outputs with `validity` attached.
 pub(crate) fn execute_owned_infallible_bool<Args, const MULTIVERSIONED: bool>(
     args: &dyn ExecutionArgs,
     ctx: &mut ExecutionCtx,
+    validity: Validity,
     apply: impl Fn(Args::Elems<'_>) -> bool,
 ) -> VortexResult<ArrayRef>
 where
@@ -55,13 +56,15 @@ where
         BitBuffer::collect_bool_in(row_count, collect, ctx.allocator().clone())
     };
 
-    Ok(BoolArray::new(values, Validity::NonNullable).into_array())
+    Ok(BoolArray::try_new(values, validity)?.into_array())
 }
 
-/// Decode every input column, then pack Boolean outputs while combining failure evidence.
+/// Decode every input column, then pack Boolean outputs with `validity` attached while combining
+/// failure evidence.
 pub(crate) fn execute_owned_bool<Args, Prepared, Fail, const MULTIVERSIONED: bool>(
     args: &dyn ExecutionArgs,
     ctx: &mut ExecutionCtx,
+    validity: Validity,
     prepare: impl FnOnce(Args::ConstElems<'_>) -> Prepared,
     apply: impl Fn(&Prepared, Args::Elems<'_>) -> (bool, Fail),
     finish_failure: impl FnOnce(Fail) -> VortexResult<()>,
@@ -104,7 +107,7 @@ where
 
     finish_failure(failure)?;
 
-    Ok(BoolArray::new(values, Validity::NonNullable).into_array())
+    Ok(BoolArray::try_new(values, validity)?.into_array())
 }
 
 /// Pack a dense Boolean attempt and report rejected failure evidence to the batch executor.
