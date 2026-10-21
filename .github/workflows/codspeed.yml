@@ -250,12 +250,12 @@ jobs:
           cargo codspeed build --locked -m walltime --profile bench \
             ${{ steps.select.outputs.packages }} ${{ steps.select.outputs.benches }}
       - name: Package benchmark executables
-        run: tar -C target -cf codspeed-cpu-benchmarks.tar codspeed
+        run: tar -C target -I 'zstd -T0 -3' -cf codspeed-cpu-benchmarks.tar.zst codspeed
       - name: Upload benchmark executables
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
         with:
           name: codspeed-cpu-benchmarks-${{ matrix.features }}
-          path: codspeed-cpu-benchmarks.tar
+          path: codspeed-cpu-benchmarks.tar.zst
           compression-level: 0
           retention-days: 1
           if-no-files-found: error
@@ -290,7 +290,7 @@ jobs:
       - name: Unpack benchmark executables
         run: |
           mkdir -p target
-          tar -C target -xf codspeed-cpu-benchmarks.tar
+          tar -C target --zstd -xf codspeed-cpu-benchmarks.tar.zst
       # Pinning clocks and reserving CPUs only pays off for walltime measurements, so this
       # runs here but not in the simulation job. It must come after setup, which itself
       # spawns processes that would otherwise be pinned to the housekeeping CPUs.
