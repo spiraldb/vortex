@@ -41,7 +41,6 @@ use vortex_io::session::RuntimeSessionExt;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
 
-use super::MAX_ROWS_PER_CHUNK;
 use super::PreparedScan;
 use super::ScanBuilder;
 use super::ScanCache;
@@ -49,6 +48,7 @@ use super::ScanFile;
 use super::columns::column_group_count;
 use super::columns::field_ranges;
 use super::columns::max_groups_for_bytes;
+use super::even_chunk_rows;
 use super::row_chunks;
 use super::rows_per_chunk;
 use crate::LayoutRef;
@@ -62,6 +62,7 @@ use crate::layouts::zoned::writer::ZonedLayoutOptions;
 use crate::layouts::zoned::writer::ZonedStrategy;
 use crate::scan::execution::SegmentLocation;
 use crate::scan::scan_builder::ScanBuilder as V1ScanBuilder;
+use crate::scan::split_by::MIN_SPLIT_ROWS;
 use crate::segments::SegmentFuture;
 use crate::segments::SegmentId;
 use crate::segments::SegmentSource;
@@ -344,6 +345,20 @@ fn chunk_byte_budget(#[case] rows: u64, #[case] bytes: u32, #[case] expected: us
     assert_eq!(rows_per_chunk(rows, &locations), expected);
 }
 
+#[rstest]
+#[case::small_file(150_000, 65_536, 65_536)]
+#[case::mid_size_file(250_000, 65_536, 16_384)]
+#[case::aligned_down(1_000_000, 65_536, 57_344)]
+#[case::large_file(10_000_000, 65_536, 65_536)]
+#[case::byte_budget(1_000_000, 8192, 8192)]
+fn mid_size_files_split_evenly(
+    #[case] rows: u64,
+    #[case] chunk_rows: usize,
+    #[case] expected: usize,
+) {
+    assert_eq!(even_chunk_rows(rows, chunk_rows), expected);
+}
+
 #[test]
 fn smaller_chunks_keep_file_alignment() {
     assert_eq!(
@@ -401,9 +416,10 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
     let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
     let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?, 1)?;
     let splits = scan.split_plans();
+    // 210,000 rows split evenly into the fewest rows a split takes.
     assert_eq!(
         splits.len(),
-        (STORED_CHUNKS * STORED_CHUNK_ROWS).div_ceil(MAX_ROWS_PER_CHUNK)
+        (STORED_CHUNKS * STORED_CHUNK_ROWS).div_ceil(MIN_SPLIT_ROWS as usize)
     );
     for (index, split) in splits.into_iter().enumerate() {
         let rows = split.scope.rows.clone();

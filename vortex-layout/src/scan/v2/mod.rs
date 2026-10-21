@@ -12,8 +12,9 @@
 //! directly and supports projection, row ranges, and selections. Unsupported layouts return an
 //! error; filters and limits are not part of this builder's API. Work is partitioned into fixed
 //! chunks of up to 65,536 rows, independently of the stored layout's chunk boundaries.
-//! Full-file projections use smaller 8,192-row multiples when serialized bytes per row are high.
-//! When there are fewer splits than worker threads, a struct projection is also split into
+//! Full-file projections use smaller 8,192-row multiples when serialized bytes per row are high,
+//! and files of a few hundred thousand rows are split evenly as [`max_split_rows`] describes.
+//! When there are still fewer splits than worker threads, a struct projection is also split into
 //! column groups, so every split runs one task per group and wide tables decode in parallel.
 //!
 //! A [`ScanFile`] carrying a [`ScanCache`] shares its lowered plan, segment index, and dictionary
@@ -64,6 +65,7 @@ use crate::scan::arrow::to_record_batch;
 use crate::scan::execution::ScanPlans;
 pub use crate::scan::execution::SegmentLocation;
 use crate::scan::execution::plan_selection;
+use crate::scan::split_by::max_split_rows;
 use crate::scan::v2::columns::Column;
 use crate::scan::v2::columns::ColumnOutput;
 use crate::scan::v2::columns::ColumnSplit;
@@ -89,6 +91,19 @@ fn rows_per_chunk(row_count: u64, locations: &[SegmentLocation]) -> usize {
     let bytes_per_row = bytes.div_ceil(row_count).max(1);
     let blocks = TARGET_BYTES_PER_CHUNK / bytes_per_row / ROW_BLOCK_SIZE as u64;
     blocks.clamp(1, 8) as usize * ROW_BLOCK_SIZE
+}
+
+/// The rows per chunk of a file of `row_count` rows, which splits it evenly when
+/// [`max_split_rows`] asks for more splits than chunks of `chunk_rows`, in multiples of
+/// [`ROW_BLOCK_SIZE`] so that chunks stay aligned to the writer's blocks.
+fn even_chunk_rows(row_count: u64, chunk_rows: usize) -> usize {
+    match max_split_rows(row_count, chunk_rows as u64) {
+        Some(max_rows) => {
+            let blocks = usize::try_from(max_rows).unwrap_or(usize::MAX) / ROW_BLOCK_SIZE;
+            blocks.max(1) * ROW_BLOCK_SIZE
+        }
+        None => chunk_rows,
+    }
 }
 
 /// Fixed boundaries in the file's row domain, clipped to the requested range.
@@ -351,6 +366,7 @@ impl<A: 'static + Send> PreparedScan<A> {
         } else {
             MAX_ROWS_PER_CHUNK
         };
+        let chunk_rows = even_chunk_rows(row_count, chunk_rows);
         let rows = builder.row_range.unwrap_or(0..row_count);
         let splits = row_chunks(rows.clone(), chunk_rows);
         let ranges = match cache.ranges() {

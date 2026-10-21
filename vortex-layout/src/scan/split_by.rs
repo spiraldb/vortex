@@ -19,6 +19,32 @@ use crate::scan::IDEAL_SPLIT_SIZE;
 /// be decoded across multiple cores rather than one.
 pub const DEFAULT_MAX_SPLIT_ROWS: u64 = IDEAL_SPLIT_SIZE;
 
+/// Files with at least this many rows are scanned in at least [`SPLITS_PER_FILE`] splits.
+pub const MIN_ROWS_TO_SPLIT_EVENLY: u64 = 200_000;
+
+/// The number of splits that files of a few hundred thousand rows are scanned in.
+pub const SPLITS_PER_FILE: u64 = 16;
+
+/// The fewest rows of a split of a file that is split evenly.
+pub const MIN_SPLIT_ROWS: u64 = 1 << 14;
+
+/// The most rows of a split of a file of `row_count` rows, at most `max_rows`, or `None` to keep
+/// the scan's own splits.
+///
+/// Scans get their parallelism from rows first. A file of a few hundred thousand rows split by
+/// its layout, or into fixed chunks of `max_rows`, leaves only a few splits, and the operators
+/// above the scan, such as the probe side of a join that fans out, run on as many threads as the
+/// scan has splits. Such a file is split evenly into [`SPLITS_PER_FILE`] splits instead. Smaller
+/// files keep their splits, as more splits of a table that only builds a hash table cost more
+/// than they gain. A scan whose row splits still leave threads idle can split its columns too.
+pub fn max_split_rows(row_count: u64, max_rows: u64) -> Option<u64> {
+    (row_count >= MIN_ROWS_TO_SPLIT_EVENLY).then(|| {
+        (row_count / SPLITS_PER_FILE)
+            .max(MIN_SPLIT_ROWS)
+            .min(max_rows)
+    })
+}
+
 /// Defines how the Vortex file is split into batches for reading.
 ///
 /// Note that each split must fit into the platform's maximum usize.
@@ -156,6 +182,7 @@ mod test {
     use std::sync::Arc;
 
     use futures::future::BoxFuture;
+    use rstest::rstest;
     use vortex_array::ArrayContext;
     use vortex_array::ArrayRef;
     use vortex_array::IntoArray;
@@ -426,5 +453,18 @@ mod test {
                 );
             }
         }
+    }
+
+    #[rstest]
+    // Small dimension tables keep their splits.
+    #[case(73_049, None)]
+    #[case(199_999, None)]
+    // TPC-DS customer_address at SF10 splits into 16.
+    #[case(250_000, Some(MIN_SPLIT_ROWS))]
+    #[case(1_000_000, Some(62_500))]
+    // Fact tables keep splits of the scan's most rows.
+    #[case(28_800_991, Some(DEFAULT_MAX_SPLIT_ROWS))]
+    fn splits_mid_size_files_evenly(#[case] row_count: u64, #[case] expected: Option<u64>) {
+        assert_eq!(max_split_rows(row_count, DEFAULT_MAX_SPLIT_ROWS), expected);
     }
 }
