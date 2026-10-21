@@ -12,14 +12,11 @@ use vortex::array::ExecutionCtx;
 use vortex::array::arrays::PrimitiveArray;
 use vortex::array::arrays::Slice;
 use vortex::array::arrays::slice::SliceArraySlotsExt;
-use vortex::array::builtins::ArrayBuiltins;
 use vortex::array::match_each_integer_ptype;
 use vortex::buffer::BitBuffer;
 use vortex::buffer::Buffer;
 use vortex::dtype::DType;
 use vortex::dtype::IntegerPType;
-use vortex::dtype::Nullability;
-use vortex::dtype::PType;
 use vortex::encodings::runend::RunEnd;
 use vortex::encodings::runend::RunEndArrayExt;
 use vortex::encodings::runend::RunEndArraySlotsExt;
@@ -120,20 +117,32 @@ pub(super) fn sum_runs(
     }
     let mut sums = Sums::new(lists.starts.len());
     let exact = if let Some(runs) = elements.as_opt::<RunEnd>() {
-        let ends = positions(runs.ends(), ctx)?;
+        let ends = runs.ends().clone().execute::<PrimitiveArray>(ctx)?;
         let shift = shift + runs.offset();
         with_values(runs.values(), ctx, |value| {
-            sum_runs_of(lists, transform, shift, &ends, value, &mut sums)
+            match_each_integer_ptype!(ends.ptype(), |I| {
+                sum_runs_of(
+                    lists,
+                    transform,
+                    shift,
+                    ends.as_slice::<I>(),
+                    value,
+                    &mut sums,
+                )
+            })
         })?
     } else if let Some(sparse) = elements.as_opt::<Sparse>() {
         let patches = sparse.patches();
-        let indices = positions(patches.indices(), ctx)?;
+        let indices = patches.indices().clone().execute::<PrimitiveArray>(ctx)?;
         let fill = sparse.fill_scalar().as_primitive();
         let fill =
             match_each_integer_ptype!(fill.ptype(), |T| { fill.typed_value::<T>().map(widen) });
         let shift = shift + patches.offset();
         with_values(patches.values(), ctx, |value| {
-            sum_patches_of(lists, transform, shift, &indices, value, fill, &mut sums)
+            match_each_integer_ptype!(indices.ptype(), |I| {
+                let indices = indices.as_slice::<I>();
+                sum_patches_of(lists, transform, shift, indices, value, fill, &mut sums)
+            })
         })?
     } else {
         return Ok(None);
@@ -158,28 +167,29 @@ fn with_values(
 
 /// Sums lists of run-end elements: run `i` holds `value(i)` up to `ends[i]`, and a list's
 /// elements are `shift` past its offsets among the runs.
-fn sum_runs_of(
+fn sum_runs_of<I: IntegerPType>(
     lists: &Lists,
     transform: Transform,
     shift: usize,
-    ends: &[u64],
+    ends: &[I],
     value: &dyn Fn(usize) -> Option<i128>,
     sums: &mut Sums,
 ) -> bool {
     let mut run = 0;
     for (start, end, list_valid) in lists.rows() {
-        let (mut position, end) = ((start + shift) as u64, (end + shift) as u64);
-        while run < ends.len() && ends[run] <= position {
+        let (mut position, end) = (start + shift, end + shift);
+        while run < ends.len() && ends[run].as_() <= position {
             run += 1;
         }
         let mut sum = Sum::default();
         while position < end && run < ends.len() {
-            let stop = ends[run].min(end);
+            let run_end: usize = ends[run].as_();
+            let stop = run_end.min(end);
             if let Some(value) = transform.apply(value(run)) {
                 sum.add(value, stop - position);
             }
             position = stop;
-            if stop == ends[run] {
+            if stop == run_end {
                 run += 1;
             }
         }
@@ -193,11 +203,11 @@ fn sum_runs_of(
 /// Sums lists of sparse elements: `fill`, or null when it is `None`, but at `indices`, the
 /// `i`th of which holds `value(i)`. A list's elements are `shift` past its offsets among the
 /// indices.
-fn sum_patches_of(
+fn sum_patches_of<I: IntegerPType>(
     lists: &Lists,
     transform: Transform,
     shift: usize,
-    indices: &[u64],
+    indices: &[I],
     value: &dyn Fn(usize) -> Option<i128>,
     fill: Option<i128>,
     sums: &mut Sums,
@@ -205,20 +215,20 @@ fn sum_patches_of(
     let fill = transform.apply(fill);
     let mut patch = 0;
     for (start, end, list_valid) in lists.rows() {
-        let (start, end) = ((start + shift) as u64, (end + shift) as u64);
-        while patch < indices.len() && indices[patch] < start {
+        let (start, end) = (start + shift, end + shift);
+        while patch < indices.len() && indices[patch].as_() < start {
             patch += 1;
         }
         let mut sum = Sum::default();
         let first = patch;
-        while patch < indices.len() && indices[patch] < end {
+        while patch < indices.len() && indices[patch].as_() < end {
             if let Some(value) = transform.apply(value(patch)) {
                 sum.add(value, 1);
             }
             patch += 1;
         }
         if let Some(fill) = fill {
-            sum.add(fill, end - start - (patch - first) as u64);
+            sum.add(fill, end - start - (patch - first));
         }
         if !sums.push(sum, list_valid) {
             return false;
@@ -230,16 +240,16 @@ fn sum_patches_of(
 /// A list's valid transformed elements: their count, sum, and the sum of their magnitudes.
 #[derive(Default)]
 struct Sum {
-    count: u64,
+    count: usize,
     sum: i128,
     magnitude: u128,
 }
 
 impl Sum {
-    fn add(&mut self, value: i128, count: u64) {
+    fn add(&mut self, value: i128, count: usize) {
         self.count += count;
-        self.sum += value * i128::from(count);
-        self.magnitude += value.unsigned_abs() * u128::from(count);
+        self.sum += value * count as i128;
+        self.magnitude += value.unsigned_abs() * count as u128;
     }
 }
 
@@ -279,14 +289,6 @@ impl Sums {
 
 fn widen<T: IntegerPType>(value: T) -> i128 {
     value.to_i128().unwrap_or_default()
-}
-
-/// Positions, as run ends or patch indices, decoded.
-fn positions(array: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<Buffer<u64>> {
-    array
-        .clone()
-        .cast(DType::Primitive(PType::U64, Nullability::NonNullable))?
-        .execute::<Buffer<u64>>(ctx)
 }
 
 #[cfg(test)]
