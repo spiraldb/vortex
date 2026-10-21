@@ -35,10 +35,61 @@ pub(crate) fn can_prune_file_stats(
     let Some(pruning_expr) = expr.falsify(session)? else {
         return Ok(false);
     };
+    evaluate_file_stats_proof(
+        pruning_expr,
+        row_count,
+        file_stats,
+        struct_fields,
+        false,
+        session,
+    )
+}
 
+/// Returns `true` if file-level statistics prove `expr` is true for every row of the file.
+pub(crate) fn is_satisfied_by_file_stats(
+    expr: &BoundExpression,
+    row_count: u64,
+    file_stats: &FileStatistics,
+    struct_fields: &StructFields,
+    session: &VortexSession,
+) -> VortexResult<bool> {
+    let Some(proof) = expr.satisfy(session)? else {
+        return Ok(false);
+    };
+    evaluate_file_stats_proof(proof, row_count, file_stats, struct_fields, false, session)
+}
+
+/// Returns `true` if file-level statistics prove `expr` is true for every row of the file in which
+/// no column is null.
+///
+/// The proof binds every null count to zero. The min and max statistics ignore nulls, so a proof
+/// over them holds for the rows without nulls.
+pub(crate) fn is_satisfied_by_non_null_file_stats(
+    expr: &BoundExpression,
+    row_count: u64,
+    file_stats: &FileStatistics,
+    struct_fields: &StructFields,
+    session: &VortexSession,
+) -> VortexResult<bool> {
+    let Some(proof) = expr.satisfy(session)? else {
+        return Ok(false);
+    };
+    evaluate_file_stats_proof(proof, row_count, file_stats, struct_fields, true, session)
+}
+
+/// Evaluates a stats proof against the file statistics; only a definite `true` proves it.
+fn evaluate_file_stats_proof(
+    pruning_expr: BoundExpression,
+    row_count: u64,
+    file_stats: &FileStatistics,
+    struct_fields: &StructFields,
+    no_nulls: bool,
+    session: &VortexSession,
+) -> VortexResult<bool> {
     let binder = FileStatsBinder {
         file_stats,
         struct_fields,
+        no_nulls,
     };
     let pruning_expr = bind_stats(pruning_expr, &binder)?;
 
@@ -63,6 +114,8 @@ pub(crate) fn can_prune_file_stats(
 struct FileStatsBinder<'a> {
     file_stats: &'a FileStatistics,
     struct_fields: &'a StructFields,
+    /// Whether to bind every null count to zero, restricting a proof to the rows without nulls.
+    no_nulls: bool,
 }
 
 impl StatBinder for FileStatsBinder<'_> {
@@ -93,9 +146,12 @@ impl FileStatsBinder<'_> {
         let field_idx = self.struct_fields.find(field_name)?;
         let field_stats = self.file_stats.stats_sets().get(field_idx)?;
 
-        let stat_value = field_stats.get(stat).as_exact()?;
         let field_dtype = self.struct_fields.field_by_index(field_idx)?;
         let stat_dtype = stat.dtype(&field_dtype)?;
+        if self.no_nulls && stat == Stat::NullCount {
+            return Some(lit(Scalar::try_new(stat_dtype, Some(0u64.into())).ok()?));
+        }
+        let stat_value = field_stats.get(stat).as_exact()?;
         let stat_scalar = Scalar::try_new(stat_dtype, Some(stat_value)).ok()?;
 
         Some(lit(stat_scalar))
