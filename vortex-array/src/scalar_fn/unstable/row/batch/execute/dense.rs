@@ -103,9 +103,9 @@ impl RowFnExecutionArgs<'_> {
             .execute_mask(self.batch.row_count, ctx)?
         {
             // An array-backed validity can materialize to all valid even though the cheap checks
-            // in `RowFnExecutionArgs::execute` could not prove that. The deferred error therefore
-            // came from an observable row and remains terminal. An empty mask is both all-valid
-            // and all-null, so preserve the all-valid behavior.
+            // in `RowFnExecutionArgs::try_execute_without_retry` could not prove that. The
+            // deferred error therefore came from an observable row and remains terminal. An empty
+            // mask is both all-valid and all-null, so preserve the all-valid behavior.
             Mask::AllTrue(_) | Mask::AllFalse(0) => return Err(deferred_error),
             Mask::AllFalse(_) => return Ok(self.all_null()),
             Mask::Values(valid_rows) => valid_rows,

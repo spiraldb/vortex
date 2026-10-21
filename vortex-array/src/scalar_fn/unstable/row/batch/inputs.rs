@@ -11,8 +11,9 @@ use crate::ArrayRef;
 
 /// The same-length input columns of one row-function execution, borrowed by index.
 ///
-/// Batch inspection and execution share this borrowed view of the inputs.
-pub(crate) trait RowInputs {
+/// The trait is `pub` only so that the sealed tuple decoding can bound on it. The private module
+/// keeps it out of the public API.
+pub trait RowInputs {
     /// Return the number of input columns.
     fn num_inputs(&self) -> usize;
 

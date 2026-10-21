@@ -10,14 +10,16 @@
 //! output.
 //!
 //! [`RowInputs`] borrows the input columns, and [`BatchProbe`] classifies them before dispatch.
-//! [`BatchInputs`] retains the columns and their classification. [`BatchPlan`] carries the nullable
-//! execution strategy selected by a concrete dispatch. [`RowFnExecutionArgs`] applies that strategy,
-//! and [`BorrowedRowFnArgs`] pairs each kernel invocation with its planning metadata.
+//! [`BatchInputs`] collects them when a visit cannot finish the batch directly. [`BatchPlan`]
+//! carries the nullable execution strategy selected by a concrete dispatch. [`RowFnExecutionArgs`]
+//! applies that strategy, and [`BorrowedRowFnArgs`] pairs each kernel invocation with its planning
+//! metadata.
 
 use smallvec::SmallVec;
 
 use crate::ArrayRef;
 use crate::dtype::DType;
+use crate::dtype::Nullability;
 use crate::scalar_fn::ScalarFnId;
 use crate::validity::Validity;
 
@@ -38,8 +40,8 @@ pub(super) use super::visitor::RowPolicy;
 
 /// What batch execution derives from its borrowed inputs before a dispatch plans them.
 ///
-/// A probe holds no input column. [`BatchInputs`] retains the columns and their probe when a batch
-/// needs owned inputs for execution.
+/// A probe holds no input column. A visit that can finish the batch directly decodes the borrowed
+/// inputs. Any other visit collects them into [`BatchInputs`].
 pub(crate) struct BatchProbe {
     /// The number of rows in the original execution scope.
     row_count: usize,
@@ -54,6 +56,9 @@ pub(crate) struct BatchProbe {
 
     /// Whether any input is a null literal constant.
     has_null_const: bool,
+
+    /// The strict result nullability: nullable when any input dtype is nullable.
+    nullability: Nullability,
 }
 
 /// The same-length input columns collected for one row-function execution, with the facts of

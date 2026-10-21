@@ -537,3 +537,19 @@ fn packed_boolean_attaches_validity(
     assert_arrays_eq!(&output, &expected, &mut ctx);
     Ok(())
 }
+
+#[test]
+#[should_panic(expected = "packed Boolean validity length must match the row count")]
+fn packed_boolean_rejects_wrong_validity_length() {
+    let values = PrimitiveArray::from_iter([1_i64, 2]).into_array();
+    let args = VecExecutionArgs::new(vec![values], 2);
+    let validity = Validity::from_iter([true, false, true]);
+    let mut ctx = VortexSession::empty().create_execution_ctx();
+
+    drop(execute_owned_infallible_bool::<(i64,), false>(
+        &args,
+        &mut ctx,
+        validity,
+        |(value,)| value > 0,
+    ));
+}
