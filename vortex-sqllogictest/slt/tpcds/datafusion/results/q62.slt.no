@@ -48,9 +48,9 @@ ORDER BY 1 NULLS FIRST,
          3 NULLS FIRST
 LIMIT 100;
 ----
-Conventional childr EXPRESS site_0 748 680 732 756 0
-Conventional childr LIBRARY site_0 562 501 538 567 0
-Conventional childr NEXT DAY site_0 713 698 719 753 0
-Conventional childr OVERNIGHT site_0 502 556 560 509 0
-Conventional childr REGULAR site_0 561 561 502 567 0
-Conventional childr TWO DAY site_0 545 539 533 567 0
+Conventional childr EXPRESS site_0 710 727 732 750 0
+Conventional childr LIBRARY site_0 544 538 566 533 0
+Conventional childr NEXT DAY site_0 704 718 699 712 0
+Conventional childr OVERNIGHT site_0 504 536 541 536 0
+Conventional childr REGULAR site_0 549 555 528 534 0
+Conventional childr TWO DAY site_0 563 543 557 576 0

@@ -442,8 +442,8 @@ logical_plan
 08)--------------Inner Join: store_sales.ss_sold_date_sk = date_dim.d_date_sk
 09)----------------TableScan: store_sales projection=[ss_sold_date_sk, ss_store_sk, ss_net_profit]
 10)----------------Projection: date_dim.d_date_sk
-11)------------------Filter: date_dim.d_qoy = Int64(2) AND date_dim.d_year = Int64(1998)
-12)--------------------TableScan: date_dim projection=[d_date_sk, d_year, d_qoy], partial_filters=[date_dim.d_qoy = Int64(2), date_dim.d_year = Int64(1998)]
+11)------------------Filter: date_dim.d_qoy = Int32(2) AND date_dim.d_year = Int32(1998)
+12)--------------------TableScan: date_dim projection=[d_date_sk, d_year, d_qoy], partial_filters=[date_dim.d_qoy = Int32(2), date_dim.d_year = Int32(1998)]
 13)------------TableScan: store projection=[s_store_sk, s_store_name, s_zip]
 14)--------SubqueryAlias: v1
 15)----------SubqueryAlias: a2
@@ -496,4 +496,4 @@ physical_plan
 29)----------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/store.vortex]]}, projection=[s_store_sk, s_store_name, s_zip], file_type=vortex
 30)----------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(d_date_sk@0, ss_sold_date_sk@0)], projection=[ss_store_sk@2, ss_net_profit@3]
 31)------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/date_dim.vortex]]}, projection=[d_date_sk], file_type=vortex, predicate: d_qoy@10 = 2 AND d_year@6 = 1998
-32)------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/store_sales.vortex:<slt:ignore>], [${WORK_DIR}/store_sales.vortex:<slt:ignore>], [${WORK_DIR}/store_sales.vortex:<slt:ignore>], [${WORK_DIR}/store_sales.vortex:<slt:ignore>]]}, projection=[ss_sold_date_sk, ss_store_sk, ss_net_profit], file_type=vortex
+32)------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/store_sales.vortex:0..2119578], [${WORK_DIR}/store_sales.vortex:2119578..4239156], [${WORK_DIR}/store_sales.vortex:4239156..6358734], [${WORK_DIR}/store_sales.vortex:6358734..8478312]]}, projection=[ss_sold_date_sk, ss_store_sk, ss_net_profit], file_type=vortex

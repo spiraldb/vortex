@@ -31,4 +31,4 @@ FROM
      AND d_month_seq BETWEEN 1200 AND 1200 + 11 ) hot_cust
 LIMIT 100;
 ----
-1
+2

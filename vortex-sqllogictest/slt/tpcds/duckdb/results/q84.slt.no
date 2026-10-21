@@ -21,9 +21,3 @@ WHERE ca_city = 'Edgewood'
 ORDER BY c_customer_id NULLS FIRST
 LIMIT 100;
 ----
-AAAAAAAAEAGCAAAA Martin, Geraldine
-AAAAAAAAEAGCAAAA Martin, Geraldine
-AAAAAAAAEGECAAAA Ortiz, Tessa
-AAAAAAAAIEKAAAAA Cohn, Michael
-AAAAAAAAJKPBAAAA Arnold, Sally
-AAAAAAAAMGLBAAAA Johnson, Wendy

@@ -37,4 +37,4 @@ FULL OUTER JOIN csci ON (ssci.customer_sk=csci.customer_sk
                          AND ssci.item_sk = csci.item_sk)
 LIMIT 100;
 ----
-54150 28203 169
+45217 34726 152

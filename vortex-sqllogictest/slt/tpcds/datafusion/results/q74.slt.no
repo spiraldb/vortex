@@ -67,6 +67,7 @@ WHERE t_s_secyear.customer_id = t_s_firstyear.customer_id
 ORDER BY 1 NULLS FIRST
 LIMIT 100;
 ----
-AAAAAAAAEPOBAAAA Thomas Whitehurst
-AAAAAAAAFNMBAAAA Shawnna Freeland
+AAAAAAAAAPFCAAAA Lucy Smith
 AAAAAAAAKJHBAAAA Roderick Ballard
+AAAAAAAALFNAAAAA David Gonzalez
+AAAAAAAAPCDAAAAA Ella Martinez

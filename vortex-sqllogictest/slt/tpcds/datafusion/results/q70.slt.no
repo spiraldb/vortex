@@ -39,6 +39,6 @@ ORDER BY lochierarchy DESC ,
          rank_within_parent
 LIMIT 100;
 ----
--44708893.64 NULL NULL 2 1
--44708893.64 TN NULL 1 1
--44708893.64 TN Williamson County 0 1
+-37220814.86 NULL NULL 2 1
+-37220814.86 TN NULL 1 1
+-37220814.86 TN Williamson County 0 1

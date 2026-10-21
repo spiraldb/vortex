@@ -54,8 +54,8 @@ logical_plan
 11)--------------------TableScan: store_sales projection=[ss_sold_date_sk, ss_store_sk, ss_net_profit]
 12)--------------------SubqueryAlias: d1
 13)----------------------Projection: date_dim.d_date_sk
-14)------------------------Filter: date_dim.d_month_seq >= Int64(1200) AND date_dim.d_month_seq <= Int64(1211)
-15)--------------------------TableScan: date_dim projection=[d_date_sk, d_month_seq], partial_filters=[date_dim.d_month_seq >= Int64(1200), date_dim.d_month_seq <= Int64(1211)]
+14)------------------------Filter: date_dim.d_month_seq >= Int32(1200) AND date_dim.d_month_seq <= Int32(1211)
+15)--------------------------TableScan: date_dim projection=[d_date_sk, d_month_seq], partial_filters=[date_dim.d_month_seq >= Int32(1200), date_dim.d_month_seq <= Int32(1211)]
 16)----------------TableScan: store projection=[s_store_sk, s_county, s_state]
 17)------------SubqueryAlias: __correlated_sq_1
 18)--------------SubqueryAlias: tmp1
@@ -71,8 +71,8 @@ logical_plan
 28)----------------------------------TableScan: store_sales projection=[ss_sold_date_sk, ss_store_sk, ss_net_profit]
 29)----------------------------------TableScan: store projection=[s_store_sk, s_state]
 30)------------------------------Projection: date_dim.d_date_sk
-31)--------------------------------Filter: date_dim.d_month_seq >= Int64(1200) AND date_dim.d_month_seq <= Int64(1211)
-32)----------------------------------TableScan: date_dim projection=[d_date_sk, d_month_seq], partial_filters=[date_dim.d_month_seq >= Int64(1200), date_dim.d_month_seq <= Int64(1211)]
+31)--------------------------------Filter: date_dim.d_month_seq >= Int32(1200) AND date_dim.d_month_seq <= Int32(1211)
+32)----------------------------------TableScan: date_dim projection=[d_date_sk, d_month_seq], partial_filters=[date_dim.d_month_seq >= Int32(1200), date_dim.d_month_seq <= Int32(1211)]
 physical_plan
 01)SortPreservingMergeExec: [lochierarchy@3 DESC, CASE WHEN lochierarchy@3 = 0 THEN s_state@1 END ASC NULLS LAST, rank_within_parent@4 ASC NULLS LAST], fetch=100
 02)--SortExec: TopK(fetch=100), expr=[lochierarchy@3 DESC, CASE WHEN lochierarchy@3 = 0 THEN s_state@1 END ASC NULLS LAST, rank_within_parent@4 ASC NULLS LAST], preserve_partitioning=[true]
@@ -97,9 +97,9 @@ physical_plan
 21)----------------------------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/date_dim.vortex]]}, projection=[d_date_sk], file_type=vortex, predicate: d_month_seq@3 >= 1200 AND d_month_seq@3 <= 1211
 22)----------------------------------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(s_store_sk@0, ss_store_sk@1)], projection=[ss_sold_date_sk@2, ss_net_profit@4, s_state@1]
 23)------------------------------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/store.vortex]]}, projection=[s_store_sk, s_state], file_type=vortex
-24)------------------------------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/store_sales.vortex:<slt:ignore>], [${WORK_DIR}/store_sales.vortex:<slt:ignore>], [${WORK_DIR}/store_sales.vortex:<slt:ignore>], [${WORK_DIR}/store_sales.vortex:<slt:ignore>]]}, projection=[ss_sold_date_sk, ss_store_sk, ss_net_profit], file_type=vortex
+24)------------------------------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/store_sales.vortex:0..2119578], [${WORK_DIR}/store_sales.vortex:2119578..4239156], [${WORK_DIR}/store_sales.vortex:4239156..6358734], [${WORK_DIR}/store_sales.vortex:6358734..8478312]]}, projection=[ss_sold_date_sk, ss_store_sk, ss_net_profit], file_type=vortex
 25)----------------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(s_store_sk@0, ss_store_sk@0)], projection=[ss_net_profit@4, s_county@1, s_state@2]
 26)------------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/store.vortex]]}, projection=[s_store_sk, s_county, s_state], file_type=vortex
 27)------------------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(d_date_sk@0, ss_sold_date_sk@0)], projection=[ss_store_sk@2, ss_net_profit@3]
 28)--------------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/date_dim.vortex]]}, projection=[d_date_sk], file_type=vortex, predicate: d_month_seq@3 >= 1200 AND d_month_seq@3 <= 1211
-29)--------------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/store_sales.vortex:<slt:ignore>], [${WORK_DIR}/store_sales.vortex:<slt:ignore>], [${WORK_DIR}/store_sales.vortex:<slt:ignore>], [${WORK_DIR}/store_sales.vortex:<slt:ignore>]]}, projection=[ss_sold_date_sk, ss_store_sk, ss_net_profit], file_type=vortex
+29)--------------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/store_sales.vortex:0..2119578], [${WORK_DIR}/store_sales.vortex:2119578..4239156], [${WORK_DIR}/store_sales.vortex:4239156..6358734], [${WORK_DIR}/store_sales.vortex:6358734..8478312]]}, projection=[ss_sold_date_sk, ss_store_sk, ss_net_profit], file_type=vortex

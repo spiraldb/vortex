@@ -44,27 +44,20 @@ ORDER BY ca_zip,
          ca_city
 LIMIT 100;
 ----
-23394 Florence 4.18
-23683 Plainview 203.23
-25752 Buena Vista 46.23
-26871 Wildwood 24.38
-26971 Wilson 6.48
-29843 Oakland 37.73
-31087 Macedonia 42.77
-41711 Unionville 39.36
-49843 Oakland 26.87
-51904 Midway 14.6
-54098 Woodlawn 3.85
-55124 Valley View 20.92
-56098 Five Points 93.57
-59858 Springtown 9.93
-60150 Bunker Hill 92.31
-62297 Freeman 10.94
-62808 Hamilton 70.32
-64107 Concord 1.91
-68339 Whitney 38.48
-69454 Highland 117.73
-71904 Midway 13.34
-76614 Providence 43.1
-NULL Waterloo 139.85
-NULL NULL 57.21
+00816 Wyoming 1.55
+05193 Pine Grove 22.57
+21521 Newport 79.87
+21952 Sunnyside 6.59
+35965 Arthur 9.18
+36871 Wildwood 19.78
+40519 Sumner 22.78
+46115 Plainville 3.04
+51521 Newport 103.73
+55124 Valley View 27.42
+56668 White Oak 3.97
+68339 Whitney 43.34
+68721 Union 7.06
+78371 Oak Ridge 7.17
+87752 Walnut Grove 32.84
+92621 Rankin 2.12
+96955 White Hall 48.55

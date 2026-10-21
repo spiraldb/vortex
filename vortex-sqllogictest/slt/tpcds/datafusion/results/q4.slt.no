@@ -122,3 +122,4 @@ ORDER BY t_s_secyear.customer_id NULLS FIRST,
          t_s_secyear.customer_preferred_cust_flag NULLS FIRST
 LIMIT 100;
 ----
+AAAAAAAAPCDAAAAA Ella Martinez Y

@@ -279,8 +279,10 @@ tokio = { version = "1.52" }
 tokio-stream = "0.1.17"
 tokio-util = "0.7.17"
 toml = "1.0"
-tpcdsgen = "0.1.0-alpha.1"
-tpcdsgen-arrow = "0.1.0-alpha.1"
+tpcdsgen = "4.0.0"
+tpcdsgen-arrow = { version = "4.0.0", default-features = false, features = [
+    "arrow_59",
+] }
 tpchgen = "4.0.0"
 tpchgen-arrow = { version = "4.0.0", default-features = false, features = [
     "arrow_59",

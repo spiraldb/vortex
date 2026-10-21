@@ -22,7 +22,7 @@ ORDER BY sum(ss_ext_sales_price) DESC,dt.d_year,
                                       item.i_category
 LIMIT 100 ;
 ----
-2000 1 Women 63812.81
-2000 7 Home 62722.51
-2000 10 Electronics 50665.69
-2000 4 Shoes 22016.68
+2000 1 Women 77072.37
+2000 10 Electronics 57235.78
+2000 7 Home 53317.91
+2000 4 Shoes 4356.99

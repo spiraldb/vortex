@@ -70,4 +70,5 @@ ORDER BY s_store_name,
          s_zip
 LIMIT 100;
 ----
-ought 1 767 Spring  Wy Suite 250 Midway Williamson County TN 31904 43 29 27 28 65
+able 1 255 Sycamore  Dr. Suite 410 Midway Williamson County TN 31904 15 11 8 10 27
+ought 1 767 Spring  Wy Suite 250 Midway Williamson County TN 31904 13 13 8 10 25

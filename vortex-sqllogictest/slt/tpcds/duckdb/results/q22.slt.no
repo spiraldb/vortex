@@ -21,103 +21,103 @@ ORDER BY qoh NULLS FIRST,
          i_category NULLS FIRST
 LIMIT 100;
 ----
-oughtableought NULL NULL NULL 387.102040816326
-oughtableought exportiunivamalg #2 NULL NULL 387.102040816326
-oughtableought exportiunivamalg #2 self-help NULL 387.102040816326
-oughtableought exportiunivamalg #2 self-help Books 387.102040816326
-anticallyantiought NULL NULL NULL 387.2
-anticallyantiought exportimaxi #6 NULL NULL 387.2
-anticallyantiought exportimaxi #6 sailing NULL 387.2
-anticallyantiought exportimaxi #6 sailing Sports 387.2
-oughteingeing NULL NULL NULL 387.576923076923
-oughteingeing univunivamalg #6 NULL NULL 387.576923076923
-oughteingeing univunivamalg #6 travel NULL 387.576923076923
-oughteingeing univunivamalg #6 travel Books 387.576923076923
-callyeingantiought NULL NULL NULL 392.551020408163
-callyeingantiought importoscholar #1 NULL NULL 392.551020408163
-callyeingantiought importoscholar #1 country NULL 392.551020408163
-callyeingantiought importoscholar #1 country Music 392.551020408163
-antieingcallyought NULL NULL NULL 393.468085106383
-antieingcallyought importonameless #6 NULL NULL 393.468085106383
-antieingcallyought importonameless #6 paint NULL 393.468085106383
-antieingcallyought importonameless #6 paint Home 393.468085106383
-ationantiese NULL NULL NULL 402.884615384615
-ationantiese scholaramalgamalg #16 NULL NULL 402.884615384615
-ationantiese scholaramalgamalg #16 portable NULL 402.884615384615
-ationantiese scholaramalgamalg #16 portable Electronics 402.884615384615
-eseableeing NULL NULL NULL 407.040816326531
-eseableeing importoamalg #1 NULL NULL 407.040816326531
-eseableeing importoamalg #1 fragrances NULL 407.040816326531
-eseableeing importoamalg #1 fragrances Women 407.040816326531
-ablen stn st NULL NULL NULL 407.607843137255
-ablen stn st brandmaxi #9 NULL NULL 407.607843137255
-ablen stn st brandmaxi #9 reference NULL 407.607843137255
-ablen stn st brandmaxi #9 reference Books 407.607843137255
-eseeseableought NULL NULL NULL 411.30612244898
-eseeseableought amalgexporti #1 NULL NULL 411.30612244898
-eseeseableought amalgexporti #1 newborn NULL 411.30612244898
-eseeseableought amalgexporti #1 newborn Children 411.30612244898
-priationought NULL NULL NULL 411.78
-priationought amalgimporto #2 NULL NULL 411.78
-priationought amalgimporto #2 accessories NULL 411.78
-priationought amalgimporto #2 accessories Men 411.78
-eseantioughtought NULL NULL NULL 412.16
-eseantioughtought exportiamalgamalg #16 NULL NULL 412.16
-eseantioughtought exportiamalgamalg #16 stereo NULL 412.16
-eseantioughtought exportiamalgamalg #16 stereo Electronics 412.16
-ationn station NULL NULL NULL 413.382978723404
-ationn station importoamalg #2 NULL NULL 413.382978723404
-ationn station importoamalg #2 fragrances NULL 413.382978723404
-ationn station importoamalg #2 fragrances Women 413.382978723404
-callycallyoughtought NULL NULL NULL 413.387755102041
-callycallyoughtought importoimporto #1 NULL NULL 413.387755102041
-callycallyoughtought importoimporto #1 shirts NULL 413.387755102041
-callycallyoughtought importoimporto #1 shirts Men 413.387755102041
-prieingcally NULL NULL NULL 415.159090909091
-prieingcally namelessbrand #4 NULL NULL 415.159090909091
-prieingcally namelessbrand #4 lighting NULL 415.159090909091
-prieingcally namelessbrand #4 lighting Home 415.159090909091
-priationcally NULL NULL NULL 416.38
-priationcally maxinameless #4 NULL NULL 416.38
-priationcally maxinameless #4 optics NULL 416.38
-priationcally maxinameless #4 optics Sports 416.38
-oughtationpri NULL NULL NULL 417.020833333333
-oughtationpri univnameless #2 NULL NULL 417.020833333333
-oughtationpri univnameless #2 flatware NULL 417.020833333333
-oughtationpri univnameless #2 flatware Home 417.020833333333
-ableationable NULL NULL NULL 417.634615384615
-ableationable corpnameless #3 NULL NULL 417.634615384615
-ableationable corpnameless #3 furniture NULL 417.634615384615
-ableationable corpnameless #3 furniture Home 417.634615384615
-callyn stationought NULL NULL NULL 417.918367346939
-callyn stationought importoscholar #1 NULL NULL 417.918367346939
-callyn stationought importoscholar #1 country NULL 417.918367346939
-callyn stationought importoscholar #1 country Music 417.918367346939
-n steingeing NULL NULL NULL 417.960784313725
-n steingeing exportischolar #2 NULL NULL 417.960784313725
-n steingeing exportischolar #2 pop NULL 417.960784313725
-n steingeing exportischolar #2 pop Music 417.960784313725
-ationn stn st NULL NULL NULL 421.085106382979
-ationn stn st exportiimporto #2 NULL NULL 421.085106382979
-ationn stn st exportiimporto #2 pants NULL 421.085106382979
-ationn stn st exportiimporto #2 pants Men 421.085106382979
-n stpricallyought NULL NULL NULL 421.367346938776
-n stpricallyought scholarcorp #8 NULL NULL 421.367346938776
-n stpricallyought scholarcorp #8 earings NULL 421.367346938776
-n stpricallyought scholarcorp #8 earings Jewelry 421.367346938776
-baresepriought NULL NULL NULL 422.875
-baresepriought importobrand #1 NULL NULL 422.875
-baresepriought importobrand #1 bedding NULL 422.875
-baresepriought importobrand #1 bedding Home 422.875
-ationcallypriought NULL NULL NULL 422.877551020408
-ationcallypriought edu packunivamalg #12 NULL NULL 422.877551020408
-ationcallypriought edu packunivamalg #12 sports NULL 422.877551020408
-ationcallypriought edu packunivamalg #12 sports Books 422.877551020408
-eingeingpriought NULL NULL NULL 422.957446808511
-eingeingpriought importonameless #9 NULL NULL 422.957446808511
-eingeingpriought importonameless #9 paint NULL 422.957446808511
-eingeingpriought importonameless #9 paint Home 422.957446808511
-esepricallyought NULL NULL NULL 423.1
-esepricallyought scholarunivamalg #3 NULL NULL 423.1
-esepricallyought scholarunivamalg #3 karoke NULL 423.1
-esepricallyought scholarunivamalg #3 karoke Electronics 423.1
+n stcallyable NULL NULL NULL 376.408163265306
+n stcallyable exportiexporti #2 NULL NULL 376.408163265306
+n stcallyable exportiexporti #2 toddlers NULL 376.408163265306
+n stcallyable exportiexporti #2 toddlers Children 376.408163265306
+oughtcallycally NULL NULL NULL 379.127659574468
+oughtcallycally edu packamalgamalg #16 NULL NULL 379.127659574468
+oughtcallycally edu packamalgamalg #16 automotive NULL 379.127659574468
+oughtcallycally edu packamalgamalg #16 automotive Electronics 379.127659574468
+ableoughteseought NULL NULL NULL 380.978260869565
+ableoughteseought exportimaxi #3 NULL NULL 380.978260869565
+ableoughteseought exportimaxi #3 sailing NULL 380.978260869565
+ableoughteseought exportimaxi #3 sailing Sports 380.978260869565
+n stn stbarought NULL NULL NULL 386.854166666667
+n stn stbarought brandnameless #10 NULL NULL 386.854166666667
+n stn stbarought brandnameless #10 hockey NULL 386.854166666667
+n stn stbarought brandnameless #10 hockey Sports 386.854166666667
+antiationation NULL NULL NULL 392.34
+antiationation amalgamalg #2 NULL NULL 392.34
+antiationation amalgamalg #2 dresses NULL 392.34
+antiationation amalgamalg #2 dresses Women 392.34
+ationbaration NULL NULL NULL 393.040816326531
+ationbaration edu packexporti #2 NULL NULL 393.040816326531
+ationbaration edu packexporti #2 school-uniforms NULL 393.040816326531
+ationbaration edu packexporti #2 school-uniforms Children 393.040816326531
+ationpri NULL NULL NULL 394.265306122449
+ationpri amalgimporto #2 NULL NULL 394.265306122449
+ationpri amalgimporto #2 accessories NULL 394.265306122449
+ationpri amalgimporto #2 accessories Men 394.265306122449
+eingablen stought NULL NULL NULL 394.583333333333
+eingablen stought scholarmaxi #9 NULL NULL 394.583333333333
+eingablen stought scholarmaxi #9 history NULL 394.583333333333
+eingablen stought scholarmaxi #9 history Books 394.583333333333
+able NULL NULL NULL 395.12
+able amalgamalg #1 NULL NULL 395.12
+able amalgamalg #1 dresses NULL 395.12
+able amalgamalg #1 dresses Women 395.12
+eseeseableought NULL NULL NULL 395.702127659574
+eseeseableought amalgexporti #1 NULL NULL 395.702127659574
+eseeseableought amalgexporti #1 newborn NULL 395.702127659574
+eseeseableought amalgexporti #1 newborn Children 395.702127659574
+pripripriought NULL NULL NULL 396.647058823529
+pripripriought importounivamalg #2 NULL NULL 396.647058823529
+pripripriought importounivamalg #2 home repair NULL 396.647058823529
+pripripriought importounivamalg #2 home repair Books 396.647058823529
+oughtbarcallyought NULL NULL NULL 396.979591836735
+oughtbarcallyought importonameless #2 NULL NULL 396.979591836735
+oughtbarcallyought importonameless #2 paint NULL 396.979591836735
+oughtbarcallyought importonameless #2 paint Home 396.979591836735
+ablen stableought NULL NULL NULL 397.057692307692
+ablen stableought scholarmaxi #3 NULL NULL 397.057692307692
+ablen stableought scholarmaxi #3 fishing NULL 397.057692307692
+ablen stableought scholarmaxi #3 fishing Sports 397.057692307692
+eseoughtantiought NULL NULL NULL 397.836734693878
+eseoughtantiought importoamalg #1 NULL NULL 397.836734693878
+eseoughtantiought importoamalg #1 fragrances NULL 397.836734693878
+eseoughtantiought importoamalg #1 fragrances Women 397.836734693878
+ationn stese NULL NULL NULL 398.958333333333
+ationn stese univamalgamalg #5 NULL NULL 398.958333333333
+ationn stese univamalgamalg #5 memory NULL 398.958333333333
+ationn stese univamalgamalg #5 memory Electronics 398.958333333333
+priationn st NULL NULL NULL 401.877551020408
+priationn st univnameless #4 NULL NULL 401.877551020408
+priationn st univnameless #4 flatware NULL 401.877551020408
+priationn st univnameless #4 flatware Home 401.877551020408
+antiprieingought NULL NULL NULL 407.448979591837
+antiprieingought brandbrand #6 NULL NULL 407.448979591837
+antiprieingought brandbrand #6 decor NULL 407.448979591837
+antiprieingought brandbrand #6 decor Home 407.448979591837
+ationoughteingought NULL NULL NULL 407.538461538462
+ationoughteingought amalgimporto #2 NULL NULL 407.538461538462
+ationoughteingought amalgimporto #2 accessories NULL 407.538461538462
+ationoughteingought amalgimporto #2 accessories Men 407.538461538462
+oughtpri NULL NULL NULL 408.156862745098
+oughtpri scholarmaxi #2 NULL NULL 408.156862745098
+oughtpri scholarmaxi #2 fishing NULL 408.156862745098
+oughtpri scholarmaxi #2 fishing Sports 408.156862745098
+oughtn stableought NULL NULL NULL 408.76
+oughtn stableought scholarmaxi #8 NULL NULL 408.76
+oughtn stableought scholarmaxi #8 history NULL 408.76
+oughtn stableought scholarmaxi #8 history Books 408.76
+callyationcallyought NULL NULL NULL 408.979591836735
+callyationcallyought amalgimporto #1 NULL NULL 408.979591836735
+callyationcallyought amalgimporto #1 accessories NULL 408.979591836735
+callyationcallyought amalgimporto #1 accessories Men 408.979591836735
+oughtcallyeingought NULL NULL NULL 410.510204081633
+oughtcallyeingought amalgedu pack #2 NULL NULL 410.510204081633
+oughtcallyeingought amalgedu pack #2 womens NULL 410.510204081633
+oughtcallyeingought amalgedu pack #2 womens Shoes 410.510204081633
+ationeseableought NULL NULL NULL 410.921568627451
+ationeseableought amalgscholar #2 NULL NULL 410.921568627451
+ationeseableought amalgscholar #2 rock NULL 410.921568627451
+ationeseableought amalgscholar #2 rock Music 410.921568627451
+eingeingought NULL NULL NULL 414
+eingeingought scholarunivamalg #9 NULL NULL 414
+eingeingought scholarunivamalg #9 fiction NULL 414
+eingeingought scholarunivamalg #9 fiction Books 414
+oughtanticallyought NULL NULL NULL 414.196078431373
+oughtanticallyought importoamalg #2 NULL NULL 414.196078431373
+oughtanticallyought importoamalg #2 fragrances NULL 414.196078431373
+oughtanticallyought importoamalg #2 fragrances Women 414.196078431373

@@ -33,13 +33,18 @@ ORDER BY ext_price DESC,
          i_manufact
 LIMIT 100 ;
 ----
-1002002 importoamalg #2 489 n steingese 25908.9
-3001002 amalgexporti #2 448 eingeseese 19805.73
-4003001 exportiedu pack #1 659 n stantically 17669.8
-10009003 maxiunivamalg #3 389 n steingpri 15308.21
-1002002 importoamalg #2 50 baranti 15077.51
-3004001 edu packexporti #1 119 n stoughtought 14958.01
-8016009 corpmaxi #9 734 esepriation 14304.64
-6011004 amalgbrand #4 9 n st 13791.82
-3002002 importoexporti #2 597 ationn stanti 12402.87
-9002011 importomaxi #11 606 callybarcally 6591.58
+8003007 exportinameless #7 85 antieing 23471.98
+9005009 scholarmaxi #9 255 antiantiable 15086.99
+9002011 importomaxi #11 606 callybarcally 14273.98
+5003002 exportischolar #2 162 ablecallyought 13941.39
+10009003 maxiunivamalg #3 389 n steingpri 13747.74
+8012001 importomaxi #1 277 ationationable 12939.51
+1002002 importoamalg #2 489 n steingese 12070.31
+1002002 importoamalg #2 50 baranti 11988.27
+8016009 corpmaxi #9 734 esepriation 11432.82
+3001002 amalgexporti #2 448 eingeseese 10902.96
+3002002 importoexporti #2 597 ationn stanti 8801.39
+6011004 amalgbrand #4 9 n st 8780.54
+8014007 edu packmaxi #7 350 barantipri 7615.9
+3004001 edu packexporti #1 119 n stoughtought 4538.77
+4003001 exportiedu pack #1 659 n stantically 4516.21

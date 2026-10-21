@@ -47,9 +47,15 @@ ORDER BY w_substr  NULLS FIRST,
         cc_name_lower NULLS FIRST
 LIMIT 100;
 ----
-Conventional childr EXPRESS ny metro 1810 2036 1851 0 0
-Conventional childr LIBRARY ny metro 1299 1478 1409 0 0
-Conventional childr NEXT DAY ny metro 1804 1911 1871 0 0
-Conventional childr OVERNIGHT ny metro 1423 1425 1370 0 0
-Conventional childr REGULAR ny metro 1397 1420 1395 0 0
-Conventional childr TWO DAY ny metro 1374 1449 1421 0 0
+Conventional childr EXPRESS mid atlantic 1087 1153 1189 0 0
+Conventional childr EXPRESS ny metro 1126 1227 1171 0 0
+Conventional childr LIBRARY mid atlantic 857 900 837 0 0
+Conventional childr LIBRARY ny metro 841 896 878 0 0
+Conventional childr NEXT DAY mid atlantic 1078 1185 1152 0 0
+Conventional childr NEXT DAY ny metro 1155 1224 1171 0 0
+Conventional childr OVERNIGHT mid atlantic 807 880 861 0 0
+Conventional childr OVERNIGHT ny metro 850 877 907 0 0
+Conventional childr REGULAR mid atlantic 887 884 886 0 0
+Conventional childr REGULAR ny metro 884 900 879 0 0
+Conventional childr TWO DAY mid atlantic 864 846 867 0 0
+Conventional childr TWO DAY ny metro 820 854 881 0 0
