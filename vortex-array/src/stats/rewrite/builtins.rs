@@ -56,7 +56,7 @@ use crate::scalar_fn::fns::list_contains::ListContains;
 use crate::scalar_fn::fns::literal::Literal;
 use crate::scalar_fn::fns::operators::CompareOperator;
 use crate::scalar_fn::fns::operators::Operator;
-use crate::scalar_fn::fns::optional::Optional;
+use crate::scalar_fn::fns::switch::Switch;
 use crate::scalar_fn::internal::row_count::RowCount;
 use crate::stats::bound::stat;
 use crate::stats::rewrite::StatsRewriteRule;
@@ -83,7 +83,7 @@ pub(crate) fn register_builtins(session: &StatsSession) {
     session.register_rewrite(DynamicComparisonNanCountStatsRewrite);
     session.register_rewrite(DynamicComparisonAllNonNanStatsRewrite);
     session.register_rewrite(DynamicExpressionStatsRewrite);
-    session.register_rewrite(OptionalStatsRewrite);
+    session.register_rewrite(SwitchStatsRewrite);
 }
 
 fn row_count() -> BoundExpression {
@@ -704,13 +704,14 @@ impl StatsRewriteRule for DynamicComparisonAllNonNanStatsRewrite {
     }
 }
 
-/// An optional predicate is its child, so the proofs of its child prove it.
+/// Applying the predicate of a switch is always permitted, so the proofs of the predicate prove
+/// the switch whether it is on or off.
 #[derive(Debug)]
-struct OptionalStatsRewrite;
+struct SwitchStatsRewrite;
 
-impl StatsRewriteRule for OptionalStatsRewrite {
+impl StatsRewriteRule for SwitchStatsRewrite {
     fn scalar_fn_id(&self) -> ScalarFnId {
-        Optional.id()
+        Switch.id()
     }
 
     fn falsify(
