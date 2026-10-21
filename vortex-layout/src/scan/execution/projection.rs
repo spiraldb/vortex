@@ -3,9 +3,8 @@
 
 use std::vec::IntoIter;
 
-use vortex_array::IntoArray;
-use vortex_array::arrays::ChunkedArray;
-use vortex_array::dtype::DType;
+use vortex_array::ExecutionCtx;
+use vortex_array::VortexSessionExecute;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
@@ -26,8 +25,8 @@ use crate::plan::physical::selection::selected;
 use crate::scan::execution::ScanPlans;
 use crate::scan::execution::SelectedRows;
 use crate::scan::execution::adaptor::AdaptorStep;
-use crate::scan::execution::adaptor::Piece;
 use crate::scan::execution::adaptor::ScanAdaptor;
+use crate::scan::execution::batches::Batcher;
 
 const MAX_OUTPUT_ROWS: usize = 65_536;
 
@@ -97,14 +96,14 @@ impl Planner for ProjectionPlanner {
     }
 }
 
-/// Runs the projection plan over a split's selected rows and returns them as one batch, in row
-/// order. A selection that projects to no rows finishes without a batch.
+/// Runs the projection plan over a split's selected rows and returns them in row order, in
+/// batches a [`Batcher`] cuts. A selection that projects to no rows finishes without a batch.
 struct ProjectionMorsel {
     plans: Option<ScanPlans>,
-    dtype: DType,
     selected: SelectedRows,
     adaptor: Option<ScanAdaptor>,
-    pieces: Vec<Piece>,
+    batches: Batcher,
+    ctx: ExecutionCtx,
     done: bool,
 }
 
@@ -112,29 +111,24 @@ impl ProjectionMorsel {
     /// Creates a morsel projecting `selected`.
     fn new(plans: ScanPlans, selected: SelectedRows) -> Self {
         Self {
-            dtype: plans.projection.dtype().clone(),
+            batches: Batcher::new(plans.projection.dtype().clone()),
+            ctx: plans.session.create_execution_ctx(),
             plans: Some(plans),
             selected,
             adaptor: None,
-            pieces: Vec::new(),
             done: false,
         }
     }
 
     fn finish(&mut self) -> VortexResult<MorselOutput> {
-        self.done = true;
-        self.pieces.sort_by_key(|piece| piece.rows.start);
-        let mut arrays: Vec<_> = std::mem::take(&mut self.pieces)
-            .into_iter()
-            .map(|piece| piece.array)
-            .filter(|array| !array.is_empty())
-            .collect();
-        let array = match arrays.len() {
-            0 => return Ok(MorselOutput::Done),
-            1 => arrays.remove(0),
-            _ => ChunkedArray::try_new(arrays, self.dtype.clone())?.into_array(),
-        };
-        Ok(MorselOutput::Batch(array))
+        self.batches.flush()?;
+        Ok(match self.batches.pop() {
+            Some(array) => MorselOutput::Batch(array),
+            None => {
+                self.done = true;
+                MorselOutput::Done
+            }
+        })
     }
 }
 
@@ -150,6 +144,7 @@ impl Morsel for ProjectionMorsel {
     fn state(&self) -> State {
         match &self.adaptor {
             _ if self.done => State::Done,
+            _ if self.batches.has_ready() => State::NeedsCompute,
             None => State::NeedsCompute,
             Some(adaptor) => match adaptor.state() {
                 State::Done => State::NeedsCompute,
@@ -184,6 +179,9 @@ impl Morsel for ProjectionMorsel {
             self.adaptor = Some(ScanAdaptor::new(scan, plans.locations));
             return Ok(MorselOutput::Continue);
         };
+        if let Some(array) = self.batches.pop() {
+            return Ok(MorselOutput::Batch(array));
+        }
         if adaptor.state() == State::Done {
             return self.finish();
         }
@@ -191,8 +189,12 @@ impl Morsel for ProjectionMorsel {
             AdaptorStep::Yield => MorselOutput::Continue,
             AdaptorStep::NeedsIO(batch) => MorselOutput::NeedsIO(batch),
             AdaptorStep::Piece(piece) => {
-                self.pieces.push(piece);
-                MorselOutput::Continue
+                // A scan of one split produces its pieces in row order.
+                self.batches.push(piece, &mut self.ctx)?;
+                match self.batches.pop() {
+                    Some(array) => MorselOutput::Batch(array),
+                    None => MorselOutput::Continue,
+                }
             }
         })
     }

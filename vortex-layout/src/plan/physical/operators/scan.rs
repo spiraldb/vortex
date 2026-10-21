@@ -6,6 +6,19 @@
 use std::ops::Range;
 
 use vortex_array::ArrayRef;
+use vortex_array::ExecutionCtx;
+use vortex_array::IntoArray;
+use vortex_array::arrays::Chunked;
+use vortex_array::arrays::ChunkedArray;
+use vortex_array::arrays::List;
+use vortex_array::arrays::ListView;
+use vortex_array::arrays::Struct;
+use vortex_array::arrays::StructArray;
+use vortex_array::arrays::chunked::ChunkedArrayExt;
+use vortex_array::arrays::struct_::StructArrayExt;
+use vortex_array::arrays::list::ListArrayExt;
+use vortex_array::arrays::list::ListArraySlotsExt;
+use vortex_array::arrays::listview::ListViewRebuildMode;
 use vortex_array::buffer::BufferHandle;
 use vortex_array::serde::SerializedArray;
 use vortex_error::VortexResult;
@@ -46,15 +59,81 @@ fn select(
     array: ArrayRef,
     slice: Option<&Range<usize>>,
     filter: Option<&Mask>,
+    ctx: &mut ExecutionCtx,
 ) -> VortexResult<ArrayRef> {
     let array = match slice {
-        Some(slice) => array.slice(slice.clone())?,
+        Some(slice) => trim_elements(array.slice(slice.clone())?, ctx)?,
         None => array,
     };
     match filter {
         Some(filter) => array.filter(filter.clone()),
         None => Ok(array),
     }
+}
+
+/// Slices `array` to `range`, keeping of every list in it, at any depth of structs and chunks,
+/// only the elements the sliced lists hold. See [`trim_elements`].
+pub(crate) fn slice_trimmed(
+    array: &ArrayRef,
+    range: Range<usize>,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<ArrayRef> {
+    if range.start == 0 && range.end == array.len() {
+        return Ok(array.clone());
+    }
+    if let Some(structs) = array.as_opt::<Struct>() {
+        let fields = structs
+            .iter_unmasked_fields()
+            .map(|field| slice_trimmed(field, range.clone(), ctx))
+            .collect::<VortexResult<Vec<_>>>()?;
+        let validity = structs.struct_validity().slice(range.clone())?;
+        let dtype = array
+            .dtype()
+            .as_struct_fields_opt()
+            .ok_or_else(|| vortex_err!("A struct array without struct fields"))?
+            .clone();
+        // SAFETY: every field is sliced to the same rows as the validity, keeping its dtype.
+        return Ok(
+            unsafe { StructArray::new_unchecked(fields, dtype, range.len(), validity) }
+                .into_array(),
+        );
+    }
+    let sliced = array.slice(range)?;
+    if let Some(chunked) = sliced.as_opt::<Chunked>() {
+        let chunks = chunked
+            .chunks()
+            .into_iter()
+            .map(|chunk| trim_elements(chunk, ctx))
+            .collect::<VortexResult<Vec<_>>>()?;
+        // SAFETY: trimming keeps each chunk's rows and dtype.
+        return Ok(unsafe { ChunkedArray::new_unchecked(chunks, sliced.dtype().clone()) }
+            .into_array());
+    }
+    trim_elements(sliced, ctx)
+}
+
+/// A slice of a list keeps every element of the lists around it, and exporting the slice
+/// would decode and copy them all. Keeps only the elements the sliced lists hold.
+fn trim_elements(array: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<ArrayRef> {
+    if array.is_empty() {
+        return Ok(array);
+    }
+    if let Some(list) = array.as_opt::<List>() {
+        let list = list.into_owned();
+        let start = list.offset_at(0, ctx)?;
+        let end = list.offset_at(list.len(), ctx)?;
+        if start == 0 && end == list.elements().len() {
+            return Ok(array);
+        }
+        return Ok(list.reset_offsets(false, ctx)?.into_array());
+    }
+    if let Some(list) = array.as_opt::<ListView>() {
+        let list = list.into_owned();
+        return Ok(list
+            .rebuild(ListViewRebuildMode::TrimElements, ctx)?
+            .into_array());
+    }
+    Ok(array)
 }
 
 /// Reads one segment, decodes it, and emits its rows of `slice`, filtered by `filter`.
@@ -112,6 +191,7 @@ impl Operator for ScanSource {
             array,
             self.slice.as_ref(),
             self.filter.as_ref(),
+            cx.exec(),
         )?))
     }
 }
@@ -129,7 +209,7 @@ impl SelectStage {
 }
 
 impl Operator for SelectStage {
-    fn compute(&mut self, input: Input, _cx: &mut Cx<'_>) -> VortexResult<Step> {
+    fn compute(&mut self, input: Input, cx: &mut Cx<'_>) -> VortexResult<Step> {
         let Input::Batch(batch) = input else {
             return Ok(Step::End);
         };
@@ -137,6 +217,7 @@ impl Operator for SelectStage {
             batch,
             self.slice.as_ref(),
             self.filter.as_ref(),
+            cx.exec(),
         )?))
     }
 }

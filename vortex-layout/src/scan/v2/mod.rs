@@ -335,11 +335,9 @@ impl<A: 'static + Send> PreparedScan<A> {
         let split_plans = self.split_plans();
         let io = self.io;
         let map_fn = self.map_fn;
-        if !self.ordered
-            && split_plans.iter().any(|split| {
-                split.scope.rows.end - split.scope.rows.start > MAX_ROWS_PER_CHUNK as u64
-            })
-        {
+        // An unordered scan hands each batch on as it is mapped, so a split holds no more than
+        // the batch its consumer has not taken.
+        if !self.ordered {
             let streams = stream::iter(split_plans).map(move |split| {
                 let (send, recv) = mpsc::channel(1);
                 let task =

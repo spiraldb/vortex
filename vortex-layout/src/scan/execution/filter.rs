@@ -245,7 +245,7 @@ impl Planner for FilterPlanner {
                     AdaptorStep::NeedsIO(batch) => PlannerOutput::NeedsIO(batch),
                     AdaptorStep::Piece(piece) => {
                         let mut ctx = self.plans.session.create_execution_ctx();
-                        let mask = piece.array.fill_null(false)?.execute::<Mask>(&mut ctx)?;
+                        let mask = piece.fill_null(false)?.execute::<Mask>(&mut ctx)?;
                         self.pieces.push(mask);
                         PlannerOutput::Continue
                     }
