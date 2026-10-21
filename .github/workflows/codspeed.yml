@@ -395,7 +395,6 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          enable-sccache: "true"
       - name: Display NVIDIA SMI details
         run: |
           nvidia-smi
