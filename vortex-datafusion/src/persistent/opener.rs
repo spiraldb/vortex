@@ -56,6 +56,7 @@ use vortex::io::InstrumentedReadAt;
 use vortex::layout::LayoutReader;
 use vortex::layout::scan::scan_builder::ScanBuilder;
 use vortex::layout::scan::v2::ScanBuilder as V2ScanBuilder;
+use vortex::layout::scan::v2::ScanFile;
 use vortex::layout::segments::SegmentSource;
 use vortex::metrics::Label;
 use vortex::metrics::MetricsRegistry;
@@ -145,6 +146,7 @@ impl FileOpener for VortexOpener {
         let mut filter = self.filter.clone();
 
         let reader = self.vortex_reader_factory.create_reader(&file, &session)?;
+        let reader_factory = Arc::clone(&self.vortex_reader_factory);
 
         let reader =
             InstrumentedReadAt::new_with_labels(reader, metrics_registry.as_ref(), labels.clone());
@@ -486,12 +488,13 @@ impl FileOpener for VortexOpener {
                 Ok(RecordBatch::from(arrow.as_struct().clone()))
             };
             let stream = if scan_v2 {
-                let mut scan_file = vxf.scan_file();
-                scan_file.segments = shared_segment_source(
+                let scan_file = v2_scan_file(
                     &segment_sources,
-                    &file.object_meta.location,
-                    scan_file.segments,
-                );
+                    reader_factory.as_ref(),
+                    &file,
+                    vxf.scan_file(),
+                )
+                .await?;
                 let mut builder = V2ScanBuilder::new(vxf.session().clone(), scan_file)
                     .with_projection(scan_projection)
                     .with_some_filter(native_filter)
@@ -643,6 +646,31 @@ fn contains_lambda(projection: &ProjectionExprs) -> DFResult<bool> {
         }
     }
     Ok(false)
+}
+
+/// The file's segments for a V2 scan: the source other partitions of the file read through,
+/// else a memory map of a local file, else the file's own source.
+async fn v2_scan_file(
+    segment_sources: &DashMap<Path, Weak<dyn SegmentSource>>,
+    reader_factory: &dyn VortexReaderFactory,
+    file: &PartitionedFile,
+    mut scan_file: ScanFile,
+) -> DFResult<ScanFile> {
+    let path = &file.object_meta.location;
+    if let Some(shared) = segment_sources
+        .get(path)
+        .and_then(|source| source.upgrade())
+    {
+        scan_file.segments = shared;
+        return Ok(scan_file);
+    }
+    if let Some(bytes) = reader_factory.map_local_file(file).await? {
+        scan_file = scan_file
+            .with_file_bytes(bytes)
+            .map_err(|e| exec_datafusion_err!("Failed to map Vortex file {path}: {e}"))?;
+    }
+    scan_file.segments = shared_segment_source(segment_sources, path, scan_file.segments);
+    Ok(scan_file)
 }
 
 /// Returns the segment source other partitions of `path` are reading through, or registers

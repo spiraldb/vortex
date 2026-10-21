@@ -42,6 +42,7 @@ use vortex_array::validity::Validity;
 use vortex_arrow::ArrowSessionExt;
 use vortex_buffer::Alignment;
 use vortex_buffer::Buffer;
+use vortex_buffer::ByteBufferMut;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_io::session::RuntimeSessionExt;
@@ -524,6 +525,61 @@ async fn projection_skips_unsupported_unselected_layouts() -> VortexResult<()> {
             .with_projection(get_item("ints", root()).bind(layout.dtype())?))
     })
     .await
+}
+
+/// A scan reading every segment from one buffer holding the whole file returns the same rows
+/// as one fetching each segment, and a file too short for its segments is rejected.
+#[tokio::test]
+async fn file_bytes_match_segment_reads() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, zoned_table().as_ref()).await?;
+    let alignment = Alignment::new(64);
+    let mut bytes = ByteBufferMut::with_capacity_aligned(0, alignment);
+    let mut locations = Vec::new();
+    for id in 0..scan_file(&segments, &layout)?.locations.len() {
+        let segment = segments
+            .request(SegmentId::from(u32::try_from(id)?))
+            .await?
+            .try_into_host_sync()?;
+        bytes.push_n(0, bytes.len().next_multiple_of(64) - bytes.len());
+        locations.push(SegmentLocation {
+            offset: bytes.len() as u64,
+            length: u32::try_from(segment.len())?,
+            alignment,
+        });
+        bytes.extend_from_slice(segment.as_ref());
+    }
+    let bytes = bytes.freeze();
+    let file = ScanFile {
+        layout: Arc::clone(&layout),
+        locations: locations.into(),
+        segments: Arc::clone(&segments),
+    };
+    let filter = gt(get_item("ints", root()), lit(1500i32)).bind(layout.dtype())?;
+    let expected = collect(
+        layout.dtype().clone(),
+        builder(&session, &segments, &layout)?
+            .with_some_filter(Some(filter.clone()))
+            .into_stream()?,
+    )
+    .await?;
+    let actual = collect(
+        layout.dtype().clone(),
+        ScanBuilder::new(
+            session.clone(),
+            file.clone().with_file_bytes(bytes.clone())?,
+        )
+        .with_some_filter(Some(filter))
+        .into_stream()?,
+    )
+    .await?;
+    assert_arrays_eq!(actual, expected, &mut session.create_execution_ctx());
+
+    assert!(
+        file.with_file_bytes(bytes.slice(0..bytes.len() - 1))
+            .is_err()
+    );
+    Ok(())
 }
 
 #[tokio::test]

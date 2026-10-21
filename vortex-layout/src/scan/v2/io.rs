@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use std::collections::VecDeque;
+use std::ops::Range;
 use std::sync::Arc;
 use std::task::Context;
 use std::task::Poll;
@@ -10,14 +11,18 @@ use std::task::Waker;
 use futures::FutureExt;
 use futures::StreamExt;
 use futures::TryFutureExt;
+use futures::future;
 use futures::future::BoxFuture;
 use futures::future::Shared;
 use futures::stream::FuturesUnordered;
 use parking_lot::Mutex;
 use vortex_array::buffer::BufferHandle;
+use vortex_buffer::Alignment;
+use vortex_buffer::ByteBuffer;
 use vortex_error::VortexError;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
+use vortex_error::vortex_ensure;
 use vortex_error::vortex_err;
 use vortex_io::request::Completion;
 use vortex_io::request::IoBatch;
@@ -43,6 +48,48 @@ pub(super) fn segment_ranges(locations: &[SegmentLocation]) -> SegmentRanges {
         ((location.offset, location.length as usize), id)
     });
     Arc::new(ranges.collect())
+}
+
+/// Serves each segment as a zero-copy slice of a buffer holding the whole file, such as a
+/// memory map, so every read completes as it is requested.
+pub(super) struct FileBytesSource {
+    bytes: ByteBuffer,
+    /// Each segment's bytes within `bytes` and the alignment they are delivered at, by id.
+    segments: Vec<(Range<usize>, Alignment)>,
+}
+
+impl FileBytesSource {
+    /// Fails unless every segment lies within `bytes`.
+    pub(super) fn try_new(bytes: ByteBuffer, locations: &[SegmentLocation]) -> VortexResult<Self> {
+        let segments = locations
+            .iter()
+            .enumerate()
+            .map(|(id, location)| {
+                let start = usize::try_from(location.offset)?;
+                let end = start.saturating_add(location.length as usize);
+                vortex_ensure!(
+                    end <= bytes.len(),
+                    "segment {id} ends at byte {end}, past the file's {} bytes",
+                    bytes.len()
+                );
+                Ok((start..end, location.alignment))
+            })
+            .collect::<VortexResult<_>>()?;
+        Ok(Self { bytes, segments })
+    }
+}
+
+impl SegmentSource for FileBytesSource {
+    fn request(&self, id: SegmentId) -> SegmentFuture {
+        let bytes = self
+            .segments
+            .get(*id as usize)
+            .ok_or_else(|| vortex_err!("segment {id} has no known location"))
+            .map(|(range, alignment)| {
+                BufferHandle::new_host(self.bytes.slice(range.clone()).aligned(*alignment))
+            });
+        future::ready(bytes).boxed()
+    }
 }
 
 /// Serves splits from any [`SegmentSource`], by segment id.
