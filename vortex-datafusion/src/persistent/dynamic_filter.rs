@@ -12,6 +12,8 @@
 //! a filter stops once it costs more than the rows it removes save.
 
 use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::PoisonError;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
@@ -35,6 +37,7 @@ use datafusion_physical_expr::expressions::CaseExpr;
 use datafusion_physical_expr::expressions::Column;
 use datafusion_physical_expr::expressions::InListExpr;
 use datafusion_physical_expr::expressions::Literal;
+use datafusion_physical_expr_common::physical_expr::snapshot_generation;
 use datafusion_physical_expr_common::physical_expr::snapshot_physical_expr;
 use datafusion_physical_plan::joins::HashTableLookupExpr;
 use vortex::array::ArrayRef;
@@ -64,6 +67,7 @@ pub(crate) struct DynamicRowFilter {
     /// The dynamic filter, over the key columns alone.
     expr: Arc<dyn PhysicalExpr>,
     session: VortexSession,
+    snapshot: Snapshot,
     /// Rows evaluated, rows kept, and nanoseconds spent evaluating, across the scan's splits.
     seen: AtomicU64,
     kept: AtomicU64,
@@ -84,6 +88,7 @@ impl DynamicRowFilter {
             target,
             expr,
             session,
+            snapshot: Snapshot::new(),
             seen: AtomicU64::new(0),
             kept: AtomicU64::new(0),
             nanos: AtomicU64::new(0),
@@ -91,8 +96,7 @@ impl DynamicRowFilter {
     }
 
     fn evaluate_keys(&self, keys: &RecordBatch) -> DFResult<BooleanArray> {
-        // The filter's current state, without the bounds a membership test already implies.
-        let expr = strip_bounds(&snapshot_physical_expr(Arc::clone(&self.expr))?)?;
+        let expr = self.snapshot.current(&self.expr)?;
         if let Some(case) = expr.downcast_ref::<CaseExpr>()
             && let Some(mask) = partitioned_lookup(case, keys)?
         {
@@ -142,6 +146,33 @@ impl RowFilter for DynamicRowFilter {
         self.kept
             .fetch_add(mask.true_count() as u64, Ordering::Relaxed);
         Ok(mask)
+    }
+}
+
+/// A dynamic filter's current state, stripped of bounds, kept with the generation it was
+/// taken at.
+///
+/// A join updates its filter once or a few times over a scan, and a snapshot of it can hold
+/// thousands of literals, so it is taken once per generation rather than once per piece.
+struct Snapshot(Mutex<Option<(u64, Arc<dyn PhysicalExpr>)>>);
+
+impl Snapshot {
+    fn new() -> Self {
+        Self(Mutex::new(None))
+    }
+
+    /// `expr`'s current state, without the bounds a membership test already implies.
+    fn current(&self, expr: &Arc<dyn PhysicalExpr>) -> DFResult<Arc<dyn PhysicalExpr>> {
+        let generation = snapshot_generation(expr);
+        let mut snapshot = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some((cached, current)) = snapshot.as_ref()
+            && *cached == generation
+        {
+            return Ok(Arc::clone(current));
+        }
+        let current = strip_bounds(&snapshot_physical_expr(Arc::clone(expr))?)?;
+        *snapshot = Some((generation, Arc::clone(&current)));
+        Ok(current)
     }
 }
 
@@ -301,11 +332,13 @@ mod tests {
     use datafusion_physical_expr::PhysicalExpr;
     use datafusion_physical_expr::expressions::BinaryExpr;
     use datafusion_physical_expr::expressions::CaseExpr;
+    use datafusion_physical_expr::expressions::DynamicFilterPhysicalExpr;
     use datafusion_physical_expr::expressions::col;
     use datafusion_physical_expr::expressions::in_list;
     use datafusion_physical_expr::expressions::lit;
     use rstest::rstest;
 
+    use super::Snapshot;
     use super::partitioned_lookup;
     use super::strip_bounds;
     use super::worth_evaluating;
@@ -373,6 +406,36 @@ mod tests {
 
         let alone = bounds(&batch, 3, 7)?;
         assert_eq!(strip_bounds(&alone)?.to_string(), alone.to_string());
+        Ok(())
+    }
+
+    /// A snapshot is taken once per update of the dynamic filter, and follows its updates.
+    #[test]
+    fn snapshot_follows_the_filters_updates() -> anyhow::Result<()> {
+        let batch = keys()?;
+        let dynamic = Arc::new(DynamicFilterPhysicalExpr::new(
+            vec![col("k", batch.schema_ref())?],
+            binary(
+                bounds(&batch, 3, 7)?,
+                Operator::And,
+                members(&batch, &[3, 7])?,
+            ),
+        ));
+        let expr = Arc::clone(&dynamic) as Arc<dyn PhysicalExpr>;
+        let snapshot = Snapshot::new();
+
+        let first = snapshot.current(&expr)?;
+        assert_eq!(first.to_string(), members(&batch, &[3, 7])?.to_string());
+        assert!(Arc::ptr_eq(&first, &snapshot.current(&expr)?));
+
+        dynamic.update(binary(
+            bounds(&batch, 1, 9)?,
+            Operator::And,
+            members(&batch, &[1, 9])?,
+        ))?;
+        let second = snapshot.current(&expr)?;
+        assert_eq!(second.to_string(), members(&batch, &[1, 9])?.to_string());
+        assert!(Arc::ptr_eq(&second, &snapshot.current(&expr)?));
         Ok(())
     }
 
