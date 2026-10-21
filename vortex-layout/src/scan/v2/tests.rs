@@ -28,6 +28,8 @@ use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinArray;
 use vortex_array::assert_arrays_eq;
 use vortex_array::dtype::DType;
+use vortex_array::dtype::PType;
+use vortex_array::expr::BoundExpression;
 use vortex_array::expr::Expression;
 use vortex_array::expr::and;
 use vortex_array::expr::eq;
@@ -46,11 +48,13 @@ use vortex_buffer::ByteBufferMut;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_io::session::RuntimeSessionExt;
+use vortex_mask::Mask;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
 
 use super::MAX_ROWS_PER_CHUNK;
 use super::PreparedScan;
+use super::RowFilter;
 use super::ScanBuilder;
 use super::ScanFile;
 use super::row_chunks;
@@ -449,7 +453,7 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
             ))
         })
         .collect::<VortexResult<Vec<_>>>()?;
-    let dtype = DType::Primitive(vortex_array::dtype::PType::I32, false.into());
+    let dtype = DType::Primitive(PType::I32, false.into());
     let ints = chunked_flat()
         .write_stream(
             ArrayContext::empty().into(),
@@ -582,6 +586,81 @@ async fn file_bytes_match_segment_reads() -> VortexResult<()> {
     Ok(())
 }
 
+/// Keeps the rows whose `ints` is even, counting the rows it evaluates.
+struct EvenInts {
+    projection: BoundExpression,
+    active: bool,
+    rows: AtomicUsize,
+}
+
+impl RowFilter for EvenInts {
+    fn projection(&self) -> &BoundExpression {
+        &self.projection
+    }
+
+    fn is_active(&self) -> bool {
+        self.active
+    }
+
+    fn evaluate(&self, array: ArrayRef) -> VortexResult<Mask> {
+        self.rows.fetch_add(array.len(), Ordering::Relaxed);
+        let ints = array.execute::<PrimitiveArray>(&mut array_session().create_execution_ctx())?;
+        Ok(ints
+            .as_slice::<i32>()
+            .iter()
+            .map(|int| int % 2 == 0)
+            .collect())
+    }
+}
+
+/// A row filter sees only the rows the scan's own filter kept and removes rows before they
+/// are projected; an inactive one reads nothing and keeps every row.
+#[rstest]
+#[case::alone(None)]
+#[case::after_the_filter(Some(1500))]
+#[tokio::test]
+async fn row_filters_run_on_the_rows_the_filter_kept(
+    #[case] cutoff: Option<i32>,
+    #[values(true, false)] active: bool,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, zoned_table().as_ref()).await?;
+    let dtype = layout.dtype().clone();
+    let ints = get_item("ints", root());
+    let filter = Arc::new(EvenInts {
+        projection: ints.clone().bind(&dtype)?,
+        active,
+        rows: AtomicUsize::new(0),
+    });
+    let mut scan = builder(&session, &segments, &layout)?
+        .with_projection(ints.clone().bind(&dtype)?)
+        .with_row_filter(Arc::<EvenInts>::clone(&filter));
+    if let Some(cutoff) = cutoff {
+        scan = scan.with_some_filter(Some(gt(ints, lit(cutoff)).bind(&dtype)?));
+    }
+    let actual = collect(
+        DType::Primitive(PType::I32, false.into()),
+        scan.into_stream()?,
+    )
+    .await?;
+    let first = cutoff.map_or(0, |cutoff| cutoff + 1);
+    let rows = i32::try_from(CHUNKS * CHUNK_ROWS)?;
+    assert_arrays_eq!(
+        actual,
+        PrimitiveArray::from_iter((first..rows).filter(|int| !active || int % 2 == 0)),
+        &mut session.create_execution_ctx()
+    );
+    assert_eq!(
+        filter.rows.load(Ordering::Relaxed),
+        if active {
+            usize::try_from(rows - first)?
+        } else {
+            0
+        }
+    );
+    Ok(())
+}
+
 #[tokio::test]
 async fn unordered_returns_every_row() -> VortexResult<()> {
     let session = new_session().with_tokio();
@@ -686,7 +765,7 @@ async fn primitive_column() -> VortexResult<()> {
             .with_row_range(990..1010),
     )?;
     let actual = collect(
-        DType::Primitive(vortex_array::dtype::PType::I32, false.into()),
+        DType::Primitive(PType::I32, false.into()),
         scan.execute_stream()?,
     )
     .await?;

@@ -53,6 +53,7 @@ use crate::plan::physical::optimize;
 use crate::plan::physical::plan_row_idx_expression;
 use crate::scan::arrow::to_record_batch;
 use crate::scan::execution::FilterPlans;
+pub use crate::scan::execution::RowFilter;
 use crate::scan::execution::ScanPlans;
 pub use crate::scan::execution::SegmentLocation;
 use crate::scan::execution::plan_selection;
@@ -126,6 +127,7 @@ pub struct ScanBuilder<A = ArrayRef> {
     file: ScanFile,
     projection: BoundExpression,
     filter: Option<BoundExpression>,
+    row_filters: Vec<Arc<dyn RowFilter>>,
     ordered: bool,
     row_range: Option<Range<u64>>,
     selection: Selection,
@@ -140,6 +142,7 @@ impl ScanBuilder<ArrayRef> {
         Self {
             projection: BoundExpression::new_root(file.layout.dtype().clone()),
             filter: None,
+            row_filters: Vec::new(),
             session,
             file,
             ordered: true,
@@ -183,6 +186,12 @@ impl<A: 'static + Send> ScanBuilder<A> {
     /// Evaluates a bound predicate before projecting the surviving rows.
     pub fn with_some_filter(mut self, filter: Option<BoundExpression>) -> Self {
         self.filter = filter;
+        self
+    }
+
+    /// Runs `filter` on the rows the scan's own filter keeps, before projecting them.
+    pub fn with_row_filter(mut self, filter: Arc<dyn RowFilter>) -> Self {
+        self.row_filters.push(filter);
         self
     }
 
@@ -235,6 +244,7 @@ impl<A: 'static + Send> ScanBuilder<A> {
             file: self.file,
             projection: self.projection,
             filter: self.filter,
+            row_filters: self.row_filters,
             ordered: self.ordered,
             row_range: self.row_range,
             selection: self.selection,
@@ -279,9 +289,14 @@ impl<A: 'static + Send> PreparedScan<A> {
         let file = builder.file;
         let root = lower(&file.layout)?;
         let row_count = root.row_count();
-        let filter = builder
-            .filter
-            .map(|filter| FilterPlans::new(filter, &root, &builder.session).map(Arc::new))
+        // Row filters alone keep the splits of an unfiltered scan: they read only a few
+        // columns, and their selectivity is unknown until they run.
+        let filtered = builder.filter.is_some();
+        let filter = (builder.filter.is_some() || !builder.row_filters.is_empty())
+            .then(|| {
+                FilterPlans::new(builder.filter, builder.row_filters, &root, &builder.session)
+                    .map(Arc::new)
+            })
             .transpose()?;
         // An identity projection needs no rewrites. Keep the lowered children lazy, including
         // statistics that a projection-only scan never reads.
@@ -291,7 +306,7 @@ impl<A: 'static + Send> PreparedScan<A> {
         } else {
             optimize(plan_row_idx_expression(builder.projection, root)?)?
         };
-        let chunk_rows = if filter.is_some() {
+        let chunk_rows = if filtered {
             FILTERED_ROWS_PER_CHUNK
         } else if identity {
             rows_per_chunk(row_count, &file.locations)
