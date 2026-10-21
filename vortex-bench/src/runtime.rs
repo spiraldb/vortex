@@ -46,13 +46,12 @@ pub enum VortexRuntime {
 pub enum VortexReader {
     /// Positional reads on the runtime's blocking thread pool.
     Blocking,
-    /// Reads submitted to the io_uring of the worker that issues them. Needs the io_uring
-    /// runtime, and otherwise falls back to blocking reads.
+    /// Reads performed by the io_uring runtime's workers on their own rings, each core copying
+    /// its share. Needs the io_uring runtime, and otherwise falls back to blocking reads.
+    #[default]
     IoUring,
     /// The whole file memory-mapped, as the Python bindings open local files. Segments are slices
-    /// of the page cache: nothing is copied, and no read is ever waited on. The fastest choice for
-    /// files the page cache holds, as the benchmarks' files are after their warm-up.
-    #[default]
+    /// of the page cache: nothing is copied, and no read is ever waited on.
     Mmap,
 }
 
@@ -60,7 +59,7 @@ pub enum VortexReader {
 static URING: AtomicBool = AtomicBool::new(false);
 
 /// The [`VortexReader`] [`open_local`] uses.
-static READER: AtomicU8 = AtomicU8::new(VortexReader::Mmap as u8);
+static READER: AtomicU8 = AtomicU8::new(VortexReader::IoUring as u8);
 
 /// Chooses how [`open_local`] reads files.
 pub fn set_reader(reader: VortexReader) {

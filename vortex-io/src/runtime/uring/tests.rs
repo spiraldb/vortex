@@ -164,3 +164,50 @@ fn reads_off_the_workers_fall_back_to_blocking_reads() -> VortexResult<()> {
     assert_eq!(runtime.block_on(read.size())?, 1000);
     Ok(())
 }
+
+#[test]
+fn large_reads_spread_over_every_ring() -> VortexResult<()> {
+    let runtime = runtime(4);
+    let (file, bytes) = temp_file(8 << 20);
+    let read = Arc::new(UringFileReadAt::open(file.path(), runtime.handle())?);
+    let len = 1 << 20;
+    let reads = (0..16u64)
+        .map(|i| {
+            let read = Arc::clone(&read);
+            runtime.handle().spawn(async move {
+                let offset = (i * 333_333) % (7 << 20);
+                let buffer = read.read_at(offset, len, Alignment::new(64)).await?;
+                VortexResult::Ok((usize::try_from(offset).unwrap_or(0), buffer))
+            })
+        })
+        .collect::<Vec<_>>();
+    for result in runtime.block_on(futures::future::join_all(reads)) {
+        let (offset, buffer) = result?;
+        let buffer = buffer.unwrap_host();
+        assert!(buffer.is_aligned(Alignment::new(64)));
+        assert_eq!(buffer.as_slice(), &bytes[offset..offset + len]);
+    }
+    Ok(())
+}
+
+#[test]
+fn dropped_read_buffers_are_reused() -> VortexResult<()> {
+    let runtime = runtime(1);
+    let (file, bytes) = temp_file(1 << 20);
+    let read = Arc::new(UringFileReadAt::open(file.path(), runtime.handle())?);
+    let read_once = |offset: u64| {
+        let read = Arc::clone(&read);
+        runtime.block_on(
+            runtime
+                .handle()
+                .spawn(async move { read.read_at(offset, 100_000, Alignment::none()).await }),
+        )
+    };
+    let first = read_once(0)?.unwrap_host();
+    let address = first.as_slice().as_ptr();
+    drop(first);
+    let second = read_once(5)?.unwrap_host();
+    assert_eq!(second.as_slice().as_ptr(), address);
+    assert_eq!(second.as_slice(), &bytes[5..100_005]);
+    Ok(())
+}

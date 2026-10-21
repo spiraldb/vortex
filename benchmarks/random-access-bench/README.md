@@ -32,16 +32,17 @@ Tokio with a warning.
 
 `--vortex-reader` picks how Vortex reads local files:
 
-- `mmap` (the default) memory-maps the file, as the Vortex Python bindings open local files.
-  Segments are slices of the page cache, so nothing is copied and no read is waited on.
+- `io-uring` (the default) has the io_uring runtime's workers perform reads on their own rings.
+  Reads of 64 KiB or more are spread over every worker's ring, so each core copies its share,
+  reads merge across gaps of up to 256 KiB into reads of at most 2 MiB, and read buffers are
+  pooled per worker and reused. Without the io_uring runtime this falls back to `blocking`.
 - `blocking` runs positional reads on the runtime's blocking pool, the reader `open_path` uses.
-- `io-uring` submits reads to the ring of the worker that issues them, merging reads only across
-  gaps of up to 64 KiB, since a batch of reads costs one syscall however many it holds.
+- `mmap` memory-maps the file, as the Vortex Python bindings open local files. Segments are slices
+  of the page cache, so nothing is copied and no read is waited on.
 
-The files sit in the page cache after the warm-up. There, copying segment bytes out of the page
-cache dominates a take, which is why mapping the file is several times faster than either read
-path, and why blocking threads copying in parallel beat ring reads, which copy on the submitting
-worker or hand larger reads to the kernel's io_uring workers.
+The files sit in the page cache after the warm-up, so a take mostly copies segment bytes out of
+the page cache. Ring reads do that on every core without a thread hop per read, which makes them
+faster than blocking reads; mapping the file avoids the copy altogether.
 
 ## Running locally
 

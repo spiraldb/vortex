@@ -18,15 +18,14 @@ use io_uring::IoUring;
 use io_uring::opcode;
 use io_uring::squeue;
 use io_uring::types;
+use vortex_buffer::Alignment;
 use vortex_buffer::BufferMut;
 use vortex_buffer::ByteBuffer;
 
+use super::pool::BufferPool;
+
 /// The `user_data` of the eventfd read that wakes a parked worker.
 const WAKE_TOKEN: u64 = u64::MAX;
-
-/// Reads at least this long are handed to the kernel's io_uring workers rather than performed
-/// inline by the submitting thread.
-const ASYNC_READ_BYTES: usize = 64 << 10;
 
 /// The largest read a single submission asks for. Longer reads continue as short reads do.
 const MAX_READ_CHUNK: usize = 1 << 30;
@@ -90,12 +89,27 @@ impl WakeFd {
     }
 }
 
+/// A read for a worker to perform on its ring.
+pub(super) struct ReadRequest {
+    pub(super) file: Arc<File>,
+    pub(super) offset: u64,
+    pub(super) len: usize,
+    pub(super) alignment: Alignment,
+    /// The destination for a read too large or too aligned for the pool, already `len` long.
+    /// `None` reads into a pooled buffer of the worker that performs the read.
+    pub(super) buffer: Option<BufferMut<u8>>,
+    pub(super) reply: oneshot::Sender<ReadResult>,
+}
+
 /// One read the kernel may still be writing into.
 struct ReadOp {
     /// Keeps the descriptor open while the kernel reads from it.
     file: Arc<File>,
     /// The destination, already at its final length. Its heap allocation does not move.
     buffer: BufferMut<u8>,
+    /// The pool size class `buffer` came from, if it goes back to the worker's pool.
+    pooled: Option<u32>,
+    alignment: Alignment,
     offset: u64,
     filled: usize,
     reply: oneshot::Sender<ReadResult>,
@@ -113,14 +127,6 @@ impl ReadOp {
         )
         .offset(self.offset + self.filled as u64)
         .build()
-        .flags(if remaining >= ASYNC_READ_BYTES {
-            // A read the page cache can serve completes inside `io_uring_enter`, copying on the
-            // submitting worker. Large copies go to the kernel's worker pool instead, so they
-            // proceed in parallel while the worker keeps running tasks.
-            squeue::Flags::ASYNC
-        } else {
-            squeue::Flags::empty()
-        })
         .user_data(token)
     }
 }
@@ -137,6 +143,7 @@ pub(super) struct Reactor {
     /// Entries pushed to the submission queue since the last `io_uring_enter`.
     unsubmitted: usize,
     wake: WakeFd,
+    pool: BufferPool,
     /// The eventfd read's destination. Boxed so the kernel's pointer stays valid.
     wake_buf: Box<u64>,
     wake_armed: bool,
@@ -158,27 +165,39 @@ impl Reactor {
             backlog: VecDeque::new(),
             unsubmitted: 0,
             wake,
+            pool: BufferPool::new(),
             wake_buf: Box::new(0),
             wake_armed: false,
         })
     }
 
-    /// Queues a read of `buffer.len()` bytes of `file` at `offset` into `buffer`. The submission
-    /// is flushed the next time the worker polls its ring.
-    pub(super) fn read(
-        &mut self,
-        file: Arc<File>,
-        offset: u64,
-        buffer: BufferMut<u8>,
-    ) -> oneshot::Receiver<ReadResult> {
-        let (reply, receiver) = oneshot::channel();
-        if buffer.is_empty() {
-            drop(reply.send(Ok(buffer.freeze())));
-            return receiver;
+    /// Queues `request` on this ring. The submission is flushed the next time the worker polls
+    /// its ring.
+    pub(super) fn read(&mut self, request: ReadRequest) {
+        let ReadRequest {
+            file,
+            offset,
+            len,
+            alignment,
+            buffer,
+            reply,
+        } = request;
+        if len == 0 {
+            drop(reply.send(Ok(ByteBuffer::empty_aligned(alignment))));
+            return;
         }
+        let (buffer, pooled) = match buffer {
+            Some(buffer) => (buffer, None),
+            None => {
+                let (class, buffer) = self.pool.take(len);
+                (buffer, Some(class))
+            }
+        };
         let op = ReadOp {
             file,
             buffer,
+            pooled,
+            alignment,
             offset,
             filled: 0,
             reply,
@@ -199,7 +218,6 @@ impl Reactor {
             .map(|op| op.entry(token as u64))
             .unwrap_or_else(|| unreachable!("the op was just inserted"));
         self.push(entry);
-        receiver
     }
 
     fn push(&mut self, entry: squeue::Entry) {
@@ -335,9 +353,19 @@ impl Reactor {
         };
         self.in_flight -= 1;
         self.free.push(token);
-        let ReadOp { buffer, reply, .. } = op;
+        let ReadOp {
+            buffer,
+            pooled,
+            alignment,
+            reply,
+            ..
+        } = op;
+        let bytes = outcome.map(|()| match pooled {
+            Some(class) => self.pool.freeze(class, buffer, alignment),
+            None => buffer.freeze(),
+        });
         // The reader may have given up on the read; then there is no one to tell.
-        drop(reply.send(outcome.map(|()| buffer.freeze())));
+        drop(reply.send(bytes));
     }
 
     /// Waits for every in-flight read, so no buffer is freed while the kernel writes into it.

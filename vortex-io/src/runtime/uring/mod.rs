@@ -3,30 +3,33 @@
 
 //! A thread-per-core runtime whose workers each own an io_uring.
 //!
-//! Tasks are scheduled onto a fixed set of worker threads with work stealing: a task woken on a
-//! worker runs next on that worker, the way a channel's receiver should run right after its sender,
-//! a spawned task joins that worker's queue, and idle workers steal from busy ones. Every worker owns its
-//! own ring, so file reads issued by a task are pushed to the submission queue of the worker that
-//! polls it, without a lock or a thread hop. Submissions are flushed in one `io_uring_enter` per
-//! scheduler tick, batching the reads of every task the worker ran, and the same call reaps their
-//! completions.
+//! Every core runs one worker thread, which runs tasks and performs file reads on its own ring.
+//! Nothing is handed to other threads: no blocking pool serves the reads and no kernel worker
+//! threads copy them.
+//!
+//! Tasks are scheduled with work stealing: a task woken on a worker runs next on that worker, the
+//! way a channel's receiver should run right after its sender, a spawned task joins that worker's
+//! queue, and idle workers steal from busy ones.
+//!
+//! [`UringFileReadAt`] reads a local file through the workers' rings. A small read goes to the ring
+//! of the worker that issues it. Larger ones are spread over every worker's ring in turn, posted to
+//! a worker's inbox when it is not the issuing one, so the reads of one scan are copied out of the
+//! page cache by every core at once rather than by the one that drives the scan. A worker submits
+//! the reads a task queued as soon as the task yields, in one `io_uring_enter`, and reads that the
+//! page cache holds complete inside that call. Reads land in buffers from the performing worker's
+//! pool, which return to it once the bytes are dropped, so steady reading reuses resident memory.
+//! Reads polled off the runtime's workers fall back to blocking positional reads.
 //!
 //! An idle worker parks inside `io_uring_enter`, waiting on its ring. An eventfd read is kept
 //! armed on every ring, so another thread wakes a parked worker by writing to its eventfd, and a
 //! read completing on the ring wakes it just the same. There is no separate reactor thread.
-//!
-//! CPU work runs on the same workers as async tasks, so a scan's splits decode on the thread that
-//! polled them, next to their reads.
-//!
-//! [`UringFileReadAt`] reads a local file through the ring of the polling worker. Reads polled off
-//! the runtime's workers fall back to blocking positional reads.
 
 mod file;
+mod pool;
 mod reactor;
 
 use std::cell::Cell;
 use std::cell::RefCell;
-use std::fs::File;
 use std::future::Future;
 use std::io;
 use std::pin::pin;
@@ -51,15 +54,13 @@ use crossbeam_deque::Worker;
 pub use file::UringFileReadAt;
 use futures::Stream;
 use futures::StreamExt;
-use futures::channel::oneshot;
 use futures::future::BoxFuture;
 use futures::stream::BoxStream;
-use vortex_buffer::BufferMut;
 use vortex_error::VortexResult;
 use vortex_utils::parallelism::get_available_parallelism;
 
 use self::reactor::Reactor;
-use self::reactor::ReadResult;
+use self::reactor::ReadRequest;
 use self::reactor::WakeFd;
 use crate::runtime::AbortHandle;
 use crate::runtime::AbortHandleRef;
@@ -73,6 +74,10 @@ const TICKS_PER_POLL: u32 = 61;
 
 /// Tasks a worker runs from its LIFO slot before it takes one from its queue.
 const MAX_LIFO_STREAK: u32 = 3;
+
+/// Reads at least this long are spread over the workers' rings rather than performed by the
+/// worker that issues them.
+const SPREAD_READ_BYTES: usize = 64 << 10;
 
 /// Submission queue entries per worker ring.
 const RING_ENTRIES: u32 = 256;
@@ -109,6 +114,8 @@ impl UringRuntime {
             searching: AtomicUsize::new(0),
             shutdown: AtomicBool::new(false),
             blocking_pool: BlockingPool::default(),
+            inboxes: (0..workers).map(|_| Injector::new()).collect(),
+            next_ring: AtomicUsize::new(0),
         });
         // Each worker creates its own ring, since a single-issuer ring may only be entered by the
         // thread that created it, and reports whether it could.
@@ -270,6 +277,10 @@ struct Shared {
     searching: AtomicUsize,
     shutdown: AtomicBool,
     blocking_pool: BlockingPool,
+    /// Reads posted to each worker by other threads, indexed by worker.
+    inboxes: Vec<Injector<ReadRequest>>,
+    /// The ring the next spread read goes to.
+    next_ring: AtomicUsize,
 }
 
 thread_local! {
@@ -285,22 +296,31 @@ fn with_current<R>(f: impl FnOnce(&WorkerContext) -> R) -> Option<R> {
     unsafe { current.as_ref() }.map(f)
 }
 
-/// Queues a read on the ring of the worker running on this thread, or hands `buffer` back when
-/// this thread is not a worker.
-fn submit_read(
-    file: &Arc<File>,
-    offset: u64,
-    buffer: BufferMut<u8>,
-) -> Result<oneshot::Receiver<ReadResult>, BufferMut<u8>> {
+/// Queues a read on the ring of one of the current runtime's workers, or hands the request back
+/// when this thread is not a worker.
+///
+/// A read of at least [`SPREAD_READ_BYTES`] goes to the workers' rings in turn, so the reads one
+/// task issues are copied by every core rather than by the one running it. A smaller read stays on
+/// the current worker's ring, where it costs no hand-off.
+fn submit_read(request: ReadRequest) -> Result<(), ReadRequest> {
     let current = CURRENT.with(Cell::get);
     // SAFETY: see `with_current`.
-    match unsafe { current.as_ref() } {
-        Some(worker) => Ok(worker
-            .reactor
-            .borrow_mut()
-            .read(Arc::clone(file), offset, buffer)),
-        None => Err(buffer),
+    let Some(worker) = (unsafe { current.as_ref() }) else {
+        return Err(request);
+    };
+    let shared = &worker.shared;
+    let target = if request.len < SPREAD_READ_BYTES {
+        worker.index
+    } else {
+        shared.next_ring.fetch_add(1, Ordering::Relaxed) % shared.inboxes.len()
+    };
+    if target == worker.index {
+        worker.reactor.borrow_mut().read(request);
+    } else {
+        shared.inboxes[target].push(request);
+        shared.signals[target].unpark();
     }
+    Ok(())
 }
 
 impl Shared {
@@ -435,6 +455,7 @@ impl WorkerContext {
 
         let mut tick: u32 = 0;
         while !self.shared.shutdown.load(Ordering::Relaxed) {
+            self.take_posted_reads();
             tick = tick.wrapping_add(1);
             if tick.is_multiple_of(TICKS_PER_POLL) {
                 // Keep the ring moving even while local work never runs out, and let tasks
@@ -476,6 +497,23 @@ impl WorkerContext {
             // Another worker may take what this one cannot run right now.
             self.shared.notify_one();
         }
+    }
+
+    /// Moves the reads other threads posted to this worker onto its ring, and starts them.
+    fn take_posted_reads(&self) {
+        let inbox = &self.shared.inboxes[self.index];
+        if inbox.is_empty() {
+            return;
+        }
+        let mut reactor = self.reactor.borrow_mut();
+        loop {
+            match inbox.steal() {
+                Steal::Success(request) => reactor.read(request),
+                Steal::Empty => break,
+                Steal::Retry => {}
+            }
+        }
+        reactor.poll();
     }
 
     fn next_task(&self) -> Option<Runnable> {
@@ -544,6 +582,7 @@ impl WorkerContext {
         // Pairs with the fence in `Shared::notify_one`.
         fence(Ordering::SeqCst);
         let runnable = !self.queue.is_empty()
+            || !self.shared.inboxes[self.index].is_empty()
             || self.has_lifo()
             || self.shared.has_queued_work()
             || self.shared.shutdown.load(Ordering::SeqCst);
