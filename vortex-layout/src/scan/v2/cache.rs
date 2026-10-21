@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::hash::Hash;
+use std::hash::Hasher;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -38,7 +40,40 @@ struct Cached {
     root: Option<PlanRef>,
     ranges: Option<SegmentRanges>,
     values: ValueCache,
-    plans: FxHashMap<(BoundExpression, Option<BoundExpression>), Planned>,
+    plans: FxHashMap<Key, Planned>,
+}
+
+/// A projection and filter, compared whole but hashed by their functions alone: every node of
+/// a bound expression carries its dtype, so hashing them all hashes the dtype of a wide struct
+/// once per field and costs as much as planning.
+#[derive(Clone, PartialEq, Eq)]
+struct Key(BoundExpression, Option<BoundExpression>);
+
+impl Hash for Key {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        hash_functions(&self.0, state);
+        if let Some(filter) = &self.1 {
+            hash_functions(filter, state);
+        }
+    }
+}
+
+fn hash_functions<H: Hasher>(expression: &BoundExpression, state: &mut H) {
+    match expression {
+        BoundExpression::Root { .. } => state.write_u8(0),
+        BoundExpression::Scalar {
+            scalar_fn,
+            children,
+            ..
+        } => {
+            state.write_u8(1);
+            scalar_fn.hash(state);
+            state.write_usize(children.len());
+            for child in children.iter() {
+                hash_functions(child, state);
+            }
+        }
+    }
 }
 
 /// The plans of one projection and filter over a file.
@@ -125,7 +160,7 @@ impl PlanCache {
                 ..Default::default()
             };
         }
-        let key = (projection, filter);
+        let key = Key(projection, filter);
         if let Some(planned) = cached.plans.get(&key) {
             return Ok(planned.clone());
         }

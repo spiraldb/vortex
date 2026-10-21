@@ -5,6 +5,7 @@ use std::future::ready;
 use std::ops::Range;
 use std::sync::Arc;
 use std::sync::Weak;
+use std::time::SystemTime;
 
 use arrow_array::RecordBatchOptions;
 use arrow_schema::DataType;
@@ -45,9 +46,11 @@ use futures::FutureExt;
 use futures::StreamExt;
 use futures::TryStreamExt;
 use futures::stream;
+use object_store::ObjectMeta;
 use object_store::path::Path;
 use tracing::Instrument;
 use vortex::array::VortexSessionExecute;
+use vortex::buffer::ByteBuffer;
 use vortex::error::VortexError;
 use vortex::error::VortexExpect;
 use vortex::expr::and_collect;
@@ -127,6 +130,9 @@ pub(crate) struct VortexOpener {
     pub projection_pushdown: bool,
     pub scan_concurrency: Option<usize>,
     pub scan_v2: bool,
+    /// Whether the scan's object store is the local file system, whose files a V2 scan maps
+    /// into memory instead of reading.
+    pub local_files: bool,
 }
 
 impl FileOpener for VortexOpener {
@@ -166,6 +172,7 @@ impl FileOpener for VortexOpener {
         let has_output_ordering = self.has_output_ordering;
         let scan_concurrency = self.scan_concurrency;
         let scan_v2 = self.scan_v2;
+        let local_files = self.local_files;
 
         let expr_converter = Arc::clone(&self.expression_converter);
         let projection_pushdown = self.projection_pushdown;
@@ -491,11 +498,21 @@ impl FileOpener for VortexOpener {
             };
             let stream = if scan_v2 {
                 let mut scan_file = vxf.scan_file();
-                scan_file.segments = shared_segment_source(
-                    &segment_sources,
-                    &file.object_meta.location,
-                    scan_file.segments,
-                );
+                let read = scan_file.segments;
+                scan_file.segments =
+                    shared_segment_source(&segment_sources, &file.object_meta.location, || {
+                        local_files
+                            .then(|| map_local_file(&file.object_meta))
+                            .flatten()
+                            .and_then(|mapped| {
+                                vxf.buffer_segment_source(mapped)
+                                    .inspect_err(|error| {
+                                        tracing::debug!("not mapping {}: {error}", file.path())
+                                    })
+                                    .ok()
+                            })
+                            .unwrap_or(read)
+                    });
                 let plan_cache = plan_caches
                     .entry(file.object_meta.location.clone())
                     .or_default()
@@ -655,11 +672,12 @@ fn contains_lambda(projection: &ProjectionExprs) -> DFResult<bool> {
 }
 
 /// Returns the segment source other partitions of `path` are reading through, or registers
-/// `fresh` as that source. Like the layout readers, a source lives only as long as one scan.
+/// the one `fresh` makes as that source. Like the layout readers, a source lives only as long
+/// as one scan.
 fn shared_segment_source(
     segment_sources: &DashMap<Path, Weak<dyn SegmentSource>>,
     path: &Path,
-    fresh: Arc<dyn SegmentSource>,
+    fresh: impl FnOnce() -> Arc<dyn SegmentSource>,
 ) -> Arc<dyn SegmentSource> {
     match segment_sources.entry(path.clone()) {
         Entry::Occupied(mut entry) => {
@@ -667,15 +685,39 @@ fn shared_segment_source(
                 tracing::trace!("reusing segment source for {path}");
                 shared
             } else {
+                let fresh = fresh();
                 entry.insert(Arc::downgrade(&fresh));
                 fresh
             }
         }
         Entry::Vacant(entry) => {
+            let fresh = fresh();
             entry.insert(Arc::downgrade(&fresh));
             fresh
         }
     }
+}
+
+/// Maps the local file `object` names into memory, or `None` when there is no file at its path
+/// of its size and modification time.
+///
+/// A mapped segment is a slice of the page cache: reading it copies nothing into a fresh
+/// buffer and waits for no IO task, which for wide rows is most of what a scan costs. The file
+/// must not be truncated while it is mapped.
+fn map_local_file(object: &ObjectMeta) -> Option<ByteBuffer> {
+    let path = std::path::Path::new("/").join(object.location.as_ref());
+    let file = std::fs::File::open(&path).ok()?;
+    let metadata = file.metadata().ok()?;
+    let modified = metadata.modified().ok();
+    if metadata.len() != object.size
+        || modified.is_some_and(|modified| modified != SystemTime::from(object.last_modified))
+    {
+        return None;
+    }
+    // SAFETY: the mapping is read-only, and the scan reads the file as of its listing, the same
+    // assumption every reader of a file being scanned makes.
+    let mapped = unsafe { memmap2::Mmap::map(&file) }.ok()?;
+    Some(ByteBuffer::from(mapped))
 }
 
 /// Return the cached [`NaturalSplits`] for `path`, computing and caching them on first use.
@@ -804,6 +846,8 @@ mod tests {
     use insta::assert_snapshot;
     use itertools::Itertools;
     use object_store::ObjectStore;
+    use object_store::ObjectStoreExt;
+    use object_store::local::LocalFileSystem;
     use object_store::memory::InMemory;
     use rstest::rstest;
     use vortex::VortexSessionDefault;
@@ -1007,6 +1051,7 @@ mod tests {
             projection_pushdown: false,
             scan_concurrency: None,
             scan_v2: false,
+            local_files: false,
         }
     }
 
@@ -1416,6 +1461,7 @@ mod tests {
             projection_pushdown: false,
             scan_concurrency: None,
             scan_v2: false,
+            local_files: false,
         };
 
         let filter = col("a").lt(lit(100_i32));
@@ -1507,6 +1553,7 @@ mod tests {
             projection_pushdown: false,
             scan_concurrency: None,
             scan_v2: false,
+            local_files: false,
         };
 
         let stream = opener.open(file)?.await?;
@@ -1689,6 +1736,7 @@ mod tests {
             projection_pushdown: false,
             scan_concurrency: None,
             scan_v2: false,
+            local_files: false,
         };
 
         // This should succeed and return the correctly projected and cast data
@@ -1753,6 +1801,7 @@ mod tests {
             projection_pushdown: false,
             scan_concurrency: None,
             scan_v2: false,
+            local_files: false,
         }
     }
 
@@ -1968,6 +2017,7 @@ mod tests {
             projection_pushdown: false,
             scan_concurrency: None,
             scan_v2: false,
+            local_files: false,
         };
 
         let file = PartitionedFile::new(file_path.to_string(), data_size);
@@ -2238,6 +2288,27 @@ mod tests {
             .try_collect::<Vec<_>>()
             .await?;
         assert_eq!(actual.iter().map(RecordBatch::num_rows).sum::<usize>(), 0);
+        Ok(())
+    }
+
+    /// A local file is mapped when its listing still describes it, and not otherwise.
+    #[tokio::test]
+    async fn local_files_are_mapped_as_listed() -> anyhow::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("mapped.vortex");
+        std::fs::write(&path, b"mapped bytes")?;
+        let store = LocalFileSystem::new();
+        let location = Path::from_filesystem_path(&path)?;
+        let mut object = store.head(&location).await?;
+
+        let mapped = map_local_file(&object).expect("the listed file is mapped");
+        assert_eq!(mapped.as_slice(), b"mapped bytes");
+
+        object.size += 1;
+        assert!(map_local_file(&object).is_none());
+        object.size -= 1;
+        object.last_modified -= std::time::Duration::from_secs(1);
+        assert!(map_local_file(&object).is_none());
         Ok(())
     }
 }

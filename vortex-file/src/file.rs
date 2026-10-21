@@ -30,6 +30,7 @@ use vortex_utils::aliases::hash_map::HashMap;
 
 use crate::FileStatistics;
 use crate::footer::Footer;
+use crate::segments::BufferSegmentSource;
 use crate::pruning::can_prune_file_stats;
 use crate::v2::FileStatsLayoutReader;
 
@@ -152,6 +153,16 @@ impl VortexFile {
     /// is dropped.
     pub fn segment_source(&self) -> Arc<dyn SegmentSource> {
         Arc::clone(&self.segment_source)
+    }
+
+    /// A segment source serving this file's segments as slices of `buffer`, the whole file,
+    /// such as a memory map of it. Segments are resolved without copying or waiting.
+    pub fn buffer_segment_source(&self, buffer: ByteBuffer) -> VortexResult<Arc<dyn SegmentSource>> {
+        self.footer.validate_file_size(buffer.len() as u64)?;
+        Ok(Arc::new(BufferSegmentSource::new(
+            buffer,
+            self.footer.segment_specs_with_metadata(),
+        )))
     }
 
     /// Replace the segment source used by this file.
