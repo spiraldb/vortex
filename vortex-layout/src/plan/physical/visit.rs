@@ -10,6 +10,7 @@
 use std::ops::Range;
 
 use vortex_error::VortexResult;
+use vortex_error::vortex_err;
 use vortex_mask::Mask;
 
 use super::PlanRef;
@@ -100,8 +101,8 @@ fn walk(
         match plan.child_rows(index) {
             ChildRows::Opaque => {}
             ChildRows::Whole => {
-                let child = plan.child_required(index)?;
-                walk(&child, 0..child.row_count(), None, &at.whole(&rows), visit)?;
+                let child = required(plan, index)?;
+                walk(child, 0..child.row_count(), None, &at.whole(&rows), visit)?;
             }
             ChildRows::Rows(span) => {
                 let local = rows.start.max(span.start)..rows.end.min(span.end);
@@ -110,8 +111,8 @@ fn walk(
                 }
                 let child_rows = local.start - span.start..local.end - span.start;
                 let Some(mask) = mask else {
-                    let child = plan.child_required(index)?;
-                    walk(&child, child_rows, None, &at.shift(span.start), visit)?;
+                    let child = required(plan, index)?;
+                    walk(child, child_rows, None, &at.shift(span.start), visit)?;
                     continue;
                 };
                 let Some((trimmed, mask)) = selected_slice(
@@ -121,13 +122,20 @@ fn walk(
                 ) else {
                     continue;
                 };
-                let child = plan.child_required(index)?;
+                let child = required(plan, index)?;
                 let trimmed = rows.start + trimmed.start as u64 - span.start
                     ..rows.start + trimmed.end as u64 - span.start;
                 let mask = (!mask.all_true()).then_some(&mask);
-                walk(&child, trimmed, mask, &at.shift(span.start), visit)?;
+                walk(child, trimmed, mask, &at.shift(span.start), visit)?;
             }
         }
     }
     Ok(())
+}
+
+/// Child `index` of `plan`, borrowed: a wide plan's walk clones no child.
+fn required(plan: &PlanRef, index: usize) -> VortexResult<&PlanRef> {
+    plan.children()
+        .get_ref(index)?
+        .ok_or_else(|| vortex_err!("Plan child {index} is absent"))
 }
