@@ -21,6 +21,7 @@ use vortex_layout::LayoutReader;
 use vortex_layout::scan::layout::LayoutReaderDataSource;
 use vortex_layout::scan::scan_builder::ScanBuilder;
 use vortex_layout::scan::split_by::SplitBy;
+use vortex_layout::scan::v2::ScanCache;
 use vortex_layout::scan::v2::ScanFile;
 use vortex_layout::scan::v2::SegmentLocation;
 use vortex_layout::segments::SegmentSource;
@@ -50,6 +51,28 @@ pub struct VortexFile {
     metadata: Arc<HashMap<String, ByteBuffer>>,
     /// None id LayoutReader caching is turned off
     layout_reader_cache: Option<OnceLock<Arc<dyn LayoutReader>>>,
+    /// None if V2 scan caching is turned off
+    scan_cache: Option<FileScanCache>,
+}
+
+/// What repeated V2 scans of a file share: its segment locations, read from the footer once, and
+/// the plan state derived from them.
+#[derive(Clone)]
+struct FileScanCache {
+    locations: Arc<[SegmentLocation]>,
+    plans: ScanCache,
+}
+
+fn segment_locations(footer: &Footer) -> Arc<[SegmentLocation]> {
+    footer
+        .segment_specs_with_metadata()
+        .iter()
+        .map(|spec| SegmentLocation {
+            offset: spec.offset,
+            length: spec.length,
+            alignment: spec.alignment,
+        })
+        .collect()
 }
 
 fn layout_reader(
@@ -86,6 +109,7 @@ impl VortexFile {
             session,
             metadata: Arc::new(HashMap::new()),
             layout_reader_cache: None,
+            scan_cache: None,
         }
     }
 
@@ -94,17 +118,23 @@ impl VortexFile {
         self
     }
 
-    /// Enable layout reader caching.
+    /// Enable layout reader and V2 scan caching.
     ///
     /// Repeated calls to [`layout_reader`](Self::layout_reader), [`scan`](Self::scan), and
-    /// [`data_source`](Self::data_source) will share the same reader tree.
+    /// [`data_source`](Self::data_source) will share the same reader tree. Repeated V2 scans of
+    /// [`scan_file`](Self::scan_file) will share its segment locations and a [`ScanCache`].
     pub fn with_caching(self) -> Self {
+        let scan_cache = FileScanCache {
+            locations: segment_locations(&self.footer),
+            plans: ScanCache::default(),
+        };
         Self {
             footer: self.footer,
             segment_source: self.segment_source,
             session: self.session,
             metadata: self.metadata,
             layout_reader_cache: Some(OnceLock::new()),
+            scan_cache: Some(scan_cache),
         }
     }
 
@@ -156,12 +186,15 @@ impl VortexFile {
 
     /// Replace the segment source used by this file.
     ///
-    /// Any cached layout reader is cleared so that subsequent scans construct readers over the
-    /// replacement source.
+    /// Any cached layout reader or V2 scan state is cleared so that subsequent scans read from
+    /// the replacement source.
     pub fn with_segment_source(mut self, segment_source: Arc<dyn SegmentSource>) -> Self {
         self.segment_source = segment_source;
         if self.layout_reader_cache.is_some() {
             self.layout_reader_cache = Some(OnceLock::new());
+        }
+        if let Some(cache) = &mut self.scan_cache {
+            cache.plans = ScanCache::default();
         }
         self
     }
@@ -227,21 +260,17 @@ impl VortexFile {
     /// where each of its segments lives, and its segment source.
     ///
     /// Pass this to [`vortex_layout::scan::v2::ScanBuilder::new`] to build a V2 scan explicitly.
+    /// With [caching](Self::with_caching), every returned [`ScanFile`] shares one [`ScanCache`].
     pub fn scan_file(&self) -> ScanFile {
-        let locations = self
-            .footer
-            .segment_specs_with_metadata()
-            .iter()
-            .map(|spec| SegmentLocation {
-                offset: spec.offset,
-                length: spec.length,
-                alignment: spec.alignment,
-            })
-            .collect();
+        let (locations, cache) = match &self.scan_cache {
+            Some(cache) => (Arc::clone(&cache.locations), Some(cache.plans.clone())),
+            None => (segment_locations(&self.footer), None),
+        };
         ScanFile {
             layout: Arc::clone(self.footer.layout()),
             locations,
             segments: Arc::clone(&self.segment_source),
+            cache,
         }
     }
 

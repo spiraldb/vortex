@@ -107,7 +107,7 @@ pub fn format_to_df_format(format: Format, scan_v2: bool) -> anyhow::Result<Arc<
         Format::OnDiskVortex | Format::VortexCompact | Format::VortexSpatialNative => {
             Arc::new(VortexFormat::new_with_options(SESSION.clone(), options))
         }
-        Format::ArrowIpc | Format::OnDiskDuckDB | Format::Lance => {
+        Format::ArrowIpc | Format::OnDiskDuckDB | Format::Lance | Format::LitData => {
             anyhow::bail!("Format {format} cannot be turned into a DataFusion `FileFormat`")
         }
     })

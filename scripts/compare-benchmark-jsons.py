@@ -138,15 +138,18 @@ def comparison_target(name: object, target: object = None) -> tuple[str, str, in
     if match is None and isinstance(name, str):
         random_access = re.match(
             r"^(?P<prefix>random-access(?:/.*)?)/"
-            r"(?P<file_format>parquet|vortex|lance)-(?P<variant>.+)$",
+            r"(?P<file_format>parquet|vortex|lance|litdata)-(?P<variant>.+)$",
             name,
         )
         if random_access is not None:
             file_format = random_access.group("file_format")
             if file_format == "vortex":
                 file_format = "vortex-file-compressed"
+            # Competitor formats stay in the detail tables but out of the Vortex attribution.
             query = (
-                None if file_format == "lance" else f"{random_access.group('prefix')}/{random_access.group('variant')}"
+                None
+                if file_format in ("lance", "litdata")
+                else f"{random_access.group('prefix')}/{random_access.group('variant')}"
             )
             return "random-access", file_format, query
 
@@ -1092,6 +1095,7 @@ FILE_FORMAT_ORDER = {
     "lance": 3,
     "duckdb": 4,
     "arrow": 5,
+    "litdata": 6,
 }
 
 UNIT_ORDER = {
