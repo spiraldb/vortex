@@ -428,7 +428,6 @@ opt-level = "z"
 inherits = "release"
 lto = "fat"
 opt-level = "s"
-strip = true
 
 [profile.bench]
 codegen-units = 16
