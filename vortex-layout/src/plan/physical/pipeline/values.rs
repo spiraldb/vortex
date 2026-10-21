@@ -166,7 +166,10 @@ mod tests {
         cache.insert(&second, kilobytes(1));
         assert!(cache.get(&first).is_some(), "both fit the budget");
         cache.insert(&third, kilobytes(1));
-        assert!(cache.get(&first).is_some(), "the first was used after the second");
+        assert!(
+            cache.get(&first).is_some(),
+            "the first was used after the second"
+        );
         assert!(
             cache.get(&second).is_none(),
             "the second, the least recently used, made room"
