@@ -63,6 +63,9 @@ impl PinnedByteBuffer {
         let event = ctx
             .new_event(Some(CUevent_flags::CU_EVENT_DISABLE_TIMING))
             .map_err(|e| vortex_err!("failed to create pinned host buffer event: {e}"))?;
+        // Reusing a pooled event does not bind the context on a new worker thread.
+        ctx.bind_to_thread()
+            .map_err(|e| vortex_err!("failed to bind pinned host buffer context: {e}"))?;
         // Keep file-I/O staging cacheable: write-combined pinned memory,
         // which makes CPU reads expensive.
         let ptr = unsafe { result::malloc_host(capacity, 0) }
