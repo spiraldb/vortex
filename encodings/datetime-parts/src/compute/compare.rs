@@ -18,7 +18,7 @@ use vortex_array::scalar_fn::fns::operators::CompareOperator;
 use vortex_array::scalar_fn::fns::operators::Operator;
 use vortex_array::validity::Validity;
 use vortex_error::VortexResult;
-use vortex_mask::Mask;
+use vortex_mask::AllOr;
 
 use crate::array::DateTimeParts;
 use crate::array::DateTimePartsArraySlotsExt;
@@ -213,12 +213,18 @@ fn valid_rows_all(
     value: bool,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<bool> {
+    let bits = comparison.to_bit_buffer();
     let valid = comparison.validity()?.execute_mask(comparison.len(), ctx)?;
-    let valid_count = valid.true_count();
+    let (valid_count, true_count) = match valid.bit_buffer() {
+        AllOr::All => (bits.len(), bits.true_count()),
+        AllOr::None => return Ok(false),
+        AllOr::Some(valid_bits) => (valid.true_count(), (&bits & valid_bits).true_count()),
+    };
+
     if valid_count == 0 {
         return Ok(false);
     }
-    let true_count = (&Mask::from_buffer(comparison.to_bit_buffer()) & &valid).true_count();
+
     Ok(if value {
         true_count == valid_count
     } else {
