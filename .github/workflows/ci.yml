@@ -161,15 +161,14 @@ jobs:
       - name: Locate Clang
         shell: pwsh
         run: |
-          $clang = Get-Command clang-cl.exe -ErrorAction SilentlyContinue
-          if ($clang) {
-            $compiler = $clang.Source
-          } else {
-            $roots = @("C:\Program Files\LLVM", "C:\Program Files\Microsoft Visual Studio", "C:\Program Files (x86)\Microsoft Visual Studio")
-            $compiler = Get-ChildItem $roots -Filter clang-cl.exe -Recurse -ErrorAction SilentlyContinue |
-              Select-Object -First 1 -ExpandProperty FullName
-          }
-          if (-not $compiler) { throw "clang-cl.exe was not found on the runner" }
+          $paths = @(
+            "C:\Program Files\LLVM\bin\clang-cl.exe",
+            "C:\Program Files\Microsoft Visual Studio\*\*\VC\Tools\Llvm\x64\bin\clang-cl.exe",
+            "C:\Program Files (x86)\Microsoft Visual Studio\*\*\VC\Tools\Llvm\x64\bin\clang-cl.exe"
+          )
+          $compiler = Get-Item $paths -ErrorAction SilentlyContinue |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $compiler) { throw "x64 clang-cl.exe was not found on the runner" }
           Split-Path $compiler | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           & $compiler --version
       - uses: ./.github/actions/setup-prebuild
@@ -302,7 +301,7 @@ jobs:
     timeout-minutes: 30
     runs-on: >-
       ${{ github.repository == 'vortex-data/vortex'
-          && format('runs-on={0}/runner=amd64-ci-medium/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=rust-docs', github.run_id)
+          && format('runs-on={0}/runner=amd64-ci-small/cpu=8/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=rust-docs', github.run_id)
           || 'ubuntu-latest' }}
     steps:
       - parallel:
