@@ -361,11 +361,14 @@ jobs:
           find target/release/build -path '*/out/libvortex_cub.so' \
             -exec cp {} target/codspeed/walltime/vortex-cuda/libvortex_cub.so \;
           test -f target/codspeed/walltime/vortex-cuda/libvortex_cub.so
+      - name: Package CUDA benchmark executables
+        run: tar -C target -I 'zstd -T0 -3' -cf codspeed-cuda-benchmarks.tar.zst codspeed
       - name: Upload benchmark executables
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
         with:
           name: codspeed-cuda-benchmarks
-          path: target/codspeed/
+          path: codspeed-cuda-benchmarks.tar.zst
+          compression-level: 0
           retention-days: 1
           if-no-files-found: error
 
@@ -404,7 +407,10 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8
         with:
           name: codspeed-cuda-benchmarks
-          path: target/codspeed
+      - name: Unpack CUDA benchmark executables
+        run: |
+          mkdir -p target
+          tar -C target --zstd -xf codspeed-cuda-benchmarks.tar.zst
       - name: Restore executable permissions
         run: find target/codspeed -type f -exec chmod +x {} +
       - name: Run benchmarks
