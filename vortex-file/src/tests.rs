@@ -38,6 +38,8 @@ use vortex_array::assert_arrays_eq;
 use vortex_array::builders::MapBuilder;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::DecimalDType;
+use vortex_array::dtype::Field;
+use vortex_array::dtype::FieldPath;
 use vortex_array::dtype::MapDType;
 use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
@@ -117,7 +119,11 @@ use crate::VERSION;
 use crate::VortexFile;
 use crate::WriteOptionsSessionExt;
 use crate::flatbuffers::footer as fb;
+use crate::flatbuffers::footer::SortKey;
 use crate::footer::SegmentSpec;
+use crate::sort_key::read_sort_key;
+use crate::sort_key::validate_sort_key;
+use crate::sort_key::write_sort_key;
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     let session = array_session()
         .with::<LayoutSession>()
@@ -3001,5 +3007,131 @@ async fn repro_8166_binary_gt_all_ff_max() -> VortexResult<()> {
         .await?;
 
     assert_arrays_eq!(result, mk_struct(vec![big])?, &mut ctx);
+    Ok(())
+}
+
+#[tokio::test]
+async fn sort_key_roundtrip() -> VortexResult<()> {
+    let sort_key = [field_path!(customer_id), field_path!(timestamp)];
+    let chunk = StructArray::from_fields(&[
+        ("customer_id", buffer![1u32, 1, 2, 2].into_array()),
+        ("timestamp", buffer![10i64, 20, 5, 15].into_array()),
+    ])?
+    .into_array();
+    let dtype = chunk.dtype().clone();
+    let mut buf = ByteBufferMut::empty();
+    let mut writer = SESSION
+        .write_options()
+        .with_sort_key(sort_key.clone())
+        .writer(&mut buf, dtype);
+
+    writer.push(chunk).await?;
+    let summary = writer.finish().await?;
+    assert_eq!(summary.footer().sort_key(), Some(sort_key.as_slice()));
+
+    // Also check the buffer read op.
+    let file = SESSION.open_options().open_buffer(buf)?;
+    assert_eq!(file.footer().sort_key(), Some(sort_key.as_slice()));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn missing_sort_key_remains_unknown() -> VortexResult<()> {
+    let mut buf = ByteBufferMut::empty();
+    let summary = SESSION
+        .write_options()
+        .write(&mut buf, buffer![2i32, 1].into_array().to_array_stream())
+        .await?;
+    assert!(summary.footer().sort_key().is_none());
+
+    let file = SESSION.open_options().open_buffer(buf)?;
+    assert!(file.footer().sort_key().is_none());
+    Ok(())
+}
+
+#[tokio::test]
+async fn non_struct_root_sort_key_roundtrip() -> VortexResult<()> {
+    let mut bytes = ByteBufferMut::empty();
+    let key = [FieldPath::root()];
+    SESSION
+        .write_options()
+        .with_file_statistics(vec![])
+        .with_sort_key(key.clone())
+        .write(
+            &mut bytes,
+            buffer![1i32, 2, 3].into_array().to_array_stream(),
+        )
+        .await?;
+    let file = SESSION.open_options().open_buffer(bytes)?;
+    assert_eq!(file.footer().sort_key(), Some(key.as_slice()));
+
+    Ok(())
+}
+
+#[rstest]
+#[case::empty(vec![])]
+#[case::missing(vec![field_path!(missing)])]
+#[case::nested(vec![field_path!(customer_id.nested)])]
+#[case::element(vec![FieldPath::from(vec![Field::ElementType])])]
+#[case::root_struct(vec![FieldPath::root()])]
+#[case::duplicate(vec![field_path!(customer_id), field_path!(customer_id)])]
+#[tokio::test]
+async fn invalid_key_fails_before_writing(#[case] key: Vec<FieldPath>) -> VortexResult<()> {
+    let array = StructArray::from_fields(&[
+        ("customer_id", buffer![1i32].into_array()),
+        (
+            "timestamp",
+            PrimitiveArray::from_option_iter([Some(1i64)]).into_array(),
+        ),
+    ])?
+    .into_array();
+
+    let mut bytes = ByteBufferMut::empty();
+    assert!(
+        SESSION
+            .write_options()
+            .with_sort_key(key)
+            .write(&mut bytes, array.to_array_stream())
+            .await
+            .is_err()
+    );
+    assert!(bytes.is_empty());
+
+    Ok(())
+}
+
+#[test]
+fn sort_key_accepts_nullable_struct() -> VortexResult<()> {
+    let array =
+        StructArray::from_fields(&[("customer_id", buffer![1i32].into_array())])?.into_array();
+    let dtype = array.dtype().as_nullable();
+    let key = [field_path!(customer_id)];
+    validate_sort_key(&dtype, &key)?;
+
+    let mut fbb = FlatBufferBuilder::new();
+    let serialized = write_sort_key(&mut fbb, &key)?;
+    fbb.finish_minimal(serialized);
+    let serialized = flatbuffers::root::<SortKey>(fbb.finished_data())?;
+
+    assert_eq!(read_sort_key(serialized, &dtype)?.as_ref(), key.as_slice());
+    Ok(())
+}
+
+#[rstest]
+#[case::empty(vec![])]
+#[case::missing(vec![field_path!(unknown)])]
+#[case::nested(vec![field_path!(customer_id.child)])]
+fn reader_rejects_invalid_sort_metadata(#[case] key: Vec<FieldPath>) -> VortexResult<()> {
+    let array =
+        StructArray::from_fields(&[("customer_id", buffer![1i32].into_array())])?.into_array();
+    let dtype = array.dtype();
+    let mut fbb = FlatBufferBuilder::new();
+    let key = write_sort_key(&mut fbb, &key)?;
+    fbb.finish_minimal(key);
+
+    let key = flatbuffers::root::<SortKey>(fbb.finished_data())?;
+    assert!(read_sort_key(key, dtype).is_err());
+
     Ok(())
 }
