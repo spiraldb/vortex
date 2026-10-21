@@ -24,11 +24,14 @@ use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinArray;
 use vortex_array::assert_arrays_eq;
 use vortex_array::dtype::DType;
+use vortex_array::dtype::FieldName;
+use vortex_array::dtype::FieldNames;
 use vortex_array::expr::get_item;
 use vortex_array::expr::gt;
 use vortex_array::expr::lit;
 use vortex_array::expr::pack;
 use vortex_array::expr::root;
+use vortex_array::expr::select;
 use vortex_array::validity::Validity;
 use vortex_arrow::ArrowSessionExt;
 use vortex_buffer::Alignment;
@@ -43,6 +46,9 @@ use super::PreparedScan;
 use super::ScanBuilder;
 use super::ScanCache;
 use super::ScanFile;
+use super::columns::column_group_count;
+use super::columns::field_ranges;
+use super::columns::max_groups_for_bytes;
 use super::row_chunks;
 use super::rows_per_chunk;
 use crate::LayoutRef;
@@ -143,21 +149,25 @@ fn zoned_table() -> Arc<dyn LayoutStrategy> {
 }
 
 /// A [`ScanFile`] over test segments. They have no byte offsets, and the scan fetches them by id,
-/// so each location is a placeholder whose offset is its id.
+/// so each location is a placeholder whose offset is its id and whose length is the segment's.
+/// Test segments are in memory, so their reads are ready at once.
 fn scan_file(segments: &Arc<dyn SegmentSource>, layout: &LayoutRef) -> VortexResult<ScanFile> {
     let mut count = 0;
     for layout in layout.depth_first_traversal() {
         for id in layout?.segment_ids() {
-            count = count.max(*id as usize + 1);
+            count = count.max(*id + 1);
         }
     }
-    let locations = (0..count as u64)
-        .map(|offset| SegmentLocation {
-            offset,
-            length: 0,
-            alignment: Alignment::none(),
+    let locations = (0..count)
+        .map(|id| {
+            let bytes = futures::executor::block_on(segments.request(SegmentId::from(id)))?;
+            Ok(SegmentLocation {
+                offset: u64::from(id),
+                length: u32::try_from(bytes.len())?,
+                alignment: Alignment::none(),
+            })
         })
-        .collect();
+        .collect::<VortexResult<_>>()?;
     Ok(ScanFile {
         layout: Arc::clone(layout),
         locations,
@@ -389,7 +399,7 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
         reads: AtomicUsize::new(0),
     });
     let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
-    let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?)?;
+    let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?, 1)?;
     let splits = scan.split_plans();
     assert_eq!(
         splits.len(),
@@ -437,11 +447,15 @@ async fn list_layouts_return_an_error() -> VortexResult<()> {
     Ok(())
 }
 
+#[rstest]
 #[tokio::test]
-async fn unordered_returns_every_row() -> VortexResult<()> {
+async fn unordered_returns_every_row(#[values(1, 8)] threads: usize) -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, table().as_ref()).await?;
-    let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?.with_ordered(false))?;
+    let scan = PreparedScan::try_new(
+        builder(&session, &segments, &layout)?.with_ordered(false),
+        threads,
+    )?;
     let chunks: Vec<ArrayRef> = scan.execute_stream()?.try_collect().await?;
     let rows: usize = chunks.iter().map(|chunk| chunk.len()).sum();
     assert_eq!(rows, CHUNKS * CHUNK_ROWS);
@@ -457,6 +471,7 @@ async fn primitive_column() -> VortexResult<()> {
         builder(&session, &segments, &layout)?
             .with_projection(get_item("ints", root()).bind(&dtype)?)
             .with_row_range(990..1010),
+        1,
     )?;
     let actual = collect(
         DType::Primitive(vortex_array::dtype::PType::I32, false.into()),
@@ -479,7 +494,7 @@ async fn work_chunks_ignore_layout_boundaries(
 ) -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, strategy.get().as_ref()).await?;
-    let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?)?;
+    let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?, 1)?;
     assert_eq!(scan.splits, vec![0..(CHUNKS * CHUNK_ROWS) as u64]);
     let arrays: Vec<_> = scan.execute_stream()?.try_collect().await?;
     assert_eq!(arrays.len(), 1);
@@ -561,6 +576,7 @@ async fn selected_split_scope_is_bounded_before_projection() -> VortexResult<()>
     let scan = PreparedScan::try_new(
         builder(&session, &segments, &layout)?
             .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(vec![7, 2001]))?),
+        1,
     )?;
     let splits = scan.split_plans();
     assert_eq!(splits.len(), 1);
@@ -601,5 +617,174 @@ async fn repeated_projections_reuse_their_values() -> VortexResult<()> {
         reads.push(counted.reads.load(Ordering::Relaxed) - before);
     }
     assert_eq!(reads, vec![4, 1, 1]);
+    Ok(())
+}
+
+#[rstest]
+#[case::no_splits(3, 0, 8, 1)]
+#[case::enough_rows(3, 8, 8, 1)]
+#[case::one_split(3, 1, 8, 3)]
+#[case::wide(100, 1, 8, 8)]
+#[case::two_splits(100, 2, 7, 4)]
+#[case::one_field(1, 1, 8, 1)]
+fn column_groups_fill_threads(
+    #[case] nfields: usize,
+    #[case] splits: usize,
+    #[case] threads: usize,
+    #[case] expected: usize,
+) {
+    assert_eq!(column_group_count(nfields, splits, threads), expected);
+}
+
+#[rstest]
+#[case::even(4, 2, vec![0..2, 2..4])]
+#[case::uneven(5, 2, vec![0..2, 2..5])]
+#[case::more_groups_than_fields(2, 4, vec![0..1, 1..2])]
+fn fields_split_into_contiguous_ranges(
+    #[case] nfields: usize,
+    #[case] groups: usize,
+    #[case] expected: Vec<Range<usize>>,
+) {
+    assert_eq!(field_ranges(nfields, groups), expected);
+}
+
+#[rstest]
+#[case::whole(32_768, 2, 2, 100, 100, 4)]
+#[case::projected_share(131_072, 1, 2, 25, 100, 2)]
+#[case::too_small(4096, 1, 1, 100, 100, 0)]
+#[case::no_rows(1 << 20, 1, 1, 0, 0, 0)]
+fn groups_need_enough_bytes(
+    #[case] bytes: u64,
+    #[case] projected: usize,
+    #[case] nfields: usize,
+    #[case] selected_rows: u64,
+    #[case] row_count: u64,
+    #[case] expected: usize,
+) {
+    assert_eq!(
+        max_groups_for_bytes(bytes, projected, nfields, selected_rows, row_count),
+        expected
+    );
+}
+
+/// Column groups convert their columns to Arrow on their own tasks, and zip them into the same
+/// record batches as a scan run whole.
+#[tokio::test]
+async fn column_groups_convert_to_arrow() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, table().as_ref()).await?;
+    let schema = Arc::new(session.arrow().to_arrow_schema(layout.dtype())?);
+    let mut batches = Vec::new();
+    for threads in [1, 8] {
+        let scan = builder(&session, &segments, &layout)?.into_record_batches(Arc::clone(&schema));
+        let scan = PreparedScan::try_new(scan, threads)?;
+        assert_eq!(scan.columns.is_some(), threads > 1);
+        let batch: Vec<_> = scan.execute_stream()?.try_collect().await?;
+        batches.push(batch);
+    }
+    assert_eq!(batches[0], batches[1]);
+    Ok(())
+}
+
+/// A scan whose splits leave threads idle runs the columns of a shredded layout as separate
+/// groups, and returns the same batches as the scan run whole. The columns of a flat struct share
+/// their segments, so it is never split.
+#[rstest]
+#[case::whole(None, None)]
+#[case::row_range(Some(250..3_100), None)]
+#[case::selection(Some(0..2_000), Some(vec!["lists".into(), "ints".into()]))]
+#[tokio::test]
+async fn column_groups_match_whole_scan(
+    #[values(Strategy::Flat, Strategy::Table, Strategy::ZonedTable)] strategy: Strategy,
+    #[case] row_range: Option<Range<u64>>,
+    #[case] columns: Option<Vec<FieldName>>,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, strategy.get().as_ref()).await?;
+    let make = || -> VortexResult<ScanBuilder<ArrayRef>> {
+        let mut builder = builder(&session, &segments, &layout)?;
+        if let Some(rows) = row_range.clone() {
+            builder = builder.with_row_range(rows);
+        }
+        if let Some(columns) = columns.clone() {
+            let projection = select(FieldNames::from(columns), root()).bind(layout.dtype())?;
+            builder = builder.with_projection(projection);
+        }
+        Ok(builder)
+    };
+    let dtype = make()?.dtype().clone();
+    let nfields = dtype.as_struct_fields().nfields();
+
+    let whole = PreparedScan::try_new(make()?, 1)?;
+    assert!(whole.columns.is_none());
+    let grouped = PreparedScan::try_new(make()?, 8)?;
+    assert_eq!(
+        grouped.columns.as_ref().map(|columns| columns.groups.len()),
+        (!matches!(strategy, Strategy::Flat)).then_some(nfields)
+    );
+
+    let expected: Vec<ArrayRef> = whole.execute_stream()?.try_collect().await?;
+    let actual: Vec<ArrayRef> = grouped.execute_stream()?.try_collect().await?;
+    // One batch per split, zipped from every group's columns.
+    assert_eq!(actual.len(), 1);
+    assert_arrays_eq!(
+        ChunkedArray::try_new(actual, dtype.clone())?.into_array(),
+        ChunkedArray::try_new(expected, dtype)?.into_array(),
+        &mut session.create_execution_ctx()
+    );
+    Ok(())
+}
+
+/// Each column group reads only its own columns, so splitting a scan reads no segment twice.
+#[tokio::test]
+async fn column_groups_read_each_segment_once() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, table().as_ref()).await?;
+    let counted = Arc::new(CountingSegments {
+        inner: segments,
+        reads: AtomicUsize::new(0),
+    });
+    let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
+    let mut reads = Vec::new();
+    for threads in [1, 8] {
+        let builder = builder(&session, &segments, &layout)?;
+        let before = counted.reads.load(Ordering::Relaxed);
+        let scan = PreparedScan::try_new(builder, threads)?;
+        let _arrays: Vec<ArrayRef> = scan.execute_stream()?.try_collect().await?;
+        reads.push(counted.reads.load(Ordering::Relaxed) - before);
+    }
+    assert_eq!(reads[0], reads[1]);
+    Ok(())
+}
+
+/// Column groups need enough selected bytes of a non-nullable struct, and can be disabled.
+#[rstest]
+#[case::disabled(false, None, false)]
+#[case::few_rows(true, Some(0..10), false)]
+#[case::nullable(true, None, true)]
+#[tokio::test]
+async fn column_groups_are_skipped(
+    #[case] column_parallelism: bool,
+    #[case] row_range: Option<Range<u64>>,
+    #[case] nullable: bool,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, table().as_ref()).await?;
+    let mut builder =
+        builder(&session, &segments, &layout)?.with_column_parallelism(column_parallelism);
+    if let Some(rows) = row_range {
+        builder = builder.with_row_range(rows);
+    }
+    if nullable {
+        let projection = pack(
+            [
+                ("ints", get_item("ints", root())),
+                ("strings", get_item("strings", root())),
+            ],
+            true.into(),
+        );
+        builder = builder.with_projection(projection.bind(layout.dtype())?);
+    }
+    assert!(PreparedScan::try_new(builder, 8)?.columns.is_none());
     Ok(())
 }
