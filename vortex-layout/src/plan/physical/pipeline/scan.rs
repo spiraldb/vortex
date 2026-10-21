@@ -457,11 +457,9 @@ impl Core {
     /// new inlet of it, closed at once when the plan selects no row.
     fn attach(&mut self, id: PipelineId, compile: SubCompile) -> VortexResult<()> {
         let inlet = self.pipeline(id).inlets.len();
-        let port = self.arena.create(
-            DEFAULT_CAPACITY,
-            None,
-            SourceEnd::Pipeline { id, inlet },
-        );
+        let port = self
+            .arena
+            .create(DEFAULT_CAPACITY, None, SourceEnd::Pipeline { id, inlet });
         let pipe = self.pipeline_mut(id);
         pipe.inlets.push(port);
         pipe.touched.grow();

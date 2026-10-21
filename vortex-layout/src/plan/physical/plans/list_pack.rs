@@ -149,11 +149,7 @@ impl PlanVTable for ListPack {
         let offsets_plan = plan.offsets()?;
         let offsets_rows = rows.start..rows.end + 1;
         let offsets = compiler
-            .compile(
-                &offsets_plan,
-                offsets_rows,
-                &Mask::new_true(mask.len() + 1),
-            )?
+            .compile(&offsets_plan, offsets_rows, &Mask::new_true(mask.len() + 1))?
             .ok_or_else(|| vortex_err!("List offsets compiled to no rows"))?;
         let mut chains = vec![offsets];
         if let Some(validity) = plan.validity()? {

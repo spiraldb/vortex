@@ -72,7 +72,8 @@ impl Batcher {
             self.flush()?;
             for start in (0..rows).step_by(batch_rows) {
                 let end = (start + batch_rows).min(rows);
-                self.ready.push_back(slice_trimmed(&piece, start..end, ctx)?);
+                self.ready
+                    .push_back(slice_trimmed(&piece, start..end, ctx)?);
             }
             return Ok(());
         }
@@ -174,7 +175,10 @@ mod tests {
     #[test]
     fn narrow_pieces_gather_into_one_batch() -> VortexResult<()> {
         let mut ctx = array_session().create_execution_ctx();
-        let dtype = PrimitiveArray::from_iter(0u32..1).into_array().dtype().clone();
+        let dtype = PrimitiveArray::from_iter(0u32..1)
+            .into_array()
+            .dtype()
+            .clone();
         let mut batches = Batcher::new(dtype);
         for start in (0u32..9000).step_by(1000) {
             batches.push(
@@ -198,7 +202,8 @@ mod tests {
         const WIDTH: usize = 10_000;
         let lists = ListArray::try_new(
             Buffer::from_iter(0..100 * WIDTH as u64).into_array(),
-            Buffer::from_iter((0..=100).map(|row| (row * WIDTH) as u32)).into_array(),
+            Buffer::from_iter((0..=100).map(|row| u32::try_from(row * WIDTH).unwrap_or(0)))
+                .into_array(),
             Validity::NonNullable,
             &mut ctx,
         )?

@@ -24,7 +24,6 @@ use crate::plan::physical::pipeline::Turn;
 use crate::scan::execution::SegmentLocation;
 use crate::segments::SegmentId;
 
-
 /// What one [`ScanAdaptor::compute`] produced.
 pub(super) enum AdaptorStep {
     /// Control returns to the owner with CPU work still ready.

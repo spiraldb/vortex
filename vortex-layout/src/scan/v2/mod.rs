@@ -47,10 +47,10 @@ use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
 use vortex_utils::parallelism::get_available_parallelism;
 
+pub use self::cache::PlanCache;
 use crate::LayoutRef;
 use crate::scan::arrow::to_record_batch;
 use crate::scan::execution::ScanPlans;
-pub use self::cache::PlanCache;
 pub use crate::scan::execution::SegmentLocation;
 use crate::scan::execution::plan_selection;
 use crate::scan::v2::cache::Planned;

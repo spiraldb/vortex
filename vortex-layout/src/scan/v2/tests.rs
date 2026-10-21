@@ -518,7 +518,7 @@ fn varied_lists_chunk(start: usize) -> VortexResult<ArrayRef> {
     let elements = PrimitiveArray::from_option_iter(
         (0..total).map(|i| (i % 7 != 0).then(|| i64::try_from(start * 3 + i).unwrap_or(0))),
     );
-    let validity = Validity::from_iter(rows.clone().map(|row| row % 11 != 3));
+    let validity = Validity::from_iter(rows.map(|row| row % 11 != 3));
     let lists = ListArray::try_new(
         elements.into_array(),
         Buffer::from(offsets.clone()).into_array(),
@@ -533,9 +533,8 @@ fn varied_lists_chunk(start: usize) -> VortexResult<ArrayRef> {
         Validity::NonNullable,
         &mut ctx,
     )?;
-    let outer_offsets = Buffer::from_iter(
-        (0..=CHUNK_ROWS).map(|i| u64::try_from(i.min(CHUNK_ROWS)).unwrap_or(0)),
-    );
+    let outer_offsets =
+        Buffer::from_iter((0..=CHUNK_ROWS).map(|i| u64::try_from(i.min(CHUNK_ROWS)).unwrap_or(0)));
     let nested = ListArray::try_new(
         inner.into_array(),
         outer_offsets.into_array(),
@@ -633,7 +632,10 @@ async fn list_layouts_match_v1(
     let (segments, layout) = write_varied_lists(&session, &list_table(zoned)).await?;
     assert_same_as_v1(&session, || {
         let projection = pack(
-            [("ints", get_item("ints", root())), (column, get_item(column, root()))],
+            [
+                ("ints", get_item("ints", root())),
+                (column, get_item(column, root())),
+            ],
             false.into(),
         );
         let mut builder = builder(&session, &segments, &layout)?

@@ -105,8 +105,11 @@ impl ListSource {
             offsets
                 .as_slice::<T>()
                 .iter()
-                .map(|&offset| offset as u64)
-                .collect()
+                .map(|&offset| {
+                    u64::try_from(i128::from(offset))
+                        .map_err(|_| vortex_err!("Negative list offset {offset}"))
+                })
+                .collect::<VortexResult<_>>()?
         });
         vortex_ensure!(
             raw.len() == self.mask.len() + 1,

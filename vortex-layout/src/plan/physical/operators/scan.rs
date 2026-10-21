@@ -16,10 +16,10 @@ use vortex_array::arrays::ListView;
 use vortex_array::arrays::Struct;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::chunked::ChunkedArrayExt;
-use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::arrays::list::ListArrayExt;
 use vortex_array::arrays::list::ListArraySlotsExt;
 use vortex_array::arrays::listview::ListViewRebuildMode;
+use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::buffer::BufferHandle;
 use vortex_array::serde::SerializedArray;
 use vortex_error::VortexResult;
@@ -124,8 +124,9 @@ pub(crate) fn slice_trimmed(
             .map(|chunk| trim_elements(chunk, ctx))
             .collect::<VortexResult<Vec<_>>>()?;
         // SAFETY: trimming keeps each chunk's rows and dtype.
-        return Ok(unsafe { ChunkedArray::new_unchecked(chunks, sliced.dtype().clone()) }
-            .into_array());
+        return Ok(
+            unsafe { ChunkedArray::new_unchecked(chunks, sliced.dtype().clone()) }.into_array(),
+        );
     }
     trim_elements(sliced, ctx)
 }
