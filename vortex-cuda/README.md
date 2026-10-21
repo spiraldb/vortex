@@ -20,6 +20,64 @@ order consumers on execution streams. Pinned source buffers stay fenced until DM
 Stream pools initialize each slot once, even under concurrent first use, while keeping the
 initialized access path lock-free.
 
+## cuDF NDS-H layout comparison
+
+**Recommended NDS-H harness default: clustered, 16Mi-row blocks.** Vortex library defaults
+are unchanged. Clustering sorts `lineitem` by `(l_shipdate, l_orderkey)` and `orders` by
+`(o_orderdate, o_orderkey)`.
+
+The patched external harness uses these defaults when the variables are unset:
+
+| Environment variable     | Default    | Override                             |
+| ------------------------ | ---------- | ------------------------------------ |
+| `NDSH_CLUSTER_INPUTS`    | `1`        | `0` retains original row order       |
+| `NDSH_VORTEX_BLOCK_ROWS` | `16777216` | Positive physical block size in rows |
+
+Explicit values take precedence; empty or invalid values are rejected.
+
+NVIDIA GH200 480GB · CUDA 13.1 · Vortex `465a9c2fb7` · NDS-H SF10 · buffered I/O.
+CPU wall-time means in **milliseconds**, two timed samples per state plus warmup; lower is better.
+Block sizes below are physical row counts, not file-read chunk sizes.
+
+### Warm
+
+| Query | Original 16Mi | Original 4Mi | Clustered 4Mi | Clustered 16Mi¹ | Clustered 32Mi |
+| ----- | ------------: | -----------: | ------------: | --------------: | -------------: |
+| Q1    |        42.539 |       55.533 |        49.148 |          45.221 |         46.209 |
+| Q5    |        11.872 |       15.138 |        14.720 |          11.753 |         10.925 |
+| Q6    |         6.030 |        9.970 |         4.263 |           3.112 |          4.092 |
+| Q9    |        15.465 |       19.152 |        18.880 |          14.898 |         14.097 |
+| Q10   |        11.249 |       14.510 |         8.600 |           7.564 |          8.124 |
+
+### Cold
+
+| Query | Original 16Mi | Original 4Mi | Clustered 4Mi | Clustered 16Mi¹ | Clustered 32Mi |
+| ----- | ------------: | -----------: | ------------: | --------------: | -------------: |
+| Q1    |        90.139 |       95.280 |        81.551 |          82.518 |         90.750 |
+| Q5    |        50.273 |       53.560 |        52.466 |          47.912 |         48.393 |
+| Q6    |        35.396 |       35.738 |         8.804 |          10.206 |         16.892 |
+| Q9    |        57.770 |       62.030 |        62.892 |          59.801 |         58.068 |
+| Q10   |        45.306 |       45.371 |        22.182 |          26.032 |         29.165 |
+
+### Summary
+
+Geometric-mean latency change versus original 16Mi; negative is faster. ¹ Recommended default.
+
+| Configuration   | Warm change | Cold change |
+| --------------- | ----------: | ----------: |
+| Original 4Mi    |     +34.47% |      +4.10% |
+| Clustered 4Mi   |      −1.12% |     −34.01% |
+| Clustered 16Mi¹ |     −18.86% |     −31.61% |
+| Clustered 32Mi  |     −14.89% |     −21.44% |
+
+- Q6/Q10 return empty results. Sorting/writing/setup costs are excluded.
+- Cold = evicted OS file pages, not GPU/controller caches. Two samples and a reused
+  matched-binary control are directional evidence, not statistical guarantees.
+- These environment options belong to the patched external NDS-H harness, not Vortex.
+- Commands, patch, and raw evidence: local ignored `target/gpu-writer-experiments-20261020/`
+  (`05-followup.md`, `05-harness.patch`, `05-factorial-comparison.json`); not shipped.
+  The archived measurement patch used explicit settings; the current harness defaults to clustering.
+
 ## Building cuDF for Arrow Device interop
 
 The `cudf-test-harness` repository provides prebuilt cuDF binaries for Arrow Device interop testing on
