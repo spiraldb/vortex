@@ -1,7 +1,5 @@
 name: Linters and Tests
 
-# CI playground: establish an unchanged baseline before measuring optimizations.
-
 # Concurrency control:
 # - PRs: new commits on a feature branch will cancel in-progress (outdated) runs.
 # - Push to develop: runs queue sequentially, never cancelled.
@@ -508,6 +506,7 @@ jobs:
   rust-test-windows:
     name: "Rust tests (windows-x64)"
     env:
+      # Stable proc-macro DLL contents let dependent crates reuse sccache entries.
       RUSTFLAGS: "-C link-arg=/Brepro"
     needs: duckdb-ready
     if: ${{ !cancelled() && needs.duckdb-ready.result == 'success' }}
