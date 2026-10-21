@@ -247,6 +247,8 @@ jobs:
           VORTEX_BENCH_PREFIX: "${{ matrix.features }}::"
           VORTEX_BENCH_SUFFIX: "_${{ matrix.features }}"
         run: |
+          # Preserve the bench profile debug level instead of cargo-codspeed's full debug info.
+          export CARGO_ENCODED_RUSTFLAGS="${RUSTFLAGS// /$'\x1f'}"
           cargo codspeed build --locked -m walltime --profile bench \
             ${{ steps.select.outputs.packages }} ${{ steps.select.outputs.benches }}
       - name: Package benchmark executables
