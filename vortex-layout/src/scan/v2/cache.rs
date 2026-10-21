@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::collections::VecDeque;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::sync::Arc;
@@ -30,8 +31,18 @@ use crate::scan::v2::io::segment_ranges;
 /// otherwise plan it again. Give each scan of a file the same cache with
 /// [`ScanBuilder::with_plan_cache`](super::ScanBuilder::with_plan_cache). A cache handed scans
 /// of another file starts over.
+///
+/// The cache is bounded: it keeps the plans of at most [`PLANS_PER_FILE`] projections and
+/// filters, and its whole values within the byte budget of its [`ValueCache`], which caches of
+/// several files may share.
 #[derive(Clone, Default)]
-pub struct PlanCache(Arc<Mutex<Cached>>);
+pub struct PlanCache {
+    cached: Arc<Mutex<Cached>>,
+    values: ValueCache,
+}
+
+/// The projections and filters whose plans a [`PlanCache`] keeps; the oldest makes room.
+pub const PLANS_PER_FILE: usize = 16;
 
 #[derive(Default)]
 struct Cached {
@@ -39,8 +50,9 @@ struct Cached {
     layout: Option<LayoutRef>,
     root: Option<PlanRef>,
     ranges: Option<SegmentRanges>,
-    values: ValueCache,
     plans: FxHashMap<Key, Planned>,
+    /// The keys of `plans`, oldest first.
+    order: VecDeque<Key>,
 }
 
 /// A projection and filter, compared whole but hashed by their functions alone: every node of
@@ -139,6 +151,15 @@ impl Planned {
 }
 
 impl PlanCache {
+    /// A cache keeping whole values in `values`, whose budget it shares with the other caches
+    /// given it.
+    pub fn with_value_cache(values: ValueCache) -> Self {
+        Self {
+            cached: Arc::default(),
+            values,
+        }
+    }
+
     /// The plans of `projection` and `filter` over `layout`, planned by the first scan that
     /// asks for them.
     pub(super) fn get(
@@ -149,7 +170,7 @@ impl PlanCache {
         filter: Option<BoundExpression>,
         session: &VortexSession,
     ) -> VortexResult<Planned> {
-        let mut cached = self.0.lock();
+        let mut cached = self.cached.lock();
         if !cached
             .layout
             .as_ref()
@@ -175,11 +196,17 @@ impl PlanCache {
         let planned = Planned::new(
             root,
             ranges,
-            cached.values.clone(),
+            self.values.clone(),
             key.0.clone(),
             key.1.clone(),
             session,
         )?;
+        if cached.plans.len() >= PLANS_PER_FILE
+            && let Some(oldest) = cached.order.pop_front()
+        {
+            cached.plans.remove(&oldest);
+        }
+        cached.order.push_back(key.clone());
         cached.plans.insert(key, planned.clone());
         Ok(planned)
     }
@@ -189,6 +216,6 @@ impl PlanCache {
 impl PlanCache {
     /// The projections and filters planned.
     pub(super) fn planned(&self) -> usize {
-        self.0.lock().plans.len()
+        self.cached.lock().plans.len()
     }
 }

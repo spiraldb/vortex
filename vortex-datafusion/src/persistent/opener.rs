@@ -64,6 +64,7 @@ use vortex::layout::scan::v2::ProjectedFilter;
 use vortex::layout::scan::v2::RowFilter;
 use vortex::layout::scan::v2::ScanBuilder as V2ScanBuilder;
 use vortex::layout::scan::v2::ScanFile;
+use vortex::layout::scan::v2::ValueCache;
 use vortex::layout::segments::SegmentSource;
 use vortex::metrics::Label;
 use vortex::metrics::MetricsRegistry;
@@ -87,6 +88,24 @@ use crate::persistent::list_sum::project_list_sum_filters;
 use crate::persistent::list_sum::push_list_sums;
 use crate::persistent::reader::VortexReaderFactory;
 use crate::persistent::stream::PrunableStream;
+
+/// The V2 plan caches of a scan's files, keyed by path, which keep their whole values within
+/// one shared budget however many files the scan reads.
+#[derive(Default)]
+pub struct PlanCaches {
+    files: DashMap<Path, PlanCache>,
+    values: ValueCache,
+}
+
+impl PlanCaches {
+    /// The plan cache of the file at `path`.
+    fn get(&self, path: &Path) -> PlanCache {
+        self.files
+            .entry(path.clone())
+            .or_insert_with(|| PlanCache::with_value_cache(self.values.clone()))
+            .clone()
+    }
+}
 
 #[derive(Clone)]
 pub(crate) struct VortexOpener {
@@ -125,7 +144,7 @@ pub(crate) struct VortexOpener {
     /// shared layout reader.
     pub segment_sources: Arc<DashMap<Path, Weak<dyn SegmentSource>>>,
     /// Shared V2 plans keyed by file path, so partitions of one file plan a scan once.
-    pub plan_caches: Arc<DashMap<Path, PlanCache>>,
+    pub plan_caches: Arc<PlanCaches>,
     /// Shared full-file natural splits keyed by file path.
     pub natural_splits: Arc<DashMap<Path, Arc<NaturalSplits>>>,
     /// Shared physical Arrow schemas of each file, keyed by file path.
@@ -573,10 +592,7 @@ impl FileOpener for VortexOpener {
                     vxf.scan_file(),
                 )
                 .await?;
-                let plan_cache = plan_caches
-                    .entry(file.object_meta.location.clone())
-                    .or_default()
-                    .clone();
+                let plan_cache = plan_caches.get(&file.object_meta.location);
                 let mut builder = V2ScanBuilder::new(vxf.session().clone(), scan_file)
                     .with_plan_cache(plan_cache)
                     .with_projection(scan_projection)

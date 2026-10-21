@@ -48,8 +48,11 @@ use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
 use vortex_utils::parallelism::get_available_parallelism;
 
+pub use self::cache::PLANS_PER_FILE;
 pub use self::cache::PlanCache;
 use crate::LayoutRef;
+pub use crate::plan::physical::pipeline::DEFAULT_VALUE_CACHE_BYTES;
+pub use crate::plan::physical::pipeline::ValueCache;
 use crate::scan::arrow::to_record_batch;
 use crate::scan::execution::FilterPlans;
 pub use crate::scan::execution::ProjectedFilter;

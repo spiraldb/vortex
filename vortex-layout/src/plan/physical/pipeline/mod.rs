@@ -59,6 +59,7 @@ pub use self::scan::ReadRequest;
 pub use self::scan::Scan;
 pub use self::scan::Split;
 pub use self::scan::Turn;
+pub use self::values::DEFAULT_VALUE_CACHE_BYTES;
 pub use self::values::ValueCache;
 
 /// Batches an inlet holds before its sink is blocked, unless the plan joining it says

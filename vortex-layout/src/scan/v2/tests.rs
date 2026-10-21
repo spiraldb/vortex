@@ -1073,3 +1073,25 @@ async fn plan_cache_is_shared_between_scans() -> VortexResult<()> {
     assert_eq!(cache.planned(), 1);
     Ok(())
 }
+
+/// A plan cache keeps the plans of at most `PLANS_PER_FILE` projections and filters, and the
+/// scans it serves past that still return their rows.
+#[tokio::test]
+async fn plan_cache_keeps_a_bounded_number_of_plans() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, zoned_table().as_ref()).await?;
+    let cache = super::PlanCache::default();
+    let projection = pack([("strings", get_item("strings", root()))], false.into());
+    for cutoff in 0..i32::try_from(super::PLANS_PER_FILE)? + 4 {
+        let filter = gt(get_item("ints", root()), lit(cutoff * 100));
+        assert_same_as_v1(&session, || {
+            Ok(builder(&session, &segments, &layout)?
+                .with_plan_cache(cache.clone())
+                .with_projection(projection.bind(layout.dtype())?)
+                .with_some_filter(Some(filter.bind(layout.dtype())?)))
+        })
+        .await?;
+    }
+    assert_eq!(cache.planned(), super::PLANS_PER_FILE);
+    Ok(())
+}
