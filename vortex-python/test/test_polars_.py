@@ -482,6 +482,10 @@ def test_polars_is_in(tmp_path, expr):
 # options. Telling those apart from a lossy user `cast(strict=False)` needs the column types,
 # which `polars_to_vortex` does not have, so such casts are not translated yet.
 _COERCION_CAST_GAP = pytest.mark.xfail(strict=True, reason="coercion casts need the file schema")
+# Polars 2 casts `is_in` members to the column type instead of casting the column.
+_POLARS_1_COERCION_CAST_GAP = pytest.mark.xfail(
+    int(pl.__version__.split(".")[0]) < 2, strict=True, reason="coercion casts need the file schema"
+)
 
 
 def _assert_pushdown(tmp_path, frame: pl.DataFrame, expr: pl.Expr) -> pl.DataFrame:
@@ -532,9 +536,9 @@ def test_polars_string_matching(tmp_path, expr, expected):
     assert _assert_pushdown(tmp_path, frame, expr)["id"].to_list() == expected
 
 
-@_COERCION_CAST_GAP
+@_POLARS_1_COERCION_CAST_GAP
 def test_polars_is_in_across_integer_widths(tmp_path):
-    # Polars widens the Int32 column to the Int64 members with an `Overflowing` cast.
+    # Polars 1 widens the Int32 column to the Int64 members with an `Overflowing` cast.
     frame = pl.DataFrame({"id": [0, 1, 2], "x32": pl.Series([1, 2, None], dtype=pl.Int32)})
     assert _assert_pushdown(tmp_path, frame, pl.col("x32").is_in([2, 4]))["id"].to_list() == [1]
 
@@ -563,3 +567,13 @@ def test_polars_cast(tmp_path):
 def test_unsupported_exprs(expr):
     with pytest.raises(NotImplementedError):
         polars_to_vortex(expr)
+
+
+@pytest.mark.parametrize("threshold", [float("inf"), float("-inf"), float("nan")])
+def test_polars_non_finite_float_literal_raises(tmp_path, threshold):
+    # Polars' JSON writes these as null, so pushing them down as a null literal would silently
+    # drop every row.
+    path = tmp_path / "non_finite.vortex"
+    vx.io.write(vx.array(pa.table({"f": [1.0, 2.0]})), str(path))
+    with pytest.raises((NotImplementedError, pl.exceptions.ComputeError), match="non-finite"):
+        vx.open(str(path)).to_polars().filter(pl.col("f") < threshold).collect()
