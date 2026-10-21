@@ -13,6 +13,7 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
 
+use super::Pack;
 use super::PlanRef;
 use super::SegmentScan;
 use super::selection::selected_slice;
@@ -97,6 +98,18 @@ fn walk(
         None => selected,
     });
     let mask = selected.as_ref().or(mask);
+    // Each field of a pack holds all its rows: a wide table's fields, segments mostly, are
+    // visited without relating their rows one by one.
+    if mask.is_none() && plan.is::<Pack>() {
+        for child in plan.children().iter_refs() {
+            let child = child?;
+            match child.as_opt::<SegmentScan>() {
+                Some(scan) => visit(scan.segment_id(), at.root(&rows)),
+                None => walk(child, rows.clone(), None, at, visit)?,
+            }
+        }
+        return Ok(());
+    }
     for index in 0..plan.children().len() {
         match plan.child_rows(index) {
             ChildRows::Opaque => {}
