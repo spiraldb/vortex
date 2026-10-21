@@ -958,3 +958,44 @@ async fn list_sums_beside_other_columns_and_filters() -> anyhow::Result<()> {
     assert_eq!(v2, v1);
     Ok(())
 }
+
+/// Wide lists read beside their sums are cut into small batches; each batch still sums only
+/// its own lists.
+#[tokio::test]
+async fn list_sums_of_wide_lists_cut_into_batches() -> anyhow::Result<()> {
+    let mut results = Vec::new();
+    for scan_v2 in [false, true] {
+        let ctx = TestSessionContext::new_with_factory(Arc::new(
+            VortexFormatFactory::new().with_options(crate::VortexTableOptions {
+                scan_v2,
+                projection_pushdown: true,
+                ..Default::default()
+            }),
+        ));
+        datafusion_functions_nested::register_all(&mut *ctx.session.state_ref().write())?;
+        ctx.session
+            .sql(
+                "CREATE EXTERNAL TABLE wide (id BIGINT NOT NULL, xs BIGINT UNSIGNED[]) \
+                 STORED AS vortex LOCATION '/wide/'",
+            )
+            .await?;
+        ctx.session
+            .sql(
+                "INSERT INTO wide SELECT value, \
+                    array_repeat(CAST(value % 3 AS BIGINT UNSIGNED), 20000) \
+                 FROM generate_series(1, 300)",
+            )
+            .await?
+            .collect()
+            .await?;
+        let batches = ctx
+            .session
+            .sql("SELECT id, array_length(xs) AS n, array_sum(xs) AS s FROM wide ORDER BY id")
+            .await?
+            .collect()
+            .await?;
+        results.push(pretty_format_batches(&batches)?.to_string());
+    }
+    assert_eq!(results[1], results[0]);
+    Ok(())
+}

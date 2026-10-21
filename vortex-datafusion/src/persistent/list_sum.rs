@@ -132,7 +132,7 @@ impl ScalarFnVTable for ListSumF64 {
         let groups = if options.element.is_none() {
             lists.groups()?
         } else {
-            vec![lists]
+            vec![lists.trimmed()?]
         };
         for group in groups {
             let (group_sums, group_validity) = sum_lists(&group, options, ctx)?;
@@ -263,8 +263,11 @@ impl Lists {
                 .zip(self.starts.iter().skip(1))
                 .all(|(end, next)| end <= next);
         let len = self.starts.len();
-        if !ordered || len == 0 || self.ends[len - 1] - self.starts[0] <= ELEMENTS_PER_GROUP {
+        if !ordered || len == 0 {
             return Ok(vec![self.clone()]);
+        }
+        if self.ends[len - 1] - self.starts[0] <= ELEMENTS_PER_GROUP {
+            return Ok(vec![self.part(0..len)?]);
         }
         let mut groups = Vec::new();
         let mut first = 0;
@@ -277,6 +280,26 @@ impl Lists {
             first = end;
         }
         Ok(groups)
+    }
+
+    /// The lists with only their elements, as a slice of lists keeps every element of the lists
+    /// around it, when their elements are in list order.
+    fn trimmed(self) -> VortexResult<Lists> {
+        let len = self.starts.len();
+        let ordered = self
+            .starts
+            .iter()
+            .zip(self.ends.iter())
+            .all(|(s, e)| s <= e)
+            && self
+                .ends
+                .iter()
+                .zip(self.starts.iter().skip(1))
+                .all(|(end, next)| end <= next);
+        if len == 0 || !ordered {
+            return Ok(self);
+        }
+        self.part(0..len)
     }
 
     /// Lists `rows`, with only their elements.

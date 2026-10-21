@@ -6,6 +6,7 @@
 use std::collections::VecDeque;
 
 use vortex_array::ArrayRef;
+use vortex_array::Canonical;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::arrays::Chunked;
@@ -13,6 +14,7 @@ use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::List;
 use vortex_array::arrays::ListView;
 use vortex_array::arrays::Struct;
+use vortex_array::arrays::StructArray;
 use vortex_array::arrays::chunked::ChunkedArrayExt;
 use vortex_array::arrays::list::ListArrayExt;
 use vortex_array::arrays::list::ListArraySlotsExt;
@@ -20,6 +22,7 @@ use vortex_array::arrays::listview::ListViewArraySlotsExt;
 use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::dtype::DType;
 use vortex_error::VortexResult;
+use vortex_error::vortex_err;
 
 use crate::plan::physical::operators::slice_trimmed;
 
@@ -70,6 +73,11 @@ impl Batcher {
             .clamp(1, BATCH_ROWS);
         if rows > batch_rows && batch_rows < BATCH_ROWS {
             self.flush()?;
+            // Each batch cut from the piece slices every field. A computed field, such as a
+            // list sum, would then be computed again over each slice of its inputs, so it is
+            // computed once here. Lists stay lazy: they are cut so that each batch exports only
+            // its own elements.
+            let piece = narrow_fields(piece, ctx)?;
             for start in (0..rows).step_by(batch_rows) {
                 let end = (start + batch_rows).min(rows);
                 self.ready
@@ -110,6 +118,31 @@ impl Batcher {
         }
         Ok(())
     }
+}
+
+/// `piece` with every field of it that is not a list executed.
+fn narrow_fields(piece: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<ArrayRef> {
+    let Some(structs) = piece.as_opt::<Struct>() else {
+        return Ok(piece);
+    };
+    let fields = structs
+        .iter_unmasked_fields()
+        .map(|field| {
+            if field.dtype().is_list() || field.is_canonical() {
+                Ok(field.clone())
+            } else {
+                Ok(field.clone().execute::<Canonical>(ctx)?.into_array())
+            }
+        })
+        .collect::<VortexResult<Vec<_>>>()?;
+    let validity = structs.struct_validity();
+    let dtype = piece
+        .dtype()
+        .as_struct_fields_opt()
+        .ok_or_else(|| vortex_err!("A struct array without struct fields"))?
+        .clone();
+    // SAFETY: executing a field keeps its rows and dtype.
+    Ok(unsafe { StructArray::new_unchecked(fields, dtype, piece.len(), validity) }.into_array())
 }
 
 /// About the bytes `array` takes once exported: fixed-width values by their width, lists by
