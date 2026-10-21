@@ -739,11 +739,12 @@ async fn file_bytes_match_segment_reads() -> VortexResult<()> {
     Ok(())
 }
 
-/// Keeps the rows whose `ints` is even, counting the rows it evaluates.
+/// Keeps the rows whose `ints` is even, counting the batches it evaluates, and stops being
+/// active after `batches` of them.
 struct EvenInts {
     projection: BoundExpression,
-    active: bool,
-    rows: AtomicUsize,
+    batches: usize,
+    evaluated: AtomicUsize,
 }
 
 impl RowFilter for EvenInts {
@@ -752,11 +753,11 @@ impl RowFilter for EvenInts {
     }
 
     fn is_active(&self) -> bool {
-        self.active
+        self.evaluated.load(Ordering::Relaxed) < self.batches
     }
 
     fn evaluate(&self, array: ArrayRef) -> VortexResult<Mask> {
-        self.rows.fetch_add(array.len(), Ordering::Relaxed);
+        self.evaluated.fetch_add(1, Ordering::Relaxed);
         let ints = array.execute::<PrimitiveArray>(&mut array_session().create_execution_ctx())?;
         Ok(ints
             .as_slice::<i32>()
@@ -767,14 +768,15 @@ impl RowFilter for EvenInts {
 }
 
 /// A row filter sees only the rows the scan's own filter kept and removes rows before they
-/// are projected; an inactive one reads nothing and keeps every row.
+/// are projected. One inactive from the start reads nothing, and one that stops after its
+/// first batch keeps every row of the split it stopped in.
 #[rstest]
 #[case::alone(None)]
 #[case::after_the_filter(Some(1500))]
 #[tokio::test]
 async fn row_filters_run_on_the_rows_the_filter_kept(
     #[case] cutoff: Option<i32>,
-    #[values(true, false)] active: bool,
+    #[values(usize::MAX, 0, 1)] batches: usize,
 ) -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, zoned_table().as_ref()).await?;
@@ -782,8 +784,8 @@ async fn row_filters_run_on_the_rows_the_filter_kept(
     let ints = get_item("ints", root());
     let filter = Arc::new(EvenInts {
         projection: ints.clone().bind(&dtype)?,
-        active,
-        rows: AtomicUsize::new(0),
+        batches,
+        evaluated: AtomicUsize::new(0),
     });
     let mut scan = builder(&session, &segments, &layout)?
         .with_projection(ints.clone().bind(&dtype)?)
@@ -798,19 +800,18 @@ async fn row_filters_run_on_the_rows_the_filter_kept(
     .await?;
     let first = cutoff.map_or(0, |cutoff| cutoff + 1);
     let rows = i32::try_from(CHUNKS * CHUNK_ROWS)?;
+    let filtered = batches == usize::MAX;
     assert_arrays_eq!(
         actual,
-        PrimitiveArray::from_iter((first..rows).filter(|int| !active || int % 2 == 0)),
+        PrimitiveArray::from_iter((first..rows).filter(|int| !filtered || int % 2 == 0)),
         &mut session.create_execution_ctx()
     );
-    assert_eq!(
-        filter.rows.load(Ordering::Relaxed),
-        if active {
-            usize::try_from(rows - first)?
-        } else {
-            0
-        }
-    );
+    let evaluated = filter.evaluated.load(Ordering::Relaxed);
+    match batches {
+        0 => assert_eq!(evaluated, 0),
+        1 => assert_eq!(evaluated, 1),
+        _ => assert!(evaluated > 1, "the split is evaluated in several batches"),
+    }
     Ok(())
 }
 

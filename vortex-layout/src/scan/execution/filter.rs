@@ -50,9 +50,9 @@ pub trait RowFilter: Send + Sync + 'static {
     /// The columns the filter reads, bound to the scanned file's dtype.
     fn projection(&self) -> &BoundExpression;
 
-    /// Whether the filter is still worth evaluating. A split that starts once it is not reads
-    /// none of the filter's columns. Every row passes a filter that is not evaluated, so a
-    /// filter may stop once it rarely removes rows.
+    /// Whether the filter is still worth evaluating, checked before each split runs it and
+    /// before each batch it would evaluate. Every row passes a filter that is not evaluated,
+    /// so a filter may stop once it rarely removes rows.
     fn is_active(&self) -> bool {
         true
     }
@@ -157,6 +157,8 @@ pub(super) struct FilterPlanner {
     row_filter_index: usize,
     active: Option<(Stage, ScanAdaptor)>,
     pieces: Vec<Mask>,
+    /// The running row filter stopped being worth evaluating: its stage keeps every row.
+    abandoned: bool,
     announced: bool,
     prefetched: bool,
     /// Ids for hints, counting down from `u32::MAX` so they never meet an adaptor's fetch ids.
@@ -201,6 +203,7 @@ impl FilterPlanner {
             row_filter_index: 0,
             active: None,
             pieces: Vec::new(),
+            abandoned: false,
             announced: false,
             prefetched: false,
             next_hint: u32::MAX,
@@ -296,7 +299,13 @@ impl Planner for FilterPlanner {
                     AdaptorStep::Piece(piece) => {
                         let mask = match *stage {
                             Stage::Row(index) => {
-                                self.filter.row_filters[index].0.evaluate(piece)?
+                                let filter = &self.filter.row_filters[index].0;
+                                if self.abandoned || !filter.is_active() {
+                                    // The stage drains its reads, and every row passes.
+                                    self.abandoned = true;
+                                    return Ok(PlannerOutput::Continue);
+                                }
+                                filter.evaluate(piece)?
                             }
                             Stage::Pruning | Stage::Conjunct(_) => {
                                 let mut ctx = self.plans.session.create_execution_ctx();
@@ -307,6 +316,11 @@ impl Planner for FilterPlanner {
                         PlannerOutput::Continue
                     }
                 });
+            }
+            if std::mem::take(&mut self.abandoned) {
+                self.active = None;
+                self.pieces.clear();
+                return Ok(PlannerOutput::Continue);
             }
             let input = selected.mask.true_count();
             let result = Mask::concat(self.pieces.iter())?;

@@ -8,11 +8,13 @@
 //! `CASE hash(key) % N WHEN i THEN bounds_i AND lookup_i ... ELSE false END` when it is hash
 //! partitioned. Vortex cannot express the lookups, so the scan hands the rows its own filter
 //! kept to a [`DynamicRowFilter`], which reads only the key columns. The filter is advisory:
-//! the join still checks every row, so passing more rows than the filter would is correct.
+//! the join still checks every row, so passing more rows than the filter would is correct, and
+//! a filter stops once it costs more than the rows it removes save.
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
+use std::time::Instant;
 
 use arrow_array::Array;
 use arrow_array::BooleanArray;
@@ -47,10 +49,11 @@ use vortex::session::VortexSession;
 use vortex_arrow::ArrowSessionExt;
 
 /// Rows a filter sees before it may decide it is not worth evaluating.
-const MIN_ROWS: u64 = 1 << 18;
+const MIN_ROWS: u64 = 1 << 16;
 
-/// The largest fraction of rows a filter may keep and still be evaluated.
-const MAX_KEPT: f64 = 0.8;
+/// Nanoseconds a row removed from the probe side saves its join besides the lookup: hashing
+/// and repartitioning it, and decoding and copying its other columns.
+const SAVED_NANOS: f64 = 20.0;
 
 /// A DataFusion dynamic filter evaluated on the key columns a V2 scan reads for it.
 pub(crate) struct DynamicRowFilter {
@@ -61,9 +64,10 @@ pub(crate) struct DynamicRowFilter {
     /// The dynamic filter, over the key columns alone.
     expr: Arc<dyn PhysicalExpr>,
     session: VortexSession,
-    /// Rows evaluated, and rows kept, across the scan's splits.
+    /// Rows evaluated, rows kept, and nanoseconds spent evaluating, across the scan's splits.
     seen: AtomicU64,
     kept: AtomicU64,
+    nanos: AtomicU64,
 }
 
 impl DynamicRowFilter {
@@ -82,6 +86,7 @@ impl DynamicRowFilter {
             session,
             seen: AtomicU64::new(0),
             kept: AtomicU64::new(0),
+            nanos: AtomicU64::new(0),
         }
     }
 
@@ -104,11 +109,15 @@ impl RowFilter for DynamicRowFilter {
     }
 
     fn is_active(&self) -> bool {
-        let seen = self.seen.load(Ordering::Relaxed);
-        seen < MIN_ROWS || (self.kept.load(Ordering::Relaxed) as f64) <= seen as f64 * MAX_KEPT
+        worth_evaluating(
+            self.seen.load(Ordering::Relaxed),
+            self.kept.load(Ordering::Relaxed),
+            self.nanos.load(Ordering::Relaxed),
+        )
     }
 
     fn evaluate(&self, array: ArrayRef) -> VortexResult<Mask> {
+        let start = Instant::now();
         let len = array.len();
         let mut ctx = self.session.create_execution_ctx();
         let keys = self
@@ -125,11 +134,29 @@ impl RowFilter for DynamicRowFilter {
             None => mask.values().clone(),
         };
         let mask = Mask::from_buffer(BitBuffer::from(mask));
+        self.nanos.fetch_add(
+            u64::try_from(start.elapsed().as_nanos()).unwrap_or(u64::MAX),
+            Ordering::Relaxed,
+        );
         self.seen.fetch_add(len as u64, Ordering::Relaxed);
         self.kept
             .fetch_add(mask.true_count() as u64, Ordering::Relaxed);
         Ok(mask)
     }
+}
+
+/// Whether a filter that kept `kept` of `seen` rows in `nanos` is worth evaluating further.
+///
+/// The filter's producer looks up every row it receives in the same table the filter does, so
+/// evaluating the filter costs its lookups again for the rows it keeps, and pays only for the
+/// work the rows it removes no longer cost downstream.
+fn worth_evaluating(seen: u64, kept: u64, nanos: u64) -> bool {
+    if seen < MIN_ROWS {
+        return true;
+    }
+    let kept = kept as f64 / seen as f64;
+    let nanos = nanos as f64 / seen as f64;
+    kept * nanos < SAVED_NANOS * (1.0 - kept)
 }
 
 /// Whether `expr` only compares columns with literals, as a join's bounds on its keys do.
@@ -281,6 +308,7 @@ mod tests {
 
     use super::partitioned_lookup;
     use super::strip_bounds;
+    use super::worth_evaluating;
 
     fn keys() -> anyhow::Result<RecordBatch> {
         let schema = Schema::new(vec![Field::new("k", DataType::UInt64, false)]);
@@ -315,6 +343,21 @@ mod tests {
             &false,
             batch.schema_ref(),
         )?)
+    }
+
+    #[rstest]
+    #[case::too_few_rows(1_000, 1_000, 1_000_000, true)]
+    #[case::selective(1 << 20, 50_000, 20 << 20, true)]
+    #[case::keeps_everything(1 << 20, 1 << 20, 2 << 20, false)]
+    #[case::costly_lookups_keep_half(1 << 20, 1 << 19, 40 << 20, false)]
+    #[case::cheap_lookups_keep_most(1 << 20, 700_000, 2 << 20, true)]
+    fn filters_stop_once_they_cost_more_than_they_save(
+        #[case] seen: u64,
+        #[case] kept: u64,
+        #[case] nanos: u64,
+        #[case] worth: bool,
+    ) {
+        assert_eq!(worth_evaluating(seen, kept, nanos), worth);
     }
 
     #[test]
