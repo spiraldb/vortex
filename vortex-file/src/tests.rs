@@ -119,7 +119,7 @@ use crate::VERSION;
 use crate::VortexFile;
 use crate::WriteOptionsSessionExt;
 use crate::flatbuffers::footer as fb;
-use crate::flatbuffers::footer::SortKey;
+use crate::flatbuffers::footer::SortKeySpec;
 use crate::footer::SegmentSpec;
 use crate::sort_key::read_sort_key;
 use crate::sort_key::validate_sort_key;
@@ -3112,7 +3112,7 @@ fn sort_key_accepts_nullable_struct() -> VortexResult<()> {
     let mut fbb = FlatBufferBuilder::new();
     let serialized = write_sort_key(&mut fbb, &key)?;
     fbb.finish_minimal(serialized);
-    let serialized = flatbuffers::root::<SortKey>(fbb.finished_data())?;
+    let serialized = flatbuffers::root::<SortKeySpec>(fbb.finished_data())?;
 
     assert_eq!(read_sort_key(serialized, &dtype)?.as_ref(), key.as_slice());
     Ok(())
@@ -3130,7 +3130,7 @@ fn reader_rejects_invalid_sort_metadata(#[case] key: Vec<FieldPath>) -> VortexRe
     let key = write_sort_key(&mut fbb, &key)?;
     fbb.finish_minimal(key);
 
-    let key = flatbuffers::root::<SortKey>(fbb.finished_data())?;
+    let key = flatbuffers::root::<SortKeySpec>(fbb.finished_data())?;
     assert!(read_sort_key(key, dtype).is_err());
 
     Ok(())

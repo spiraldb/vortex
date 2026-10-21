@@ -73,7 +73,7 @@
 //! │    Statistics flatbuffer   │  optional; file-level per-field statistics
 //! ├────────────────────────────┤
 //! │      Footer flatbuffer     │  required; dictionary-encoded segment map
-//! │                            │  and encoding specs, plus an optional sort key
+//! │                            │  and array/layout/compression/encryption/sort specs
 //! ├────────────────────────────┤
 //! │         Postscript         │  locators for the footer and user-metadata segments;
 //! │                            │  at most 65528 bytes
