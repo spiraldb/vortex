@@ -804,3 +804,77 @@ async fn test_predicate_memtable_oracle(
     }
     Ok(())
 }
+
+/// A V2 scan on the probe side of a hash join takes the join's dynamic filter and evaluates it
+/// on the join keys; the join returns the same rows as an in-memory oracle either way.
+#[rstest]
+#[tokio::test]
+async fn hash_join_dynamic_filter(#[values(false, true)] scan_v2: bool) -> anyhow::Result<()> {
+    let ctx = TestSessionContext::new_with_factory(Arc::new(
+        VortexFormatFactory::new().with_options(crate::VortexTableOptions {
+            scan_v2,
+            ..Default::default()
+        }),
+    ));
+    let dim = arrow_array::record_batch!(
+        ("k", Int64, (0..100).collect::<Vec<i64>>()),
+        ("tag", Int32, (0..100).map(|k| k % 10).collect::<Vec<i32>>())
+    )?;
+    let fact = arrow_array::record_batch!(
+        (
+            "fk",
+            Int64,
+            (0..20_000).map(|row| row % 100).collect::<Vec<i64>>()
+        ),
+        ("v", Int64, (0..20_000).collect::<Vec<i64>>())
+    )?;
+    for (name, batch) in [("dim", &dim), ("fact", &fact)] {
+        let path = format!("{name}.vortex");
+        ctx.write_arrow_batch(path.as_str(), batch).await?;
+        let table = ctx
+            .table_provider(name, format!("/{path}"), batch.schema().as_ref().clone())
+            .await?;
+        ctx.session.register_table(name, table)?;
+        ctx.session.register_table(
+            format!("{name}_oracle"),
+            Arc::new(datafusion::datasource::MemTable::try_new(
+                batch.schema(),
+                vec![vec![batch.clone()]],
+            )?),
+        )?;
+    }
+    let query = |dim: &str, fact: &str| {
+        format!(
+            "SELECT fk, count(*) AS n, sum(v) AS total FROM {fact} JOIN {dim} ON fk = k \
+             WHERE tag = 3 GROUP BY fk ORDER BY fk"
+        )
+    };
+
+    let plan = ctx
+        .session
+        .sql(&format!("EXPLAIN {}", query("dim", "fact")))
+        .await?
+        .collect()
+        .await?;
+    let plan = pretty_format_batches(&plan)?.to_string();
+    assert_eq!(plan.contains("DynamicFilter"), scan_v2, "{plan}");
+
+    let actual = ctx
+        .session
+        .sql(&query("dim", "fact"))
+        .await?
+        .collect()
+        .await?;
+    let expected = ctx
+        .session
+        .sql(&query("dim_oracle", "fact_oracle"))
+        .await?
+        .collect()
+        .await?;
+    let schema = expected[0].schema();
+    assert_eq!(
+        concat_batches(&schema, &actual)?,
+        concat_batches(&schema, &expected)?
+    );
+    Ok(())
+}

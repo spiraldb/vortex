@@ -5,6 +5,7 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use bit_vec::BitVec;
+use vortex_array::ArrayRef;
 use vortex_array::VortexSessionExecute;
 use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::expr::BoundExpression;
@@ -42,30 +43,53 @@ use crate::plan::physical::visit_segments;
 use crate::scan::filter::FilterExpr;
 use crate::segments::SegmentId;
 
+/// A predicate a scan cannot express as a Vortex expression, such as a join's filter on keys
+/// it has seen, evaluated on the rows the scan's own conjuncts kept and before the projection
+/// decodes them.
+pub trait RowFilter: Send + Sync + 'static {
+    /// The columns the filter reads, bound to the scanned file's dtype.
+    fn projection(&self) -> &BoundExpression;
+
+    /// Whether the filter is still worth evaluating. A split that starts once it is not reads
+    /// none of the filter's columns. Every row passes a filter that is not evaluated, so a
+    /// filter may stop once it rarely removes rows.
+    fn is_active(&self) -> bool {
+        true
+    }
+
+    /// Selects rows of `array`, the filter's projection over rows the scan kept, returning a
+    /// mask as long as `array`.
+    fn evaluate(&self, array: ArrayRef) -> VortexResult<Mask>;
+}
+
 /// Plans and adaptive conjunct ordering shared by all splits of a scan.
 pub(in crate::scan) struct FilterPlans {
-    expression: FilterExpr,
+    expression: Option<FilterExpr>,
     predicates: Vec<PlanRef>,
     pruning: Vec<Option<PlanRef>>,
+    /// Row filters and the plans of the columns they read, run after the conjuncts.
+    row_filters: Vec<(Arc<dyn RowFilter>, PlanRef)>,
 }
 
 impl FilterPlans {
     pub(in crate::scan) fn new(
-        expression: BoundExpression,
+        expression: Option<BoundExpression>,
+        row_filters: Vec<Arc<dyn RowFilter>>,
         root: &PlanRef,
         session: &VortexSession,
     ) -> VortexResult<Self> {
-        let expression = FilterExpr::new(find_between(expression)?);
-        let predicates = expression
-            .conjuncts()
+        let expression = expression
+            .map(|expression| VortexResult::Ok(FilterExpr::new(find_between(expression)?)))
+            .transpose()?;
+        let conjuncts = expression.as_ref().map_or(&[][..], FilterExpr::conjuncts);
+        let predicates = conjuncts
             .iter()
             .map(|expr| {
                 let plan = optimize(plan_row_idx_expression(expr.clone(), root.clone())?)?;
                 Ok(FilterPlan::new(plan).into_plan())
             })
             .collect::<VortexResult<_>>()?;
-        let pruning = expression
-            .conjuncts()
+        let pruning = conjuncts
             .iter()
             .map(|expr| {
                 expr.falsify(session)?
@@ -80,10 +104,21 @@ impl FilterPlans {
                 }
             })
             .collect::<VortexResult<_>>()?;
+        let row_filters = row_filters
+            .into_iter()
+            .map(|filter| {
+                let plan = optimize(plan_row_idx_expression(
+                    filter.projection().clone(),
+                    root.clone(),
+                )?)?;
+                Ok((filter, plan))
+            })
+            .collect::<VortexResult<_>>()?;
         Ok(Self {
             expression,
             predicates,
             pruning,
+            row_filters,
         })
     }
 }
@@ -107,7 +142,8 @@ fn metadata_only(plan: &PlanRef) -> VortexResult<bool> {
     Ok(true)
 }
 
-/// Proves zone exclusions, evaluates conjuncts over survivors, then hands the mask to projection.
+/// Proves zone exclusions, evaluates conjuncts over survivors, runs the row filters over what
+/// the conjuncts kept, then hands the mask to projection.
 ///
 /// Reads are started ahead of the stage that needs them: zone maps on the first compute, and
 /// the conjuncts' segments for the rows pruning kept once the proofs are in. Stages then run
@@ -118,12 +154,24 @@ pub(super) struct FilterPlanner {
     filter: Arc<FilterPlans>,
     remaining: BitVec,
     prune_index: usize,
-    active: Option<(usize, bool, ScanAdaptor)>,
+    row_filter_index: usize,
+    active: Option<(Stage, ScanAdaptor)>,
     pieces: Vec<Mask>,
     announced: bool,
     prefetched: bool,
     /// Ids for hints, counting down from `u32::MAX` so they never meet an adaptor's fetch ids.
     next_hint: u32,
+}
+
+/// The filter stage a [`FilterPlanner`] is running.
+#[derive(Clone, Copy, Debug)]
+enum Stage {
+    /// A pruning proof, whose rows are excluded.
+    Pruning,
+    /// Conjunct `index`.
+    Conjunct(usize),
+    /// Row filter `index`.
+    Row(usize),
 }
 
 /// The segments `plans` read over `rows`, under `mask`, each once, in plan order.
@@ -150,6 +198,7 @@ impl FilterPlanner {
             selected: Some(selected),
             filter,
             prune_index: 0,
+            row_filter_index: 0,
             active: None,
             pieces: Vec::new(),
             announced: false,
@@ -183,7 +232,7 @@ fn hint(
 
 impl IoConsumer for FilterPlanner {
     fn set_io_result(&mut self, request: IoRequestId, result: IoResult) {
-        if let Some((_, _, adaptor)) = &mut self.active {
+        if let Some((_, adaptor)) = &mut self.active {
             adaptor.set_io_result(request, result);
         }
     }
@@ -195,7 +244,7 @@ impl Planner for FilterPlanner {
             return State::Done;
         }
         match &self.active {
-            Some((_, _, adaptor)) if adaptor.state() != State::Done => adaptor.state(),
+            Some((_, adaptor)) if adaptor.state() != State::Done => adaptor.state(),
             _ => State::NeedsCompute,
         }
     }
@@ -214,6 +263,7 @@ impl Planner for FilterPlanner {
                 self.filter
                     .predicates
                     .iter()
+                    .chain(self.filter.row_filters.iter().map(|(_, plan)| plan))
                     .chain(std::iter::once(&self.plans.projection)),
                 rows,
                 None,
@@ -238,14 +288,21 @@ impl Planner for FilterPlanner {
                 return Ok(PlannerOutput::NeedsIO(batch));
             }
         }
-        if let Some((index, pruning, adaptor)) = &mut self.active {
+        if let Some((stage, adaptor)) = &mut self.active {
             if adaptor.state() != State::Done {
                 return Ok(match adaptor.compute()? {
                     AdaptorStep::Yield => PlannerOutput::Continue,
                     AdaptorStep::NeedsIO(batch) => PlannerOutput::NeedsIO(batch),
                     AdaptorStep::Piece(piece) => {
-                        let mut ctx = self.plans.session.create_execution_ctx();
-                        let mask = piece.fill_null(false)?.execute::<Mask>(&mut ctx)?;
+                        let mask = match *stage {
+                            Stage::Row(index) => {
+                                self.filter.row_filters[index].0.evaluate(piece)?
+                            }
+                            Stage::Pruning | Stage::Conjunct(_) => {
+                                let mut ctx = self.plans.session.create_execution_ctx();
+                                piece.fill_null(false)?.execute::<Mask>(&mut ctx)?
+                            }
+                        };
                         self.pieces.push(mask);
                         PlannerOutput::Continue
                     }
@@ -254,21 +311,23 @@ impl Planner for FilterPlanner {
             let input = selected.mask.true_count();
             let result = Mask::concat(self.pieces.iter())?;
             vortex_ensure_eq!(result.len(), input);
-            let result = if *pruning { !result } else { result };
+            let result = if matches!(stage, Stage::Pruning) {
+                !result
+            } else {
+                result
+            };
             selected.mask = selected.mask.intersect_by_rank(&result);
             tracing::debug!(
                 row_start = selected.scope.rows.start,
                 row_end = selected.scope.rows.end,
                 input_rows = input,
                 output_rows = selected.mask.true_count(),
-                pruning = *pruning,
-                conjunct = *index,
-                "v2 filter conjunct evaluated"
+                stage = ?stage,
+                "v2 filter stage evaluated"
             );
-            if !*pruning {
-                self.filter
-                    .expression
-                    .report_selectivity(*index, selected.mask.true_count() as f64 / input as f64);
+            if let (Stage::Conjunct(index), Some(expression)) = (*stage, &self.filter.expression) {
+                expression
+                    .report_selectivity(index, selected.mask.true_count() as f64 / input as f64);
             }
             self.active = None;
             self.pieces.clear();
@@ -294,7 +353,14 @@ impl Planner for FilterPlanner {
                     .iter()
                     .enumerate()
                     .filter(|(index, _)| self.remaining[*index])
-                    .map(|(_, plan)| plan),
+                    .map(|(_, plan)| plan)
+                    .chain(
+                        self.filter
+                            .row_filters
+                            .iter()
+                            .filter(|(filter, _)| filter.is_active())
+                            .map(|(_, plan)| plan),
+                    ),
                 rows,
                 mask,
             )?;
@@ -316,17 +382,32 @@ impl Planner for FilterPlanner {
             let index = self.prune_index;
             self.prune_index += 1;
             if let Some(plan) = &self.filter.pruning[index] {
-                next = Some((index, true, plan.clone()));
+                next = Some((Stage::Pruning, plan.clone()));
                 break;
             }
         }
         if next.is_none()
-            && let Some(index) = self.filter.expression.next_conjunct(&self.remaining)
+            && let Some(index) = self
+                .filter
+                .expression
+                .as_ref()
+                .and_then(|expression| expression.next_conjunct(&self.remaining))
         {
             self.remaining.set(index, false);
-            next = Some((index, false, self.filter.predicates[index].clone()));
+            next = Some((
+                Stage::Conjunct(index),
+                self.filter.predicates[index].clone(),
+            ));
         }
-        if let Some((index, pruning, plan)) = next {
+        while next.is_none() && self.row_filter_index < self.filter.row_filters.len() {
+            let index = self.row_filter_index;
+            self.row_filter_index += 1;
+            let (filter, plan) = &self.filter.row_filters[index];
+            if filter.is_active() {
+                next = Some((Stage::Row(index), plan.clone()));
+            }
+        }
+        if let Some((stage, plan)) = next {
             let scan = Scan::try_new(
                 self.plans.session.clone(),
                 plan,
@@ -338,8 +419,7 @@ impl Planner for FilterPlanner {
             .with_row_offset(self.plans.row_offset)
             .with_value_cache(self.plans.values.clone());
             self.active = Some((
-                index,
-                pruning,
+                stage,
                 ScanAdaptor::new(scan, Arc::clone(&self.plans.locations)),
             ));
             return Ok(PlannerOutput::Continue);

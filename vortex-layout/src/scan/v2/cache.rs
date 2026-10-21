@@ -99,7 +99,7 @@ impl Planned {
         session: &VortexSession,
     ) -> VortexResult<Self> {
         let filter = filter
-            .map(|filter| FilterPlans::new(filter, &root, session).map(Arc::new))
+            .map(|filter| FilterPlans::new(Some(filter), Vec::new(), &root, session).map(Arc::new))
             .transpose()?;
         // An identity projection needs no rewrites. Keep the lowered children lazy, including
         // statistics that a projection-only scan never reads.

@@ -18,6 +18,7 @@ use datafusion_physical_expr::EquivalenceProperties;
 use datafusion_physical_expr::PhysicalExprRef;
 use datafusion_physical_expr::PhysicalSortExpr;
 use datafusion_physical_expr::conjunction;
+use datafusion_physical_expr::expressions::DynamicFilterPhysicalExpr;
 use datafusion_physical_expr::projection::ProjectionExprs;
 use datafusion_physical_expr_adapter::DefaultPhysicalExprAdapterFactory;
 use datafusion_physical_expr_common::physical_expr::fmt_sql;
@@ -489,6 +490,13 @@ impl FileSource for VortexSource {
         let supported_filters = filters
             .into_iter()
             .map(|expr| {
+                // A V2 scan evaluates a join's or a TopK's dynamic filter on the keys it reads.
+                // Such filters are advisory: their producer still checks every row.
+                if self.options.scan_v2
+                    && expr.downcast_ref::<DynamicFilterPhysicalExpr>().is_some()
+                {
+                    return Ok(PushedDownPredicate::supported(expr));
+                }
                 if self
                     .expression_converter
                     .try_convert(&expr, self.table_schema.table_schema())?

@@ -51,6 +51,8 @@ use vortex_utils::parallelism::get_available_parallelism;
 pub use self::cache::PlanCache;
 use crate::LayoutRef;
 use crate::scan::arrow::to_record_batch;
+use crate::scan::execution::FilterPlans;
+pub use crate::scan::execution::RowFilter;
 use crate::scan::execution::ScanPlans;
 pub use crate::scan::execution::SegmentLocation;
 use crate::scan::execution::plan_selection;
@@ -124,6 +126,7 @@ pub struct ScanBuilder<A = ArrayRef> {
     file: ScanFile,
     projection: BoundExpression,
     filter: Option<BoundExpression>,
+    row_filters: Vec<Arc<dyn RowFilter>>,
     ordered: bool,
     row_range: Option<Range<u64>>,
     selection: Selection,
@@ -139,6 +142,7 @@ impl ScanBuilder<ArrayRef> {
         Self {
             projection: BoundExpression::new_root(file.layout.dtype().clone()),
             filter: None,
+            row_filters: Vec::new(),
             session,
             file,
             ordered: true,
@@ -183,6 +187,12 @@ impl<A: 'static + Send> ScanBuilder<A> {
     /// Evaluates a bound predicate before projecting the surviving rows.
     pub fn with_some_filter(mut self, filter: Option<BoundExpression>) -> Self {
         self.filter = filter;
+        self
+    }
+
+    /// Runs `filter` on the rows the scan's own filter keeps, before projecting them.
+    pub fn with_row_filter(mut self, filter: Arc<dyn RowFilter>) -> Self {
+        self.row_filters.push(filter);
         self
     }
 
@@ -242,6 +252,7 @@ impl<A: 'static + Send> ScanBuilder<A> {
             file: self.file,
             projection: self.projection,
             filter: self.filter,
+            row_filters: self.row_filters,
             ordered: self.ordered,
             row_range: self.row_range,
             selection: self.selection,
@@ -285,24 +296,39 @@ impl<A: 'static + Send> PreparedScan<A> {
     /// fixed-size row chunks.
     fn try_new(builder: ScanBuilder<A>) -> VortexResult<Self> {
         let file = builder.file;
+        // Row filters alone keep the splits of an unfiltered scan: they read only a few
+        // columns, and their selectivity is unknown until they run.
+        let filtered = builder.filter.is_some();
         let planned = match &builder.plan_cache {
             Some(cache) => cache.get(
                 &file.layout,
                 &file.locations,
                 builder.projection,
-                builder.filter,
+                builder.filter.clone(),
                 &builder.session,
             )?,
             None => Planned::uncached(
                 &file.layout,
                 &file.locations,
                 builder.projection,
-                builder.filter,
+                builder.filter.clone(),
                 &builder.session,
             )?,
         };
+        // A row filter, such as a join's, belongs to its scan alone, so a scan with any plans
+        // its filter itself.
+        let filter = if builder.row_filters.is_empty() {
+            planned.filter.clone()
+        } else {
+            Some(Arc::new(FilterPlans::new(
+                builder.filter,
+                builder.row_filters,
+                &planned.root,
+                &builder.session,
+            )?))
+        };
         let row_count = planned.root.row_count();
-        let chunk_rows = if planned.filter.is_some() {
+        let chunk_rows = if filtered {
             FILTERED_ROWS_PER_CHUNK
         } else if planned.identity {
             rows_per_chunk(row_count, &file.locations)
@@ -317,7 +343,7 @@ impl<A: 'static + Send> PreparedScan<A> {
                 session: builder.session,
                 locations: file.locations,
                 projection: planned.projection,
-                filter: planned.filter,
+                filter,
                 row_offset: builder.row_offset,
                 values: planned.values,
             },

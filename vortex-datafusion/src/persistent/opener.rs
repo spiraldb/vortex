@@ -9,6 +9,7 @@ use std::sync::Weak;
 use arrow_array::RecordBatchOptions;
 use arrow_schema::DataType;
 use arrow_schema::Field;
+use arrow_schema::Schema;
 use arrow_schema::SchemaRef;
 use datafusion_common::DataFusionError;
 use datafusion_common::Result as DFResult;
@@ -23,6 +24,8 @@ use datafusion_datasource::file_stream::FileOpenFuture;
 use datafusion_datasource::file_stream::FileOpener;
 use datafusion_execution::cache::cache_manager::CachedFileMetadataEntry;
 use datafusion_execution::cache::cache_manager::FileMetadataCache;
+use datafusion_physical_expr::DynamicFilterTracking;
+use datafusion_physical_expr::PhysicalExpr;
 use datafusion_physical_expr::PhysicalExprRef;
 use datafusion_physical_expr::expressions::LambdaExpr;
 use datafusion_physical_expr::projection::ProjectionExprs;
@@ -52,10 +55,12 @@ use vortex::error::VortexError;
 use vortex::error::VortexExpect;
 use vortex::expr::and_collect;
 use vortex::file::OpenOptionsSessionExt;
+use vortex::file::VortexFile;
 use vortex::io::InstrumentedReadAt;
 use vortex::layout::LayoutReader;
 use vortex::layout::scan::scan_builder::ScanBuilder;
 use vortex::layout::scan::v2::PlanCache;
+use vortex::layout::scan::v2::RowFilter;
 use vortex::layout::scan::v2::ScanBuilder as V2ScanBuilder;
 use vortex::layout::scan::v2::ScanFile;
 use vortex::layout::segments::SegmentSource;
@@ -74,6 +79,7 @@ use crate::convert::schema::calculate_physical_schema;
 use crate::metrics::PARTITION_LABEL;
 use crate::metrics::PATH_LABEL;
 use crate::persistent::cache::CachedVortexMetadata;
+use crate::persistent::dynamic_filter::DynamicRowFilter;
 use crate::persistent::reader::VortexReaderFactory;
 use crate::persistent::stream::PrunableStream;
 
@@ -305,11 +311,14 @@ impl FileOpener for VortexOpener {
 
             // TODO: support lambda pushdown.
             let projection_pushdown = projection_pushdown && !contains_lambda(&projection)?;
+            let projected_columns = projection.column_indices();
 
             // Split the adapted filter into conjuncts Vortex evaluates natively and residual
             // conjuncts DataFusion evaluates on the raw scan output.
             let mut native_filters = Vec::new();
             let mut residual_filters = Vec::new();
+            // Dynamic filters a V2 scan evaluates on their keys, before decoding the projection.
+            let mut dynamic_filters = Vec::new();
             if let Some(filter) = &filter {
                 if filter.data_type(&this_file_schema)? != DataType::Boolean {
                     return Err(exec_datafusion_err!(
@@ -328,6 +337,11 @@ impl FileOpener for VortexOpener {
                         })?;
                     match converted {
                         Some(expr) => native_filters.push(expr),
+                        None if scan_v2
+                            && DynamicFilterTracking::classify(expr).contains_dynamic_filter() =>
+                        {
+                            dynamic_filters.push(Arc::clone(expr))
+                        }
                         None => residual_filters.push(Arc::clone(expr)),
                     }
                 }
@@ -521,6 +535,13 @@ impl FileOpener for VortexOpener {
                 if let Some(concurrency) = scan_concurrency {
                     builder = builder.with_concurrency(concurrency);
                 }
+                for filter in dynamic_filters {
+                    if let Some(filter) =
+                        dynamic_row_filter(filter, &projected_columns, &this_file_schema, &vxf)?
+                    {
+                        builder = builder.with_row_filter(filter);
+                    }
+                }
                 builder.map(map_batch).into_stream()
             } else {
                 scan_builder
@@ -655,6 +676,46 @@ fn contains_lambda(projection: &ProjectionExprs) -> DFResult<bool> {
         }
     }
     Ok(false)
+}
+
+/// A V2 row filter evaluating `filter`, a dynamic filter over columns of `file_schema`, on
+/// those columns alone.
+///
+/// `None` when the scan outputs only the filter's columns: the filter then saves decoding no
+/// other column, and rows it removes cost its producer no more than the filter does.
+fn dynamic_row_filter(
+    filter: Arc<dyn PhysicalExpr>,
+    projected_columns: &[usize],
+    file_schema: &Schema,
+    vxf: &VortexFile,
+) -> DFResult<Option<Arc<dyn RowFilter>>> {
+    let mut indices = collect_columns(&filter)
+        .iter()
+        .map(|column| column.index())
+        .collect::<Vec<_>>();
+    indices.sort_unstable();
+    indices.dedup();
+    if projected_columns
+        .iter()
+        .all(|column| indices.binary_search(column).is_ok())
+    {
+        return Ok(None);
+    }
+    let (projection, reference_schema) = raw_projection(&indices, file_schema)?;
+    let projection = projection
+        .bind(vxf.dtype())
+        .and_then(|projection| projection.optimize_recursive())
+        .map_err(|e| exec_datafusion_err!("Couldn't bind dynamic filter columns: {e}"))?;
+    let session = vxf.session().clone();
+    let schema =
+        calculate_physical_schema(projection.dtype(), &reference_schema, &session.arrow())?;
+    let filter = reassign_expr_columns(filter, &schema)?;
+    Ok(Some(Arc::new(DynamicRowFilter::new(
+        projection,
+        Field::new_struct("", schema.fields().clone(), false),
+        filter,
+        session,
+    ))))
 }
 
 /// The file's segments for a V2 scan: the source other partitions of the file read through,

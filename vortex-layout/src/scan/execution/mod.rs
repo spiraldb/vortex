@@ -23,6 +23,7 @@ use vortex_scan::planning::planner::WorkScope;
 use vortex_session::VortexSession;
 
 pub(super) use self::filter::FilterPlans;
+pub use self::filter::RowFilter;
 pub(super) use self::selection::plan_selection;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::pipeline::ValueCache;
