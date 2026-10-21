@@ -419,7 +419,7 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
     // 210,000 rows split evenly into the fewest rows a split takes.
     assert_eq!(
         splits.len(),
-        (STORED_CHUNKS * STORED_CHUNK_ROWS).div_ceil(MIN_SPLIT_ROWS as usize)
+        (STORED_CHUNKS * STORED_CHUNK_ROWS).div_ceil(usize::try_from(MIN_SPLIT_ROWS)?)
     );
     for (index, split) in splits.into_iter().enumerate() {
         let rows = split.scope.rows.clone();
