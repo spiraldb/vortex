@@ -1164,4 +1164,27 @@ mod tests {
             assert_eq!(mapped.value(i), expected, "Mismatch at index {}", i);
         }
     }
+
+    #[rstest]
+    #[case(0, 200)]
+    #[case(3, 197)]
+    #[case(13, 600)]
+    fn test_select_unset_sliced(#[case] start: usize, #[case] len: usize) {
+        let buf = BitBuffer::collect_bool(start + len, |i| i % 3 == 0 || i % 7 == 0);
+        let sliced = buf.slice(start..start + len);
+        let expected: Vec<usize> = sliced
+            .iter()
+            .enumerate()
+            .filter_map(|(index, set)| (!set).then_some(index))
+            .collect();
+
+        for (nth, &index) in expected.iter().enumerate() {
+            assert_eq!(
+                sliced.select_unset(nth),
+                Some(index),
+                "start={start} nth={nth}"
+            );
+        }
+        assert_eq!(sliced.select_unset(expected.len()), None);
+    }
 }

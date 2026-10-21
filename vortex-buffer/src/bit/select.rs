@@ -131,7 +131,8 @@ fn read_partial_byte<const UNSET: bool>(byte: u8, bit_len: usize) -> u8 {
 
 // ── 64-byte chunk scan ──────────────────────────────────────────────────
 
-/// Scan `chunks` accumulating popcounts. Returns `(remaining, position, chunk_index)`.
+/// Scan `chunks` counting the bits being selected: set bits, or unset ones with `UNSET`.
+/// Returns `(remaining, position, chunk_index)`.
 ///
 /// If `chunk_index < chunks.len()`, the target bit is inside that chunk and `remaining`
 /// is the rank *within* that chunk. Otherwise all chunks were consumed.
@@ -168,7 +169,8 @@ fn scan_chunks_simd<S: Simd, const UNSET: bool>(
 
 // ── Word-level scan ─────────────────────────────────────────────────────
 
-/// Scan `words` accumulating popcounts. Returns `(remaining, position, word_index)`.
+/// Scan `words` counting the bits being selected: set bits, or unset ones with `UNSET`.
+/// Returns `(remaining, position, word_index)`.
 ///
 /// If `word_index < words.len()`, the target bit is inside that word and `remaining`
 /// is the rank *within* that word. Otherwise all words were consumed.
@@ -249,7 +251,7 @@ fn scan_words_scalar<const UNSET: bool>(
 
 // ── In-chunk select ─────────────────────────────────────────────────────
 
-/// Position of the `nth` set bit inside a 64-byte chunk (0-indexed).
+/// Position of the `nth` set bit, or unset bit with `UNSET`, inside a 64-byte chunk (0-indexed).
 #[inline]
 fn select_in_chunk<const UNSET: bool>(chunk: &[u8; 64], nth: usize) -> usize {
     dispatch!(Level::new(), simd => select_in_chunk_simd::<_, UNSET>(simd, chunk, nth))
@@ -465,6 +467,30 @@ mod tests {
             );
         }
         assert_eq!(bit_select_unset(&buf, offset, len, len), None);
+    }
+
+    /// Sparse unset bits over several 64-byte chunks, so the scan subtracts `512 - total` for
+    /// whole chunks and then selects inside a later one.
+    #[rstest]
+    #[case(0)]
+    #[case(3)]
+    fn test_select_unset_across_chunks(#[case] offset: usize) {
+        let len = 4 * 512 + 100;
+        let mut buf = vec![0xFFu8; (offset + len).div_ceil(8)];
+        let expected: Vec<usize> = (0..len).filter(|i| i % 97 == 0).collect();
+        for &index in &expected {
+            let phys = offset + index;
+            buf[phys / 8] &= !(1 << (phys % 8));
+        }
+
+        for (nth, &expected_pos) in expected.iter().enumerate() {
+            assert_eq!(
+                bit_select_unset(&buf, offset, len, nth),
+                Some(expected_pos),
+                "offset={offset} nth={nth}"
+            );
+        }
+        assert_eq!(bit_select_unset(&buf, offset, len, expected.len()), None);
     }
 
     #[test]
