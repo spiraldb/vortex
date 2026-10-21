@@ -8,13 +8,17 @@
 //! dispatch. [`row_fn_return_dtype`] and [`execute_rows`] expose the same paths to public vtables
 //! that delegate to a private row kernel.
 
+use smallvec::SmallVec;
 use vortex_error::VortexResult;
 use vortex_error::vortex_ensure_eq;
 use vortex_mask::MaskValuesRef;
 use vortex_session::VortexSession;
 
+use super::batch::ArrayInputs;
+use super::batch::BatchInputs;
+use super::batch::BatchProbe;
 use super::batch::BorrowedRowFnArgs;
-use super::batch::RowFnExecutionArgs;
+use super::batch::RowInputs;
 use super::batch::finalize_kernel_output;
 use super::row_fn::RowFn;
 use super::visitor::BatchPlanner;
@@ -119,12 +123,39 @@ pub fn execute_rows<F: RowFn>(
 ) -> VortexResult<ArrayRef> {
     ensure_arity(function, args.num_inputs())?;
 
-    if args.num_inputs() == 0 {
-        return execute_nullary_rows(function, options, args.row_count(), ctx);
+    let arrays = (0..args.num_inputs())
+        .map(|index| args.get(index))
+        .collect::<VortexResult<SmallVec<[ArrayRef; 4]>>>()?;
+
+    execute_row_inputs(
+        function,
+        options,
+        &ArrayInputs::new(&arrays, args.row_count()),
+        ctx,
+    )
+}
+
+/// Execute a row function over borrowed input columns.
+///
+/// Callers that already hold their operands avoid collecting another owned argument list.
+/// Batch inspection validates the lengths before planning or decoding the inputs.
+pub(crate) fn execute_row_inputs<F: RowFn, I: RowInputs + ?Sized>(
+    function: &F,
+    options: &F::Options,
+    inputs: &I,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<ArrayRef> {
+    ensure_arity(function, inputs.num_inputs())?;
+
+    if inputs.num_inputs() == 0 {
+        return execute_nullary_rows(function, options, inputs.row_count(), ctx);
     }
 
-    let batch = prepare_batch(function, options, args)?;
-    batch.execute(
+    let (probe, arg_dtypes) = BatchProbe::new(|| RowFn::id(function), inputs)?;
+    let plan = function.dispatch(options, &arg_dtypes, BatchPlanner::<F>::new(&arg_dtypes))?;
+    let batch = BatchInputs::collect(RowFn::id(function), probe, inputs);
+
+    batch.with_plan(&arg_dtypes, plan).execute(
         |args, ctx| execute_row_kernel(function, options, args, ctx),
         |args, ctx| execute_dense_attempt(function, options, args, ctx),
         |args, valid, ctx| try_execute_valid_rows(function, options, args, valid, ctx),
@@ -216,16 +247,6 @@ fn execute_filtered_rows<F: RowFn>(
         args.dtypes(),
         ExecuteFilteredRows::<F>::new(&args, args.dtypes(), args.plan(), valid, ctx),
     )
-}
-
-fn prepare_batch<F: RowFn>(
-    function: &F,
-    options: &F::Options,
-    args: &dyn ExecutionArgs,
-) -> VortexResult<RowFnExecutionArgs> {
-    RowFnExecutionArgs::new(RowFn::id(function), args, |arg_dtypes| {
-        function.dispatch(options, arg_dtypes, BatchPlanner::<F>::new(arg_dtypes))
-    })
 }
 
 #[cfg(test)]
