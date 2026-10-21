@@ -47,6 +47,7 @@ use vortex_arrow::ArrowSessionExt;
 use vortex_buffer::Alignment;
 use vortex_buffer::Buffer;
 use vortex_buffer::ByteBufferMut;
+use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_io::session::RuntimeSessionExt;
@@ -1070,6 +1071,46 @@ async fn plan_cache_is_shared_between_scans() -> VortexResult<()> {
         })
         .await?;
     }
+    assert_eq!(cache.planned(), 1);
+    Ok(())
+}
+
+/// Scans adding their own row filters, as the partitions of a join's probe side do, still
+/// share the cached plans and adaptive order of the filter's conjuncts.
+#[tokio::test]
+async fn row_filters_share_the_cached_conjunct_plans() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, zoned_table().as_ref()).await?;
+    let dtype = layout.dtype().clone();
+    let cache = super::PlanCache::default();
+    let ints = get_item("ints", root());
+    let filter = gt(ints.clone(), lit(1_500i32)).bind(&dtype)?;
+    let scans = (0..2)
+        .map(|_| {
+            PreparedScan::try_new(
+                builder(&session, &segments, &layout)?
+                    .with_plan_cache(cache.clone())
+                    .with_projection(ints.clone().bind(&dtype)?)
+                    .with_some_filter(Some(filter.clone()))
+                    .with_row_filter(Arc::new(EvenInts {
+                        projection: ints.clone().bind(&dtype)?,
+                        batches: usize::MAX,
+                        evaluated: AtomicUsize::new(0),
+                    })),
+            )
+        })
+        .collect::<VortexResult<Vec<_>>>()?;
+    let [first, second] = [&scans[0], &scans[1]].map(|scan| {
+        scan.plans
+            .filter
+            .as_ref()
+            .vortex_expect("a filtered scan has filter plans")
+    });
+    assert!(
+        !Arc::ptr_eq(first, second),
+        "each scan has its own row filters"
+    );
+    assert!(first.shares_conjuncts(second));
     assert_eq!(cache.planned(), 1);
     Ok(())
 }

@@ -317,28 +317,29 @@ impl<A: 'static + Send> PreparedScan<A> {
                 &file.layout,
                 &file.locations,
                 builder.projection,
-                builder.filter.clone(),
+                builder.filter,
                 &builder.session,
             )?,
             None => Planned::uncached(
                 &file.layout,
                 &file.locations,
                 builder.projection,
-                builder.filter.clone(),
+                builder.filter,
                 &builder.session,
             )?,
         };
         // A row filter, such as a join's, belongs to its scan alone, so a scan with any plans
-        // its filter itself.
+        // them itself. Its conjuncts keep the plans and adaptive order shared with the other
+        // scans of the file.
         let filter = if builder.row_filters.is_empty() {
             planned.filter.clone()
         } else {
-            Some(Arc::new(FilterPlans::new(
-                builder.filter,
-                builder.row_filters,
-                &planned.root,
-                &builder.session,
-            )?))
+            Some(Arc::new(match &planned.filter {
+                Some(shared) => shared.with_row_filters(builder.row_filters, &planned.root)?,
+                None => {
+                    FilterPlans::new(None, builder.row_filters, &planned.root, &builder.session)?
+                }
+            }))
         };
         let row_count = planned.root.row_count();
         let chunk_rows = if filtered {

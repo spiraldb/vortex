@@ -80,17 +80,73 @@ pub trait ProjectedFilter: Send + Sync + 'static {
 
 /// Plans and adaptive conjunct ordering shared by all splits of a scan.
 pub(in crate::scan) struct FilterPlans {
+    conjuncts: Arc<ConjunctPlans>,
+    /// Row filters and the plans of the columns they read, run after the conjuncts.
+    row_filters: Vec<(Arc<dyn RowFilter>, PlanRef)>,
+}
+
+/// The plans of a filter expression's conjuncts and their pruning proofs, with the conjuncts'
+/// adaptive order, which the scans of one file share whatever row filters each adds.
+struct ConjunctPlans {
     expression: Option<FilterExpr>,
     predicates: Vec<PlanRef>,
     pruning: Vec<Option<PlanRef>>,
-    /// Row filters and the plans of the columns they read, run after the conjuncts.
-    row_filters: Vec<(Arc<dyn RowFilter>, PlanRef)>,
 }
 
 impl FilterPlans {
     pub(in crate::scan) fn new(
         expression: Option<BoundExpression>,
         row_filters: Vec<Arc<dyn RowFilter>>,
+        root: &PlanRef,
+        session: &VortexSession,
+    ) -> VortexResult<Self> {
+        Ok(Self {
+            conjuncts: Arc::new(ConjunctPlans::new(expression, root, session)?),
+            row_filters: plan_row_filters(row_filters, root)?,
+        })
+    }
+
+    /// These conjuncts, sharing their plans and adaptive order, followed by `row_filters`.
+    pub(in crate::scan) fn with_row_filters(
+        &self,
+        row_filters: Vec<Arc<dyn RowFilter>>,
+        root: &PlanRef,
+    ) -> VortexResult<Self> {
+        Ok(Self {
+            conjuncts: Arc::clone(&self.conjuncts),
+            row_filters: plan_row_filters(row_filters, root)?,
+        })
+    }
+}
+
+#[cfg(test)]
+impl FilterPlans {
+    /// Whether `self` and `other` evaluate the same conjunct plans in one adaptive order.
+    pub(in crate::scan) fn shares_conjuncts(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.conjuncts, &other.conjuncts)
+    }
+}
+
+/// Plans the columns each row filter reads.
+fn plan_row_filters(
+    row_filters: Vec<Arc<dyn RowFilter>>,
+    root: &PlanRef,
+) -> VortexResult<Vec<(Arc<dyn RowFilter>, PlanRef)>> {
+    row_filters
+        .into_iter()
+        .map(|filter| {
+            let plan = optimize(plan_row_idx_expression(
+                filter.projection().clone(),
+                root.clone(),
+            )?)?;
+            Ok((filter, plan))
+        })
+        .collect()
+}
+
+impl ConjunctPlans {
+    fn new(
+        expression: Option<BoundExpression>,
         root: &PlanRef,
         session: &VortexSession,
     ) -> VortexResult<Self> {
@@ -120,21 +176,10 @@ impl FilterPlans {
                 }
             })
             .collect::<VortexResult<_>>()?;
-        let row_filters = row_filters
-            .into_iter()
-            .map(|filter| {
-                let plan = optimize(plan_row_idx_expression(
-                    filter.projection().clone(),
-                    root.clone(),
-                )?)?;
-                Ok((filter, plan))
-            })
-            .collect::<VortexResult<_>>()?;
         Ok(Self {
             expression,
             predicates,
             pruning,
-            row_filters,
         })
     }
 }
@@ -211,7 +256,7 @@ impl FilterPlanner {
     pub(super) fn new(plans: ScanPlans, selected: SelectedRows) -> Self {
         let filter = Arc::clone(plans.filter.as_ref().vortex_expect("filter plans exist"));
         Self {
-            remaining: BitVec::from_elem(filter.predicates.len(), true),
+            remaining: BitVec::from_elem(filter.conjuncts.predicates.len(), true),
             plans,
             selected: Some(selected),
             filter,
@@ -277,9 +322,14 @@ impl Planner for FilterPlanner {
             let rows = selected.scope.rows.clone();
             // Pruning proofs read only zone maps and run first: start those reads now. The rest
             // is announced so the proofs' reads can coalesce with it.
-            let proofs = segments_read(self.filter.pruning.iter().flatten(), rows.clone(), None)?;
+            let proofs = segments_read(
+                self.filter.conjuncts.pruning.iter().flatten(),
+                rows.clone(),
+                None,
+            )?;
             let rest = segments_read(
                 self.filter
+                    .conjuncts
                     .predicates
                     .iter()
                     .chain(self.filter.row_filters.iter().map(|(_, plan)| plan))
@@ -355,7 +405,9 @@ impl Planner for FilterPlanner {
                 stage = ?stage,
                 "v2 filter stage evaluated"
             );
-            if let (Stage::Conjunct(index), Some(expression)) = (*stage, &self.filter.expression) {
+            if let (Stage::Conjunct(index), Some(expression)) =
+                (*stage, &self.filter.conjuncts.expression)
+            {
                 expression
                     .report_selectivity(index, selected.mask.true_count() as f64 / input as f64);
             }
@@ -367,7 +419,7 @@ impl Planner for FilterPlanner {
             return Ok(PlannerOutput::Done);
         }
         if !self.prefetched
-            && !self.filter.pruning[self.prune_index..]
+            && !self.filter.conjuncts.pruning[self.prune_index..]
                 .iter()
                 .any(Option::is_some)
         {
@@ -379,6 +431,7 @@ impl Planner for FilterPlanner {
             let mask = (!selected.mask.all_true()).then_some(&selected.mask);
             let predicates = segments_read(
                 self.filter
+                    .conjuncts
                     .predicates
                     .iter()
                     .enumerate()
@@ -408,10 +461,10 @@ impl Planner for FilterPlanner {
         }
 
         let mut next = None;
-        while self.prune_index < self.filter.pruning.len() {
+        while self.prune_index < self.filter.conjuncts.pruning.len() {
             let index = self.prune_index;
             self.prune_index += 1;
-            if let Some(plan) = &self.filter.pruning[index] {
+            if let Some(plan) = &self.filter.conjuncts.pruning[index] {
                 next = Some((Stage::Pruning, plan.clone()));
                 break;
             }
@@ -419,6 +472,7 @@ impl Planner for FilterPlanner {
         if next.is_none()
             && let Some(index) = self
                 .filter
+                .conjuncts
                 .expression
                 .as_ref()
                 .and_then(|expression| expression.next_conjunct(&self.remaining))
@@ -426,7 +480,7 @@ impl Planner for FilterPlanner {
             self.remaining.set(index, false);
             next = Some((
                 Stage::Conjunct(index),
-                self.filter.predicates[index].clone(),
+                self.filter.conjuncts.predicates[index].clone(),
             ));
         }
         while next.is_none() && self.row_filter_index < self.filter.row_filters.len() {
