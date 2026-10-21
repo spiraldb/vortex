@@ -24,6 +24,10 @@ use vortex_buffer::ByteBuffer;
 /// The `user_data` of the eventfd read that wakes a parked worker.
 const WAKE_TOKEN: u64 = u64::MAX;
 
+/// Reads at least this long are handed to the kernel's io_uring workers rather than performed
+/// inline by the submitting thread.
+const ASYNC_READ_BYTES: usize = 64 << 10;
+
 /// The largest read a single submission asks for. Longer reads continue as short reads do.
 const MAX_READ_CHUNK: usize = 1 << 30;
 
@@ -109,6 +113,14 @@ impl ReadOp {
         )
         .offset(self.offset + self.filled as u64)
         .build()
+        .flags(if remaining >= ASYNC_READ_BYTES {
+            // A read the page cache can serve completes inside `io_uring_enter`, copying on the
+            // submitting worker. Large copies go to the kernel's worker pool instead, so they
+            // proceed in parallel while the worker keeps running tasks.
+            squeue::Flags::ASYNC
+        } else {
+            squeue::Flags::empty()
+        })
         .user_data(token)
     }
 }
@@ -220,6 +232,11 @@ impl Reactor {
     pub(super) fn poll(&mut self) -> usize {
         self.enter(0);
         self.reap()
+    }
+
+    /// Whether reads are queued that the kernel has not been told about yet.
+    pub(super) fn has_unsubmitted(&self) -> bool {
+        self.unsubmitted > 0 || !self.backlog.is_empty()
     }
 
     /// Blocks until something completes on the ring, including a wakeup from another thread.

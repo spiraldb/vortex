@@ -22,6 +22,20 @@ untimed warm-up, then reuses the open file handle. Reopen mode includes file ope
 work in each timed iteration. CI drives the full matrix via
 [`scripts/random-access-split.py`](../../scripts/random-access-split.py).
 
+## Runtime
+
+Vortex takes run as tasks on the runtime installed on the Vortex session, chosen by `--runtime`:
+`io-uring` (the default on Linux) is Vortex's own thread-per-core runtime, with one worker per
+core, each owning an io_uring it parks on when idle; `tokio` uses the benchmark's Tokio runtime,
+which every other format runs on. If the kernel refuses to create a ring, the run falls back to
+Tokio with a warning.
+
+`--vortex-reader` picks how Vortex reads local files. `blocking` (the default) runs positional
+reads on the runtime's blocking pool. `io-uring` submits them to the ring of the worker that issues
+them. The files sit in the page cache after the warm-up, and there reads that many blocking threads
+copy in parallel finish sooner than ring reads, which copy on the submitting worker or hand off to
+the kernel's io_uring workers.
+
 ## Running locally
 
 ```bash

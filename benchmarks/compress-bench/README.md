@@ -15,7 +15,7 @@ CMSprovider, Euro2016, Food, HashTags), TPC-H `l_comment` variants, and syntheti
 data. This is the workload behind the `Compression` PR comment.
 
 See [`src/main.rs`](./src/main.rs) for the dataset list and CLI flags (`--formats`,
-`--datasets`, `--ops compress,decompress`, `--runtime`, `--vortex-source`).
+`--datasets`, `--ops compress,decompress`, `--runtime`, `--vortex-source`, `--vortex-reader`).
 
 ## CPU parallelism
 
@@ -36,9 +36,10 @@ Neither format uses threads outside its pool, and the main thread does none of t
 `--threads 1` compares single-worker decoders; the default compares them at full width.
 
 Decompression reads the file from memory for both formats. `--vortex-source file` instead writes
-the Vortex file to a temporary file, untimed, and reads it back from disk on every iteration:
-through the workers' rings on the io_uring runtime, and as blocking reads on Tokio's blocking pool
-otherwise. After the first iteration those reads come from the page cache.
+the Vortex file to a temporary file, untimed, and reads it back from disk on every iteration. After
+the first iteration those reads come from the page cache. `--vortex-reader` picks how: `blocking`
+(the default) runs positional reads on the runtime's blocking pool, and `io-uring` submits them to
+the rings of the io_uring runtime's workers.
 
 CI runs the timed benchmark on a fixed budget of 16 cores: `scripts/compress-split.py --cpus 16`
 (the default) pins the process to 16 CPUs through `scripts/bench-taskset.sh` and passes

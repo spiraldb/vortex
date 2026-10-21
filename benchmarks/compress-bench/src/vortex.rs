@@ -18,15 +18,12 @@ use futures::StreamExt;
 use futures::pin_mut;
 use tempfile::NamedTempFile;
 use vortex::array::IntoArray;
-use vortex::array::memory::MemorySessionExt;
 use vortex::dtype::FieldNames;
 use vortex::expr::root;
 use vortex::expr::select;
 use vortex::file::OpenOptionsSessionExt;
 use vortex::file::VortexFile;
 use vortex::file::WriteOptionsSessionExt;
-#[cfg(target_os = "linux")]
-use vortex::io::runtime::uring::UringFileReadAt;
 use vortex::io::session::RuntimeSessionExt;
 use vortex::layout::scan::v2::ScanBuilder;
 use vortex_arrow::ArrowSessionExt;
@@ -38,6 +35,7 @@ use vortex_bench::compress::Compressor;
 use vortex_bench::compress::Uncompressed;
 use vortex_bench::compress::read_projection;
 use vortex_bench::conversions::parquet_to_vortex_chunks;
+use vortex_bench::runtime::open_local;
 
 /// Where Vortex decompression reads the compressed file from.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
@@ -53,14 +51,12 @@ pub enum VortexSource {
 /// Compressor implementation for Vortex format.
 pub struct VortexCompressor {
     source: VortexSource,
-    /// Whether Vortex runs on the io_uring runtime, so file reads can go through its rings.
-    uring: bool,
 }
 
 impl VortexCompressor {
     /// A compressor whose decompression reads from `source`.
-    pub fn new(source: VortexSource, uring: bool) -> Self {
-        Self { source, uring }
+    pub fn new(source: VortexSource) -> Self {
+        Self { source }
     }
 }
 
@@ -115,7 +111,7 @@ impl Compressor for VortexCompressor {
     async fn decompress(&self, compressed: &Compressed) -> Result<Duration> {
         let source = match &compressed.data {
             CompressedData::Bytes(data) => Source::Memory(data.clone()),
-            CompressedData::File(file) => Source::File(file.path().to_path_buf(), self.uring),
+            CompressedData::File(file) => Source::File(file.path().to_path_buf()),
             CompressedData::Dir(_) => bail!("Vortex decompression expects a single file"),
         };
 
@@ -131,24 +127,14 @@ impl Compressor for VortexCompressor {
 /// A compressed Vortex file to scan.
 enum Source {
     Memory(Bytes),
-    /// A path, and whether to read it through the io_uring runtime's rings.
-    File(PathBuf, bool),
+    File(PathBuf),
 }
 
 impl Source {
     async fn open(self) -> Result<VortexFile> {
         Ok(match self {
             Source::Memory(data) => SESSION.open_options().open_buffer(data)?,
-            #[cfg(target_os = "linux")]
-            Source::File(path, true) => {
-                let read = UringFileReadAt::open_with_allocator(
-                    path,
-                    SESSION.handle(),
-                    SESSION.allocator(),
-                )?;
-                SESSION.open_options().open(Arc::new(read)).await?
-            }
-            Source::File(path, _) => SESSION.open_options().open_path(path).await?,
+            Source::File(path) => SESSION.open_options().open(open_local(path)?).await?,
         })
     }
 }

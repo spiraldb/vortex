@@ -8,7 +8,6 @@ use std::time::Duration;
 
 use anyhow::Context;
 use clap::Parser;
-use clap::ValueEnum;
 #[cfg(feature = "lance")]
 use compress_bench::LanceCompressor;
 use compress_bench::arrow::ArrowIpcCompressor;
@@ -24,18 +23,10 @@ use indicatif::ProgressBar;
 use itertools::Itertools;
 use mimalloc::MiMalloc;
 use regex::Regex;
-#[cfg(target_os = "linux")]
-use vortex::io::runtime::BlockingRuntime;
-#[cfg(target_os = "linux")]
-use vortex::io::runtime::uring::UringRuntime;
-#[cfg(target_os = "linux")]
-use vortex::io::session::RuntimeSessionExt;
 use vortex::utils::aliases::hash_map::HashMap;
 use vortex_bench::Engine;
 use vortex_bench::Format;
 use vortex_bench::LogFormat;
-#[cfg(target_os = "linux")]
-use vortex_bench::SESSION;
 use vortex_bench::Target;
 use vortex_bench::compress::CompressMeasurements;
 use vortex_bench::compress::CompressOp;
@@ -62,6 +53,8 @@ use vortex_bench::public_bi::PBIDataset::CMSprovider;
 use vortex_bench::public_bi::PBIDataset::Euro2016;
 use vortex_bench::public_bi::PBIDataset::Food;
 use vortex_bench::public_bi::PBIDataset::HashTags;
+use vortex_bench::runtime::VortexReader;
+use vortex_bench::runtime::VortexRuntime;
 use vortex_bench::setup_logging_and_tracing_with_format;
 use vortex_bench::v3;
 
@@ -132,6 +125,9 @@ struct Args {
     /// Where Vortex decompression reads the compressed file from.
     #[arg(long, value_enum, default_value_t)]
     vortex_source: VortexSource,
+    /// How Vortex reads its file when `--vortex-source file` is set.
+    #[arg(long, value_enum, default_value_t)]
+    vortex_reader: VortexReader,
     #[arg(short, long, default_value_t, value_enum)]
     display_format: DisplayFormat,
     #[arg(short, long)]
@@ -145,47 +141,6 @@ struct Args {
     /// `json` emits one JSON object per event, suitable for piping into `jq`.
     #[arg(long, value_enum, default_value_t = LogFormat::Text)]
     log_format: LogFormat,
-}
-
-/// The runtime Vortex work is scheduled on.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-enum VortexRuntime {
-    /// The Tokio pool every other format runs on.
-    Tokio,
-    /// A thread-per-core pool whose workers each own an io_uring.
-    #[default]
-    IoUring,
-}
-
-/// Moves Vortex work onto `kind`, returning the runtime to keep alive for the whole run, or `None`
-/// when Vortex stays on Tokio.
-///
-/// The handle is installed on the shared session, so every Vortex spawn lands on the runtime's
-/// workers.
-#[cfg(target_os = "linux")]
-fn install_vortex_runtime(kind: VortexRuntime, workers: usize) -> Option<impl Any> {
-    if kind == VortexRuntime::Tokio {
-        return None;
-    }
-    match UringRuntime::with_workers(workers) {
-        Ok(uring) => {
-            tracing::info!("Running Vortex on {} io_uring workers", uring.workers());
-            drop(SESSION.clone().with_handle(uring.handle()));
-            Some(uring)
-        }
-        Err(error) => {
-            tracing::warn!("io_uring is unavailable, running Vortex on Tokio: {error}");
-            None
-        }
-    }
-}
-
-#[cfg(not(target_os = "linux"))]
-fn install_vortex_runtime(kind: VortexRuntime, _workers: usize) -> Option<()> {
-    if kind == VortexRuntime::IoUring {
-        tracing::warn!("io_uring needs Linux, running Vortex on Tokio");
-    }
-    None
 }
 
 #[global_allocator]
@@ -206,12 +161,12 @@ fn main() -> anyhow::Result<()> {
     let workers = runtime.metrics().num_workers();
     tracing::info!("Running with {workers} Tokio worker threads");
 
-    let vortex_runtime = install_vortex_runtime(args.runtime, workers);
-    let uring = vortex_runtime.is_some();
-    runtime.block_on(run(args, uring))
+    let _vortex_runtime = vortex_bench::runtime::install(args.runtime, workers);
+    vortex_bench::runtime::set_reader(args.vortex_reader);
+    runtime.block_on(run(args))
 }
 
-async fn run(args: Args, uring: bool) -> anyhow::Result<()> {
+async fn run(args: Args) -> anyhow::Result<()> {
     if args.gpu_decompress && !cfg!(feature = "cuda") {
         anyhow::bail!("--gpu-decompress requires building compress-bench with --features cuda");
     }
@@ -225,7 +180,6 @@ async fn run(args: Args, uring: bool) -> anyhow::Result<()> {
     } else {
         BenchMode::Cpu(CpuOptions {
             vortex_source: args.vortex_source,
-            uring,
         })
     };
 
@@ -271,8 +225,6 @@ enum BenchMode {
 struct CpuOptions {
     /// Where decompression reads the Vortex file from.
     vortex_source: VortexSource,
-    /// Whether Vortex runs on the io_uring runtime, which then also serves its file reads.
-    uring: bool,
 }
 
 impl BenchMode {
@@ -291,9 +243,7 @@ fn get_compressor(format: Format, mode: BenchMode) -> anyhow::Result<Box<dyn Com
 
     Ok(match format {
         Format::ArrowIpc => Box::new(ArrowIpcCompressor),
-        Format::OnDiskVortex => {
-            Box::new(VortexCompressor::new(options.vortex_source, options.uring))
-        }
+        Format::OnDiskVortex => Box::new(VortexCompressor::new(options.vortex_source)),
         Format::Parquet => Box::new(ParquetCompressor::new()),
         #[cfg(feature = "lance")]
         Format::Lance => Box::new(LanceCompressor),

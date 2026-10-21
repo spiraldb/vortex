@@ -19,6 +19,9 @@ use vortex_bench::datasets::taxi_data::TaxiData;
 use vortex_bench::display::DisplayFormat;
 use vortex_bench::random_access::BenchDataset;
 use vortex_bench::random_access::RemoteDataDir;
+use vortex_bench::runtime;
+use vortex_bench::runtime::VortexReader;
+use vortex_bench::runtime::VortexRuntime;
 use vortex_bench::setup_logging_and_tracing;
 
 /// Which synthetic dataset to benchmark.
@@ -97,6 +100,13 @@ struct Args {
     /// paths, and exit without benchmarking.
     #[arg(long)]
     prepare_data: bool,
+    /// Runtime that drives Vortex reads. `io-uring` runs them on Vortex's own pool of one worker
+    /// per core, each reading through an io_uring; the other formats stay on Tokio.
+    #[arg(long, value_enum, default_value_t)]
+    runtime: VortexRuntime,
+    /// How Vortex reads local files.
+    #[arg(long, value_enum, default_value_t)]
+    vortex_reader: VortexReader,
 }
 
 #[global_allocator]
@@ -107,6 +117,10 @@ async fn main() -> Result<()> {
     vortex_bench::configure_allocator();
     let args = Args::parse();
     setup_logging_and_tracing(args.verbose, args.tracing)?;
+    // Sized like the Tokio runtime `#[tokio::main]` starts, and kept alive for the whole run.
+    let workers = runtime::available_workers();
+    let _vortex_runtime = runtime::install(args.runtime, workers);
+    runtime::set_reader(args.vortex_reader);
 
     let datasets: Vec<Box<dyn BenchDataset>> = args
         .datasets

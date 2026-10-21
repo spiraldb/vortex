@@ -447,6 +447,12 @@ impl WorkerContext {
             }
             if let Some(runnable) = self.next_task() {
                 runnable.run();
+                // Start the reads the task queued now, rather than after the rest of the queue:
+                // the task, or the scan it belongs to, is probably waiting on them.
+                let mut reactor = self.reactor.borrow_mut();
+                if reactor.has_unsubmitted() {
+                    reactor.poll();
+                }
                 continue;
             }
             // Nothing runnable: flush submissions and take whatever completed.

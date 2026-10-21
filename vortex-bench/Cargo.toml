@@ -20,8 +20,9 @@ workspace = true
 
 [dependencies]
 vortex = { workspace = true, features = [
-    "object_store",
     "files",
+    "io-uring",
+    "object_store",
     "tokio",
     "zstd",
 ] }
