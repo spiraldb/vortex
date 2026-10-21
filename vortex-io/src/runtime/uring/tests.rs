@@ -211,3 +211,40 @@ fn dropped_read_buffers_are_reused() -> VortexResult<()> {
     assert_eq!(second.as_slice(), &bytes[5..100_005]);
     Ok(())
 }
+
+/// A lone large read is divided among the idle rings, and its parts land in one buffer.
+#[rstest]
+#[case(0, 4 << 20)]
+#[case(12_345, (1 << 20) + 777)]
+#[case(1, 256 << 10)]
+fn a_lone_large_read_is_divided_among_the_rings(
+    #[case] offset: usize,
+    #[case] len: usize,
+) -> VortexResult<()> {
+    let runtime = runtime(4);
+    let (file, bytes) = temp_file(6 << 20);
+    let read = Arc::new(UringFileReadAt::open(file.path(), runtime.handle())?);
+    let buffer = runtime.block_on(
+        runtime
+            .handle()
+            .spawn(async move { read.read_at(offset as u64, len, Alignment::new(64)).await }),
+    )?;
+    let buffer = buffer.unwrap_host();
+    assert!(buffer.is_aligned(Alignment::new(64)));
+    assert_eq!(buffer.as_slice(), &bytes[offset..offset + len]);
+    Ok(())
+}
+
+#[test]
+fn a_divided_read_past_the_end_fails() -> VortexResult<()> {
+    let runtime = runtime(4);
+    let (file, _) = temp_file(1 << 20);
+    let read = Arc::new(UringFileReadAt::open(file.path(), runtime.handle())?);
+    let result = runtime.block_on(
+        runtime
+            .handle()
+            .spawn(async move { read.read_at(512 << 10, 1 << 20, Alignment::none()).await }),
+    );
+    assert!(result.is_err());
+    Ok(())
+}

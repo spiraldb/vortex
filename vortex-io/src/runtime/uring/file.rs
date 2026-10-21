@@ -17,6 +17,7 @@ use vortex_error::vortex_err;
 
 use super::pool::BufferPool;
 use super::reactor::ReadRequest;
+use super::reactor::ReadTarget;
 use super::submit_read;
 use crate::CoalesceConfig;
 use crate::VortexReadAt;
@@ -82,6 +83,14 @@ impl VortexReadAt for UringFileReadAt {
         CONCURRENCY
     }
 
+    /// A read costs one submission queue entry on the ring of the worker that needs it, so a
+    /// file opened on this reader issues every segment read from the task that wants it. A driver
+    /// that coalesces reads would serialize them on one worker instead, and merging reads of
+    /// cached pages saves nothing.
+    fn prefers_direct_reads(&self) -> bool {
+        true
+    }
+
     fn size(&self) -> BoxFuture<'static, VortexResult<u64>> {
         let file = Arc::clone(&self.file);
         async move { Ok(file.metadata()?.len()) }.boxed()
@@ -107,17 +116,22 @@ impl VortexReadAt for UringFileReadAt {
                 offset,
                 len: length,
                 alignment,
-                buffer,
-                reply,
+                target: ReadTarget::Whole { buffer, reply },
             };
             let bytes = match submit_read(request) {
-                Ok(()) => read.await.map_err(|_| {
-                    vortex_err!("io_uring worker stopped before the read finished")
-                })??,
+                Ok(guard) => {
+                    let bytes = read.await.map_err(|_| {
+                        vortex_err!("io_uring worker stopped before the read finished")
+                    })??;
+                    drop(guard);
+                    bytes
+                }
                 Err(request) => {
-                    let mut buffer = request
-                        .buffer
-                        .unwrap_or_else(|| exact_buffer(&allocator, length, alignment));
+                    let ReadTarget::Whole { buffer, .. } = request.target else {
+                        unreachable!("the request was built as a whole read")
+                    };
+                    let mut buffer =
+                        buffer.unwrap_or_else(|| exact_buffer(&allocator, length, alignment));
                     handle
                         .spawn_blocking(move || {
                             read_exact_at(&file, buffer.as_mut_slice(), offset)?;

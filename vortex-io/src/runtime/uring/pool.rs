@@ -86,12 +86,12 @@ impl BufferPool {
         buffer: BufferMut<u8>,
         alignment: Alignment,
     ) -> ByteBuffer {
-        let owner = Pooled {
-            class,
-            buffer: Some(buffer),
-            pool: Arc::clone(&self.shared),
-        };
-        ByteBuffer::from_bytes_aligned(Bytes::from_owner(owner), alignment)
+        freeze(&self.shared, class, buffer, alignment)
+    }
+
+    /// A handle that returns buffers to this pool from any thread.
+    pub(super) fn handle(&self) -> PoolHandle {
+        PoolHandle(Arc::clone(&self.shared))
     }
 
     fn collect_returned(&mut self) {
@@ -105,6 +105,35 @@ impl BufferPool {
             }
         }
     }
+}
+
+/// Returns buffers to a worker's pool from any thread.
+pub(super) struct PoolHandle(Arc<PoolShared>);
+
+impl PoolHandle {
+    /// Hands out the filled `buffer` as bytes that return it to the pool once dropped.
+    pub(super) fn freeze(
+        &self,
+        class: u32,
+        buffer: BufferMut<u8>,
+        alignment: Alignment,
+    ) -> ByteBuffer {
+        freeze(&self.0, class, buffer, alignment)
+    }
+}
+
+fn freeze(
+    pool: &Arc<PoolShared>,
+    class: u32,
+    buffer: BufferMut<u8>,
+    alignment: Alignment,
+) -> ByteBuffer {
+    let owner = Pooled {
+        class,
+        buffer: Some(buffer),
+        pool: Arc::clone(pool),
+    };
+    ByteBuffer::from_bytes_aligned(Bytes::from_owner(owner), alignment)
 }
 
 /// The size class holding `len` bytes.

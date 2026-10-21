@@ -3,7 +3,8 @@
 
 //! A thread-per-core runtime whose workers each own an io_uring.
 //!
-//! Every core runs one worker thread, which runs tasks and performs file reads on its own ring.
+//! Every core runs one worker thread, pinned to it, which runs tasks and performs file reads on its
+//! own ring.
 //! Nothing is handed to other threads: no blocking pool serves the reads and no kernel worker
 //! threads copy them.
 //!
@@ -14,10 +15,12 @@
 //! [`UringFileReadAt`] reads a local file through the workers' rings. A small read goes to the ring
 //! of the worker that issues it. Larger ones are spread over every worker's ring in turn, posted to
 //! a worker's inbox when it is not the issuing one, so the reads of one scan are copied out of the
-//! page cache by every core at once rather than by the one that drives the scan. A worker submits
-//! the reads a task queued as soon as the task yields, in one `io_uring_enter`, and reads that the
-//! page cache holds complete inside that call. Reads land in buffers from the performing worker's
-//! pool, which return to it once the bytes are dropped, so steady reading reuses resident memory.
+//! page cache by every core at once rather than by the one that drives the scan. While fewer reads
+//! are in flight than there are rings, a large read is also divided into parts that idle rings
+//! copy at once into one buffer. A worker submits the reads a task queued as soon as the task
+//! yields, in one `io_uring_enter`, and reads that the page cache holds complete inside that call.
+//! Reads land in buffers from the performing worker's pool, which return to it once the bytes are
+//! dropped, so steady reading reuses resident memory.
 //! Reads polled off the runtime's workers fall back to blocking positional reads.
 //!
 //! An idle worker parks inside `io_uring_enter`, waiting on its ring. An eventfd read is kept
@@ -61,6 +64,8 @@ use vortex_utils::parallelism::get_available_parallelism;
 
 use self::reactor::Reactor;
 use self::reactor::ReadRequest;
+use self::reactor::ReadTarget;
+use self::reactor::SplitRead;
 use self::reactor::WakeFd;
 use crate::runtime::AbortHandle;
 use crate::runtime::AbortHandleRef;
@@ -78,6 +83,13 @@ const MAX_LIFO_STREAK: u32 = 3;
 /// Reads at least this long are spread over the workers' rings rather than performed by the
 /// worker that issues them.
 const SPREAD_READ_BYTES: usize = 64 << 10;
+
+/// Reads at least this long are divided into parts that several rings perform at once.
+const SPLIT_READ_BYTES: usize = 256 << 10;
+
+/// A divided read has at most one part for each this many bytes. Smaller parts wake more workers
+/// than the copying they share out is worth.
+const READ_PART_BYTES: usize = 256 << 10;
 
 /// Submission queue entries per worker ring.
 const RING_ENTRIES: u32 = 256;
@@ -116,6 +128,7 @@ impl UringRuntime {
             blocking_pool: BlockingPool::default(),
             inboxes: (0..workers).map(|_| Injector::new()).collect(),
             next_ring: AtomicUsize::new(0),
+            reads_in_flight: AtomicUsize::new(0),
         });
         // Each worker creates its own ring, since a single-issuer ring may only be entered by the
         // thread that created it, and reports whether it could.
@@ -127,6 +140,7 @@ impl UringRuntime {
             let thread = std::thread::Builder::new()
                 .name(format!("vortex-uring-{index}"))
                 .spawn(move || {
+                    pin_to_cpu(index);
                     let shared = worker_shared;
                     let reactor = match Reactor::new(RING_ENTRIES, shared.signals[index].clone()) {
                         Ok(reactor) => {
@@ -145,6 +159,7 @@ impl UringRuntime {
                         lifo: Cell::new(None),
                         lifo_streak: Cell::new(0),
                         reactor: RefCell::new(reactor),
+                        spread: RefCell::new(Vec::new()),
                     }
                     .run()
                 });
@@ -182,6 +197,36 @@ impl UringRuntime {
 impl Drop for UringRuntime {
     fn drop(&mut self) {
         stop(&self.shared, std::mem::take(&mut self.threads));
+    }
+}
+
+/// Pins the calling thread to the `index`th of the CPUs the process may run on, wrapping around
+/// when there are more workers than CPUs.
+///
+/// Pinned workers keep their caches and do not move onto each other's cores, which otherwise
+/// happens often enough between short bursts of work to make latency vary from run to run. A
+/// failure leaves the thread where the scheduler puts it.
+fn pin_to_cpu(index: usize) {
+    // SAFETY: an all-zero `cpu_set_t` is the empty set.
+    let mut allowed: libc::cpu_set_t = unsafe { std::mem::zeroed() };
+    // SAFETY: the kernel writes at most `size_of::<cpu_set_t>()` bytes into `allowed`.
+    if unsafe { libc::sched_getaffinity(0, size_of::<libc::cpu_set_t>(), &raw mut allowed) } != 0 {
+        return;
+    }
+    let cpus = (0..libc::CPU_SETSIZE as usize)
+        // SAFETY: `cpu` is below `CPU_SETSIZE`.
+        .filter(|&cpu| unsafe { libc::CPU_ISSET(cpu, &allowed) })
+        .collect::<Vec<_>>();
+    if cpus.is_empty() {
+        return;
+    }
+    // SAFETY: an all-zero `cpu_set_t` is the empty set.
+    let mut set: libc::cpu_set_t = unsafe { std::mem::zeroed() };
+    // SAFETY: the CPU came from `allowed`, so it is below `CPU_SETSIZE`. The kernel only reads
+    // `set`, and a failure leaves the thread unpinned.
+    unsafe {
+        libc::CPU_SET(cpus[index % cpus.len()], &mut set);
+        libc::sched_setaffinity(0, size_of::<libc::cpu_set_t>(), &raw const set);
     }
 }
 
@@ -281,6 +326,8 @@ struct Shared {
     inboxes: Vec<Injector<ReadRequest>>,
     /// The ring the next spread read goes to.
     next_ring: AtomicUsize,
+    /// Reads submitted to the rings and not yet awaited to completion.
+    reads_in_flight: AtomicUsize,
 }
 
 thread_local! {
@@ -299,28 +346,76 @@ fn with_current<R>(f: impl FnOnce(&WorkerContext) -> R) -> Option<R> {
 /// Queues a read on the ring of one of the current runtime's workers, or hands the request back
 /// when this thread is not a worker.
 ///
-/// A read of at least [`SPREAD_READ_BYTES`] goes to the workers' rings in turn, so the reads one
-/// task issues are copied by every core rather than by the one running it. A smaller read stays on
-/// the current worker's ring, where it costs no hand-off.
-fn submit_read(request: ReadRequest) -> Result<(), ReadRequest> {
+/// A read of at least [`SPREAD_READ_BYTES`] is held until the issuing task yields, and then goes
+/// to the workers' rings in turn (see [`WorkerContext::dispatch_spread`]), so the reads one task
+/// issues are copied by every core rather than by the one running it. A smaller read stays on the
+/// current worker's ring, where it costs no hand-off.
+///
+/// The returned guard counts the read as in flight until it is dropped.
+fn submit_read(request: ReadRequest) -> Result<ReadGuard, ReadRequest> {
     let current = CURRENT.with(Cell::get);
     // SAFETY: see `with_current`.
     let Some(worker) = (unsafe { current.as_ref() }) else {
         return Err(request);
     };
     let shared = &worker.shared;
-    let target = if request.len < SPREAD_READ_BYTES {
-        worker.index
-    } else {
-        shared.next_ring.fetch_add(1, Ordering::Relaxed) % shared.inboxes.len()
-    };
-    if target == worker.index {
+    shared.reads_in_flight.fetch_add(1, Ordering::Relaxed);
+    let guard = ReadGuard(Arc::clone(shared));
+    if request.len < SPREAD_READ_BYTES || shared.inboxes.len() == 1 {
         worker.reactor.borrow_mut().read(request);
     } else {
-        shared.inboxes[target].push(request);
-        shared.signals[target].unpark();
+        worker.spread.borrow_mut().push(request);
     }
-    Ok(())
+    Ok(guard)
+}
+
+/// Counts a read as in flight until dropped.
+struct ReadGuard(Arc<Shared>);
+
+impl Drop for ReadGuard {
+    fn drop(&mut self) {
+        self.0.reads_in_flight.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
+/// Divides `request` into one part for each of `targets`, the rings that read them into one
+/// buffer.
+fn split_read(worker: &WorkerContext, request: ReadRequest, targets: &[usize]) {
+    let ReadRequest {
+        file,
+        offset,
+        len,
+        alignment,
+        target,
+    } = request;
+    let ReadTarget::Whole { buffer, reply } = target else {
+        unreachable!("only whole reads are submitted")
+    };
+    let (buffer, pooled) = match buffer {
+        Some(buffer) => (buffer, None),
+        None => {
+            let mut reactor = worker.reactor.borrow_mut();
+            let (class, buffer) = reactor.take_buffer(len);
+            (buffer, Some((class, reactor.pool_handle())))
+        }
+    };
+    let part = len.div_ceil(targets.len());
+    let parts = len.div_ceil(part);
+    let split = Arc::new(SplitRead::new(buffer, pooled, alignment, parts, reply));
+    for index in 0..parts {
+        let start = index * part;
+        let request = ReadRequest {
+            file: Arc::clone(&file),
+            offset: offset + start as u64,
+            len: part.min(len - start),
+            alignment,
+            target: ReadTarget::Part {
+                split: Arc::clone(&split),
+                start,
+            },
+        };
+        worker.post_read(targets[index], request);
+    }
 }
 
 impl Shared {
@@ -439,6 +534,8 @@ struct WorkerContext {
     /// Tasks run from the LIFO slot in a row, capped so a ping-pong pair cannot starve the queue.
     lifo_streak: Cell<u32>,
     reactor: RefCell<Reactor>,
+    /// Large reads the running task issued, spread over the rings once it yields.
+    spread: RefCell<Vec<ReadRequest>>,
 }
 
 impl WorkerContext {
@@ -462,18 +559,12 @@ impl WorkerContext {
                 // injected from outside the runtime in.
                 self.reactor.borrow_mut().poll();
                 if let Some(runnable) = self.steal_from_injector() {
-                    runnable.run();
+                    self.run_task(runnable);
                     continue;
                 }
             }
             if let Some(runnable) = self.next_task() {
-                runnable.run();
-                // Start the reads the task queued now, rather than after the rest of the queue:
-                // the task, or the scan it belongs to, is probably waiting on them.
-                let mut reactor = self.reactor.borrow_mut();
-                if reactor.has_unsubmitted() {
-                    reactor.poll();
-                }
+                self.run_task(runnable);
                 continue;
             }
             // Nothing runnable: flush submissions and take whatever completed.
@@ -496,6 +587,61 @@ impl WorkerContext {
             self.queue.push(previous);
             // Another worker may take what this one cannot run right now.
             self.shared.notify_one();
+        }
+    }
+
+    /// Runs `runnable`, then starts the reads it issued.
+    fn run_task(&self, runnable: Runnable) {
+        runnable.run();
+        self.dispatch_spread();
+        // Start the reads the task queued now, rather than after the rest of the queue: the task,
+        // or the scan it belongs to, is probably waiting on them.
+        let mut reactor = self.reactor.borrow_mut();
+        if reactor.has_unsubmitted() {
+            reactor.poll();
+        }
+    }
+
+    /// Hands the large reads the last task issued to the workers' rings in turn.
+    ///
+    /// While fewer reads are in flight than there are rings, a read of at least
+    /// [`SPLIT_READ_BYTES`] is divided among the rings the other reads leave idle, so that a take
+    /// that needs only a few large segments still has every core copying them. Every part goes to
+    /// another ring in turn, like whole reads, so a task that issues many reads does not copy the
+    /// first part of each itself.
+    fn dispatch_spread(&self) {
+        let pending = std::mem::take(&mut *self.spread.borrow_mut());
+        if pending.is_empty() {
+            return;
+        }
+        let shared = &self.shared;
+        let rings = shared.inboxes.len();
+        let in_flight = shared.reads_in_flight.load(Ordering::Relaxed).max(1);
+        for request in pending {
+            let parts = if request.len >= SPLIT_READ_BYTES {
+                (rings / in_flight).clamp(1, request.len.div_ceil(READ_PART_BYTES))
+            } else {
+                1
+            };
+            let first = shared.next_ring.fetch_add(parts, Ordering::Relaxed);
+            if parts > 1 {
+                let targets = (0..parts)
+                    .map(|offset| (first + offset) % rings)
+                    .collect::<Vec<_>>();
+                split_read(self, request, &targets);
+            } else {
+                self.post_read(first % rings, request);
+            }
+        }
+    }
+
+    /// Queues `request` on the ring of worker `target`: this worker's own, or another's inbox.
+    fn post_read(&self, target: usize, request: ReadRequest) {
+        if target == self.index {
+            self.reactor.borrow_mut().read(request);
+        } else {
+            self.shared.inboxes[target].push(request);
+            self.shared.signals[target].unpark();
         }
     }
 

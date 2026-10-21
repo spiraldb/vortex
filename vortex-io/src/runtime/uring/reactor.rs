@@ -11,6 +11,7 @@ use std::os::fd::FromRawFd;
 use std::os::fd::OwnedFd;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
 use futures::channel::oneshot;
@@ -22,7 +23,10 @@ use vortex_buffer::Alignment;
 use vortex_buffer::BufferMut;
 use vortex_buffer::ByteBuffer;
 
+use parking_lot::Mutex;
+
 use super::pool::BufferPool;
+use super::pool::PoolHandle;
 
 /// The `user_data` of the eventfd read that wakes a parked worker.
 const WAKE_TOKEN: u64 = u64::MAX;
@@ -95,31 +99,134 @@ pub(super) struct ReadRequest {
     pub(super) offset: u64,
     pub(super) len: usize,
     pub(super) alignment: Alignment,
-    /// The destination for a read too large or too aligned for the pool, already `len` long.
-    /// `None` reads into a pooled buffer of the worker that performs the read.
-    pub(super) buffer: Option<BufferMut<u8>>,
-    pub(super) reply: oneshot::Sender<ReadResult>,
+    pub(super) target: ReadTarget,
+}
+
+/// Where a read's bytes land, and who learns that they have.
+pub(super) enum ReadTarget {
+    /// A read of its own, answered on `reply`.
+    Whole {
+        /// The destination for a read too large or too aligned for the pool, already `len`
+        /// long. `None` reads into a pooled buffer of the worker that performs the read.
+        buffer: Option<BufferMut<u8>>,
+        reply: oneshot::Sender<ReadResult>,
+    },
+    /// Bytes `start..start + len` of a [`SplitRead`]'s buffer.
+    Part { split: Arc<SplitRead>, start: usize },
+}
+
+/// One read divided into parts that several rings perform at once, so that as many cores copy
+/// a large read out of the page cache. The last part to finish answers the read.
+pub(super) struct SplitRead {
+    /// The start of `buffer`'s heap allocation, which parts write disjoint ranges of.
+    base: *mut u8,
+    /// The destination, taken by the last part to finish.
+    buffer: Mutex<Option<BufferMut<u8>>>,
+    /// The pool `buffer` returns to once the bytes are dropped, with its size class.
+    pooled: Option<(u32, PoolHandle)>,
+    alignment: Alignment,
+    remaining: AtomicUsize,
+    /// The first error a part failed with.
+    error: Mutex<Option<io::Error>>,
+    reply: Mutex<Option<oneshot::Sender<ReadResult>>>,
+}
+
+// SAFETY: `base` points into the heap allocation `buffer` owns, which does not move. Each part
+// writes only its own range, and `buffer` is handed out only after every part has finished.
+unsafe impl Send for SplitRead {}
+// SAFETY: see `Send`; every other field is synchronized.
+unsafe impl Sync for SplitRead {}
+
+impl SplitRead {
+    /// A read into `buffer` of `parts` parts, answered on `reply` once all of them finish.
+    pub(super) fn new(
+        mut buffer: BufferMut<u8>,
+        pooled: Option<(u32, PoolHandle)>,
+        alignment: Alignment,
+        parts: usize,
+        reply: oneshot::Sender<ReadResult>,
+    ) -> Self {
+        Self {
+            base: buffer.as_mut_slice().as_mut_ptr(),
+            buffer: Mutex::new(Some(buffer)),
+            pooled,
+            alignment,
+            remaining: AtomicUsize::new(parts),
+            error: Mutex::new(None),
+            reply: Mutex::new(Some(reply)),
+        }
+    }
+
+    /// Records that one part finished, answering the read if it was the last.
+    fn part_done(&self, outcome: io::Result<()>) {
+        if let Err(err) = outcome {
+            self.error.lock().get_or_insert(err);
+        }
+        if self.remaining.fetch_sub(1, Ordering::AcqRel) != 1 {
+            return;
+        }
+        let Some(reply) = self.reply.lock().take() else {
+            return;
+        };
+        let result = match self.error.lock().take() {
+            Some(err) => Err(err),
+            None => match self.buffer.lock().take() {
+                Some(buffer) => Ok(match &self.pooled {
+                    Some((class, pool)) => pool.freeze(*class, buffer, self.alignment),
+                    None => buffer.freeze(),
+                }),
+                None => Err(io::Error::other("split read finished twice")),
+            },
+        };
+        drop(reply.send(result));
+    }
+}
+
+/// The destination of one in-flight read.
+enum OpTarget {
+    Whole {
+        /// Already at its final length. Its heap allocation does not move.
+        buffer: BufferMut<u8>,
+        /// The pool size class `buffer` came from, if it goes back to the worker's pool.
+        pooled: Option<u32>,
+        alignment: Alignment,
+        reply: oneshot::Sender<ReadResult>,
+    },
+    Part {
+        split: Arc<SplitRead>,
+        start: usize,
+        len: usize,
+    },
 }
 
 /// One read the kernel may still be writing into.
 struct ReadOp {
     /// Keeps the descriptor open while the kernel reads from it.
     file: Arc<File>,
-    /// The destination, already at its final length. Its heap allocation does not move.
-    buffer: BufferMut<u8>,
-    /// The pool size class `buffer` came from, if it goes back to the worker's pool.
-    pooled: Option<u32>,
-    alignment: Alignment,
+    target: OpTarget,
     offset: u64,
     filled: usize,
-    reply: oneshot::Sender<ReadResult>,
 }
 
 impl ReadOp {
+    fn len(&self) -> usize {
+        match &self.target {
+            OpTarget::Whole { buffer, .. } => buffer.len(),
+            OpTarget::Part { len, .. } => *len,
+        }
+    }
+
     fn entry(&mut self, token: u64) -> squeue::Entry {
-        let remaining = (self.buffer.len() - self.filled).min(MAX_READ_CHUNK);
-        // SAFETY: `filled < len`, so the pointer stays within the buffer's initialized length.
-        let ptr = unsafe { self.buffer.as_mut_slice().as_mut_ptr().add(self.filled) };
+        let remaining = (self.len() - self.filled).min(MAX_READ_CHUNK);
+        let ptr = match &mut self.target {
+            // SAFETY: `filled < len`, so the pointer stays within the buffer's initialized
+            // length.
+            OpTarget::Whole { buffer, .. } => unsafe {
+                buffer.as_mut_slice().as_mut_ptr().add(self.filled)
+            },
+            // SAFETY: the part's range lies within the split's buffer, and `filled < len`.
+            OpTarget::Part { split, start, .. } => unsafe { split.base.add(*start + self.filled) },
+        };
         opcode::Read::new(
             types::Fd(self.file.as_raw_fd()),
             ptr,
@@ -179,28 +286,39 @@ impl Reactor {
             offset,
             len,
             alignment,
-            buffer,
-            reply,
+            target,
         } = request;
-        if len == 0 {
-            drop(reply.send(Ok(ByteBuffer::empty_aligned(alignment))));
-            return;
-        }
-        let (buffer, pooled) = match buffer {
-            Some(buffer) => (buffer, None),
-            None => {
-                let (class, buffer) = self.pool.take(len);
-                (buffer, Some(class))
+        let target = match target {
+            ReadTarget::Whole { reply, .. } if len == 0 => {
+                drop(reply.send(Ok(ByteBuffer::empty_aligned(alignment))));
+                return;
             }
+            ReadTarget::Part { split, .. } if len == 0 => {
+                split.part_done(Ok(()));
+                return;
+            }
+            ReadTarget::Whole { buffer, reply } => {
+                let (buffer, pooled) = match buffer {
+                    Some(buffer) => (buffer, None),
+                    None => {
+                        let (class, buffer) = self.pool.take(len);
+                        (buffer, Some(class))
+                    }
+                };
+                OpTarget::Whole {
+                    buffer,
+                    pooled,
+                    alignment,
+                    reply,
+                }
+            }
+            ReadTarget::Part { split, start } => OpTarget::Part { split, start, len },
         };
         let op = ReadOp {
             file,
-            buffer,
-            pooled,
-            alignment,
+            target,
             offset,
             filled: 0,
-            reply,
         };
         let token = match self.free.pop() {
             Some(token) => {
@@ -330,7 +448,7 @@ impl Reactor {
         let outcome = match result {
             n if n > 0 => {
                 op.filled += n as usize;
-                if op.filled < op.buffer.len() {
+                if op.filled < op.len() {
                     // A short read: continue from where it stopped.
                     let entry = op.entry(token as u64);
                     self.ops[token] = Some(op);
@@ -353,19 +471,32 @@ impl Reactor {
         };
         self.in_flight -= 1;
         self.free.push(token);
-        let ReadOp {
-            buffer,
-            pooled,
-            alignment,
-            reply,
-            ..
-        } = op;
-        let bytes = outcome.map(|()| match pooled {
-            Some(class) => self.pool.freeze(class, buffer, alignment),
-            None => buffer.freeze(),
-        });
-        // The reader may have given up on the read; then there is no one to tell.
-        drop(reply.send(bytes));
+        match op.target {
+            OpTarget::Whole {
+                buffer,
+                pooled,
+                alignment,
+                reply,
+            } => {
+                let bytes = outcome.map(|()| match pooled {
+                    Some(class) => self.pool.freeze(class, buffer, alignment),
+                    None => buffer.freeze(),
+                });
+                // The reader may have given up on the read; then there is no one to tell.
+                drop(reply.send(bytes));
+            }
+            OpTarget::Part { split, .. } => split.part_done(outcome),
+        }
+    }
+
+    /// A buffer of `len` bytes from this worker's pool, and its size class.
+    pub(super) fn take_buffer(&mut self, len: usize) -> (u32, BufferMut<u8>) {
+        self.pool.take(len)
+    }
+
+    /// A handle that returns buffers to this worker's pool.
+    pub(super) fn pool_handle(&self) -> PoolHandle {
+        self.pool.handle()
     }
 
     /// Waits for every in-flight read, so no buffer is freed while the kernel writes into it.
