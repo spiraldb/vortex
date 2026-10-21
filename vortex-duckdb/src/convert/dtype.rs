@@ -24,6 +24,8 @@
 //! | `Struct` | `STRUCT` |
 //! | `Decimal` | `DECIMAL` |
 //! | `List` | `LIST` |
+//! | `FixedSizeList` | `ARRAY` |
+//! | `Map` | `MAP` |
 //! | `Date` | `DATE` |
 //! | `Time` | `TIME` |
 //! | `Timestamp` | `TIMESTAMP` |
@@ -137,6 +139,10 @@ impl FromLogicalType for DType {
             DUCKDB_TYPE::DUCKDB_TYPE_TIMESTAMP_NS => {
                 DType::Extension(Timestamp::new(TimeUnit::Nanoseconds, nullability).erased())
             }
+            DUCKDB_TYPE::DUCKDB_TYPE_TIMESTAMP_TZ_NS => DType::Extension(
+                Timestamp::new_with_tz(TimeUnit::Nanoseconds, Some("UTC".into()), nullability)
+                    .erased(),
+            ),
             DUCKDB_TYPE::DUCKDB_TYPE_ARRAY => {
                 let child_type = logical_type.array_child_type();
                 DType::FixedSizeList(
@@ -253,7 +259,11 @@ impl TryFrom<&DType> for LogicalType {
             DType::Struct(struct_type, _) => {
                 return LogicalType::try_from(struct_type);
             }
-            DType::Map(..) => vortex_bail!("Vortex Map isn't supported"),
+            DType::Map(map_dtype, _) => {
+                let key_logical_type = LogicalType::try_from(&map_dtype.key_dtype())?;
+                let value_logical_type = LogicalType::try_from(&map_dtype.value_dtype())?;
+                return LogicalType::map_type(&key_logical_type, &value_logical_type);
+            }
             // TODO(connor): Union
             DType::Union(..) => vortex_bail!("Vortex Union isn't supported"),
             DType::Variant(_) => vortex_bail!("Vortex Variant array aren't supported"),

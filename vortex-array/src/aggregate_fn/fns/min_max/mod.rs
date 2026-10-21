@@ -4,6 +4,7 @@
 mod bool;
 mod decimal;
 mod extension;
+mod fixed_size_list;
 mod primitive;
 mod varbinview;
 
@@ -18,6 +19,7 @@ use vortex_session::registry::CachedId;
 use self::bool::accumulate_bool;
 use self::decimal::accumulate_decimal;
 use self::extension::accumulate_extension;
+use self::fixed_size_list::accumulate_fixed_size_bytes;
 use self::primitive::accumulate_primitive;
 use self::varbinview::accumulate_varbinview;
 use crate::ArrayRef;
@@ -31,6 +33,7 @@ use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnVTable;
 use crate::aggregate_fn::DynAccumulator;
 use crate::aggregate_fn::NumericalAggregateOpts;
+use crate::aggregate_fn::fns::fixed_size_bytes::is_fixed_size_bytes;
 use crate::dtype::DType;
 use crate::dtype::FieldNames;
 use crate::dtype::Nullability;
@@ -299,7 +302,8 @@ fn minmax_supported_dtype(input_dtype: &DType) -> bool {
 ///
 /// This is intentionally narrower than [`minmax_supported_dtype`]. List and fixed-size-list
 /// extrema have a defined output dtype for aggregate expression lowering, but the accumulator does
-/// not yet implement lexicographic list comparison.
+/// not yet implement lexicographic list comparison. Fixed-size lists of non-nullable `u8` are the
+/// exception: they compare by byte.
 fn minmax_compute_supported_dtype(input_dtype: &DType) -> bool {
     matches!(
         input_dtype,
@@ -309,7 +313,7 @@ fn minmax_compute_supported_dtype(input_dtype: &DType) -> bool {
             | DType::Utf8(..)
             | DType::Binary(..)
             | DType::Extension(..)
-    )
+    ) || is_fixed_size_bytes(input_dtype)
 }
 
 impl AggregateFnVTable for MinMax {
@@ -473,6 +477,9 @@ impl AggregateFnVTable for MinMax {
                 Canonical::VarBinView(v) => accumulate_varbinview(args, partial, v, ctx),
                 Canonical::Decimal(d) => accumulate_decimal(args, partial, d, ctx),
                 Canonical::Extension(e) => accumulate_extension(args, partial, e, ctx),
+                Canonical::FixedSizeList(f) if is_fixed_size_bytes(f.dtype()) => {
+                    accumulate_fixed_size_bytes(args, partial, f, ctx)
+                }
                 Canonical::Null(_) => Ok(()),
                 Canonical::Union(_) => {
                     vortex_bail!("TODO(connor)[Union]: implement min_max for Union arrays")
@@ -987,6 +994,7 @@ mod tests {
             buffer![1i32, 2, 3].into_array(),
             buffer![0u32, 2, 3].into_array(),
             Validity::NonNullable,
+            &mut ctx,
         )?
         .into_array();
         assert_eq!(

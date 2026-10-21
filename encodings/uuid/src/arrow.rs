@@ -518,6 +518,7 @@ mod tests {
             uuid_array(&session)?,
             PrimitiveArray::from_iter([0i32, 1, 2]).into_array(),
             Validity::NonNullable,
+            &mut ctx,
         )?
         .into_array();
 
@@ -643,6 +644,36 @@ mod tests {
         let uuids = values.values().as_fixed_size_binary();
         assert_eq!(uuids.value(0), b"0123456789abcdef");
         assert_eq!(uuids.value(1), b"fedcba9876543210");
+        Ok(())
+    }
+
+    #[test]
+    fn dictionary_preserves_outer_uuid_metadata() -> VortexResult<()> {
+        let vortex_session = uuid_session();
+        let session = vortex_session.arrow();
+        let uuid_field =
+            Field::new("id", DataType::FixedSizeBinary(16), false).with_extension_type(ArrowUuid);
+        let values = FixedSizeBinaryArray::try_from_iter([[1u8; 16], [2u8; 16]].into_iter())?;
+        let dict = DictionaryArray::<Int32Type>::try_new(
+            Int32Array::from(vec![1, 0, 1]),
+            Arc::new(values),
+        )?;
+        let field = uuid_field.clone().with_data_type(dict.data_type().clone());
+        let schema = Arc::new(Schema::new(vec![field]));
+        let batch = RecordBatch::try_new(Arc::clone(&schema), vec![Arc::new(dict)])?;
+
+        let array = session.from_arrow_record_batch(batch, &schema)?;
+        assert_eq!(array.dtype(), &session.from_arrow_schema(&schema)?);
+        let ids = array.as_::<Struct>().unmasked_field_by_name("id")?.clone();
+        assert_eq!(ids.dtype(), &uuid_dtype(false));
+        let exported = session.execute_arrow(
+            ids,
+            Some(&uuid_field),
+            &mut vortex_session.create_execution_ctx(),
+        )?;
+        let expected =
+            FixedSizeBinaryArray::try_from_iter([[2u8; 16], [1u8; 16], [2u8; 16]].into_iter())?;
+        assert_eq!(exported.to_data(), expected.to_data());
         Ok(())
     }
 

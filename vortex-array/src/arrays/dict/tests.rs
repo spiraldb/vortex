@@ -88,7 +88,7 @@ fn test_dict_display() {
 
 #[test]
 fn test_dict_list_dict_display() {
-    let ctx = array_session().create_execution_ctx();
+    let mut ctx = array_session().create_execution_ctx();
     let elements = DictArray::try_new(
         buffer![0u8, 0, 0, 1, 0, 3, 3, 2].into_array(),
         <VarBinArray as FromIterator<_>>::from_iter([
@@ -114,6 +114,7 @@ fn test_dict_list_dict_display() {
         Validity::Array(
             BoolArray::from_iter([true, true, false, true, false, true, true]).into_array(),
         ),
+        &mut ctx,
     )
     .unwrap()
     .into_array();

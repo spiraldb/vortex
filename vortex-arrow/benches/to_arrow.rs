@@ -40,8 +40,6 @@ use vortex_array::session::ArraySessionExt;
 )]
 use vortex_arrow::ArrowArrayExecutor;
 use vortex_arrow::ArrowSessionExt;
-#[allow(deprecated)]
-use vortex_arrow::dtype::ToArrowType as _;
 use vortex_fsst::fsst_compress;
 use vortex_fsst::fsst_train_compressor;
 use vortex_onpair::DEFAULT_CONFIG;
@@ -108,14 +106,6 @@ fn array() -> ArrayRef {
     ])
     .unwrap()
     .into_array()
-}
-
-#[divan::bench]
-fn to_arrow_dtype(bencher: Bencher) {
-    bencher.with_inputs(schema).bench_values(|dtype| {
-        #[expect(deprecated, reason = "benchmarking deprecated code path")]
-        dtype.to_arrow_dtype().unwrap()
-    });
 }
 
 #[allow(non_snake_case)]

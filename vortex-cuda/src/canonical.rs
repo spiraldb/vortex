@@ -169,11 +169,13 @@ impl CanonicalCudaExt for Canonical {
                 } = list.into_data_parts();
                 let validity = validity_into_host(validity, ctx).await?;
 
+                let elements = child_into_host(elements, ctx).await?;
+                let offsets = child_into_host(offsets, ctx).await?;
+                let sizes = child_into_host(sizes, ctx).await?;
+                // Device-resident offsets and sizes skip numeric validation when the list is
+                // built, so check them now that they are on the host.
                 Ok(Canonical::List(ListViewArray::try_new(
-                    child_into_host(elements, ctx).await?,
-                    child_into_host(offsets, ctx).await?,
-                    child_into_host(sizes, ctx).await?,
-                    validity,
+                    elements, offsets, sizes, validity, ctx,
                 )?))
             }
             Canonical::Extension(ext) => {
@@ -186,5 +188,37 @@ impl CanonicalCudaExt for Canonical {
             }
             c => vortex_bail!("into_host is not implemented for {}", c.dtype()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use vortex::array::VortexSessionExecute;
+    use vortex::array::array_session;
+    use vortex::dtype::PType;
+
+    use super::*;
+    use crate::CudaSession;
+
+    #[crate::test]
+    async fn test_into_host_rejects_out_of_bounds_device_list_view() -> VortexResult<()> {
+        let cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())?;
+        let offsets = cuda_ctx.stream().copy_to_device(vec![0u32, 2])?.await?;
+        let sizes = cuda_ctx.stream().copy_to_device(vec![2u32, 5])?.await?;
+        let mut ctx = array_session().create_execution_ctx();
+        // The second list reads elements 2..7 of 3. The range check is skipped while the offsets
+        // and sizes are on the device, so it must run once they are copied to the host.
+        let list = ListViewArray::try_new(
+            PrimitiveArray::from_iter([1i32, 2, 3]).into_array(),
+            PrimitiveArray::from_buffer_handle(offsets, PType::U32, Validity::NonNullable)
+                .into_array(),
+            PrimitiveArray::from_buffer_handle(sizes, PType::U32, Validity::NonNullable)
+                .into_array(),
+            Validity::NonNullable,
+            &mut ctx,
+        )?;
+
+        assert!(Canonical::List(list).into_host(&mut ctx).await.is_err());
+        Ok(())
     }
 }

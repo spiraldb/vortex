@@ -3,7 +3,7 @@
 
 mod bool;
 mod decimal;
-mod extension;
+mod fixed_size_list;
 mod primitive;
 mod varbin;
 
@@ -18,7 +18,7 @@ use vortex_session::registry::CachedId;
 
 use self::bool::check_bool_sorted;
 use self::decimal::check_decimal_sorted;
-use self::extension::check_extension_sorted;
+use self::fixed_size_list::check_fixed_size_bytes_sorted;
 use self::primitive::check_primitive_sorted;
 use self::varbin::check_varbinview_sorted;
 use crate::ArrayRef;
@@ -31,6 +31,7 @@ use crate::aggregate_fn::AggregateArgs;
 use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnVTable;
 use crate::aggregate_fn::DynAccumulator;
+use crate::aggregate_fn::fns::fixed_size_bytes::is_fixed_size_bytes;
 use crate::arrays::Constant;
 use crate::arrays::Null;
 use crate::builtins::ArrayBuiltins;
@@ -59,7 +60,8 @@ impl Display for IsSortedOptions {
 /// Compute whether an array is sorted in non-decreasing order.
 ///
 /// Returns `true` for empty arrays and arrays of length 1.
-/// Returns `false` for struct, list, and fixed-size list arrays.
+/// Returns `false` for struct, list, and fixed-size list arrays, except fixed-size lists of
+/// non-nullable `u8`, which are ordered by byte.
 pub fn is_sorted(array: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<bool> {
     is_sorted_impl(array, false, ctx)
 }
@@ -67,7 +69,8 @@ pub fn is_sorted(array: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<bool>
 /// Compute whether an array is strictly sorted in increasing order (no duplicates).
 ///
 /// Returns `true` for empty arrays and arrays of length 1.
-/// Returns `false` for struct, list, and fixed-size list arrays.
+/// Returns `false` for struct, list, and fixed-size list arrays, except fixed-size lists of
+/// non-nullable `u8`, which are ordered by byte.
 pub fn is_strict_sorted(array: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<bool> {
     is_sorted_impl(array, true, ctx)
 }
@@ -254,6 +257,9 @@ impl AggregateFnVTable for IsSorted {
 
     fn return_dtype(&self, _options: &Self::Options, input_dtype: &DType) -> Option<DType> {
         match input_dtype {
+            DType::FixedSizeList(..) if is_fixed_size_bytes(input_dtype) => {
+                Some(DType::Bool(Nullability::NonNullable))
+            }
             DType::Null
             | DType::List(..)
             | DType::FixedSizeList(..)
@@ -272,6 +278,9 @@ impl AggregateFnVTable for IsSorted {
 
     fn partial_dtype(&self, _options: &Self::Options, input_dtype: &DType) -> Option<DType> {
         match input_dtype {
+            DType::FixedSizeList(..) if is_fixed_size_bytes(input_dtype) => {
+                Some(make_is_sorted_partial_dtype(input_dtype))
+            }
             DType::Null
             | DType::List(..)
             | DType::FixedSizeList(..)
@@ -514,9 +523,12 @@ impl AggregateFnVTable for IsSorted {
                         check_varbinview_sorted(v, args.options.strict, ctx)?
                     }
                     Canonical::Decimal(d) => check_decimal_sorted(d, args.options.strict, ctx)?,
-                    Canonical::Extension(e) => check_extension_sorted(e, args.options.strict, ctx)?,
+                    Canonical::FixedSizeList(f) => {
+                        check_fixed_size_bytes_sorted(f, args.options.strict, ctx)?
+                    }
                     Canonical::Null(_) => !args.options.strict,
-                    // Struct, List, FixedSizeList should have been filtered out by return_dtype
+                    // Struct, List, other FixedSizeLists and Extension should have been filtered
+                    // out by return_dtype
                     _ => unreachable!(),
                 };
 

@@ -69,6 +69,13 @@ impl<V: AggregateFnVTable> Accumulator<V> {
         self.vtable.empty_partial(self.dtypes.args(&self.options))
     }
 
+    /// Take the accumulated partial state, leaving the accumulator empty.
+    ///
+    /// Returns `None` if nothing was accumulated.
+    pub(crate) fn take_partial(&mut self) -> Option<V::Partial> {
+        self.partial.take()
+    }
+
     fn ensure_partial(&mut self) -> VortexResult<()> {
         if self.partial.is_none() {
             self.partial = Some(self.empty_partial()?);

@@ -20,6 +20,7 @@ use vortex_array::ArrayContext;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
+use vortex_array::array_session;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::PrimitiveArray;
@@ -48,6 +49,7 @@ use vortex_session::VortexSession;
 use super::MAX_ROWS_PER_CHUNK;
 use super::PreparedScan;
 use super::ScanBuilder;
+use super::ScanCache;
 use super::ScanFile;
 use super::rows_per_chunk;
 use crate::LayoutRef;
@@ -138,6 +140,7 @@ async fn sparse_primitive_reads_preserve_rows_and_skip_bytes(
         layout,
         locations: Arc::from([SegmentLocation { offset: 8, length: u32::try_from(length)?, alignment: Alignment::new(8) }]),
         segments: source,
+        cache: None,
     };
     let dtype = file.layout.dtype().clone();
     let actual = collect(dtype, ScanBuilder::new(session.clone(), file)
@@ -155,6 +158,7 @@ async fn sparse_primitive_reads_preserve_rows_and_skip_bytes(
 /// A table chunk of `CHUNK_ROWS` rows starting at row `start`: an integer, a nullable string and a
 /// list column.
 fn table_chunk(start: usize) -> VortexResult<ArrayRef> {
+    let mut ctx = array_session().create_execution_ctx();
     let rows = start..start + CHUNK_ROWS;
     let ints = Buffer::from_iter(
         rows.clone()
@@ -170,6 +174,7 @@ fn table_chunk(start: usize) -> VortexResult<ArrayRef> {
         elements.into_array(),
         offsets.into_array(),
         Validity::NonNullable,
+        &mut ctx,
     )?;
     Ok(StructArray::from_fields(&[
         ("ints", ints.into_array()),
@@ -244,6 +249,7 @@ fn scan_file(segments: &Arc<dyn SegmentSource>, layout: &LayoutRef) -> VortexRes
         layout: Arc::clone(layout),
         locations,
         segments: Arc::clone(segments),
+        cache: None,
     })
 }
 
@@ -610,6 +616,73 @@ async fn work_chunks_ignore_layout_boundaries(
     Ok(())
 }
 
+/// Writes `0..30` as three stored chunks of ten rows.
+async fn chunked_ints(
+    session: &VortexSession,
+    segments: &Arc<TestSegments>,
+) -> VortexResult<LayoutRef> {
+    let (mut sequence, eof) = SequenceId::root().split();
+    let arrays = (0..3i32)
+        .map(|index| {
+            Ok((
+                sequence.advance(),
+                PrimitiveArray::from_iter(index * 10..index * 10 + 10).into_array(),
+            ))
+        })
+        .collect::<Vec<_>>();
+    let dtype = DType::Primitive(vortex_array::dtype::PType::I32, false.into());
+    chunked_flat()
+        .write_stream(
+            ArrayContext::empty().into(),
+            Arc::<TestSegments>::clone(segments),
+            SequentialStreamAdapter::new(dtype, stream::iter(arrays)).sendable(),
+            eof,
+            session,
+        )
+        .await
+}
+
+/// A shared [`ScanCache`] keeps dictionary values between scans; without one, each scan reads
+/// them again.
+#[rstest]
+#[case::cached(true, 1)]
+#[case::uncached(false, 4)]
+#[tokio::test]
+async fn scan_cache_reuses_values_between_scans(
+    #[case] cached: bool,
+    #[case] second_scan_reads: usize,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let segments = Arc::new(TestSegments::default());
+    let values = chunked_ints(&session, &segments).await?;
+    let codes = chunked_ints(&session, &segments).await?;
+    let layout = DictLayout::new(values, codes).into_layout();
+    let counted = Arc::new(CountingSegments {
+        inner: segments,
+        reads: AtomicUsize::new(0),
+    });
+    let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
+    let mut file = scan_file(&segments, &layout)?;
+    file.cache = cached.then(ScanCache::default);
+
+    let mut reads = Vec::new();
+    for _ in 0..2 {
+        let before = counted.reads.load(Ordering::Relaxed);
+        let scan = ScanBuilder::new(session.clone(), file.clone())
+            .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(vec![12u64, 15]))?);
+        let actual = collect(layout.dtype().clone(), scan.into_stream()?).await?;
+        assert_arrays_eq!(
+            actual,
+            PrimitiveArray::from_iter([12i32, 15]),
+            &mut session.create_execution_ctx()
+        );
+        reads.push(counted.reads.load(Ordering::Relaxed) - before);
+    }
+    // Every values chunk and the one selected codes chunk, then only the codes chunk if cached.
+    assert_eq!(reads, vec![4, second_scan_reads]);
+    Ok(())
+}
+
 #[tokio::test]
 async fn selected_split_scope_is_bounded_before_projection() -> VortexResult<()> {
     let session = new_session().with_tokio();
@@ -648,5 +721,41 @@ async fn dropping_file_planner_stream_releases_pending_work(
         locations.upgrade().is_none(),
         "dropping the stream must cancel the producer and release queued planners"
     );
+    Ok(())
+}
+
+/// A repeated projection reuses its optimized plan, so later scans find the dictionary values the
+/// first one kept instead of reading them again.
+#[tokio::test]
+async fn repeated_projections_reuse_their_values() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let segments = Arc::new(TestSegments::default());
+    let values = chunked_ints(&session, &segments).await?;
+    let codes = chunked_ints(&session, &segments).await?;
+    let layout = DictLayout::new(values, codes).into_layout();
+    let counted = Arc::new(CountingSegments {
+        inner: segments,
+        reads: AtomicUsize::new(0),
+    });
+    let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
+    let mut file = scan_file(&segments, &layout)?;
+    file.cache = Some(ScanCache::default());
+
+    let projection = gt(root(), lit(15i32)).bind(layout.dtype())?;
+    let mut reads = Vec::new();
+    for _ in 0..3 {
+        let before = counted.reads.load(Ordering::Relaxed);
+        let scan = ScanBuilder::new(session.clone(), file.clone())
+            .with_projection(projection.clone())
+            .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(vec![12u64, 18]))?);
+        let actual = collect(projection.dtype().clone(), scan.into_stream()?).await?;
+        assert_arrays_eq!(
+            actual,
+            vortex_array::arrays::BoolArray::from_iter([false, true]),
+            &mut session.create_execution_ctx()
+        );
+        reads.push(counted.reads.load(Ordering::Relaxed) - before);
+    }
+    assert_eq!(reads, vec![4, 1, 1]);
     Ok(())
 }

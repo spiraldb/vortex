@@ -171,6 +171,9 @@ pub enum Format {
     #[clap(name = "lance")]
     #[serde(rename = "lance")]
     Lance,
+    #[clap(name = "litdata")]
+    #[serde(rename = "litdata")]
+    LitData,
 }
 
 impl Display for Format {
@@ -186,6 +189,7 @@ pub const ALLOWED_FORMATS: &[Format] = &[
     Format::OnDiskVortex,
     Format::VortexCompact,
     Format::Lance,
+    Format::LitData,
 ];
 
 impl Format {
@@ -213,6 +217,7 @@ impl Format {
             Format::VortexSpatialNative => "vortex-spatial-native",
             Format::OnDiskDuckDB => "duckdb",
             Format::Lance => "lance",
+            Format::LitData => "litdata",
         }
     }
 
@@ -226,6 +231,7 @@ impl Format {
             Format::VortexSpatialNative => "vortex",
             Format::OnDiskDuckDB => "duckdb",
             Format::Lance => "lance",
+            Format::LitData => "litdata",
         }
     }
 }

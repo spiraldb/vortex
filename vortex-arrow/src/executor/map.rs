@@ -86,7 +86,6 @@ mod tests {
     use arrow_schema::DataType;
     use arrow_schema::Field;
     use arrow_schema::Fields;
-    use vortex_array::ArrayRef;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
     use vortex_array::array_session;
@@ -105,7 +104,7 @@ mod tests {
     use vortex_error::VortexResult;
     use vortex_mask::Mask;
 
-    use crate::FromArrowArray as _;
+    use crate::convert::from_arrow_map;
     use crate::session::ArrowSessionExt as _;
 
     fn i32_utf8_map_field(keys_sorted: bool, nullable: bool) -> Field {
@@ -202,7 +201,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_from_arrow_map_imports_canonical_map() -> VortexResult<()> {
+    fn from_arrow_map_imports_canonical_map() -> VortexResult<()> {
         let arrow = i32_utf8_map_array(
             vec![0, 1, 2],
             vec![1, 2],
@@ -210,7 +209,7 @@ mod tests {
             None,
             false,
         )?;
-        let vortex = ArrayRef::from_arrow(&arrow, false)?;
+        let vortex = from_arrow_map(&arrow, false)?;
 
         assert!(vortex.is::<VortexMap>());
         assert_eq!(
@@ -274,13 +273,13 @@ mod tests {
             false,
             Nullable,
         )?;
-        let legacy = ArrayRef::from_arrow(&arrow, true)?;
-        assert_eq!(legacy.dtype(), &expected_dtype);
+        let canonical = from_arrow_map(&arrow, true)?;
+        assert_eq!(canonical.dtype(), &expected_dtype);
 
         let field = Field::new("maps", arrow.data_type().clone(), true);
         let vortex = session.from_arrow_array(Arc::new(arrow), &field)?;
         assert_eq!(vortex.dtype(), &expected_dtype);
-        for imported in [&legacy, &vortex] {
+        for imported in [&canonical, &vortex] {
             assert_eq!(imported.len(), 4);
             let expected_rows = [
                 Some(vec![("joe", 1i32)]),
@@ -351,8 +350,9 @@ mod tests {
         let map = vortex.as_::<VortexMap>();
         let entries = map.entries().as_::<ListView>();
         assert!(entries.is_zero_copy_to_list());
-        assert_eq!(entries.offset_at(0), 1);
-        assert_eq!(entries.offset_at(1), 3);
+        let mut ctx = vortex_session.create_execution_ctx();
+        assert_eq!(entries.offset_at(0, &mut ctx), 1);
+        assert_eq!(entries.offset_at(1, &mut ctx), 3);
 
         Ok(())
     }
@@ -376,10 +376,10 @@ mod tests {
         let vortex = session.from_arrow_array(sliced, &field)?;
         let map = vortex.as_::<VortexMap>();
         let entries = map.entries().as_::<ListView>();
-        assert_eq!(entries.offset_at(0), 1);
-        assert_eq!(entries.offset_at(1), 3);
-        assert_eq!(entries.size_at(0), 2);
-        assert_eq!(entries.size_at(1), 1);
+        assert_eq!(entries.offset_at(0, &mut ctx), 1);
+        assert_eq!(entries.offset_at(1, &mut ctx), 3);
+        assert_eq!(entries.size_at(0, &mut ctx), 2);
+        assert_eq!(entries.size_at(1, &mut ctx), 1);
 
         let exported = session.execute_arrow(vortex, Some(&field), &mut ctx)?;
         let map = exported.as_map();
