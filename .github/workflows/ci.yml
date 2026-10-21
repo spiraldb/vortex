@@ -181,6 +181,8 @@ jobs:
         env:
           # Keep this constant to avoid pyo3 invalidating itself
           PYO3_ENVIRONMENT_SIGNATURE: "cpython3"
+          # Also applies to host proc-macro links when Cargo receives an explicit target.
+          LINK: /Brepro
 
       # rust-test-windows excludes vortex-python, so this is the only check that the
       # win_amd64 wheel imports and can round-trip a file. Runs outside the checkout so
@@ -789,7 +791,7 @@ jobs:
     if: ${{ !cancelled() && needs.duckdb-ready.result == 'success' }}
     runs-on: >-
       ${{ github.repository == 'vortex-data/vortex'
-          && format('runs-on={0}/runner=amd64-ci-medium/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=sql-logic-test', github.run_id)
+          && format('runs-on={0}/runner=amd64-ci-medium/cpu=8/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=sql-logic-test', github.run_id)
           || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
