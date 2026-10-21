@@ -37,6 +37,7 @@ use crate::plan::physical::PlanRef;
 use crate::plan::physical::SegmentScan;
 use crate::plan::physical::Zoned;
 use crate::plan::physical::optimize;
+use crate::plan::physical::pipeline::DecodedSegments;
 use crate::plan::physical::pipeline::Scan;
 use crate::plan::physical::pipeline::Split;
 use crate::plan::physical::plan_row_idx_expression;
@@ -224,6 +225,8 @@ pub(super) struct FilterPlanner {
     prefetched: bool,
     /// Ids for hints, counting down from `u32::MAX` so they never meet an adaptor's fetch ids.
     next_hint: u32,
+    /// The segments the split's stages decoded, kept for its later stages and projection.
+    decoded: DecodedSegments,
 }
 
 /// The filter stage a [`FilterPlanner`] is running.
@@ -268,6 +271,7 @@ impl FilterPlanner {
             announced: false,
             prefetched: false,
             next_hint: u32::MAX,
+            decoded: DecodedSegments::default(),
         }
     }
 }
@@ -501,7 +505,8 @@ impl Planner for FilterPlanner {
                 }],
             )?
             .with_row_offset(self.plans.row_offset)
-            .with_value_cache(self.plans.values.clone());
+            .with_value_cache(self.plans.values.clone())
+            .with_decoded_segments(self.decoded.clone());
             self.active = Some((
                 stage,
                 ScanAdaptor::new(scan, Arc::clone(&self.plans.locations)),
@@ -511,7 +516,11 @@ impl Planner for FilterPlanner {
         let selected = self.selected.take().vortex_expect("selected rows exist");
         Ok(PlannerOutput::Planner(
             selected.scope.clone(),
-            Box::new(ProjectionPlanner::new(self.plans.clone(), selected)),
+            Box::new(ProjectionPlanner::new(
+                self.plans.clone(),
+                selected,
+                Some(self.decoded.clone()),
+            )),
         ))
     }
 }

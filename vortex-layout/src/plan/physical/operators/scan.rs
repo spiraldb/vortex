@@ -42,6 +42,7 @@ use crate::plan::physical::operator::Source;
 use crate::plan::physical::operator::SourceBlocked;
 use crate::plan::physical::operator::SourceReady;
 use crate::plan::physical::operator::Step;
+use crate::plan::physical::pipeline::DecodedSegments;
 use crate::segments::SegmentId;
 
 /// Decodes the whole of a scan's segment.
@@ -296,6 +297,8 @@ pub(crate) struct ScanSource {
     unread: Option<SegmentId>,
     /// The segment has been emitted.
     done: bool,
+    /// Keeps the whole decoded segment for the other scans of the split.
+    decoded: Option<DecodedSegments>,
 }
 
 impl ScanSource {
@@ -303,6 +306,7 @@ impl ScanSource {
         plan: SegmentScanPlan,
         slice: Option<Range<usize>>,
         filter: Option<Mask>,
+        decoded: Option<DecodedSegments>,
     ) -> Self {
         Self {
             unread: Some(plan.segment_id()),
@@ -310,6 +314,7 @@ impl ScanSource {
             slice,
             filter,
             done: false,
+            decoded,
         }
     }
 }
@@ -338,6 +343,9 @@ impl Operator for ScanSource {
             .ok_or_else(|| vortex_err!("Segment scan ran without its bytes"))?;
         self.done = true;
         let array = decode(&self.plan, bytes, cx.session())?;
+        if let Some(decoded) = &self.decoded {
+            decoded.insert(self.plan.segment_id(), array.clone());
+        }
         Ok(Step::Final(select(
             array,
             self.slice.as_ref(),

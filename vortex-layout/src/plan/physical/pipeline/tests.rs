@@ -751,6 +751,59 @@ fn a_segment_two_readers_need_is_read_once() -> VortexResult<()> {
     assert_view(&expected, &rows, &mask, run.arrays)
 }
 
+/// Scans sharing decoded segments read and decode each segment once: a later scan reads none
+/// the first decoded, whether one reader or several of its own read the segment.
+#[test]
+fn scans_sharing_decoded_segments_read_each_once() -> VortexResult<()> {
+    let mut store = Store::default();
+    let a = PrimitiveArray::from_iter(0..ROWS as i32).into_array();
+    let column = lower(&store.chunked(&a, &[7, 13])?)?;
+    let pair = StructArray::from_fields(&[("x", a.clone()), ("y", a.clone())])?.into_array();
+    let pack = PackPlan::try_new(
+        pair.dtype()
+            .as_struct_fields_opt()
+            .vortex_expect("struct")
+            .clone(),
+        vortex_array::dtype::Nullability::NonNullable,
+        ROWS,
+        vec![column.clone(), column.clone()],
+        None,
+    )?
+    .into_plan();
+    let decoded = DecodedSegments::default();
+    let scan = |plan: &PlanRef, rows: Range<u64>, mask: &Mask| {
+        let split = Split {
+            rows,
+            mask: mask.clone(),
+        };
+        drive(
+            &store,
+            Scan::try_new(SESSION.clone(), plan.clone(), vec![split])?
+                .with_decoded_segments(decoded.clone()),
+            delivery(Delivery::Fifo),
+        )
+    };
+
+    let first = Mask::new_true(5);
+    let run = scan(&column, 0..5, &first)?;
+    assert_eq!(segments_read(&run.events), [0]);
+    assert_view(&a, &(0..5), &first, run.arrays)?;
+
+    let mask = Sel::EveryOther.mask(14);
+    let run = scan(&column, 3..17, &mask)?;
+    assert_eq!(
+        segments_read(&run.events),
+        [1],
+        "the first chunk was decoded"
+    );
+    assert_view(&a, &(3..17), &mask, run.arrays)?;
+
+    let run = scan(&pack, 3..17, &mask)?;
+    assert_eq!(run.leftover, (0, 0), "a finished scan holds no port");
+    assert_eq!(reads(&run.events), 0, "both chunks were decoded");
+    assert_view(&pair, &(3..17), &mask, run.arrays)
+}
+
 #[rstest]
 fn pack_readiness_tracks_changes_and_consumption(
     #[values(2, 3)] second_len: u64,

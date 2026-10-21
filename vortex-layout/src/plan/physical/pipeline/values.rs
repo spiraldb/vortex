@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Whole values, such as dictionary values, kept between the scans that share them.
+//! Whole values, such as dictionary values, and whole decoded segments, kept between the scans
+//! that share them.
 
 use std::sync::Arc;
 
@@ -14,6 +15,7 @@ use crate::arrays::shared::SharedArrayExt;
 use crate::arrays::shared::SharedArraySlotsExt;
 use crate::plan::physical::PlanByPtr;
 use crate::plan::physical::PlanRef;
+use crate::segments::SegmentId;
 
 /// The bytes a [`ValueCache`] holds unless given another budget.
 pub const DEFAULT_VALUE_CACHE_BYTES: u64 = 64 << 20;
@@ -108,6 +110,28 @@ impl ValueCache {
             },
         );
         value
+    }
+}
+
+/// Whole decoded segments kept between the scans of one split.
+///
+/// A split runs a scan per filter stage and per projection morsel, and each decodes every
+/// segment it reads, so a chunk read by two conjuncts, by a conjunct and the projection, or by
+/// several morsels was read and decoded again by each. Scans given the same cache read and decode
+/// each segment once. A decoded segment holds the bytes the split's IO session keeps for its
+/// whole life anyway, so the cache lives as long as the split and needs no budget of its own.
+#[derive(Clone, Default)]
+pub(crate) struct DecodedSegments(Arc<Mutex<FxHashMap<SegmentId, ArrayRef>>>);
+
+impl DecodedSegments {
+    /// The whole decoded segment `id`, if a scan of the split decoded it.
+    pub(crate) fn get(&self, id: SegmentId) -> Option<ArrayRef> {
+        self.0.lock().get(&id).cloned()
+    }
+
+    /// Keeps `array`, the whole decoded segment `id`, for the split's later scans.
+    pub(crate) fn insert(&self, id: SegmentId, array: ArrayRef) {
+        self.0.lock().entry(id).or_insert(array);
     }
 }
 

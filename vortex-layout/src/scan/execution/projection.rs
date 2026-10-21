@@ -20,6 +20,7 @@ use vortex_scan::planning::planner::PlannerOutput;
 use vortex_scan::planning::planner::State;
 use vortex_scan::planning::planner::WorkScope;
 
+use crate::plan::physical::pipeline::DecodedSegments;
 use crate::plan::physical::pipeline::Scan;
 use crate::plan::physical::pipeline::Split;
 use crate::plan::physical::selection::selected;
@@ -38,11 +39,19 @@ const MAX_OUTPUT_ROWS: usize = 65_536;
 pub(super) struct ProjectionPlanner {
     plans: ScanPlans,
     selected: IntoIter<SelectedRows>,
+    /// The segments the split decoded, shared by its morsels.
+    decoded: Option<DecodedSegments>,
 }
 
 impl ProjectionPlanner {
-    /// Creates a planner for `selected`.
-    pub(super) fn new(plans: ScanPlans, selected: SelectedRows) -> Self {
+    /// Creates a planner for `selected`, whose morsels read and decode each segment once with
+    /// the split's other scans through `decoded`. A split of several morsels shares one cache
+    /// between them when given none.
+    pub(super) fn new(
+        plans: ScanPlans,
+        selected: SelectedRows,
+        decoded: Option<DecodedSegments>,
+    ) -> Self {
         let selected = if selected.mask.true_count() <= MAX_OUTPUT_ROWS {
             vec![selected]
         } else {
@@ -65,9 +74,11 @@ impl ProjectionPlanner {
                 })
                 .collect()
         };
+        let decoded = decoded.or_else(|| (selected.len() > 1).then(DecodedSegments::default));
         Self {
             plans,
             selected: selected.into_iter(),
+            decoded,
         }
     }
 }
@@ -94,7 +105,11 @@ impl Planner for ProjectionPlanner {
         }
         Ok(PlannerOutput::Morsel(
             selected.scope.clone(),
-            Box::new(ProjectionMorsel::new(self.plans.clone(), selected)),
+            Box::new(ProjectionMorsel::new(
+                self.plans.clone(),
+                selected,
+                self.decoded.clone(),
+            )),
         ))
     }
 }
@@ -109,11 +124,12 @@ struct ProjectionMorsel {
     batches: Batcher,
     ctx: ExecutionCtx,
     done: bool,
+    decoded: Option<DecodedSegments>,
 }
 
 impl ProjectionMorsel {
     /// Creates a morsel projecting `selected`.
-    fn new(plans: ScanPlans, selected: SelectedRows) -> Self {
+    fn new(plans: ScanPlans, selected: SelectedRows, decoded: Option<DecodedSegments>) -> Self {
         Self {
             batches: Batcher::new(plans.projection.dtype().clone()),
             ctx: plans.session.create_execution_ctx(),
@@ -122,6 +138,7 @@ impl ProjectionMorsel {
             selected,
             adaptor: None,
             done: false,
+            decoded,
         }
     }
 
@@ -181,6 +198,10 @@ impl Morsel for ProjectionMorsel {
             )?
             .with_row_offset(plans.row_offset)
             .with_value_cache(plans.values);
+            let scan = match self.decoded.take() {
+                Some(decoded) => scan.with_decoded_segments(decoded),
+                None => scan,
+            };
             self.adaptor = Some(ScanAdaptor::new(scan, plans.locations));
             return Ok(MorselOutput::Continue);
         };

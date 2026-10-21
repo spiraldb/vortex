@@ -8,6 +8,7 @@ use std::ops::Range;
 
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
+use vortex_array::ArrayRef;
 use vortex_error::VortexResult;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
@@ -23,6 +24,7 @@ use crate::plan::physical::SegmentScanPlan;
 use crate::plan::physical::operator::Operator;
 use crate::plan::physical::operator::Source;
 use crate::plan::physical::operators::ConcatSource;
+use crate::plan::physical::operators::OnceSource;
 use crate::plan::physical::operators::ScanSource;
 use crate::plan::physical::operators::SelectStage;
 use crate::plan::physical::visit_segments;
@@ -163,17 +165,33 @@ impl Compiler<'_> {
             Some(usize::try_from(rows.start)?..usize::try_from(rows.end)?)
         };
         let split = self.core.split;
-        Ok(Some(match self.claim(scan, split) {
-            None => Chain::new(ScanSource::new(scan.clone(), slice, filter)),
-            Some(port) => {
-                let chain = Chain::port(port);
-                if slice.is_none() && filter.is_none() {
-                    chain
-                } else {
-                    chain.with(SelectStage::new(slice, filter))
-                }
-            }
+        let chain = match self.claim(scan, split) {
+            Some(port) => Chain::port(port),
+            None => match self.decoded(scan) {
+                Some(array) => Chain::new(OnceSource::new(array)),
+                None => return Ok(Some(Chain::new(self.scan_source(scan, slice, filter)))),
+            },
+        };
+        Ok(Some(if slice.is_none() && filter.is_none() {
+            chain
+        } else {
+            chain.with(SelectStage::new(slice, filter))
         }))
+    }
+
+    /// The whole of `scan`'s segment, if another scan of the split decoded it.
+    fn decoded(&self, scan: &SegmentScanPlan) -> Option<ArrayRef> {
+        self.core.decoded.as_ref()?.get(scan.segment_id())
+    }
+
+    /// Reads and decodes `scan`'s segment, keeping it whole for the split's later scans.
+    fn scan_source(
+        &self,
+        scan: &SegmentScanPlan,
+        slice: Option<Range<usize>>,
+        filter: Option<Mask>,
+    ) -> ScanSource {
+        ScanSource::new(scan.clone(), slice, filter, self.core.decoded.clone())
     }
 
     /// Claims split `split`'s port for `scan`'s segment when the segment is shared, building
@@ -222,10 +240,11 @@ impl Compiler<'_> {
                     .push(port);
             }
         }
-        self.core.add_pipeline(
-            Chain::new(ScanSource::new(scan.clone(), None, None)),
-            outlets,
-        );
+        let chain = match self.decoded(scan) {
+            Some(array) => Chain::new(OnceSource::new(array)),
+            None => Chain::new(self.scan_source(scan, None, None)),
+        };
+        self.core.add_pipeline(chain, outlets);
         mine
     }
 }

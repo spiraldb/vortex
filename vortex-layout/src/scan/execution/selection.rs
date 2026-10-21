@@ -25,7 +25,7 @@ pub(crate) fn plan_selection(
     let planner: Box<dyn Planner> = if plans.filter.is_some() {
         Box::new(FilterPlanner::new(plans.clone(), selected))
     } else {
-        Box::new(ProjectionPlanner::new(plans.clone(), selected))
+        Box::new(ProjectionPlanner::new(plans.clone(), selected, None))
     };
     Some((scope, planner))
 }

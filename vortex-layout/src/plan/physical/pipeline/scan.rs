@@ -29,6 +29,7 @@ use super::port::PipelineId;
 use super::port::PortId;
 use super::port::Slab;
 use super::port::SourceEnd;
+use super::values::DecodedSegments;
 use super::values::ValueCache;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::operator::Cx;
@@ -294,6 +295,8 @@ pub(crate) struct Core {
     pub(crate) split: usize,
     /// Whole values kept for later scans of the same split.
     pub(crate) values: ValueCache,
+    /// Whole decoded segments shared with the other scans of the split, if any.
+    pub(crate) decoded: Option<DecodedSegments>,
 }
 
 impl Core {
@@ -314,6 +317,7 @@ impl Core {
             shares: Shares::new(splits),
             split: usize::MAX,
             values: ValueCache::default(),
+            decoded: None,
         }
     }
 
@@ -755,6 +759,13 @@ impl Scan {
     /// Shares whole values, such as dictionary values, with the other scans given `values`.
     pub fn with_value_cache(mut self, values: ValueCache) -> Self {
         self.core.values = values;
+        self
+    }
+
+    /// Reads and decodes each segment once with the other scans given `decoded`, which must
+    /// read the same file.
+    pub(crate) fn with_decoded_segments(mut self, decoded: DecodedSegments) -> Self {
+        self.core.decoded = Some(decoded);
         self
     }
 
