@@ -158,6 +158,20 @@ jobs:
       - name: Setup (Windows)
         run: |
           echo "C:\rust\cargo\bin" >> $env:GITHUB_PATH
+      - name: Locate Clang
+        shell: pwsh
+        run: |
+          $clang = Get-Command clang-cl.exe -ErrorAction SilentlyContinue
+          if ($clang) {
+            $compiler = $clang.Source
+          } else {
+            $roots = @("C:\Program Files\LLVM", "C:\Program Files\Microsoft Visual Studio", "C:\Program Files (x86)\Microsoft Visual Studio")
+            $compiler = Get-ChildItem $roots -Filter clang-cl.exe -Recurse -ErrorAction SilentlyContinue |
+              Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $compiler) { throw "clang-cl.exe was not found on the runner" }
+          Split-Path $compiler | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & $compiler --version
       - uses: ./.github/actions/setup-prebuild
         with:
           enable-sccache: "true"
@@ -183,8 +197,8 @@ jobs:
           PYO3_ENVIRONMENT_SIGNATURE: "cpython3"
           # Also applies to host proc-macro links when Cargo receives an explicit target.
           LINK: /Brepro
-          CC: "C:\\Program Files\\LLVM\\bin\\clang-cl.exe"
-          CXX: "C:\\Program Files\\LLVM\\bin\\clang-cl.exe"
+          CC: "clang-cl"
+          CXX: "clang-cl"
 
       # rust-test-windows excludes vortex-python, so this is the only check that the
       # win_amd64 wheel imports and can round-trip a file. Runs outside the checkout so
