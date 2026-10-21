@@ -105,6 +105,15 @@ pub trait VortexReadAt: Send + Sync + 'static {
     /// many requests in parallel.
     fn concurrency(&self) -> usize;
 
+    /// Whether every segment should be read with its own [`VortexReadAt::read_at`], issued by the
+    /// task that needs it, rather than through a shared driver that coalesces reads.
+    ///
+    /// Sources whose reads are cheap to issue, such as local files read through io_uring, gain
+    /// nothing from coalescing, while a single driver serializes every read of a scan.
+    fn prefers_direct_reads(&self) -> bool {
+        false
+    }
+
     /// Asynchronously get the number of bytes of the underlying source.
     fn size(&self) -> BoxFuture<'static, VortexResult<u64>>;
 
@@ -152,6 +161,10 @@ impl VortexReadAt for Arc<dyn VortexReadAt> {
         self.as_ref().concurrency()
     }
 
+    fn prefers_direct_reads(&self) -> bool {
+        self.as_ref().prefers_direct_reads()
+    }
+
     fn size(&self) -> BoxFuture<'static, VortexResult<u64>> {
         self.as_ref().size()
     }
@@ -181,6 +194,10 @@ impl<R: VortexReadAt> VortexReadAt for Arc<R> {
 
     fn concurrency(&self) -> usize {
         self.as_ref().concurrency()
+    }
+
+    fn prefers_direct_reads(&self) -> bool {
+        self.as_ref().prefers_direct_reads()
     }
 
     fn size(&self) -> BoxFuture<'static, VortexResult<u64>> {
@@ -346,6 +363,10 @@ impl<T: VortexReadAt + Clone> VortexReadAt for InstrumentedReadAt<T> {
 
     fn concurrency(&self) -> usize {
         self.read.concurrency()
+    }
+
+    fn prefers_direct_reads(&self) -> bool {
+        self.read.prefers_direct_reads()
     }
 
     fn size(&self) -> BoxFuture<'static, VortexResult<u64>> {

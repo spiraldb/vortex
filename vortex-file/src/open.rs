@@ -35,6 +35,7 @@ use crate::MAX_POSTSCRIPT_SIZE;
 use crate::VortexFile;
 use crate::footer::Footer;
 use crate::segments::BufferSegmentSource;
+use crate::segments::DirectSegmentSource;
 use crate::segments::FileSegmentSource;
 use crate::segments::InitialReadSegmentCache;
 use crate::segments::RequestMetrics;
@@ -330,12 +331,19 @@ impl VortexOpenOptions {
         let metrics = RequestMetrics::new(metrics_registry.as_ref(), self.labels);
 
         // Create a segment source backed by the VortexRead implementation.
-        let segment_source = Arc::new(SharedSegmentSource::new(FileSegmentSource::open(
-            footer.segment_specs_with_metadata(),
-            reader,
-            self.session.handle(),
-            metrics,
-        )));
+        let segment_source: Arc<dyn SegmentSource> = if reader.prefers_direct_reads() {
+            Arc::new(SharedSegmentSource::new(DirectSegmentSource::new(
+                footer.segment_specs_with_metadata(),
+                reader,
+            )))
+        } else {
+            Arc::new(SharedSegmentSource::new(FileSegmentSource::open(
+                footer.segment_specs_with_metadata(),
+                reader,
+                self.session.handle(),
+                metrics,
+            )))
+        };
 
         // Wrap up the segment source to first resolve segments from the initial read cache.
         let segment_source: Arc<dyn SegmentSource> = Arc::new(SegmentCacheSourceAdapter::new(
@@ -523,8 +531,12 @@ mod tests {
     use futures::future::BoxFuture;
     use parking_lot::Mutex;
     use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
+    use vortex_array::arrays::ChunkedArray;
+    use vortex_array::assert_arrays_eq;
     use vortex_array::buffer::BufferHandle;
     use vortex_array::memory::BufferAllocatorRef;
+    use vortex_array::stream::ArrayStreamExt;
     use vortex_array::memory::MemorySessionExt;
     use vortex_buffer::Alignment;
     use vortex_buffer::Buffer;
@@ -601,6 +613,78 @@ mod tests {
             // SAFETY: ptr and layout came from Global.
             unsafe { Global.deallocate(ptr, layout) }
         }
+    }
+
+    /// Reads `inner` like [`CountingRead`], but asks for every segment to be read on its own.
+    #[derive(Clone)]
+    struct DirectRead {
+        inner: ByteBuffer,
+        reads: Arc<Mutex<Vec<(u64, usize)>>>,
+    }
+
+    impl VortexReadAt for DirectRead {
+        fn size(&self) -> BoxFuture<'static, VortexResult<u64>> {
+            self.inner.size()
+        }
+
+        fn read_at(
+            &self,
+            offset: u64,
+            length: usize,
+            alignment: Alignment,
+        ) -> BoxFuture<'static, VortexResult<BufferHandle>> {
+            self.reads.lock().push((offset, length));
+            self.inner.read_at(offset, length, alignment)
+        }
+
+        fn concurrency(&self) -> usize {
+            1
+        }
+
+        fn prefers_direct_reads(&self) -> bool {
+            true
+        }
+    }
+
+    #[tokio::test]
+    async fn direct_reads_fetch_each_segment_on_its_own() -> VortexResult<()> {
+        let session = test_session();
+        let array = ChunkedArray::from_iter(
+            (0..8i64)
+                .map(|chunk| Buffer::from_iter(chunk * 1000..chunk * 1000 + 1000).into_array()),
+        )
+        .into_array();
+        let mut buf = ByteBufferMut::empty();
+        session
+            .write_options()
+            .write(&mut buf, array.to_array_stream())
+            .await?;
+
+        let reads = Arc::new(Mutex::new(Vec::new()));
+        let reader = DirectRead {
+            inner: ByteBuffer::from(buf),
+            reads: Arc::clone(&reads),
+        };
+        let file = session
+            .open_options()
+            .with_initial_read_size(0)
+            .open_read(reader)
+            .await?;
+        let specs = file
+            .footer()
+            .segment_map()
+            .iter()
+            .map(|spec| (spec.offset, spec.length as usize))
+            .collect::<Vec<_>>();
+        reads.lock().clear();
+
+        let actual = file.scan()?.into_array_stream()?.read_all().await?;
+        assert_arrays_eq!(actual, array, &mut session.create_execution_ctx());
+        // Every read is exactly one segment: none is merged with its neighbours.
+        let reads = reads.lock().clone();
+        assert!(!reads.is_empty());
+        assert!(reads.iter().all(|read| specs.contains(read)), "{reads:?}");
+        Ok(())
     }
 
     #[tokio::test]

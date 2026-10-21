@@ -31,6 +31,10 @@ impl<R: VortexReadAt> VortexReadAt for Compat<R> {
         self.inner().concurrency()
     }
 
+    fn prefers_direct_reads(&self) -> bool {
+        self.inner().prefers_direct_reads()
+    }
+
     fn size(&self) -> BoxFuture<'static, VortexResult<u64>> {
         Compat::new(self.inner().size()).boxed()
     }
