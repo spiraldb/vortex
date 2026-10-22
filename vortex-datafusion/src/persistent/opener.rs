@@ -82,6 +82,7 @@ use crate::metrics::PARTITION_LABEL;
 use crate::metrics::PATH_LABEL;
 use crate::persistent::cache::CachedVortexMetadata;
 use crate::persistent::reader::VortexReaderFactory;
+use crate::persistent::scan_v2::DriverMetrics;
 use crate::persistent::scan_v2::ScanDriver;
 use crate::persistent::stream::PrunableStream;
 
@@ -232,6 +233,7 @@ impl FileOpener for VortexOpener {
             }
 
             let scan_labels = labels.clone();
+            let driver_labels = labels.clone();
             let mut open_opts = session
                 .open_options()
                 .with_file_size(file.object_meta.size)
@@ -501,7 +503,10 @@ impl FileOpener for VortexOpener {
                     chunks(None)
                 };
 
-                let driver = ScanDriver::new(handle, concurrency, has_output_ordering);
+                let driver =
+                    ScanDriver::new(handle, concurrency, has_output_ordering).with_metrics(
+                        DriverMetrics::new(metrics_registry.as_ref(), &driver_labels),
+                    );
                 tracing::debug!(
                     row_start = scan.rows().start,
                     row_end = scan.rows().end,
