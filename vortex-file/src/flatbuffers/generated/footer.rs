@@ -1476,8 +1476,7 @@ impl<'a> EncryptionSpec<'a> {
   pub const VT_ALGORITHM: ::flatbuffers::VOffsetT = 4;
   pub const VT_KEY_METADATA: ::flatbuffers::VOffsetT = 6;
   pub const VT_AAD_FILE_UNIQUE: ::flatbuffers::VOffsetT = 8;
-  pub const VT_AAD_PREFIX: ::flatbuffers::VOffsetT = 10;
-  pub const VT_SUPPLY_AAD_PREFIX: ::flatbuffers::VOffsetT = 12;
+  pub const VT_REQUIRES_AAD_PREFIX: ::flatbuffers::VOffsetT = 10;
 
   #[inline]
   pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
@@ -1489,10 +1488,9 @@ impl<'a> EncryptionSpec<'a> {
     args: &'args EncryptionSpecArgs<'args>
   ) -> ::flatbuffers::WIPOffset<EncryptionSpec<'bldr>> {
     let mut builder = EncryptionSpecBuilder::new(_fbb);
-    if let Some(x) = args.aad_prefix { builder.add_aad_prefix(x); }
     if let Some(x) = args.aad_file_unique { builder.add_aad_file_unique(x); }
     if let Some(x) = args.key_metadata { builder.add_key_metadata(x); }
-    builder.add_supply_aad_prefix(args.supply_aad_prefix);
+    builder.add_requires_aad_prefix(args.requires_aad_prefix);
     builder.add_algorithm(args.algorithm);
     builder.finish()
   }
@@ -1522,22 +1520,14 @@ impl<'a> EncryptionSpec<'a> {
     // which contains a valid value in this slot
     unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u8>>>(EncryptionSpec::VT_AAD_FILE_UNIQUE, None)}
   }
-  /// An application-defined prefix of the additional authenticated data, e.g. the file's path,
-  /// when the writer chose to store it. Absent if there is no prefix or it must be supplied.
+  /// Whether the additional authenticated data starts with an application-defined prefix, e.g.
+  /// the file's path. The prefix is never stored in the file, so readers must supply it.
   #[inline]
-  pub fn aad_prefix(&self) -> Option<::flatbuffers::Vector<'a, u8>> {
+  pub fn requires_aad_prefix(&self) -> bool {
     // Safety:
     // Created from valid Table for this object
     // which contains a valid value in this slot
-    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u8>>>(EncryptionSpec::VT_AAD_PREFIX, None)}
-  }
-  /// Whether the writer omitted a prefix that readers must supply to decrypt the file.
-  #[inline]
-  pub fn supply_aad_prefix(&self) -> bool {
-    // Safety:
-    // Created from valid Table for this object
-    // which contains a valid value in this slot
-    unsafe { self._tab.get::<bool>(EncryptionSpec::VT_SUPPLY_AAD_PREFIX, Some(false)).unwrap()}
+    unsafe { self._tab.get::<bool>(EncryptionSpec::VT_REQUIRES_AAD_PREFIX, Some(false)).unwrap()}
   }
 }
 
@@ -1550,8 +1540,7 @@ impl ::flatbuffers::Verifiable for EncryptionSpec<'_> {
      .visit_field::<EncryptionAlgorithm>("algorithm", Self::VT_ALGORITHM, false)?
      .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u8>>>("key_metadata", Self::VT_KEY_METADATA, false)?
      .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u8>>>("aad_file_unique", Self::VT_AAD_FILE_UNIQUE, false)?
-     .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u8>>>("aad_prefix", Self::VT_AAD_PREFIX, false)?
-     .visit_field::<bool>("supply_aad_prefix", Self::VT_SUPPLY_AAD_PREFIX, false)?
+     .visit_field::<bool>("requires_aad_prefix", Self::VT_REQUIRES_AAD_PREFIX, false)?
      .finish();
     Ok(())
   }
@@ -1560,8 +1549,7 @@ pub struct EncryptionSpecArgs<'a> {
     pub algorithm: EncryptionAlgorithm,
     pub key_metadata: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u8>>>,
     pub aad_file_unique: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u8>>>,
-    pub aad_prefix: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u8>>>,
-    pub supply_aad_prefix: bool,
+    pub requires_aad_prefix: bool,
 }
 impl<'a> Default for EncryptionSpecArgs<'a> {
   #[inline]
@@ -1570,8 +1558,7 @@ impl<'a> Default for EncryptionSpecArgs<'a> {
       algorithm: EncryptionAlgorithm::None,
       key_metadata: None,
       aad_file_unique: None,
-      aad_prefix: None,
-      supply_aad_prefix: false,
+      requires_aad_prefix: false,
     }
   }
 }
@@ -1594,12 +1581,8 @@ impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> EncryptionSpecBuilder<'a, 'b,
     self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(EncryptionSpec::VT_AAD_FILE_UNIQUE, aad_file_unique);
   }
   #[inline]
-  pub fn add_aad_prefix(&mut self, aad_prefix: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , u8>>) {
-    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(EncryptionSpec::VT_AAD_PREFIX, aad_prefix);
-  }
-  #[inline]
-  pub fn add_supply_aad_prefix(&mut self, supply_aad_prefix: bool) {
-    self.fbb_.push_slot::<bool>(EncryptionSpec::VT_SUPPLY_AAD_PREFIX, supply_aad_prefix, false);
+  pub fn add_requires_aad_prefix(&mut self, requires_aad_prefix: bool) {
+    self.fbb_.push_slot::<bool>(EncryptionSpec::VT_REQUIRES_AAD_PREFIX, requires_aad_prefix, false);
   }
   #[inline]
   pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> EncryptionSpecBuilder<'a, 'b, A> {
@@ -1622,8 +1605,7 @@ impl ::core::fmt::Debug for EncryptionSpec<'_> {
       ds.field("algorithm", &self.algorithm());
       ds.field("key_metadata", &self.key_metadata());
       ds.field("aad_file_unique", &self.aad_file_unique());
-      ds.field("aad_prefix", &self.aad_prefix());
-      ds.field("supply_aad_prefix", &self.supply_aad_prefix());
+      ds.field("requires_aad_prefix", &self.requires_aad_prefix());
       ds.finish()
   }
 }

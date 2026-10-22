@@ -67,7 +67,6 @@ use crate::Footer;
 use crate::MAGIC_BYTES;
 use crate::WriteStrategyBuilder;
 use crate::counting::CountingVortexWrite;
-use crate::encryption::AadPrefix;
 use crate::encryption::EncryptionConfig;
 use crate::encryption::EncryptionSpec;
 use crate::footer::FileStatistics;
@@ -94,7 +93,7 @@ pub struct VortexWriteOptions {
     file_statistics: Vec<Stat>,
     metadata: HashMap<String, ByteBuffer>,
     encryption: Option<EncryptionConfig>,
-    aad_prefix: Option<AadPrefix>,
+    aad_prefix: Option<Arc<[u8]>>,
     encryption_keys: HashMap<EncryptionKeyName, EncryptionConfig>,
     field_encryption: Vec<(FieldPath, EncryptionKeyName)>,
 }
@@ -180,14 +179,14 @@ impl VortexWriteOptions {
         self
     }
 
-    /// Bind the encrypted segments of the file to an application-defined [`AadPrefix`], such as
-    /// the file's path, which readers verify with
-    /// [`VortexOpenOptions::with_aad_prefix`](crate::VortexOpenOptions::with_aad_prefix).
+    /// Bind the encrypted segments of the file to an application-defined AAD prefix, such as the
+    /// file's path.
     ///
-    /// The prefix applies to every key of the file, and requires
-    /// [`with_encryption`](Self::with_encryption).
-    pub fn with_aad_prefix(mut self, aad_prefix: AadPrefix) -> Self {
-        self.aad_prefix = Some(aad_prefix);
+    /// The prefix is not stored in the file, so readers must supply it with
+    /// [`VortexOpenOptions::with_aad_prefix`](crate::VortexOpenOptions::with_aad_prefix). It
+    /// applies to every key of the file, and requires [`with_encryption`](Self::with_encryption).
+    pub fn with_aad_prefix(mut self, aad_prefix: impl Into<Arc<[u8]>>) -> Self {
+        self.aad_prefix = Some(aad_prefix.into());
         self
     }
 
@@ -396,7 +395,7 @@ impl VortexWriteOptions {
         let cipher = self
             .encryption
             .as_ref()
-            .map(|config| config.file_cipher(self.aad_prefix.as_ref()))
+            .map(|config| config.file_cipher(self.aad_prefix.as_deref()))
             .transpose()?;
         let mut segments = BufferedSegmentSink::new(send, position);
         // Index 0 of the footer's encryption specs is reserved for plaintext segments.
@@ -411,7 +410,7 @@ impl VortexWriteOptions {
             .iter()
             .sorted_unstable_by(|(left, _), (right, _)| left.cmp(right))
         {
-            let named = config.file_cipher(self.aad_prefix.as_ref())?;
+            let named = config.file_cipher(self.aad_prefix.as_deref())?;
             let index = u16::try_from(encryption_specs.len())
                 .map_err(|_| vortex_err!("Too many encryption keys"))?;
             encryption_specs.push(named.spec().clone());

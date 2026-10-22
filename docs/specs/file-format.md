@@ -111,8 +111,9 @@ postscript remains in plaintext.
   spec's random `aad_file_unique` bytes, and an identifier of the segment: its index in the segment map, the name of a
   footer segment, or the key of a metadata segment. A segment moved within or between files fails to decrypt.
 - The AAD prefix is optional and application-defined, such as the file's path, and binds the file to an identity the
-  reader knows, so that it cannot be replaced by another file encrypted with the same key. The writer either stores it
-  in `aad_prefix`, so readers can verify it, or omits it and sets `supply_aad_prefix`, so readers must supply it.
+  reader knows, so that it cannot be replaced by another file encrypted with the same key. It is never stored in the
+  file: the writer sets `requires_aad_prefix`, and readers must supply the prefix to decrypt the file. Without a
+  prefix, its length is 0.
 - Keys are never stored in the file. The opaque `key_metadata` of an `EncryptionSpec` identifies the key to the
   reader, for example by a key management service key id.
 

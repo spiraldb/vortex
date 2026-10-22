@@ -86,10 +86,8 @@ impl FooterDeserializer {
 
     /// Provide the AAD prefix the encrypted file is bound to.
     ///
-    /// This is required for files written with an [`AadPrefix::supplied`] prefix, and verifies a
-    /// stored one.
-    ///
-    /// [`AadPrefix::supplied`]: crate::encryption::AadPrefix::supplied
+    /// This is required for files written with an AAD prefix. Deserialization fails if the file
+    /// is not bound to one.
     pub fn with_aad_prefix(mut self, aad_prefix: impl Into<Arc<[u8]>>) -> Self {
         self.aad_prefix = Some(aad_prefix.into());
         self

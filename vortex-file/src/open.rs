@@ -223,10 +223,9 @@ impl VortexOpenOptions {
 
     /// Configure the AAD prefix an encrypted file is expected to be bound to, such as its path.
     ///
-    /// This is required to open files written with an [`AadPrefix::supplied`] prefix. For files
-    /// with a stored prefix, opening fails unless it matches.
-    ///
-    /// [`AadPrefix::supplied`]: crate::encryption::AadPrefix::supplied
+    /// This is required to open files written with
+    /// [`VortexWriteOptions::with_aad_prefix`](crate::VortexWriteOptions::with_aad_prefix), and
+    /// opening fails for files without a prefix. A wrong prefix fails decryption.
     pub fn with_aad_prefix(mut self, aad_prefix: impl Into<Arc<[u8]>>) -> Self {
         self.aad_prefix = Some(aad_prefix.into());
         self

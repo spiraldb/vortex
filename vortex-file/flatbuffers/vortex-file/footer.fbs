@@ -141,11 +141,9 @@ table EncryptionSpec {
     /// Random per-file bytes included in the additional authenticated data of every segment, so
     /// that encrypted segments cannot be swapped between files that share a key.
     aad_file_unique: [ubyte];
-    /// An application-defined prefix of the additional authenticated data, e.g. the file's path,
-    /// when the writer chose to store it. Absent if there is no prefix or it must be supplied.
-    aad_prefix: [ubyte];
-    /// Whether the writer omitted a prefix that readers must supply to decrypt the file.
-    supply_aad_prefix: bool;
+    /// Whether the additional authenticated data starts with an application-defined prefix, e.g.
+    /// the file's path. The prefix is never stored in the file, so readers must supply it.
+    requires_aad_prefix: bool;
 }
 // [footer]
 
