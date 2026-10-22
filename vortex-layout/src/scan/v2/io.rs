@@ -78,8 +78,9 @@ impl IoService for SegmentScanIo {
 }
 
 /// Reads a session speculated: started reads, shared by every session that fetches the segment
-/// for as long as the service lives, since a chunk straddling two partitions is fetched by
-/// both; and requests announced for coalescing and never polled, taken by the first.
+/// for as long as the service lives, since a chunk straddling two partitions or two chunks is
+/// fetched by both; and requests announced for coalescing and never polled, which the first
+/// fetch turns into a shared started read.
 #[derive(Default)]
 struct Speculated {
     started: HashMap<SegmentId, Prefetched>,
@@ -140,22 +141,23 @@ impl SegmentIoSource {
             .ok_or_else(|| vortex_err!("No segment at bytes {offset}+{len}"))
     }
 
-    /// The read of `segment`: one speculated for it, else one announced speculatively or by
-    /// this session, else a new request.
+    /// The read of `segment`: one speculated for it, else the request speculatively announced
+    /// for it, which becomes the speculated read every session shares, else one this session
+    /// announced, else a new request.
     fn read(&self, segment: SegmentId) -> Prefetched {
         let mut ahead = self.ahead.lock();
         if let Some(read) = ahead.started.get(&segment) {
             return read.clone();
         }
-        ahead
-            .announced
-            .remove(&segment)
-            .or_else(|| {
-                self.announced
-                    .lock()
-                    .get_mut(&segment)
-                    .and_then(VecDeque::pop_front)
-            })
+        if let Some(announced) = ahead.announced.remove(&segment) {
+            let read = announced.map_err(Arc::new).boxed().shared();
+            ahead.started.insert(segment, read.clone());
+            return read;
+        }
+        self.announced
+            .lock()
+            .get_mut(&segment)
+            .and_then(VecDeque::pop_front)
             .unwrap_or_else(|| {
                 tracing::trace!(segment = *segment, "v2 io new request on read");
                 self.segments.request(segment)
@@ -181,15 +183,19 @@ impl IoSource for SegmentIoSource {
         for request in batch {
             let segment = self.segment(&request)?;
             if request.intent == IoIntent::Announce {
-                // An announcement speculated for the segment is the same interest, already
-                // registered beside the reads it coalesces with: take it rather than add one.
-                let speculated = self.ahead.lock().announced.remove(&segment);
-                self.announced.lock().entry(segment).or_default().push_back(
-                    speculated.unwrap_or_else(|| {
-                        tracing::trace!(segment = *segment, "v2 io new request on announce");
-                        self.segments.request(segment)
-                    }),
-                );
+                // A segment speculated for the scan is already requested, beside the reads it
+                // coalesces with, for every session: this one adds nothing.
+                let ahead = self.ahead.lock();
+                if ahead.started.contains_key(&segment) || ahead.announced.contains_key(&segment) {
+                    continue;
+                }
+                drop(ahead);
+                tracing::trace!(segment = *segment, "v2 io new request on announce");
+                self.announced
+                    .lock()
+                    .entry(segment)
+                    .or_default()
+                    .push_back(self.segments.request(segment));
                 continue;
             }
             if request.intent == IoIntent::Prefetch {
@@ -465,10 +471,10 @@ mod tests {
             "a started read is not announced"
         );
 
-        // An announcement is requested once, never polled, and taken by the first session
-        // that announces or fetches the segment.
+        // An announcement is requested once and never polled; a session's own announcement
+        // adds nothing, and the first fetch makes it the read every session shares.
         let service = SegmentScanIo::new(Arc::clone(&segments) as _, segment_ranges(&[location]));
-        let (planner, late) = (service.session(), service.session());
+        let (planner, late, later) = (service.session(), service.session(), service.session());
         planner.speculate(IoOwnerId(0), vec![request(IoIntent::Announce, 7)])?;
         assert_eq!(
             segments.0.load(Ordering::Relaxed),
@@ -479,13 +485,19 @@ mod tests {
         assert_eq!(
             segments.0.load(Ordering::Relaxed),
             2,
-            "a session's announcement takes the speculated one"
+            "a session announces nothing more"
         );
         late.submit(IoOwnerId(3), vec![request(IoIntent::Fetch, 8)])?;
         assert_eq!(
             segments.0.load(Ordering::Relaxed),
             2,
             "the fetch took the announcement"
+        );
+        later.submit(IoOwnerId(4), vec![request(IoIntent::Fetch, 10)])?;
+        assert_eq!(
+            segments.0.load(Ordering::Relaxed),
+            2,
+            "a later session shares the read"
         );
         Ok(())
     }
