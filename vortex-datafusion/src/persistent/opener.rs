@@ -683,7 +683,9 @@ impl NaturalSplits {
     /// with no boundary of its own comes back empty.
     fn snap(&self, rows: Range<u64>) -> Range<u64> {
         let up = |row: u64| {
-            let index = self.row_boundaries.partition_point(|&boundary| boundary < row);
+            let index = self
+                .row_boundaries
+                .partition_point(|&boundary| boundary < row);
             self.row_boundaries.get(index).copied().unwrap_or(row)
         };
         let start = up(rows.start);
