@@ -223,6 +223,12 @@ impl Planner for FilterPlanner {
         if !self.announced {
             self.announced = true;
             self.started = Some(Instant::now());
+            tracing::debug!(
+                row_start = selected.scope.rows.start,
+                row_end = selected.scope.rows.end,
+                selected_rows = selected.mask.true_count(),
+                "v2 filter started"
+            );
             let session = &self.scan.session;
             let rows = selected.scope.rows.clone();
             let predicates = segments_read(

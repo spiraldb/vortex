@@ -238,6 +238,11 @@ impl Planner for PrunePlanner {
         }
         if self.started.is_none() {
             self.started = Some(Instant::now());
+            tracing::debug!(
+                row_start = self.rows.start,
+                row_end = self.rows.end,
+                "v2 pruning started"
+            );
             self.start()?;
         }
         // Step every adaptor that can compute, publishing all their reads as one batch.

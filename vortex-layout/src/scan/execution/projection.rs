@@ -226,6 +226,10 @@ impl Morsel for ProjectionMorsel {
             AdaptorStep::Piece(piece) => {
                 if let Some(reads_at) = self.reads_at.take() {
                     self.scan.metrics.projection_wait.update(reads_at.elapsed());
+                    tracing::debug!(
+                        row_start = self.selected.scope.rows.start,
+                        "v2 projection first piece"
+                    );
                 }
                 self.pieces.push(piece);
                 MorselOutput::Continue
