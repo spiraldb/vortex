@@ -40,6 +40,7 @@ use crate::plan::physical::Zoned;
 use crate::plan::physical::optimize;
 use crate::plan::physical::pipeline::Scan;
 use crate::plan::physical::pipeline::Split;
+use crate::plan::physical::pipeline::ValueCache;
 use crate::plan::physical::plan_row_idx_expression;
 use crate::scan::filter::FilterExpr;
 use crate::segments::SegmentId;
@@ -140,10 +141,11 @@ pub(super) fn segments_read<'a>(
     plans: impl Iterator<Item = &'a PlanRef>,
     rows: Range<u64>,
     mask: &Mask,
+    values: &ValueCache,
 ) -> VortexResult<Vec<SegmentId>> {
     let mut segments = Vec::new();
     for plan in plans {
-        segments.extend(Scan::segments(session, plan, rows.clone(), mask)?);
+        segments.extend(Scan::segments(session, plan, rows.clone(), mask, values)?);
     }
     segments.sort_unstable();
     segments.dedup();
@@ -228,12 +230,14 @@ impl Planner for FilterPlanner {
                 self.filter.predicates.iter(),
                 rows.clone(),
                 &selected.mask,
+                &self.scan.values,
             )?;
             let projection = segments_read(
                 session,
                 std::iter::once(&self.scan.projection),
                 rows,
                 &selected.mask,
+                &self.scan.values,
             )?;
             let mut batch = Vec::new();
             let mut seen = FxHashSet::default();
