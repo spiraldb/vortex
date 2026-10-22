@@ -37,8 +37,8 @@ use tracing::info;
 use vortex::array::ArrayRef;
 use vortex::array::stream::ArrayStreamAdapter;
 use vortex::error::VortexExpect;
-use vortex::utils::parallelism::get_available_parallelism;
 use vortex::file::WriteOptionsSessionExt;
+use vortex::utils::parallelism::get_available_parallelism;
 use vortex_arrow::ArrowSessionExt;
 
 use crate::CompactionStrategy;
