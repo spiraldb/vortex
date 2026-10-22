@@ -12,6 +12,8 @@ use std::sync::Arc;
 use flatbuffers::FlatBufferBuilder;
 use flatbuffers::WIPOffset;
 use itertools::Itertools;
+use prost::encoding::decode_varint;
+use prost::encoding::encode_varint;
 use vortex_array::aggregate_fn::AggregateFnId;
 use vortex_array::aggregate_fn::AggregateFnRef;
 use vortex_array::aggregate_fn::session::AggregateFnSessionExt;
@@ -370,18 +372,6 @@ fn aggregate_stats_from_partials(
     Ok(AggregateStats::new(aggregates))
 }
 
-/// The maximum length of an unsigned LEB128 encoding of a `u64`.
-const MAX_VARINT_LEN: usize = 10;
-
-/// Appends `value` to `out` as an unsigned LEB128 varint.
-fn write_varint(out: &mut Vec<u8>, mut value: u64) {
-    while value >= 0x80 {
-        out.push((value as u8) | 0x80);
-        value >>= 7;
-    }
-    out.push(value as u8);
-}
-
 /// Reads the length-prefixed partial states of `FileStatistics.partials` in order.
 struct PartialsReader<'a> {
     remaining: &'a [u8],
@@ -394,7 +384,8 @@ impl<'a> PartialsReader<'a> {
 
     /// Returns the bytes of the next partial state.
     fn next_partial(&mut self) -> VortexResult<&'a [u8]> {
-        let len = self.next_varint()?;
+        let len = decode_varint(&mut self.remaining)
+            .map_err(|error| vortex_err!("file statistics partial length: {error}"))?;
         let len = usize::try_from(len)
             .ok()
             .filter(|&len| len <= self.remaining.len())
@@ -407,24 +398,6 @@ impl<'a> PartialsReader<'a> {
         let (partial, rest) = self.remaining.split_at(len);
         self.remaining = rest;
         Ok(partial)
-    }
-
-    fn next_varint(&mut self) -> VortexResult<u64> {
-        let mut value = 0u64;
-        for (i, &byte) in self.remaining.iter().take(MAX_VARINT_LEN).enumerate() {
-            let bits = u64::from(byte & 0x7f);
-            // The tenth byte holds only the top bit of a `u64`.
-            vortex_ensure!(
-                i < MAX_VARINT_LEN - 1 || bits <= 1,
-                "file statistics partial length overflows u64"
-            );
-            value |= bits << (7 * i);
-            if byte & 0x80 == 0 {
-                self.remaining = &self.remaining[i + 1..];
-                return Ok(value);
-            }
-        }
-        vortex_bail!("truncated or overlong file statistics partial length")
     }
 
     /// Fails unless every partial state has been read.
@@ -510,7 +483,7 @@ impl WriteFlatBuffer for FileStatistics {
                 };
                 set.push(specs.intern(stat.aggregate_fn())?);
                 let partial = ScalarValue::to_proto_bytes::<Vec<u8>>(partial.value());
-                write_varint(&mut partials, partial.len() as u64);
+                encode_varint(partial.len() as u64, &mut partials);
                 partials.extend_from_slice(&partial);
             }
             entry_sets.push(sets.intern(set)?);
@@ -863,7 +836,7 @@ mod tests {
             known.partial().vortex_expect("has a partial").value(),
         );
         let mut prefixed = Vec::new();
-        write_varint(&mut prefixed, partial.len() as u64);
+        encode_varint(partial.len() as u64, &mut prefixed);
         prefixed.extend_from_slice(&partial);
         Ok((options, prefixed))
     }
@@ -900,14 +873,14 @@ mod tests {
     #[case::set_index_out_of_range(vec![vec![0]], vec![1], None, "aggregate set index 1 out of range")]
     #[case::spec_index_out_of_range(vec![vec![1]], vec![0], None, "aggregate spec index 1 out of range")]
     #[case::wrong_entry_count(vec![vec![0]], vec![0, 0], None, "")]
-    #[case::partial_missing(vec![vec![0]], vec![0], Some(vec![]), "truncated or overlong")]
-    #[case::truncated_varint(vec![vec![0]], vec![0], Some(vec![0x80]), "truncated or overlong")]
-    #[case::overlong_varint(vec![vec![0]], vec![0], Some(vec![0x80; 11]), "truncated or overlong")]
+    #[case::partial_missing(vec![vec![0]], vec![0], Some(vec![]), "invalid varint")]
+    #[case::truncated_varint(vec![vec![0]], vec![0], Some(vec![0x80]), "invalid varint")]
+    #[case::overlong_varint(vec![vec![0]], vec![0], Some(vec![0x80; 11]), "invalid varint")]
     #[case::varint_overflows(
         vec![vec![0]],
         vec![0],
         Some(vec![0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x02]),
-        "overflows u64"
+        "invalid varint"
     )]
     #[case::length_past_end(vec![vec![0]], vec![0], Some(vec![5, 0]), "exceeds the 1 remaining bytes")]
     #[case::trailing_bytes(vec![vec![]], vec![0], Some(vec![0]), "1 unread bytes")]
@@ -935,23 +908,6 @@ mod tests {
             "unexpected error: {error}"
         );
         Ok(())
-    }
-
-    #[rstest]
-    #[case(0)]
-    #[case(1)]
-    #[case(127)]
-    #[case(128)]
-    #[case(300)]
-    #[case(u64::from(u32::MAX))]
-    #[case(u64::MAX)]
-    fn varints_round_trip(#[case] value: u64) -> VortexResult<()> {
-        let mut bytes = Vec::new();
-        write_varint(&mut bytes, value);
-        assert!(bytes.len() <= MAX_VARINT_LEN);
-        let mut reader = PartialsReader::new(&bytes);
-        assert_eq!(reader.next_varint()?, value);
-        reader.finish()
     }
 
     #[test]
