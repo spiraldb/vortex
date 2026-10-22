@@ -467,13 +467,16 @@ async fn arrow_stream_projects_across_chunks() -> VortexResult<()> {
     Ok(())
 }
 
+/// Chunks are cut from the range's own start, so a range shorter than a chunk is one chunk
+/// wherever it lies in the file.
 #[rstest]
 #[case::whole(0..150_000, vec![0..65_536, 65_536..131_072, 131_072..150_000])]
-#[case::unaligned(10..140_000, vec![10..65_536, 65_536..131_072, 131_072..140_000])]
+#[case::unaligned(10..140_000, vec![10..65_546, 65_546..131_082, 131_082..140_000])]
 #[case::boundary(65_536..131_072, vec![65_536..131_072])]
+#[case::short(1_000_000..1_040_000, vec![1_000_000..1_040_000])]
 #[case::empty(5..5, vec![])]
 #[case::near_max(u64::MAX - 3..u64::MAX, vec![u64::MAX - 3..u64::MAX])]
-fn fixed_row_chunks(#[case] rows: Range<u64>, #[case] expected: Vec<Range<u64>>) {
+fn row_chunks_start_at_the_range(#[case] rows: Range<u64>, #[case] expected: Vec<Range<u64>>) {
     assert_eq!(row_chunks(rows, 65_536), expected);
 }
 
@@ -491,14 +494,6 @@ fn chunk_byte_budget(#[case] rows: u64, #[case] bytes: u32, #[case] expected: us
         alignment: Alignment::none(),
     }];
     assert_eq!(rows_per_chunk(rows, &locations), expected);
-}
-
-#[test]
-fn smaller_chunks_keep_file_alignment() {
-    assert_eq!(
-        row_chunks(7500..33_000, 16_384),
-        [7500..16_384, 16_384..32_768, 32_768..33_000]
-    );
 }
 
 struct CountingSegments {

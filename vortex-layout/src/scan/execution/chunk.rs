@@ -44,17 +44,16 @@ pub(crate) fn rows_per_chunk(row_count: u64, locations: &[SegmentLocation]) -> u
     blocks.clamp(1, 8) as usize * ROW_BLOCK_SIZE
 }
 
-/// Fixed boundaries in the file's row domain, clipped to the requested range.
+/// Chunks of `rows_per_chunk` rows from the start of `rows`, the last one shorter. Cut from
+/// the range's own start rather than a grid over the file, a partition shorter than a chunk is
+/// one chunk, so its reads go out together.
 pub(crate) fn row_chunks(rows: Range<u64>, rows_per_chunk: usize) -> Vec<Range<u64>> {
     if rows.is_empty() {
         return Vec::new();
     }
-    let first = rows.start / rows_per_chunk as u64 * rows_per_chunk as u64;
-    (first..rows.end)
+    (rows.start..rows.end)
         .step_by(rows_per_chunk)
-        .map(|start| {
-            start.max(rows.start)..start.saturating_add(rows_per_chunk as u64).min(rows.end)
-        })
+        .map(|start| start..start.saturating_add(rows_per_chunk as u64).min(rows.end))
         .collect()
 }
 
