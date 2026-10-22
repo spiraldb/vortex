@@ -12,9 +12,13 @@ use divan::Bencher;
 use mimalloc::MiMalloc;
 use rand::prelude::*;
 use vortex_array::ArrayRef;
+use vortex_array::Columnar;
+use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
+use vortex_array::aggregate_fn::AggregateDTypes;
 use vortex_array::aggregate_fn::AggregateFnRef;
+use vortex_array::aggregate_fn::AggregateFnVTable;
 use vortex_array::aggregate_fn::AggregateFnVTableExt;
 use vortex_array::aggregate_fn::EmptyOptions;
 use vortex_array::aggregate_fn::NumericalAggregateOpts;
@@ -204,4 +208,133 @@ fn density_batch(dict: bool) -> ArrayRef {
     } else {
         PrimitiveArray::new(values(), Validity::NonNullable).into_array()
     }
+}
+
+const VALID_DENSITIES: &[f64] = &[0.5, 0.9, 0.95, 0.97, 0.99];
+
+/// A nullable batch whose given fraction of rows, chosen at random, is valid.
+fn batch_with_validity(density: f64) -> (ArrayRef, Mask) {
+    let mut rng = StdRng::seed_from_u64(6);
+    let valid = Mask::from_iter((0..N).map(|_| rng.random_bool(density)));
+    let batch = PrimitiveArray::new(
+        values(),
+        Validity::from_mask(valid.clone(), Nullability::Nullable),
+    )
+    .into_array();
+    (batch, valid)
+}
+
+/// Run the vtable's kernel over `batch` directly, bypassing the accumulator's valid-only filter.
+fn run_kernel<V: AggregateFnVTable>(
+    vtable: &V,
+    options: &V::Options,
+    batch: &ArrayRef,
+    ctx: &mut ExecutionCtx,
+) -> Scalar {
+    let dtypes = AggregateDTypes::try_new(vtable, options, batch.dtype().clone()).unwrap();
+    let mut partial = vtable.empty_partial(dtypes.args(options)).unwrap();
+    let columnar = batch.clone().execute::<Columnar>(ctx).unwrap();
+    vtable
+        .accumulate(dtypes.args(options), &mut partial, &columnar, ctx)
+        .unwrap();
+    vtable.to_scalar(dtypes.args(options), &partial).unwrap()
+}
+
+/// Compare the nullable kernel with filtering to the valid rows first, checking that both agree.
+fn bench_valid_only<V: AggregateFnVTable>(
+    bencher: Bencher,
+    vtable: V,
+    options: V::Options,
+    density: f64,
+    filter_first: bool,
+) {
+    let (batch, valid) = batch_with_validity(density);
+    let mut ctx = SESSION.create_execution_ctx();
+    assert_eq!(
+        run_kernel(&vtable, &options, &batch, &mut ctx),
+        run_kernel(
+            &vtable,
+            &options,
+            &batch.filter(valid.clone()).unwrap(),
+            &mut ctx
+        ),
+    );
+    bencher
+        .with_inputs(|| SESSION.create_execution_ctx())
+        .bench_values(|mut ctx| {
+            if filter_first {
+                let filtered = batch.filter(valid.clone()).unwrap();
+                run_kernel(&vtable, &options, &filtered, &mut ctx)
+            } else {
+                run_kernel(&vtable, &options, &batch, &mut ctx)
+            }
+        });
+}
+
+/// The nullable kernel over every row, null rows included.
+#[divan::bench(args = VALID_DENSITIES)]
+fn sum_nullable_kernel(bencher: Bencher, density: f64) {
+    bench_valid_only(
+        bencher,
+        Sum,
+        NumericalAggregateOpts::default(),
+        density,
+        false,
+    );
+}
+
+/// Filter to the valid rows first, then the dense kernel.
+#[divan::bench(args = VALID_DENSITIES)]
+fn sum_filter_first(bencher: Bencher, density: f64) {
+    bench_valid_only(
+        bencher,
+        Sum,
+        NumericalAggregateOpts::default(),
+        density,
+        true,
+    );
+}
+
+#[divan::bench(args = VALID_DENSITIES)]
+fn min_nullable_kernel(bencher: Bencher, density: f64) {
+    bench_valid_only(
+        bencher,
+        Min,
+        NumericalAggregateOpts::default(),
+        density,
+        false,
+    );
+}
+
+#[divan::bench(args = VALID_DENSITIES)]
+fn min_filter_first(bencher: Bencher, density: f64) {
+    bench_valid_only(
+        bencher,
+        Min,
+        NumericalAggregateOpts::default(),
+        density,
+        true,
+    );
+}
+
+#[divan::bench(args = VALID_DENSITIES)]
+fn max_nullable_kernel(bencher: Bencher, density: f64) {
+    bench_valid_only(
+        bencher,
+        Max,
+        NumericalAggregateOpts::default(),
+        density,
+        false,
+    );
+}
+
+#[divan::bench(args = VALID_DENSITIES)]
+fn max_filter_first(bencher: Bencher, density: f64) {
+    bench_valid_only(
+        bencher,
+        Max,
+        NumericalAggregateOpts::default(),
+        density,
+        true,
+    );
 }
