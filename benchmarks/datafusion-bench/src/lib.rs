@@ -98,9 +98,16 @@ pub fn make_object_store(
     }
 }
 
-pub fn format_to_df_format(format: Format, scan_v2: bool) -> anyhow::Result<Arc<dyn FileFormat>> {
+pub fn format_to_df_format(
+    format: Format,
+    scan_v2: bool,
+    scan_v2_lookahead: Option<usize>,
+    scan_v2_mmap: bool,
+) -> anyhow::Result<Arc<dyn FileFormat>> {
     let mut options = vortex_table_options();
     options.scan_v2 = scan_v2;
+    options.scan_v2_lookahead = scan_v2_lookahead;
+    options.scan_v2_mmap = scan_v2_mmap;
     Ok(match format {
         Format::Csv => Arc::new(CsvFormat::default()) as _,
         Format::Parquet => Arc::new(ParquetFormat::new()),

@@ -379,6 +379,8 @@ impl VortexSource {
             projection_pushdown: self.options.projection_pushdown,
             scan_concurrency: self.options.scan_concurrency,
             scan_v2: self.options.scan_v2,
+            scan_v2_lookahead: self.options.scan_v2_lookahead,
+            scan_v2_mmap: self.options.scan_v2_mmap,
         };
 
         Ok(opener)

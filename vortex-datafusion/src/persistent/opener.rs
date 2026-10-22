@@ -59,6 +59,7 @@ use vortex::file::VortexFile;
 use vortex::io::InstrumentedReadAt;
 use vortex::layout::LayoutReader;
 use vortex::layout::scan::scan_builder::ScanBuilder;
+use vortex::layout::scan::v2::Executor;
 use vortex::layout::scan::v2::PlanCache;
 use vortex::layout::scan::v2::ProjectedFilter;
 use vortex::layout::scan::v2::RowFilter;
@@ -158,6 +159,10 @@ pub(crate) struct VortexOpener {
     pub projection_pushdown: bool,
     pub scan_concurrency: Option<usize>,
     pub scan_v2: bool,
+    /// Run a partition's V2 scan inline on its task, with this many splits reading ahead.
+    pub scan_v2_lookahead: Option<usize>,
+    /// Map local files into memory for V2 scans, else read them on the scanning thread.
+    pub scan_v2_mmap: bool,
 }
 
 impl FileOpener for VortexOpener {
@@ -198,6 +203,8 @@ impl FileOpener for VortexOpener {
         let has_output_ordering = self.has_output_ordering;
         let scan_concurrency = self.scan_concurrency;
         let scan_v2 = self.scan_v2;
+        let scan_v2_lookahead = self.scan_v2_lookahead;
+        let scan_v2_mmap = self.scan_v2_mmap;
 
         let expr_converter = Arc::clone(&self.expression_converter);
         let projection_pushdown = self.projection_pushdown;
@@ -590,6 +597,7 @@ impl FileOpener for VortexOpener {
                     reader_factory.as_ref(),
                     &file,
                     vxf.scan_file(),
+                    scan_v2_mmap,
                 )
                 .await?;
                 let plan_cache = plan_caches.get(&file.object_meta.location);
@@ -610,6 +618,9 @@ impl FileOpener for VortexOpener {
                 }
                 if let Some(concurrency) = scan_concurrency {
                     builder = builder.with_concurrency(concurrency);
+                }
+                if let Some(lookahead) = scan_v2_lookahead {
+                    builder = builder.with_executor(Executor::Inline { lookahead });
                 }
                 for (_, filter) in list_sum_filters {
                     builder = builder.with_row_filter(filter);
@@ -801,12 +812,14 @@ fn dynamic_row_filter(
 }
 
 /// The file's segments for a V2 scan: the source other partitions of the file read through,
-/// else a memory map of a local file, else the file's own source.
+/// else a memory map of a local file when `mmap`, else positional reads of a local file, else
+/// the file's own source.
 async fn v2_scan_file(
     segment_sources: &DashMap<Path, Weak<dyn SegmentSource>>,
     reader_factory: &dyn VortexReaderFactory,
     file: &PartitionedFile,
     mut scan_file: ScanFile,
+    mmap: bool,
 ) -> DFResult<ScanFile> {
     let path = &file.object_meta.location;
     if let Some(shared) = segment_sources
@@ -816,10 +829,14 @@ async fn v2_scan_file(
         scan_file.segments = shared;
         return Ok(scan_file);
     }
-    if let Some(bytes) = reader_factory.map_local_file(file).await? {
-        scan_file = scan_file
-            .with_file_bytes(bytes)
-            .map_err(|e| exec_datafusion_err!("Failed to map Vortex file {path}: {e}"))?;
+    if mmap {
+        if let Some(bytes) = reader_factory.map_local_file(file).await? {
+            scan_file = scan_file
+                .with_file_bytes(bytes)
+                .map_err(|e| exec_datafusion_err!("Failed to map Vortex file {path}: {e}"))?;
+        }
+    } else if let Some(local) = reader_factory.open_local_file(file).await? {
+        scan_file = scan_file.with_local_file(local);
     }
     scan_file.segments = shared_segment_source(segment_sources, path, scan_file.segments);
     Ok(scan_file)
@@ -1178,6 +1195,8 @@ mod tests {
             projection_pushdown: false,
             scan_concurrency: None,
             scan_v2: false,
+            scan_v2_lookahead: None,
+            scan_v2_mmap: true,
         }
     }
 
@@ -1587,6 +1606,8 @@ mod tests {
             projection_pushdown: false,
             scan_concurrency: None,
             scan_v2: false,
+            scan_v2_lookahead: None,
+            scan_v2_mmap: true,
         };
 
         let filter = col("a").lt(lit(100_i32));
@@ -1678,6 +1699,8 @@ mod tests {
             projection_pushdown: false,
             scan_concurrency: None,
             scan_v2: false,
+            scan_v2_lookahead: None,
+            scan_v2_mmap: true,
         };
 
         let stream = opener.open(file)?.await?;
@@ -1860,6 +1883,8 @@ mod tests {
             projection_pushdown: false,
             scan_concurrency: None,
             scan_v2: false,
+            scan_v2_lookahead: None,
+            scan_v2_mmap: true,
         };
 
         // This should succeed and return the correctly projected and cast data
@@ -1924,6 +1949,8 @@ mod tests {
             projection_pushdown: false,
             scan_concurrency: None,
             scan_v2: false,
+            scan_v2_lookahead: None,
+            scan_v2_mmap: true,
         }
     }
 
@@ -2139,6 +2166,8 @@ mod tests {
             projection_pushdown: false,
             scan_concurrency: None,
             scan_v2: false,
+            scan_v2_lookahead: None,
+            scan_v2_mmap: true,
         };
 
         let file = PartitionedFile::new(file_path.to_string(), data_size);

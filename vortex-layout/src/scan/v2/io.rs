@@ -18,6 +18,7 @@ use futures::stream::FuturesUnordered;
 use parking_lot::Mutex;
 use vortex_array::buffer::BufferHandle;
 use vortex_buffer::Alignment;
+use vortex_buffer::BufferMut;
 use vortex_buffer::ByteBuffer;
 use vortex_error::VortexError;
 use vortex_error::VortexResult;
@@ -32,6 +33,8 @@ use vortex_io::request::IoResult;
 use vortex_io::request::IoService;
 use vortex_io::request::IoSource;
 use vortex_io::request::IoTarget;
+#[cfg(not(target_arch = "wasm32"))]
+use vortex_io::std_file::read_exact_at;
 use vortex_utils::aliases::hash_map::HashMap;
 
 use crate::scan::execution::SegmentLocation;
@@ -89,6 +92,45 @@ impl SegmentSource for FileBytesSource {
                 BufferHandle::new_host(self.bytes.slice(range.clone()).aligned(*alignment))
             });
         future::ready(bytes).boxed()
+    }
+}
+
+/// Serves each segment with a positional read of a local file, done on the thread that first
+/// polls the request. An announced segment is never read; a prefetch or fetch reads it at once,
+/// so a split never waits and no read runs on another thread.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) struct LocalFileSource {
+    file: Arc<std::fs::File>,
+    segments: Vec<SegmentLocation>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl LocalFileSource {
+    pub(super) fn new(file: std::fs::File, locations: &[SegmentLocation]) -> Self {
+        Self {
+            file: Arc::new(file),
+            segments: locations.to_vec(),
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl SegmentSource for LocalFileSource {
+    fn request(&self, id: SegmentId) -> SegmentFuture {
+        let Some(location) = self.segments.get(*id as usize).copied() else {
+            return future::ready(Err(vortex_err!("segment {id} has no known location"))).boxed();
+        };
+        let file = Arc::clone(&self.file);
+        future::lazy(move |_| {
+            let length = location.length as usize;
+            let mut buffer = BufferMut::<u8>::with_capacity_aligned(length, location.alignment);
+            // SAFETY: read_exact_at fills every byte or fails.
+            unsafe { buffer.set_len(length) };
+            read_exact_at(&file, buffer.as_mut_slice(), location.offset)
+                .map_err(|e| vortex_err!("read of segment {id} failed: {e}"))?;
+            Ok(BufferHandle::new_host(buffer.freeze()))
+        })
+        .boxed()
     }
 }
 
