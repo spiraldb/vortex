@@ -184,7 +184,6 @@ impl IoSource for SegmentIoSource {
         let (announced, batch): (Vec<_>, Vec<_>) = batch
             .into_iter()
             .partition(|request| request.intent == IoIntent::Announce);
-        let mut to_start = Vec::new();
         for request in announced.into_iter().chain(batch) {
             let segment = self.segment(&request)?;
             if request.intent == IoIntent::Announce {
@@ -203,8 +202,9 @@ impl IoSource for SegmentIoSource {
             if request.intent == IoIntent::Prefetch {
                 // A prefetch is for whichever session fetches the segment, like a speculated
                 // read: a planner reads ahead for chunks that may run on sessions of their own.
-                // Registered now and started once the whole batch is registered, so a
-                // coalescing source dispatches none of them before it knows them all.
+                // Started as it is registered: a source that drains its backlog before it
+                // dispatches would otherwise hold the first read until the whole batch, and
+                // every other partition's, is registered.
                 if prefetched.contains_key(&segment) {
                     continue;
                 }
@@ -212,9 +212,9 @@ impl IoSource for SegmentIoSource {
                 if !ahead.started.contains_key(&segment) {
                     drop(ahead);
                     let read = self.read(segment);
+                    Self::start(&read);
                     ahead = self.ahead.lock();
-                    ahead.started.insert(segment, read.clone());
-                    to_start.push(read);
+                    ahead.started.insert(segment, read);
                 }
                 continue;
             }
@@ -259,9 +259,6 @@ impl IoSource for SegmentIoSource {
                 .boxed(),
             );
         }
-        for read in &to_start {
-            Self::start(read);
-        }
         Ok(())
     }
 
@@ -276,7 +273,6 @@ impl IoSource for SegmentIoSource {
         let (announced, batch): (Vec<_>, Vec<_>) = batch
             .into_iter()
             .partition(|request| request.intent == IoIntent::Announce);
-        let mut to_start = Vec::new();
         for request in announced.into_iter().chain(batch) {
             if matches!(request.intent, IoIntent::Fetch | IoIntent::Urgent) {
                 vortex_bail!("a speculated read is never delivered, so it cannot be a fetch");
@@ -300,12 +296,8 @@ impl IoSource for SegmentIoSource {
                 .map_err(Arc::new)
                 .boxed()
                 .shared();
-            ahead.started.insert(segment, read.clone());
-            to_start.push(read);
-        }
-        // Every read registered, none dispatched alone before the source knows them all.
-        for read in &to_start {
-            Self::start(read);
+            Self::start(&read);
+            ahead.started.insert(segment, read);
         }
         Ok(())
     }
