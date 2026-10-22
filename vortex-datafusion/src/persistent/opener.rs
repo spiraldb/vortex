@@ -528,6 +528,7 @@ impl FileOpener for VortexOpener {
                 )?;
                 Ok(RecordBatch::from(arrow.as_struct().clone()))
             };
+            let t_rows = u64::try_from(opened_at.elapsed().as_micros()).unwrap_or(u64::MAX);
             let stream = if scan_v2 {
                 let mut scan_file = vxf.scan_file();
                 scan_file.segments = shared_segment_source(
@@ -568,6 +569,7 @@ impl FileOpener for VortexOpener {
                 tracing::debug!(
                     row_start = scan.rows().start,
                     row_end = scan.rows().end,
+                    rows_at = t_rows,
                     micros = u64::try_from(opened_at.elapsed().as_micros()).unwrap_or(u64::MAX),
                     "v2 open prepared"
                 );
