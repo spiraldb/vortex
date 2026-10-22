@@ -649,15 +649,18 @@ impl Scan {
         })
     }
 
-    /// The segments compiling `plan` over `rows` under `mask` reads, each once, in id order.
+    /// The segments compiling `plan` over `rows` under `mask` reads, each once, in id order,
+    /// sharing `values` as the scan will, so a whole value it holds already lists no segment.
     /// Compiling does no IO, so the segments a stage will read are known before it starts.
     pub fn segments(
         session: &VortexSession,
         plan: &PlanRef,
         rows: Range<u64>,
         mask: &Mask,
+        values: &ValueCache,
     ) -> VortexResult<Vec<SegmentId>> {
         let mut core = Core::new(session.clone(), 0);
+        core.values = values.clone();
         core.compile(plan, rows, mask)?;
         let mut segments = core.segments;
         segments.sort_unstable();

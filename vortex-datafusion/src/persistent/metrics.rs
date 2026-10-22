@@ -159,6 +159,7 @@ fn metric_value_to_datafusion(name: &str, metric: &MetricValue) -> Vec<Datafusio
         MetricValue::Timer(timer) => {
             let mut res = Vec::new();
             res.push(df_counter(format!("{name}_count"), timer.count()));
+            res.push(df_timer(format!("{name}_total"), timer.total()));
 
             if !timer.is_empty() {
                 let max = timer.quantile(1.0).vortex_expect("must not be empty");

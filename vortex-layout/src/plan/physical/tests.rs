@@ -61,6 +61,7 @@ use crate::layouts::zoned::zone_map::ZoneMap;
 use crate::plan::physical::Filter;
 use crate::plan::physical::LegacyStats;
 use crate::plan::physical::pipeline::Scan;
+use crate::plan::physical::pipeline::ValueCache;
 use crate::segments::SegmentId;
 use crate::test::SESSION;
 
@@ -1338,7 +1339,13 @@ fn data_expression_strips_zoned_to_its_data() -> VortexResult<()> {
 
     let identity = optimize(source)?;
     assert!(identity.is::<Filter>());
-    let segments = Scan::segments(&SESSION, &identity, 0..5, &Mask::new_true(5))?;
+    let segments = Scan::segments(
+        &SESSION,
+        &identity,
+        0..5,
+        &Mask::new_true(5),
+        &ValueCache::default(),
+    )?;
     assert_eq!(segments, vec![SegmentId::from(0)]);
     Ok(())
 }

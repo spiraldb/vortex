@@ -161,8 +161,13 @@ impl Planner for PrunePlanner {
         for chunk in &self.ahead {
             let len = usize::try_from(chunk.end - chunk.start).unwrap_or(usize::MAX);
             let mask = Mask::new_true(len);
-            let predicates =
-                segments_read(session, filter.predicates.iter(), chunk.clone(), &mask)?;
+            let predicates = segments_read(
+                session,
+                filter.predicates.iter(),
+                chunk.clone(),
+                &mask,
+                &self.scan.values,
+            )?;
             hint(
                 locations,
                 &mut self.next_hint,
@@ -176,6 +181,7 @@ impl Planner for PrunePlanner {
                 std::iter::once(&self.scan.projection),
                 chunk.clone(),
                 &mask,
+                &self.scan.values,
             )?);
         }
         for projection in &projections {

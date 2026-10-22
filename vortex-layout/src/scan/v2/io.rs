@@ -77,10 +77,11 @@ impl IoService for SegmentScanIo {
     }
 }
 
-/// Reads a session speculated: started reads, shared by every session that fetches the segment
-/// for as long as the service lives, since a chunk straddling two partitions or two chunks is
-/// fetched by both; and requests announced for coalescing and never polled, which the first
-/// fetch turns into a shared started read.
+/// Reads a session speculated or prefetched: started reads, shared by every session that
+/// fetches the segment for as long as the service lives, since a planner reads ahead for chunks
+/// that run on sessions of their own and a chunk straddling two partitions is fetched by both;
+/// and requests announced for coalescing and never polled, which the first fetch turns into a
+/// shared started read.
 #[derive(Default)]
 struct Speculated {
     started: HashMap<SegmentId, Prefetched>,
@@ -103,7 +104,7 @@ pub(super) struct SegmentIoSource {
     ranges: SegmentRanges,
     reads: Mutex<FuturesUnordered<BoxFuture<'static, Completion>>>,
     ready: Mutex<VecDeque<Completion>>,
-    /// Every read the session has started, by segment, shared by later fetches of the segment
+    /// Every read the session has fetched, by segment, shared by later fetches of the segment
     /// until the session is cleared.
     prefetched: Mutex<HashMap<SegmentId, Prefetched>>,
     /// Announced segments, requested and never polled.
@@ -204,11 +205,14 @@ impl IoSource for SegmentIoSource {
                 continue;
             }
             if request.intent == IoIntent::Prefetch {
-                prefetched.entry(segment).or_insert_with(|| {
-                    let read = self.read(segment);
-                    Self::start(&read);
-                    read
-                });
+                // A prefetch is for whichever session fetches the segment, like a speculated
+                // read: a planner reads ahead for chunks that may run on sessions of their own.
+                if prefetched.contains_key(&segment) {
+                    continue;
+                }
+                let read = self.read(segment);
+                Self::start(&read);
+                self.ahead.lock().started.entry(segment).or_insert(read);
                 continue;
             }
             // A segment stays with the session once read, so a later stage or morsel of the
@@ -543,6 +547,8 @@ mod tests {
         assert!(completion.result.is_ok());
         assert_eq!(segments.0.load(Ordering::Relaxed), 1);
 
+        // Clearing the session drops what its fetches retained; a prefetched read belongs
+        // to the service and is still shared.
         io.clear();
         io.submit(IoOwnerId(0), vec![request(IoIntent::Fetch, 3)])?;
         assert!(
@@ -551,7 +557,7 @@ mod tests {
                 .result
                 .is_ok()
         );
-        assert_eq!(segments.0.load(Ordering::Relaxed), 2);
+        assert_eq!(segments.0.load(Ordering::Relaxed), 1);
         Ok(())
     }
 
