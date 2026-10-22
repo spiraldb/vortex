@@ -60,7 +60,6 @@ use vortex::layout::scan::v2::ChunkPlanner;
 use vortex::layout::scan::v2::ChunkReads;
 use vortex::layout::scan::v2::FileAnnouncePlanner;
 use vortex::layout::scan::v2::PrunePlanner;
-use vortex::layout::scan::v2::ReadAheadPlanner;
 use vortex::layout::scan::v2::ScanBuilder as V2ScanBuilder;
 use vortex::layout::scan::v2::ScanCache;
 use vortex::layout::scan::v2::WeakScanCache;
@@ -214,6 +213,7 @@ impl FileOpener for VortexOpener {
         }
 
         Ok(async move {
+            let opened_at = std::time::Instant::now();
             // FilePruner now has all the logic to figure out if its worthwhile, and will return `None` if not.
             let mut file_pruner = file_pruning_predicate.and_then(|predicate| {
                 FilePruner::try_new(
@@ -565,14 +565,24 @@ impl FileOpener for VortexOpener {
                     .await
                     .map_err(|e| exec_datafusion_err!("Failed to plan Vortex scan: {e}"))?;
                 let scan = Arc::new(scan);
+                tracing::debug!(
+                    row_start = scan.rows().start,
+                    row_end = scan.rows().end,
+                    micros = u64::try_from(opened_at.elapsed().as_micros()).unwrap_or(u64::MAX),
+                    "v2 open prepared"
+                );
 
                 // The planners, composed: with a filter, its pruning plans first over the whole
                 // partition, continuing into the chunks of the rows they keep; without a
                 // filter, the chunks directly. A chunk plans its conjuncts, then its
                 // projection.
                 let driver = ScanDriver::new(handle, concurrency, has_output_ordering);
-                // Reads go ahead as far as chunks run beside each other.
-                let window = driver.in_flight();
+                tracing::debug!(
+                    row_start = scan.rows().start,
+                    row_end = scan.rows().end,
+                    micros = u64::try_from(opened_at.elapsed().as_micros()).unwrap_or(u64::MAX),
+                    "v2 open stream"
+                );
                 let chunks = {
                     let scan = Arc::clone(&scan);
                     move |kept: Option<Mask>, _: Vec<ChunkReads>| -> Box<dyn Planner> {
@@ -581,28 +591,14 @@ impl FileOpener for VortexOpener {
                         Box::new(ChunkPlanner::new(scan, rows, selection, kept))
                     }
                 };
-                let ahead = {
-                    let scan = Arc::clone(&scan);
-                    move |kept: Option<Mask>, reads: Vec<ChunkReads>| -> Box<dyn Planner> {
-                        let rows = scan.rows().clone();
-                        Box::new(ReadAheadPlanner::new(
-                            scan,
-                            rows,
-                            kept,
-                            window,
-                            reads,
-                            Box::new(chunks),
-                        ))
-                    }
-                };
                 let root = {
                     let scan = Arc::clone(&scan);
                     move || -> Box<dyn Planner> {
                         if scan.filter().is_some() {
                             let rows = scan.rows().clone();
-                            Box::new(PrunePlanner::new(scan, rows, window, Box::new(ahead)))
+                            Box::new(PrunePlanner::new(scan, rows, usize::MAX, Box::new(chunks)))
                         } else {
-                            ahead(None, Vec::new())
+                            chunks(None, Vec::new())
                         }
                     }
                 };

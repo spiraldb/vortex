@@ -60,7 +60,6 @@ use super::MAX_ROWS_PER_CHUNK;
 use super::PreparedScan;
 use super::PrunePlanner;
 use super::ROW_BLOCK_SIZE;
-use super::ReadAheadPlanner;
 use super::ScanBuilder;
 use super::ScanCache;
 use super::ScanFile;
@@ -210,27 +209,13 @@ fn compose(scan: &Arc<PreparedScan>, rows: Range<u64>) -> Box<dyn Planner> {
             Box::new(ChunkPlanner::new(scan, rows, selection, kept))
         }
     };
-    let ahead = {
-        let scan = Arc::clone(scan);
-        let rows = rows.clone();
-        move |kept: Option<Mask>, reads: Vec<ChunkReads>| -> Box<dyn Planner> {
-            Box::new(ReadAheadPlanner::new(
-                scan,
-                rows,
-                kept,
-                4,
-                reads,
-                Box::new(chunks),
-            ))
-        }
-    };
     let root = {
         let scan = Arc::clone(scan);
         move || -> Box<dyn Planner> {
             if scan.filter().is_some() {
-                Box::new(PrunePlanner::new(scan, rows, 4, Box::new(ahead)))
+                Box::new(PrunePlanner::new(scan, rows, usize::MAX, Box::new(chunks)))
             } else {
-                ahead(None, Vec::new())
+                chunks(None, Vec::new())
             }
         }
     };

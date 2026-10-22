@@ -114,8 +114,7 @@ impl PrunePlanner {
                 .and_then(|index| index.checked_shl(IDS_PER_PLAN))
                 .ok_or_else(|| vortex_err!("too many pruning plans to number their requests"))?;
             let adaptor =
-                ScanAdaptor::numbered_from(scan, Arc::clone(&self.scan.locations), first_id)
-                    .urgent();
+                ScanAdaptor::numbered_from(scan, Arc::clone(&self.scan.locations), first_id);
             self.active.push((adaptor, Vec::new()));
         }
         Ok(())
@@ -234,6 +233,11 @@ impl Planner for PrunePlanner {
         }
         if self.started.is_none() {
             self.started = Some(Instant::now());
+            tracing::debug!(
+                row_start = self.rows.start,
+                row_end = self.rows.end,
+                "v2 pruning started"
+            );
             self.start()?;
         }
         // Step every adaptor that can compute, publishing all their reads as one batch.

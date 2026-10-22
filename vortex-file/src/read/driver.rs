@@ -73,22 +73,11 @@ where
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let mut this = self.project();
 
-        // Apply the events already available before choosing work, a bounded number at a time.
-        // This gives coalescing visibility into registered neighbors without delaying emission
-        // for future events, and without holding the first read until every scan registering
-        // at once has been applied: what is left is applied on the next poll, which the wake
-        // below brings about. A polled request to be read on its own stops the draining at
-        // once, since it coalesces with nothing registered later.
-        let mut applied = 0;
-        let mut more = false;
+        // Apply all events already available before choosing work. This gives coalescing visibility
+        // into registered neighbors without delaying emission for future events.
         loop {
-            if applied >= MAX_EVENTS_PER_POLL || this.state.alone_polled {
-                more = true;
-                break;
-            }
             match this.events.as_mut().poll_next(cx) {
                 Poll::Ready(Some(event)) => {
-                    applied += 1;
                     this.state.on_event(event);
                 }
                 Poll::Ready(None) => {
@@ -99,10 +88,6 @@ where
                     break;
                 }
             }
-        }
-        this.state.alone_polled = false;
-        if more {
-            cx.waker().wake_by_ref();
         }
 
         // Emit a partial batch immediately so the downstream driver can fill free I/O slots.
@@ -127,9 +112,6 @@ where
     }
 }
 
-/// How many events one poll of the request stream applies before it dispatches what it has.
-const MAX_EVENTS_PER_POLL: usize = 256;
-
 /// The state of the I/O request stream.
 struct State {
     // Maintains the set of pending requests, ordered by insertion.
@@ -147,8 +129,6 @@ struct State {
     // Metrics for tracking I/O request patterns
     metrics: RequestMetrics,
     coalesced_buffer_alignment: Alignment,
-    /// Whether a request to be read on its own was polled since the last dispatch.
-    alone_polled: bool,
 }
 
 impl State {
@@ -159,7 +139,6 @@ impl State {
             requests_by_offset: BTreeSet::new(),
             metrics,
             coalesced_buffer_alignment,
-            alone_polled: false,
         }
     }
 
@@ -181,7 +160,6 @@ impl State {
                         self.requests_by_offset.remove(&(req.offset, req_id));
                         trace!(?req, "ReadRequest dropped before poll");
                     } else {
-                        self.alone_polled |= req.alone;
                         self.polled_requests.insert(req_id, req);
                     }
                 }
