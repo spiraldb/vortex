@@ -14,7 +14,12 @@ use arrow_schema::SchemaRef;
 use futures::FutureExt;
 use futures::StreamExt;
 use futures::future::BoxFuture;
-use parquet::arrow::AsyncArrowWriter;
+use parquet::arrow::ArrowWriter;
+use parquet::column::writer::ColumnCloseResult;
+use parquet::file::metadata::PageIndexPolicy;
+use parquet::file::metadata::ParquetMetaDataReader;
+use parquet::file::properties::WriterProperties;
+use parquet::file::writer::SerializedFileWriter;
 use tokio::fs::File as TokioFile;
 use tokio::sync::Semaphore;
 use tokio::sync::mpsc;
@@ -33,6 +38,7 @@ use vortex::array::ArrayRef;
 use vortex::array::stream::ArrayStreamAdapter;
 use vortex::error::VortexExpect;
 use vortex::file::WriteOptionsSessionExt;
+use vortex::utils::parallelism::get_available_parallelism;
 use vortex_arrow::ArrowSessionExt;
 
 use crate::CompactionStrategy;
@@ -190,14 +196,15 @@ fn generate_table_file(
                 of.to_string_lossy()
             );
 
-            let iter = create_batch_iterator(generator, &options)?;
+            let num_parts = table_num_parts(generator);
 
-            // Create generator and process batches in streaming fashion
-            let schema = iter.schema();
+            if matches!(write_format, Format::Parquet) {
+                return write_parquet_parts(generator, &options, num_parts, &path).await;
+            }
 
-            // Create writer based on format
+            let schema = create_batch_iterator(generator, &options, 1, 1)?.schema();
+
             let mut writer: Box<dyn FileWriter + Send> = match write_format {
-                Format::Parquet => Box::new(ParquetWriter::new(path, schema).await?),
                 Format::OnDiskVortex => Box::new(VortexWriter::new(
                     path,
                     schema,
@@ -211,6 +218,7 @@ fn generate_table_file(
                 _ => unreachable!(),
             };
 
+            let iter = create_batch_iterator(generator, &options, 1, 1)?;
             for batch in iter {
                 writer.write_batch(&batch?).await?;
             }
@@ -226,14 +234,106 @@ fn generate_table_file(
     Ok(future)
 }
 
-/// Create a batch iterator for one full table
+fn table_num_parts(generator: TableGenerator) -> usize {
+    match generator {
+        TableGenerator::Nation | TableGenerator::Region => 1,
+        _ => get_available_parallelism().unwrap_or(1),
+    }
+}
+
+async fn write_parquet_parts(
+    generator: TableGenerator,
+    options: &TpchGenOptions,
+    num_parts: usize,
+    output: &Path,
+) -> Result<()> {
+    let mut tasks = Vec::with_capacity(num_parts);
+    for part in 1..=num_parts {
+        let options = options.clone();
+        let part_path = output.with_extension(format!("part{part}"));
+        tasks.push(tokio::task::spawn_blocking(move || {
+            let iter = create_batch_iterator(generator, &options, part, num_parts)?;
+            let schema = iter.schema();
+            let props = parquet_writer_properties()
+                .set_max_row_group_row_count(Some(ROW_GROUP_SIZE))
+                .build();
+            let mut writer =
+                ArrowWriter::try_new(fs::File::create(&part_path)?, schema, Some(props))?;
+            for batch in iter {
+                writer.write(&batch?)?;
+            }
+            writer.close()?;
+            Ok::<_, anyhow::Error>(part_path)
+        }));
+    }
+
+    let mut part_paths = Vec::with_capacity(num_parts);
+    for task in tasks {
+        part_paths.push(task.await??);
+    }
+
+    let output = output.to_path_buf();
+    tokio::task::spawn_blocking(move || concat_parquet_parts(&part_paths, &output)).await?
+}
+
+fn concat_parquet_parts(parts: &[PathBuf], output: &Path) -> Result<()> {
+    let inputs = parts
+        .iter()
+        .map(|part| -> Result<_> {
+            let reader = fs::File::open(part)?;
+            let metadata = ParquetMetaDataReader::new()
+                .with_page_index_policy(PageIndexPolicy::Optional)
+                .parse_and_finish(&reader)?;
+            Ok((reader, metadata))
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let root_schema = inputs[0].1.file_metadata().schema_descr().root_schema_ptr();
+    let mut writer = SerializedFileWriter::new(
+        fs::File::create(output)?,
+        root_schema,
+        Arc::new(WriterProperties::builder().build()),
+    )?;
+
+    for (input, metadata) in &inputs {
+        let column_indexes = metadata.column_index();
+        let offset_indexes = metadata.offset_index();
+        for (rg_idx, rg) in metadata.row_groups().iter().enumerate() {
+            let rg_column_indexes = column_indexes.and_then(|ci| ci.get(rg_idx));
+            let rg_offset_indexes = offset_indexes.and_then(|oi| oi.get(rg_idx));
+            let mut rg_out = writer.next_row_group()?;
+            for (col_idx, column) in rg.columns().iter().enumerate() {
+                let result = ColumnCloseResult {
+                    bytes_written: column.compressed_size() as _,
+                    rows_written: rg.num_rows() as _,
+                    metadata: column.clone(),
+                    bloom_filter: None,
+                    column_index: rg_column_indexes.and_then(|row| row.get(col_idx)).cloned(),
+                    offset_index: rg_offset_indexes.and_then(|row| row.get(col_idx)).cloned(),
+                };
+                rg_out.append_column(input, result)?;
+            }
+            rg_out.close()?;
+        }
+    }
+    writer.close()?;
+
+    for part in parts {
+        fs::remove_file(part)?;
+    }
+
+    Ok(())
+}
+
 fn create_batch_iterator(
     generator: TableGenerator,
     options: &TpchGenOptions,
+    part: usize,
+    num_parts: usize,
 ) -> Result<Box<dyn RecordBatchReader + Send>> {
     let scale_factor = options.scale_factor.parse::<f64>()?;
-    let part = 1;
-    let num_parts = 1;
+    let part = i32::try_from(part)?;
+    let num_parts = i32::try_from(num_parts)?;
     let batch_size = options.batch_size;
 
     let iterator: Box<dyn RecordBatchReader + Send> = match generator {
@@ -295,34 +395,6 @@ fn create_batch_iterator(
 trait FileWriter {
     async fn write_batch(&mut self, batch: &RecordBatch) -> Result<()>;
     async fn finalize(self: Box<Self>) -> Result<()>;
-}
-
-/// Parquet writer for streaming TPC-H data
-struct ParquetWriter {
-    writer: AsyncArrowWriter<TokioFile>,
-}
-
-impl ParquetWriter {
-    async fn new(path: PathBuf, schema: SchemaRef) -> Result<Self> {
-        let file = TokioFile::create(&path).await?;
-        let props = parquet_writer_properties()
-            .set_max_row_group_row_count(Some(ROW_GROUP_SIZE))
-            .build();
-        let writer = AsyncArrowWriter::try_new(file, schema, Some(props))?;
-        Ok(Self { writer })
-    }
-}
-
-#[async_trait::async_trait]
-impl FileWriter for ParquetWriter {
-    async fn write_batch(&mut self, batch: &RecordBatch) -> Result<()> {
-        self.writer.write(batch).await.map_err(|e| anyhow!(e))
-    }
-
-    async fn finalize(self: Box<Self>) -> Result<()> {
-        self.writer.close().await?;
-        Ok(())
-    }
 }
 
 /// Vortex writer for streaming TPC-H data
