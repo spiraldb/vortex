@@ -2258,6 +2258,35 @@ async fn nested_struct_list_struct_roundtrip() -> VortexResult<()> {
 }
 
 #[tokio::test]
+async fn unreadable_file_statistics_do_not_fail_the_open() -> VortexResult<()> {
+    let array =
+        StructArray::from_fields(&[("numbers", buffer![1u32, 2, 3].into_array())])?.into_array();
+    let mut buf = ByteBufferMut::empty();
+    let summary = SESSION
+        .write_options()
+        .write(&mut buf, array.to_array_stream())
+        .await?;
+
+    // Overwrite the statistics segment so it no longer parses.
+    let stats = summary
+        .footer()
+        .statistics()
+        .vortex_expect("file statistics were written")
+        .write_flatbuffer_bytes()?;
+    let start = buf
+        .windows(stats.len())
+        .position(|window| window == stats.as_slice())
+        .vortex_expect("statistics segment is in the file");
+    buf[start..start + stats.len()].fill(0xff);
+
+    let file = SESSION.open_options().open_buffer(buf)?;
+    assert!(file.file_stats().is_none());
+    let actual = file.scan()?.into_array_stream()?.read_all().await?;
+    assert_arrays_eq!(actual, array, &mut SESSION.create_execution_ctx());
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_writer_with_statistics() -> VortexResult<()> {
     let array = StructArray::from_fields(&[("numbers", buffer![1u32, 2, 3, 4, 5].into_array())])?
         .into_array();
