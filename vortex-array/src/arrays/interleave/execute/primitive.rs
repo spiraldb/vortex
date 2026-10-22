@@ -14,7 +14,7 @@ use vortex_error::vortex_ensure_eq;
 
 use super::super::Interleave;
 use super::super::InterleaveArrayExt;
-use super::super::slots::InterleaveSlots;
+use super::super::InterleaveSlots;
 use crate::AnyColumnar;
 use crate::array::Array;
 use crate::arrays::Constant;

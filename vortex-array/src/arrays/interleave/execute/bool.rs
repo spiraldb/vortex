@@ -13,7 +13,7 @@ use vortex_error::vortex_ensure_eq;
 
 use super::super::Interleave;
 use super::super::InterleaveArrayExt;
-use super::super::slots::InterleaveSlots;
+use super::super::InterleaveSlots;
 use crate::array::Array;
 use crate::arrays::Bool;
 use crate::arrays::BoolArray;
