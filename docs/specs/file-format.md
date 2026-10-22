@@ -113,6 +113,11 @@ postscript remains in plaintext.
 - Keys are never stored in the file. The opaque `key_metadata` of an `EncryptionSpec` identifies the key to the
   reader, for example by a key management service key id.
 
+A writer can also encrypt individual fields with their own keys, each recorded as a separate `EncryptionSpec`. Every
+segment of such a field, including its zone maps and dictionaries, uses the field's key, while the footer and all other
+segments use the footer key. A reader that can only resolve the footer key can still read every other field, and the
+writer omits the file-level statistics of fields with their own key, since those live in the footer.
+
 Readers without encryption support fail to parse an encrypted file's footer.
 
 ## Reified File Example

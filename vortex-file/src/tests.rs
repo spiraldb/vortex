@@ -3010,6 +3010,7 @@ async fn repro_8166_binary_gt_all_ff_max() -> VortexResult<()> {
 }
 
 mod encryption {
+    use vortex_array::dtype::FieldPath;
     use vortex_error::vortex_bail;
 
     use super::*;
@@ -3211,6 +3212,158 @@ mod encryption {
             read_all(&file).await?,
             array()?,
             &mut SESSION.create_execution_ctx()
+        );
+        Ok(())
+    }
+
+    const COLUMN_KEY_METADATA: &[u8] = b"kms://keys/pii";
+
+    fn column_key() -> EncryptionKey {
+        EncryptionKey::new([7; KEY_LEN])
+    }
+
+    /// Resolves the footer key, and the column key only if `with_column_key`.
+    fn column_retriever(with_column_key: bool) -> Arc<dyn KeyRetriever> {
+        Arc::new(move |key_metadata: &[u8]| match key_metadata {
+            KEY_METADATA => Ok(key()),
+            COLUMN_KEY_METADATA if with_column_key => Ok(column_key()),
+            _ => vortex_bail!("access denied to key {key_metadata:?}"),
+        })
+    }
+
+    async fn write_column_encrypted(array: &ArrayRef) -> VortexResult<ByteBuffer> {
+        let mut buf = ByteBufferMut::empty();
+        SESSION
+            .write_options()
+            .with_encryption(EncryptionConfig::new(key(), KEY_METADATA))
+            .with_field_encryption(
+                FieldPath::from_name(SECRET_COLUMN),
+                "pii",
+                EncryptionConfig::new(column_key(), COLUMN_KEY_METADATA),
+            )
+            .write(&mut buf, array.to_array_stream())
+            .await?;
+        Ok(buf.freeze())
+    }
+
+    #[tokio::test]
+    async fn column_key_roundtrip() -> VortexResult<()> {
+        let array = array()?;
+        let bytes = write_column_encrypted(&array).await?;
+        assert!(!contains(&bytes, SECRET.as_bytes()));
+        assert!(!contains(&bytes, SECRET_COLUMN.as_bytes()));
+
+        let file = SESSION
+            .open_options()
+            .with_key_retriever(column_retriever(true))
+            .open_buffer(bytes)?;
+        let footer = file.footer();
+        let key_metadata: Vec<&[u8]> = footer
+            .encryption_specs()
+            .iter()
+            .map(|spec| spec.key_metadata())
+            .collect();
+        assert_eq!(
+            key_metadata,
+            [b"".as_slice(), KEY_METADATA, COLUMN_KEY_METADATA]
+        );
+
+        // Every segment of the secret column, and only those, uses the column key.
+        let layout = footer.layout();
+        // Slot 0 holds the struct validity, followed by the fields.
+        let secret_field = layout.slot(1)?.vortex_expect("secret column");
+        let mut secret_segments = Vec::new();
+        for segment in secret_field.depth_first_traversal() {
+            secret_segments.extend(segment?.segment_ids().iter().map(|id| **id as usize));
+        }
+        assert!(!secret_segments.is_empty());
+        for (index, segment) in footer.segment_map().iter().enumerate() {
+            let expected = if secret_segments.contains(&index) {
+                2
+            } else {
+                1
+            };
+            assert_eq!(segment.encryption, expected, "segment {index}");
+        }
+
+        // The footer key can decrypt file statistics, so the secret column has none.
+        let stats = footer.statistics().vortex_expect("file statistics");
+        assert!(stats.stats_sets()[0].is_empty());
+        assert!(!stats.stats_sets()[1].is_empty());
+
+        assert_arrays_eq!(
+            read_all(&file).await?,
+            array,
+            &mut SESSION.create_execution_ctx()
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn column_key_unavailable() -> VortexResult<()> {
+        let array = array()?;
+        let bytes = write_column_encrypted(&array).await?;
+        let file = SESSION
+            .open_options()
+            .with_key_retriever(column_retriever(false))
+            .open_buffer(bytes)?;
+
+        // Columns encrypted with the footer key remain readable.
+        let numbers = file
+            .scan()?
+            .with_projection(bind_scan_expr(&file, select(["numbers"], root())))
+            .into_array_stream()?
+            .read_all()
+            .await?;
+        let expected =
+            StructArray::from_fields(&[("numbers", buffer![1u32, 2, 3, 4].into_array())])?;
+        assert_arrays_eq!(numbers, expected, &mut SESSION.create_execution_ctx());
+
+        let err = file
+            .scan()?
+            .with_projection(bind_scan_expr(&file, select([SECRET_COLUMN], root())))
+            .into_array_stream()?
+            .read_all()
+            .await
+            .err()
+            .vortex_expect("reading the secret column without its key must fail");
+        assert!(err.to_string().contains("access denied"), "{err}");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn column_key_requires_footer_key() -> VortexResult<()> {
+        let err = SESSION
+            .write_options()
+            .with_field_encryption(
+                FieldPath::from_name(SECRET_COLUMN),
+                "pii",
+                EncryptionConfig::new(column_key(), COLUMN_KEY_METADATA),
+            )
+            .write(ByteBufferMut::empty(), array()?.to_array_stream())
+            .await
+            .err()
+            .vortex_expect("a column key without a footer key must fail");
+        assert!(err.to_string().contains("footer key"), "{err}");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn unregistered_key_name_fails() -> VortexResult<()> {
+        let strategy = crate::WriteStrategyBuilder::from_session(&SESSION)
+            .with_field_encryption(FieldPath::from_name(SECRET_COLUMN), "missing")
+            .build();
+        let err = SESSION
+            .write_options()
+            .with_strategy(strategy)
+            .with_encryption(EncryptionConfig::new(key(), KEY_METADATA))
+            .write(ByteBufferMut::empty(), array()?.to_array_stream())
+            .await
+            .err()
+            .vortex_expect("an unregistered key name must fail");
+        assert!(
+            err.to_string().contains("No encryption key named missing"),
+            "{err}"
         );
         Ok(())
     }

@@ -11,9 +11,12 @@ use vortex_buffer::Alignment;
 use vortex_buffer::ByteBuffer;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
+use vortex_layout::segments::EncryptionKeyName;
 use vortex_layout::segments::SegmentId;
 use vortex_layout::segments::SegmentSink;
+use vortex_layout::segments::SegmentWriteOptions;
 use vortex_layout::sequence::SequenceId;
+use vortex_utils::aliases::hash_map::HashMap;
 
 use crate::encryption::ENCRYPTION_OVERHEAD;
 use crate::encryption::SegmentCipher;
@@ -24,8 +27,11 @@ pub struct BufferedSegmentSink {
     buffers: kanal::AsyncSender<ByteBuffer>,
     byte_offset: AtomicU64,
     segment_specs: Mutex<Vec<SegmentSpec>>,
-    /// The cipher to encrypt segments with, and the index of its spec in the footer.
-    cipher: Option<(SegmentCipher, u16)>,
+    /// The cipher for segments that require no particular key, and the index of its spec in the
+    /// footer.
+    default_cipher: Option<(SegmentCipher, u16)>,
+    /// The ciphers for segments that require a named key, and the indices of their specs.
+    named_ciphers: HashMap<EncryptionKeyName, (SegmentCipher, u16)>,
 }
 
 impl BufferedSegmentSink {
@@ -34,13 +40,27 @@ impl BufferedSegmentSink {
             buffers: send,
             byte_offset: AtomicU64::new(byte_offset),
             segment_specs: Default::default(),
-            cipher: None,
+            default_cipher: None,
+            named_ciphers: HashMap::default(),
         }
     }
 
-    /// Encrypt every segment with `cipher`, whose spec is at `encryption` in the footer.
-    pub(crate) fn with_cipher(mut self, cipher: SegmentCipher, encryption: u16) -> Self {
-        self.cipher = Some((cipher, encryption));
+    /// Encrypt segments that require no particular key with `cipher`, whose spec is at
+    /// `encryption` in the footer.
+    pub(crate) fn with_default_cipher(mut self, cipher: SegmentCipher, encryption: u16) -> Self {
+        self.default_cipher = Some((cipher, encryption));
+        self
+    }
+
+    /// Encrypt segments that require the key `name` with `cipher`, whose spec is at `encryption`
+    /// in the footer.
+    pub(crate) fn with_named_cipher(
+        mut self,
+        name: EncryptionKeyName,
+        cipher: SegmentCipher,
+        encryption: u16,
+    ) -> Self {
+        self.named_ciphers.insert(name, (cipher, encryption));
         self
     }
 
@@ -55,9 +75,26 @@ impl BufferedSegmentSink {
 impl SegmentSink for BufferedSegmentSink {
     async fn write(
         &self,
-        mut sequence_id: SequenceId,
+        sequence_id: SequenceId,
         buffers: Vec<ByteBuffer>,
     ) -> VortexResult<SegmentId> {
+        self.write_with_options(sequence_id, buffers, SegmentWriteOptions::default())
+            .await
+    }
+
+    async fn write_with_options(
+        &self,
+        mut sequence_id: SequenceId,
+        buffers: Vec<ByteBuffer>,
+        options: SegmentWriteOptions,
+    ) -> VortexResult<SegmentId> {
+        let cipher = match &options.encryption {
+            None => self.default_cipher.as_ref(),
+            Some(name) => Some(self.named_ciphers.get(name).ok_or_else(|| {
+                vortex_err!("No encryption key named {name} was configured for the file")
+            })?),
+        };
+
         // We wait for all segment IDs before this one to be dropped. Then while we hold a strong
         // reference to this one, we essentially have an exclusive lock on the segment writer.
         sequence_id.collapse().await;
@@ -78,7 +115,7 @@ impl SegmentSink for BufferedSegmentSink {
                 .map(|buffer| buffer.alignment())
                 .unwrap_or_else(Alignment::none);
             let plaintext_length = buffers.iter().map(|buffer| buffer.len()).sum::<usize>();
-            let (length, encryption) = match &self.cipher {
+            let (length, encryption) = match cipher {
                 None => (plaintext_length, 0),
                 Some((_, encryption)) => (plaintext_length + ENCRYPTION_OVERHEAD, *encryption),
             };
@@ -109,7 +146,7 @@ impl SegmentSink for BufferedSegmentSink {
 
         // The sequence id still orders this write after all earlier ones, so the encryption can
         // happen outside the lock.
-        let buffers = match &self.cipher {
+        let buffers = match cipher {
             None => buffers,
             Some((cipher, _)) => {
                 let alignment = buffers

@@ -20,12 +20,15 @@ use vortex_array::ArrayContext;
 use vortex_array::ArrayId;
 use vortex_array::ArrayRef;
 use vortex_array::dtype::DType;
+use vortex_array::dtype::Field;
+use vortex_array::dtype::FieldName;
 use vortex_array::dtype::FieldPath;
 use vortex_array::expr::stats::Stat;
 use vortex_array::iter::ArrayIterator;
 use vortex_array::iter::ArrayIteratorExt;
 use vortex_array::session::ArraySessionExt;
 use vortex_array::stats::PRUNING_STATS;
+use vortex_array::stats::StatsSet;
 use vortex_array::stream::ArrayStream;
 use vortex_array::stream::ArrayStreamAdapter;
 use vortex_array::stream::ArrayStreamExt;
@@ -49,6 +52,7 @@ use vortex_layout::LayoutContext;
 use vortex_layout::LayoutStrategy;
 use vortex_layout::LayoutWriterContext;
 use vortex_layout::layouts::file_stats::accumulate_stats;
+use vortex_layout::segments::EncryptionKeyName;
 use vortex_layout::sequence::SequenceId;
 use vortex_layout::sequence::SequentialStreamAdapter;
 use vortex_layout::sequence::SequentialStreamExt;
@@ -89,6 +93,8 @@ pub struct VortexWriteOptions {
     file_statistics: Vec<Stat>,
     metadata: HashMap<String, ByteBuffer>,
     encryption: Option<EncryptionConfig>,
+    encryption_keys: HashMap<EncryptionKeyName, EncryptionConfig>,
+    field_encryption: Vec<(FieldPath, EncryptionKeyName)>,
 }
 
 /// Extension trait for constructing [`VortexWriteOptions`] from a session.
@@ -113,6 +119,8 @@ impl VortexWriteOptions {
             max_variable_length_statistics_size: 64,
             metadata: HashMap::default(),
             encryption: None,
+            encryption_keys: HashMap::default(),
+            field_encryption: Vec::new(),
         }
     }
 
@@ -167,6 +175,45 @@ impl VortexWriteOptions {
     pub fn with_encryption(mut self, encryption: EncryptionConfig) -> Self {
         self.encryption = Some(encryption);
         self
+    }
+
+    /// Register a named encryption key, for segments that a layout strategy requires to be
+    /// encrypted with it, e.g. through [`WriteStrategyBuilder::with_field_encryption`].
+    ///
+    /// Named keys require [`with_encryption`](Self::with_encryption), whose key encrypts the
+    /// footer, so that the footer does not reveal the schema and statistics of encrypted fields.
+    /// A reader that can only resolve the footer key can still read every field not encrypted
+    /// with a named key.
+    pub fn with_encryption_key(
+        mut self,
+        name: impl Into<EncryptionKeyName>,
+        encryption: EncryptionConfig,
+    ) -> Self {
+        self.encryption_keys.insert(name.into(), encryption);
+        self
+    }
+
+    /// Encrypt a field with its own key when writing with the default layout strategy.
+    ///
+    /// This registers `encryption` under `name`, as [`with_encryption_key`] does, and encrypts the
+    /// field with it, as [`WriteStrategyBuilder::with_field_encryption`] does. The file-level
+    /// statistics of the field's top-level field are omitted, since the footer is only encrypted
+    /// with the footer key.
+    ///
+    /// With a custom strategy configure the field on the strategy instead; the write fails
+    /// otherwise. File-level statistics are then kept for every field, so restrict them with
+    /// [`with_file_statistics`](Self::with_file_statistics) if needed.
+    ///
+    /// [`with_encryption_key`]: Self::with_encryption_key
+    pub fn with_field_encryption(
+        mut self,
+        field: impl Into<FieldPath>,
+        name: impl Into<EncryptionKeyName>,
+        encryption: EncryptionConfig,
+    ) -> Self {
+        let name = name.into();
+        self.field_encryption.push((field.into(), name.clone()));
+        self.with_encryption_key(name, encryption)
     }
 
     /// Configure which statistics to compute at the file level.
@@ -250,6 +297,18 @@ impl VortexWriteOptions {
         stream: SendableArrayStream,
     ) -> VortexResult<WriteSummary> {
         validate_metadata_segments(&self.metadata)?;
+        if !self.encryption_keys.is_empty() && self.encryption.is_none() {
+            vortex_bail!(
+                "Named encryption keys require a footer key, configured with \
+                 VortexWriteOptions::with_encryption"
+            );
+        }
+        if !self.field_encryption.is_empty() && self.strategy.is_some() {
+            vortex_bail!(
+                "VortexWriteOptions::with_field_encryption applies to the default strategy only; \
+                 configure field encryption on the custom strategy instead"
+            );
+        }
 
         let enforce_editions = !self.disable_editions;
         // The array context is built here, rather than when the options were constructed, so that
@@ -262,6 +321,15 @@ impl VortexWriteOptions {
         } else {
             ctx
         };
+        // The top-level fields that contain a field encrypted with its own key.
+        let encrypted_fields: Vec<FieldName> = self
+            .field_encryption
+            .iter()
+            .filter_map(|(path, _)| match path.parts().first() {
+                Some(Field::Name(name)) => Some(name.clone()),
+                _ => None,
+            })
+            .collect();
         let strategy = match self.strategy {
             Some(strategy) => strategy,
             None => {
@@ -269,9 +337,12 @@ impl VortexWriteOptions {
                 if !enforce_editions {
                     compressor = compressor.disable_editions();
                 }
-                WriteStrategyBuilder::from_session(&self.session)
-                    .with_btrblocks_builder(compressor)
-                    .build()
+                let mut builder = WriteStrategyBuilder::from_session(&self.session)
+                    .with_btrblocks_builder(compressor);
+                for (field, name) in self.field_encryption {
+                    builder = builder.with_field_encryption(field, name);
+                }
+                builder.build()
             }
         };
         let dtype = stream.dtype().clone();
@@ -308,9 +379,23 @@ impl VortexWriteOptions {
             .map(EncryptionConfig::file_cipher)
             .transpose()?;
         let mut segments = BufferedSegmentSink::new(send, position);
+        // Index 0 of the footer's encryption specs is reserved for plaintext segments.
+        let mut encryption_specs = vec![EncryptionSpec::plaintext()];
         if let Some(cipher) = &cipher {
-            // Index 0 of the footer's encryption specs is reserved for plaintext segments.
-            segments = segments.with_cipher(cipher.clone(), 1);
+            segments = segments.with_default_cipher(cipher.clone(), 1);
+            encryption_specs.push(cipher.spec().clone());
+        }
+        // Sort the named keys so that the footer is deterministic.
+        for (name, config) in self
+            .encryption_keys
+            .iter()
+            .sorted_unstable_by(|(left, _), (right, _)| left.cmp(right))
+        {
+            let named = config.file_cipher()?;
+            let index = u16::try_from(encryption_specs.len())
+                .map_err(|_| vortex_err!("Too many encryption keys"))?;
+            encryption_specs.push(named.spec().clone());
+            segments = segments.with_named_cipher(name.clone(), named, index);
         }
         let segments = Arc::new(segments);
 
@@ -348,10 +433,17 @@ impl VortexWriteOptions {
         let statistics = if self.file_statistics.is_empty() {
             None
         } else {
-            Some(FileStatistics::new_with_dtype(
-                file_stats.stats_sets().into(),
-                &dtype,
-            ))
+            let mut stats_sets = file_stats.stats_sets();
+            // File statistics live in the footer, which readers without a field's key can decrypt,
+            // so drop the statistics of fields encrypted with their own key.
+            if let Some(fields) = dtype.as_struct_fields_opt() {
+                for name in &encrypted_fields {
+                    if let Some(index) = fields.find(name) {
+                        stats_sets[index] = StatsSet::default();
+                    }
+                }
+            }
+            Some(FileStatistics::new_with_dtype(stats_sets.into(), &dtype))
         };
         let mut footer = Footer::new(
             Arc::clone(&layout),
@@ -359,11 +451,8 @@ impl VortexWriteOptions {
             statistics,
             ReadContext::new(ctx.array_ctx().to_ids()),
         );
-        if let Some(cipher) = &cipher {
-            footer = footer.with_encryption_specs(Arc::from([
-                EncryptionSpec::plaintext(),
-                cipher.spec().clone(),
-            ]))?;
+        if cipher.is_some() {
+            footer = footer.with_encryption_specs(encryption_specs.into())?;
         }
 
         // Emit the footer buffers and EOF.
