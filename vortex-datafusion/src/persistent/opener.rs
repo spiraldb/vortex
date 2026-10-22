@@ -470,8 +470,16 @@ impl FileOpener for VortexOpener {
                 if byte_range.start == 0 && byte_range.end == file.object_meta.size {
                     // Full-file scans already cover every natural split.
                 } else if let Some(rows) = partition_rows {
-                    // Planning already cut the partition's rows from the cached footer, so the
-                    // V2 scan needs no layout walk to find them.
+                    // Planning cut the partition's rows from the cached footer on the writer's
+                    // row grid. Snapped to the file's natural splits, no chunk is decoded by
+                    // two partitions.
+                    let natural_splits = natural_splits_for_file(
+                        natural_splits.as_ref(),
+                        &file.object_meta.location,
+                        &scan_builder,
+                        file.object_meta.size,
+                    )?;
+                    let rows = natural_splits.snap(rows);
                     if rows.is_empty() {
                         return Ok(stream::empty().boxed());
                     }
@@ -670,6 +678,18 @@ pub(crate) struct NaturalSplits {
 }
 
 impl NaturalSplits {
+    /// Moves each end of `rows` up to the first split boundary at or after it. Partitions that
+    /// tile the file's rows still tile them, each boundary now a split boundary; a partition
+    /// with no boundary of its own comes back empty.
+    fn snap(&self, rows: Range<u64>) -> Range<u64> {
+        let up = |row: u64| {
+            let index = self.row_boundaries.partition_point(|&boundary| boundary < row);
+            self.row_boundaries.get(index).copied().unwrap_or(row)
+        };
+        let start = up(rows.start);
+        start..up(rows.end).max(start)
+    }
+
     fn new(row_boundaries: Arc<[u64]>, total_size: u64) -> Self {
         let row_count = row_boundaries.last().copied().unwrap_or_default();
         let assignment_bytes = if row_count == 0 {
@@ -968,6 +988,23 @@ mod tests {
         NaturalSplits::new(row_boundaries.into(), total_size)
     }
 
+    /// Partition rows cut on the writer's row grid snap up to split boundaries, so partitions
+    /// that tile the file still tile it on splits, and one that owns no split is empty.
+    #[rstest]
+    #[case(0..3000, 0..4000)]
+    #[case(3000..6000, 4000..8000)]
+    #[case(6000..9000, 8000..10000)]
+    #[case(4000..7000, 4000..8000)]
+    #[case(4100..4200, 8000..8000)]
+    #[case(9000..10000, 10000..10000)]
+    fn partition_rows_snap_to_natural_splits(
+        #[case] rows: Range<u64>,
+        #[case] snapped: Range<u64>,
+    ) {
+        let splits = NaturalSplits::new(vec![0, 4000, 8000, 10000].into(), 100);
+        assert_eq!(splits.snap(rows), snapped);
+    }
+
     #[rstest]
     #[case(0..3, 10, vec![0..2, 2..5, 5..10], Some(0..2))]
     #[case(3..7, 10, vec![0..2, 2..5, 5..10], Some(2..5))]
@@ -1121,16 +1158,17 @@ mod tests {
         assert_eq!(rows[0].end, rows[1].start);
         assert_eq!(rows[1].end, rows[2].start);
 
+        // The opener snaps each partition's rows to the file's natural splits, so together the
+        // partitions still read every row once, whatever the planning-time cut was.
         let mut data = Vec::new();
-        for (file, rows) in files.iter().zip(&rows) {
-            let batches = opener
-                .open(file.clone())?
-                .await?
-                .try_collect::<Vec<_>>()
-                .await?;
-            let read: usize = batches.iter().map(|rb| rb.num_rows()).sum();
-            assert_eq!(read as u64, rows.end - rows.start);
-            data.extend(batches);
+        for file in &files {
+            data.extend(
+                opener
+                    .open(file.clone())?
+                    .await?
+                    .try_collect::<Vec<_>>()
+                    .await?,
+            );
         }
         assert_eq!(concat_batches(&batch.schema(), &data)?, batch);
         Ok(())
