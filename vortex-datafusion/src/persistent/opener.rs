@@ -57,6 +57,7 @@ use vortex::io::session::RuntimeSessionExt;
 use vortex::layout::LayoutReader;
 use vortex::layout::scan::scan_builder::ScanBuilder;
 use vortex::layout::scan::v2::ChunkPlanner;
+use vortex::layout::scan::v2::ChunkReads;
 use vortex::layout::scan::v2::FileAnnouncePlanner;
 use vortex::layout::scan::v2::PrunePlanner;
 use vortex::layout::scan::v2::ReadAheadPlanner;
@@ -574,7 +575,7 @@ impl FileOpener for VortexOpener {
                 let window = driver.in_flight();
                 let chunks = {
                     let scan = Arc::clone(&scan);
-                    move |kept: Option<Mask>| -> Box<dyn Planner> {
+                    move |kept: Option<Mask>, _: Vec<ChunkReads>| -> Box<dyn Planner> {
                         let rows = scan.rows().clone();
                         let selection = scan.selection().clone();
                         Box::new(ChunkPlanner::new(scan, rows, selection, kept))
@@ -582,13 +583,14 @@ impl FileOpener for VortexOpener {
                 };
                 let ahead = {
                     let scan = Arc::clone(&scan);
-                    move |kept: Option<Mask>| -> Box<dyn Planner> {
+                    move |kept: Option<Mask>, reads: Vec<ChunkReads>| -> Box<dyn Planner> {
                         let rows = scan.rows().clone();
                         Box::new(ReadAheadPlanner::new(
                             scan,
                             rows,
                             kept,
                             window,
+                            reads,
                             Box::new(chunks),
                         ))
                     }
@@ -600,7 +602,7 @@ impl FileOpener for VortexOpener {
                             let rows = scan.rows().clone();
                             Box::new(PrunePlanner::new(scan, rows, window, Box::new(ahead)))
                         } else {
-                            ahead(None)
+                            ahead(None, Vec::new())
                         }
                     }
                 };

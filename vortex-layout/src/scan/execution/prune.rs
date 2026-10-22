@@ -26,17 +26,17 @@ use vortex_scan::selection::Selection;
 use super::PreparedScan;
 use super::adaptor::AdaptorStep;
 use super::adaptor::ScanAdaptor;
-use super::chunk::row_chunks;
 use super::filter::hint;
 use super::filter::piece_mask;
-use super::filter::segments_read;
+use super::read_ahead::ChunkReads;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::pipeline::Scan;
 use crate::plan::physical::pipeline::Split;
 
 /// The planner a prune planner continues into, given the rows pruning kept, or `None` when
-/// no pruning plan ran.
-pub type PruneNext = Box<dyn FnOnce(Option<Mask>) -> Box<dyn Planner> + Send>;
+/// no pruning plan ran, and the reads of every chunk, listed while the zone maps were read, or
+/// none when they were not.
+pub type PruneNext = Box<dyn FnOnce(Option<Mask>, Vec<ChunkReads>) -> Box<dyn Planner> + Send>;
 
 /// Request ids of the adaptor of pruning plan `i` start at `i << IDS_PER_PLAN`, far below the
 /// hint ids counting down from `u32::MAX`.
@@ -58,9 +58,10 @@ pub struct PrunePlanner {
     started: Option<Instant>,
     /// Ids for hints, counting down from `u32::MAX` so they never meet an adaptor's fetch ids.
     next_hint: u32,
-    /// The first chunks of `rows`, whose reads are speculated on the first ask: as many as the
-    /// read-ahead window, since the planner after this one reads ahead from there.
-    ahead: Vec<Range<u64>>,
+    /// How many chunks' reads are started while the zone maps are read; the rest are announced.
+    window: usize,
+    /// Every chunk's reads, listed on the first ask while the zone maps are read, and handed on.
+    chunk_reads: Vec<ChunkReads>,
     speculated: bool,
     done: bool,
 }
@@ -74,8 +75,7 @@ impl PrunePlanner {
             .iter()
             .flat_map(|filter| filter.pruning().cloned())
             .collect();
-        let mut ahead = row_chunks(rows.clone(), scan.chunk_rows);
-        ahead.truncate(window.max(1));
+
         Self {
             scan,
             rows,
@@ -84,7 +84,8 @@ impl PrunePlanner {
             active: Vec::new(),
             started: None,
             next_hint: u32::MAX,
-            ahead,
+            window: window.max(1),
+            chunk_reads: Vec::new(),
             speculated: false,
             done: false,
         }
@@ -113,7 +114,8 @@ impl PrunePlanner {
                 .and_then(|index| index.checked_shl(IDS_PER_PLAN))
                 .ok_or_else(|| vortex_err!("too many pruning plans to number their requests"))?;
             let adaptor =
-                ScanAdaptor::numbered_from(scan, Arc::clone(&self.scan.locations), first_id);
+                ScanAdaptor::numbered_from(scan, Arc::clone(&self.scan.locations), first_id)
+                    .urgent();
             self.active.push((adaptor, Vec::new()));
         }
         Ok(())
@@ -141,59 +143,49 @@ impl IoConsumer for PrunePlanner {
 }
 
 impl Planner for PrunePlanner {
-    /// While the zone maps are read, the first window of chunks' predicate columns and
-    /// projection columns are read too, the predicates first in the batch, registered together
-    /// so they coalesce. The projection is read, not only announced: in a file whose columns are
-    /// written in bursts a wide projection column shares no read with the narrow predicate
-    /// beside it, and a read only announced is not started until the projection fetches it,
-    /// after the filter, with nothing to overlap. The planner after this one reads ahead from
-    /// the window on, over the rows pruning kept. A scan selecting rows by index reads nothing
-    /// it was not asked for.
+    /// While the zone maps are read, every chunk's reads are listed, the first window's
+    /// started, predicates first, and the rest announced, so the window's reads go out
+    /// together and every later read coalesces with them. The projection is read, not only
+    /// announced: in a file whose columns are written in bursts a wide projection column
+    /// shares no read with the narrow predicate beside it, and a read only announced is not
+    /// started until the projection fetches it, after the filter, with nothing to overlap. The
+    /// planner after this one gets the list and the kept rows, and starts the rest for the
+    /// chunks that survive. A scan selecting rows by index reads nothing it was not asked for.
     fn speculate(&mut self) -> VortexResult<Option<IoBatch>> {
         if !matches!(self.scan.selection, Selection::All) || self.speculated {
             return Ok(None);
         }
-        let Some(filter) = &self.scan.filter else {
-            return Ok(None);
-        };
         self.speculated = true;
-        let session = &self.scan.session;
+        self.chunk_reads = ChunkReads::list(&self.scan, self.rows.clone())?;
         let locations = &self.scan.locations;
         let mut batch = Vec::new();
         let mut seen = FxHashSet::default();
-        let mut projections = Vec::new();
-        for chunk in &self.ahead {
-            let len = usize::try_from(chunk.end - chunk.start).unwrap_or(usize::MAX);
-            let mask = Mask::new_true(len);
-            let predicates = segments_read(
-                session,
-                filter.predicates.iter(),
-                chunk.clone(),
-                &mask,
-                &self.scan.values,
-            )?;
+        for (index, chunk) in self.chunk_reads.iter().enumerate() {
+            let intent = if index < self.window {
+                IoIntent::Prefetch
+            } else {
+                IoIntent::Announce
+            };
             hint(
                 locations,
                 &mut self.next_hint,
-                IoIntent::Prefetch,
-                &predicates,
+                intent,
+                &chunk.predicates,
                 &mut seen,
                 &mut batch,
             );
-            projections.push(segments_read(
-                session,
-                std::iter::once(&self.scan.projection),
-                chunk.clone(),
-                &mask,
-                &self.scan.values,
-            )?);
         }
-        for projection in &projections {
+        for (index, chunk) in self.chunk_reads.iter().enumerate() {
+            let intent = if index < self.window {
+                IoIntent::Prefetch
+            } else {
+                IoIntent::Announce
+            };
             hint(
                 locations,
                 &mut self.next_hint,
-                IoIntent::Prefetch,
-                projection,
+                intent,
+                &chunk.projection,
                 &mut seen,
                 &mut batch,
             );
@@ -309,7 +301,7 @@ impl Planner for PrunePlanner {
                 file_ordinal: 0,
                 rows: self.rows.clone(),
             },
-            next(kept),
+            next(kept, std::mem::take(&mut self.chunk_reads)),
         ))
     }
 }

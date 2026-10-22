@@ -37,8 +37,8 @@ impl<S: SegmentSource> SharedSegmentSource<S> {
     }
 }
 
-impl<S: SegmentSource> SegmentSource for SharedSegmentSource<S> {
-    fn request(&self, id: SegmentId) -> SegmentFuture {
+impl<S: SegmentSource> SharedSegmentSource<S> {
+    fn request_shared(&self, id: SegmentId, alone: bool) -> SegmentFuture {
         loop {
             match self.in_flight.entry(id) {
                 Entry::Occupied(e) => {
@@ -50,7 +50,12 @@ impl<S: SegmentSource> SegmentSource for SharedSegmentSource<S> {
                     }
                 }
                 Entry::Vacant(e) => {
-                    let future = self.inner.request(id).map_err(Arc::new).boxed().shared();
+                    let request = if alone {
+                        self.inner.request_alone(id)
+                    } else {
+                        self.inner.request(id)
+                    };
+                    let future = request.map_err(Arc::new).boxed().shared();
                     e.insert(
                         future
                             .downgrade()
@@ -60,6 +65,16 @@ impl<S: SegmentSource> SegmentSource for SharedSegmentSource<S> {
                 }
             }
         }
+    }
+}
+
+impl<S: SegmentSource> SegmentSource for SharedSegmentSource<S> {
+    fn request(&self, id: SegmentId) -> SegmentFuture {
+        self.request_shared(id, false)
+    }
+
+    fn request_alone(&self, id: SegmentId) -> SegmentFuture {
+        self.request_shared(id, true)
     }
 }
 

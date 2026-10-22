@@ -97,6 +97,8 @@ pub struct ReadRequest {
     pub(crate) offset: u64,
     pub(crate) length: usize,
     pub(crate) alignment: Alignment,
+    /// Read on its own, coalesced only with other requests read on their own.
+    pub(crate) alone: bool,
     pub(crate) callback: oneshot::Sender<VortexResult<BufferHandle>>,
 }
 

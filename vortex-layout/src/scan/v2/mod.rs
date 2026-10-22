@@ -46,6 +46,7 @@ use crate::plan::physical::lower;
 use crate::plan::physical::optimize;
 use crate::plan::physical::plan_row_idx_expression;
 pub use crate::scan::execution::ChunkPlanner;
+pub use crate::scan::execution::ChunkReads;
 use crate::scan::execution::FILTERED_ROWS_PER_CHUNK;
 pub use crate::scan::execution::FileAnnouncePlanner;
 pub use crate::scan::execution::FilterPlans;

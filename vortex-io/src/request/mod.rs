@@ -62,6 +62,10 @@ pub enum IoIntent {
     Prefetch,
     /// Coalescing interest only; never starts an independent read.
     Announce,
+    /// Required bytes delivered like a fetch, read on their own as soon as they are published:
+    /// coalesced only with other urgent requests, never held for data reads nearby. For the
+    /// small reads everything else waits on, such as a filter's zone maps.
+    Urgent,
 }
 
 /// One request: a consumer-chosen id and the target it names.

@@ -268,6 +268,16 @@ impl SegmentCacheSourceAdapter {
 
 impl SegmentSource for SegmentCacheSourceAdapter {
     fn request(&self, id: SegmentId) -> SegmentFuture {
+        self.request_cached(id, false)
+    }
+
+    fn request_alone(&self, id: SegmentId) -> SegmentFuture {
+        self.request_cached(id, true)
+    }
+}
+
+impl SegmentCacheSourceAdapter {
+    fn request_cached(&self, id: SegmentId, alone: bool) -> SegmentFuture {
         let cache = Arc::clone(&self.cache);
         let source = Arc::clone(&self.source);
         let mut request = async move {
@@ -275,7 +285,11 @@ impl SegmentSource for SegmentCacheSourceAdapter {
                 tracing::debug!("Resolved segment {} from cache", id);
                 return Ok(BufferHandle::new_host(segment));
             }
-            let delegate = source.request(id);
+            let delegate = if alone {
+                source.request_alone(id)
+            } else {
+                source.request(id)
+            };
             // The eager poll may register a miss for coalescing, but only the caller may
             // demand the read. Pending lookups reaching this point later must wake that caller.
             let mut defer = true;

@@ -47,6 +47,7 @@ pub use self::metrics::ScanMetrics;
 use self::projection::ProjectionPlanner;
 pub use self::prune::PruneNext;
 pub use self::prune::PrunePlanner;
+pub use self::read_ahead::ChunkReads;
 pub use self::read_ahead::ReadAheadPlanner;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::pipeline::ValueCache;

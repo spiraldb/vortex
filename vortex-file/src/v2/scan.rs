@@ -25,6 +25,7 @@ use vortex_error::VortexResult;
 use vortex_io::request::IoSource;
 use vortex_io::runtime::Handle;
 use vortex_layout::scan::v2::ChunkPlanner;
+use vortex_layout::scan::v2::ChunkReads;
 use vortex_layout::scan::v2::FileAnnouncePlanner;
 use vortex_layout::scan::v2::PreparedScan;
 use vortex_layout::scan::v2::PrunePlanner;
@@ -126,7 +127,7 @@ fn compose(scan: &Arc<PreparedScan>, window: usize) -> Box<dyn Planner> {
     let chunks = {
         let scan = Arc::clone(scan);
         let rows = rows.clone();
-        move |kept: Option<Mask>| -> Box<dyn Planner> {
+        move |kept: Option<Mask>, _: Vec<ChunkReads>| -> Box<dyn Planner> {
             let selection = scan.selection().clone();
             Box::new(ChunkPlanner::new(scan, rows, selection, kept))
         }
@@ -134,12 +135,13 @@ fn compose(scan: &Arc<PreparedScan>, window: usize) -> Box<dyn Planner> {
     let ahead = {
         let scan = Arc::clone(scan);
         let rows = rows.clone();
-        move |kept: Option<Mask>| -> Box<dyn Planner> {
+        move |kept: Option<Mask>, reads: Vec<ChunkReads>| -> Box<dyn Planner> {
             Box::new(ReadAheadPlanner::new(
                 scan,
                 rows,
                 kept,
                 window,
+                reads,
                 Box::new(chunks),
             ))
         }
@@ -150,7 +152,7 @@ fn compose(scan: &Arc<PreparedScan>, window: usize) -> Box<dyn Planner> {
             if scan.filter().is_some() {
                 Box::new(PrunePlanner::new(scan, rows, window, Box::new(ahead)))
             } else {
-                ahead(None)
+                ahead(None, Vec::new())
             }
         }
     };

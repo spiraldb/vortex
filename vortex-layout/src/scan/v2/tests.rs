@@ -54,6 +54,7 @@ use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
 
 use super::ChunkPlanner;
+use super::ChunkReads;
 use super::FileAnnouncePlanner;
 use super::MAX_ROWS_PER_CHUNK;
 use super::PreparedScan;
@@ -204,7 +205,7 @@ fn compose(scan: &Arc<PreparedScan>, rows: Range<u64>) -> Box<dyn Planner> {
     let chunks = {
         let scan = Arc::clone(scan);
         let rows = rows.clone();
-        move |kept: Option<Mask>| -> Box<dyn Planner> {
+        move |kept: Option<Mask>, _: Vec<ChunkReads>| -> Box<dyn Planner> {
             let selection = scan.selection().clone();
             Box::new(ChunkPlanner::new(scan, rows, selection, kept))
         }
@@ -212,8 +213,15 @@ fn compose(scan: &Arc<PreparedScan>, rows: Range<u64>) -> Box<dyn Planner> {
     let ahead = {
         let scan = Arc::clone(scan);
         let rows = rows.clone();
-        move |kept: Option<Mask>| -> Box<dyn Planner> {
-            Box::new(ReadAheadPlanner::new(scan, rows, kept, 4, Box::new(chunks)))
+        move |kept: Option<Mask>, reads: Vec<ChunkReads>| -> Box<dyn Planner> {
+            Box::new(ReadAheadPlanner::new(
+                scan,
+                rows,
+                kept,
+                4,
+                reads,
+                Box::new(chunks),
+            ))
         }
     };
     let root = {
@@ -222,7 +230,7 @@ fn compose(scan: &Arc<PreparedScan>, rows: Range<u64>) -> Box<dyn Planner> {
             if scan.filter().is_some() {
                 Box::new(PrunePlanner::new(scan, rows, 4, Box::new(ahead)))
             } else {
-                ahead(None)
+                ahead(None, Vec::new())
             }
         }
     };
@@ -738,8 +746,9 @@ async fn scan_cache_reuses_values_between_scans(
         );
         reads.push(counted.reads() - before);
     }
-    // Every values chunk and the one selected codes chunk; a scan sharing the cache then reads
-    // nothing, since the reads started for the file stay with it.
+    // Every values chunk and the one selected codes chunk. The file's segments are announced
+    // once per cache and a fetch of one becomes the file's read, so a scan sharing the cache
+    // reads nothing again.
     assert_eq!(reads, vec![4, second_scan_reads]);
     Ok(())
 }
@@ -796,7 +805,8 @@ async fn repeated_projections_reuse_their_values() -> VortexResult<()> {
         );
         reads.push(counted.reads() - before);
     }
-    // The reads started for the file stay with its cache, so later scans read nothing.
+    // The file's segments are announced once and a fetch of one becomes the file's read, so
+    // later scans sharing the cache read nothing again.
     assert_eq!(reads, vec![4, 0, 0]);
     Ok(())
 }
@@ -886,6 +896,7 @@ async fn shared_cache_prunes_zones_once() -> VortexResult<()> {
     // The first scan reads the zone map and, speculated while it waits for it, the whole of
     // the first chunk ahead: the file is one chunk of four segments. The second scan reads
     // only the segment pruning keeps.
-    assert_eq!(reads, vec![5, 1]);
+    // The second scan finds every read it needs with the file.
+    assert_eq!(reads, vec![5, 0]);
     Ok(())
 }
