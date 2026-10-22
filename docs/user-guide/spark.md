@@ -78,6 +78,8 @@ When pointed at a directory, the connector discovers all `.vortex` files and cre
 partition per file.
 
 Column pruning is pushed down — only the columns referenced by the query are read from the file.
+Pruning applies to top-level columns: a query that uses one field of a struct, array or map
+column reads the whole column.
 
 Filter pushdown is also supported. Comparisons (`=`, `<>`, `>`, `>=`, `<`, `<=`), `IS NULL`,
 `IS NOT NULL`, `IN`, the string predicates `STARTS_WITH`, `ENDS_WITH` and `CONTAINS`, and a bare

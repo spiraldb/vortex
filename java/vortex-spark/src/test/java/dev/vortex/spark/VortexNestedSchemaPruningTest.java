@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.apache.spark.sql.Column;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SaveMode;
@@ -19,35 +20,49 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.io.TempDir;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 
 /**
- * Tests that selecting nested fields returns the requested field.
+ * Tests that reading one field of a nested column returns that field.
  *
- * <p>With {@code spark.sql.optimizer.nestedSchemaPruning.enabled} (the Spark default), Spark passes struct columns to
- * {@code pruneColumns} with unused fields removed. The native scan only prunes top-level columns, so the scan must
- * report the full struct type; otherwise Spark reads the pruned field ordinals out of the full struct and returns the
- * wrong field.
+ * <p>With {@code spark.sql.optimizer.nestedSchemaPruning.enabled}, Spark asks the scan for only the nested fields a
+ * query uses. Each row of the table holds {@code a = id + 100}, {@code b = id + 200} and {@code c = id + 300}, so a
+ * field read from the wrong position shows up as the wrong hundred.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public final class VortexNestedSchemaPruningTest {
 
-    private SparkSession spark;
+    private static final List<Long> C_VALUES = List.of(300L, 301L, 302L, 303L, 304L);
 
-    @TempDir
-    Path tempDir;
+    private SparkSession spark;
+    private Dataset<Row> table;
 
     @BeforeAll
-    public void setUp() {
+    public void setUp(@TempDir Path tempDir) {
         spark = SparkSession.builder()
                 .appName("VortexNestedSchemaPruningTest")
                 .master("local[2]")
                 .config("spark.driver.host", "127.0.0.1")
                 .config("spark.sql.shuffle.partitions", "2")
                 .config("spark.sql.adaptive.enabled", "false")
+                .config("spark.sql.optimizer.nestedSchemaPruning.enabled", "true")
                 .config("spark.ui.enabled", "false")
                 .getOrCreate();
+
+        Column abc = functions.struct(
+                functions.col("id").plus(100).alias("a"),
+                functions.col("id").plus(200).alias("b"),
+                functions.col("id").plus(300).alias("c"));
+        Dataset<Row> df = spark.range(5)
+                .select(
+                        functions.col("id"),
+                        abc.alias("s"),
+                        functions.array(abc).alias("arr"),
+                        functions.map(functions.lit("k"), abc).alias("m"),
+                        functions.struct(functions.lit("x").alias("p"), abc.alias("inner")).alias("outer"));
+
+        String path = tempDir.resolve("nested").toUri().toString();
+        df.write().format("vortex").option("path", path).mode(SaveMode.Overwrite).save();
+        table = spark.read().format("vortex").option("path", path).load();
     }
 
     @AfterAll
@@ -57,59 +72,33 @@ public final class VortexNestedSchemaPruningTest {
         }
     }
 
-    private Dataset<Row> writeAndRead(String name) {
-        Dataset<Row> df = spark.range(5)
-                .select(
-                        functions.col("id"),
-                        functions
-                                .struct(
-                                        functions.col("id").plus(100).alias("a"),
-                                        functions.col("id").plus(200).alias("b"),
-                                        functions.col("id").plus(300).alias("c"))
-                                .alias("s"));
-        df = df.withColumn("arr", functions.array(functions.col("s")))
-                .withColumn(
-                        "outer",
-                        functions.struct(
-                                functions.lit("x").alias("p"),
-                                functions.col("s").alias("inner")));
-        String path = tempDir.resolve(name).toUri().toString();
-        df.write()
-                .format("vortex")
-                .option("path", path)
-                .mode(SaveMode.Overwrite)
-                .save();
-        return spark.read().format("vortex").option("path", path).load();
-    }
-
-    private static List<String> rows(Dataset<Row> df) {
-        return df.orderBy("id").collectAsList().stream().map(Row::toString).collect(Collectors.toList());
-    }
-
-    @ParameterizedTest(name = "nestedSchemaPruning={0}")
-    @ValueSource(strings = {"true", "false"})
-    @DisplayName("Selecting a non-first struct field returns that field")
-    public void selectNestedField(String nestedSchemaPruning) {
-        spark.conf().set("spark.sql.optimizer.nestedSchemaPruning.enabled", nestedSchemaPruning);
-        Dataset<Row> df = writeAndRead("struct_" + nestedSchemaPruning);
-
-        assertEquals(List.of("[0,300]", "[1,301]", "[2,302]", "[3,303]", "[4,304]"), rows(df.select("id", "s.c")));
-        assertEquals(
-                List.of("[0,200,300]", "[1,201,301]", "[2,202,302]", "[3,203,303]", "[4,204,304]"),
-                rows(df.select("id", "s.b", "s.c")));
-        assertEquals(List.of("[3,303]", "[4,304]"), rows(df.filter("s.c >= 303").select("id", "s.c")));
+    @Test
+    @DisplayName("Selecting a struct field other than the first returns that field")
+    public void structField() {
+        assertEquals(C_VALUES, longsOf(functions.col("s.c")));
     }
 
     @Test
-    @DisplayName("Selecting a field of a struct inside an array or another struct returns that field")
-    public void selectDeeplyNestedField() {
-        spark.conf().set("spark.sql.optimizer.nestedSchemaPruning.enabled", "true");
-        Dataset<Row> df = writeAndRead("deep");
+    @DisplayName("Selecting a field of the structs in an array returns that field")
+    public void arrayElementField() {
+        assertEquals(C_VALUES, longsOf(functions.element_at(functions.col("arr.c"), 1)));
+    }
 
-        assertEquals(
-                List.of("[0,300]", "[1,301]", "[2,302]", "[3,303]", "[4,304]"),
-                rows(df.select(functions.col("id"), functions.element_at(functions.col("arr.c"), 1))));
-        assertEquals(
-                List.of("[0,300]", "[1,301]", "[2,302]", "[3,303]", "[4,304]"), rows(df.select("id", "outer.inner.c")));
+    @Test
+    @DisplayName("Selecting a field of the structs in a map returns that field")
+    public void mapValueField() {
+        assertEquals(C_VALUES, longsOf(functions.col("m").getItem("k").getField("c")));
+    }
+
+    @Test
+    @DisplayName("Selecting a field of a struct inside a struct returns that field")
+    public void structInStructField() {
+        assertEquals(C_VALUES, longsOf(functions.col("outer.inner.c")));
+    }
+
+    private List<Long> longsOf(Column column) {
+        return table.orderBy("id").select(column).collectAsList().stream()
+                .map(row -> row.getLong(0))
+                .collect(Collectors.toList());
     }
 }

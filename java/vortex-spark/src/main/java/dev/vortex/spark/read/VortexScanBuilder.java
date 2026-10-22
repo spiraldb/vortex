@@ -15,7 +15,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.apache.spark.sql.connector.catalog.CatalogV2Util;
 import org.apache.spark.sql.connector.catalog.Column;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.Transform;
@@ -131,23 +130,20 @@ public final class VortexScanBuilder
     /**
      * Prunes the columns to only include those specified in the required schema.
      *
-     * <p>Only top-level pruning is supported. With {@code spark.sql.optimizer.nestedSchemaPruning.enabled} (the
-     * default), Spark may pass a struct column with some of its fields removed, but the native scan projects by
-     * top-level name and returns the whole struct. Each required column therefore keeps its full table type, so
-     * {@link VortexScan#readSchema()} matches the data the reader returns and Spark binds nested fields by the right
-     * ordinal. Reporting the pruned type instead makes Spark read the wrong struct field.
+     * <p>Spark may also prune fields inside struct, array and map columns, but the native scan only projects
+     * top-level columns and returns each one whole. Required columns therefore keep their table type, so that
+     * {@link VortexScan#readSchema()} describes the data the reader returns.
      *
      * @param requiredSchema the schema specifying which columns are required
      */
     @Override
     public void pruneColumns(StructType requiredSchema) {
-        Map<String, Column> byName = new HashMap<>();
-        for (Column column : tableColumns) {
-            byName.put(column.name(), column);
-        }
+        Set<String> required = Set.copyOf(Arrays.asList(requiredSchema.fieldNames()));
         readColumns.clear();
-        for (Column required : CatalogV2Util.structTypeToV2Columns(requiredSchema)) {
-            readColumns.add(byName.getOrDefault(required.name(), required));
+        for (Column column : tableColumns) {
+            if (required.contains(column.name())) {
+                readColumns.add(column);
+            }
         }
     }
 
