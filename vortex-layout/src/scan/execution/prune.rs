@@ -136,10 +136,11 @@ impl IoConsumer for PrunePlanner {
 }
 
 impl Planner for PrunePlanner {
-    /// While the zone maps are read, the predicate columns of the next chunk are read too,
-    /// as its filter planner will fetch them once pruning keeps it. One chunk per ask, so the
-    /// reads ahead follow how long the zone maps take. A scan selecting rows by index reads
-    /// nothing it was not asked for.
+    /// While the zone maps are read, the next chunk's predicate columns are read too and its
+    /// projection announced, the batch its filter planner publishes once pruning keeps it, so
+    /// the chunk's reads coalesce as they would have. One chunk per ask, so the reads ahead
+    /// follow how long the zone maps take. A scan selecting rows by index reads nothing it was
+    /// not asked for.
     fn speculate(&mut self) -> VortexResult<Option<IoBatch>> {
         if !matches!(self.scan.selection, Selection::All) {
             return Ok(None);
@@ -151,19 +152,31 @@ impl Planner for PrunePlanner {
             return Ok(None);
         };
         let len = usize::try_from(chunk.end - chunk.start).unwrap_or(usize::MAX);
-        let segments = segments_read(
-            &self.scan.session,
-            filter.predicates.iter(),
+        let mask = Mask::new_true(len);
+        let session = &self.scan.session;
+        let predicates = segments_read(session, filter.predicates.iter(), chunk.clone(), &mask)?;
+        let projection = segments_read(
+            session,
+            std::iter::once(&self.scan.projection),
             chunk.clone(),
-            &Mask::new_true(len),
+            &mask,
         )?;
         let mut batch = Vec::new();
         let mut seen = FxHashSet::default();
+        let locations = &self.scan.locations;
         hint(
-            &self.scan.locations,
+            locations,
             &mut self.next_hint,
             IoIntent::Prefetch,
-            &segments,
+            &predicates,
+            &mut seen,
+            &mut batch,
+        );
+        hint(
+            locations,
+            &mut self.next_hint,
+            IoIntent::Announce,
+            &projection,
             &mut seen,
             &mut batch,
         );

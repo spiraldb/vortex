@@ -77,8 +77,15 @@ impl IoService for SegmentScanIo {
     }
 }
 
-/// Speculated reads, by segment, until a session's fetch takes them.
-type Ahead = Arc<Mutex<HashMap<SegmentId, Prefetched>>>;
+/// Reads a session speculated, until a session's fetch or prefetch takes them: started reads,
+/// and requests announced for coalescing and never polled.
+#[derive(Default)]
+struct Speculated {
+    started: HashMap<SegmentId, Prefetched>,
+    announced: HashMap<SegmentId, SegmentFuture>,
+}
+
+type Ahead = Arc<Mutex<Speculated>>;
 
 /// Serves a split's range requests from a segment source, without blocking.
 ///
@@ -107,11 +114,7 @@ pub(super) struct SegmentIoSource {
 type Prefetched = Shared<BoxFuture<'static, Result<BufferHandle, Arc<VortexError>>>>;
 
 impl SegmentIoSource {
-    pub(super) fn new(
-        segments: Arc<dyn SegmentSource>,
-        ranges: SegmentRanges,
-        ahead: Ahead,
-    ) -> Self {
+    fn new(segments: Arc<dyn SegmentSource>, ranges: SegmentRanges, ahead: Ahead) -> Self {
         Self {
             segments,
             ranges,
@@ -136,15 +139,18 @@ impl SegmentIoSource {
             .ok_or_else(|| vortex_err!("No segment at bytes {offset}+{len}"))
     }
 
-    /// The read of `segment`: one speculated for it, else one announced, else a new request.
+    /// The read of `segment`: one speculated for it, else one announced by this session or
+    /// speculatively, else a new request.
     fn read(&self, segment: SegmentId) -> Prefetched {
-        if let Some(read) = self.ahead.lock().remove(&segment) {
+        let mut ahead = self.ahead.lock();
+        if let Some(read) = ahead.started.remove(&segment) {
             return read;
         }
         self.announced
             .lock()
             .get_mut(&segment)
             .and_then(VecDeque::pop_front)
+            .or_else(|| ahead.announced.remove(&segment))
             .unwrap_or_else(|| self.segments.request(segment))
             .map_err(Arc::new)
             .boxed()
@@ -217,8 +223,9 @@ impl IoSource for SegmentIoSource {
         Ok(())
     }
 
-    /// Starts every read of the batch for whichever session fetches it first. A session that
-    /// has the segment already, or speculated it before, starts nothing.
+    /// Starts every prefetch of the batch, and requests every announcement without polling
+    /// it, for whichever session fetches the segment first. A session that has the segment
+    /// already, or speculated it before, requests nothing.
     fn speculate(&self, _owner: IoOwnerId, batch: IoBatch) -> VortexResult<()> {
         let prefetched = self.prefetched.lock();
         let mut ahead = self.ahead.lock();
@@ -227,22 +234,30 @@ impl IoSource for SegmentIoSource {
                 vortex_bail!("a speculated read is never delivered, so it cannot be a fetch");
             }
             let segment = self.segment(&request)?;
-            if prefetched.contains_key(&segment) {
+            if prefetched.contains_key(&segment) || ahead.started.contains_key(&segment) {
                 continue;
             }
-            ahead.entry(segment).or_insert_with(|| {
-                let read = self
+            if request.intent == IoIntent::Announce {
+                ahead
                     .announced
-                    .lock()
-                    .get_mut(&segment)
-                    .and_then(VecDeque::pop_front)
-                    .unwrap_or_else(|| self.segments.request(segment))
-                    .map_err(Arc::new)
-                    .boxed()
-                    .shared();
-                Self::start(&read);
-                read
-            });
+                    .entry(segment)
+                    .or_insert_with(|| self.segments.request(segment));
+                continue;
+            }
+            let announced = ahead.announced.remove(&segment);
+            let read = announced
+                .or_else(|| {
+                    self.announced
+                        .lock()
+                        .get_mut(&segment)
+                        .and_then(VecDeque::pop_front)
+                })
+                .unwrap_or_else(|| self.segments.request(segment))
+                .map_err(Arc::new)
+                .boxed()
+                .shared();
+            Self::start(&read);
+            ahead.started.insert(segment, read);
         }
         Ok(())
     }
@@ -435,6 +450,18 @@ mod tests {
                 .speculate(IoOwnerId(0), vec![request(IoIntent::Fetch, 5)])
                 .is_err(),
             "a speculated fetch is refused"
+        );
+
+        // An announcement is requested once, never polled, and taken by the first fetch.
+        let late = service.session();
+        planner.speculate(IoOwnerId(0), vec![request(IoIntent::Announce, 6)])?;
+        planner.speculate(IoOwnerId(0), vec![request(IoIntent::Announce, 7)])?;
+        assert_eq!(segments.0.load(Ordering::Relaxed), 3, "requested for coalescing");
+        late.submit(IoOwnerId(3), vec![request(IoIntent::Fetch, 8)])?;
+        assert_eq!(
+            segments.0.load(Ordering::Relaxed),
+            3,
+            "the fetch took the announcement"
         );
         Ok(())
     }
