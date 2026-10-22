@@ -235,6 +235,19 @@ extensions_options! {
         /// with `SET vortex.scan_concurrency = <n>`, or per table with
         /// `OPTIONS(scan_concurrency '<n>')`.
         pub scan_concurrency: Option<usize>, default = None
+        /// Run each partition's V2 scan on the partition's own task, with this many splits
+        /// reading ahead of the one being decoded, instead of running every split as a task
+        /// of its own.
+        ///
+        /// Leave as `None` to run the splits as tasks. Override per session with
+        /// `SET vortex.scan_v2_lookahead = <n>`, or per table with
+        /// `OPTIONS(scan_v2_lookahead '<n>')`.
+        pub scan_v2_lookahead: Option<usize>, default = None
+        /// Map local files into memory for V2 scans, so every segment is a slice of the map.
+        ///
+        /// Enabled by default. When disabled, a local file's segments are read with positional
+        /// reads on the thread running the scan. Files on object stores are unaffected.
+        pub scan_v2_mmap: bool, default = true
     }
 }
 

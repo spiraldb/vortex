@@ -47,6 +47,17 @@ pub trait VortexReaderFactory: Debug + Send + Sync + 'static {
     ) -> BoxFuture<'static, DFResult<Option<ByteBuffer>>> {
         futures::future::ready(Ok(None)).boxed()
     }
+
+    /// Opens `file` for positional reads when it is a local file, else `None`.
+    ///
+    /// A V2 scan that does not map local files reads the file's segments through it, on the
+    /// thread running the scan.
+    fn open_local_file(
+        &self,
+        _file: &PartitionedFile,
+    ) -> BoxFuture<'static, DFResult<Option<std::fs::File>>> {
+        futures::future::ready(Ok(None)).boxed()
+    }
 }
 
 /// Default [`VortexReaderFactory`] backed by DataFusion's [`ObjectStore`].
@@ -113,6 +124,25 @@ impl VortexReaderFactory for DefaultVortexReaderFactory {
             // would fault on access, as it would for any reader of a memory-mapped file.
             let map = unsafe { Mmap::map(&file) }?;
             Ok((map.len() as u64 == size).then(|| ByteBuffer::from(map)))
+        }
+        .boxed()
+    }
+
+    fn open_local_file(
+        &self,
+        file: &PartitionedFile,
+    ) -> BoxFuture<'static, DFResult<Option<std::fs::File>>> {
+        let store = Arc::clone(&self.object_store);
+        let path = file.path().clone();
+        async move {
+            let options = GetOptions {
+                head: true,
+                ..Default::default()
+            };
+            match store.get_opts(&path, options).await?.payload {
+                GetResultPayload::File(file, _) => Ok(Some(file)),
+                _ => Ok(None),
+            }
         }
         .boxed()
     }

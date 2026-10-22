@@ -16,6 +16,7 @@
 //! Full-file projections use smaller 8,192-row multiples when serialized bytes per row are high.
 
 mod cache;
+mod driver;
 mod io;
 mod split;
 #[cfg(test)]
@@ -61,7 +62,10 @@ use crate::scan::execution::ScanPlans;
 pub use crate::scan::execution::SegmentLocation;
 use crate::scan::execution::plan_selection;
 use crate::scan::v2::cache::Planned;
+use crate::scan::v2::driver::InlineScan;
 use crate::scan::v2::io::FileBytesSource;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::scan::v2::io::LocalFileSource;
 use crate::scan::v2::io::SegmentScanIo;
 use crate::scan::v2::split::SplitPlan;
 use crate::segments::SegmentSource;
@@ -119,6 +123,33 @@ impl ScanFile {
         self.segments = Arc::new(FileBytesSource::try_new(bytes, &self.locations)?);
         Ok(self)
     }
+
+    /// Reads every segment from `file`, a local file, with a positional read on the thread that
+    /// first polls its request.
+    ///
+    /// A split's reads then complete as they are requested, on the thread running the split,
+    /// so it never waits and no read runs on another thread. An announced segment is never
+    /// read.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn with_local_file(mut self, file: std::fs::File) -> Self {
+        self.segments = Arc::new(LocalFileSource::new(file, &self.locations));
+        self
+    }
+}
+
+/// How a scan runs its splits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Executor {
+    /// Every split runs as a task of its own on the session's runtime, and the scan decodes
+    /// ahead of its consumer by the builder's concurrency.
+    Spawned,
+    /// The splits run on the thread that polls the stream, `lookahead` of them at a time, with
+    /// the reads of the later ones in flight while the first decodes. No task is spawned, so
+    /// a partition's scan runs on its consumer's task and holds no more than the lookahead.
+    Inline {
+        /// The number of splits admitted at once. At least one.
+        lookahead: usize,
+    },
 }
 
 /// Builds a projection scan on the planner-driven V2 executor.
@@ -136,6 +167,7 @@ pub struct ScanBuilder<A = ArrayRef> {
     row_range: Option<Range<u64>>,
     selection: Selection,
     concurrency: usize,
+    executor: Executor,
     map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
     row_offset: u64,
     plan_cache: Option<PlanCache>,
@@ -155,6 +187,7 @@ impl ScanBuilder<ArrayRef> {
             row_range: None,
             selection: Selection::default(),
             concurrency: 2,
+            executor: Executor::Spawned,
             map_fn: Arc::new(Ok),
             row_offset: 0,
             plan_cache: None,
@@ -253,6 +286,12 @@ impl<A: 'static + Send> ScanBuilder<A> {
         self
     }
 
+    /// Sets how the scan runs its splits. Defaults to [`Executor::Spawned`].
+    pub fn with_executor(mut self, executor: Executor) -> Self {
+        self.executor = executor;
+        self
+    }
+
     /// Maps each output batch on its split's task.
     pub fn map<B: 'static>(
         self,
@@ -270,6 +309,7 @@ impl<A: 'static + Send> ScanBuilder<A> {
             row_range: self.row_range,
             selection: self.selection,
             concurrency: self.concurrency,
+            executor: self.executor,
             row_offset: self.row_offset,
             plan_cache: self.plan_cache,
             map_fn: Arc::new(move |array| old_map_fn(array).and_then(&map_fn)),
@@ -302,6 +342,7 @@ struct PreparedScan<A: 'static + Send> {
     map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
     ordered: bool,
     concurrency: usize,
+    executor: Executor,
 }
 
 impl<A: 'static + Send> PreparedScan<A> {
@@ -367,6 +408,7 @@ impl<A: 'static + Send> PreparedScan<A> {
             map_fn: builder.map_fn,
             ordered: builder.ordered,
             concurrency: builder.concurrency,
+            executor: builder.executor,
         })
     }
 
@@ -388,12 +430,14 @@ impl<A: 'static + Send> PreparedScan<A> {
             .collect()
     }
 
-    /// Runs every split as a task on the session's runtime and yields their mapped batches.
+    /// Runs the splits as the executor says and yields their mapped batches.
     ///
-    /// The scan decodes ahead of its consumer by up to `concurrency` × 65,536 rows per worker
-    /// thread, and always by at least one split: eight 65,536-row splits, or one filtered
-    /// split of 1,048,576 rows, with `concurrency` 2 on four threads. Batches are yielded in
-    /// row order when the scan is ordered.
+    /// A spawned scan runs every split as a task on the session's runtime and decodes ahead of
+    /// its consumer by up to `concurrency` × 65,536 rows per worker thread, and always by at
+    /// least one split: eight 65,536-row splits, or one filtered split of 1,048,576 rows, with
+    /// `concurrency` 2 on four threads. An inline scan runs its splits on the polling thread
+    /// with its lookahead of them admitted at once. Batches are yielded in row order when the
+    /// scan is ordered.
     fn execute_stream(self) -> VortexResult<BoxStream<'static, VortexResult<A>>> {
         let rows_ahead =
             self.concurrency * get_available_parallelism().unwrap_or(1) * MAX_ROWS_PER_CHUNK;
@@ -401,6 +445,9 @@ impl<A: 'static + Send> PreparedScan<A> {
         let split_plans = self.split_plans();
         let io = self.io;
         let map_fn = self.map_fn;
+        if let Executor::Inline { lookahead } = self.executor {
+            return Ok(InlineScan::new(split_plans, io, map_fn, lookahead, self.ordered).boxed());
+        }
         let split_rows = split_plans
             .iter()
             .map(|split| {

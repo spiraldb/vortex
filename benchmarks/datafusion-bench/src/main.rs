@@ -124,6 +124,14 @@ struct Args {
     #[arg(long, action = clap::ArgAction::Set)]
     scan_v2: Option<bool>,
 
+    /// Run each partition's V2 scan inline on its task, with this many splits reading ahead.
+    #[arg(long)]
+    scan_v2_lookahead: Option<usize>,
+
+    /// Map local files into memory for V2 scans (defaults to true).
+    #[arg(long, action = clap::ArgAction::Set)]
+    scan_v2_mmap: Option<bool>,
+
     #[arg(long = "opt", value_delimiter = ',', value_parser = value_parser!(Opt))]
     options: Vec<Opt>,
 }
@@ -140,6 +148,8 @@ async fn main() -> anyhow::Result<()> {
         matches!(args.benchmark, BenchmarkArg::TpcH)
             && !std::env::var("VORTEX_SCAN_V2").is_ok_and(|v| v == "0")
     });
+    let scan_v2_lookahead = args.scan_v2_lookahead;
+    let scan_v2_mmap = args.scan_v2_mmap.unwrap_or(true);
 
     set_join_set_tracer(get_static_tracer())?;
     setup_logging_and_tracing(args.verbose, args.tracing)?;
@@ -199,7 +209,15 @@ async fn main() -> anyhow::Result<()> {
                         session.sql(&sql).await?.collect().await?;
                     }
                     datafusion_bench::make_object_store(&session, benchmark.data_url())?;
-                    register_benchmark_tables(&session, benchmark, format, scan_v2).await?;
+                    register_benchmark_tables(
+                        &session,
+                        benchmark,
+                        format,
+                        scan_v2,
+                        scan_v2_lookahead,
+                        scan_v2_mmap,
+                    )
+                    .await?;
                     Ok((session, format))
                 }
             },
@@ -264,13 +282,16 @@ async fn register_benchmark_tables<B: Benchmark + ?Sized>(
     benchmark: &B,
     format: Format,
     scan_v2: bool,
+    scan_v2_lookahead: Option<usize>,
+    scan_v2_mmap: bool,
 ) -> anyhow::Result<()> {
     if !scan_v2 && use_scan_api() && matches!(format, Format::OnDiskVortex | Format::VortexCompact)
     {
         register_v2_tables(session, benchmark, format).await
     } else {
         let benchmark_base = benchmark.data_url().join(&format!("{}/", format.name()))?;
-        let file_format = format_to_df_format(format, scan_v2)?;
+        let file_format =
+            format_to_df_format(format, scan_v2, scan_v2_lookahead, scan_v2_mmap)?;
 
         for table in benchmark.table_specs().iter() {
             let pattern = benchmark.pattern(table.name, format);

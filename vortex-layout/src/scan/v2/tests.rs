@@ -54,6 +54,7 @@ use vortex_mask::Mask;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
 
+use super::Executor;
 use super::MAX_ROWS_PER_CHUNK;
 use super::PreparedScan;
 use super::ProjectedFilter;
@@ -285,11 +286,13 @@ async fn filter_matches_v1(
     #[values(Strategy::Flat, Strategy::Table, Strategy::ZonedTable)] strategy: Strategy,
     #[case] filter: Expression,
     #[values(false, true)] sparse: bool,
+    #[values(Executor::Spawned, Executor::Inline { lookahead: 2 })] executor: Executor,
 ) -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, strategy.get().as_ref()).await?;
     assert_same_as_v1(&session, || {
         let mut scan = builder(&session, &segments, &layout)?
+            .with_executor(executor)
             .with_projection(
                 pack([("strings", get_item("strings", root()))], false.into())
                     .bind(layout.dtype())?,
@@ -328,11 +331,12 @@ async fn matches_v1(
     #[values(Strategy::Flat, Strategy::Table, Strategy::ZonedTable)] strategy: Strategy,
     #[case] row_range: Option<Range<u64>>,
     #[case] rows: Option<&'static [u64]>,
+    #[values(Executor::Spawned, Executor::Inline { lookahead: 1 })] executor: Executor,
 ) -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, strategy.get().as_ref()).await?;
     assert_same_as_v1(&session, || {
-        let mut builder = builder(&session, &segments, &layout)?;
+        let mut builder = builder(&session, &segments, &layout)?.with_executor(executor);
         if let Some(row_range) = row_range.clone() {
             builder = builder.with_row_range(row_range);
         }
