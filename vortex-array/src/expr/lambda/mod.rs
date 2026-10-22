@@ -107,9 +107,8 @@ impl Lambda {
     /// Bind the body to these parameter dtypes: `@x` becomes `$.x`, a field of the struct of the
     /// lambda's inputs.
     ///
-    /// A function that takes a lambda calls this from its
-    /// [`bind_options`](crate::scalar_fn::ScalarFnVTable::bind_options), so the body is bound once,
-    /// with the node that holds it, and never while the function runs.
+    /// A function that takes a lambda calls this from its `bind_options`, so the body is bound
+    /// once, with the node that holds it, and never while the function runs.
     pub fn bind(&self, param_dtypes: &[DType]) -> VortexResult<BoundLambda> {
         let params = self.param_fields(param_dtypes)?;
         let body = self

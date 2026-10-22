@@ -167,6 +167,7 @@ pub trait ScalarFnVTable: 'static + Sized + Clone + Send + Sync {
     /// A rebuilt node calls it again, possibly with other dtypes: options that are already bound
     /// must be checked against these dtypes, returning `None` if they fit and an error if they
     /// don't. Return `None` to keep the options as they are, which the default does.
+    #[doc(hidden)]
     fn bind_options(
         &self,
         options: &Self::Options,
