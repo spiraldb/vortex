@@ -445,9 +445,23 @@ impl FileOpener for VortexOpener {
                     end: u64::try_from(file_range.end)
                         .map_err(|_| exec_datafusion_err!("Vortex file range end is negative"))?,
                 };
-                if byte_range.start != 0 || byte_range.end != file.object_meta.size {
-                    // Full-file scans already cover every natural split. Only translate the
-                    // byte range back into row boundaries when DataFusion has trimmed the file.
+                let partition_rows = file
+                    .extensions
+                    .get::<PartitionRows>()
+                    .filter(|_| scan_v2)
+                    .map(|rows| rows.0.clone());
+                if byte_range.start == 0 && byte_range.end == file.object_meta.size {
+                    // Full-file scans already cover every natural split.
+                } else if let Some(rows) = partition_rows {
+                    // Planning already cut the partition's rows from the cached footer, so the
+                    // V2 scan needs no layout walk to find them.
+                    if rows.is_empty() {
+                        return Ok(stream::empty().boxed());
+                    }
+                    scan_row_range = Some(rows);
+                } else {
+                    // Translate the byte range back into row boundaries when DataFusion has
+                    // trimmed the file and planning attached no rows for it.
                     let natural_splits = natural_splits_for_file(
                         natural_splits.as_ref(),
                         &file.object_meta.location,
@@ -577,6 +591,12 @@ impl FileOpener for VortexOpener {
         .boxed())
     }
 }
+
+/// The rows of a file one partition reads, attached to its `PartitionedFile` by
+/// [`VortexSource::repartitioned`](super::VortexSource) from the cached footer, so the V2 scan
+/// reads them directly instead of translating the partition's byte range.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PartitionRows(pub(crate) Range<u64>);
 
 /// A file's natural split boundaries plus the precomputed byte each split is assigned to,
 /// enabling [`split_aligned_row_range`] to translate a DataFusion byte range into row
@@ -786,7 +806,11 @@ mod tests {
     use datafusion_common::arrow::compute::concat_batches;
     use datafusion_common::assert_batches_eq;
     use datafusion_common::stats::Precision;
+    use datafusion_datasource::file::FileSource;
+    use datafusion_datasource::file_groups::FileGroup;
+    use datafusion_datasource::file_scan_config::FileScanConfigBuilder;
     use datafusion_execution::cache::default_cache::DefaultCache;
+    use datafusion_execution::object_store::ObjectStoreUrl;
     use datafusion_expr::Operator;
     use datafusion_physical_expr::PhysicalExpr;
     use datafusion_physical_expr::expressions as df_expr;
@@ -809,6 +833,7 @@ mod tests {
 
     use super::*;
     use crate::VortexAccessPlan;
+    use crate::VortexSource;
     use crate::convert::exprs::DefaultExpressionConverter;
     use crate::persistent::reader::DefaultVortexReaderFactory;
 
@@ -949,6 +974,94 @@ mod tests {
         assert_eq!(natural_splits.assignment_bytes.as_ref(), [0, 0, 1, 1]);
         assert_eq!(split_aligned_row_range(0..1, &natural_splits), Some(0..2));
         assert_eq!(split_aligned_row_range(1..2, &natural_splits), Some(2..4));
+    }
+
+    /// Planning attaches each partition's rows from the cached footer; the V2 opener reads
+    /// exactly those rows, and the partitions together read the file once.
+    #[tokio::test]
+    async fn test_repartitioned_rows_tile_the_file() -> anyhow::Result<()> {
+        let object_store = Arc::new(InMemory::new()) as Arc<dyn ObjectStore>;
+        let file_path = "rows/file.vortex";
+        let values: Vec<Option<i32>> = (0..30_000).map(Some).collect();
+        let batch = record_batch!(("a", Int32, values)).unwrap();
+        let data_size =
+            write_arrow_to_vortex(Arc::clone(&object_store), file_path, batch.clone()).await?;
+        let file = PartitionedFile::new(file_path.to_string(), data_size);
+        let table_schema = TableSchema::from(batch.schema());
+
+        let cache: Arc<FileMetadataCache> = Arc::new(
+            DefaultCache::<Path, CachedFileMetadataEntry>::new(64 * 1024 * 1024),
+        );
+        let mut opener = make_opener(Arc::clone(&object_store), table_schema.clone(), None);
+        opener.file_metadata_cache = Some(Arc::clone(&cache));
+        opener.scan_v2 = true;
+        // Populates the footer cache, as planning does through `VortexFormat`.
+        opener
+            .open(file.clone())?
+            .await?
+            .try_collect::<Vec<_>>()
+            .await?;
+
+        let source = VortexSource::new(table_schema, SESSION.clone());
+        let config = FileScanConfigBuilder::new(
+            ObjectStoreUrl::local_filesystem(),
+            Arc::new(source.clone()),
+        )
+        .with_file_group(FileGroup::new(vec![file.clone()]))
+        .build();
+
+        // Without a cached footer the partitions keep only their byte ranges.
+        let blind = source
+            .repartitioned(3, 0, None, &config)?
+            .ok_or_else(|| anyhow::anyhow!("file was not repartitioned"))?;
+        assert!(
+            blind
+                .file_groups
+                .iter()
+                .flat_map(FileGroup::iter)
+                .all(|file| {
+                    file.range.is_some() && !file.extensions.contains::<PartitionRows>()
+                })
+        );
+
+        let source = source.with_file_metadata_cache(Arc::clone(&cache));
+        let partitioned = source
+            .repartitioned(3, 0, None, &config)?
+            .ok_or_else(|| anyhow::anyhow!("file was not repartitioned"))?;
+        let files: Vec<_> = partitioned
+            .file_groups
+            .iter()
+            .flat_map(FileGroup::iter)
+            .cloned()
+            .collect();
+        assert_eq!(files.len(), 3);
+        let rows: Vec<_> = files
+            .iter()
+            .map(|file| {
+                file.extensions
+                    .get::<PartitionRows>()
+                    .map(|rows| rows.0.clone())
+                    .ok_or_else(|| anyhow::anyhow!("partition has no rows"))
+            })
+            .collect::<anyhow::Result<_>>()?;
+        assert_eq!(rows[0].start, 0);
+        assert_eq!(rows[2].end, 30_000);
+        assert_eq!(rows[0].end, rows[1].start);
+        assert_eq!(rows[1].end, rows[2].start);
+
+        let mut data = Vec::new();
+        for (file, rows) in files.iter().zip(&rows) {
+            let batches = opener
+                .open(file.clone())?
+                .await?
+                .try_collect::<Vec<_>>()
+                .await?;
+            let read: usize = batches.iter().map(|rb| rb.num_rows()).sum();
+            assert_eq!(read as u64, rows.end - rows.start);
+            data.extend(batches);
+        }
+        assert_eq!(concat_batches(&batch.schema(), &data)?, batch);
+        Ok(())
     }
 
     async fn write_arrow_to_vortex(
