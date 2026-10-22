@@ -121,6 +121,7 @@ mod expression;
 pub mod extension;
 pub mod flatbuffers;
 mod hash;
+pub mod higher_order_fn;
 pub mod iter;
 pub mod kernel;
 pub mod mask;

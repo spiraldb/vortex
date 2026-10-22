@@ -15,11 +15,16 @@ use vortex_error::vortex_ensure;
 use vortex_session::VortexSession;
 
 use crate::dtype::DType;
+use crate::expr::BoundLambda;
 use crate::expr::Expression;
+use crate::expr::Lambda;
 use crate::expr::display::DisplayTreeExpr;
+use crate::expr::expression::unbound_variable;
 use crate::expr::scope::Scope;
 use crate::expr::traversal::TraversalOrder;
 use crate::expr::traversal::pre_order_visit_down;
+use crate::higher_order_fn::HigherOrderFnRef;
+use crate::higher_order_fn::rebind_if_needed;
 use crate::scalar_fn::EmptyOptions;
 use crate::scalar_fn::ExpressionReduceNode;
 use crate::scalar_fn::ReduceNode;
@@ -28,6 +33,7 @@ use crate::scalar_fn::ScalarFnRef;
 use crate::scalar_fn::ScalarFnVTable;
 use crate::scalar_fn::ScalarFnVTableExt;
 use crate::scalar_fn::fns::is_not_null::IsNotNull;
+use crate::scalar_fn::union_child_validities;
 use crate::stats::rewrite::falsify;
 use crate::stats::rewrite::satisfy;
 
@@ -56,6 +62,20 @@ pub enum BoundExpression {
     Root {
         /// The dtype this node evaluates to.
         dtype: DType,
+    },
+    /// A higher-order function applied to bound value children, with its lambdas bound.
+    HigherOrder {
+        /// The dtype this node evaluates to.
+        dtype: DType,
+        /// The function and its options.
+        function: HigherOrderFnRef,
+        /// The bound value children, in argument order.
+        children: Arc<Vec<BoundExpression>>,
+        /// The lambdas as written, kept to display them and to rebind them when the children's
+        /// dtypes change.
+        lambdas: Arc<Vec<Lambda>>,
+        /// The lambdas bound to the children's dtypes.
+        bound: Arc<Vec<BoundLambda>>,
     },
 }
 
@@ -86,6 +106,27 @@ impl PartialEq for ExactBoundExpr {
                     && Arc::ptr_eq(lhs_children, rhs_children)
                     && lhs_dtype == rhs_dtype
             }
+            (
+                BoundExpression::HigherOrder {
+                    dtype: lhs_dtype,
+                    function: lhs_fn,
+                    children: lhs_children,
+                    bound: lhs_bound,
+                    ..
+                },
+                BoundExpression::HigherOrder {
+                    dtype: rhs_dtype,
+                    function: rhs_fn,
+                    children: rhs_children,
+                    bound: rhs_bound,
+                    ..
+                },
+            ) => {
+                lhs_fn == rhs_fn
+                    && Arc::ptr_eq(lhs_children, rhs_children)
+                    && lhs_bound == rhs_bound
+                    && lhs_dtype == rhs_dtype
+            }
             _ => false,
         }
     }
@@ -106,6 +147,13 @@ impl Hash for ExactBoundExpr {
             } => {
                 state.write_u8(1);
                 scalar_fn.hash(state);
+                Arc::as_ptr(children).hash(state);
+            }
+            BoundExpression::HigherOrder {
+                function, children, ..
+            } => {
+                state.write_u8(2);
+                function.hash(state);
                 Arc::as_ptr(children).hash(state);
             }
         }
@@ -147,12 +195,77 @@ impl BoundExpression {
         })
     }
 
+    /// Create a bound higher-order node: bind its lambdas against its children's dtypes.
+    pub fn try_new_higher_order(
+        function: HigherOrderFnRef,
+        children: impl IntoIterator<Item = BoundExpression>,
+        lambdas: Arc<Vec<Lambda>>,
+    ) -> VortexResult<Self> {
+        let children = Vec::from_iter(children);
+        vortex_ensure!(
+            function.arity().matches(children.len()),
+            "Expression arity mismatch: {} expects {} children but got {}",
+            function.id(),
+            function.arity(),
+            children.len()
+        );
+        let arg_dtypes = children
+            .iter()
+            .map(|child| child.dtype().clone())
+            .collect_vec();
+        let (bound, dtype) = function.bind_node(&arg_dtypes, &lambdas)?;
+        Ok(Self::HigherOrder {
+            dtype,
+            function,
+            children: children.into(),
+            lambdas,
+            bound: bound.into(),
+        })
+    }
+
+    /// The higher-order function and its bound lambdas, if this is a higher-order node.
+    pub fn as_higher_order(&self) -> Option<(&HigherOrderFnRef, &[BoundLambda])> {
+        match self {
+            Self::HigherOrder {
+                function, bound, ..
+            } => Some((function, bound.as_slice())),
+            _ => None,
+        }
+    }
+
     /// Rebuild this node with new bound children, recomputing its dtype.
     pub fn with_children(
         self,
         children: impl IntoIterator<Item = BoundExpression>,
     ) -> VortexResult<Self> {
         let children = Vec::from_iter(children);
+        if let BoundExpression::HigherOrder {
+            function,
+            lambdas,
+            bound,
+            ..
+        } = &self
+        {
+            vortex_ensure!(
+                function.arity().matches(children.len()),
+                "Expression arity mismatch: {} expects {} children but got {}",
+                function.id(),
+                function.arity(),
+                children.len()
+            );
+            let arg_dtypes = children
+                .iter()
+                .map(|child| child.dtype().clone())
+                .collect_vec();
+            let (bound, dtype) = rebind_if_needed(function, &arg_dtypes, lambdas, bound)?;
+            return Ok(Self::HigherOrder {
+                dtype,
+                function: function.clone(),
+                children: children.into(),
+                lambdas: Arc::clone(lambdas),
+                bound,
+            });
+        }
         let BoundExpression::Scalar { scalar_fn, .. } = &self else {
             vortex_ensure!(
                 children.is_empty(),
@@ -168,14 +281,18 @@ impl BoundExpression {
     /// The dtype this expression evaluates to.
     pub fn dtype(&self) -> &DType {
         match self {
-            Self::Scalar { dtype, .. } | Self::Root { dtype } => dtype,
+            Self::Scalar { dtype, .. } | Self::Root { dtype } | Self::HigherOrder { dtype, .. } => {
+                dtype
+            }
         }
     }
 
     /// The bound children of this node, in argument order. Empty for [`BoundExpression::Root`].
     pub fn children(&self) -> &[BoundExpression] {
         match self {
-            Self::Scalar { children, .. } => children.as_slice(),
+            Self::Scalar { children, .. } | Self::HigherOrder { children, .. } => {
+                children.as_slice()
+            }
             Self::Root { .. } => &[],
         }
     }
@@ -189,7 +306,7 @@ impl BoundExpression {
     pub fn as_scalar(&self) -> Option<&ScalarFnRef> {
         match self {
             Self::Scalar { scalar_fn, .. } => Some(scalar_fn),
-            Self::Root { .. } => None,
+            Self::Root { .. } | Self::HigherOrder { .. } => None,
         }
     }
 
@@ -256,6 +373,11 @@ impl BoundExpression {
         match self {
             // The scope is exactly as valid as itself.
             Self::Root { .. } => Ok(self.clone()),
+            // A strict function is valid where all its value children are.
+            Self::HigherOrder { function, .. } if function.is_strict() => {
+                Ok(union_child_validities(&ExpressionReduceNode::new(self))?.into_expression())
+            }
+            Self::HigherOrder { .. } => IsNotNull.try_new_bound_expr(EmptyOptions, [self.clone()]),
             Self::Scalar { .. } => {
                 let node = ExpressionReduceNode::new(self);
                 Ok(match node.validity()? {
@@ -290,6 +412,9 @@ impl Display for BoundExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Scalar { scalar_fn, .. } => scalar_fn.fmt_sql(self, f),
+            Self::HigherOrder {
+                function, lambdas, ..
+            } => function.fmt_sql(self, lambdas, f),
             Self::Root { .. } => f.write_str("$"),
         }
     }
@@ -310,15 +435,28 @@ impl Expression {
         if self.is_root() {
             return Ok(BoundExpression::new_root(scope.root().clone()));
         }
+        if let Expression::Variable(name) = self {
+            return Err(unbound_variable(name));
+        }
 
         let children: Vec<_> = self
             .children()
             .iter()
             .map(|child| child.bind_scope(scope))
             .try_collect()?;
+        if let Expression::HigherOrder {
+            function, lambdas, ..
+        } = self
+        {
+            return BoundExpression::try_new_higher_order(
+                function.clone(),
+                children,
+                Arc::clone(lambdas),
+            );
+        }
         let scalar_fn = self
             .as_scalar()
-            .vortex_expect("root was handled above, so this is a scalar node");
+            .vortex_expect("leaves were handled above, so this is a scalar node");
         BoundExpression::try_new(scalar_fn.clone(), children)
     }
 }
@@ -326,7 +464,7 @@ impl Expression {
 /// Iterative drop to avoid stack overflows on deep trees.
 impl Drop for BoundExpression {
     fn drop(&mut self) {
-        let Self::Scalar { children, .. } = self else {
+        let (Self::Scalar { children, .. } | Self::HigherOrder { children, .. }) = self else {
             return;
         };
         let Some(children) = Arc::get_mut(children) else {
@@ -335,7 +473,8 @@ impl Drop for BoundExpression {
 
         let mut to_drop = std::mem::take(children);
         while let Some(mut child) = to_drop.pop() {
-            if let BoundExpression::Scalar { children, .. } = &mut child
+            if let BoundExpression::Scalar { children, .. }
+            | BoundExpression::HigherOrder { children, .. } = &mut child
                 && let Some(grandchildren) = Arc::get_mut(children)
             {
                 to_drop.append(grandchildren);

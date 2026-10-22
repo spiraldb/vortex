@@ -40,6 +40,11 @@ pub fn make_bound_free_field_annotator(
     scope: &StructFields,
 ) -> impl AnnotationFn<BoundExpression, Annotation = FieldName> {
     move |expr: &BoundExpression| {
+        // A higher-order node reads through its value children; its lambdas read only their
+        // parameters.
+        if expr.as_higher_order().is_some() {
+            return vec![];
+        }
         let Some(scalar_fn) = expr.as_scalar() else {
             return scope.names().iter().cloned().collect();
         };

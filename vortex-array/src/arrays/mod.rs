@@ -105,6 +105,9 @@ pub use primitive::PrimitiveArray;
 pub mod scalar_fn;
 pub use scalar_fn::ScalarFn;
 pub use scalar_fn::ScalarFnArray;
+pub mod higher_order;
+pub use higher_order::HigherOrder;
+pub use higher_order::HigherOrderArray;
 
 pub mod slice;
 pub use slice::Slice;

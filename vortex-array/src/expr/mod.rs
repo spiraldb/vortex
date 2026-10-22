@@ -49,6 +49,7 @@ pub(crate) mod expression;
 mod exprs;
 pub(crate) mod field;
 pub mod forms;
+pub mod lambda;
 mod optimize;
 pub mod proto;
 pub mod scope;
@@ -91,6 +92,7 @@ pub use exprs::list_contains_opts;
 pub use exprs::list_length;
 pub use exprs::list_sum;
 pub use exprs::list_sum_opts;
+pub use exprs::list_transform;
 pub use exprs::lit;
 pub use exprs::lt;
 pub use exprs::lt_eq;
@@ -109,8 +111,10 @@ pub use exprs::replace_time_zone;
 pub use exprs::root;
 pub use exprs::select;
 pub use exprs::select_exclude;
+pub use exprs::var;
 pub use exprs::variant_get;
 pub use exprs::zip_expr;
+pub use lambda::*;
 pub use scope::*;
 
 #[cfg(feature = "_test-harness")]

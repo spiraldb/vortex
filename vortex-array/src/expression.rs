@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::sync::Arc;
+
 use smallvec::SmallVec;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
@@ -8,15 +10,37 @@ use vortex_error::VortexResult;
 use crate::ArrayRef;
 use crate::IntoArray;
 use crate::arrays::ConstantArray;
+use crate::arrays::HigherOrderArray;
 use crate::arrays::ScalarFnArray;
 use crate::expr::BoundExpression;
 use crate::expr::Expression;
+use crate::expr::expression::unbound_variable;
 use crate::optimizer::ArrayOptimizer;
 use crate::scalar_fn::fns::literal::Literal;
 
 impl ArrayRef {
     /// Apply a bound expression to this array, producing a new array in constant time.
     pub fn apply_bound(self, expr: &BoundExpression) -> VortexResult<ArrayRef> {
+        if let BoundExpression::HigherOrder {
+            function,
+            children,
+            bound,
+            ..
+        } = expr
+        {
+            let len = self.len();
+            let children = children
+                .iter()
+                .map(|child| self.clone().apply_bound(child))
+                .collect::<VortexResult<Vec<ArrayRef>>>()?;
+            return Ok(HigherOrderArray::try_new(
+                function.clone(),
+                Arc::clone(bound),
+                children,
+                len,
+            )?
+            .into_array());
+        }
         let BoundExpression::Scalar {
             scalar_fn,
             children,
@@ -47,6 +71,9 @@ impl ArrayRef {
         if expr.is_root() {
             return Ok(self);
         }
+        if let Expression::Variable(name) = expr {
+            return Err(unbound_variable(name));
+        }
 
         // Manually convert literals to ConstantArray.
         if let Some(scalar) = expr.as_opt::<Literal>() {
@@ -61,10 +88,28 @@ impl ArrayRef {
             .map(|e| self.clone().apply(e))
             .collect::<VortexResult<SmallVec<[ArrayRef; 4]>>>()?;
 
+        if let Expression::HigherOrder {
+            function, lambdas, ..
+        } = expr
+        {
+            let arg_dtypes = children
+                .iter()
+                .map(|child| child.dtype().clone())
+                .collect::<Vec<_>>();
+            let bound = function.bind_lambdas(&arg_dtypes, lambdas)?;
+            return Ok(HigherOrderArray::try_new(
+                function.clone(),
+                Arc::new(bound),
+                children,
+                len,
+            )?
+            .into_array());
+        }
+
         // And wrap the scalar function up in an array.
         let scalar_fn = expr
             .as_scalar()
-            .vortex_expect("root and literal were handled above, so this is a scalar node");
+            .vortex_expect("leaves and literals were handled above, so this is a scalar node");
         let array = ScalarFnArray::try_new_with_len(scalar_fn.clone(), children, len)?.into_array();
 
         // Optimize the resulting array's root.
