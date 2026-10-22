@@ -26,10 +26,8 @@ use crate::plan::physical::operators::ConcatSource;
 use crate::plan::physical::optimizer::PlanParentReduceRule;
 use crate::plan::physical::pipeline::Chain;
 use crate::plan::physical::pipeline::Compiler;
-use crate::plan::physical::pipeline::Reach;
 use crate::plan::physical::pipeline::overlapping;
 use crate::plan::physical::selection::selected_slice;
-use crate::segments::SegmentId;
 
 /// Concatenates its children row-wise.
 #[derive(Clone, Debug)]
@@ -217,22 +215,6 @@ impl PlanVTable for Concat {
             1 => chains.pop(),
             count => Some(compiler.join(chains, ConcatSource::new(count))),
         })
-    }
-
-    fn reach(
-        plan: &Plan<Self>,
-        rows: Range<u64>,
-        at: &Reach,
-        visit: &mut dyn FnMut(SegmentId, Range<u64>),
-    ) -> VortexResult<()> {
-        for (index, start, local) in overlapping(plan, &rows) {
-            plan.child_required(index)?.reach(
-                local.start - start..local.end - start,
-                &at.shift(start),
-                visit,
-            )?;
-        }
-        Ok(())
     }
 }
 

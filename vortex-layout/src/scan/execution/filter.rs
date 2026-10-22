@@ -32,7 +32,6 @@ use crate::plan::physical::PlanRef;
 use crate::plan::physical::SegmentScan;
 use crate::plan::physical::Zoned;
 use crate::plan::physical::optimize;
-use crate::plan::physical::pipeline::Reach;
 use crate::plan::physical::pipeline::Scan;
 use crate::plan::physical::pipeline::Split;
 use crate::plan::physical::plan_row_idx_expression;
@@ -165,14 +164,12 @@ impl Planner for FilterPlanner {
                 .chain(self.filter.predicates.iter())
                 .chain(std::iter::once(&self.plans.projection))
             {
-                let mut segments = Vec::new();
-                plan.reach(
+                let segments = Scan::segments(
+                    &self.plans.session,
+                    plan,
                     selected.scope.rows.clone(),
-                    &Reach::Offset(0),
-                    &mut |id, _| segments.push(id),
+                    &selected.mask,
                 )?;
-                segments.sort_unstable();
-                segments.dedup();
                 for segment in segments {
                     batch.push(IoRequest {
                         intent: IoIntent::Announce,
