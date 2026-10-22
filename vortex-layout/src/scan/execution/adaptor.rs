@@ -68,6 +68,16 @@ pub(super) struct ScanAdaptor {
 impl ScanAdaptor {
     /// Wraps a scan, numbering requests uniquely within this adaptor's lifetime.
     pub(super) fn new(scan: Scan, locations: Arc<[SegmentLocation]>) -> Self {
+        Self::numbered_from(scan, locations, 0)
+    }
+
+    /// Wraps a scan, numbering its requests from `first_id`, so an owner running several
+    /// adaptors at once can tell their requests apart.
+    pub(super) fn numbered_from(
+        scan: Scan,
+        locations: Arc<[SegmentLocation]>,
+        first_id: u32,
+    ) -> Self {
         Self {
             scan,
             pending: None,
@@ -76,7 +86,7 @@ impl ScanAdaptor {
             locations,
             outstanding: FxHashMap::default(),
             failed: None,
-            next_id: 0,
+            next_id: first_id,
         }
     }
 
