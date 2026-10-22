@@ -53,6 +53,7 @@ pub use crate::scan::execution::PreparedScan;
 pub use crate::scan::execution::PruneNext;
 pub use crate::scan::execution::PrunePlanner;
 use crate::scan::execution::ROW_BLOCK_SIZE;
+pub use crate::scan::execution::ReadAheadPlanner;
 use crate::scan::execution::ScanMetrics;
 pub use crate::scan::execution::SegmentLocation;
 use crate::scan::execution::rows_per_chunk;

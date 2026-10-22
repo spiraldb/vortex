@@ -27,6 +27,7 @@ use vortex_io::runtime::Handle;
 use vortex_layout::scan::v2::ChunkPlanner;
 use vortex_layout::scan::v2::PreparedScan;
 use vortex_layout::scan::v2::PrunePlanner;
+use vortex_layout::scan::v2::ReadAheadPlanner;
 use vortex_layout::scan::v2::ScanBuilder;
 use vortex_mask::Mask;
 use vortex_scan::planning::driver::Progress;
@@ -74,12 +75,12 @@ impl ScanDriver {
     fn execute(self, scan: Arc<PreparedScan>) -> BoxStream<'static, VortexResult<ArrayRef>> {
         let in_flight = self.concurrency * get_available_parallelism().unwrap_or(1);
         let inline = in_flight <= 1;
+        let root = compose(&scan, in_flight);
         let scope = WorkScope {
             file_ordinal: 0,
             rows: scan.rows().clone(),
         };
         let io = scan.io();
-        let root = compose(&scan);
         let (chunk_handle, chunk_io) = (self.handle.clone(), Arc::clone(&io));
         let batches = run_stream(self.handle, root, scope, io.session(), inline)
             .map_ok(move |yielded| match yielded {
@@ -119,7 +120,7 @@ impl ScanDriver {
 
 /// The planners of a scan, composed: with a filter, its pruning plans first over the whole scan,
 /// continuing into the chunks of the rows they keep; without, the chunks directly.
-fn compose(scan: &Arc<PreparedScan>) -> Box<dyn Planner> {
+fn compose(scan: &Arc<PreparedScan>, window: usize) -> Box<dyn Planner> {
     let rows = scan.rows().clone();
     let chunks = {
         let scan = Arc::clone(scan);
@@ -129,10 +130,28 @@ fn compose(scan: &Arc<PreparedScan>) -> Box<dyn Planner> {
             Box::new(ChunkPlanner::new(scan, rows, selection, kept))
         }
     };
+    let ahead = {
+        let scan = Arc::clone(scan);
+        let rows = rows.clone();
+        move |kept: Option<Mask>| -> Box<dyn Planner> {
+            Box::new(ReadAheadPlanner::new(
+                scan,
+                rows,
+                kept,
+                window,
+                Box::new(chunks),
+            ))
+        }
+    };
     if scan.filter().is_some() {
-        Box::new(PrunePlanner::new(Arc::clone(scan), rows, Box::new(chunks)))
+        Box::new(PrunePlanner::new(
+            Arc::clone(scan),
+            rows,
+            window,
+            Box::new(ahead),
+        ))
     } else {
-        chunks(None)
+        ahead(None)
     }
 }
 

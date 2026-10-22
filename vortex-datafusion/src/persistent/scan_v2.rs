@@ -56,6 +56,11 @@ impl ScanDriver {
 
     /// Runs `root`, the first planner composed over `scan`, and everything it emits, and
     /// streams their batches mapped by `map`.
+    /// How many chunks run beside each other.
+    pub(crate) fn in_flight(&self) -> usize {
+        self.concurrency * get_available_parallelism().unwrap_or(1)
+    }
+
     pub(crate) fn run(
         self,
         scan: Arc<PreparedScan>,
@@ -63,7 +68,7 @@ impl ScanDriver {
         map: impl Fn(ArrayRef) -> VortexResult<RecordBatch> + Send + Sync + 'static,
     ) -> BoxStream<'static, VortexResult<RecordBatch>> {
         let map: MapBatch = Arc::new(map);
-        let in_flight = self.concurrency * get_available_parallelism().unwrap_or(1);
+        let in_flight = self.in_flight();
         let inline = in_flight <= 1;
         let scope = WorkScope {
             file_ordinal: 0,

@@ -18,8 +18,10 @@ pub struct ScanMetrics {
     /// Rows pruning looked at, and the rows it kept.
     pub prune_rows_in: Counter,
     pub prune_rows_kept: Counter,
-    /// Requests the prune planner speculated while its zone maps were read.
+    /// Requests the prune planner speculated while its zone maps were read, and requests the
+    /// read-ahead planner started or announced for the chunks ahead.
     pub speculated_requests: Counter,
+    pub read_ahead_requests: Counter,
     /// Chunks planned, and chunks skipped because nothing was selected or kept of them.
     pub chunks: Counter,
     pub chunks_skipped: Counter,
@@ -56,6 +58,7 @@ impl ScanMetrics {
             prune_rows_in: counter("vortex.scan.prune.rows_in"),
             prune_rows_kept: counter("vortex.scan.prune.rows_kept"),
             speculated_requests: counter("vortex.scan.speculated.requests"),
+            read_ahead_requests: counter("vortex.scan.read_ahead.requests"),
             chunks: counter("vortex.scan.chunks"),
             chunks_skipped: counter("vortex.scan.chunks.skipped"),
             filter_duration: timer("vortex.scan.filter.duration"),

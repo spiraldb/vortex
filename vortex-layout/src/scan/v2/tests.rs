@@ -57,6 +57,7 @@ use super::MAX_ROWS_PER_CHUNK;
 use super::PreparedScan;
 use super::PrunePlanner;
 use super::ROW_BLOCK_SIZE;
+use super::ReadAheadPlanner;
 use super::ScanBuilder;
 use super::ScanCache;
 use super::ScanFile;
@@ -206,10 +207,22 @@ fn compose(scan: &Arc<PreparedScan>, rows: Range<u64>) -> Box<dyn Planner> {
             Box::new(ChunkPlanner::new(scan, rows, selection, kept))
         }
     };
+    let ahead = {
+        let scan = Arc::clone(scan);
+        let rows = rows.clone();
+        move |kept: Option<Mask>| -> Box<dyn Planner> {
+            Box::new(ReadAheadPlanner::new(scan, rows, kept, 4, Box::new(chunks)))
+        }
+    };
     if scan.filter().is_some() {
-        Box::new(PrunePlanner::new(Arc::clone(scan), rows, Box::new(chunks)))
+        Box::new(PrunePlanner::new(
+            Arc::clone(scan),
+            rows,
+            4,
+            Box::new(ahead),
+        ))
     } else {
-        chunks(None)
+        ahead(None)
     }
 }
 
@@ -553,18 +566,10 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
         let before = counted.reads.load(Ordering::Relaxed);
         let arrays = run_rows(&scan, rows.clone()).await?;
         let reads = counted.reads.load(Ordering::Relaxed) - before;
-        let code_chunks =
-            (rows.end - 1) / STORED_CHUNK_ROWS as u64 - rows.start / STORED_CHUNK_ROWS as u64 + 1;
-        // The first chunk reads every values chunk once for the whole scan; its codes are one of
-        // them, and the session shares that read. Later chunks read only their codes.
-        assert_eq!(
-            reads,
-            if index == 0 {
-                STORED_CHUNKS
-            } else {
-                usize::try_from(code_chunks)?
-            }
-        );
+        // The first chunk reads every values chunk once for the whole scan; its codes are one
+        // of them. The reads read ahead for the file are kept with it, so later chunks, whose
+        // codes are those same chunks, read nothing.
+        assert_eq!(reads, if index == 0 { STORED_CHUNKS } else { 0 });
         let expected =
             PrimitiveArray::from_iter(i32::try_from(rows.start)?..i32::try_from(rows.end)?);
         assert_arrays_eq!(

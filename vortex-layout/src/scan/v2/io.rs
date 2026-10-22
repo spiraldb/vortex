@@ -48,9 +48,9 @@ pub(super) fn segment_ranges(locations: &[SegmentLocation]) -> SegmentRanges {
 
 /// Serves splits from any [`SegmentSource`], by segment id.
 ///
-/// Reads a session speculates are started here, shared by every session of the service, and
-/// handed to the first session that fetches the segment: a chunk fetches what the planner before
-/// it read ahead on its behalf.
+/// Reads a session speculates or prefetches are kept with the file, shared by every session of
+/// every scan of it: a chunk fetches what the planner before it read ahead on its behalf, and a
+/// second scan of the file fetches what the first started.
 pub(crate) struct SegmentScanIo {
     segments: Arc<dyn SegmentSource>,
     ranges: SegmentRanges,
@@ -58,11 +58,17 @@ pub(crate) struct SegmentScanIo {
 }
 
 impl SegmentScanIo {
-    pub(crate) fn new(segments: Arc<dyn SegmentSource>, ranges: SegmentRanges) -> Self {
+    /// A service over `segments`, sharing `ahead`, the reads speculated for the file, with
+    /// every other scan of it.
+    pub(crate) fn new(
+        segments: Arc<dyn SegmentSource>,
+        ranges: SegmentRanges,
+        ahead: Ahead,
+    ) -> Self {
         Self {
             segments,
             ranges,
-            ahead: Ahead::default(),
+            ahead,
         }
     }
 }
@@ -83,12 +89,12 @@ impl IoService for SegmentScanIo {
 /// and requests announced for coalescing and never polled, which the first fetch turns into a
 /// shared started read.
 #[derive(Default)]
-struct Speculated {
+pub(crate) struct Speculated {
     started: HashMap<SegmentId, Prefetched>,
     announced: HashMap<SegmentId, SegmentFuture>,
 }
 
-type Ahead = Arc<Mutex<Speculated>>;
+pub(crate) type Ahead = Arc<Mutex<Speculated>>;
 
 /// Serves a split's range requests from a segment source, without blocking.
 ///
@@ -438,7 +444,11 @@ mod tests {
             length: 4,
             alignment: Alignment::none(),
         };
-        let service = SegmentScanIo::new(Arc::clone(&segments) as _, segment_ranges(&[location]));
+        let service = SegmentScanIo::new(
+            Arc::clone(&segments) as _,
+            segment_ranges(&[location]),
+            Ahead::default(),
+        );
         let (planner, chunk, other) = (service.session(), service.session(), service.session());
 
         planner.speculate(IoOwnerId(0), vec![request(IoIntent::Prefetch, 0)])?;
@@ -486,7 +496,11 @@ mod tests {
 
         // An announcement is requested once and never polled; a session's own announcement
         // adds nothing, and the first fetch makes it the read every session shares.
-        let service = SegmentScanIo::new(Arc::clone(&segments) as _, segment_ranges(&[location]));
+        let service = SegmentScanIo::new(
+            Arc::clone(&segments) as _,
+            segment_ranges(&[location]),
+            Ahead::default(),
+        );
         let (planner, late, later) = (service.session(), service.session(), service.session());
         planner.speculate(IoOwnerId(0), vec![request(IoIntent::Announce, 7)])?;
         assert_eq!(

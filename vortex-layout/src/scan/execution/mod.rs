@@ -17,6 +17,7 @@ mod filter;
 mod metrics;
 mod projection;
 mod prune;
+mod read_ahead;
 mod selection;
 
 use std::ops::Range;
@@ -44,6 +45,7 @@ pub use self::metrics::ScanMetrics;
 use self::projection::ProjectionPlanner;
 pub use self::prune::PruneNext;
 pub use self::prune::PrunePlanner;
+pub use self::read_ahead::ReadAheadPlanner;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::pipeline::ValueCache;
 use crate::scan::v2::ScanCache;
@@ -86,8 +88,8 @@ pub struct PreparedScan {
     pub(super) segments: Arc<dyn SegmentSource>,
     /// The segments' byte ranges, back to their ids.
     pub(super) ranges: SegmentRanges,
-    /// Held for the scan's life, so scans of the file that start meanwhile share it.
-    #[expect(dead_code, reason = "kept alive, never read")]
+    /// The file's cache, shared with every other scan of the file: the reads read ahead for
+    /// the file live there.
     pub(super) cache: ScanCache,
     /// The location of every segment, indexed by segment id.
     pub(super) locations: Arc<[SegmentLocation]>,
@@ -128,6 +130,7 @@ impl PreparedScan {
         Arc::new(SegmentScanIo::new(
             Arc::clone(&self.segments),
             Arc::clone(&self.ranges),
+            self.cache.ahead(),
         ))
     }
 

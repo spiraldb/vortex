@@ -58,21 +58,24 @@ pub struct PrunePlanner {
     started: Option<Instant>,
     /// Ids for hints, counting down from `u32::MAX` so they never meet an adaptor's fetch ids.
     next_hint: u32,
-    /// The chunks of `rows`, whose reads are speculated on the first ask.
+    /// The first chunks of `rows`, whose reads are speculated on the first ask: as many as the
+    /// read-ahead window, since the planner after this one reads ahead from there.
     ahead: Vec<Range<u64>>,
     speculated: bool,
     done: bool,
 }
 
 impl PrunePlanner {
-    /// The planner of `scan`'s filter's pruning plans over `rows`, continuing into `next`.
-    pub fn new(scan: Arc<PreparedScan>, rows: Range<u64>, next: PruneNext) -> Self {
+    /// The planner of `scan`'s filter's pruning plans over `rows`, speculating the reads of the
+    /// first `window` chunks while they run, continuing into `next`.
+    pub fn new(scan: Arc<PreparedScan>, rows: Range<u64>, window: usize, next: PruneNext) -> Self {
         let pruning: Vec<_> = scan
             .filter
             .iter()
             .flat_map(|filter| filter.pruning().cloned())
             .collect();
-        let ahead = row_chunks(rows.clone(), scan.chunk_rows);
+        let mut ahead = row_chunks(rows.clone(), scan.chunk_rows);
+        ahead.truncate(window.max(1));
         Self {
             scan,
             rows,
@@ -138,13 +141,14 @@ impl IoConsumer for PrunePlanner {
 }
 
 impl Planner for PrunePlanner {
-    /// While the zone maps are read, every chunk's predicate columns and projection columns are
-    /// read too, the predicates first in the batch, registered together so the partition's reads
-    /// coalesce as one scan's. The projection is read, not only announced: in a file whose
-    /// columns are written in bursts a wide projection column shares no read with the narrow
-    /// predicate beside it, and a read only announced is not started until the projection
-    /// fetches it, after the filter, with nothing to overlap. One ask reads it all. A scan
-    /// selecting rows by index reads nothing it was not asked for.
+    /// While the zone maps are read, the first window of chunks' predicate columns and
+    /// projection columns are read too, the predicates first in the batch, registered together
+    /// so they coalesce. The projection is read, not only announced: in a file whose columns are
+    /// written in bursts a wide projection column shares no read with the narrow predicate
+    /// beside it, and a read only announced is not started until the projection fetches it,
+    /// after the filter, with nothing to overlap. The planner after this one reads ahead from
+    /// the window on, over the rows pruning kept. A scan selecting rows by index reads nothing
+    /// it was not asked for.
     fn speculate(&mut self) -> VortexResult<Option<IoBatch>> {
         if !matches!(self.scan.selection, Selection::All) || self.speculated {
             return Ok(None);

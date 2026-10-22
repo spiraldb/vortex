@@ -7,10 +7,8 @@ use std::ops::Range;
 use std::sync::Arc;
 use std::vec::IntoIter;
 
-use rustc_hash::FxHashSet;
 use vortex_error::VortexResult;
 use vortex_io::request::IoConsumer;
-use vortex_io::request::IoIntent;
 use vortex_io::request::IoRequestId;
 use vortex_io::request::IoResult;
 use vortex_mask::Mask;
@@ -22,8 +20,6 @@ use vortex_scan::selection::Selection;
 
 use super::PreparedScan;
 use super::SegmentLocation;
-use super::filter::hint;
-use super::filter::segments_read;
 use super::selection::plan_selection;
 
 /// The row grid every chunk boundary lies on.
@@ -71,10 +67,6 @@ pub struct ChunkPlanner {
     selection: Selection,
     /// The rows zone pruning kept, over `rows`, or `None` when nothing was pruned.
     kept: Option<Mask>,
-    /// Whether the projection's reads were started, for a scan without a filter.
-    prefetched: bool,
-    /// Ids for hints, counting down from `u32::MAX`.
-    next_hint: u32,
 }
 
 impl ChunkPlanner {
@@ -93,8 +85,6 @@ impl ChunkPlanner {
             chunks,
             selection,
             kept,
-            prefetched: false,
-            next_hint: u32::MAX,
         }
     }
 }
@@ -113,39 +103,6 @@ impl Planner for ChunkPlanner {
     }
 
     fn compute(&mut self) -> VortexResult<PlannerOutput> {
-        // A scan without a filter reads every projection segment of its rows: started together
-        // here, before any chunk, they coalesce as one scan's reads would, instead of each chunk
-        // reading its own as it starts.
-        if !self.prefetched {
-            self.prefetched = true;
-            if self.scan.filter.is_none() && matches!(self.selection, Selection::All) {
-                let len = usize::try_from(self.rows.end - self.rows.start).unwrap_or(usize::MAX);
-                let segments = segments_read(
-                    &self.scan.session,
-                    std::iter::once(&self.scan.projection),
-                    self.rows.clone(),
-                    &Mask::new_true(len),
-                    &self.scan.values,
-                )?;
-                let mut batch = Vec::new();
-                let mut seen = FxHashSet::default();
-                hint(
-                    &self.scan.locations,
-                    &mut self.next_hint,
-                    IoIntent::Prefetch,
-                    &segments,
-                    &mut seen,
-                    &mut batch,
-                );
-                if !batch.is_empty() {
-                    self.scan
-                        .metrics
-                        .speculated_requests
-                        .add(batch.len() as u64);
-                    return Ok(PlannerOutput::NeedsIO(batch));
-                }
-            }
-        }
         let kept = self.kept.as_ref().map(|kept| (kept, self.rows.start));
         for chunk in self.chunks.by_ref() {
             let scope = WorkScope {

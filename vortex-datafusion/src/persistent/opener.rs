@@ -58,6 +58,7 @@ use vortex::layout::LayoutReader;
 use vortex::layout::scan::scan_builder::ScanBuilder;
 use vortex::layout::scan::v2::ChunkPlanner;
 use vortex::layout::scan::v2::PrunePlanner;
+use vortex::layout::scan::v2::ReadAheadPlanner;
 use vortex::layout::scan::v2::ScanBuilder as V2ScanBuilder;
 use vortex::layout::scan::v2::ScanCache;
 use vortex::layout::scan::v2::WeakScanCache;
@@ -567,6 +568,9 @@ impl FileOpener for VortexOpener {
                 // partition, continuing into the chunks of the rows they keep; without a
                 // filter, the chunks directly. A chunk plans its conjuncts, then its
                 // projection.
+                let driver = ScanDriver::new(handle, concurrency, has_output_ordering);
+                // Reads go ahead as far as chunks run beside each other.
+                let window = driver.in_flight();
                 let chunks = {
                     let scan = Arc::clone(&scan);
                     move |kept: Option<Mask>| -> Box<dyn Planner> {
@@ -575,14 +579,31 @@ impl FileOpener for VortexOpener {
                         Box::new(ChunkPlanner::new(scan, rows, selection, kept))
                     }
                 };
+                let ahead = {
+                    let scan = Arc::clone(&scan);
+                    move |kept: Option<Mask>| -> Box<dyn Planner> {
+                        let rows = scan.rows().clone();
+                        Box::new(ReadAheadPlanner::new(
+                            scan,
+                            rows,
+                            kept,
+                            window,
+                            Box::new(chunks),
+                        ))
+                    }
+                };
                 let root: Box<dyn Planner> = if scan.filter().is_some() {
                     let rows = scan.rows().clone();
-                    Box::new(PrunePlanner::new(Arc::clone(&scan), rows, Box::new(chunks)))
+                    Box::new(PrunePlanner::new(
+                        Arc::clone(&scan),
+                        rows,
+                        window,
+                        Box::new(ahead),
+                    ))
                 } else {
-                    chunks(None)
+                    ahead(None)
                 };
 
-                let driver = ScanDriver::new(handle, concurrency, has_output_ordering);
                 Ok(driver.run(scan, root, map_batch))
             } else {
                 scan_builder

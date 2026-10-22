@@ -15,6 +15,7 @@ use super::io::SegmentRanges;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::pipeline::ValueCache;
 use crate::scan::execution::FilterPlans;
+use crate::scan::v2::io::Ahead;
 
 /// Reusable state for repeated V2 scans of one file, the V2 counterpart of a cached
 /// [`LayoutReader`](crate::LayoutReader) tree.
@@ -44,9 +45,16 @@ struct Inner {
     /// excluded, so sharing the plans prunes a file's zones once for every scan of that filter.
     filters: Mutex<FxHashMap<ExactBoundExpr, Arc<FilterPlans>>>,
     values: ValueCache,
+    /// Reads speculated or read ahead for the file, shared by every scan of it.
+    ahead: Ahead,
 }
 
 impl ScanCache {
+    /// The reads speculated or read ahead for the file, shared by every scan of it.
+    pub(crate) fn ahead(&self) -> Ahead {
+        Arc::clone(&self.0.ahead)
+    }
+
     /// The lowered root plan an earlier scan kept.
     pub(super) fn root(&self) -> Option<PlanRef> {
         self.0.root.lock().clone()
