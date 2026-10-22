@@ -10,7 +10,6 @@ use itertools::Itertools;
 use parking_lot::Mutex;
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
-use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::aggregate_fn::fns::sum::sum;
 use vortex_array::arrays::StructArray;
@@ -18,7 +17,6 @@ use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::builders::ArrayBuilder;
 use vortex_array::builders::BoolBuilder;
 use vortex_array::builders::builder_with_capacity_in;
-use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldName;
 use vortex_array::dtype::Nullability;
@@ -35,6 +33,7 @@ use vortex_buffer::BufferString;
 use vortex_buffer::ByteBuffer;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
+use vortex_mask::Mask;
 use vortex_session::VortexSession;
 
 use crate::layouts::zoned::MAX_IS_TRUNCATED;
@@ -101,9 +100,27 @@ impl StatsAccumulator {
         }
     }
 
-    fn push_chunk(&mut self, array: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<()> {
+    /// Push the statistics of `array`, which is null wherever `demand` is false.
+    fn push_chunk(
+        &mut self,
+        array: &ArrayRef,
+        demand: &Mask,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<()> {
         for builder in &mut self.builders {
-            if let Some(value) = array.statistics().compute_stat(builder.stat(), ctx)? {
+            let stat = builder.stat();
+            let value = if demand.all_true() {
+                array.statistics().compute_stat(stat, ctx)?
+            } else if let Some(aggregate_fn) = stat.aggregate_fn() {
+                let mut accumulator = aggregate_fn.accumulator(array.dtype())?;
+                accumulator.accumulate_demanded(array, demand, ctx)?;
+                // A null result, e.g. the minimum of a chunk with no demanded values, is unknown.
+                Some(accumulator.finish()?).filter(|value| !value.is_null())
+            } else {
+                // A statistic without an aggregate cannot be computed over the demanded rows.
+                None
+            };
+            if let Some(value) = value {
                 builder.append_scalar(value.cast(&value.dtype().as_nullable())?)?;
             } else {
                 builder.append_null();
@@ -504,15 +521,11 @@ impl FileStatsAccumulator {
                 .iter_mut()
                 .zip_eq(struct_chunk.iter_unmasked_fields())
             {
-                if demand.all_true() {
-                    acc.push_chunk(field, &mut ctx)?;
-                } else {
-                    let logical_field = field.clone().mask(demand.clone().into_array())?;
-                    acc.push_chunk(&logical_field, &mut ctx)?;
-                }
+                acc.push_chunk(field, &demand, &mut ctx)?;
             }
         } else {
-            self.accumulators.lock()[0].push_chunk(&chunk, &mut ctx)?;
+            let demand = Mask::new_true(chunk.len());
+            self.accumulators.lock()[0].push_chunk(&chunk, &demand, &mut ctx)?;
         }
         Ok((sequence_id, chunk))
     }
@@ -544,6 +557,15 @@ mod tests {
 
     use super::*;
 
+    /// Push every row of `array`.
+    fn push(
+        acc: &mut StatsAccumulator,
+        array: &ArrayRef,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<()> {
+        acc.push_chunk(array, &Mask::new_true(array.len()), ctx)
+    }
+
     #[rstest]
     #[case(DType::Utf8(Nullability::NonNullable))]
     #[case(DType::Binary(Nullability::NonNullable))]
@@ -565,9 +587,9 @@ mod tests {
         builder2.append_value("wait a minute");
         let mut acc =
             StatsAccumulator::new(builder.dtype(), &[Stat::Max, Stat::Min, Stat::Sum], 12);
-        acc.push_chunk(&builder.finish(), &mut ctx)
+        push(&mut acc, &builder.finish(), &mut ctx)
             .vortex_expect("push_chunk should succeed for test data");
-        acc.push_chunk(&builder2.finish(), &mut ctx)
+        push(&mut acc, &builder2.finish(), &mut ctx)
             .vortex_expect("push_chunk should succeed for test data");
         let stats_table = acc
             .as_array(&mut ctx)
@@ -615,7 +637,7 @@ mod tests {
         builder.append_value("Value to be truncated");
         builder.append_value("Another truncated value");
         let mut acc = StatsAccumulator::new(builder.dtype(), &[Stat::Max, Stat::Min], 12);
-        acc.push_chunk(&builder.finish(), &mut ctx)
+        push(&mut acc, &builder.finish(), &mut ctx)
             .vortex_expect("push_chunk should succeed for test data");
 
         let stats = acc
@@ -631,8 +653,7 @@ mod tests {
         let mut ctx = array_session().create_execution_ctx();
         let array = buffer![0, 1, 2].into_array();
         let mut acc = StatsAccumulator::new(array.dtype(), &[Stat::Max, Stat::Min, Stat::Sum], 12);
-        acc.push_chunk(&array, &mut ctx)
-            .vortex_expect("push_chunk should succeed for test array");
+        push(&mut acc, &array, &mut ctx).vortex_expect("push_chunk should succeed for test array");
         let stats_table = acc
             .as_array(&mut ctx)
             .unwrap()
@@ -657,7 +678,8 @@ mod tests {
         let dtype = DType::Primitive(PType::I64, Nullability::Nullable);
         let mut acc = StatsAccumulator::new(&dtype, &[Stat::Sum], 12);
         for chunk in chunks {
-            acc.push_chunk(
+            push(
+                &mut acc,
                 &PrimitiveArray::from_option_iter(chunk).into_array(),
                 &mut ctx,
             )?;
