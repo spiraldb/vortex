@@ -13,11 +13,11 @@ use vortex_array::RecursiveCanonical;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::VarBinViewArray;
+use vortex_array::arrays::runend::RunEnd;
+use vortex_array::arrays::runend::compress::runend_encode;
 use vortex_array::dtype::IntegerPType;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
-use vortex_runend::RunEnd;
-use vortex_runend::compress::runend_encode;
 use vortex_session::VortexSession;
 
 // `runend_encode` allocates its output buffers inside the timed region, so route allocation
@@ -30,11 +30,7 @@ fn main() {
     divan::main();
 }
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-    let session = vortex_array::array_session();
-    vortex_runend::initialize(&session);
-    session
-});
+static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::array_session);
 
 // (length, run_step). The (4_000, 1024) point is left out: it flipped by 20% between runs of
 // identical code on more than 40 pull requests, and (10_000, 1024) and (10_000, 4096) keep long

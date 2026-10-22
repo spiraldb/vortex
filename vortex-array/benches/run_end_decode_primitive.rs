@@ -15,11 +15,11 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::PrimitiveArray;
+use vortex_array::arrays::runend::compress::runend_decode_primitive;
 use vortex_array::dtype::NativePType;
 use vortex_array::validity::Validity;
 use vortex_buffer::BitBuffer;
 use vortex_buffer::Buffer;
-use vortex_runend::compress::runend_decode_primitive;
 use vortex_session::VortexSession;
 
 #[global_allocator]
@@ -29,11 +29,7 @@ fn main() {
     divan::main();
 }
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-    let session = vortex_array::array_session();
-    vortex_runend::initialize(&session);
-    session
-});
+static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::array_session);
 
 const LEN: usize = 16_384;
 

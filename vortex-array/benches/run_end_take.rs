@@ -16,9 +16,9 @@ use vortex_array::IntoArray;
 use vortex_array::RecursiveCanonical;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::PrimitiveArray;
+use vortex_array::arrays::runend::RunEnd;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
-use vortex_runend::RunEnd;
 use vortex_session::VortexSession;
 
 #[global_allocator]
@@ -28,11 +28,7 @@ fn main() {
     divan::main();
 }
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-    let session = vortex_array::array_session();
-    vortex_runend::initialize(&session);
-    session
-});
+static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::array_session);
 
 #[derive(Clone, Copy)]
 enum IndexPattern {

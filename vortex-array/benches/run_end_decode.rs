@@ -11,10 +11,10 @@ use mimalloc::MiMalloc;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::PrimitiveArray;
+use vortex_array::arrays::runend::decompress_bool::runend_decode_bools;
 use vortex_array::validity::Validity;
 use vortex_buffer::BitBuffer;
 use vortex_buffer::BufferMut;
-use vortex_runend::decompress_bool::runend_decode_bools;
 use vortex_session::VortexSession;
 
 #[global_allocator]
@@ -24,11 +24,7 @@ fn main() {
     divan::main();
 }
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-    let session = vortex_array::array_session();
-    vortex_runend::initialize(&session);
-    session
-});
+static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::array_session);
 
 /// Distribution types for bool benchmarks
 #[derive(Clone, Copy)]

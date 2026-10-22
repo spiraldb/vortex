@@ -12,17 +12,13 @@ use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::aggregate_fn::fns::sum_v2::sum_v2;
 use vortex_array::arrays::PrimitiveArray;
-use vortex_runend::RunEnd;
+use vortex_array::arrays::runend::RunEnd;
 use vortex_session::VortexSession;
 
 const LEN: usize = 2_048;
 const RUN_LENGTH: usize = 64;
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-    let session = vortex_array::array_session();
-    vortex_runend::initialize(&session);
-    session
-});
+static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::array_session);
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
