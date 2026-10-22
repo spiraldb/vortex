@@ -111,8 +111,10 @@ impl Planner for ChunkPlanner {
             };
             if let Some((scope, planner)) = plan_selection(&self.scan, scope, &self.selection, kept)
             {
+                self.scan.metrics.chunks.add(1);
                 return Ok(PlannerOutput::Spawn(scope, planner));
             }
+            self.scan.metrics.chunks_skipped.add(1);
         }
         Ok(PlannerOutput::Done)
     }

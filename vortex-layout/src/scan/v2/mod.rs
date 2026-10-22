@@ -33,6 +33,8 @@ use vortex_array::dtype::DType;
 use vortex_array::expr::BoundExpression;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
+use vortex_metrics::Label;
+use vortex_metrics::MetricsRegistry;
 use vortex_scan::selection::Selection;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
@@ -51,6 +53,7 @@ pub use crate::scan::execution::PreparedScan;
 pub use crate::scan::execution::PruneNext;
 pub use crate::scan::execution::PrunePlanner;
 use crate::scan::execution::ROW_BLOCK_SIZE;
+use crate::scan::execution::ScanMetrics;
 pub use crate::scan::execution::SegmentLocation;
 use crate::scan::execution::rows_per_chunk;
 use crate::scan::v2::io::segment_ranges;
@@ -97,6 +100,7 @@ pub struct ScanBuilder {
     row_range: Option<Range<u64>>,
     selection: Selection,
     row_offset: u64,
+    metrics: Option<(Arc<dyn MetricsRegistry>, Vec<Label>)>,
 }
 
 impl ScanBuilder {
@@ -110,7 +114,18 @@ impl ScanBuilder {
             row_range: None,
             selection: Selection::default(),
             row_offset: 0,
+            metrics: None,
         }
+    }
+
+    /// Registers the scan's metrics with `registry` under `labels`.
+    pub fn with_metrics_registry(
+        mut self,
+        registry: Arc<dyn MetricsRegistry>,
+        labels: Vec<Label>,
+    ) -> Self {
+        self.metrics = Some((registry, labels));
+        self
     }
 
     /// The output dtype after projection.
@@ -212,6 +227,10 @@ impl ScanBuilder {
             row_offset: self.row_offset,
             values,
             chunk_rows,
+            metrics: Arc::new(match &self.metrics {
+                Some((registry, labels)) => ScanMetrics::new(registry.as_ref(), labels),
+                None => ScanMetrics::unregistered(),
+            }),
         })
     }
 }
