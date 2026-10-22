@@ -58,7 +58,7 @@ pub struct PrunePlanner {
     started: bool,
     /// Ids for hints, counting down from `u32::MAX` so they never meet an adaptor's fetch ids.
     next_hint: u32,
-    /// The chunks of `rows` whose predicate columns have not been speculated yet.
+    /// The chunks of `rows` whose reads have not been speculated yet.
     ahead: IntoIter<Range<u64>>,
     done: bool,
 }
@@ -136,11 +136,10 @@ impl IoConsumer for PrunePlanner {
 }
 
 impl Planner for PrunePlanner {
-    /// While the zone maps are read, the next chunk's predicate columns are read too and its
-    /// projection announced, the batch its filter planner publishes once pruning keeps it, so
-    /// the chunk's reads coalesce as they would have. One chunk per ask, so the reads ahead
-    /// follow how long the zone maps take. A scan selecting rows by index reads nothing it was
-    /// not asked for.
+    /// While the zone maps are read, every chunk's predicate columns are read too and its
+    /// projection announced, the batches their filter planners publish once pruning keeps them,
+    /// registered together so the partition's reads coalesce as one scan's would. A scan
+    /// selecting rows by index reads nothing it was not asked for.
     fn speculate(&mut self) -> VortexResult<Option<IoBatch>> {
         if !matches!(self.scan.selection, Selection::All) {
             return Ok(None);
@@ -148,45 +147,48 @@ impl Planner for PrunePlanner {
         let Some(filter) = &self.scan.filter else {
             return Ok(None);
         };
-        let Some(chunk) = self.ahead.next() else {
-            return Ok(None);
-        };
-        let len = usize::try_from(chunk.end - chunk.start).unwrap_or(usize::MAX);
-        let mask = Mask::new_true(len);
         let session = &self.scan.session;
-        let predicates = segments_read(session, filter.predicates.iter(), chunk.clone(), &mask)?;
-        let projection = segments_read(
-            session,
-            std::iter::once(&self.scan.projection),
-            chunk.clone(),
-            &mask,
-        )?;
+        let locations = &self.scan.locations;
         let mut batch = Vec::new();
         let mut seen = FxHashSet::default();
-        let locations = &self.scan.locations;
-        hint(
-            locations,
-            &mut self.next_hint,
-            IoIntent::Prefetch,
-            &predicates,
-            &mut seen,
-            &mut batch,
-        );
-        hint(
-            locations,
-            &mut self.next_hint,
-            IoIntent::Announce,
-            &projection,
-            &mut seen,
-            &mut batch,
-        );
+        for chunk in self.ahead.by_ref() {
+            let len = usize::try_from(chunk.end - chunk.start).unwrap_or(usize::MAX);
+            let mask = Mask::new_true(len);
+            let predicates =
+                segments_read(session, filter.predicates.iter(), chunk.clone(), &mask)?;
+            let projection = segments_read(
+                session,
+                std::iter::once(&self.scan.projection),
+                chunk.clone(),
+                &mask,
+            )?;
+            hint(
+                locations,
+                &mut self.next_hint,
+                IoIntent::Prefetch,
+                &predicates,
+                &mut seen,
+                &mut batch,
+            );
+            hint(
+                locations,
+                &mut self.next_hint,
+                IoIntent::Announce,
+                &projection,
+                &mut seen,
+                &mut batch,
+            );
+        }
+        if batch.is_empty() {
+            return Ok(None);
+        }
         tracing::debug!(
-            row_start = chunk.start,
-            row_end = chunk.end,
+            row_start = self.rows.start,
+            row_end = self.rows.end,
             segments = batch.len(),
             "v2 chunk reads speculated"
         );
-        Ok((!batch.is_empty()).then_some(batch))
+        Ok(Some(batch))
     }
 
     fn state(&self) -> State {
