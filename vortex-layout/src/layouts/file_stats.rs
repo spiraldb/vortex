@@ -25,7 +25,6 @@ use vortex_array::aggregate_fn::fns::max::Max;
 use vortex_array::aggregate_fn::fns::min::Min;
 use vortex_array::aggregate_fn::fns::nan_count::NanCount;
 use vortex_array::aggregate_fn::fns::null_count::NullCount;
-use vortex_array::aggregate_fn::fns::sum::Sum;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::dtype::DType;
@@ -321,10 +320,10 @@ fn default_pruning_aggregate_fns(dtype: &DType) -> Vec<AggregateFnRef> {
         )
     };
 
+    // `Sum` is left out until the footer records the overflow-aware `SumV2`.
     vec![
         max,
         min,
-        Sum.bind(NumericalAggregateOpts::skip_nans()),
         NullCount.bind(EmptyOptions),
         NanCount.bind(EmptyOptions),
     ]
@@ -1215,9 +1214,8 @@ mod tests {
     fn forbidden_aggregates_are_gated() -> VortexResult<()> {
         let session = array_session();
         let dtype = DType::struct_([("a", i32_dtype())], Nullability::NonNullable);
-        let ctx = LayoutWriterContext::new(ArrayContext::empty()).with_allowed_aggregates(
-            HashSet::from_iter([Min.id(), Max.id(), NanCount.id(), NullCount.id()]),
-        );
+        let ctx = LayoutWriterContext::new(ArrayContext::empty())
+            .with_allowed_aggregates(HashSet::from_iter([Min.id(), Max.id(), NanCount.id()]));
 
         // An explicitly requested aggregate the context forbids fails the write.
         let error = FileStatsAccumulator::try_new(
@@ -1231,7 +1229,8 @@ mod tests {
         .vortex_expect("Sum is not permitted");
         assert!(error.to_string().contains("not permitted by ctx"));
 
-        // The defaults leave it out of the nested aggregates, but the legacy stats keep it.
+        // The defaults leave a forbidden aggregate out of the nested aggregates, but the legacy
+        // stats keep it.
         let acc = FileStatsAccumulator::try_new(&dtype, None, &session, true, &ctx)?;
         let chunk = StructArray::new(
             FieldNames::from(["a"]),
@@ -1252,14 +1251,41 @@ mod tests {
         assert!(
             !aggregates[0]
                 .iter()
-                .any(|stat| stat.aggregate_fn().is::<Sum>())
+                .any(|stat| stat.aggregate_fn().is::<NullCount>())
         );
         assert_eq!(
             acc.legacy_aggregate_stats()?[0]
-                .get(&agg(Stat::Sum))
+                .get(&agg(Stat::NullCount))
                 .and_then(Scalar::into_value),
-            Precision::exact(ScalarValue::from(6i64))
+            Precision::exact(ScalarValue::from(0u64))
         );
+        Ok(())
+    }
+
+    #[test]
+    fn defaults_do_not_record_sum() -> VortexResult<()> {
+        let session = array_session();
+        let dtype = DType::struct_([("a", i32_dtype())], Nullability::NonNullable);
+        let acc = FileStatsAccumulator::try_new(
+            &dtype,
+            None,
+            &session,
+            true,
+            &LayoutWriterContext::new(ArrayContext::empty()),
+        )?;
+        let chunk = StructArray::new(
+            FieldNames::from(["a"]),
+            [buffer![1i32, 2, 3].into_array()],
+            3,
+            Validity::NonNullable,
+        )
+        .into_array();
+        let (mut ptr, _eof) = SequenceId::root().split();
+        acc.process(Ok((ptr.advance(), chunk)))?;
+
+        let sum = agg(Stat::Sum);
+        assert!(acc.aggregate_stats()?[0].get(&sum).is_absent());
+        assert!(acc.legacy_aggregate_stats()?[0].get(&sum).is_absent());
         Ok(())
     }
 
