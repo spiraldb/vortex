@@ -3,6 +3,7 @@
 
 use std::ops::Range;
 use std::sync::Arc;
+use std::time::Instant;
 
 use bit_vec::BitVec;
 use rustc_hash::FxHashSet;
@@ -129,6 +130,7 @@ pub(super) struct FilterPlanner {
     announced: bool,
     /// Ids for hints, counting down from `u32::MAX` so they never meet an adaptor's fetch ids.
     next_hint: u32,
+    started: Option<Instant>,
 }
 
 /// The segments `plans` read over `rows` under `mask`, each once, in id order. Compiling finds
@@ -160,6 +162,7 @@ impl FilterPlanner {
             pieces: Vec::new(),
             announced: false,
             next_hint: u32::MAX,
+            started: None,
         }
     }
 }
@@ -217,6 +220,7 @@ impl Planner for FilterPlanner {
         };
         if !self.announced {
             self.announced = true;
+            self.started = Some(Instant::now());
             let session = &self.scan.session;
             let rows = selected.scope.rows.clone();
             let predicates = segments_read(
@@ -280,11 +284,20 @@ impl Planner for FilterPlanner {
             self.filter
                 .expression
                 .report_selectivity(*index, selected.mask.true_count() as f64 / input as f64);
+            let metrics = &self.scan.metrics;
+            metrics.filter_conjuncts.add(1);
+            metrics.filter_rows_in.add(input as u64);
+            metrics
+                .filter_rows_out
+                .add(selected.mask.true_count() as u64);
             self.active = None;
             self.pieces.clear();
         }
         if selected.mask.all_false() {
             self.selected = None;
+            if let Some(started) = self.started {
+                self.scan.metrics.filter_duration.update(started.elapsed());
+            }
             return Ok(PlannerOutput::Done);
         }
         if let Some(index) = self.filter.expression.next_conjunct(&self.remaining) {
@@ -306,6 +319,9 @@ impl Planner for FilterPlanner {
             return Ok(PlannerOutput::Continue);
         }
         let selected = self.selected.take().vortex_expect("selected rows exist");
+        if let Some(started) = self.started {
+            self.scan.metrics.filter_duration.update(started.elapsed());
+        }
         Ok(PlannerOutput::Planner(
             selected.scope.clone(),
             Box::new(ProjectionPlanner::new(Arc::clone(&self.scan), selected)),

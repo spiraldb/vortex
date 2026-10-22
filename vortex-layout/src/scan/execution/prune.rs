@@ -5,6 +5,7 @@
 
 use std::ops::Range;
 use std::sync::Arc;
+use std::time::Instant;
 
 use rustc_hash::FxHashSet;
 use vortex_error::VortexResult;
@@ -54,7 +55,7 @@ pub struct PrunePlanner {
     pruning: Vec<PlanRef>,
     /// One adaptor per pruning plan, each over the whole of `rows`, with the pieces it produced.
     active: Vec<(ScanAdaptor, Vec<Mask>)>,
-    started: bool,
+    started: Option<Instant>,
     /// Ids for hints, counting down from `u32::MAX` so they never meet an adaptor's fetch ids.
     next_hint: u32,
     /// The chunks of `rows`, whose reads are speculated on the first ask.
@@ -78,7 +79,7 @@ impl PrunePlanner {
             next: Some(next),
             pruning,
             active: Vec::new(),
-            started: false,
+            started: None,
             next_hint: u32::MAX,
             ahead,
             speculated: false,
@@ -190,6 +191,10 @@ impl Planner for PrunePlanner {
         if batch.is_empty() {
             return Ok(None);
         }
+        self.scan
+            .metrics
+            .speculated_requests
+            .add(batch.len() as u64);
         tracing::debug!(
             row_start = self.rows.start,
             row_end = self.rows.end,
@@ -203,7 +208,7 @@ impl Planner for PrunePlanner {
         if self.done {
             return State::Done;
         }
-        if !self.started {
+        if self.started.is_none() {
             return State::NeedsCompute;
         }
         let mut waiting = false;
@@ -225,8 +230,8 @@ impl Planner for PrunePlanner {
         if self.done {
             return Ok(PlannerOutput::Done);
         }
-        if !self.started {
-            self.started = true;
+        if self.started.is_none() {
+            self.started = Some(Instant::now());
             self.start()?;
         }
         // Step every adaptor that can compute, publishing all their reads as one batch.
@@ -268,6 +273,14 @@ impl Planner for PrunePlanner {
         let pruned = !self.active.is_empty();
         let kept = pruned.then(|| self.kept()).transpose()?;
         self.done = true;
+        let metrics = &self.scan.metrics;
+        if let Some(started) = self.started {
+            metrics.prune_duration.update(started.elapsed());
+        }
+        if let Some(kept) = &kept {
+            metrics.prune_rows_in.add(kept.len() as u64);
+            metrics.prune_rows_kept.add(kept.true_count() as u64);
+        }
         tracing::debug!(
             row_start = self.rows.start,
             row_end = self.rows.end,

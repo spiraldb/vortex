@@ -14,6 +14,7 @@
 mod adaptor;
 mod chunk;
 mod filter;
+mod metrics;
 mod projection;
 mod prune;
 mod selection;
@@ -39,6 +40,7 @@ pub(crate) use self::chunk::row_chunks;
 pub(crate) use self::chunk::rows_per_chunk;
 use self::filter::FilterPlanner;
 pub use self::filter::FilterPlans;
+pub use self::metrics::ScanMetrics;
 use self::projection::ProjectionPlanner;
 pub use self::prune::PruneNext;
 pub use self::prune::PrunePlanner;
@@ -100,6 +102,8 @@ pub struct PreparedScan {
     pub(super) values: ValueCache,
     /// The rows of one chunk, the unit of work a chunk planner emits.
     pub(super) chunk_rows: usize,
+    /// What the scan's stages did, for the engine's metrics.
+    pub(super) metrics: Arc<ScanMetrics>,
 }
 
 impl PreparedScan {

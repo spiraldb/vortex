@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use std::sync::Arc;
+use std::time::Instant;
 use std::vec::IntoIter;
 
 use vortex_array::IntoArray;
@@ -100,6 +101,9 @@ impl Planner for ProjectionPlanner {
 /// Runs the projection plan over a split's selected rows and returns them as one batch, in row
 /// order. A selection that projects to no rows finishes without a batch.
 struct ProjectionMorsel {
+    started: Option<Instant>,
+    /// When the morsel's reads went out, until its first piece arrives.
+    reads_at: Option<Instant>,
     scan: Arc<PreparedScan>,
     dtype: DType,
     selected: SelectedRows,
@@ -118,11 +122,24 @@ impl ProjectionMorsel {
             adaptor: None,
             pieces: Vec::new(),
             done: false,
+            started: None,
+            reads_at: None,
         }
     }
 
     fn finish(&mut self) -> VortexResult<MorselOutput> {
         self.done = true;
+        let metrics = &self.scan.metrics;
+        if let Some(started) = self.started {
+            metrics.projection_duration.update(started.elapsed());
+        }
+        metrics.batches.add(1);
+        metrics.projection_rows.add(
+            self.pieces
+                .iter()
+                .map(|piece| piece.array.len() as u64)
+                .sum(),
+        );
         self.pieces.sort_by_key(|piece| piece.rows.start);
         let mut arrays: Vec<_> = std::mem::take(&mut self.pieces)
             .into_iter()
@@ -178,6 +195,7 @@ impl Morsel for ProjectionMorsel {
             .with_row_offset(self.scan.row_offset)
             .with_value_cache(self.scan.values.clone());
             self.adaptor = Some(ScanAdaptor::new(scan, Arc::clone(&self.scan.locations)));
+            self.started = Some(Instant::now());
             tracing::debug!(
                 row_start = self.selected.scope.rows.start,
                 row_end = self.selected.scope.rows.end,
@@ -197,6 +215,7 @@ impl Morsel for ProjectionMorsel {
         Ok(match adaptor.compute()? {
             AdaptorStep::Yield => MorselOutput::Continue,
             AdaptorStep::NeedsIO(batch) => {
+                self.reads_at.get_or_insert_with(Instant::now);
                 tracing::debug!(
                     row_start = self.selected.scope.rows.start,
                     requests = batch.len(),
@@ -205,6 +224,9 @@ impl Morsel for ProjectionMorsel {
                 MorselOutput::NeedsIO(batch)
             }
             AdaptorStep::Piece(piece) => {
+                if let Some(reads_at) = self.reads_at.take() {
+                    self.scan.metrics.projection_wait.update(reads_at.elapsed());
+                }
                 self.pieces.push(piece);
                 MorselOutput::Continue
             }

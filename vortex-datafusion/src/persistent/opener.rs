@@ -229,6 +229,7 @@ impl FileOpener for VortexOpener {
                 return Ok(stream::empty().boxed());
             }
 
+            let scan_labels = labels.clone();
             let mut open_opts = session
                 .open_options()
                 .with_file_size(file.object_meta.size)
@@ -534,7 +535,8 @@ impl FileOpener for VortexOpener {
                 scan_file.cache = Some(shared_scan_cache(&scan_caches, &file.object_meta.location));
                 let mut builder = V2ScanBuilder::new(vxf.session().clone(), scan_file)
                     .with_projection(scan_projection)
-                    .with_some_filter(native_filter);
+                    .with_some_filter(native_filter)
+                    .with_metrics_registry(Arc::clone(&metrics_registry), scan_labels);
                 if let Some(rows) = scan_row_range {
                     builder = builder.with_row_range(rows);
                 }
