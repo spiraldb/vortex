@@ -10,6 +10,7 @@ use std::sync::atomic::Ordering;
 use arrow_array::cast::AsArray;
 use arrow_array::types::Int32Type;
 use arrow_schema::Field;
+use futures::FutureExt;
 use futures::TryStreamExt;
 use futures::stream;
 use rstest::rstest;
@@ -53,6 +54,7 @@ use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
 
 use super::ChunkPlanner;
+use super::FileAnnouncePlanner;
 use super::MAX_ROWS_PER_CHUNK;
 use super::PreparedScan;
 use super::PrunePlanner;
@@ -214,16 +216,17 @@ fn compose(scan: &Arc<PreparedScan>, rows: Range<u64>) -> Box<dyn Planner> {
             Box::new(ReadAheadPlanner::new(scan, rows, kept, 4, Box::new(chunks)))
         }
     };
-    if scan.filter().is_some() {
-        Box::new(PrunePlanner::new(
-            Arc::clone(scan),
-            rows,
-            4,
-            Box::new(ahead),
-        ))
-    } else {
-        ahead(None)
-    }
+    let root = {
+        let scan = Arc::clone(scan);
+        move || -> Box<dyn Planner> {
+            if scan.filter().is_some() {
+                Box::new(PrunePlanner::new(scan, rows, 4, Box::new(ahead)))
+            } else {
+                ahead(None)
+            }
+        }
+    };
+    Box::new(FileAnnouncePlanner::new(Arc::clone(scan), Box::new(root)))
 }
 
 /// Runs `rows` of a prepared scan on one planning run, every spawned chunk admitted to it, and
@@ -509,15 +512,35 @@ fn chunk_byte_budget(#[case] rows: u64, #[case] bytes: u32, #[case] expected: us
     assert_eq!(rows_per_chunk(rows, &locations), expected);
 }
 
+/// Counts the reads a scan performs: a request counts once it is polled, since a request only
+/// announced for coalescing is never polled and reads nothing.
 struct CountingSegments {
     inner: Arc<dyn SegmentSource>,
-    reads: AtomicUsize,
+    counter: Arc<AtomicUsize>,
+}
+
+impl CountingSegments {
+    fn new(inner: Arc<dyn SegmentSource>) -> Self {
+        Self {
+            inner,
+            counter: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
+    fn reads(&self) -> usize {
+        self.counter.load(Ordering::Relaxed)
+    }
 }
 
 impl SegmentSource for CountingSegments {
     fn request(&self, id: SegmentId) -> SegmentFuture {
-        self.reads.fetch_add(1, Ordering::Relaxed);
-        self.inner.request(id)
+        let read = self.inner.request(id);
+        let reads = Arc::clone(&self.counter);
+        async move {
+            reads.fetch_add(1, Ordering::Relaxed);
+            read.await
+        }
+        .boxed()
     }
 }
 
@@ -551,10 +574,7 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
         .await?;
     // Codes index the same values across fixed work chunks and stored chunk boundaries.
     let layout = DictLayout::new(Arc::clone(&ints), ints).into_layout();
-    let counted = Arc::new(CountingSegments {
-        inner: segments,
-        reads: AtomicUsize::new(0),
-    });
+    let counted = Arc::new(CountingSegments::new(segments));
     let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
     let scan = Arc::new(builder(&session, &segments, &layout)?.prepare()?);
     let chunks = row_chunks(scan.rows().clone(), scan.chunk_rows);
@@ -563,13 +583,21 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
         (STORED_CHUNKS * STORED_CHUNK_ROWS).div_ceil(MAX_ROWS_PER_CHUNK)
     );
     for (index, rows) in chunks.into_iter().enumerate() {
-        let before = counted.reads.load(Ordering::Relaxed);
+        let before = counted.reads();
         let arrays = run_rows(&scan, rows.clone()).await?;
-        let reads = counted.reads.load(Ordering::Relaxed) - before;
-        // The first chunk reads every values chunk once for the whole scan; its codes are one
-        // of them. The reads read ahead for the file are kept with it, so later chunks, whose
-        // codes are those same chunks, read nothing.
-        assert_eq!(reads, if index == 0 { STORED_CHUNKS } else { 0 });
+        let reads = counted.reads() - before;
+        let code_chunks =
+            (rows.end - 1) / STORED_CHUNK_ROWS as u64 - rows.start / STORED_CHUNK_ROWS as u64 + 1;
+        // The first chunk reads every values chunk once for the whole scan; its codes are one of
+        // them, and the session shares that read. Later chunks read only their codes.
+        assert_eq!(
+            reads,
+            if index == 0 {
+                STORED_CHUNKS
+            } else {
+                usize::try_from(code_chunks)?
+            }
+        );
         let expected =
             PrimitiveArray::from_iter(i32::try_from(rows.start)?..i32::try_from(rows.end)?);
         assert_arrays_eq!(
@@ -696,17 +724,14 @@ async fn scan_cache_reuses_values_between_scans(
     let values = chunked_ints(&session, &segments).await?;
     let codes = chunked_ints(&session, &segments).await?;
     let layout = DictLayout::new(values, codes).into_layout();
-    let counted = Arc::new(CountingSegments {
-        inner: segments,
-        reads: AtomicUsize::new(0),
-    });
+    let counted = Arc::new(CountingSegments::new(segments));
     let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
     let mut file = scan_file(&segments, &layout)?;
     file.cache = cached.then(ScanCache::default);
 
     let mut reads = Vec::new();
     for _ in 0..2 {
-        let before = counted.reads.load(Ordering::Relaxed);
+        let before = counted.reads();
         let scan = ScanBuilder::new(session.clone(), file.clone())
             .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(vec![12u64, 15]))?);
         let actual = collect_scan(layout.dtype().clone(), scan).await?;
@@ -715,7 +740,7 @@ async fn scan_cache_reuses_values_between_scans(
             PrimitiveArray::from_iter([12i32, 15]),
             &mut session.create_execution_ctx()
         );
-        reads.push(counted.reads.load(Ordering::Relaxed) - before);
+        reads.push(counted.reads() - before);
     }
     // Every values chunk and the one selected codes chunk, then only the codes chunk if cached.
     assert_eq!(reads, vec![4, second_scan_reads]);
@@ -754,10 +779,7 @@ async fn repeated_projections_reuse_their_values() -> VortexResult<()> {
     let values = chunked_ints(&session, &segments).await?;
     let codes = chunked_ints(&session, &segments).await?;
     let layout = DictLayout::new(values, codes).into_layout();
-    let counted = Arc::new(CountingSegments {
-        inner: segments,
-        reads: AtomicUsize::new(0),
-    });
+    let counted = Arc::new(CountingSegments::new(segments));
     let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
     let mut file = scan_file(&segments, &layout)?;
     file.cache = Some(ScanCache::default());
@@ -765,7 +787,7 @@ async fn repeated_projections_reuse_their_values() -> VortexResult<()> {
     let projection = gt(root(), lit(15i32)).bind(layout.dtype())?;
     let mut reads = Vec::new();
     for _ in 0..3 {
-        let before = counted.reads.load(Ordering::Relaxed);
+        let before = counted.reads();
         let scan = ScanBuilder::new(session.clone(), file.clone())
             .with_projection(projection.clone())
             .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(vec![12u64, 18]))?);
@@ -775,7 +797,7 @@ async fn repeated_projections_reuse_their_values() -> VortexResult<()> {
             vortex_array::arrays::BoolArray::from_iter([false, true]),
             &mut session.create_execution_ctx()
         );
-        reads.push(counted.reads.load(Ordering::Relaxed) - before);
+        reads.push(counted.reads() - before);
     }
     assert_eq!(reads, vec![4, 1, 1]);
     Ok(())
@@ -840,10 +862,7 @@ async fn pruned_rows_get_no_chunk(
 async fn shared_cache_prunes_zones_once() -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, zoned_table().as_ref()).await?;
-    let counted = Arc::new(CountingSegments {
-        inner: segments,
-        reads: AtomicUsize::new(0),
-    });
+    let counted = Arc::new(CountingSegments::new(segments));
     let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
     let mut file = scan_file(&segments, &layout)?;
     let cache = ScanCache::default();
@@ -854,13 +873,13 @@ async fn shared_cache_prunes_zones_once() -> VortexResult<()> {
 
     let mut reads = Vec::new();
     for _ in 0..2 {
-        let before = counted.reads.load(Ordering::Relaxed);
+        let before = counted.reads();
         let scan = ScanBuilder::new(session.clone(), file.clone())
             .with_projection(projection.clone())
             .with_some_filter(Some(filter.clone()));
         let actual = collect_scan(projection.dtype().clone(), scan).await?;
         assert_eq!(actual.len(), 1_000);
-        reads.push(counted.reads.load(Ordering::Relaxed) - before);
+        reads.push(counted.reads() - before);
     }
     let plans = cache
         .filter_plans(&filter)

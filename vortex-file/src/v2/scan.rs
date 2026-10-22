@@ -25,6 +25,7 @@ use vortex_error::VortexResult;
 use vortex_io::request::IoSource;
 use vortex_io::runtime::Handle;
 use vortex_layout::scan::v2::ChunkPlanner;
+use vortex_layout::scan::v2::FileAnnouncePlanner;
 use vortex_layout::scan::v2::PreparedScan;
 use vortex_layout::scan::v2::PrunePlanner;
 use vortex_layout::scan::v2::ReadAheadPlanner;
@@ -143,16 +144,17 @@ fn compose(scan: &Arc<PreparedScan>, window: usize) -> Box<dyn Planner> {
             ))
         }
     };
-    if scan.filter().is_some() {
-        Box::new(PrunePlanner::new(
-            Arc::clone(scan),
-            rows,
-            window,
-            Box::new(ahead),
-        ))
-    } else {
-        ahead(None)
-    }
+    let root = {
+        let scan = Arc::clone(scan);
+        move || -> Box<dyn Planner> {
+            if scan.filter().is_some() {
+                Box::new(PrunePlanner::new(scan, rows, window, Box::new(ahead)))
+            } else {
+                ahead(None)
+            }
+        }
+    };
+    Box::new(FileAnnouncePlanner::new(Arc::clone(scan), Box::new(root)))
 }
 
 /// What the root run's stream yields: a batch with the row it starts at, or a chunk a planner of

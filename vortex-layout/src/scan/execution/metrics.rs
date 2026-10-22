@@ -22,6 +22,8 @@ pub struct ScanMetrics {
     /// read-ahead planner started or announced for the chunks ahead.
     pub speculated_requests: Counter,
     pub read_ahead_requests: Counter,
+    /// Requests announced for the whole file, by the first partition to open it.
+    pub file_announced_requests: Counter,
     /// Chunks planned, and chunks skipped because nothing was selected or kept of them.
     pub chunks: Counter,
     pub chunks_skipped: Counter,
@@ -59,6 +61,7 @@ impl ScanMetrics {
             prune_rows_kept: counter("vortex.scan.prune.rows_kept"),
             speculated_requests: counter("vortex.scan.speculated.requests"),
             read_ahead_requests: counter("vortex.scan.read_ahead.requests"),
+            file_announced_requests: counter("vortex.scan.file.announced.requests"),
             chunks: counter("vortex.scan.chunks"),
             chunks_skipped: counter("vortex.scan.chunks.skipped"),
             filter_duration: timer("vortex.scan.filter.duration"),

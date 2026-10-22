@@ -8,10 +8,12 @@ use std::sync::Weak;
 
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
+use rustc_hash::FxHashSet;
 use vortex_array::expr::BoundExpression;
 use vortex_array::expr::ExactBoundExpr;
 
 use super::io::SegmentRanges;
+use crate::plan::physical::PlanByPtr;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::pipeline::ValueCache;
 use crate::scan::execution::FilterPlans;
@@ -47,12 +49,28 @@ struct Inner {
     values: ValueCache,
     /// Reads speculated or read ahead for the file, shared by every scan of it.
     ahead: Ahead,
+    /// The projection and filter plans whose segments were announced for the whole file.
+    announced: Mutex<FxHashSet<(PlanByPtr, usize)>>,
 }
 
 impl ScanCache {
     /// The reads speculated or read ahead for the file, shared by every scan of it.
     pub(crate) fn ahead(&self) -> Ahead {
         Arc::clone(&self.0.ahead)
+    }
+
+    /// Whether the scan of `projection` under `filter` is the first to announce the file's
+    /// segments; later ones get `false`.
+    pub(crate) fn announce_once(
+        &self,
+        projection: &PlanRef,
+        filter: Option<&Arc<FilterPlans>>,
+    ) -> bool {
+        let key = (
+            PlanByPtr(projection.clone()),
+            filter.map_or(0, |filter| Arc::as_ptr(filter) as usize),
+        );
+        self.0.announced.lock().insert(key)
     }
 
     /// The lowered root plan an earlier scan kept.

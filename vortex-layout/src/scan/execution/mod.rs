@@ -12,6 +12,7 @@
 //! says what it needs, compute or reads; where either runs is the engine's driver's decision.
 
 mod adaptor;
+mod announce;
 mod chunk;
 mod filter;
 mod metrics;
@@ -32,6 +33,7 @@ use vortex_scan::planning::planner::WorkScope;
 use vortex_scan::selection::Selection;
 use vortex_session::VortexSession;
 
+pub use self::announce::FileAnnouncePlanner;
 pub use self::chunk::ChunkPlanner;
 pub(crate) use self::chunk::FILTERED_ROWS_PER_CHUNK;
 pub(crate) use self::chunk::MAX_ROWS_PER_CHUNK;

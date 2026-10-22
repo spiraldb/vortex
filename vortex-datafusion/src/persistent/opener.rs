@@ -57,6 +57,7 @@ use vortex::io::session::RuntimeSessionExt;
 use vortex::layout::LayoutReader;
 use vortex::layout::scan::scan_builder::ScanBuilder;
 use vortex::layout::scan::v2::ChunkPlanner;
+use vortex::layout::scan::v2::FileAnnouncePlanner;
 use vortex::layout::scan::v2::PrunePlanner;
 use vortex::layout::scan::v2::ReadAheadPlanner;
 use vortex::layout::scan::v2::ScanBuilder as V2ScanBuilder;
@@ -592,17 +593,21 @@ impl FileOpener for VortexOpener {
                         ))
                     }
                 };
-                let root: Box<dyn Planner> = if scan.filter().is_some() {
-                    let rows = scan.rows().clone();
-                    Box::new(PrunePlanner::new(
-                        Arc::clone(&scan),
-                        rows,
-                        window,
-                        Box::new(ahead),
-                    ))
-                } else {
-                    ahead(None)
+                let root = {
+                    let scan = Arc::clone(&scan);
+                    move || -> Box<dyn Planner> {
+                        if scan.filter().is_some() {
+                            let rows = scan.rows().clone();
+                            Box::new(PrunePlanner::new(scan, rows, window, Box::new(ahead)))
+                        } else {
+                            ahead(None)
+                        }
+                    }
                 };
+                // The first partition to open the file announces every segment the scan reads
+                // of it, so each partition's reads coalesce with its neighbours'.
+                let root: Box<dyn Planner> =
+                    Box::new(FileAnnouncePlanner::new(Arc::clone(&scan), Box::new(root)));
 
                 Ok(driver.run(scan, root, map_batch))
             } else {
