@@ -481,12 +481,14 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
         let reads = counted.reads.load(Ordering::Relaxed) - before;
         let code_chunks =
             (rows.end - 1) / STORED_CHUNK_ROWS as u64 - rows.start / STORED_CHUNK_ROWS as u64 + 1;
+        // The first split reads every values chunk once for the whole scan, plus its codes.
+        let code_chunks = usize::try_from(code_chunks)?;
         assert_eq!(
             reads,
             if index == 0 {
-                STORED_CHUNKS
+                STORED_CHUNKS + code_chunks
             } else {
-                usize::try_from(code_chunks)?
+                code_chunks
             }
         );
         let expected =

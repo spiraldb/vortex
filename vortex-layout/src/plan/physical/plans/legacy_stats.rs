@@ -29,8 +29,6 @@ use crate::plan::physical::optimizer::PlanParentReduceRule;
 use crate::plan::physical::optimizer::PlanReduceRule;
 use crate::plan::physical::pipeline::Chain;
 use crate::plan::physical::pipeline::Compiler;
-use crate::plan::physical::pipeline::Reach;
-use crate::segments::SegmentId;
 
 const DATA: usize = 0;
 const ZONES: usize = 1;
@@ -145,15 +143,6 @@ impl PlanVTable for LegacyStats {
         compiler: &mut Compiler<'_>,
     ) -> VortexResult<Option<Chain>> {
         compiler.compile(&plan.data_plan()?, rows, mask)
-    }
-
-    fn reach(
-        plan: &Plan<Self>,
-        rows: Range<u64>,
-        at: &Reach,
-        visit: &mut dyn FnMut(SegmentId, Range<u64>),
-    ) -> VortexResult<()> {
-        plan.data_plan()?.reach(rows, at, visit)
     }
 }
 

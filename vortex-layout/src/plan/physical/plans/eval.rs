@@ -23,8 +23,6 @@ use crate::plan::physical::operators::EvalStage;
 use crate::plan::physical::optimizer::PlanReduceRule;
 use crate::plan::physical::pipeline::Chain;
 use crate::plan::physical::pipeline::Compiler;
-use crate::plan::physical::pipeline::Reach;
-use crate::segments::SegmentId;
 
 /// Applies an expression to the output of its child.
 #[derive(Clone, Debug)]
@@ -129,15 +127,6 @@ impl PlanVTable for Eval {
     ) -> VortexResult<Option<Chain>> {
         let chain = compiler.compile(&plan.child_plan()?, rows, mask)?;
         Ok(chain.map(|chain| chain.with(EvalStage::new(plan.expression().clone()))))
-    }
-
-    fn reach(
-        plan: &Plan<Self>,
-        rows: Range<u64>,
-        at: &Reach,
-        visit: &mut dyn FnMut(SegmentId, Range<u64>),
-    ) -> VortexResult<()> {
-        plan.child_plan()?.reach(rows, at, visit)
     }
 }
 
