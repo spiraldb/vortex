@@ -63,6 +63,8 @@ use crate::Footer;
 use crate::MAGIC_BYTES;
 use crate::WriteStrategyBuilder;
 use crate::counting::CountingVortexWrite;
+use crate::encryption::EncryptionConfig;
+use crate::encryption::EncryptionSpec;
 use crate::footer::FileStatistics;
 use crate::footer::MAX_METADATA_KEY_BYTES;
 use crate::footer::MAX_METADATA_SEGMENTS;
@@ -86,6 +88,7 @@ pub struct VortexWriteOptions {
     max_variable_length_statistics_size: usize,
     file_statistics: Vec<Stat>,
     metadata: HashMap<String, ByteBuffer>,
+    encryption: Option<EncryptionConfig>,
 }
 
 /// Extension trait for constructing [`VortexWriteOptions`] from a session.
@@ -109,6 +112,7 @@ impl VortexWriteOptions {
             file_statistics: PRUNING_STATS.to_vec(),
             max_variable_length_statistics_size: 64,
             metadata: HashMap::default(),
+            encryption: None,
         }
     }
 
@@ -151,6 +155,17 @@ impl VortexWriteOptions {
     //  read-time is sane? I guess most layouts will have some reasonable validation.
     pub fn exclude_dtype(mut self) -> Self {
         self.exclude_dtype = true;
+        self
+    }
+
+    /// Encrypt the file.
+    ///
+    /// Every data segment, and the dtype, layout, statistics, footer, and user metadata segments,
+    /// is encrypted with AES-256-GCM. Only the postscript, which records segment locations and the
+    /// key metadata of the [`EncryptionConfig`], is stored in plaintext. Readers must be opened
+    /// with a matching [`KeyRetriever`](crate::encryption::KeyRetriever).
+    pub fn with_encryption(mut self, encryption: EncryptionConfig) -> Self {
+        self.encryption = Some(encryption);
         self
     }
 
@@ -287,7 +302,17 @@ impl VortexWriteOptions {
         // Create a channel to send buffers from the segment sink to the output stream.
         let (send, recv) = kanal::bounded_async(1);
 
-        let segments = Arc::new(BufferedSegmentSink::new(send, position));
+        let cipher = self
+            .encryption
+            .as_ref()
+            .map(EncryptionConfig::file_cipher)
+            .transpose()?;
+        let mut segments = BufferedSegmentSink::new(send, position);
+        if let Some(cipher) = &cipher {
+            // Index 0 of the footer's encryption specs is reserved for plaintext segments.
+            segments = segments.with_cipher(cipher.clone(), 1);
+        }
+        let segments = Arc::new(segments);
 
         // We spawn the layout future so it is driven in the background while we write the
         // buffer stream, so we don't need to poll it until all buffers have been drained.
@@ -334,11 +359,19 @@ impl VortexWriteOptions {
             statistics,
             ReadContext::new(ctx.array_ctx().to_ids()),
         );
+        if let Some(cipher) = &cipher {
+            footer = footer.with_encryption_specs(Arc::from([
+                EncryptionSpec::plaintext(),
+                cipher.spec().clone(),
+            ]))?;
+        }
 
         // Emit the footer buffers and EOF.
-        let (footer_buffers, metadata, approx_byte_size) = footer
-            .clone()
-            .into_serializer()
+        let mut serializer = footer.clone().into_serializer();
+        if let Some(cipher) = cipher {
+            serializer = serializer.with_cipher(cipher);
+        }
+        let (footer_buffers, metadata, approx_byte_size) = serializer
             .with_layout_context(new_layout_context(&self.session, enforce_editions))
             .with_metadata_segments(self.metadata)
             .with_offset(position)

@@ -102,6 +102,94 @@ impl<'a> ::flatbuffers::Verifiable for CompressionScheme {
 }
 
 impl ::flatbuffers::SimpleToVerifyInSlice for CompressionScheme {}
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+pub const ENUM_MIN_ENCRYPTION_ALGORITHM: u8 = 0;
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+pub const ENUM_MAX_ENCRYPTION_ALGORITHM: u8 = 1;
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+#[allow(non_camel_case_types)]
+pub const ENUM_VALUES_ENCRYPTION_ALGORITHM: [EncryptionAlgorithm; 2] = [
+  EncryptionAlgorithm::None,
+  EncryptionAlgorithm::Aes256Gcm,
+];
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[repr(transparent)]
+pub struct EncryptionAlgorithm(pub u8);
+#[allow(non_upper_case_globals)]
+impl EncryptionAlgorithm {
+  pub const None: Self = Self(0);
+  /// AES-256 in Galois/Counter Mode. An encrypted segment is stored as
+  /// `ciphertext || nonce (12 bytes) || tag (16 bytes)`, where the ciphertext has the length of
+  /// the plaintext. The additional authenticated data is `aad_prefix` followed by a module
+  /// identifier that binds the ciphertext to its position in the file.
+  pub const Aes256Gcm: Self = Self(1);
+
+  pub const ENUM_MIN: u8 = 0;
+  pub const ENUM_MAX: u8 = 1;
+  pub const ENUM_VALUES: &'static [Self] = &[
+    Self::None,
+    Self::Aes256Gcm,
+  ];
+  /// Returns the variant's name or "" if unknown.
+  pub fn variant_name(self) -> Option<&'static str> {
+    match self {
+      Self::None => Some("None"),
+      Self::Aes256Gcm => Some("Aes256Gcm"),
+      _ => None,
+    }
+  }
+}
+impl ::core::fmt::Debug for EncryptionAlgorithm {
+  fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+    if let Some(name) = self.variant_name() {
+      f.write_str(name)
+    } else {
+      f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
+    }
+  }
+}
+impl<'a> ::flatbuffers::Follow<'a> for EncryptionAlgorithm {
+  type Inner = Self;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    let b = unsafe { ::flatbuffers::read_scalar_at::<u8>(buf, loc) };
+    Self(b)
+  }
+}
+
+impl ::flatbuffers::Push for EncryptionAlgorithm {
+    type Output = EncryptionAlgorithm;
+    #[inline]
+    unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
+        unsafe { ::flatbuffers::emplace_scalar::<u8>(dst, self.0) };
+    }
+}
+
+impl ::flatbuffers::EndianScalar for EncryptionAlgorithm {
+  type Scalar = u8;
+  #[inline]
+  fn to_little_endian(self) -> u8 {
+    self.0.to_le()
+  }
+  #[inline]
+  #[allow(clippy::wrong_self_convention)]
+  fn from_little_endian(v: u8) -> Self {
+    let b = u8::from_le(v);
+    Self(b)
+  }
+}
+
+impl<'a> ::flatbuffers::Verifiable for EncryptionAlgorithm {
+  #[inline]
+  fn run_verifier(
+    v: &mut ::flatbuffers::Verifier, pos: usize
+  ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+    u8::run_verifier(v, pos)
+  }
+}
+
+impl ::flatbuffers::SimpleToVerifyInSlice for EncryptionAlgorithm {}
 /// A `SegmentSpec` acts as the locator for a buffer within the file.
 // struct SegmentSpec, aligned to 8
 #[repr(transparent)]
@@ -119,7 +207,7 @@ impl ::core::fmt::Debug for SegmentSpec {
       .field("length", &self.length())
       .field("alignment_exponent", &self.alignment_exponent())
       .field("_compression", &self._compression())
-      .field("_encryption", &self._encryption())
+      .field("encryption", &self.encryption())
       .finish()
   }
 }
@@ -168,14 +256,14 @@ impl<'a> SegmentSpec {
     length: u32,
     alignment_exponent: u8,
     _compression: u8,
-    _encryption: u16,
+    encryption: u16,
   ) -> Self {
     let mut s = Self([0; 16]);
     s.set_offset(offset);
     s.set_length(length);
     s.set_alignment_exponent(alignment_exponent);
     s.set__compression(_compression);
-    s.set__encryption(_encryption);
+    s.set_encryption(encryption);
     s
   }
 
@@ -269,6 +357,7 @@ impl<'a> SegmentSpec {
     }
   }
 
+  /// Reserved for future use as a pointer into `Footer::compression_specs`.
   pub fn _compression(&self) -> u8 {
     let mut mem = ::core::mem::MaybeUninit::<<u8 as ::flatbuffers::EndianScalar>::Scalar>::uninit();
     // Safety:
@@ -298,7 +387,8 @@ impl<'a> SegmentSpec {
     }
   }
 
-  pub fn _encryption(&self) -> u16 {
+  /// Index into `Footer::encryption_specs`. Index 0 always denotes a plaintext segment.
+  pub fn encryption(&self) -> u16 {
     let mut mem = ::core::mem::MaybeUninit::<<u16 as ::flatbuffers::EndianScalar>::Scalar>::uninit();
     // Safety:
     // Created from a valid Table for this object
@@ -313,7 +403,7 @@ impl<'a> SegmentSpec {
     })
   }
 
-  pub fn set__encryption(&mut self, x: u16) {
+  pub fn set_encryption(&mut self, x: u16) {
     let x_le = ::flatbuffers::EndianScalar::to_little_endian(x);
     // Safety:
     // Created from a valid Table for this object
@@ -654,7 +744,7 @@ impl<'a> PostscriptSegment<'a> {
   pub const VT_LENGTH: ::flatbuffers::VOffsetT = 6;
   pub const VT_ALIGNMENT_EXPONENT: ::flatbuffers::VOffsetT = 8;
   pub const VT__COMPRESSION: ::flatbuffers::VOffsetT = 10;
-  pub const VT__ENCRYPTION: ::flatbuffers::VOffsetT = 12;
+  pub const VT_ENCRYPTION: ::flatbuffers::VOffsetT = 12;
 
   #[inline]
   pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
@@ -667,7 +757,7 @@ impl<'a> PostscriptSegment<'a> {
   ) -> ::flatbuffers::WIPOffset<PostscriptSegment<'bldr>> {
     let mut builder = PostscriptSegmentBuilder::new(_fbb);
     builder.add_offset(args.offset);
-    if let Some(x) = args._encryption { builder.add__encryption(x); }
+    if let Some(x) = args.encryption { builder.add_encryption(x); }
     if let Some(x) = args._compression { builder.add__compression(x); }
     builder.add_length(args.length);
     builder.add_alignment_exponent(args.alignment_exponent);
@@ -703,12 +793,13 @@ impl<'a> PostscriptSegment<'a> {
     // which contains a valid value in this slot
     unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<CompressionSpec>>(PostscriptSegment::VT__COMPRESSION, None)}
   }
+  /// Encryption of the segment. Absent means the segment is stored in plaintext.
   #[inline]
-  pub fn _encryption(&self) -> Option<EncryptionSpec<'a>> {
+  pub fn encryption(&self) -> Option<EncryptionSpec<'a>> {
     // Safety:
     // Created from valid Table for this object
     // which contains a valid value in this slot
-    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<EncryptionSpec>>(PostscriptSegment::VT__ENCRYPTION, None)}
+    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<EncryptionSpec>>(PostscriptSegment::VT_ENCRYPTION, None)}
   }
 }
 
@@ -722,7 +813,7 @@ impl ::flatbuffers::Verifiable for PostscriptSegment<'_> {
      .visit_field::<u32>("length", Self::VT_LENGTH, false)?
      .visit_field::<u8>("alignment_exponent", Self::VT_ALIGNMENT_EXPONENT, false)?
      .visit_field::<::flatbuffers::ForwardsUOffset<CompressionSpec>>("_compression", Self::VT__COMPRESSION, false)?
-     .visit_field::<::flatbuffers::ForwardsUOffset<EncryptionSpec>>("_encryption", Self::VT__ENCRYPTION, false)?
+     .visit_field::<::flatbuffers::ForwardsUOffset<EncryptionSpec>>("encryption", Self::VT_ENCRYPTION, false)?
      .finish();
     Ok(())
   }
@@ -732,7 +823,7 @@ pub struct PostscriptSegmentArgs<'a> {
     pub length: u32,
     pub alignment_exponent: u8,
     pub _compression: Option<::flatbuffers::WIPOffset<CompressionSpec<'a>>>,
-    pub _encryption: Option<::flatbuffers::WIPOffset<EncryptionSpec<'a>>>,
+    pub encryption: Option<::flatbuffers::WIPOffset<EncryptionSpec<'a>>>,
 }
 impl<'a> Default for PostscriptSegmentArgs<'a> {
   #[inline]
@@ -742,7 +833,7 @@ impl<'a> Default for PostscriptSegmentArgs<'a> {
       length: 0,
       alignment_exponent: 0,
       _compression: None,
-      _encryption: None,
+      encryption: None,
     }
   }
 }
@@ -769,8 +860,8 @@ impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> PostscriptSegmentBuilder<'a, 
     self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<CompressionSpec>>(PostscriptSegment::VT__COMPRESSION, _compression);
   }
   #[inline]
-  pub fn add__encryption(&mut self, _encryption: ::flatbuffers::WIPOffset<EncryptionSpec<'b >>) {
-    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<EncryptionSpec>>(PostscriptSegment::VT__ENCRYPTION, _encryption);
+  pub fn add_encryption(&mut self, encryption: ::flatbuffers::WIPOffset<EncryptionSpec<'b >>) {
+    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<EncryptionSpec>>(PostscriptSegment::VT_ENCRYPTION, encryption);
   }
   #[inline]
   pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> PostscriptSegmentBuilder<'a, 'b, A> {
@@ -794,7 +885,7 @@ impl ::core::fmt::Debug for PostscriptSegment<'_> {
       ds.field("length", &self.length());
       ds.field("alignment_exponent", &self.alignment_exponent());
       ds.field("_compression", &self._compression());
-      ds.field("_encryption", &self._encryption());
+      ds.field("encryption", &self.encryption());
       ds.finish()
   }
 }
@@ -1365,6 +1456,9 @@ impl ::core::fmt::Debug for CompressionSpec<'_> {
 pub enum EncryptionSpecOffset {}
 #[derive(Copy, Clone, PartialEq)]
 
+/// Definition of an encryption scheme.
+///
+/// Keys are never stored in the file. Readers resolve the key for a spec from its `key_metadata`.
 pub struct EncryptionSpec<'a> {
   pub _tab: ::flatbuffers::Table<'a>,
 }
@@ -1378,6 +1472,9 @@ impl<'a> ::flatbuffers::Follow<'a> for EncryptionSpec<'a> {
 }
 
 impl<'a> EncryptionSpec<'a> {
+  pub const VT_ALGORITHM: ::flatbuffers::VOffsetT = 4;
+  pub const VT_KEY_METADATA: ::flatbuffers::VOffsetT = 6;
+  pub const VT_AAD_PREFIX: ::flatbuffers::VOffsetT = 8;
 
   #[inline]
   pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
@@ -1386,12 +1483,40 @@ impl<'a> EncryptionSpec<'a> {
   #[allow(unused_mut)]
   pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
     _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
-    _args: &'args EncryptionSpecArgs
+    args: &'args EncryptionSpecArgs<'args>
   ) -> ::flatbuffers::WIPOffset<EncryptionSpec<'bldr>> {
     let mut builder = EncryptionSpecBuilder::new(_fbb);
+    if let Some(x) = args.aad_prefix { builder.add_aad_prefix(x); }
+    if let Some(x) = args.key_metadata { builder.add_key_metadata(x); }
+    builder.add_algorithm(args.algorithm);
     builder.finish()
   }
 
+
+  #[inline]
+  pub fn algorithm(&self) -> EncryptionAlgorithm {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<EncryptionAlgorithm>(EncryptionSpec::VT_ALGORITHM, Some(EncryptionAlgorithm::None)).unwrap()}
+  }
+  /// Opaque bytes that identify the key to the reader's key retriever, e.g. a KMS key id.
+  #[inline]
+  pub fn key_metadata(&self) -> Option<::flatbuffers::Vector<'a, u8>> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u8>>>(EncryptionSpec::VT_KEY_METADATA, None)}
+  }
+  /// Random per-file bytes prefixed to the additional authenticated data of every segment, so
+  /// that encrypted segments cannot be swapped between files that share a key.
+  #[inline]
+  pub fn aad_prefix(&self) -> Option<::flatbuffers::Vector<'a, u8>> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u8>>>(EncryptionSpec::VT_AAD_PREFIX, None)}
+  }
 }
 
 impl ::flatbuffers::Verifiable for EncryptionSpec<'_> {
@@ -1400,16 +1525,25 @@ impl ::flatbuffers::Verifiable for EncryptionSpec<'_> {
     v: &mut ::flatbuffers::Verifier, pos: usize
   ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
     v.visit_table(pos)?
+     .visit_field::<EncryptionAlgorithm>("algorithm", Self::VT_ALGORITHM, false)?
+     .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u8>>>("key_metadata", Self::VT_KEY_METADATA, false)?
+     .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u8>>>("aad_prefix", Self::VT_AAD_PREFIX, false)?
      .finish();
     Ok(())
   }
 }
-pub struct EncryptionSpecArgs {
+pub struct EncryptionSpecArgs<'a> {
+    pub algorithm: EncryptionAlgorithm,
+    pub key_metadata: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u8>>>,
+    pub aad_prefix: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u8>>>,
 }
-impl<'a> Default for EncryptionSpecArgs {
+impl<'a> Default for EncryptionSpecArgs<'a> {
   #[inline]
   fn default() -> Self {
     EncryptionSpecArgs {
+      algorithm: EncryptionAlgorithm::None,
+      key_metadata: None,
+      aad_prefix: None,
     }
   }
 }
@@ -1419,6 +1553,18 @@ pub struct EncryptionSpecBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
   start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
 }
 impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> EncryptionSpecBuilder<'a, 'b, A> {
+  #[inline]
+  pub fn add_algorithm(&mut self, algorithm: EncryptionAlgorithm) {
+    self.fbb_.push_slot::<EncryptionAlgorithm>(EncryptionSpec::VT_ALGORITHM, algorithm, EncryptionAlgorithm::None);
+  }
+  #[inline]
+  pub fn add_key_metadata(&mut self, key_metadata: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , u8>>) {
+    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(EncryptionSpec::VT_KEY_METADATA, key_metadata);
+  }
+  #[inline]
+  pub fn add_aad_prefix(&mut self, aad_prefix: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , u8>>) {
+    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(EncryptionSpec::VT_AAD_PREFIX, aad_prefix);
+  }
   #[inline]
   pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> EncryptionSpecBuilder<'a, 'b, A> {
     let start = _fbb.start_table();
@@ -1437,6 +1583,9 @@ impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> EncryptionSpecBuilder<'a, 'b,
 impl ::core::fmt::Debug for EncryptionSpec<'_> {
   fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
     let mut ds = f.debug_struct("EncryptionSpec");
+      ds.field("algorithm", &self.algorithm());
+      ds.field("key_metadata", &self.key_metadata());
+      ds.field("aad_prefix", &self.aad_prefix());
       ds.finish()
   }
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use flatbuffers::root;
@@ -19,6 +20,10 @@ use crate::EOF_SIZE;
 use crate::Footer;
 use crate::MAGIC_BYTES;
 use crate::VERSION;
+use crate::encryption::EncryptionSpec;
+use crate::encryption::KeyRetriever;
+use crate::encryption::SegmentCipher;
+use crate::encryption::SegmentRole;
 use crate::footer::FileStatistics;
 use crate::footer::SegmentSpec;
 use crate::footer::postscript::Postscript;
@@ -40,6 +45,8 @@ pub struct FooterDeserializer {
     session: VortexSession,
     // The DType, if provided externally.
     dtype: Option<DType>,
+    // Resolves the keys of encrypted footer segments.
+    keys: Option<Arc<dyn KeyRetriever>>,
 
     // Internal state that we accumulate
 
@@ -56,9 +63,22 @@ impl FooterDeserializer {
             buffer: initial_read,
             session,
             dtype: None,
+            keys: None,
             file_size: None,
             postscript: None,
         }
+    }
+
+    /// Provide the [`KeyRetriever`] used to decrypt the footer of an encrypted file.
+    pub fn with_key_retriever(mut self, keys: Arc<dyn KeyRetriever>) -> Self {
+        self.keys = Some(keys);
+        self
+    }
+
+    /// Provide or clear the [`KeyRetriever`] used to decrypt the footer of an encrypted file.
+    pub fn with_some_key_retriever(mut self, keys: Option<Arc<dyn KeyRetriever>>) -> Self {
+        self.keys = keys;
+        self
     }
 
     /// Provide the file dtype externally.
@@ -163,21 +183,25 @@ impl FooterDeserializer {
         }
 
         // Now we read our initial segments.
+        let segments = InitialSegments {
+            initial_offset,
+            initial_read: &self.buffer,
+            ciphers: resolve_postscript_ciphers(postscript, self.keys.as_deref())?,
+        };
         let dtype = dtype_segment
-            .map(|segment| self.parse_dtype(initial_offset, &self.buffer, segment))
+            .map(|segment| {
+                let bytes = segments.read(segment, SegmentRole::DType)?;
+                DType::from_flatbuffer(FlatBuffer::copy_from(bytes), &self.session)
+            })
             .transpose()?
             .unwrap_or_else(|| self.dtype.clone().vortex_expect("DType was provided"));
         let file_stats = postscript
             .statistics
             .as_ref()
             .map(|segment| {
-                self.parse_file_statistics(
-                    initial_offset,
-                    &self.buffer,
-                    segment,
-                    &dtype,
-                    &self.session,
-                )
+                let bytes = segments.read(segment, SegmentRole::Statistics)?;
+                let fb = root::<crate::flatbuffers::footer::FileStatistics>(&bytes)?;
+                FileStatistics::from_flatbuffer(&fb, &dtype, &self.session)
             })
             .transpose()?;
         let metadata = postscript
@@ -188,6 +212,7 @@ impl FooterDeserializer {
                     offset: metadata.segment.offset,
                     length: metadata.segment.length,
                     alignment: metadata.segment.alignment,
+                    encryption: 0,
                 };
                 let end = segment
                     .offset
@@ -213,17 +238,23 @@ impl FooterDeserializer {
                         segment.alignment
                     );
                 }
-                Ok((metadata.key.clone(), segment))
+                Ok((
+                    metadata.key.clone(),
+                    segment,
+                    metadata.segment.encryption.clone(),
+                ))
             })
-            .collect::<VortexResult<Arc<[_]>>>()?;
+            .collect::<VortexResult<Vec<_>>>()?;
 
-        Ok(DeserializeStep::Done(self.parse_footer(
-            initial_offset,
-            &self.buffer,
-            postscript,
+        let footer_bytes = segments.read(&postscript.footer, SegmentRole::Footer)?;
+        let layout_bytes = segments.read(&postscript.layout, SegmentRole::Layout)?;
+        Ok(DeserializeStep::Done(Footer::from_flatbuffer(
+            &footer_bytes,
+            FlatBuffer::copy_from(layout_bytes),
             dtype,
             file_stats,
             metadata,
+            &self.session,
         )?))
     }
 
@@ -272,66 +303,56 @@ impl FooterDeserializer {
 
         Postscript::read_flatbuffer_bytes(&initial_read[eof_loc - ps_size..eof_loc])
     }
+}
 
-    /// Parse the DType from the initial read.
-    fn parse_dtype(
+/// The footer segments covered by the deserializer's buffer.
+struct InitialSegments<'a> {
+    initial_offset: u64,
+    initial_read: &'a [u8],
+    ciphers: Vec<SegmentCipher>,
+}
+
+impl<'a> InitialSegments<'a> {
+    /// Slice a segment out of the buffer, decrypting it if necessary.
+    fn read(
         &self,
-        initial_offset: u64,
-        initial_read: &[u8],
         segment: &PostscriptSegment,
-    ) -> VortexResult<DType> {
-        let sliced_buffer = FlatBuffer::copy_from(checked_segment_slice(
-            initial_read,
-            initial_offset,
-            segment,
-        )?);
-        DType::from_flatbuffer(sliced_buffer, &self.session)
+        role: SegmentRole<'_>,
+    ) -> VortexResult<Cow<'a, [u8]>> {
+        let bytes = checked_segment_slice(self.initial_read, self.initial_offset, segment)?;
+        if !segment.encryption.is_encrypted() {
+            return Ok(Cow::Borrowed(bytes));
+        }
+        let cipher = self
+            .ciphers
+            .iter()
+            .find(|cipher| *cipher.spec() == segment.encryption)
+            .vortex_expect("ciphers resolved for every postscript encryption spec");
+        let plaintext = cipher.decrypt(role, ByteBuffer::copy_from(bytes), segment.alignment)?;
+        Ok(Cow::Owned(plaintext.as_slice().to_vec()))
     }
+}
 
-    /// Parse the [`FileStatistics`] from the initial read buffer.
-    fn parse_file_statistics(
-        &self,
-        initial_offset: u64,
-        initial_read: &[u8],
-        segment: &PostscriptSegment,
-        dtype: &DType,
-        session: &VortexSession,
-    ) -> VortexResult<FileStatistics> {
-        let sliced_buffer = checked_segment_slice(initial_read, initial_offset, segment)?;
-
-        let fb = root::<crate::flatbuffers::footer::FileStatistics>(sliced_buffer)?;
-        FileStatistics::from_flatbuffer(&fb, dtype, session)
+/// Resolve a cipher for each distinct encryption spec of the postscript's segments.
+fn resolve_postscript_ciphers(
+    postscript: &Postscript,
+    keys: Option<&dyn KeyRetriever>,
+) -> VortexResult<Vec<SegmentCipher>> {
+    let segments = [&postscript.dtype, &postscript.statistics]
+        .into_iter()
+        .flatten()
+        .chain([&postscript.layout, &postscript.footer])
+        .chain(postscript.metadata.iter().map(|metadata| &metadata.segment));
+    let mut specs: Vec<&EncryptionSpec> = Vec::new();
+    for segment in segments {
+        if segment.encryption.is_encrypted() && !specs.contains(&&segment.encryption) {
+            specs.push(&segment.encryption);
+        }
     }
-
-    /// Parse the rest of the footer from the initial read.
-    fn parse_footer(
-        &self,
-        initial_offset: u64,
-        initial_read: &[u8],
-        postscript: &Postscript,
-        dtype: DType,
-        file_stats: Option<FileStatistics>,
-        metadata: Arc<[(String, SegmentSpec)]>,
-    ) -> VortexResult<Footer> {
-        let footer_segment = &postscript.footer;
-        let footer_bytes = checked_segment_slice(initial_read, initial_offset, footer_segment)?;
-
-        let layout_segment = &postscript.layout;
-        let layout_bytes = FlatBuffer::copy_from(checked_segment_slice(
-            initial_read,
-            initial_offset,
-            layout_segment,
-        )?);
-
-        Footer::from_flatbuffer(
-            footer_bytes,
-            layout_bytes,
-            dtype,
-            file_stats,
-            metadata,
-            &self.session,
-        )
-    }
+    specs
+        .into_iter()
+        .filter_map(|spec| SegmentCipher::resolve(spec, keys).transpose())
+        .collect()
 }
 
 fn checked_segment_slice<'a>(
@@ -373,6 +394,7 @@ mod tests {
             offset,
             length,
             alignment: FlatBuffer::alignment(),
+            encryption: EncryptionSpec::plaintext(),
         }
     }
 

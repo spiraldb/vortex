@@ -33,8 +33,10 @@ use crate::DeserializeStep;
 use crate::EOF_SIZE;
 use crate::MAX_POSTSCRIPT_SIZE;
 use crate::VortexFile;
+use crate::encryption::KeyRetriever;
 use crate::footer::Footer;
 use crate::segments::BufferSegmentSource;
+use crate::segments::DecryptingSegmentSource;
 use crate::segments::FileSegmentSource;
 use crate::segments::InitialReadSegmentCache;
 use crate::segments::RequestMetrics;
@@ -75,6 +77,8 @@ pub struct VortexOpenOptions {
     labels: Vec<Label>,
     /// Whether to cache file's LayoutReader between scans
     cache_layout_reader: bool,
+    /// Resolves the keys of encrypted files.
+    key_retriever: Option<Arc<dyn KeyRetriever>>,
 }
 
 /// Extension trait for constructing [`VortexOpenOptions`] from a session.
@@ -94,6 +98,7 @@ pub trait OpenOptionsSessionExt:
             metrics_registry: None,
             labels: Vec::default(),
             cache_layout_reader: false,
+            key_retriever: None,
         }
     }
 }
@@ -204,6 +209,15 @@ impl VortexOpenOptions {
         self
     }
 
+    /// Configure the [`KeyRetriever`] that resolves the keys of an encrypted file.
+    ///
+    /// Opening an encrypted file fails without one. Segments are decrypted as they are read, after
+    /// the segment cache, so that the cache only holds ciphertext.
+    pub fn with_key_retriever(mut self, key_retriever: Arc<dyn KeyRetriever>) -> Self {
+        self.key_retriever = Some(key_retriever);
+        self
+    }
+
     /// Configure a custom [`MetricsRegistry`] implementation.
     pub fn with_metrics_registry(mut self, metrics: Arc<dyn MetricsRegistry>) -> Self {
         self.metrics_registry = Some(metrics);
@@ -262,10 +276,14 @@ impl VortexOpenOptions {
         };
         footer.validate_file_size(buffer.len() as u64)?;
 
-        let segment_source: Arc<dyn SegmentSource> = Arc::new(BufferSegmentSource::new(
-            buffer,
-            footer.segment_specs_with_metadata(),
-        ));
+        let segment_source = DecryptingSegmentSource::wrap(
+            Arc::new(BufferSegmentSource::new(
+                buffer,
+                footer.segment_specs_with_metadata(),
+            )),
+            &footer,
+            opts.key_retriever.as_deref(),
+        )?;
         let metadata = if include_metadata {
             block_on(resolve_metadata(&footer, Arc::clone(&segment_source)))?
         } else {
@@ -338,10 +356,14 @@ impl VortexOpenOptions {
         )));
 
         // Wrap up the segment source to first resolve segments from the initial read cache.
-        let segment_source: Arc<dyn SegmentSource> = Arc::new(SegmentCacheSourceAdapter::new(
-            segment_cache,
-            segment_source,
-        ));
+        let segment_source = DecryptingSegmentSource::wrap(
+            Arc::new(SegmentCacheSourceAdapter::new(
+                segment_cache,
+                segment_source,
+            )),
+            &footer,
+            self.key_retriever.as_deref(),
+        )?;
 
         let metadata = if self.include_metadata {
             resolve_metadata(&footer, Arc::clone(&segment_source)).await?
@@ -380,7 +402,8 @@ impl VortexOpenOptions {
 
         let mut deserializer = Footer::deserializer(initial_read, self.session.clone())
             .with_size(file_size)
-            .with_some_dtype(self.dtype.clone());
+            .with_some_dtype(self.dtype.clone())
+            .with_some_key_retriever(self.key_retriever.clone());
 
         let footer = loop {
             match deserializer.deserialize()? {
@@ -842,6 +865,7 @@ mod tests {
             offset: 0,
             length: 1024,
             alignment: Alignment::none(),
+            encryption: 0,
         }]);
         let bad_footer = Footer::new(
             Arc::clone(footer.layout()),

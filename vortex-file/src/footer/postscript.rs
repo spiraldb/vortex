@@ -15,6 +15,7 @@ use vortex_utils::aliases::hash_set::HashSet;
 
 use super::MAX_METADATA_KEY_BYTES;
 use super::MAX_METADATA_SEGMENTS;
+use crate::encryption::EncryptionSpec;
 use crate::flatbuffers::footer as fb;
 
 /// The postscript captures the locations and compression for the initial segments required for
@@ -231,6 +232,7 @@ pub struct PostscriptSegment {
     pub(crate) offset: u64,
     pub(crate) length: u32,
     pub(crate) alignment: Alignment,
+    pub(crate) encryption: EncryptionSpec,
 }
 
 impl FlatBufferRoot for PostscriptSegment {}
@@ -242,6 +244,10 @@ impl WriteFlatBuffer for PostscriptSegment {
         &self,
         fbb: &mut FlatBufferBuilder<'fb>,
     ) -> VortexResult<WIPOffset<Self::Target<'fb>>> {
+        let encryption = self
+            .encryption
+            .is_encrypted()
+            .then(|| self.encryption.write_flatbuffer(fbb));
         Ok(fb::PostscriptSegment::create(
             fbb,
             &fb::PostscriptSegmentArgs {
@@ -249,7 +255,7 @@ impl WriteFlatBuffer for PostscriptSegment {
                 length: self.length,
                 alignment_exponent: self.alignment.exponent(),
                 _compression: None,
-                _encryption: None,
+                encryption,
             },
         ))
     }
@@ -268,6 +274,11 @@ impl ReadFlatBuffer for PostscriptSegment {
             // The alignment exponent comes from the file and may be corrupt, so validate it rather
             // than panicking on a too-large shift (see issue #8819).
             alignment: Alignment::try_from_untrusted_exponent(fb.alignment_exponent())?,
+            encryption: fb
+                .encryption()
+                .map(|spec| EncryptionSpec::read_flatbuffer(&spec))
+                .transpose()?
+                .unwrap_or_else(EncryptionSpec::plaintext),
         })
     }
 }
@@ -287,6 +298,7 @@ mod tests {
             offset,
             length: 1,
             alignment: Alignment::none(),
+            encryption: EncryptionSpec::plaintext(),
         }
     }
 

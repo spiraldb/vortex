@@ -15,12 +15,17 @@ use vortex_layout::segments::SegmentId;
 use vortex_layout::segments::SegmentSink;
 use vortex_layout::sequence::SequenceId;
 
+use crate::encryption::ENCRYPTION_OVERHEAD;
+use crate::encryption::SegmentCipher;
+use crate::encryption::SegmentRole;
 use crate::footer::SegmentSpec;
 
 pub struct BufferedSegmentSink {
     buffers: kanal::AsyncSender<ByteBuffer>,
     byte_offset: AtomicU64,
     segment_specs: Mutex<Vec<SegmentSpec>>,
+    /// The cipher to encrypt segments with, and the index of its spec in the footer.
+    cipher: Option<(SegmentCipher, u16)>,
 }
 
 impl BufferedSegmentSink {
@@ -29,7 +34,14 @@ impl BufferedSegmentSink {
             buffers: send,
             byte_offset: AtomicU64::new(byte_offset),
             segment_specs: Default::default(),
+            cipher: None,
         }
+    }
+
+    /// Encrypt every segment with `cipher`, whose spec is at `encryption` in the footer.
+    pub(crate) fn with_cipher(mut self, cipher: SegmentCipher, encryption: u16) -> Self {
+        self.cipher = Some((cipher, encryption));
+        self
     }
 
     /// Close the sink, returning the segment specs and the final byte offset.
@@ -65,7 +77,12 @@ impl SegmentSink for BufferedSegmentSink {
                 .first()
                 .map(|buffer| buffer.alignment())
                 .unwrap_or_else(Alignment::none);
-            let length = u32::try_from(buffers.iter().map(|buffer| buffer.len()).sum::<usize>())
+            let plaintext_length = buffers.iter().map(|buffer| buffer.len()).sum::<usize>();
+            let (length, encryption) = match &self.cipher {
+                None => (plaintext_length, 0),
+                Some((_, encryption)) => (plaintext_length + ENCRYPTION_OVERHEAD, *encryption),
+            };
+            let length = u32::try_from(length)
                 .map_err(|_| vortex_err!("segment buffer length exceeds maximum u32"))?;
 
             // Add any padding required to align the segment.
@@ -76,6 +93,7 @@ impl SegmentSink for BufferedSegmentSink {
                 offset,
                 length,
                 alignment,
+                encryption,
             });
 
             self.byte_offset
@@ -86,6 +104,19 @@ impl SegmentSink for BufferedSegmentSink {
                 (segment_id, Some(ByteBuffer::zeroed(padding as usize)))
             } else {
                 (segment_id, None)
+            }
+        };
+
+        // The sequence id still orders this write after all earlier ones, so the encryption can
+        // happen outside the lock.
+        let buffers = match &self.cipher {
+            None => buffers,
+            Some((cipher, _)) => {
+                let alignment = buffers
+                    .first()
+                    .map(|buffer| buffer.alignment())
+                    .unwrap_or_else(Alignment::none);
+                vec![cipher.encrypt(SegmentRole::Data(*segment_id), &buffers, alignment)?]
             }
         };
 

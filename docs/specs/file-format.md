@@ -96,6 +96,25 @@ For example, it contains the locations, compression schemes, encryption schemes,
 The footer is separated from the Data Type such that large schemas can be omitted from the file if they can be
 shared or fetched from an external source.
 
+## Encryption
+
+Segments can be encrypted with AES-256-GCM. A writer configured with a key encrypts every data segment and every
+segment referenced by the postscript: the `DType`, layout, statistics, footer, and user metadata segments. Only the
+postscript remains in plaintext.
+
+- Each `PostscriptSegment` carries its `EncryptionSpec` inline, so the footer can be decrypted without a prior lookup.
+- Each `SegmentSpec` stores an index into the footer's `encryption_specs`. Index 0 always denotes a plaintext segment,
+  so files written before encryption existed remain valid.
+- An encrypted segment is stored as `ciphertext || nonce || tag`, with a random 12-byte nonce and a 16-byte tag. The
+  ciphertext has the plaintext's length and starts at the segment's offset.
+- The additional authenticated data is the spec's random per-file `aad_prefix`, followed by an identifier of the
+  segment: its index in the segment map, the name of a footer segment, or the key of a metadata segment. A segment
+  moved within or between files fails to decrypt.
+- Keys are never stored in the file. The opaque `key_metadata` of an `EncryptionSpec` identifies the key to the
+  reader, for example by a key management service key id.
+
+Readers without encryption support fail to parse an encrypted file's footer.
+
 ## Reified File Example
 
 Since Vortex files are largely self-describing, many mainstays of other columnar file formats (e.g., whether or not to

@@ -2300,7 +2300,7 @@ fn with_invalid_metadata_alignment(bytes: &ByteBuffer, exponent: u8) -> ByteBuff
                 length,
                 alignment_exponent,
                 _compression: None,
-                _encryption: None,
+                encryption: None,
             },
         )
     }
@@ -3007,4 +3007,211 @@ async fn repro_8166_binary_gt_all_ff_max() -> VortexResult<()> {
 
     assert_arrays_eq!(result, mk_struct(vec![big])?, &mut ctx);
     Ok(())
+}
+
+mod encryption {
+    use vortex_error::vortex_bail;
+
+    use super::*;
+    use crate::encryption::EncryptionConfig;
+    use crate::encryption::EncryptionKey;
+    use crate::encryption::KEY_LEN;
+    use crate::encryption::KeyRetriever;
+
+    const KEY_METADATA: &[u8] = b"kms://keys/1";
+    const SECRET: &str = "a-secret-string-value";
+    const SECRET_COLUMN: &str = "secret_column_name";
+
+    fn key() -> EncryptionKey {
+        EncryptionKey::new([42; KEY_LEN])
+    }
+
+    fn retriever() -> Arc<dyn KeyRetriever> {
+        Arc::new(|key_metadata: &[u8]| {
+            if key_metadata != KEY_METADATA {
+                vortex_bail!("unknown key {key_metadata:?}");
+            }
+            Ok(key())
+        })
+    }
+
+    fn array() -> VortexResult<ArrayRef> {
+        let strings = VarBinArray::from(vec![SECRET, "foo", SECRET, "bar"]).into_array();
+        let numbers = buffer![1u32, 2, 3, 4].into_array();
+        Ok(
+            StructArray::from_fields(&[(SECRET_COLUMN, strings), ("numbers", numbers)])?
+                .into_array(),
+        )
+    }
+
+    async fn write_encrypted(array: &ArrayRef) -> VortexResult<ByteBuffer> {
+        let mut buf = ByteBufferMut::empty();
+        SESSION
+            .write_options()
+            .with_encryption(EncryptionConfig::new(key(), KEY_METADATA))
+            .with_metadata_segment("meta", ByteBuffer::copy_from(SECRET.as_bytes()))
+            .write(&mut buf, array.to_array_stream())
+            .await?;
+        Ok(buf.freeze())
+    }
+
+    async fn read_all(file: &VortexFile) -> VortexResult<ArrayRef> {
+        let chunks: Vec<ArrayRef> = file.scan()?.into_array_stream()?.try_collect().await?;
+        Ok(ChunkedArray::try_new(chunks, file.dtype().clone())?.into_array())
+    }
+
+    fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+        haystack
+            .windows(needle.len())
+            .any(|window| window == needle)
+    }
+
+    #[tokio::test]
+    async fn roundtrip_buffer() -> VortexResult<()> {
+        let array = array()?;
+        let bytes = write_encrypted(&array).await?;
+
+        // Neither the data, nor the schema, nor user metadata are stored in plaintext.
+        assert!(!contains(&bytes, SECRET.as_bytes()));
+        assert!(!contains(&bytes, SECRET_COLUMN.as_bytes()));
+
+        let file = SESSION
+            .open_options()
+            .with_key_retriever(retriever())
+            .include_metadata()
+            .open_buffer(bytes)?;
+        assert!(file.footer().is_encrypted());
+        assert_eq!(
+            file.metadata_segment("meta").map(ByteBuffer::as_slice),
+            Some(SECRET.as_bytes())
+        );
+        assert_arrays_eq!(
+            read_all(&file).await?,
+            array,
+            &mut SESSION.create_execution_ctx()
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn roundtrip_path() -> VortexResult<()> {
+        let array = array()?;
+        let dir = tempdir()?;
+        let path = dir.path().join("encrypted.vortex");
+        fs::write(&path, write_encrypted(&array).await?.as_slice())?;
+
+        let file = SESSION
+            .open_options()
+            .with_key_retriever(retriever())
+            .include_metadata()
+            .open_path(&path)
+            .await?;
+        assert_eq!(
+            file.metadata_segment("meta").map(ByteBuffer::as_slice),
+            Some(SECRET.as_bytes())
+        );
+        assert_arrays_eq!(
+            read_all(&file).await?,
+            array,
+            &mut SESSION.create_execution_ctx()
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn requires_key_retriever() -> VortexResult<()> {
+        let bytes = write_encrypted(&array()?).await?;
+        let err = SESSION
+            .open_options()
+            .open_buffer(bytes)
+            .err()
+            .vortex_expect("opening without a key must fail");
+        assert!(err.to_string().contains("KeyRetriever"), "{err}");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn rejects_wrong_key() -> VortexResult<()> {
+        let bytes = write_encrypted(&array()?).await?;
+        let err = SESSION
+            .open_options()
+            .with_key_retriever(Arc::new(EncryptionKey::new([0; KEY_LEN])))
+            .open_buffer(bytes)
+            .err()
+            .vortex_expect("opening with the wrong key must fail");
+        assert!(err.to_string().contains("Failed to decrypt"), "{err}");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn rejects_tampered_data_segment() -> VortexResult<()> {
+        let bytes = write_encrypted(&array()?).await?;
+        let file = SESSION
+            .open_options()
+            .with_key_retriever(retriever())
+            .open_buffer(bytes.clone())?;
+        let segment = file.footer().segment_map()[0];
+
+        let mut tampered = ByteBufferMut::copy_from(&bytes);
+        tampered[usize::try_from(segment.offset)?] ^= 1;
+        let file = SESSION
+            .open_options()
+            .with_key_retriever(retriever())
+            .open_buffer(tampered.freeze())?;
+        let err = read_all(&file)
+            .await
+            .err()
+            .vortex_expect("reading a tampered segment must fail");
+        assert!(err.to_string().contains("Failed to decrypt"), "{err}");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn serializing_encrypted_footer_requires_encryption() -> VortexResult<()> {
+        let bytes = write_encrypted(&array()?).await?;
+        let footer = SESSION
+            .open_options()
+            .with_key_retriever(retriever())
+            .open_buffer(bytes.clone())?
+            .footer()
+            .clone();
+
+        let err = footer
+            .clone()
+            .into_serializer()
+            .serialize()
+            .err()
+            .vortex_expect("serializing an encrypted footer in plaintext must fail");
+        assert!(err.to_string().contains("with_encryption"), "{err}");
+
+        // A standalone footer, encrypted under the same key, opens the file without reading its
+        // footer.
+        let config = EncryptionConfig::new(key(), KEY_METADATA);
+        let footer_bytes = footer
+            .into_serializer()
+            .with_encryption(&config)?
+            .serialize()?
+            .iter()
+            .flat_map(|buffer| buffer.as_slice().iter().copied())
+            .collect::<Vec<u8>>();
+        let mut deserializer =
+            crate::Footer::deserializer(ByteBuffer::copy_from(&footer_bytes), SESSION.clone())
+                .with_size(footer_bytes.len() as u64)
+                .with_key_retriever(retriever());
+        let crate::DeserializeStep::Done(footer) = deserializer.deserialize()? else {
+            vortex_bail!("standalone footer must deserialize in one step");
+        };
+        let file = SESSION
+            .open_options()
+            .with_key_retriever(retriever())
+            .with_footer(footer)
+            .open_buffer(bytes)?;
+        assert_arrays_eq!(
+            read_all(&file).await?,
+            array()?,
+            &mut SESSION.create_execution_ctx()
+        );
+        Ok(())
+    }
 }
