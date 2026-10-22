@@ -256,11 +256,15 @@ pub unsafe extern "C-unwind" fn duckdb_footer_get_cached(
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn duckdb_footer_get_statistics(
     footer: *const c_void,
-    column_index: usize,
+    column_name: *const c_char,
+    column_name_len: usize,
     stats_out: *mut cpp::duckdb_column_statistics,
 ) -> bool {
     let footer = unsafe { footer.cast::<Footer>().as_ref() }.vortex_expect("null pointer");
-    let Some(stats) = footer_get_statistics(footer, column_index) else {
+    let name_bytes =
+        unsafe { std::slice::from_raw_parts(column_name.cast::<u8>(), column_name_len) };
+    let name = String::from_utf8_lossy(name_bytes);
+    let Some(stats) = footer_get_statistics(footer, &name) else {
         return false;
     };
     let stats_out = unsafe { &mut *stats_out };

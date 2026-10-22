@@ -66,7 +66,7 @@ use crate::table_function::convert_result;
 // After this, still in planning phase, one thread calls the following chain on
 // all files to try and replace scanning with metadata answer:
 //
-// `can_get_partition_stats` -> `footer_open` -> `footer_get_statistics`.
+// `can_get_partition_stats` -> `footer_get_cached` -> `footer_get_statistics`.
 //
 // Then there's query runtime phase, called for all files in scan:
 //
@@ -372,11 +372,12 @@ pub fn footer_get_cached(bind: &mut BindState, path: &str) -> VortexResult<Optio
     Ok(footer)
 }
 
-/// Called by one thread for every footer in planning phase
-pub fn footer_get_statistics(footer: &Footer, index: usize) -> Option<ColumnStatistics> {
+/// Called by one thread for every footer in planning phase.
+pub fn footer_get_statistics(footer: &Footer, column: &str) -> Option<ColumnStatistics> {
     let DType::Struct(fields, _) = footer.dtype() else {
         return None;
     };
+    let index = fields.find(column)?;
     let stats = footer.statistics()?;
     let dtype = fields.field_by_index(index)?;
     let stats = stats.stats_sets().get(index)?;

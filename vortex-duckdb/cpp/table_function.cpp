@@ -121,13 +121,23 @@ unique_ptr<MultiFileReader> get_multi_file_reader(const BoundTableFunction &) {
 }
 
 unique_ptr<BaseStatistics> VortexRowGroup::GetColumnStatistics(const StorageIndex &storage_index) {
-    duckdb_column_statistics statistics = {};
     const idx_t idx = storage_index.GetPrimaryIndex();
-    const void *const ffi_footer_ptr = ffi_footer->DataPtr();
-    if (!duckdb_footer_get_statistics(ffi_footer_ptr, idx, &statistics)) {
+    if (idx >= columns.size()) {
         return {};
     }
-    return to_duckdb_statistics(statistics);
+    const MultiFileColumnDefinition &column = columns[idx];
+
+    duckdb_column_statistics statistics = {};
+    const void *const ffi_footer_ptr = ffi_footer->DataPtr();
+    if (!duckdb_footer_get_statistics(ffi_footer_ptr, column.name.c_str(), column.name.size(), &statistics)) {
+        return {};
+    }
+
+    unique_ptr<BaseStatistics> stats = to_duckdb_statistics(statistics);
+    if (stats && stats->GetType() != column.type) {
+        return {};
+    }
+    return stats;
 }
 
 static vector<PartitionStatistics> get_partition_stats(ClientContext &, GetPartitionStatsInput &input) {
@@ -160,7 +170,7 @@ static vector<PartitionStatistics> get_partition_stats(ClientContext &, GetParti
         stats.count = count;
         stats.count_type = CountType::COUNT_EXACT;
         row_start += count;
-        stats.partition_row_group = make_shared_ptr<VortexRowGroup>(std::move(cdata));
+        stats.partition_row_group = make_shared_ptr<VortexRowGroup>(std::move(cdata), bind_data.columns);
     }
     return result;
 }
