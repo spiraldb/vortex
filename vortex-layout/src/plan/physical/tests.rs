@@ -1336,9 +1336,22 @@ fn data_expression_strips_zoned_to_its_data() -> VortexResult<()> {
         child: vortex.plan.segment_scan(i32, rows=5)
     ");
 
+    // The lowered plan still holds its zone table, which only the optimizer may remove: walking
+    // it is an error rather than a child skipped.
+    let mut segments = Vec::new();
+    let walked = visit_segments(&source, 0..5, None, &mut |segment, _| {
+        segments.push(segment)
+    });
+    assert!(
+        walked
+            .as_ref()
+            .is_err_and(|e| e.to_string().contains("never reads its zone table")),
+        "{walked:?}"
+    );
+
     let identity = optimize(source)?;
     assert!(identity.is::<Filter>());
-    let mut segments = Vec::new();
+    segments.clear();
     visit_segments(&identity, 0..5, None, &mut |segment, _| {
         segments.push(segment)
     })?;

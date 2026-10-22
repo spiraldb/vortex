@@ -26,6 +26,7 @@ use vortex_session::registry::CachedId;
 
 use super::Chain;
 use super::Compiler;
+use crate::plan::physical::ChildRows;
 use crate::plan::physical::Plan;
 use crate::plan::physical::PlanChildren;
 use crate::plan::physical::PlanId;
@@ -116,6 +117,11 @@ impl PlanVTable for Synthetic {
         compiler: &mut Compiler<'_>,
     ) -> VortexResult<Option<Chain>> {
         (plan.data().builder)(rows, mask, compiler)
+    }
+
+    /// A synthetic plan's children are compiled over its own rows.
+    fn child_rows(plan: &Plan<Self>, _index: usize) -> VortexResult<ChildRows> {
+        Ok(ChildRows::Rows(0..plan.row_count()))
     }
 }
 

@@ -73,8 +73,8 @@ impl PlanVTable for Selected {
         compiler.compile(&plan.child_required(0)?, rows, &mask)
     }
 
-    fn child_rows(plan: &Plan<Self>, _index: usize) -> ChildRows {
-        ChildRows::Rows(0..plan.row_count())
+    fn child_rows(plan: &Plan<Self>, _index: usize) -> VortexResult<ChildRows> {
+        Ok(ChildRows::Rows(0..plan.row_count()))
     }
 }
 

@@ -96,10 +96,11 @@ pub trait PlanVTable: 'static + Clone + Sized + Send + Sync + Debug {
     /// reads over some rows can be found without compiling it. See
     /// [`visit_segments`](crate::plan::physical::visit_segments).
     ///
-    /// The default is [`ChildRows::Opaque`]: the child is not walked, so its segments are read
-    /// by each reader alone.
-    fn child_rows(plan: &Plan<Self>, index: usize) -> ChildRows {
-        let _ = (plan, index);
-        ChildRows::Opaque
+    /// Every child of a plan that compiles is read for some of its parent's rows or whole. A
+    /// child the optimizer removes before any walk, such as the zone table of a zoned data plan,
+    /// is an error to ask about, as is any child of a plan with no pipeline implementation.
+    fn child_rows(plan: &Plan<Self>, index: usize) -> VortexResult<ChildRows> {
+        let _ = index;
+        vortex_bail!("Plan {} has no segment walk", plan.vtable().id())
     }
 }

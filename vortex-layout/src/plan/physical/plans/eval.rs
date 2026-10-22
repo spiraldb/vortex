@@ -130,8 +130,8 @@ impl PlanVTable for Eval {
         Ok(chain.map(|chain| chain.with(EvalStage::new(plan.expression().clone()))))
     }
 
-    fn child_rows(plan: &Plan<Self>, _index: usize) -> ChildRows {
-        ChildRows::Rows(0..plan.row_count())
+    fn child_rows(plan: &Plan<Self>, _index: usize) -> VortexResult<ChildRows> {
+        Ok(ChildRows::Rows(0..plan.row_count()))
     }
 }
 

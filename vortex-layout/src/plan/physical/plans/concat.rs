@@ -218,14 +218,14 @@ impl PlanVTable for Concat {
         })
     }
 
-    fn child_rows(plan: &Plan<Self>, index: usize) -> ChildRows {
+    fn child_rows(plan: &Plan<Self>, index: usize) -> VortexResult<ChildRows> {
         let offsets = plan.row_offsets();
         let start = offsets[index];
         let end = offsets
             .get(index + 1)
             .copied()
             .unwrap_or_else(|| plan.row_count());
-        ChildRows::Rows(start..end)
+        Ok(ChildRows::Rows(start..end))
     }
 }
 

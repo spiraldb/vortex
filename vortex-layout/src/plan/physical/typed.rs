@@ -157,7 +157,7 @@ impl PlanRef {
 
     /// How the rows of the child at `index` relate to this plan's rows. See
     /// [`PlanVTable::child_rows`].
-    pub fn child_rows(&self, index: usize) -> ChildRows {
+    pub fn child_rows(&self, index: usize) -> VortexResult<ChildRows> {
         self.dyn_plan().dyn_child_rows(self, index)
     }
 
@@ -405,7 +405,7 @@ pub trait DynPlan: 'static + Send + Sync + Debug {
     ) -> VortexResult<Option<Chain>>;
 
     /// Relates a child's rows to this operator's. See [`PlanVTable::child_rows`].
-    fn dyn_child_rows(&self, plan: &PlanRef, index: usize) -> ChildRows;
+    fn dyn_child_rows(&self, plan: &PlanRef, index: usize) -> VortexResult<ChildRows>;
 }
 
 impl<V: PlanVTable> DynPlan for PlanData<V> {
@@ -448,7 +448,7 @@ impl<V: PlanVTable> DynPlan for PlanData<V> {
         V::compile(plan.as_::<V>(), rows, mask, compiler)
     }
 
-    fn dyn_child_rows(&self, plan: &PlanRef, index: usize) -> ChildRows {
+    fn dyn_child_rows(&self, plan: &PlanRef, index: usize) -> VortexResult<ChildRows> {
         V::child_rows(plan.as_::<V>(), index)
     }
 }

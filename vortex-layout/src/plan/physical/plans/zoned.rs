@@ -375,16 +375,18 @@ impl PlanVTable for Zoned {
         Ok(Some(compiler.join_with(vec![chain], |_| UNBOUNDED, source)))
     }
 
-    fn child_rows(plan: &Plan<Self>, index: usize) -> ChildRows {
+    fn child_rows(plan: &Plan<Self>, index: usize) -> VortexResult<ChildRows> {
         // A pruning plan has one child, its zone table, read whole for any rows.
         if plan.is_pruning() {
-            return ChildRows::Whole;
+            return Ok(ChildRows::Whole);
         }
-        if index == DATA {
-            ChildRows::Rows(0..plan.row_count())
-        } else {
-            ChildRows::Opaque
+        if index != DATA {
+            vortex_bail!(
+                "A zoned data plan never reads its zone table and is optimized to its data \
+                 before its segments are walked"
+            );
         }
+        Ok(ChildRows::Rows(0..plan.row_count()))
     }
 }
 

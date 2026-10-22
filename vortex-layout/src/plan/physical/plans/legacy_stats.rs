@@ -149,12 +149,14 @@ impl PlanVTable for LegacyStats {
         compiler.compile(&plan.data_plan()?, rows, mask)
     }
 
-    fn child_rows(plan: &Plan<Self>, index: usize) -> ChildRows {
-        if index == DATA {
-            ChildRows::Rows(0..plan.row_count())
-        } else {
-            ChildRows::Opaque
+    fn child_rows(plan: &Plan<Self>, index: usize) -> VortexResult<ChildRows> {
+        if index != DATA {
+            vortex_bail!(
+                "A legacy stats data plan never reads its stats and is optimized to its data \
+                 before its segments are walked"
+            );
         }
+        Ok(ChildRows::Rows(0..plan.row_count()))
     }
 }
 

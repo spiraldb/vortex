@@ -172,12 +172,12 @@ impl PlanVTable for Take {
         )))
     }
 
-    fn child_rows(plan: &Plan<Self>, index: usize) -> ChildRows {
-        if index == VALUES {
+    fn child_rows(plan: &Plan<Self>, index: usize) -> VortexResult<ChildRows> {
+        Ok(if index == VALUES {
             ChildRows::Whole
         } else {
             ChildRows::Rows(0..plan.row_count())
-        }
+        })
     }
 }
 

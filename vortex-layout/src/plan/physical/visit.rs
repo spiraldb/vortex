@@ -26,9 +26,6 @@ pub enum ChildRows {
     /// The child is read whole whatever rows of the parent are read, as dictionary values are
     /// for their codes.
     Whole,
-    /// The child's rows have no row-wise relation to the parent's, so the walk does not enter
-    /// it. Its segments are read by each reader alone and never found ahead of compiling.
-    Opaque,
 }
 
 /// The rows of the scanned plan a visited plan's rows are read for.
@@ -97,8 +94,7 @@ fn walk(
     });
     let mask = selected.as_ref().or(mask);
     for index in 0..plan.children().len() {
-        match plan.child_rows(index) {
-            ChildRows::Opaque => {}
+        match plan.child_rows(index)? {
             ChildRows::Whole => {
                 let child = plan.child_required(index)?;
                 walk(&child, 0..child.row_count(), None, &at.whole(&rows), visit)?;

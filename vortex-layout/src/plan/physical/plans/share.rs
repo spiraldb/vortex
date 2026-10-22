@@ -133,8 +133,8 @@ impl PlanVTable for Share {
         Ok(Some(compiler.join_with(vec![chain], |_| UNBOUNDED, source)))
     }
 
-    fn child_rows(_plan: &Plan<Self>, _index: usize) -> ChildRows {
-        ChildRows::Whole
+    fn child_rows(_plan: &Plan<Self>, _index: usize) -> VortexResult<ChildRows> {
+        Ok(ChildRows::Whole)
     }
 }
 
