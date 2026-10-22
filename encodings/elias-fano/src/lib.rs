@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Encodings for non-decreasing integer sequences.
+//! Elias-Fano and unary encodings for integers.
 //!
-//! [`Unary`] stores a non-decreasing, non-nullable unsigned column as one bit array, writing
-//! each value's gap from the previous one in unary. It takes `len + (max - min)` bits, so it suits
-//! dense sequences, where values rise by about one per row or less. It is also meant to hold the
-//! high bits of the Elias-Fano encoding this crate is being built towards.
+//! [`Unary`] stores a non-nullable unsigned column as one bit array, writing each value in unary.
+//! It takes `len + num_ones` bits, where `num_ones` is the sum of the values, so it suits small
+//! values in any order. It is also meant to hold the bucket counts of the high bits of the
+//! Elias-Fano encoding this crate is being built towards.
 //!
 //! None of these encodings is in a file edition or registered by `vortex-file`, so the default
 //! writers reject them for now. [`initialize`] registers them in a session.
+#![deny(missing_docs)]
 
 mod unary;
 

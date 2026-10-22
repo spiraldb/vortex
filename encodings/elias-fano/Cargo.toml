@@ -2,7 +2,7 @@
 name = "vortex-elias-fano"
 authors = { workspace = true }
 categories = { workspace = true }
-description = "Vortex encodings for non-decreasing integer sequences"
+description = "Vortex Elias-Fano and unary integer encodings"
 edition = { workspace = true }
 include = { workspace = true }
 keywords = { workspace = true }

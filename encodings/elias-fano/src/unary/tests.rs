@@ -30,9 +30,6 @@ use vortex_array::compute::conformance::consistency::test_array_consistency;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability::NonNullable;
 use vortex_array::dtype::PType;
-use vortex_array::expr::stats::Precision;
-use vortex_array::expr::stats::Stat;
-use vortex_array::expr::stats::StatsProviderExt;
 use vortex_array::match_each_unsigned_integer_ptype;
 use vortex_array::serde::SerializeOptions;
 use vortex_array::serde::SerializedArray;
@@ -50,6 +47,7 @@ use vortex_session::registry::ReadContext;
 use super::Unary;
 use super::UnaryArray;
 use super::array::UnaryMetadata;
+use super::bits::for_each_unset_index;
 use super::unary_encode;
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
@@ -75,12 +73,10 @@ fn encode(values: &[u64]) -> VortexResult<UnaryArray> {
         .ok_or_else(|| vortex_err!("{} values did not encode", values.len()))
 }
 
-/// `len` sorted values drawn from `0..=span`, with duplicates wherever they fall.
-fn sorted(len: usize, span: u64, seed: u64) -> Vec<u64> {
+/// `len` values drawn from `0..=max`, in no particular order.
+fn small(len: usize, max: u64, seed: u64) -> Vec<u64> {
     let mut rng = StdRng::seed_from_u64(seed);
-    let mut values: Vec<u64> = (0..len).map(|_| rng.random_range(0..=span)).collect();
-    values.sort_unstable();
-    values
+    (0..len).map(|_| rng.random_range(0..=max)).collect()
 }
 
 /// Every value read back through `execute_scalar`, in a shuffled order and then in sequence.
@@ -120,14 +116,10 @@ fn hash_of(array: &ArrayRef) -> u64 {
 
 #[test]
 fn test_layout_example() -> VortexResult<()> {
-    let array = encode(&[3, 5, 5, 9])?;
-    assert_eq!(array.base(), 3);
-    assert_eq!(array.max(), 9);
+    let array = encode(&[2, 0, 3])?;
     assert_eq!(
         array.bits(),
-        &BitBuffer::from(vec![
-            true, false, false, true, true, false, false, false, false, true
-        ])
+        &BitBuffer::from(vec![true, true, false, false, true, true, true, false])
     );
     Ok(())
 }
@@ -135,21 +127,18 @@ fn test_layout_example() -> VortexResult<()> {
 #[rstest]
 #[case::empty(PType::U64, vec![])]
 #[case::single(PType::U64, vec![42])]
+#[case::all_zeros(PType::U64, vec![0; 300])]
 #[case::all_equal(PType::U64, vec![7; 300])]
-#[case::consecutive(PType::U64, (0..300).collect())]
-#[case::dense(PType::U64, sorted(500, 500, 1))]
-#[case::spread(PType::U64, sorted(500, 1000, 2))]
+#[case::unsorted(PType::U64, small(500, 3, 1))]
+#[case::decreasing(PType::U64, (0..60).rev().collect())]
 #[case::runs(PType::U64, (0..500).map(|i| i / 64 * 3).collect())]
-#[case::near_max(
-    PType::U64,
-    sorted(500, 1000, 3).into_iter().map(|v| u64::MAX - 1000 + v).collect()
-)]
-#[case::u8(PType::U8, sorted(300, 255, 4))]
-#[case::u16(PType::U16, (0..500).map(|i| 60_000 + 2 * i).collect())]
-#[case::u32(
-    PType::U32,
-    sorted(500, 1000, 5).into_iter().map(|v| u64::from(u32::MAX) - 1000 + v).collect()
-)]
+#[case::u8(PType::U8, small(300, 7, 2))]
+#[case::u8_max(PType::U8, (0..41).map(|i| if i == 20 { 255 } else { 0 }).collect())]
+#[case::u16(PType::U16, small(500, 20, 3))]
+#[case::u32(PType::U32, small(500, 40, 4))]
+// A value of 1,000 that starts 4 bits into a byte, so reading it scans whole 512-bit chunks from an
+// offset.
+#[case::long_value(PType::U16, [vec![3, 1000], vec![0; 68]].concat())]
 fn test_roundtrip(#[case] ptype: PType, #[case] values: Vec<u64>) -> VortexResult<()> {
     let expected = primitive(ptype, &values);
     let encoded = encode_as(ptype, &values)?
@@ -163,12 +152,13 @@ fn test_roundtrip(#[case] ptype: PType, #[case] values: Vec<u64>) -> VortexResul
 #[test]
 fn test_encode_returns_none() -> VortexResult<()> {
     let inputs = [
-        PrimitiveArray::from_iter([3u64, 1, 2]),
         PrimitiveArray::new(buffer![1u64, 2, 3], Validity::AllValid),
         PrimitiveArray::from_iter([1i64, 2, 3]),
         PrimitiveArray::from_iter([1.0f64, 2.0, 3.0]),
         // 2 + 1,000 bits, against the plain array's 128.
         PrimitiveArray::from_iter([0u64, 1000]),
+        // The sum overflows a `u64`.
+        PrimitiveArray::from_iter([u64::MAX, 1]),
     ];
     for input in inputs {
         assert!(
@@ -186,10 +176,10 @@ fn test_encode_returns_none() -> VortexResult<()> {
 #[case(PType::U32)]
 #[case(PType::U64)]
 fn test_size_rule_boundary(#[case] ptype: PType) -> VortexResult<()> {
-    // Four values take `4 + span` bits, against the plain array's `4 × width`.
-    let span = 4 * u64::try_from(ptype.bit_width())? - 4;
-    assert!(encode_as(ptype, &[0, 0, 0, span])?.is_some());
-    assert!(encode_as(ptype, &[0, 0, 0, span + 1])?.is_none());
+    // Four values take `4 + num_ones` bits, against the plain array's `4 × width`.
+    let num_ones = 4 * u64::try_from(ptype.bit_width())? - 4;
+    assert!(encode_as(ptype, &[0, 0, 0, num_ones])?.is_some());
+    assert!(encode_as(ptype, &[0, 0, 0, num_ones + 1])?.is_none());
     Ok(())
 }
 
@@ -197,50 +187,37 @@ fn test_size_rule_boundary(#[case] ptype: PType) -> VortexResult<()> {
 fn test_try_new_rejects() -> VortexResult<()> {
     let bits = |bits: &[bool]| BitBuffer::from(bits);
     let rejected = [
-        (
-            "base above max",
-            Unary::try_new(bits(&[true]), 5, 3, PType::U64, 1),
-        ),
-        (
-            "max above the ptype",
-            Unary::try_new(bits(&[true]), 0, 300, PType::U8, 1),
-        ),
-        ("signed", Unary::try_new(bits(&[true]), 0, 0, PType::I64, 1)),
+        ("signed", Unary::try_new(bits(&[false]), PType::I64, 1)),
         (
             "nonzero offset",
-            Unary::try_new(
-                bits(&[false, false, false, true]).slice(3..),
-                0,
-                0,
-                PType::U64,
-                1,
-            ),
+            Unary::try_new(bits(&[true, true, true, false]).slice(3..), PType::U64, 1),
         ),
         (
-            "wrong bit length",
-            Unary::try_new(bits(&[true, true]), 0, 0, PType::U64, 1),
+            "fewer bits than values",
+            Unary::try_new(bits(&[false, false]), PType::U64, 3),
         ),
         (
-            "first bit unset",
-            Unary::try_new(bits(&[false, true, true]), 0, 1, PType::U64, 2),
+            "last bit set",
+            Unary::try_new(bits(&[false, true]), PType::U64, 1),
         ),
         (
-            "last bit unset",
-            Unary::try_new(bits(&[true, true, false]), 0, 1, PType::U64, 2),
+            "empty with bits",
+            Unary::try_new(bits(&[true]), PType::U64, 0),
         ),
-        (
-            "empty with a span",
-            Unary::try_new(BitBuffer::new_unset(3), 0, 3, PType::U64, 0),
-        ),
-        // `[0, 0, 1]` takes the bits `11 01`, and `[0, 2]` takes `1 001`. Clearing or setting bit 1
-        // keeps both ends set, so only the count of set bits catches them.
+        // `[1, 0]` takes the bits `10 0`. Clearing bit 0 or setting bit 1 keeps the last bit unset,
+        // so only the count of set bits catches them.
         (
             "a set bit missing",
-            Unary::try_new(bits(&[true, false, false, true]), 0, 1, PType::U64, 3),
+            Unary::try_new(bits(&[false, false, false]), PType::U64, 2),
         ),
         (
             "an extra set bit",
-            Unary::try_new(bits(&[true, true, false, true]), 0, 2, PType::U64, 2),
+            Unary::try_new(bits(&[true, true, false]), PType::U64, 2),
+        ),
+        // 256 set bits and one unset: a single value of 256.
+        (
+            "a value above the ptype",
+            Unary::try_new((0..257).map(|bit| bit < 256).collect(), PType::U8, 1),
         ),
     ];
     for (case, result) in rejected {
@@ -266,39 +243,42 @@ fn test_try_new_rejects() -> VortexResult<()> {
 #[test]
 fn test_deserialize_rejects() {
     let dtype = DType::Primitive(PType::U64, NonNullable);
-    let metadata = |base: u64, max: u64| UnaryMetadata { base, max }.encode_to_vec();
-    // `[0, 1]` takes the bits `1 01`.
-    let bits = BufferHandle::new_host(BitBuffer::from(vec![true, false, true]).inner().clone());
+    let metadata = |num_ones: u64| UnaryMetadata { num_ones }.encode_to_vec();
+    // `[1, 0]` takes the bits `10 0`.
+    let bits = BufferHandle::new_host(BitBuffer::from(vec![true, false, false]).inner().clone());
     let no_children: [ArrayRef; 0] = [];
+    // `try_from_parts` validates the parts, as the array plugin does after `deserialize`.
     let deserialize = |metadata: &[u8], buffers: &[BufferHandle], children: &[ArrayRef]| {
-        Unary.deserialize(&dtype, 2, metadata, buffers, &children, &SESSION)
+        Unary
+            .deserialize(&dtype, 2, metadata, buffers, &children, &SESSION)
+            .and_then(Array::try_from_parts)
     };
 
     let one = slice::from_ref(&bits);
 
-    assert!(deserialize(&metadata(0, 1), one, &no_children).is_ok());
-    assert!(deserialize(&metadata(0, 1), &[], &no_children).is_err());
-    assert!(deserialize(&metadata(0, 1), &[bits.clone(), bits.clone()], &no_children).is_err());
+    assert!(deserialize(&metadata(1), one, &no_children).is_ok());
+    assert!(deserialize(&metadata(1), &[], &no_children).is_err());
+    assert!(deserialize(&metadata(1), &[bits.clone(), bits.clone()], &no_children).is_err());
     assert!(
         deserialize(
-            &metadata(0, 1),
+            &metadata(1),
             one,
             &[primitive(PType::U64, &[1]).into_array()]
         )
         .is_err()
     );
     // The buffer holds 8 bits, short of the 102 these claim.
-    assert!(deserialize(&metadata(0, 100), one, &no_children).is_err());
+    assert!(deserialize(&metadata(100), one, &no_children).is_err());
     // 2 + `u64::MAX` bits overflow the count.
-    assert!(deserialize(&metadata(0, u64::MAX), one, &no_children).is_err());
-    // `1 11` keeps both ends set, but holds three set bits for two values.
-    let extra = BufferHandle::new_host(BitBuffer::from(vec![true, true, true]).inner().clone());
-    assert!(deserialize(&metadata(0, 1), slice::from_ref(&extra), &no_children).is_err());
+    assert!(deserialize(&metadata(u64::MAX), one, &no_children).is_err());
+    // `11 0` keeps the last bit unset, but holds two set bits where the metadata says one.
+    let extra = BufferHandle::new_host(BitBuffer::from(vec![true, true, false]).inner().clone());
+    assert!(deserialize(&metadata(1), slice::from_ref(&extra), &no_children).is_err());
 }
 
 #[test]
 fn test_serde_roundtrip() -> VortexResult<()> {
-    let values = sorted(1000, 1500, 6);
+    let values = small(1000, 7, 6);
     let decoded = serde_roundtrip(&encode(&values)?.into_array())?;
     assert!(decoded.is::<Unary>());
     assert_arrays_eq!(
@@ -311,7 +291,7 @@ fn test_serde_roundtrip() -> VortexResult<()> {
 
 #[test]
 fn test_with_buffers_roundtrip() -> VortexResult<()> {
-    let array = encode(&sorted(1000, 1500, 7))?.into_array();
+    let array = encode(&small(1000, 7, 7))?.into_array();
     let buffers = array.buffer_handles();
     // SAFETY: the replacement buffers are the array's own, so they hold the same values.
     let rebuilt = unsafe { array.clone().with_buffers(buffers) }?;
@@ -322,17 +302,13 @@ fn test_with_buffers_roundtrip() -> VortexResult<()> {
 
 #[test]
 fn test_array_eq_hash() -> VortexResult<()> {
-    let values: Vec<u64> = (0..500).map(|i| 2 * i).collect();
-    let array = encode(&values)?.into_array();
-    let same = encode(&values)?.into_array();
+    let array = encode(&[1, 0, 2])?.into_array();
+    let same = encode(&[1, 0, 2])?.into_array();
     assert!(array.array_eq(&same, EqMode::Value));
     assert_eq!(hash_of(&array), hash_of(&same));
 
-    let shifted: Vec<u64> = values.iter().map(|value| value + 1).collect();
-    // The same base and max, with different bits.
-    let mut moved = values;
-    moved[1] = 3;
-    for other in [encode(&shifted)?, encode(&moved)?] {
+    // `[0, 1, 2]` has the same length and sum, with different bits.
+    for other in [encode(&[0, 1, 2])?, encode(&[1, 0, 3])?] {
         assert!(!array.array_eq(&other.into_array(), EqMode::Value));
     }
     Ok(())
@@ -340,11 +316,20 @@ fn test_array_eq_hash() -> VortexResult<()> {
 
 #[test]
 fn test_nbytes() -> VortexResult<()> {
-    let values = sorted(1000, 1500, 9);
-    let span = values[999] - values[0];
+    let values = small(1000, 7, 9);
+    let num_ones: u64 = values.iter().sum();
     assert_eq!(
         encode(&values)?.into_array().nbytes(),
-        (1000 + span).div_ceil(8)
+        (1000 + num_ones).div_ceil(8)
+    );
+
+    // The value 2, as the first 3 bits of a 125-byte buffer, keeps only the byte it uses.
+    let prefix: BitBuffer = (0..1000).map(|bit| bit < 2).collect();
+    assert_eq!(
+        Unary::try_new(prefix.slice(..3), PType::U64, 1)?
+            .into_array()
+            .nbytes(),
+        1
     );
     Ok(())
 }
@@ -354,18 +339,15 @@ fn test_nbytes() -> VortexResult<()> {
 fn test_unary_metadata() {
     check_metadata(
         "unary.metadata",
-        &UnaryMetadata {
-            base: u64::MAX,
-            max: u64::MAX,
-        }
-        .encode_to_vec(),
+        &UnaryMetadata { num_ones: u64::MAX }.encode_to_vec(),
     );
 }
 
 #[rstest]
-#[case::dense(sorted(1000, 1000, 10))]
-#[case::spread(sorted(1000, 2000, 11))]
+#[case::small(small(1000, 3, 10))]
+#[case::wide(small(1000, 40, 11))]
 #[case::runs((0..1000).map(|i| i / 64).collect())]
+#[case::zeros(vec![0; 100])]
 #[case::single(vec![5])]
 fn test_unary_consistency(#[case] values: Vec<u64>) -> VortexResult<()> {
     let array = encode(&values)?.into_array();
@@ -378,26 +360,41 @@ fn test_unary_consistency(#[case] values: Vec<u64>) -> VortexResult<()> {
 }
 
 #[test]
-fn test_is_sorted_stat() -> VortexResult<()> {
-    for values in [vec![], vec![4], sorted(500, 500, 12)] {
-        let array = encode(&values)?.into_array();
-        assert_eq!(
-            array
-                .statistics()
-                .with_typed_stats_set(|stats| stats.get_as::<bool>(Stat::IsSorted)),
-            Precision::Exact(true),
-            "IsSorted over {} values",
-            values.len()
-        );
-    }
-    Ok(())
-}
-
-#[test]
 fn test_lazy_slice() -> VortexResult<()> {
-    let values = sorted(1000, 1500, 13);
+    let values = small(1000, 7, 13);
     let sliced = encode(&values)?.into_array().slice(100..900)?;
     let expected = primitive(PType::U64, &values[100..900]);
     assert_arrays_eq!(sliced, expected, &mut SESSION.create_execution_ctx());
     check_access(&sliced, &expected, 0x51CE)
+}
+
+#[rstest]
+#[case(0)]
+#[case(1)]
+#[case(63)]
+#[case(64)]
+#[case(65)]
+#[case(128)]
+#[case(200)]
+fn test_for_each_unset_index_agrees_with_naive(#[case] len: usize) -> VortexResult<()> {
+    let mut rng = StdRng::seed_from_u64(u64::try_from(len)?);
+    let random: BitBuffer = (0..len).map(|_| rng.random_bool(0.5)).collect();
+    // The same kind of bits, starting 3 bits into their buffer.
+    let offset: BitBuffer = (0..len + 3).map(|_| rng.random_bool(0.5)).collect();
+    for bits in [
+        random,
+        offset.slice(3..),
+        BitBuffer::new_set(len),
+        BitBuffer::new_unset(len),
+    ] {
+        let expected: Vec<usize> = bits
+            .iter()
+            .enumerate()
+            .filter_map(|(index, set)| (!set).then_some(index))
+            .collect();
+        let mut found = Vec::new();
+        for_each_unset_index(&bits, |index| found.push(index));
+        assert_eq!(found, expected);
+    }
+    Ok(())
 }
