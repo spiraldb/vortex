@@ -169,7 +169,6 @@ impl SegmentIoSource {
 impl IoSource for SegmentIoSource {
     fn submit(&self, owner: IoOwnerId, batch: IoBatch) -> VortexResult<()> {
         let reads = self.reads.lock();
-        let mut ready = self.ready.lock();
         let mut prefetched = self.prefetched.lock();
         for request in batch {
             let segment = self.segment(&request)?;
@@ -192,23 +191,16 @@ impl IoSource for SegmentIoSource {
             // A segment stays with the session once read, so a later stage or morsel of the
             // split that reads it again shares the read instead of starting another once the
             // first has completed.
-            let mut bytes = prefetched
+            let bytes = prefetched
                 .entry(segment)
                 .or_insert_with(|| self.read(segment))
                 .clone()
                 .map_err(move |err| vortex_err!("read of segment {segment} failed: {err}"))
                 .boxed();
             let id = request.request;
-            // In-memory and cached segments need no allocated asynchronous task. A pending
-            // read is polled again by FuturesUnordered before the driver can go to sleep.
-            if let Poll::Ready(result) = bytes.poll_unpin(&mut Context::from_waker(Waker::noop())) {
-                ready.push_back(Completion {
-                    owner,
-                    request: id,
-                    result: result.map(IoResult::Bytes),
-                });
-                continue;
-            }
+            // Registered now, polled when the session is: a fetch is not marked wanted until
+            // the run has nothing left to compute and has speculated, so the reads a planner
+            // speculates are registered beside it and a coalescing source folds them together.
             reads.push(
                 async move {
                     Completion {

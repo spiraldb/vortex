@@ -264,14 +264,19 @@ impl Run {
                 return Ok(event);
             }
             if self.visits_until_poll == 0 || self.queue.is_empty() {
+                // Parked planners speculate before the sources are polled, so what they read
+                // ahead is registered beside the reads they wait for and coalesces with them.
+                if self.queue.is_empty() && !self.parked.is_empty() {
+                    self.speculate()?;
+                }
                 self.take_completions()?;
                 self.visits_until_poll = IO_POLL_INTERVAL;
                 if self.queue.is_empty() {
-                    if self.parked.is_empty() {
-                        return Ok(Progress::Idle);
-                    }
-                    self.speculate()?;
-                    return Ok(Progress::Waiting);
+                    return Ok(if self.parked.is_empty() {
+                        Progress::Idle
+                    } else {
+                        Progress::Waiting
+                    });
                 }
             }
             self.visits_until_poll -= 1;
