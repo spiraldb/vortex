@@ -245,6 +245,11 @@ fn chunk_stream(
 ) -> BoxStream<'static, VortexResult<(u64, RecordBatch)>> {
     let (mut send, recv) = mpsc::channel(1);
     let task = handle.spawn(async move {
+        tracing::debug!(
+            row_start = scope.rows.start,
+            row_end = scope.rows.end,
+            "v2 chunk run started"
+        );
         let mut run = Run::new();
         run.admit(root, scope, Arc::clone(&io));
         loop {
