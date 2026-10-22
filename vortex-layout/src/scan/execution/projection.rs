@@ -178,14 +178,32 @@ impl Morsel for ProjectionMorsel {
             .with_row_offset(self.scan.row_offset)
             .with_value_cache(self.scan.values.clone());
             self.adaptor = Some(ScanAdaptor::new(scan, Arc::clone(&self.scan.locations)));
+            tracing::debug!(
+                row_start = self.selected.scope.rows.start,
+                row_end = self.selected.scope.rows.end,
+                selected_rows = self.selected.mask.true_count(),
+                "v2 projection started"
+            );
             return Ok(MorselOutput::Continue);
         };
         if adaptor.state() == State::Done {
+            tracing::debug!(
+                row_start = self.selected.scope.rows.start,
+                pieces = self.pieces.len(),
+                "v2 projection finished"
+            );
             return self.finish();
         }
         Ok(match adaptor.compute()? {
             AdaptorStep::Yield => MorselOutput::Continue,
-            AdaptorStep::NeedsIO(batch) => MorselOutput::NeedsIO(batch),
+            AdaptorStep::NeedsIO(batch) => {
+                tracing::debug!(
+                    row_start = self.selected.scope.rows.start,
+                    requests = batch.len(),
+                    "v2 projection reads"
+                );
+                MorselOutput::NeedsIO(batch)
+            }
             AdaptorStep::Piece(piece) => {
                 self.pieces.push(piece);
                 MorselOutput::Continue
