@@ -292,6 +292,10 @@ name = "take_varbin"
 harness = false
 
 [[bench]]
+name = "take_varbinview"
+harness = false
+
+[[bench]]
 name = "take_filter"
 harness = false
 
