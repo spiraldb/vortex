@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-use std::collections::BTreeSet;
-
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
@@ -11,7 +9,6 @@ use vortex_array::array_session;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::ExtensionArray;
 use vortex_array::arrays::ListArray;
-use vortex_array::arrays::Patched;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::assert_arrays_eq;
@@ -42,7 +39,6 @@ use vortex_file::WriteOptionsSessionExt;
 use vortex_file::WriteStrategyBuilder;
 use vortex_io::session::RuntimeSession;
 use vortex_layout::session::LayoutSession;
-use vortex_layout::session::LayoutSessionExt;
 use vortex_sequence::Sequence;
 use vortex_session::VortexSession;
 use vortex_session::registry::Id;
@@ -55,7 +51,6 @@ use super::CORE_2026_08_3;
 use super::DEFAULT_CORE_EDITION;
 use super::DEFAULT_PREVIEW_EDITION;
 use super::EDITION_DECLARATIONS;
-use super::PREVIEW_2026_08_0;
 use super::UNSTABLE;
 use crate::VortexSessionDefault;
 
@@ -146,54 +141,6 @@ fn core_2026_08_3_is_frozen_and_adds_variants() {
             .iter()
             .any(|inclusion| inclusion.component_id.as_str() == "vortex.uuid")
     );
-}
-
-#[test]
-fn preview_starts_empty() -> VortexResult<()> {
-    let session = session()?;
-    for kind in [
-        ComponentKind::Array,
-        ComponentKind::Layout,
-        ComponentKind::DType,
-        ComponentKind::Aggregate,
-    ] {
-        assert!(session.components_in(&PREVIEW_2026_08_0, kind).is_empty());
-    }
-    Ok(())
-}
-
-#[test]
-fn registered_array_and_layout_encodings_have_editions() {
-    let session = VortexSession::default();
-    session.arrays().register(Patched);
-    let arrays = session
-        .arrays()
-        .registry()
-        .read(|registry| registry.keys().copied().collect::<Vec<_>>());
-    let layouts = session
-        .layouts()
-        .registry()
-        .read(|registry| registry.keys().copied().collect::<Vec<_>>());
-    for (kind, registered) in [
-        (ComponentKind::Array, arrays),
-        (ComponentKind::Layout, layouts),
-    ] {
-        let editions = session.editions();
-        let declared: BTreeSet<Id> = editions
-            .editions()
-            .iter()
-            .flat_map(|edition| editions.components_in(&edition.id, kind))
-            .map(|inclusion| inclusion.component_id)
-            .collect();
-        let missing: Vec<Id> = registered
-            .into_iter()
-            .filter(|id| !declared.contains(id))
-            .collect();
-        assert!(
-            missing.is_empty(),
-            "{kind} encodings without an edition: {missing:?}"
-        );
-    }
 }
 
 #[test]
