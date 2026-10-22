@@ -180,7 +180,12 @@ impl IoSource for SegmentIoSource {
     fn submit(&self, owner: IoOwnerId, batch: IoBatch) -> VortexResult<()> {
         let reads = self.reads.lock();
         let mut prefetched = self.prefetched.lock();
-        for request in batch {
+        // Announcements first: a request registered before a read is started is folded into
+        // it by a coalescing source, one registered after waits for a read of its own.
+        let (announced, batch): (Vec<_>, Vec<_>) = batch
+            .into_iter()
+            .partition(|request| request.intent == IoIntent::Announce);
+        for request in announced.into_iter().chain(batch) {
             let segment = self.segment(&request)?;
             if request.intent == IoIntent::Announce {
                 // A segment speculated for the scan is already requested, beside the reads it
@@ -240,7 +245,11 @@ impl IoSource for SegmentIoSource {
     fn speculate(&self, _owner: IoOwnerId, batch: IoBatch) -> VortexResult<()> {
         let prefetched = self.prefetched.lock();
         let mut ahead = self.ahead.lock();
-        for request in batch {
+        // Announcements first, so every read started here is dispatched with them registered.
+        let (announced, batch): (Vec<_>, Vec<_>) = batch
+            .into_iter()
+            .partition(|request| request.intent == IoIntent::Announce);
+        for request in announced.into_iter().chain(batch) {
             if request.intent == IoIntent::Fetch {
                 vortex_bail!("a speculated read is never delivered, so it cannot be a fetch");
             }

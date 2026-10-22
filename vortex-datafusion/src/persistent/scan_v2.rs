@@ -177,6 +177,13 @@ fn run_stream(
             }
             match yielded {
                 Some(yielded) => {
+                    if let Yielded::Batch(start, batch) = &yielded {
+                        tracing::debug!(
+                            row_start = start,
+                            rows = batch.num_rows(),
+                            "v2 batch sent"
+                        );
+                    }
                     if send.send(Ok(yielded)).await.is_err() {
                         return Ok(());
                     }
@@ -220,6 +227,13 @@ fn chunk_stream(
                 Progress::Batch(batch) => {
                     let start = batch.scope.rows.start;
                     let batch = map(batch.array);
+                    if let Ok(batch) = &batch {
+                        tracing::debug!(
+                            row_start = start,
+                            rows = batch.num_rows(),
+                            "v2 batch sent"
+                        );
+                    }
                     let failed = batch.is_err();
                     if send.send(batch.map(|batch| (start, batch))).await.is_err() || failed {
                         return Ok(());

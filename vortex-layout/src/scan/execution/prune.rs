@@ -5,7 +5,6 @@
 
 use std::ops::Range;
 use std::sync::Arc;
-use std::vec::IntoIter;
 
 use rustc_hash::FxHashSet;
 use vortex_error::VortexResult;
@@ -58,8 +57,9 @@ pub struct PrunePlanner {
     started: bool,
     /// Ids for hints, counting down from `u32::MAX` so they never meet an adaptor's fetch ids.
     next_hint: u32,
-    /// The chunks of `rows` whose reads have not been speculated yet.
-    ahead: IntoIter<Range<u64>>,
+    /// The chunks of `rows`, whose reads are speculated on the first ask.
+    ahead: Vec<Range<u64>>,
+    speculated: bool,
     done: bool,
 }
 
@@ -71,7 +71,7 @@ impl PrunePlanner {
             .iter()
             .flat_map(|filter| filter.pruning().cloned())
             .collect();
-        let ahead = row_chunks(rows.clone(), scan.chunk_rows).into_iter();
+        let ahead = row_chunks(rows.clone(), scan.chunk_rows);
         Self {
             scan,
             rows,
@@ -81,6 +81,7 @@ impl PrunePlanner {
             started: false,
             next_hint: u32::MAX,
             ahead,
+            speculated: false,
             done: false,
         }
     }
@@ -136,32 +137,31 @@ impl IoConsumer for PrunePlanner {
 }
 
 impl Planner for PrunePlanner {
-    /// While the zone maps are read, every chunk's predicate columns are read too and its
-    /// projection announced, the batches their filter planners publish once pruning keeps them,
-    /// registered together so the partition's reads coalesce as one scan's would. A scan
+    /// While the zone maps are read, every chunk's predicate columns and projection columns are
+    /// read too, the predicates first in the batch, registered together so the partition's reads
+    /// coalesce as one scan's. The projection is read, not only announced: in a file whose
+    /// columns are written in bursts a wide projection column shares no read with the narrow
+    /// predicate beside it, and a read only announced is not started until the projection
+    /// fetches it, after the filter, with nothing to overlap. One ask reads it all. A scan
     /// selecting rows by index reads nothing it was not asked for.
     fn speculate(&mut self) -> VortexResult<Option<IoBatch>> {
-        if !matches!(self.scan.selection, Selection::All) {
+        if !matches!(self.scan.selection, Selection::All) || self.speculated {
             return Ok(None);
         }
         let Some(filter) = &self.scan.filter else {
             return Ok(None);
         };
+        self.speculated = true;
         let session = &self.scan.session;
         let locations = &self.scan.locations;
         let mut batch = Vec::new();
         let mut seen = FxHashSet::default();
-        for chunk in self.ahead.by_ref() {
+        let mut projections = Vec::new();
+        for chunk in &self.ahead {
             let len = usize::try_from(chunk.end - chunk.start).unwrap_or(usize::MAX);
             let mask = Mask::new_true(len);
             let predicates =
                 segments_read(session, filter.predicates.iter(), chunk.clone(), &mask)?;
-            let projection = segments_read(
-                session,
-                std::iter::once(&self.scan.projection),
-                chunk.clone(),
-                &mask,
-            )?;
             hint(
                 locations,
                 &mut self.next_hint,
@@ -170,11 +170,19 @@ impl Planner for PrunePlanner {
                 &mut seen,
                 &mut batch,
             );
+            projections.push(segments_read(
+                session,
+                std::iter::once(&self.scan.projection),
+                chunk.clone(),
+                &mask,
+            )?);
+        }
+        for projection in &projections {
             hint(
                 locations,
                 &mut self.next_hint,
-                IoIntent::Announce,
-                &projection,
+                IoIntent::Prefetch,
+                projection,
                 &mut seen,
                 &mut batch,
             );
