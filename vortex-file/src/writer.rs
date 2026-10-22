@@ -784,7 +784,7 @@ mod tests {
         static DECLARATION: EditionDeclaration = EditionDeclaration {
             edition: Edition {
                 id: EDITION,
-                freezes: true,
+                immutable: true,
                 min_library_version: None,
             },
             added: &[EditionMember::array(&"vortex.primitive")],
@@ -808,7 +808,7 @@ mod tests {
         static DECLARATION: EditionDeclaration = EditionDeclaration {
             edition: Edition {
                 id: EDITION,
-                freezes: true,
+                immutable: true,
                 min_library_version: None,
             },
             added: &[
@@ -848,7 +848,7 @@ mod tests {
         static ARRAYS_ONLY: EditionDeclaration = EditionDeclaration {
             edition: Edition {
                 id: EDITION,
-                freezes: true,
+                immutable: true,
                 min_library_version: None,
             },
             added: &[EditionMember::array(&"vortex.primitive")],
@@ -893,7 +893,7 @@ mod tests {
         static DECLARATION: EditionDeclaration = EditionDeclaration {
             edition: Edition {
                 id: EDITION,
-                freezes: true,
+                immutable: true,
                 min_library_version: None,
             },
             added: &[EditionMember::dtype(&"vortex.date")],

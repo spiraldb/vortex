@@ -78,7 +78,7 @@ const INDEXED_TEST_EDITION: EditionId =
 static INDEXED_TEST_DECLARATION: EditionDeclaration = EditionDeclaration {
     edition: Edition {
         id: INDEXED_TEST_EDITION,
-        freezes: true,
+        immutable: true,
         min_library_version: None,
     },
     added: &[
