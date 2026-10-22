@@ -24,6 +24,7 @@ use vortex_array::arrays::MapArray;
 use vortex_array::arrays::Patched;
 use vortex_array::arrays::PiecewiseSequenceArray;
 use vortex_array::arrays::PrimitiveArray;
+use vortex_array::arrays::ScalarFnArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinViewArray;
 use vortex_array::arrays::patched::PatchedArraySlotsExt;
@@ -34,6 +35,9 @@ use vortex_array::dtype::MapDType;
 use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
 use vortex_array::patches::Patches;
+use vortex_array::scalar_fn::TypedScalarFnInstance;
+use vortex_array::scalar_fn::fns::binary::Binary;
+use vortex_array::scalar_fn::fns::operators::Operator;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
 use vortex_error::VortexExpect;
@@ -226,6 +230,23 @@ fn piecewise(variable_lengths: bool) -> ArrayRef {
         .into_array()
 }
 
+fn scalar_fn(nested: bool) -> ArrayRef {
+    let add = TypedScalarFnInstance::new(Binary, Operator::Add).erased();
+    let lhs = nullable_primitive(LEN);
+    let rhs = ConstantArray::new(3i64, LEN).into_array();
+    let added = ScalarFnArray::try_new(add, vec![lhs, rhs])
+        .vortex_expect("scalar function add fixture")
+        .into_array();
+    if !nested {
+        return added;
+    }
+
+    let mul = TypedScalarFnInstance::new(Binary, Operator::Mul).erased();
+    ScalarFnArray::try_new(mul, vec![added, nullable_primitive(LEN)])
+        .vortex_expect("nested scalar function fixture")
+        .into_array()
+}
+
 fn same_piece_indices(variable_lengths: bool) -> Vec<usize> {
     let length = if variable_lengths { 4 } else { 8 };
     (0..ACCESSES).map(|i| LEN / 2 + i % length).collect()
@@ -257,9 +278,12 @@ const ARRAYS: &[&str] = &[
     "patched",
     "piecewise_variable",
     "piecewise_constant",
+    "scalar_fn_binary",
+    "scalar_fn_nested",
 ];
 
 const PIECEWISE_ARRAYS: &[&str] = &["piecewise_variable", "piecewise_constant"];
+const SCALAR_FN_ARRAYS: &[&str] = &["scalar_fn_binary", "scalar_fn_nested"];
 
 fn array(name: &str) -> ArrayRef {
     match name {
@@ -270,6 +294,8 @@ fn array(name: &str) -> ArrayRef {
         "patched" => patched(),
         "piecewise_variable" => piecewise(true),
         "piecewise_constant" => piecewise(false),
+        "scalar_fn_binary" => scalar_fn(false),
+        "scalar_fn_nested" => scalar_fn(true),
         "dict" => dict_over_nullable_values(),
         "struct" => nullable_struct(),
         "bool" => {
@@ -404,6 +430,38 @@ fn piecewise_same_piece_repeated(bencher: Bencher, name: &str) {
                 divan::black_box(
                     probe
                         .execute_scalar(index, ctx)
+                        .vortex_expect("in-bounds read"),
+                );
+            }
+        });
+}
+
+#[divan::bench(args = SCALAR_FN_ARRAYS)]
+fn scalar_fn_same_row_once(bencher: Bencher, name: &str) {
+    let array = array(name);
+    bencher
+        .with_inputs(|| SESSION.create_execution_ctx())
+        .bench_refs(|ctx| {
+            for _ in 0..ACCESSES {
+                divan::black_box(
+                    array
+                        .execute_scalar(LEN / 2, ctx)
+                        .vortex_expect("in-bounds read"),
+                );
+            }
+        });
+}
+
+#[divan::bench(args = SCALAR_FN_ARRAYS)]
+fn scalar_fn_same_row_repeated(bencher: Bencher, name: &str) {
+    let array = array(name);
+    bencher
+        .with_inputs(|| (SESSION.create_execution_ctx(), array.repeated_probe()))
+        .bench_refs(|(ctx, probe)| {
+            for _ in 0..ACCESSES {
+                divan::black_box(
+                    probe
+                        .execute_scalar(LEN / 2, ctx)
                         .vortex_expect("in-bounds read"),
                 );
             }
