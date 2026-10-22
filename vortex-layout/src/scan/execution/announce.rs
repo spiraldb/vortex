@@ -8,6 +8,7 @@ use std::sync::Arc;
 use rustc_hash::FxHashSet;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
+use vortex_io::request::IoBatch;
 use vortex_io::request::IoConsumer;
 use vortex_io::request::IoIntent;
 use vortex_io::request::IoRequestId;
@@ -33,10 +34,15 @@ pub type AnnounceNext = Box<dyn FnOnce() -> Box<dyn Planner> + Send>;
 pub struct FileAnnouncePlanner {
     scan: Arc<PreparedScan>,
     next: Option<AnnounceNext>,
-    announced: bool,
+    /// The announcements still to publish, a slice per compute, once listed.
+    pending: Option<IoBatch>,
     /// Ids for hints, counting down from `u32::MAX`.
     next_hint: u32,
 }
+
+/// How many announcements one compute publishes: a lot, but not the whole file at once, so
+/// the source dispatching between them is not held up by a file's worth of registrations.
+const ANNOUNCEMENTS_PER_COMPUTE: usize = 256;
 
 impl FileAnnouncePlanner {
     /// The planner announcing `scan`'s file, continuing into `next`.
@@ -44,7 +50,7 @@ impl FileAnnouncePlanner {
         Self {
             scan,
             next: Some(next),
-            announced: false,
+            pending: None,
             next_hint: u32::MAX,
         }
     }
@@ -64,8 +70,15 @@ impl Planner for FileAnnouncePlanner {
     }
 
     fn compute(&mut self) -> VortexResult<PlannerOutput> {
-        if !self.announced {
-            self.announced = true;
+        if let Some(pending) = &mut self.pending {
+            let slice: IoBatch = pending
+                .drain(..pending.len().min(ANNOUNCEMENTS_PER_COMPUTE))
+                .collect();
+            if !slice.is_empty() {
+                return Ok(PlannerOutput::NeedsIO(slice));
+            }
+        } else {
+            self.pending = Some(Vec::new());
             let scan = &self.scan;
             if scan
                 .cache
@@ -98,7 +111,8 @@ impl Planner for FileAnnouncePlanner {
                         requests = batch.len(),
                         "v2 file announced"
                     );
-                    return Ok(PlannerOutput::NeedsIO(batch));
+                    self.pending = Some(batch);
+                    return Ok(PlannerOutput::Continue);
                 }
             }
         }
