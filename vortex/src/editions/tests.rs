@@ -413,6 +413,7 @@ const WRITER_TEST_EDITION: EditionId = EditionId::new("writer-test", 2026, 7, 0)
 static WRITER_TEST_DECLARATION: EditionDeclaration = EditionDeclaration {
     edition: Edition {
         id: WRITER_TEST_EDITION,
+        freezes: true,
         min_library_version: None,
     },
     added: &[
@@ -551,6 +552,7 @@ fn session_declaring(members: &[(ComponentKind, Id)]) -> VortexResult<VortexSess
     let editions = session.editions();
     editions.declare_edition(Edition {
         id: EDITION,
+        freezes: true,
         min_library_version: None,
     })?;
     for inclusion in session
