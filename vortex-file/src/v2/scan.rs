@@ -154,7 +154,11 @@ fn compose(scan: &Arc<PreparedScan>, window: usize) -> Box<dyn Planner> {
             }
         }
     };
-    Box::new(FileAnnouncePlanner::new(Arc::clone(scan), Box::new(root)))
+    if scan.filter().is_none() {
+        Box::new(FileAnnouncePlanner::new(Arc::clone(scan), Box::new(root)))
+    } else {
+        root()
+    }
 }
 
 /// What the root run's stream yields: a batch with the row it starts at, or a chunk a planner of

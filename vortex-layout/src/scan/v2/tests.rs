@@ -226,7 +226,11 @@ fn compose(scan: &Arc<PreparedScan>, rows: Range<u64>) -> Box<dyn Planner> {
             }
         }
     };
-    Box::new(FileAnnouncePlanner::new(Arc::clone(scan), Box::new(root)))
+    if scan.filter().is_none() {
+        Box::new(FileAnnouncePlanner::new(Arc::clone(scan), Box::new(root)))
+    } else {
+        root()
+    }
 }
 
 /// Runs `rows` of a prepared scan on one planning run, every spawned chunk admitted to it, and

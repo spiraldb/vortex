@@ -604,10 +604,16 @@ impl FileOpener for VortexOpener {
                         }
                     }
                 };
-                // The first partition to open the file announces every segment the scan reads
-                // of it, so each partition's reads coalesce with its neighbours'.
-                let root: Box<dyn Planner> =
-                    Box::new(FileAnnouncePlanner::new(Arc::clone(&scan), Box::new(root)));
+                // A scan without a filter reads every segment of its columns: the first
+                // partition to open the file announces them all, so each partition's reads
+                // coalesce with its neighbours' whatever order they start in. A filtered scan
+                // does not: announced everywhere, its zone-map reads coalesce into wide reads
+                // of its neighbours' data and pruning waits on them.
+                let root: Box<dyn Planner> = if scan.filter().is_none() {
+                    Box::new(FileAnnouncePlanner::new(Arc::clone(&scan), Box::new(root)))
+                } else {
+                    root()
+                };
 
                 Ok(driver.run(scan, root, map_batch))
             } else {
