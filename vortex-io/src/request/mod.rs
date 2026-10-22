@@ -128,6 +128,13 @@ pub trait IoSource: Send + Sync {
     /// Registration does not perform IO and never blocks.
     fn submit(&self, owner: IoOwnerId, batch: IoBatch) -> VortexResult<()>;
 
+    /// Registers reads `owner` speculated it will need later: prefetches and announcements that
+    /// are never delivered to it. A source serving several scopes may hand a speculated read to
+    /// whichever scope fetches it first. By default they are submitted like any other batch.
+    fn speculate(&self, owner: IoOwnerId, batch: IoBatch) -> VortexResult<()> {
+        self.submit(owner, batch)
+    }
+
     /// Advances eligible IO without blocking and returns a required completion if ready.
     /// Optional successes stay in the source; any read failure fails the run.
     fn poll(&self) -> VortexResult<Option<Completion>>;

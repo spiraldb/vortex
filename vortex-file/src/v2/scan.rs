@@ -83,6 +83,8 @@ impl ScanDriver {
         let root = compose(&scan);
         let (chunk_handle, chunk_io) = (self.handle.clone(), Arc::clone(&io));
         let batches = run_stream(self.handle, root, scope, io.session(), inline)
+            .map_ok(|yielded| stream::iter(yielded.into_iter().map(VortexResult::Ok)))
+            .try_flatten()
             .map_ok(move |yielded| match yielded {
                 Yielded::Batch(start, batch) => {
                     stream::once(future::ready(Ok((start, batch)))).boxed()
@@ -138,12 +140,15 @@ enum Yielded {
     Spawn(WorkScope, Box<dyn Planner>),
 }
 
-/// One CPU step of a run, taken on a `spawn_cpu` task with the run.
-enum Step {
+/// What one CPU step of the root run produced: the chunks it spawned, then how it ended.
+struct Stepped {
+    spawned: Vec<(WorkScope, Box<dyn Planner>)>,
+    end: End,
+}
+
+enum End {
     Batch(u64, ArrayRef),
-    Spawn(WorkScope, Box<dyn Planner>),
-    RootDone,
-    Idle,
+    Done,
     Waiting,
 }
 
@@ -155,17 +160,21 @@ struct RunState {
     io: Arc<dyn IoSource>,
     /// Whether a spawned chunk runs on this run, as another root, instead of being yielded.
     inline: bool,
+    /// How the last step ended, once the chunks it spawned have been yielded.
+    pending: Option<End>,
 }
 
-/// Runs `root` over `scope` on a planning run of its own, reading through `io`, each CPU step
-/// on a `spawn_cpu` task, and yields its batches and, unless `inline`, the chunks it spawns.
+/// Runs `root` over `scope` on a planning run of its own, reading through `io`, and yields its
+/// batches and, unless `inline`, the chunks it spawns. One CPU step, on a `spawn_cpu` task, runs
+/// the run until it has a batch, waits for a read, or is done, so every chunk the run can plan
+/// at once is yielded together.
 fn run_stream(
     handle: Handle,
     root: Box<dyn Planner>,
     scope: WorkScope,
     io: Arc<dyn IoSource>,
     inline: bool,
-) -> BoxStream<'static, VortexResult<Yielded>> {
+) -> BoxStream<'static, VortexResult<Vec<Yielded>>> {
     let mut run = Run::new();
     run.admit(root, scope, Arc::clone(&io));
     let state = RunState {
@@ -173,45 +182,67 @@ fn run_stream(
         run: Some(run),
         io,
         inline,
+        pending: None,
     };
     stream::try_unfold(state, |mut state| async move {
         loop {
             let run = state
                 .run
+                .as_mut()
+                .ok_or_else(|| vortex_err!("the scan's run is missing"))?;
+            match state.pending.take() {
+                None => {}
+                Some(End::Waiting) => future::poll_fn(|cx| run.poll_completion(cx)).await?,
+                Some(End::Done | End::Batch(..)) => return Ok(None),
+            }
+            let run = state
+                .run
                 .take()
                 .ok_or_else(|| vortex_err!("the scan's run is missing"))?;
-            let (run, step) = state
+            let (io, inline) = (Arc::clone(&state.io), state.inline);
+            let (run, stepped) = state
                 .handle
                 .spawn_cpu(move || {
                     let mut run = run;
-                    let step = run.advance().map(|progress| match progress {
-                        Progress::Batch(batch) => Step::Batch(batch.scope.rows.start, batch.array),
-                        Progress::Spawn(scope, child) => Step::Spawn(scope, child),
-                        Progress::RootDone(_) => Step::RootDone,
-                        Progress::Idle => Step::Idle,
-                        Progress::Waiting => Step::Waiting,
-                    });
-                    (run, step)
+                    let stepped = step(&mut run, &io, inline);
+                    (run, stepped)
                 })
                 .await;
-            let run = state.run.insert(run);
-            match step? {
-                Step::Batch(start, batch) => {
-                    return Ok(Some((Yielded::Batch(start, batch), state)));
-                }
-                Step::Spawn(scope, child) if state.inline => {
-                    run.admit(child, scope, Arc::clone(&state.io));
-                }
-                Step::Spawn(scope, child) => {
-                    return Ok(Some((Yielded::Spawn(scope, child), state)));
-                }
-                Step::RootDone if run.live_roots() > 0 => {}
-                Step::RootDone | Step::Idle => return Ok(None),
-                Step::Waiting => future::poll_fn(|cx| run.poll_completion(cx)).await?,
+            state.run = Some(run);
+            let Stepped { spawned, end } = stepped?;
+            let mut yielded: Vec<_> = spawned
+                .into_iter()
+                .map(|(scope, chunk)| Yielded::Spawn(scope, chunk))
+                .collect();
+            match end {
+                End::Batch(start, batch) => yielded.push(Yielded::Batch(start, batch)),
+                end => state.pending = Some(end),
+            }
+            if !yielded.is_empty() {
+                return Ok(Some((yielded, state)));
             }
         }
     })
     .boxed()
+}
+
+/// Advances `run` until it has a batch, waits, or is done, admitting each chunk it spawns as
+/// another root when `inline` and collecting it otherwise.
+fn step(run: &mut Run, io: &Arc<dyn IoSource>, inline: bool) -> VortexResult<Stepped> {
+    let mut spawned = Vec::new();
+    let end = loop {
+        match run.advance()? {
+            Progress::Batch(batch) => break End::Batch(batch.scope.rows.start, batch.array),
+            Progress::Spawn(scope, child) if inline => {
+                run.admit(child, scope, Arc::clone(io));
+            }
+            Progress::Spawn(scope, child) => spawned.push((scope, child)),
+            Progress::RootDone(_) if run.live_roots() > 0 => {}
+            Progress::RootDone(_) | Progress::Idle => break End::Done,
+            Progress::Waiting => break End::Waiting,
+        }
+    };
+    Ok(Stepped { spawned, end })
 }
 
 /// Runs a spawned chunk's `root` over `scope` on a planning run of its own, on one task that

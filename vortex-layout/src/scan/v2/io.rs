@@ -23,6 +23,7 @@ use vortex_io::request::Completion;
 use vortex_io::request::IoBatch;
 use vortex_io::request::IoIntent;
 use vortex_io::request::IoOwnerId;
+use vortex_io::request::IoRequest;
 use vortex_io::request::IoResult;
 use vortex_io::request::IoService;
 use vortex_io::request::IoSource;
@@ -46,14 +47,23 @@ pub(super) fn segment_ranges(locations: &[SegmentLocation]) -> SegmentRanges {
 }
 
 /// Serves splits from any [`SegmentSource`], by segment id.
+///
+/// Reads a session speculates are started here, shared by every session of the service, and
+/// handed to the first session that fetches the segment: a chunk fetches what the planner before
+/// it read ahead on its behalf.
 pub(crate) struct SegmentScanIo {
     segments: Arc<dyn SegmentSource>,
     ranges: SegmentRanges,
+    ahead: Ahead,
 }
 
 impl SegmentScanIo {
     pub(crate) fn new(segments: Arc<dyn SegmentSource>, ranges: SegmentRanges) -> Self {
-        Self { segments, ranges }
+        Self {
+            segments,
+            ranges,
+            ahead: Ahead::default(),
+        }
     }
 }
 
@@ -62,9 +72,13 @@ impl IoService for SegmentScanIo {
         Arc::new(SegmentIoSource::new(
             Arc::clone(&self.segments),
             Arc::clone(&self.ranges),
+            Arc::clone(&self.ahead),
         ))
     }
 }
+
+/// Speculated reads, by segment, until a session's fetch takes them.
+type Ahead = Arc<Mutex<HashMap<SegmentId, Prefetched>>>;
 
 /// Serves a split's range requests from a segment source, without blocking.
 ///
@@ -85,13 +99,19 @@ pub(super) struct SegmentIoSource {
     prefetched: Mutex<HashMap<SegmentId, Prefetched>>,
     /// Announced segments, requested and never polled.
     announced: Mutex<HashMap<SegmentId, VecDeque<SegmentFuture>>>,
+    /// Reads speculated by any session of the service, taken by the first fetch of each.
+    ahead: Ahead,
 }
 
 /// A read started ahead of the fetch that needs it.
 type Prefetched = Shared<BoxFuture<'static, Result<BufferHandle, Arc<VortexError>>>>;
 
 impl SegmentIoSource {
-    pub(super) fn new(segments: Arc<dyn SegmentSource>, ranges: SegmentRanges) -> Self {
+    pub(super) fn new(
+        segments: Arc<dyn SegmentSource>,
+        ranges: SegmentRanges,
+        ahead: Ahead,
+    ) -> Self {
         Self {
             segments,
             ranges,
@@ -99,7 +119,44 @@ impl SegmentIoSource {
             ready: Mutex::default(),
             prefetched: Mutex::default(),
             announced: Mutex::default(),
+            ahead,
         }
+    }
+
+    fn segment(&self, request: &IoRequest) -> VortexResult<SegmentId> {
+        let IoTarget::Range { offset, len, .. } = request.target else {
+            vortex_bail!(
+                "SegmentIoSource only serves byte ranges, not {:?}",
+                request.target
+            );
+        };
+        self.ranges
+            .get(&(offset, len))
+            .copied()
+            .ok_or_else(|| vortex_err!("No segment at bytes {offset}+{len}"))
+    }
+
+    /// The read of `segment`: one speculated for it, else one announced, else a new request.
+    fn read(&self, segment: SegmentId) -> Prefetched {
+        if let Some(read) = self.ahead.lock().remove(&segment) {
+            return read;
+        }
+        self.announced
+            .lock()
+            .get_mut(&segment)
+            .and_then(VecDeque::pop_front)
+            .unwrap_or_else(|| self.segments.request(segment))
+            .map_err(Arc::new)
+            .boxed()
+            .shared()
+    }
+
+    /// Starts `read` now: polling registers it as wanted by the source.
+    fn start(read: &Prefetched) {
+        drop(
+            read.clone()
+                .poll_unpin(&mut Context::from_waker(Waker::noop())),
+        );
     }
 }
 
@@ -109,16 +166,7 @@ impl IoSource for SegmentIoSource {
         let mut ready = self.ready.lock();
         let mut prefetched = self.prefetched.lock();
         for request in batch {
-            let IoTarget::Range { offset, len, .. } = request.target else {
-                vortex_bail!(
-                    "SegmentIoSource only serves byte ranges, not {:?}",
-                    request.target
-                );
-            };
-            let segment = *self
-                .ranges
-                .get(&(offset, len))
-                .ok_or_else(|| vortex_err!("No segment at bytes {offset}+{len}"))?;
+            let segment = self.segment(&request)?;
             if request.intent == IoIntent::Announce {
                 self.announced
                     .lock()
@@ -129,20 +177,8 @@ impl IoSource for SegmentIoSource {
             }
             if request.intent == IoIntent::Prefetch {
                 prefetched.entry(segment).or_insert_with(|| {
-                    let read = self
-                        .announced
-                        .lock()
-                        .get_mut(&segment)
-                        .and_then(VecDeque::pop_front)
-                        .unwrap_or_else(|| self.segments.request(segment))
-                        .map_err(Arc::new)
-                        .boxed()
-                        .shared();
-                    // Polling registers the read as wanted, so the source starts it now.
-                    drop(
-                        read.clone()
-                            .poll_unpin(&mut Context::from_waker(Waker::noop())),
-                    );
+                    let read = self.read(segment);
+                    Self::start(&read);
                     read
                 });
                 continue;
@@ -152,16 +188,7 @@ impl IoSource for SegmentIoSource {
             // first has completed.
             let mut bytes = prefetched
                 .entry(segment)
-                .or_insert_with(|| {
-                    self.announced
-                        .lock()
-                        .get_mut(&segment)
-                        .and_then(VecDeque::pop_front)
-                        .unwrap_or_else(|| self.segments.request(segment))
-                        .map_err(Arc::new)
-                        .boxed()
-                        .shared()
-                })
+                .or_insert_with(|| self.read(segment))
                 .clone()
                 .map_err(move |err| vortex_err!("read of segment {segment} failed: {err}"))
                 .boxed();
@@ -186,6 +213,36 @@ impl IoSource for SegmentIoSource {
                 }
                 .boxed(),
             );
+        }
+        Ok(())
+    }
+
+    /// Starts every read of the batch for whichever session fetches it first. A session that
+    /// has the segment already, or speculated it before, starts nothing.
+    fn speculate(&self, _owner: IoOwnerId, batch: IoBatch) -> VortexResult<()> {
+        let prefetched = self.prefetched.lock();
+        let mut ahead = self.ahead.lock();
+        for request in batch {
+            if request.intent == IoIntent::Fetch {
+                vortex_bail!("a speculated read is never delivered, so it cannot be a fetch");
+            }
+            let segment = self.segment(&request)?;
+            if prefetched.contains_key(&segment) {
+                continue;
+            }
+            ahead.entry(segment).or_insert_with(|| {
+                let read = self
+                    .announced
+                    .lock()
+                    .get_mut(&segment)
+                    .and_then(VecDeque::pop_front)
+                    .unwrap_or_else(|| self.segments.request(segment))
+                    .map_err(Arc::new)
+                    .boxed()
+                    .shared();
+                Self::start(&read);
+                read
+            });
         }
         Ok(())
     }
@@ -254,6 +311,7 @@ mod tests {
 
     use super::SegmentIoSource;
     use super::segment_ranges;
+    use super::*;
     use crate::scan::execution::SegmentLocation;
     use crate::segments::SegmentFuture;
     use crate::segments::SegmentId;
@@ -307,7 +365,7 @@ mod tests {
             length: 4,
             alignment: Alignment::none(),
         });
-        let io = SegmentIoSource::new(segments, segment_ranges(&locations));
+        let io = SegmentIoSource::new(segments, segment_ranges(&locations), Ahead::default());
         let mut pending = request(IoIntent::Fetch, 1);
         pending.target = IoTarget::range(4, 4);
         io.submit(IoOwnerId(0), vec![pending, request(IoIntent::Fetch, 0)])?;
@@ -330,6 +388,57 @@ mod tests {
         Ok(())
     }
 
+    /// A read one session speculates is started once, taken by the first fetch of the segment
+    /// from any session of the service, and from then on retained by that session alone.
+    #[tokio::test]
+    async fn a_speculated_read_is_taken_by_the_first_fetch() -> VortexResult<()> {
+        let segments = Arc::new(CountingSegments::default());
+        let location = SegmentLocation {
+            offset: 0,
+            length: 4,
+            alignment: Alignment::none(),
+        };
+        let service = SegmentScanIo::new(Arc::clone(&segments) as _, segment_ranges(&[location]));
+        let (planner, chunk, other) = (service.session(), service.session(), service.session());
+
+        planner.speculate(IoOwnerId(0), vec![request(IoIntent::Prefetch, 0)])?;
+        assert_eq!(segments.0.load(Ordering::Relaxed), 1, "started at once");
+        planner.speculate(IoOwnerId(0), vec![request(IoIntent::Prefetch, 1)])?;
+        assert_eq!(segments.0.load(Ordering::Relaxed), 1, "speculated once");
+
+        chunk.submit(IoOwnerId(1), vec![request(IoIntent::Fetch, 2)])?;
+        let completion = std::future::poll_fn(|cx| chunk.poll_completion(cx)).await?;
+        assert_eq!(completion.request, IoRequestId(2));
+        assert!(completion.result.is_ok());
+        assert_eq!(
+            segments.0.load(Ordering::Relaxed),
+            1,
+            "the chunk took the read"
+        );
+
+        other.submit(IoOwnerId(2), vec![request(IoIntent::Fetch, 3)])?;
+        assert_eq!(
+            segments.0.load(Ordering::Relaxed),
+            2,
+            "a second session reads again"
+        );
+
+        planner.clear();
+        chunk.submit(IoOwnerId(1), vec![request(IoIntent::Fetch, 4)])?;
+        assert_eq!(
+            segments.0.load(Ordering::Relaxed),
+            2,
+            "the chunk retains its read"
+        );
+        assert!(
+            planner
+                .speculate(IoOwnerId(0), vec![request(IoIntent::Fetch, 5)])
+                .is_err(),
+            "a speculated fetch is refused"
+        );
+        Ok(())
+    }
+
     /// A fetch of a prefetched segment waits on the prefetch's read rather than reading again,
     /// only the fetch is delivered, and a later fetch of the segment shares the same read.
     #[tokio::test]
@@ -340,7 +449,11 @@ mod tests {
             length: 4,
             alignment: Alignment::none(),
         };
-        let io = SegmentIoSource::new(Arc::clone(&segments) as _, segment_ranges(&[location]));
+        let io = SegmentIoSource::new(
+            Arc::clone(&segments) as _,
+            segment_ranges(&[location]),
+            Ahead::default(),
+        );
 
         io.submit(IoOwnerId(0), vec![request(IoIntent::Prefetch, 0)])?;
         assert_eq!(segments.0.load(Ordering::Relaxed), 1);
@@ -378,7 +491,11 @@ mod tests {
             length: 4,
             alignment: Alignment::none(),
         };
-        let io = SegmentIoSource::new(Arc::clone(&segments) as _, segment_ranges(&[location]));
+        let io = SegmentIoSource::new(
+            Arc::clone(&segments) as _,
+            segment_ranges(&[location]),
+            Ahead::default(),
+        );
         io.submit(
             IoOwnerId(0),
             vec![

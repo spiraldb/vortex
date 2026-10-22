@@ -46,7 +46,7 @@ use crate::segments::SegmentId;
 /// Plans and adaptive conjunct ordering shared by every chunk of a scan.
 pub struct FilterPlans {
     expression: FilterExpr,
-    predicates: Vec<PlanRef>,
+    pub(super) predicates: Vec<PlanRef>,
     /// A metadata-only pruning plan per conjunct, where the conjunct has one.
     pruning: Vec<Option<PlanRef>>,
 }

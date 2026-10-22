@@ -71,6 +71,15 @@ pub trait Planner: IoConsumer + Send {
 
     /// Advances CPU work. Only called when [`state`](Self::state) is `NeedsCompute`.
     fn compute(&mut self) -> VortexResult<PlannerOutput>;
+
+    /// Reads the planner expects to need later, asked for while it waits and nothing else in
+    /// its run can compute, so the reads go out while the ones it waits for are in flight.
+    /// Each call may return further reads; `None` when there is nothing more to speculate.
+    /// Speculated reads are never delivered: the run's source keeps each for the fetch that
+    /// needs it, so a batch may hold prefetches and announcements, never a fetch.
+    fn speculate(&mut self) -> VortexResult<Option<IoBatch>> {
+        Ok(None)
+    }
 }
 
 impl fmt::Debug for PlannerOutput {

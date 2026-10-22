@@ -11,6 +11,7 @@ use rustc_hash::FxHashSet;
 use vortex_error::VortexResult;
 use vortex_error::vortex_ensure_eq;
 use vortex_error::vortex_err;
+use vortex_io::request::IoBatch;
 use vortex_io::request::IoConsumer;
 use vortex_io::request::IoIntent;
 use vortex_io::request::IoRequestId;
@@ -20,10 +21,12 @@ use vortex_scan::planning::planner::Planner;
 use vortex_scan::planning::planner::PlannerOutput;
 use vortex_scan::planning::planner::State;
 use vortex_scan::planning::planner::WorkScope;
+use vortex_scan::selection::Selection;
 
 use super::PreparedScan;
 use super::adaptor::AdaptorStep;
 use super::adaptor::ScanAdaptor;
+use super::chunk::row_chunks;
 use super::filter::hint;
 use super::filter::piece_mask;
 use super::filter::segments_read;
@@ -54,6 +57,8 @@ pub struct PrunePlanner {
     announced: bool,
     /// Ids for hints, counting down from `u32::MAX` so they never meet an adaptor's fetch ids.
     next_hint: u32,
+    /// The chunks of `rows` whose predicate columns have not been speculated yet.
+    ahead: IntoIter<Range<u64>>,
     done: bool,
 }
 
@@ -66,6 +71,7 @@ impl PrunePlanner {
             .flat_map(|filter| filter.pruning().cloned())
             .collect();
         let len = usize::try_from(rows.end - rows.start).unwrap_or(usize::MAX);
+        let ahead = row_chunks(rows.clone(), scan.chunk_rows).into_iter();
         Self {
             scan,
             rows,
@@ -77,6 +83,7 @@ impl PrunePlanner {
             pieces: Vec::new(),
             announced: false,
             next_hint: u32::MAX,
+            ahead,
             done: false,
         }
     }
@@ -91,6 +98,40 @@ impl IoConsumer for PrunePlanner {
 }
 
 impl Planner for PrunePlanner {
+    /// While the zone maps are read, the predicate columns of the next chunk are read too,
+    /// as its filter planner will fetch them once pruning keeps it. One chunk per ask, so the
+    /// reads ahead follow how long the zone maps take. A scan selecting rows by index reads
+    /// nothing it was not asked for.
+    fn speculate(&mut self) -> VortexResult<Option<IoBatch>> {
+        if !matches!(self.scan.selection, Selection::All) {
+            return Ok(None);
+        }
+        let Some(filter) = &self.scan.filter else {
+            return Ok(None);
+        };
+        let Some(chunk) = self.ahead.next() else {
+            return Ok(None);
+        };
+        let len = usize::try_from(chunk.end - chunk.start).unwrap_or(usize::MAX);
+        let segments = segments_read(
+            &self.scan.session,
+            filter.predicates.iter(),
+            chunk,
+            &Mask::new_true(len),
+        )?;
+        let mut batch = Vec::new();
+        let mut seen = FxHashSet::default();
+        hint(
+            &self.scan.locations,
+            &mut self.next_hint,
+            IoIntent::Prefetch,
+            &segments,
+            &mut seen,
+            &mut batch,
+        );
+        Ok((!batch.is_empty()).then_some(batch))
+    }
+
     fn state(&self) -> State {
         if self.done {
             return State::Done;
