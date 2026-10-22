@@ -212,6 +212,7 @@ impl FileOpener for VortexOpener {
         }
 
         Ok(async move {
+            let opened_at = std::time::Instant::now();
             // FilePruner now has all the logic to figure out if its worthwhile, and will return `None` if not.
             let mut file_pruner = file_pruning_predicate.and_then(|predicate| {
                 FilePruner::try_new(
@@ -474,6 +475,12 @@ impl FileOpener for VortexOpener {
                     .await
                     .map_err(|e| exec_datafusion_err!("Failed to plan Vortex scan: {e}"))?;
                 let scan = Arc::new(scan);
+                tracing::debug!(
+                    row_start = scan.rows().start,
+                    row_end = scan.rows().end,
+                    micros = u64::try_from(opened_at.elapsed().as_micros()).unwrap_or(u64::MAX),
+                    "v2 open prepared"
+                );
 
                 // The planners, composed: with a filter, its pruning plans first over the whole
                 // partition, continuing into the chunks of the rows they keep; without a
@@ -495,6 +502,12 @@ impl FileOpener for VortexOpener {
                 };
 
                 let driver = ScanDriver::new(handle, concurrency, has_output_ordering);
+                tracing::debug!(
+                    row_start = scan.rows().start,
+                    row_end = scan.rows().end,
+                    micros = u64::try_from(opened_at.elapsed().as_micros()).unwrap_or(u64::MAX),
+                    "v2 open stream"
+                );
                 Ok(driver.run(scan, root, map_batch))
             } else {
                 // Share V1 layout readers across partitions of the file.
