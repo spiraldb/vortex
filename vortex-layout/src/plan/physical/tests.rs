@@ -1370,6 +1370,7 @@ fn legacy_layout(
     metadata.extend(as_stat_bitset_bytes(stats));
     LayoutEncoding::build(
         &LegacyStatsLayoutEncoding,
+        LayoutEncoding::id(&LegacyStatsLayoutEncoding),
         dtype,
         5,
         &metadata,
