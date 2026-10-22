@@ -58,10 +58,16 @@ public final class VortexNestedSchemaPruningTest {
                         abc.alias("s"),
                         functions.array(abc).alias("arr"),
                         functions.map(functions.lit("k"), abc).alias("m"),
-                        functions.struct(functions.lit("x").alias("p"), abc.alias("inner")).alias("outer"));
+                        functions
+                                .struct(functions.lit("x").alias("p"), abc.alias("inner"))
+                                .alias("outer"));
 
         String path = tempDir.resolve("nested").toUri().toString();
-        df.write().format("vortex").option("path", path).mode(SaveMode.Overwrite).save();
+        df.write()
+                .format("vortex")
+                .option("path", path)
+                .mode(SaveMode.Overwrite)
+                .save();
         table = spark.read().format("vortex").option("path", path).load();
     }
 
