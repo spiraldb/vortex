@@ -267,11 +267,11 @@ impl Run {
                 self.take_completions()?;
                 self.visits_until_poll = IO_POLL_INTERVAL;
                 if self.queue.is_empty() {
-                    return Ok(if self.parked.is_empty() {
-                        Progress::Idle
-                    } else {
-                        Progress::Waiting
-                    });
+                    if self.parked.is_empty() {
+                        return Ok(Progress::Idle);
+                    }
+                    self.speculate()?;
+                    return Ok(Progress::Waiting);
                 }
             }
             self.visits_until_poll -= 1;
@@ -407,6 +407,37 @@ impl Run {
             root.remove().io.clear();
             self.events.push_back(Progress::RootDone(work.root));
         }
+    }
+
+    /// Asks every parked planner what it will read later and registers the answers with its
+    /// root's session, so those reads go out while the run has nothing to compute.
+    fn speculate(&mut self) -> VortexResult<()> {
+        for work in self.parked.values_mut() {
+            let Item::Planner(planner) = &mut work.item else {
+                continue;
+            };
+            let Some(batch) = planner.speculate()? else {
+                continue;
+            };
+            if batch.is_empty() {
+                vortex_bail!("speculate() published an empty batch");
+            }
+            if let Some(fetch) = batch
+                .iter()
+                .find(|request| request.intent == IoIntent::Fetch)
+            {
+                vortex_bail!(
+                    "work for scope {:?} speculated fetch {:?}, which is never delivered",
+                    work.scope,
+                    fetch.request
+                );
+            }
+            let Some(root) = self.roots.get(&work.root) else {
+                vortex_bail!("work {:?} outlived its root {:?}", work.id, work.root);
+            };
+            root.io.speculate(work.id, batch)?;
+        }
+        Ok(())
     }
 
     /// Parks an item that waits for IO, which is a protocol error with no fetch outstanding.
