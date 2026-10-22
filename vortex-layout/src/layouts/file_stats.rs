@@ -1215,7 +1215,7 @@ mod tests {
         });
         let mut acc = StatsAccumulator::new(&dtype, Some(std::slice::from_ref(&max)));
         acc.push_chunk(
-            &ConstantArray::new(Scalar::null(dtype.clone()), 3).into_array(),
+            &ConstantArray::new(Scalar::null(dtype), 3).into_array(),
             &mut ctx,
         )?;
 
