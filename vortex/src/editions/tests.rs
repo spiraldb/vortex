@@ -94,10 +94,10 @@ fn core_2026_08_1_dtype_set_is_pinned() {
 fn core_2026_08_2_is_frozen() {
     let session = session().unwrap_or_else(|e| panic!("registering editions: {e}"));
     assert!(
-        session
+        !session
             .find(&CORE_2026_08_2)
             .unwrap_or_else(|| panic!("{CORE_2026_08_2} is not registered"))
-            .is_frozen()
+            .is_draft()
     );
     assert!(
         session
@@ -117,10 +117,10 @@ fn core_2026_08_2_is_frozen() {
 fn core_2026_08_3_is_frozen_and_adds_variants() {
     let session = session().unwrap_or_else(|e| panic!("registering editions: {e}"));
     assert!(
-        session
+        !session
             .find(&CORE_2026_08_3)
             .unwrap_or_else(|| panic!("{CORE_2026_08_3} is not registered"))
-            .is_frozen()
+            .is_draft()
     );
     assert!(
         session
@@ -413,7 +413,6 @@ const WRITER_TEST_EDITION: EditionId = EditionId::new("writer-test", 2026, 7, 0)
 static WRITER_TEST_DECLARATION: EditionDeclaration = EditionDeclaration {
     edition: Edition {
         id: WRITER_TEST_EDITION,
-        unstable: false,
         min_library_version: None,
     },
     added: &[
@@ -552,7 +551,6 @@ fn session_declaring(members: &[(ComponentKind, Id)]) -> VortexResult<VortexSess
     let editions = session.editions();
     editions.declare_edition(Edition {
         id: EDITION,
-        unstable: false,
         min_library_version: None,
     })?;
     for inclusion in session

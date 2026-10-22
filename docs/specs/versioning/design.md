@@ -195,8 +195,7 @@ supports all its members. New formats require a later edition, leaving the earli
 to writers targeting older versions.
 
 An _edition family_ groups editions for related components. Membership is cumulative within a
-family: each later non-unstable edition includes all earlier non-unstable members. Unstable
-editions have independent membership.
+family: each later edition includes all earlier members.
 
 The `core` family covers the default writer's formats, while optional features have independent
 families. A writer can select one `core` edition and one `tensor` edition, for example, and use the
@@ -228,8 +227,8 @@ format, and reader version.
    formats, including those writers no longer choose. Edition selection does not restrict what a
    reader can read.
 4. **Frozen edition records are immutable.** Membership, origin, and recorded minimum stay fixed.
-   Later editions include earlier non-unstable members within their family, while selecting editions
-   from multiple families permits the union of their members.
+   Later editions include all earlier members within their family, while selecting editions from
+   multiple families permits the union of their members.
 5. **Edition enforcement covers the whole output.** Every serialized component must be permitted,
    including children and nested dependencies, so compressor declarations alone are insufficient.
 6. **Recorded reader requirements are sound.** Each recorded origin version supplies readers for
@@ -250,19 +249,10 @@ historical writing implementation.
 
 ## New formats
 
-A format whose contract is still changing belongs in `UNSTABLE`, an ordinary edition selection
-without compatibility guarantees. Plugins register its members through ordinary edition inclusions.
-Membership and wire contracts may change under existing IDs, so producers and readers need matching
-implementations. The wire ID alone cannot distinguish earlier experimental contracts.
-
-Unstable membership is never inherited by another edition. Once a contract is settled, its owner
-explicitly adds it to a new draft edition and removes its unstable inclusion. The ID can stay the
-same, but this does not make earlier experimental files compatible. A format intended for `core`
-enters `preview` for broader testing, then `core` for default use. Promotion preserves the settled
-wire ID and contract. A contract frozen in any edition remains immutable regardless of whether
-`UNSTABLE` also includes it; reader-visible corrections then require a new ID.
-
-Draft editions have no recorded minimum version or frozen guarantee. The
+A new format starts in a draft edition so it can be tested before its origin commits to reading it
+indefinitely. Drafts have no recorded minimum version or frozen guarantee, and their members can
+change or be removed. A format intended for `core` can progress to `preview` for broader testing,
+then to `core` for default use. Promotion preserves its wire ID and interpretation. The
 [registry instructions](editions.md#format-testing-and-promotion) cover promotion, freezing, and
 recording the minimum version.
 
@@ -272,8 +262,8 @@ The default BtrBlocks compressor excludes a scheme if any of its declared output
 forbidden. This filtering also applies to schemes used for child compression.
 
 By default, the decimal scheme uses the v1 wire format, leaving values too wide for a single child
-in the standard uncompressed decimal representation. Selecting `UNSTABLE`, which includes the v2
-format, allows the default compressor to use its multi-child mode.
+in the standard uncompressed decimal representation. The default compressor uses its multi-child
+mode only when a selected draft edition permits the v2 format.
 
 ### Planned scheme configuration
 
@@ -283,5 +273,5 @@ apply consistently to estimation, sampling, full compression, children, and fall
 per-writer scheme configuration is not implemented, and its API is unsettled.
 
 [^decimal-availability]:
-    The multi-child format requires selecting `UNSTABLE`. The
+    No frozen edition currently permits the multi-child format. The
     [compression section](#compression) describes what the default compressor produces today.
