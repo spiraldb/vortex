@@ -139,18 +139,22 @@ impl SegmentIoSource {
             .ok_or_else(|| vortex_err!("No segment at bytes {offset}+{len}"))
     }
 
-    /// The read of `segment`: one speculated for it, else one announced by this session or
-    /// speculatively, else a new request.
+    /// The read of `segment`: one speculated for it, else one announced speculatively or by
+    /// this session, else a new request.
     fn read(&self, segment: SegmentId) -> Prefetched {
         let mut ahead = self.ahead.lock();
         if let Some(read) = ahead.started.remove(&segment) {
             return read;
         }
-        self.announced
-            .lock()
-            .get_mut(&segment)
-            .and_then(VecDeque::pop_front)
-            .or_else(|| ahead.announced.remove(&segment))
+        ahead
+            .announced
+            .remove(&segment)
+            .or_else(|| {
+                self.announced
+                    .lock()
+                    .get_mut(&segment)
+                    .and_then(VecDeque::pop_front)
+            })
             .unwrap_or_else(|| self.segments.request(segment))
             .map_err(Arc::new)
             .boxed()
@@ -173,11 +177,14 @@ impl IoSource for SegmentIoSource {
         for request in batch {
             let segment = self.segment(&request)?;
             if request.intent == IoIntent::Announce {
+                // An announcement speculated for the segment is the same interest, already
+                // registered beside the reads it coalesces with: take it rather than add one.
+                let speculated = self.ahead.lock().announced.remove(&segment);
                 self.announced
                     .lock()
                     .entry(segment)
                     .or_default()
-                    .push_back(self.segments.request(segment));
+                    .push_back(speculated.unwrap_or_else(|| self.segments.request(segment)));
                 continue;
             }
             if request.intent == IoIntent::Prefetch {
@@ -449,6 +456,12 @@ mod tests {
         planner.speculate(IoOwnerId(0), vec![request(IoIntent::Announce, 6)])?;
         planner.speculate(IoOwnerId(0), vec![request(IoIntent::Announce, 7)])?;
         assert_eq!(segments.0.load(Ordering::Relaxed), 3, "requested for coalescing");
+        late.submit(IoOwnerId(3), vec![request(IoIntent::Announce, 9)])?;
+        assert_eq!(
+            segments.0.load(Ordering::Relaxed),
+            3,
+            "a session's announcement takes the speculated one"
+        );
         late.submit(IoOwnerId(3), vec![request(IoIntent::Fetch, 8)])?;
         assert_eq!(
             segments.0.load(Ordering::Relaxed),
