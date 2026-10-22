@@ -834,7 +834,8 @@ async fn pruned_rows_get_no_chunk(
 }
 
 /// Scans of one file that share a cache share their filter plans, so the pruning plans run once:
-/// the second scan with the same filter re-reads the data it needs but never the zone maps.
+/// the second scan with the same filter re-reads the data it needs but never the zone maps, and
+/// never waits, so it speculates nothing.
 #[tokio::test]
 async fn shared_cache_prunes_zones_once() -> VortexResult<()> {
     let session = new_session().with_tokio();
@@ -865,7 +866,9 @@ async fn shared_cache_prunes_zones_once() -> VortexResult<()> {
         .filter_plans(&filter)
         .expect("the first scan kept its filter plans");
     assert_eq!(plans.pruning().count(), 1);
-    // Each scan reads the one chunk pruning keeps; only the first reads the zone map.
-    assert_eq!(reads, vec![2, 1]);
+    // The first scan reads the zone map and, speculated while it waits for it, the whole of
+    // the first chunk ahead: the file is one chunk of four segments. The second scan reads
+    // only the segment pruning keeps.
+    assert_eq!(reads, vec![5, 1]);
     Ok(())
 }
