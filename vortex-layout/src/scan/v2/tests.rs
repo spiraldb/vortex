@@ -590,18 +590,10 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
         let before = counted.reads();
         let arrays = run_rows(&scan, rows.clone()).await?;
         let reads = counted.reads() - before;
-        let code_chunks =
-            (rows.end - 1) / STORED_CHUNK_ROWS as u64 - rows.start / STORED_CHUNK_ROWS as u64 + 1;
-        // The first chunk reads every values chunk once for the whole scan; its codes are one of
-        // them, and the session shares that read. Later chunks read only their codes.
-        assert_eq!(
-            reads,
-            if index == 0 {
-                STORED_CHUNKS
-            } else {
-                usize::try_from(code_chunks)?
-            }
-        );
+        // The first chunk reads every values chunk once for the whole scan; its codes are one
+        // of them. The reads started for the file stay with it, so later chunks, whose codes
+        // are those same chunks, read nothing.
+        assert_eq!(reads, if index == 0 { STORED_CHUNKS } else { 0 });
         let expected =
             PrimitiveArray::from_iter(i32::try_from(rows.start)?..i32::try_from(rows.end)?);
         assert_arrays_eq!(
@@ -716,7 +708,7 @@ async fn chunked_ints(
 /// A shared [`ScanCache`] keeps dictionary values between scans; without one, each scan reads
 /// them again.
 #[rstest]
-#[case::cached(true, 1)]
+#[case::cached(true, 0)]
 #[case::uncached(false, 4)]
 #[tokio::test]
 async fn scan_cache_reuses_values_between_scans(
@@ -746,7 +738,8 @@ async fn scan_cache_reuses_values_between_scans(
         );
         reads.push(counted.reads() - before);
     }
-    // Every values chunk and the one selected codes chunk, then only the codes chunk if cached.
+    // Every values chunk and the one selected codes chunk; a scan sharing the cache then reads
+    // nothing, since the reads started for the file stay with it.
     assert_eq!(reads, vec![4, second_scan_reads]);
     Ok(())
 }
@@ -803,7 +796,8 @@ async fn repeated_projections_reuse_their_values() -> VortexResult<()> {
         );
         reads.push(counted.reads() - before);
     }
-    assert_eq!(reads, vec![4, 1, 1]);
+    // The reads started for the file stay with its cache, so later scans read nothing.
+    assert_eq!(reads, vec![4, 0, 0]);
     Ok(())
 }
 

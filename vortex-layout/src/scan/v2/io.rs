@@ -154,7 +154,9 @@ impl SegmentIoSource {
             return read.clone();
         }
         if let Some(announced) = ahead.announced.remove(&segment) {
-            return announced.map_err(Arc::new).boxed().shared();
+            let read = announced.map_err(Arc::new).boxed().shared();
+            ahead.started.insert(segment, read.clone());
+            return read;
         }
         tracing::trace!(segment = *segment, "v2 io new request on read");
         self.segments
@@ -218,15 +220,11 @@ impl IoSource for SegmentIoSource {
             }
             // A segment stays with the session once fetched, so a later stage or morsel of the
             // split that reads it again shares the read instead of starting another once the
-            // first has completed. A read started ahead for the file leaves the file's map
-            // with the first session that fetches it, so the file holds only what no session
-            // has taken yet.
+            // first has completed. A read started ahead stays with the file as well: a chunk
+            // straddling two partitions is fetched by both, and the second must find it.
             let bytes = prefetched
                 .entry(segment)
-                .or_insert_with(|| {
-                    let started = self.ahead.lock().started.remove(&segment);
-                    started.unwrap_or_else(|| self.read(segment))
-                })
+                .or_insert_with(|| self.read(segment))
                 .clone()
                 .map_err(move |err| vortex_err!("read of segment {segment} failed: {err}"))
                 .boxed();
@@ -468,20 +466,20 @@ mod tests {
             "the chunk took the read"
         );
 
-        // The first fetch takes the read out of the file's map, so the file holds only what
-        // no session has taken yet; a second session fetching the segment reads it again.
+        // A chunk straddling two partitions is fetched by both: the read stays with the file
+        // and the second session shares it.
         other.submit(IoOwnerId(2), vec![request(IoIntent::Fetch, 3)])?;
         assert_eq!(
             segments.0.load(Ordering::Relaxed),
-            2,
-            "a second session reads again"
+            1,
+            "shared by a second session"
         );
 
         planner.clear();
         chunk.submit(IoOwnerId(1), vec![request(IoIntent::Fetch, 4)])?;
         assert_eq!(
             segments.0.load(Ordering::Relaxed),
-            2,
+            1,
             "the chunk retains its read"
         );
         assert!(
@@ -492,7 +490,7 @@ mod tests {
         );
 
         // An announcement is requested once and never polled; a session's own announcement
-        // adds nothing, and the first fetch takes it as its read.
+        // adds nothing, and the first fetch makes it the read every session shares.
         let service = SegmentScanIo::new(
             Arc::clone(&segments) as _,
             segment_ranges(&[location]),
@@ -502,27 +500,26 @@ mod tests {
         planner.speculate(IoOwnerId(0), vec![request(IoIntent::Announce, 7)])?;
         assert_eq!(
             segments.0.load(Ordering::Relaxed),
-            3,
+            2,
             "requested for coalescing"
         );
         late.submit(IoOwnerId(3), vec![request(IoIntent::Announce, 9)])?;
         assert_eq!(
             segments.0.load(Ordering::Relaxed),
-            3,
+            2,
             "a session announces nothing more"
         );
         late.submit(IoOwnerId(3), vec![request(IoIntent::Fetch, 8)])?;
         assert_eq!(
             segments.0.load(Ordering::Relaxed),
-            3,
+            2,
             "the fetch took the announcement"
         );
         later.submit(IoOwnerId(4), vec![request(IoIntent::Fetch, 10)])?;
-        // The fetch took the read into its session, so a later session reads again.
         assert_eq!(
             segments.0.load(Ordering::Relaxed),
-            4,
-            "a later session reads again"
+            2,
+            "a later session shares the read"
         );
         Ok(())
     }
@@ -559,7 +556,8 @@ mod tests {
         assert!(completion.result.is_ok());
         assert_eq!(segments.0.load(Ordering::Relaxed), 1);
 
-        // The fetch took the prefetched read into the session; clearing the session drops it.
+        // Clearing the session drops what its fetches retained; a prefetched read belongs
+        // to the file and is still shared.
         io.clear();
         io.submit(IoOwnerId(0), vec![request(IoIntent::Fetch, 3)])?;
         assert!(
@@ -568,7 +566,7 @@ mod tests {
                 .result
                 .is_ok()
         );
-        assert_eq!(segments.0.load(Ordering::Relaxed), 2);
+        assert_eq!(segments.0.load(Ordering::Relaxed), 1);
         Ok(())
     }
 
