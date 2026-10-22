@@ -13,10 +13,13 @@ use futures::future::BoxFuture;
 use futures::future::Shared;
 use parking_lot::RwLock;
 use tracing::trace;
+use vortex_array::Canonical;
+use vortex_array::IntoArray;
 use vortex_array::MaskFuture;
 use vortex_array::VortexSessionExecute;
 use vortex_array::aggregate_fn::AggregateFnRef;
 use vortex_array::arrays::StructArray;
+use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::dtype::DType;
 use vortex_array::expr::BoundExpression;
 use vortex_array::expr::ExactBoundExpr;
@@ -180,6 +183,18 @@ impl PruningState {
                 async move {
                     let mut ctx = session.create_execution_ctx();
                     let zones_array = zones_eval.await?.execute::<StructArray>(&mut ctx)?;
+                    // Every pruning predicate is evaluated against these stats, so decode each
+                    // one once here rather than once per evaluation.
+                    let stats = zones_array
+                        .iter_unmasked_fields()
+                        .map(|stat| Ok(stat.clone().execute::<Canonical>(&mut ctx)?.into_array()))
+                        .collect::<VortexResult<Vec<_>>>()?;
+                    let zones_array = StructArray::try_new(
+                        zones_array.names().clone(),
+                        stats,
+                        zones_array.len(),
+                        zones_array.struct_validity(),
+                    )?;
                     // SAFETY: zoned layout validation checked that this zones child was
                     // written from the same column dtype and aggregate stats-table schema.
                     Ok(unsafe {
