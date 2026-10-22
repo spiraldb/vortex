@@ -174,34 +174,33 @@ impl ScanBuilder {
     pub fn prepare(self) -> VortexResult<PreparedScan> {
         let file = self.file;
         let cache = file.cache.unwrap_or_default();
+        let t_prepare = std::time::Instant::now();
         let root = match cache.root() {
             Some(root) => root,
             None => cache.insert_root(lower(&file.layout)?),
         };
         let row_count = root.row_count();
+        let t_root = t_prepare.elapsed().as_micros();
         let filter = self
             .filter
-            .map(|filter| -> VortexResult<_> {
-                match cache.filter_plans(&filter) {
-                    Some(plans) => Ok(plans),
-                    None => {
-                        let plans =
-                            Arc::new(FilterPlans::new(filter.clone(), &root, &self.session)?);
-                        Ok(cache.insert_filter_plans(filter, plans))
-                    }
-                }
+            .map(|filter| {
+                cache.filter_plans_or_build(&filter, || {
+                    Ok(Arc::new(FilterPlans::new(
+                        filter.clone(),
+                        &root,
+                        &self.session,
+                    )?))
+                })
             })
             .transpose()?;
         // Optimizing drops the zone tables a projection never reads and keeps the chunks of a
         // chunked column lazy, so an identity projection is optimized like any other.
+        let t_filter = t_prepare.elapsed().as_micros();
         let identity = self.projection.is_root() && self.projection.dtype() == root.dtype();
-        let projection = match cache.projection(&self.projection) {
-            Some(plan) => plan,
-            None => {
-                let plan = optimize(plan_row_idx_expression(self.projection.clone(), root)?)?;
-                cache.insert_projection(self.projection, plan)
-            }
-        };
+        let projection = cache.projection(&self.projection, || {
+            optimize(plan_row_idx_expression(self.projection.clone(), root)?)
+        })?;
+        let t_projection = t_prepare.elapsed().as_micros();
         let chunk_rows = if filter.is_some() {
             FILTERED_ROWS_PER_CHUNK
         } else if identity {
@@ -214,6 +213,13 @@ impl ScanBuilder {
             None => cache.insert_ranges(segment_ranges(&file.locations)),
         };
         let values = cache.values();
+        tracing::debug!(
+            root = u64::try_from(t_root).unwrap_or(u64::MAX),
+            filter = u64::try_from(t_filter).unwrap_or(u64::MAX),
+            projection = u64::try_from(t_projection).unwrap_or(u64::MAX),
+            total = u64::try_from(t_prepare.elapsed().as_micros()).unwrap_or(u64::MAX),
+            "v2 prepare phases"
+        );
         Ok(PreparedScan {
             session: self.session,
             rows: self.row_range.unwrap_or(0..row_count),
