@@ -77,13 +77,21 @@ impl ScanDriver {
                 Yielded::Batch(start, batch) => {
                     stream::once(future::ready(Ok((start, batch)))).boxed()
                 }
-                Yielded::Spawn(scope, chunk) => chunk_stream(
-                    &chunk_handle,
-                    chunk,
-                    scope,
-                    chunk_io.session(),
-                    Arc::clone(&chunk_map),
-                ),
+                Yielded::Spawned(chunks) => {
+                    let streams: Vec<_> = chunks
+                        .into_iter()
+                        .map(|(scope, chunk)| {
+                            chunk_stream(
+                                &chunk_handle,
+                                chunk,
+                                scope,
+                                chunk_io.session(),
+                                Arc::clone(&chunk_map),
+                            )
+                        })
+                        .collect();
+                    stream::iter(streams).flatten_unordered(None).boxed()
+                }
             })
             .try_flatten_unordered(in_flight);
         // The prepared scan holds the file's shared cache: keep it until the stream ends, so
@@ -110,13 +118,16 @@ impl ScanDriver {
 /// planner of the run spawned.
 enum Yielded {
     Batch(u64, RecordBatch),
-    Spawn(WorkScope, Box<dyn Planner>),
+    /// Chunks the run spawned together, to be run beside each other from the same moment, so
+    /// their first reads are registered together and coalesce.
+    Spawned(Vec<(WorkScope, Box<dyn Planner>)>),
 }
 
 /// Runs `root` over `scope` on a planning run of its own, on one task that drives the run to
-/// its end and awaits only its reads, and yields its batches and the chunks it spawns. The
-/// first chunk the run spawns, and every chunk when `inline`, runs on this run as another root,
-/// so a partition of one chunk never hands it to a task of its own.
+/// its end and awaits only its reads, and yields its batches and the chunks it spawns, those
+/// spawned between two hand-offs together. The first chunk the run spawns, and every chunk when
+/// `inline`, runs on this run as another root, so a partition of one chunk never hands it to a
+/// task of its own.
 fn run_stream(
     handle: Handle,
     root: Box<dyn Planner>,
@@ -130,24 +141,50 @@ fn run_stream(
         let mut run = Run::new();
         run.admit(root, scope, Arc::clone(&io));
         let mut admitted = 0;
+        let mut spawned = Vec::new();
         loop {
             let yielded = match run.advance()? {
-                Progress::Batch(batch) => Yielded::Batch(batch.scope.rows.start, map(batch.array)?),
+                Progress::Batch(batch) => {
+                    Some(Yielded::Batch(batch.scope.rows.start, map(batch.array)?))
+                }
                 Progress::Spawn(scope, child) if inline || admitted == 0 => {
                     admitted += 1;
                     run.admit(child, scope, Arc::clone(&io));
                     continue;
                 }
-                Progress::Spawn(scope, child) => Yielded::Spawn(scope, child),
-                Progress::RootDone(_) if run.live_roots() > 0 => continue,
-                Progress::RootDone(_) | Progress::Idle => return Ok(()),
-                Progress::Waiting => {
-                    future::poll_fn(|cx| run.poll_completion(cx)).await?;
+                Progress::Spawn(scope, child) => {
+                    spawned.push((scope, child));
                     continue;
                 }
+                Progress::RootDone(_) if run.live_roots() > 0 => continue,
+                Progress::RootDone(_) | Progress::Idle => None,
+                Progress::Waiting => {
+                    if spawned.is_empty() {
+                        future::poll_fn(|cx| run.poll_completion(cx)).await?;
+                        continue;
+                    }
+                    None
+                }
             };
-            if send.send(Ok(yielded)).await.is_err() {
+            // Everything spawned since the last hand-off goes out together, ahead of a batch.
+            if !spawned.is_empty()
+                && send
+                    .send(Ok(Yielded::Spawned(std::mem::take(&mut spawned))))
+                    .await
+                    .is_err()
+            {
                 return Ok(());
+            }
+            match yielded {
+                Some(yielded) => {
+                    if send.send(Ok(yielded)).await.is_err() {
+                        return Ok(());
+                    }
+                }
+                None if run.live_roots() > 0 => {
+                    future::poll_fn(|cx| run.poll_completion(cx)).await?;
+                }
+                None => return Ok(()),
             }
         }
     });
