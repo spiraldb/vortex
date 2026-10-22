@@ -21,6 +21,8 @@ pub use delta::DeltaScheme;
 pub(crate) use for_::FOR_V1;
 pub use for_::FoRScheme;
 #[cfg(feature = "pco")]
+pub(crate) use pco::PCO_V1;
+#[cfg(feature = "pco")]
 pub use pco::PcoScheme;
 pub use rle::IntRLEScheme;
 pub(crate) use rle::rle_compress;

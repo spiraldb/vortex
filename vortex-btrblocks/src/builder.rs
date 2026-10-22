@@ -55,7 +55,7 @@ impl CompressionMode {
                     binary::ZstdBuffersScheme.id(),
                 ]);
                 #[cfg(feature = "pco")]
-                excluded.extend([integer::PcoScheme.id(), float::PcoScheme.id()]);
+                excluded.extend([integer::PCO_V1.id(), float::PCO_V1.id()]);
             }
             Self::Compact => {
                 #[cfg(feature = "zstd")]
@@ -84,7 +84,7 @@ impl CompressionMode {
                 #[cfg(feature = "zstd")]
                 excluded.push(string::ZstdScheme.id());
                 #[cfg(feature = "pco")]
-                excluded.extend([integer::PcoScheme.id(), float::PcoScheme.id()]);
+                excluded.extend([integer::PCO_V1.id(), float::PCO_V1.id()]);
             }
         }
         excluded

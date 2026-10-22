@@ -16,10 +16,12 @@ version = { workspace = true }
 workspace = true
 
 [dependencies]
+parking_lot = { workspace = true }
 pco = { workspace = true }
 prost = { workspace = true }
 vortex-array = { workspace = true }
 vortex-buffer = { workspace = true }
+vortex-edition = { workspace = true }
 vortex-error = { workspace = true }
 vortex-mask = { workspace = true }
 vortex-session = { workspace = true }
@@ -33,4 +35,8 @@ vortex-arrow = { workspace = true }
 
 [[bench]]
 name = "scalar"
+harness = false
+
+[[bench]]
+name = "pco_v2"
 harness = false

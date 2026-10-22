@@ -14,6 +14,8 @@ mod pco;
 pub use alp::ALPScheme;
 pub use alprd::ALPRDScheme;
 #[cfg(feature = "pco")]
+pub(crate) use pco::PCO_V1;
+#[cfg(feature = "pco")]
 pub use pco::PcoScheme;
 pub use rle::FloatRLEScheme;
 pub use sparse::NullDominatedSparseScheme;

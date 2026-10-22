@@ -603,6 +603,23 @@ mod tests {
         Ok(())
     }
 
+    /// A null value is null between any non-null bounds, also when an all-null chunk is held as
+    /// a [`ConstantArray`].
+    #[test]
+    fn null_constant_array() -> VortexResult<()> {
+        let ctx = &mut SESSION.create_execution_ctx();
+        let lower = ConstantArray::new(Scalar::from(0i32), 2).into_array();
+        let upper = ConstantArray::new(Scalar::from(5i32), 2).into_array();
+
+        let result = null_i32s(2)
+            .between(lower, upper, NON_STRICT)?
+            .execute::<BoolArray>(ctx)?;
+
+        assert_eq!(result.opt_bool_vec(ctx), [None, None]);
+
+        Ok(())
+    }
+
     /// With both bounds null no comparison can falsify a row, so every row is null.
     #[test]
     fn both_bounds_null() -> VortexResult<()> {
