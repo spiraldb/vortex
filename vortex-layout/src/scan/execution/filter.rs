@@ -47,7 +47,7 @@ use crate::segments::SegmentId;
 pub struct FilterPlans {
     expression: FilterExpr,
     predicates: Vec<PlanRef>,
-    /// A metadata-only proof per conjunct, where the conjunct has one.
+    /// A metadata-only pruning plan per conjunct, where the conjunct has one.
     pruning: Vec<Option<PlanRef>>,
 }
 
@@ -71,7 +71,7 @@ impl FilterPlans {
             .iter()
             .map(|expr| {
                 expr.falsify(session)?
-                    .map(|proof| optimize(plan_row_idx_expression(proof, root.clone())?))
+                    .map(|pruning| optimize(plan_row_idx_expression(pruning, root.clone())?))
                     .transpose()
             })
             .map(|plan| {
@@ -89,13 +89,13 @@ impl FilterPlans {
         })
     }
 
-    /// The pruning proofs, run once over a scan's rows before its chunks are planned.
-    pub(crate) fn proofs(&self) -> impl Iterator<Item = &PlanRef> {
+    /// The pruning plans, run once over a scan's rows before its chunks are planned.
+    pub(crate) fn pruning(&self) -> impl Iterator<Item = &PlanRef> {
         self.pruning.iter().flatten()
     }
 }
 
-/// A pruning proof must not fetch data when its requested statistics are unavailable.
+/// A pruning plan must not fetch data when its requested statistics are unavailable.
 fn metadata_only(plan: &PlanRef) -> VortexResult<bool> {
     if plan
         .as_opt::<Zoned>()
