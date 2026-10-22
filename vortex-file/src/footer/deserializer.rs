@@ -47,6 +47,8 @@ pub struct FooterDeserializer {
     dtype: Option<DType>,
     // Resolves the keys of encrypted footer segments.
     keys: Option<Arc<dyn KeyRetriever>>,
+    // The AAD prefix the file is expected to be bound to.
+    aad_prefix: Option<Arc<[u8]>>,
 
     // Internal state that we accumulate
 
@@ -64,6 +66,7 @@ impl FooterDeserializer {
             session,
             dtype: None,
             keys: None,
+            aad_prefix: None,
             file_size: None,
             postscript: None,
         }
@@ -78,6 +81,23 @@ impl FooterDeserializer {
     /// Provide or clear the [`KeyRetriever`] used to decrypt the footer of an encrypted file.
     pub fn with_some_key_retriever(mut self, keys: Option<Arc<dyn KeyRetriever>>) -> Self {
         self.keys = keys;
+        self
+    }
+
+    /// Provide the AAD prefix the encrypted file is bound to.
+    ///
+    /// This is required for files written with an [`AadPrefix::supplied`] prefix, and verifies a
+    /// stored one.
+    ///
+    /// [`AadPrefix::supplied`]: crate::encryption::AadPrefix::supplied
+    pub fn with_aad_prefix(mut self, aad_prefix: impl Into<Arc<[u8]>>) -> Self {
+        self.aad_prefix = Some(aad_prefix.into());
+        self
+    }
+
+    /// Provide or clear the AAD prefix the encrypted file is bound to.
+    pub fn with_some_aad_prefix(mut self, aad_prefix: Option<Arc<[u8]>>) -> Self {
+        self.aad_prefix = aad_prefix;
         self
     }
 
@@ -186,7 +206,11 @@ impl FooterDeserializer {
         let segments = InitialSegments {
             initial_offset,
             initial_read: &self.buffer,
-            ciphers: resolve_postscript_ciphers(postscript, self.keys.as_deref())?,
+            ciphers: resolve_postscript_ciphers(
+                postscript,
+                self.keys.as_deref(),
+                self.aad_prefix.as_deref(),
+            )?,
         };
         let dtype = dtype_segment
             .map(|segment| {
@@ -337,6 +361,7 @@ impl<'a> InitialSegments<'a> {
 fn resolve_postscript_ciphers(
     postscript: &Postscript,
     keys: Option<&dyn KeyRetriever>,
+    aad_prefix: Option<&[u8]>,
 ) -> VortexResult<Vec<SegmentCipher>> {
     let segments = [&postscript.dtype, &postscript.statistics]
         .into_iter()
@@ -351,7 +376,7 @@ fn resolve_postscript_ciphers(
     }
     specs
         .into_iter()
-        .filter_map(|spec| SegmentCipher::resolve(spec, keys).transpose())
+        .filter_map(|spec| SegmentCipher::resolve(spec, keys, aad_prefix).transpose())
         .collect()
 }
 

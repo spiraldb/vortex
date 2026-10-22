@@ -14,8 +14,10 @@
 //!
 //! An encrypted segment is stored as `ciphertext || nonce || tag`. The ciphertext has the length
 //! of the plaintext, so it starts at the segment's aligned offset. The additional authenticated
-//! data binds the ciphertext to its file, through a random per-file prefix, and to its position in
-//! the file, so that segments cannot be swapped without failing decryption.
+//! data binds the ciphertext to its file, through random per-file bytes, and to its position in
+//! the file, so that segments cannot be swapped without failing decryption. An optional
+//! [`AadPrefix`] additionally binds the file to an application-defined identity, such as its path,
+//! so that a file cannot be replaced by another file encrypted with the same key.
 
 use std::fmt;
 use std::fmt::Debug;
@@ -32,6 +34,7 @@ use flatbuffers::WIPOffset;
 use vortex_buffer::Alignment;
 use vortex_buffer::ByteBuffer;
 use vortex_buffer::ByteBufferMut;
+use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
@@ -43,7 +46,7 @@ use crate::flatbuffers::footer as fb;
 pub const KEY_LEN: usize = 32;
 const NONCE_LEN: usize = 12;
 const TAG_LEN: usize = 16;
-const AAD_PREFIX_LEN: usize = 16;
+const AAD_FILE_UNIQUE_LEN: usize = 16;
 
 /// Number of bytes an encrypted segment occupies in addition to its plaintext.
 pub const ENCRYPTION_OVERHEAD: usize = NONCE_LEN + TAG_LEN;
@@ -135,16 +138,68 @@ impl EncryptionConfig {
         }
     }
 
-    /// Create the cipher for one file, with a fresh random AAD prefix.
-    pub(crate) fn file_cipher(&self) -> VortexResult<SegmentCipher> {
-        let mut aad_prefix = [0u8; AAD_PREFIX_LEN];
-        fill_random(&mut aad_prefix)?;
+    /// Create the cipher for one file, with fresh random per-file AAD bytes.
+    pub(crate) fn file_cipher(
+        &self,
+        aad_prefix: Option<&AadPrefix>,
+    ) -> VortexResult<SegmentCipher> {
+        let mut aad_file_unique = [0u8; AAD_FILE_UNIQUE_LEN];
+        fill_random(&mut aad_file_unique)?;
         let spec = EncryptionSpec {
             algorithm: EncryptionAlgorithm::Aes256Gcm,
             key_metadata: Arc::clone(&self.key_metadata),
-            aad_prefix: Arc::from(aad_prefix),
+            aad_file_unique: Arc::from(aad_file_unique),
+            aad_prefix: aad_prefix
+                .filter(|aad| aad.stored)
+                .map(|aad| Arc::clone(&aad.prefix))
+                .unwrap_or_else(|| Arc::from([])),
+            supply_aad_prefix: aad_prefix.is_some_and(|aad| !aad.stored),
         };
-        Ok(SegmentCipher::new(spec, &self.key))
+        let prefix = aad_prefix
+            .map(|aad| aad.prefix.as_ref())
+            .unwrap_or_default();
+        Ok(SegmentCipher::new(spec, &self.key, prefix))
+    }
+}
+
+/// An application-defined prefix of the additional authenticated data of every encrypted segment.
+///
+/// The prefix binds a file to an identity known to the reader, such as its path or a table
+/// snapshot id, so that a file cannot be replaced by another one encrypted with the same key.
+/// Readers verify it by supplying the expected prefix with
+/// [`VortexOpenOptions::with_aad_prefix`](crate::VortexOpenOptions::with_aad_prefix).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AadPrefix {
+    prefix: Arc<[u8]>,
+    stored: bool,
+}
+
+impl AadPrefix {
+    /// A prefix that is stored in the file, so readers can decrypt it without supplying the
+    /// prefix, and can verify it by supplying one.
+    pub fn stored(prefix: impl Into<Arc<[u8]>>) -> Self {
+        Self {
+            prefix: prefix.into(),
+            stored: true,
+        }
+    }
+
+    /// A prefix that is not stored in the file, so readers must supply it to decrypt the file.
+    pub fn supplied(prefix: impl Into<Arc<[u8]>>) -> Self {
+        Self {
+            prefix: prefix.into(),
+            stored: false,
+        }
+    }
+
+    /// The prefix bytes.
+    pub fn prefix(&self) -> &[u8] {
+        &self.prefix
+    }
+
+    /// Whether the prefix is stored in the file.
+    pub fn is_stored(&self) -> bool {
+        self.stored
     }
 }
 
@@ -163,7 +218,9 @@ pub enum EncryptionAlgorithm {
 pub struct EncryptionSpec {
     algorithm: EncryptionAlgorithm,
     key_metadata: Arc<[u8]>,
+    aad_file_unique: Arc<[u8]>,
     aad_prefix: Arc<[u8]>,
+    supply_aad_prefix: bool,
 }
 
 impl EncryptionSpec {
@@ -172,7 +229,9 @@ impl EncryptionSpec {
         Self {
             algorithm: EncryptionAlgorithm::None,
             key_metadata: Arc::from([]),
+            aad_file_unique: Arc::from([]),
             aad_prefix: Arc::from([]),
+            supply_aad_prefix: false,
         }
     }
 
@@ -184,6 +243,16 @@ impl EncryptionSpec {
     /// The opaque metadata used to resolve the key with a [`KeyRetriever`].
     pub fn key_metadata(&self) -> &[u8] {
         &self.key_metadata
+    }
+
+    /// The AAD prefix stored in the file, or empty if there is none or it must be supplied.
+    pub fn aad_prefix(&self) -> &[u8] {
+        &self.aad_prefix
+    }
+
+    /// Whether readers must supply the AAD prefix, since the writer did not store it.
+    pub fn supply_aad_prefix(&self) -> bool {
+        self.supply_aad_prefix
     }
 
     /// Whether segments with this spec are encrypted.
@@ -203,10 +272,15 @@ impl EncryptionSpec {
                 .key_metadata()
                 .map(|bytes| Arc::from(bytes.bytes()))
                 .unwrap_or_else(|| Arc::from([])),
+            aad_file_unique: fb
+                .aad_file_unique()
+                .map(|bytes| Arc::from(bytes.bytes()))
+                .unwrap_or_else(|| Arc::from([])),
             aad_prefix: fb
                 .aad_prefix()
                 .map(|bytes| Arc::from(bytes.bytes()))
                 .unwrap_or_else(|| Arc::from([])),
+            supply_aad_prefix: fb.supply_aad_prefix(),
         })
     }
 
@@ -220,13 +294,17 @@ impl EncryptionSpec {
         };
         let key_metadata =
             (!self.key_metadata.is_empty()).then(|| fbb.create_vector(&self.key_metadata));
+        let aad_file_unique =
+            (!self.aad_file_unique.is_empty()).then(|| fbb.create_vector(&self.aad_file_unique));
         let aad_prefix = (!self.aad_prefix.is_empty()).then(|| fbb.create_vector(&self.aad_prefix));
         fb::EncryptionSpec::create(
             fbb,
             &fb::EncryptionSpecArgs {
                 algorithm,
                 key_metadata,
+                aad_file_unique,
                 aad_prefix,
+                supply_aad_prefix: self.supply_aad_prefix,
             },
         )
     }
@@ -269,20 +347,34 @@ impl SegmentRole<'_> {
 pub(crate) struct SegmentCipher {
     spec: EncryptionSpec,
     cipher: Aes256Gcm,
+    /// The additional authenticated data shared by every segment, without the segment's role.
+    aad: Arc<[u8]>,
 }
 
 impl SegmentCipher {
-    fn new(spec: EncryptionSpec, key: &EncryptionKey) -> Self {
+    fn new(spec: EncryptionSpec, key: &EncryptionKey, aad_prefix: &[u8]) -> Self {
+        // Length-prefix the application-defined prefix, so that it cannot run into the bytes that
+        // follow it.
+        let prefix_len =
+            u32::try_from(aad_prefix.len()).vortex_expect("AAD prefix length fits in u32");
+        let mut aad = Vec::with_capacity(4 + aad_prefix.len() + spec.aad_file_unique.len());
+        aad.extend_from_slice(&prefix_len.to_le_bytes());
+        aad.extend_from_slice(aad_prefix);
+        aad.extend_from_slice(&spec.aad_file_unique);
         Self {
             spec,
             cipher: key.cipher(),
+            aad: aad.into(),
         }
     }
 
     /// Resolve the cipher for `spec`, or `None` if it describes plaintext segments.
+    ///
+    /// `aad_prefix` is the prefix supplied by the reader, which must match a stored prefix.
     pub(crate) fn resolve(
         spec: &EncryptionSpec,
         keys: Option<&dyn KeyRetriever>,
+        aad_prefix: Option<&[u8]>,
     ) -> VortexResult<Option<Self>> {
         match spec.algorithm {
             EncryptionAlgorithm::None => Ok(None),
@@ -293,8 +385,22 @@ impl SegmentCipher {
                          VortexOpenOptions::with_key_retriever"
                     )
                 })?;
+                let aad_prefix = match aad_prefix {
+                    Some(supplied) if spec.supply_aad_prefix || *spec.aad_prefix == *supplied => {
+                        supplied
+                    }
+                    Some(_) => vortex_bail!(
+                        "The AAD prefix supplied to VortexOpenOptions::with_aad_prefix does not \
+                         match the one stored in the file"
+                    ),
+                    None if spec.supply_aad_prefix => vortex_bail!(
+                        "Vortex file requires an AAD prefix, supplied with \
+                         VortexOpenOptions::with_aad_prefix"
+                    ),
+                    None => &spec.aad_prefix,
+                };
                 let key = keys.retrieve_key(&spec.key_metadata)?;
-                Ok(Some(Self::new(spec.clone(), &key)))
+                Ok(Some(Self::new(spec.clone(), &key, aad_prefix)))
             }
         }
     }
@@ -304,8 +410,8 @@ impl SegmentCipher {
     }
 
     fn aad(&self, role: SegmentRole<'_>) -> Vec<u8> {
-        let mut aad = Vec::with_capacity(self.spec.aad_prefix.len() + 8);
-        aad.extend_from_slice(&self.spec.aad_prefix);
+        let mut aad = Vec::with_capacity(self.aad.len() + 8);
+        aad.extend_from_slice(&self.aad);
         role.write_aad(&mut aad);
         aad
     }
@@ -376,8 +482,8 @@ impl SegmentCipher {
             )
             .map_err(|_| {
                 vortex_err!(
-                    "Failed to decrypt {role:?} segment: the key is wrong or the segment was \
-                     modified"
+                    "Failed to decrypt {role:?} segment: the key or AAD prefix is wrong, or the \
+                     segment was modified"
                 )
             })?;
         Ok(plaintext.freeze())
@@ -393,7 +499,8 @@ mod tests {
     use super::*;
 
     fn cipher() -> VortexResult<SegmentCipher> {
-        EncryptionConfig::new(EncryptionKey::new([7; KEY_LEN]), b"key-1".as_slice()).file_cipher()
+        EncryptionConfig::new(EncryptionKey::new([7; KEY_LEN]), b"key-1".as_slice())
+            .file_cipher(None)
     }
 
     #[test]
@@ -454,7 +561,11 @@ mod tests {
             &[ByteBuffer::copy_from(b"layout")],
             Alignment::none(),
         )?;
-        let wrong = SegmentCipher::new(cipher.spec().clone(), &EncryptionKey::new([8; KEY_LEN]));
+        let wrong = SegmentCipher::new(
+            cipher.spec().clone(),
+            &EncryptionKey::new([8; KEY_LEN]),
+            b"",
+        );
         assert!(
             wrong
                 .decrypt(SegmentRole::Layout, encrypted, Alignment::none())

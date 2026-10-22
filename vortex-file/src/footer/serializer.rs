@@ -21,6 +21,7 @@ use crate::Footer;
 use crate::MAGIC_BYTES;
 use crate::MAX_POSTSCRIPT_SIZE;
 use crate::VERSION;
+use crate::encryption::AadPrefix;
 use crate::encryption::EncryptionConfig;
 use crate::encryption::EncryptionSpec;
 use crate::encryption::SegmentCipher;
@@ -86,12 +87,17 @@ impl FooterSerializer {
         self
     }
 
-    /// Encrypt the dtype, layout, statistics, footer, and metadata segments.
+    /// Encrypt the dtype, layout, statistics, footer, and metadata segments, optionally bound to
+    /// an [`AadPrefix`].
     ///
     /// This is required to serialize the footer of a file with encrypted segments, so that a
     /// standalone footer does not leak the file's metadata in plaintext.
-    pub fn with_encryption(self, config: &EncryptionConfig) -> VortexResult<Self> {
-        Ok(self.with_cipher(config.file_cipher()?))
+    pub fn with_encryption(
+        self,
+        config: &EncryptionConfig,
+        aad_prefix: Option<&AadPrefix>,
+    ) -> VortexResult<Self> {
+        Ok(self.with_cipher(config.file_cipher(aad_prefix)?))
     }
 
     pub(crate) fn with_cipher(mut self, cipher: SegmentCipher) -> Self {

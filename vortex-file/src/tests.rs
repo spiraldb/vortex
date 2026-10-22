@@ -3014,6 +3014,7 @@ mod encryption {
     use vortex_error::vortex_bail;
 
     use super::*;
+    use crate::encryption::AadPrefix;
     use crate::encryption::EncryptionConfig;
     use crate::encryption::EncryptionKey;
     use crate::encryption::KEY_LEN;
@@ -3191,7 +3192,7 @@ mod encryption {
         let config = EncryptionConfig::new(key(), KEY_METADATA);
         let footer_bytes = footer
             .into_serializer()
-            .with_encryption(&config)?
+            .with_encryption(&config, None)?
             .serialize()?
             .iter()
             .flat_map(|buffer| buffer.as_slice().iter().copied())
@@ -3365,6 +3366,113 @@ mod encryption {
             err.to_string().contains("No encryption key named missing"),
             "{err}"
         );
+        Ok(())
+    }
+
+    const AAD: &[u8] = b"s3://bucket/table/part-0.vortex";
+
+    async fn write_with_aad(aad_prefix: AadPrefix) -> VortexResult<ByteBuffer> {
+        let mut buf = ByteBufferMut::empty();
+        SESSION
+            .write_options()
+            .with_encryption(EncryptionConfig::new(key(), KEY_METADATA))
+            .with_field_encryption(
+                FieldPath::from_name(SECRET_COLUMN),
+                "pii",
+                EncryptionConfig::new(column_key(), COLUMN_KEY_METADATA),
+            )
+            .with_aad_prefix(aad_prefix)
+            .write(&mut buf, array()?.to_array_stream())
+            .await?;
+        Ok(buf.freeze())
+    }
+
+    fn open_with_aad(bytes: ByteBuffer, aad_prefix: Option<&[u8]>) -> VortexResult<VortexFile> {
+        let mut options = SESSION
+            .open_options()
+            .with_key_retriever(column_retriever(true));
+        if let Some(aad_prefix) = aad_prefix {
+            options = options.with_aad_prefix(aad_prefix);
+        }
+        options.open_buffer(bytes)
+    }
+
+    #[tokio::test]
+    async fn stored_aad_prefix() -> VortexResult<()> {
+        let bytes = write_with_aad(AadPrefix::stored(AAD)).await?;
+        assert!(contains(&bytes, AAD));
+
+        for aad_prefix in [None, Some(AAD)] {
+            let file = open_with_aad(bytes.clone(), aad_prefix)?;
+            assert_arrays_eq!(
+                read_all(&file).await?,
+                array()?,
+                &mut SESSION.create_execution_ctx()
+            );
+        }
+
+        let err = open_with_aad(bytes, Some(b"s3://bucket/table/other.vortex"))
+            .err()
+            .vortex_expect("a mismatched AAD prefix must fail");
+        assert!(err.to_string().contains("does not match"), "{err}");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn supplied_aad_prefix() -> VortexResult<()> {
+        let bytes = write_with_aad(AadPrefix::supplied(AAD)).await?;
+        assert!(!contains(&bytes, AAD));
+
+        let file = open_with_aad(bytes.clone(), Some(AAD))?;
+        assert!(
+            file.footer()
+                .encryption_specs()
+                .iter()
+                .skip(1)
+                .all(|spec| spec.supply_aad_prefix() && spec.aad_prefix().is_empty())
+        );
+        assert_arrays_eq!(
+            read_all(&file).await?,
+            array()?,
+            &mut SESSION.create_execution_ctx()
+        );
+
+        let err = open_with_aad(bytes.clone(), None)
+            .err()
+            .vortex_expect("a missing AAD prefix must fail");
+        assert!(err.to_string().contains("requires an AAD prefix"), "{err}");
+
+        let err = open_with_aad(bytes, Some(b"s3://bucket/table/other.vortex"))
+            .err()
+            .vortex_expect("a wrong AAD prefix must fail");
+        assert!(err.to_string().contains("Failed to decrypt"), "{err}");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn aad_prefix_for_file_without_one_fails() -> VortexResult<()> {
+        let bytes = write_encrypted(&array()?).await?;
+        let err = SESSION
+            .open_options()
+            .with_key_retriever(retriever())
+            .with_aad_prefix(AAD)
+            .open_buffer(bytes)
+            .err()
+            .vortex_expect("expecting an AAD prefix the file lacks must fail");
+        assert!(err.to_string().contains("does not match"), "{err}");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn aad_prefix_requires_encryption() -> VortexResult<()> {
+        let err = SESSION
+            .write_options()
+            .with_aad_prefix(AadPrefix::stored(AAD))
+            .write(ByteBufferMut::empty(), array()?.to_array_stream())
+            .await
+            .err()
+            .vortex_expect("an AAD prefix without encryption must fail");
+        assert!(err.to_string().contains("requires encryption"), "{err}");
         Ok(())
     }
 }

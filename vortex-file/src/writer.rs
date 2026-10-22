@@ -67,6 +67,7 @@ use crate::Footer;
 use crate::MAGIC_BYTES;
 use crate::WriteStrategyBuilder;
 use crate::counting::CountingVortexWrite;
+use crate::encryption::AadPrefix;
 use crate::encryption::EncryptionConfig;
 use crate::encryption::EncryptionSpec;
 use crate::footer::FileStatistics;
@@ -93,6 +94,7 @@ pub struct VortexWriteOptions {
     file_statistics: Vec<Stat>,
     metadata: HashMap<String, ByteBuffer>,
     encryption: Option<EncryptionConfig>,
+    aad_prefix: Option<AadPrefix>,
     encryption_keys: HashMap<EncryptionKeyName, EncryptionConfig>,
     field_encryption: Vec<(FieldPath, EncryptionKeyName)>,
 }
@@ -119,6 +121,7 @@ impl VortexWriteOptions {
             max_variable_length_statistics_size: 64,
             metadata: HashMap::default(),
             encryption: None,
+            aad_prefix: None,
             encryption_keys: HashMap::default(),
             field_encryption: Vec::new(),
         }
@@ -174,6 +177,17 @@ impl VortexWriteOptions {
     /// with a matching [`KeyRetriever`](crate::encryption::KeyRetriever).
     pub fn with_encryption(mut self, encryption: EncryptionConfig) -> Self {
         self.encryption = Some(encryption);
+        self
+    }
+
+    /// Bind the encrypted segments of the file to an application-defined [`AadPrefix`], such as
+    /// the file's path, which readers verify with
+    /// [`VortexOpenOptions::with_aad_prefix`](crate::VortexOpenOptions::with_aad_prefix).
+    ///
+    /// The prefix applies to every key of the file, and requires
+    /// [`with_encryption`](Self::with_encryption).
+    pub fn with_aad_prefix(mut self, aad_prefix: AadPrefix) -> Self {
+        self.aad_prefix = Some(aad_prefix);
         self
     }
 
@@ -297,6 +311,12 @@ impl VortexWriteOptions {
         stream: SendableArrayStream,
     ) -> VortexResult<WriteSummary> {
         validate_metadata_segments(&self.metadata)?;
+        if self.aad_prefix.is_some() && self.encryption.is_none() {
+            vortex_bail!(
+                "An AAD prefix requires encryption, configured with \
+                 VortexWriteOptions::with_encryption"
+            );
+        }
         if !self.encryption_keys.is_empty() && self.encryption.is_none() {
             vortex_bail!(
                 "Named encryption keys require a footer key, configured with \
@@ -376,7 +396,7 @@ impl VortexWriteOptions {
         let cipher = self
             .encryption
             .as_ref()
-            .map(EncryptionConfig::file_cipher)
+            .map(|config| config.file_cipher(self.aad_prefix.as_ref()))
             .transpose()?;
         let mut segments = BufferedSegmentSink::new(send, position);
         // Index 0 of the footer's encryption specs is reserved for plaintext segments.
@@ -391,7 +411,7 @@ impl VortexWriteOptions {
             .iter()
             .sorted_unstable_by(|(left, _), (right, _)| left.cmp(right))
         {
-            let named = config.file_cipher()?;
+            let named = config.file_cipher(self.aad_prefix.as_ref())?;
             let index = u16::try_from(encryption_specs.len())
                 .map_err(|_| vortex_err!("Too many encryption keys"))?;
             encryption_specs.push(named.spec().clone());

@@ -125,8 +125,9 @@ enum EncryptionAlgorithm: uint8 {
     None = 0,
     /// AES-256 in Galois/Counter Mode. An encrypted segment is stored as
     /// `ciphertext || nonce (12 bytes) || tag (16 bytes)`, where the ciphertext has the length of
-    /// the plaintext. The additional authenticated data is `aad_prefix` followed by a module
-    /// identifier that binds the ciphertext to its position in the file.
+    /// the plaintext. The additional authenticated data is the length of the AAD prefix as a
+    /// little-endian uint32, the AAD prefix, `aad_file_unique`, and a module identifier that binds
+    /// the ciphertext to its position in the file.
     Aes256Gcm = 1,
 }
 
@@ -137,9 +138,14 @@ table EncryptionSpec {
     algorithm: EncryptionAlgorithm;
     /// Opaque bytes that identify the key to the reader's key retriever, e.g. a KMS key id.
     key_metadata: [ubyte];
-    /// Random per-file bytes prefixed to the additional authenticated data of every segment, so
+    /// Random per-file bytes included in the additional authenticated data of every segment, so
     /// that encrypted segments cannot be swapped between files that share a key.
+    aad_file_unique: [ubyte];
+    /// An application-defined prefix of the additional authenticated data, e.g. the file's path,
+    /// when the writer chose to store it. Absent if there is no prefix or it must be supplied.
     aad_prefix: [ubyte];
+    /// Whether the writer omitted a prefix that readers must supply to decrypt the file.
+    supply_aad_prefix: bool;
 }
 // [footer]
 

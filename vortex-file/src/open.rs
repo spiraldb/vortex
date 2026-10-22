@@ -79,6 +79,8 @@ pub struct VortexOpenOptions {
     cache_layout_reader: bool,
     /// Resolves the keys of encrypted files.
     key_retriever: Option<Arc<dyn KeyRetriever>>,
+    /// The AAD prefix an encrypted file is expected to be bound to.
+    aad_prefix: Option<Arc<[u8]>>,
 }
 
 /// Extension trait for constructing [`VortexOpenOptions`] from a session.
@@ -99,6 +101,7 @@ pub trait OpenOptionsSessionExt:
             labels: Vec::default(),
             cache_layout_reader: false,
             key_retriever: None,
+            aad_prefix: None,
         }
     }
 }
@@ -218,6 +221,17 @@ impl VortexOpenOptions {
         self
     }
 
+    /// Configure the AAD prefix an encrypted file is expected to be bound to, such as its path.
+    ///
+    /// This is required to open files written with an [`AadPrefix::supplied`] prefix. For files
+    /// with a stored prefix, opening fails unless it matches.
+    ///
+    /// [`AadPrefix::supplied`]: crate::encryption::AadPrefix::supplied
+    pub fn with_aad_prefix(mut self, aad_prefix: impl Into<Arc<[u8]>>) -> Self {
+        self.aad_prefix = Some(aad_prefix.into());
+        self
+    }
+
     /// Configure a custom [`MetricsRegistry`] implementation.
     pub fn with_metrics_registry(mut self, metrics: Arc<dyn MetricsRegistry>) -> Self {
         self.metrics_registry = Some(metrics);
@@ -283,6 +297,7 @@ impl VortexOpenOptions {
             )),
             &footer,
             opts.key_retriever.as_deref(),
+            opts.aad_prefix.as_deref(),
         )?;
         let metadata = if include_metadata {
             block_on(resolve_metadata(&footer, Arc::clone(&segment_source)))?
@@ -363,6 +378,7 @@ impl VortexOpenOptions {
             )),
             &footer,
             self.key_retriever.as_deref(),
+            self.aad_prefix.as_deref(),
         )?;
 
         let metadata = if self.include_metadata {
@@ -403,7 +419,8 @@ impl VortexOpenOptions {
         let mut deserializer = Footer::deserializer(initial_read, self.session.clone())
             .with_size(file_size)
             .with_some_dtype(self.dtype.clone())
-            .with_some_key_retriever(self.key_retriever.clone());
+            .with_some_key_retriever(self.key_retriever.clone())
+            .with_some_aad_prefix(self.aad_prefix.clone());
 
         let footer = loop {
             match deserializer.deserialize()? {

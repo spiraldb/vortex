@@ -41,6 +41,7 @@ impl DecryptingSegmentSource {
         inner: Arc<dyn SegmentSource>,
         footer: &Footer,
         keys: Option<&dyn KeyRetriever>,
+        aad_prefix: Option<&[u8]>,
     ) -> VortexResult<Arc<dyn SegmentSource>> {
         if !footer.is_encrypted() {
             return Ok(inner);
@@ -56,11 +57,13 @@ impl DecryptingSegmentSource {
         let ciphers = footer
             .encryption_specs()
             .iter()
-            .map(|spec| match SegmentCipher::resolve(spec, keys) {
-                Ok(None) => CipherSlot::Plaintext,
-                Ok(Some(cipher)) => CipherSlot::Ready(Arc::new(cipher)),
-                Err(err) => CipherSlot::Unavailable(Arc::from(err.to_string())),
-            })
+            .map(
+                |spec| match SegmentCipher::resolve(spec, keys, aad_prefix) {
+                    Ok(None) => CipherSlot::Plaintext,
+                    Ok(Some(cipher)) => CipherSlot::Ready(Arc::new(cipher)),
+                    Err(err) => CipherSlot::Unavailable(Arc::from(err.to_string())),
+                },
+            )
             .collect();
         Ok(Arc::new(Self {
             inner,
