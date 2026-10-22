@@ -59,12 +59,19 @@ impl FilterPlans {
         root: &PlanRef,
         session: &VortexSession,
     ) -> VortexResult<Self> {
+        let started = Instant::now();
         let expression = FilterExpr::new(find_between(expression)?);
+        let (mut planned, mut optimized, mut falsified, mut pruned) = (0u128, 0u128, 0u128, 0u128);
         let predicates = expression
             .conjuncts()
             .iter()
             .map(|expr| {
-                let plan = optimize(plan_row_idx_expression(expr.clone(), root.clone())?)?;
+                let at = Instant::now();
+                let plan = plan_row_idx_expression(expr.clone(), root.clone())?;
+                planned += at.elapsed().as_micros();
+                let at = Instant::now();
+                let plan = optimize(plan)?;
+                optimized += at.elapsed().as_micros();
                 Ok(FilterPlan::new(plan).into_plan())
             })
             .collect::<VortexResult<_>>()?;
@@ -72,9 +79,15 @@ impl FilterPlans {
             .conjuncts()
             .iter()
             .map(|expr| {
-                expr.falsify(session)?
+                let at = Instant::now();
+                let falsifier = expr.falsify(session)?;
+                falsified += at.elapsed().as_micros();
+                let at = Instant::now();
+                let plan = falsifier
                     .map(|pruning| optimize(plan_row_idx_expression(pruning, root.clone())?))
-                    .transpose()
+                    .transpose();
+                pruned += at.elapsed().as_micros();
+                plan
             })
             .map(|plan| {
                 let plan = plan?;
@@ -84,6 +97,15 @@ impl FilterPlans {
                 }
             })
             .collect::<VortexResult<_>>()?;
+        tracing::debug!(
+            conjuncts = expression.conjuncts().len(),
+            planned = u64::try_from(planned).unwrap_or(u64::MAX),
+            optimized = u64::try_from(optimized).unwrap_or(u64::MAX),
+            falsified = u64::try_from(falsified).unwrap_or(u64::MAX),
+            pruning_planned = u64::try_from(pruned).unwrap_or(u64::MAX),
+            total = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
+            "v2 filter plans built"
+        );
         Ok(Self {
             expression,
             predicates,

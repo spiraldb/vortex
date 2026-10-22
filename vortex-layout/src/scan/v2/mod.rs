@@ -171,7 +171,7 @@ impl ScanBuilder {
     /// Lowers the file's layout and plans the filter and the projection, from the file's cache
     /// where an earlier scan planned them already. Touches no segment. Lowering and optimizing a
     /// wide file is real CPU, so a driver runs this where it runs compute.
-    pub fn prepare(self) -> VortexResult<PreparedScan> {
+    pub fn prepare(mut self) -> VortexResult<PreparedScan> {
         let file = self.file;
         let cache = file.cache.unwrap_or_default();
         let t_prepare = std::time::Instant::now();
@@ -181,8 +181,11 @@ impl ScanBuilder {
         };
         let row_count = root.row_count();
         let t_root = t_prepare.elapsed().as_micros();
-        let filter = self
-            .filter
+        // Interned, so partitions that bound the filter and projection on their own share the
+        // trees everything in the cache is keyed by.
+        let filter = self.filter.map(|filter| cache.intern(filter));
+        self.projection = cache.intern(self.projection);
+        let filter = filter
             .map(|filter| {
                 cache.filter_plans_or_build(&filter, || {
                     Ok(Arc::new(FilterPlans::new(
