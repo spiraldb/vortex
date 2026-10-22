@@ -580,6 +580,7 @@ impl FileStatsAccumulator {
         let mut ctx = self.ctx.lock();
         if chunk.dtype().is_struct() {
             let struct_chunk = chunk.clone().execute::<StructArray>(&mut ctx)?;
+            // In the future we should avoid computing stats twice.
             if self.write_legacy_stats {
                 for (acc, field) in self
                     .legacy
