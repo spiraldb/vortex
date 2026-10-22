@@ -252,7 +252,9 @@ impl StructReader {
             .into_boxed_slice();
         partitioned.replace_partitions(partitions)?;
 
-        Ok(Partitioned::Multi(Arc::new(PartitionedEval::new(partitioned)?)))
+        Ok(Partitioned::Multi(Arc::new(PartitionedEval::new(
+            partitioned,
+        )?)))
     }
 }
 

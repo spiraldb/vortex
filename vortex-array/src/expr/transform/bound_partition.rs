@@ -257,13 +257,10 @@ where
                     .iter()
                     .next()
                     .vortex_expect("expected one field");
-                let position = *self
-                    .positions
-                    .entry(annotation.clone())
-                    .or_insert_with(|| {
-                        self.sub_expressions.push((annotation.clone(), Vec::new()));
-                        self.sub_expressions.len() - 1
-                    });
+                let position = *self.positions.entry(annotation.clone()).or_insert_with(|| {
+                    self.sub_expressions.push((annotation.clone(), Vec::new()));
+                    self.sub_expressions.len() - 1
+                });
                 self.sub_expressions[position].1.push(node.clone());
                 Ok(Transformed {
                     value: node,
@@ -455,7 +452,10 @@ mod tests {
 
         partitioned.collapse_single_partitions()?;
 
-        assert_eq!(partitioned.partitions[0], get_item("c", root()).bind(&dtype)?);
+        assert_eq!(
+            partitioned.partitions[0],
+            get_item("c", root()).bind(&dtype)?
+        );
         assert_eq!(
             partitioned.partitions[1],
             pack(
