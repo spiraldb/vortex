@@ -14,6 +14,7 @@
 use std::future;
 use std::sync::Arc;
 use std::task::Poll;
+use std::time::Instant;
 
 use arrow_array::RecordBatch;
 use futures::SinkExt;
@@ -27,6 +28,11 @@ use vortex::error::VortexResult;
 use vortex::io::request::IoSource;
 use vortex::io::runtime::Handle;
 use vortex::layout::scan::v2::PreparedScan;
+use vortex::metrics::Counter;
+use vortex::metrics::Label;
+use vortex::metrics::MetricBuilder;
+use vortex::metrics::MetricsRegistry;
+use vortex::metrics::Timer;
 use vortex::scan::planning::driver::Progress;
 use vortex::scan::planning::driver::Run;
 use vortex::scan::planning::planner::Planner;
@@ -43,6 +49,38 @@ pub(crate) struct ScanDriver {
     concurrency: usize,
     /// Whether batches are yielded in row order, which holds them until the scan is done.
     ordered: bool,
+    /// What the driver records about each partition it runs, when the engine wants it.
+    metrics: Option<DriverMetrics>,
+}
+
+/// What a driver records about a partition, beside what the scan's stages record themselves:
+/// the time from the stream's creation to its first batch and to its end, each spawned chunk's
+/// run, and how many chunks were spawned.
+#[derive(Clone)]
+pub(crate) struct DriverMetrics {
+    first_batch: Timer,
+    duration: Timer,
+    chunk_duration: Timer,
+    chunks_spawned: Counter,
+}
+
+impl DriverMetrics {
+    /// Registers the driver's metrics with `registry` under `labels`.
+    pub(crate) fn new(registry: &dyn MetricsRegistry, labels: &[Label]) -> Self {
+        let timer = |name: &'static str| {
+            MetricBuilder::new(registry)
+                .add_labels(labels.iter().cloned())
+                .timer(name)
+        };
+        Self {
+            first_batch: timer("vortex.scan.stream.first_batch"),
+            duration: timer("vortex.scan.stream.duration"),
+            chunk_duration: timer("vortex.scan.chunk.duration"),
+            chunks_spawned: MetricBuilder::new(registry)
+                .add_labels(labels.iter().cloned())
+                .counter("vortex.scan.chunks.spawned"),
+        }
+    }
 }
 
 impl ScanDriver {
@@ -51,7 +89,14 @@ impl ScanDriver {
             handle,
             concurrency,
             ordered,
+            metrics: None,
         }
+    }
+
+    /// A driver that also records what it runs, as [`DriverMetrics`].
+    pub(crate) fn with_metrics(mut self, metrics: DriverMetrics) -> Self {
+        self.metrics = Some(metrics);
+        self
     }
 
     /// Runs `root`, the first planner composed over `scan`, and everything it emits, and
@@ -63,6 +108,8 @@ impl ScanDriver {
         map: impl Fn(ArrayRef) -> VortexResult<RecordBatch> + Send + Sync + 'static,
     ) -> BoxStream<'static, VortexResult<RecordBatch>> {
         let map: MapBatch = Arc::new(map);
+        let metrics = self.metrics.clone();
+        let started = Instant::now();
         let in_flight = self.concurrency * get_available_parallelism().unwrap_or(1);
         let inline = in_flight <= 1;
         let scope = WorkScope {
@@ -70,14 +117,21 @@ impl ScanDriver {
             rows: scan.rows().clone(),
         };
         let io = scan.io();
-        let (chunk_handle, chunk_io, chunk_map) =
-            (self.handle.clone(), Arc::clone(&io), Arc::clone(&map));
+        let (chunk_handle, chunk_io, chunk_map, chunk_metrics) = (
+            self.handle.clone(),
+            Arc::clone(&io),
+            Arc::clone(&map),
+            metrics.clone(),
+        );
         let batches = run_stream(self.handle, root, scope, io.session(), map, inline)
             .map_ok(move |yielded| match yielded {
                 Yielded::Batch(start, batch) => {
                     stream::once(future::ready(Ok((start, batch)))).boxed()
                 }
                 Yielded::Spawned(chunks) => {
+                    if let Some(metrics) = &chunk_metrics {
+                        metrics.chunks_spawned.add(chunks.len() as u64);
+                    }
                     let streams: Vec<_> = chunks
                         .into_iter()
                         .map(|(scope, chunk)| {
@@ -87,6 +141,7 @@ impl ScanDriver {
                                 scope,
                                 chunk_io.session(),
                                 Arc::clone(&chunk_map),
+                                chunk_metrics.clone(),
                             )
                         })
                         .collect();
@@ -94,10 +149,24 @@ impl ScanDriver {
                 }
             })
             .try_flatten_unordered(in_flight);
+        // The first batch and the end of the stream are the partition's, recorded here.
+        let mut first = true;
+        let end_metrics = metrics.clone();
+        let batches = batches.inspect_ok(move |_| {
+            if first {
+                first = false;
+                if let Some(metrics) = &metrics {
+                    metrics.first_batch.update(started.elapsed());
+                }
+            }
+        });
         // The prepared scan holds the file's shared cache: keep it until the stream ends, so
         // scans of the file that start meanwhile find it.
         let batches = batches.chain(stream::poll_fn(move |_| {
             let _ = &scan;
+            if let Some(metrics) = &end_metrics {
+                metrics.duration.update(started.elapsed());
+            }
             Poll::Ready(None)
         }));
         if !self.ordered {
@@ -212,9 +281,31 @@ fn chunk_stream(
     scope: WorkScope,
     io: Arc<dyn IoSource>,
     map: MapBatch,
+    metrics: Option<DriverMetrics>,
 ) -> BoxStream<'static, VortexResult<(u64, RecordBatch)>> {
-    let (mut send, recv) = mpsc::channel(1);
+    let (send, recv) = mpsc::channel(1);
     let task = handle.spawn(async move {
+        let started = Instant::now();
+        let result = chunk_run(root, scope, io, map, send).await;
+        if let Some(metrics) = &metrics {
+            metrics.chunk_duration.update(started.elapsed());
+        }
+        result
+    });
+    let errors = stream::once(task)
+        .filter_map(|result: VortexResult<()>| future::ready(result.err().map(Err)));
+    stream::select(recv, errors).boxed()
+}
+
+/// Drives one chunk's run to its end on the calling task, sending its batches on `send`.
+async fn chunk_run(
+    root: Box<dyn Planner>,
+    scope: WorkScope,
+    io: Arc<dyn IoSource>,
+    map: MapBatch,
+    mut send: mpsc::Sender<VortexResult<(u64, RecordBatch)>>,
+) -> VortexResult<()> {
+    {
         tracing::debug!(
             row_start = scope.rows.start,
             row_end = scope.rows.end,
@@ -247,8 +338,5 @@ fn chunk_stream(
                 Progress::Waiting => future::poll_fn(|cx| run.poll_completion(cx)).await?,
             }
         }
-    });
-    let errors = stream::once(task)
-        .filter_map(|result: VortexResult<()>| future::ready(result.err().map(Err)));
-    stream::select(recv, errors).boxed()
+    }
 }
