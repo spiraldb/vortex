@@ -53,6 +53,7 @@ use vortex::error::VortexExpect;
 use vortex::expr::and_collect;
 use vortex::file::OpenOptionsSessionExt;
 use vortex::io::InstrumentedReadAt;
+use vortex::io::session::RuntimeSessionExt;
 use vortex::layout::LayoutReader;
 use vortex::layout::scan::scan_builder::ScanBuilder;
 use vortex::layout::scan::v2::ScanBuilder as V2ScanBuilder;
@@ -76,6 +77,7 @@ use crate::metrics::PARTITION_LABEL;
 use crate::metrics::PATH_LABEL;
 use crate::persistent::cache::CachedVortexMetadata;
 use crate::persistent::reader::VortexReaderFactory;
+use crate::persistent::scan_v2::ScanDriver;
 use crate::persistent::stream::PrunableStream;
 
 #[derive(Clone)]
@@ -520,8 +522,7 @@ impl FileOpener for VortexOpener {
                 scan_file.cache = Some(shared_scan_cache(&scan_caches, &file.object_meta.location));
                 let mut builder = V2ScanBuilder::new(vxf.session().clone(), scan_file)
                     .with_projection(scan_projection)
-                    .with_some_filter(native_filter)
-                    .with_ordered(has_output_ordering);
+                    .with_some_filter(native_filter);
                 if let Some(rows) = scan_row_range {
                     builder = builder.with_row_range(rows);
                 }
@@ -540,8 +541,9 @@ impl FileOpener for VortexOpener {
                         .div_ceil(partitions)
                         .max(1)
                 });
-                builder = builder.with_concurrency(concurrency);
-                builder.map(map_batch).into_stream()
+                let driver =
+                    ScanDriver::new(vxf.session().handle(), concurrency, has_output_ordering);
+                Ok(driver.run(builder, map_batch))
             } else {
                 scan_builder
                     .with_metrics_registry(metrics_registry)
