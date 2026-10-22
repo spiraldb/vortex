@@ -9,6 +9,7 @@ use std::sync::Weak;
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
+use rustc_hash::FxHashSet;
 use vortex_array::expr::BoundExpression;
 use vortex_array::expr::ExactBoundExpr;
 use vortex_error::VortexResult;
@@ -48,10 +49,26 @@ struct Inner {
     /// projection's. A pruning plan remembers the zones it excluded, so sharing the plans prunes
     /// a file's zones once for every scan of that filter.
     filters: Mutex<FxHashMap<ExactBoundExpr, Arc<OnceCell<Arc<FilterPlans>>>>>,
+    /// Every expression a scan of the file was built with, one shared tree per distinct
+    /// expression, so scans converting the same filter or projection on their own, as an
+    /// engine's partitions do, share the plans, pruned zones and values keyed by its identity.
+    expressions: Mutex<FxHashSet<BoundExpression>>,
     values: ValueCache,
 }
 
 impl ScanCache {
+    /// The shared tree of `expression`: the one an earlier scan of the file interned if it is
+    /// structurally the same, else this one, kept for the next. Plans, pruned zones and values
+    /// are keyed by a tree's identity, so scans share them only through the same tree.
+    pub(super) fn intern(&self, expression: BoundExpression) -> BoundExpression {
+        let mut expressions = self.0.expressions.lock();
+        if let Some(shared) = expressions.get(&expression) {
+            return shared.clone();
+        }
+        expressions.insert(expression.clone());
+        expression
+    }
+
     /// The lowered root plan an earlier scan kept.
     pub(super) fn root(&self) -> Option<PlanRef> {
         self.0.root.lock().clone()
