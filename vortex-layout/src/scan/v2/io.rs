@@ -77,8 +77,9 @@ impl IoService for SegmentScanIo {
     }
 }
 
-/// Reads a session speculated, until a session's fetch or prefetch takes them: started reads,
-/// and requests announced for coalescing and never polled.
+/// Reads a session speculated: started reads, shared by every session that fetches the segment
+/// for as long as the service lives, since a chunk straddling two partitions is fetched by
+/// both; and requests announced for coalescing and never polled, taken by the first.
 #[derive(Default)]
 struct Speculated {
     started: HashMap<SegmentId, Prefetched>,
@@ -143,8 +144,8 @@ impl SegmentIoSource {
     /// this session, else a new request.
     fn read(&self, segment: SegmentId) -> Prefetched {
         let mut ahead = self.ahead.lock();
-        if let Some(read) = ahead.started.remove(&segment) {
-            return read;
+        if let Some(read) = ahead.started.get(&segment) {
+            return read.clone();
         }
         ahead
             .announced
@@ -155,7 +156,10 @@ impl SegmentIoSource {
                     .get_mut(&segment)
                     .and_then(VecDeque::pop_front)
             })
-            .unwrap_or_else(|| self.segments.request(segment))
+            .unwrap_or_else(|| {
+                tracing::trace!(segment = *segment, "v2 io new request on read");
+                self.segments.request(segment)
+            })
             .map_err(Arc::new)
             .boxed()
             .shared()
@@ -180,11 +184,12 @@ impl IoSource for SegmentIoSource {
                 // An announcement speculated for the segment is the same interest, already
                 // registered beside the reads it coalesces with: take it rather than add one.
                 let speculated = self.ahead.lock().announced.remove(&segment);
-                self.announced
-                    .lock()
-                    .entry(segment)
-                    .or_default()
-                    .push_back(speculated.unwrap_or_else(|| self.segments.request(segment)));
+                self.announced.lock().entry(segment).or_default().push_back(
+                    speculated.unwrap_or_else(|| {
+                        tracing::trace!(segment = *segment, "v2 io new request on announce");
+                        self.segments.request(segment)
+                    }),
+                );
                 continue;
             }
             if request.intent == IoIntent::Prefetch {
@@ -222,9 +227,10 @@ impl IoSource for SegmentIoSource {
         Ok(())
     }
 
-    /// Starts every prefetch of the batch, and requests every announcement without polling
-    /// it, for whichever session fetches the segment first. A session that has the segment
-    /// already, or speculated it before, requests nothing.
+    /// Starts every prefetch of the batch, shared by every session that fetches the segment,
+    /// and requests every announcement without polling it, for whichever session fetches the
+    /// segment first. A session that has the segment already, or speculated it before,
+    /// requests nothing.
     fn speculate(&self, _owner: IoOwnerId, batch: IoBatch) -> VortexResult<()> {
         let prefetched = self.prefetched.lock();
         let mut ahead = self.ahead.lock();
@@ -237,12 +243,13 @@ impl IoSource for SegmentIoSource {
                 continue;
             }
             if request.intent == IoIntent::Announce {
-                ahead
-                    .announced
-                    .entry(segment)
-                    .or_insert_with(|| self.segments.request(segment));
+                ahead.announced.entry(segment).or_insert_with(|| {
+                    tracing::trace!(segment = *segment, "v2 io speculated announce");
+                    self.segments.request(segment)
+                });
                 continue;
             }
+            tracing::trace!(segment = *segment, "v2 io speculated prefetch");
             let announced = ahead.announced.remove(&segment);
             let read = announced
                 .or_else(|| {
@@ -430,18 +437,19 @@ mod tests {
             "the chunk took the read"
         );
 
+        // A chunk straddling two partitions is fetched by both: the read is shared.
         other.submit(IoOwnerId(2), vec![request(IoIntent::Fetch, 3)])?;
         assert_eq!(
             segments.0.load(Ordering::Relaxed),
-            2,
-            "a second session reads again"
+            1,
+            "shared by a second session"
         );
 
         planner.clear();
         chunk.submit(IoOwnerId(1), vec![request(IoIntent::Fetch, 4)])?;
         assert_eq!(
             segments.0.load(Ordering::Relaxed),
-            2,
+            1,
             "the chunk retains its read"
         );
         assert!(
@@ -450,22 +458,33 @@ mod tests {
                 .is_err(),
             "a speculated fetch is refused"
         );
-
-        // An announcement is requested once, never polled, and taken by the first fetch.
-        let late = service.session();
         planner.speculate(IoOwnerId(0), vec![request(IoIntent::Announce, 6)])?;
+        assert_eq!(
+            segments.0.load(Ordering::Relaxed),
+            1,
+            "a started read is not announced"
+        );
+
+        // An announcement is requested once, never polled, and taken by the first session
+        // that announces or fetches the segment.
+        let service = SegmentScanIo::new(Arc::clone(&segments) as _, segment_ranges(&[location]));
+        let (planner, late) = (service.session(), service.session());
         planner.speculate(IoOwnerId(0), vec![request(IoIntent::Announce, 7)])?;
-        assert_eq!(segments.0.load(Ordering::Relaxed), 3, "requested for coalescing");
+        assert_eq!(
+            segments.0.load(Ordering::Relaxed),
+            2,
+            "requested for coalescing"
+        );
         late.submit(IoOwnerId(3), vec![request(IoIntent::Announce, 9)])?;
         assert_eq!(
             segments.0.load(Ordering::Relaxed),
-            3,
+            2,
             "a session's announcement takes the speculated one"
         );
         late.submit(IoOwnerId(3), vec![request(IoIntent::Fetch, 8)])?;
         assert_eq!(
             segments.0.load(Ordering::Relaxed),
-            3,
+            2,
             "the fetch took the announcement"
         );
         Ok(())

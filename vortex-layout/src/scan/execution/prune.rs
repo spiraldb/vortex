@@ -246,7 +246,12 @@ impl Planner for PrunePlanner {
             );
             return Ok(PlannerOutput::NeedsIO(batch));
         }
-        if computed || self.active.iter().any(|(adaptor, _)| adaptor.state() != State::Done) {
+        if computed
+            || self
+                .active
+                .iter()
+                .any(|(adaptor, _)| adaptor.state() != State::Done)
+        {
             return Ok(PlannerOutput::Continue);
         }
         // Every pruning plan has run: the planner this one continues into gets the kept rows.
