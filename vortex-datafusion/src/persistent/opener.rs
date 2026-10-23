@@ -554,11 +554,9 @@ impl FileOpener for VortexOpener {
             let t_rows = u64::try_from(opened_at.elapsed().as_micros()).unwrap_or(u64::MAX);
             let stream = if scan_v2 {
                 let mut scan_file = vxf.scan_file();
-                scan_file.segments = shared_segment_source(
-                    &segment_sources,
-                    &file.object_meta.location,
-                    scan_file.segments,
-                );
+                // EXPERIMENT: one segment source, and so one read driver, per partition, as V1
+                // has. A file's partitions shared one driver bounded to 32 reads in flight.
+                let _ = &segment_sources;
                 scan_file.cache = Some(scan_cache);
                 let mut builder = V2ScanBuilder::new(vxf.session().clone(), scan_file)
                     .with_projection(scan_projection)
