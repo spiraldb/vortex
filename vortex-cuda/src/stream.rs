@@ -9,11 +9,6 @@ use std::mem::size_of_val;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use cudarc::driver::CudaSlice;
-use cudarc::driver::CudaStream;
-use cudarc::driver::DeviceRepr;
-use cudarc::driver::ValidAsZeroBits;
-use cudarc::driver::result::stream;
 use futures::future::BoxFuture;
 use kanal::Sender;
 use tracing::warn;
@@ -21,6 +16,11 @@ use vortex::array::buffer::BufferHandle;
 use vortex::error::VortexResult;
 use vortex::error::vortex_ensure;
 use vortex::error::vortex_err;
+use vortex_cuda_driver::CudaSlice;
+use vortex_cuda_driver::CudaStream;
+use vortex_cuda_driver::DeviceRepr;
+use vortex_cuda_driver::ValidAsZeroBits;
+use vortex_cuda_driver::result::stream;
 
 use crate::CudaDeviceBuffer;
 use crate::device_buffer::CUDF_VALIDITY_BUFFER_PADDING;

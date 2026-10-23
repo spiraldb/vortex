@@ -7,9 +7,6 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use cudarc::driver::DevicePtr;
-use cudarc::driver::DeviceRepr;
-use cudarc::driver::PushKernelArg;
 use tracing::instrument;
 use vortex::array::ArrayRef;
 use vortex::array::Canonical;
@@ -37,6 +34,9 @@ use vortex::encodings::fsst::FSSTArraySlotsExt;
 use vortex::error::VortexExpect;
 use vortex::error::VortexResult;
 use vortex::error::vortex_err;
+use vortex_cuda_driver::DevicePtr;
+use vortex_cuda_driver::DeviceRepr;
+use vortex_cuda_driver::PushKernelArg;
 
 use crate::CanonicalCudaExt;
 use crate::CudaBufferExt;

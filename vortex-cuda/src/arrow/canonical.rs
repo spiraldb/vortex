@@ -7,10 +7,6 @@ use std::ptr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use cudarc::driver::CudaSlice;
-use cudarc::driver::DeviceRepr;
-use cudarc::driver::LaunchConfig;
-use cudarc::driver::PushKernelArg;
 use futures::future::BoxFuture;
 use futures::future::join;
 use vortex::array::ArrayRef;
@@ -63,6 +59,10 @@ use vortex::error::vortex_ensure;
 use vortex::error::vortex_ensure_eq;
 use vortex::error::vortex_err;
 use vortex::extension::datetime::AnyTemporal;
+use vortex_cuda_driver::CudaSlice;
+use vortex_cuda_driver::DeviceRepr;
+use vortex_cuda_driver::LaunchConfig;
+use vortex_cuda_driver::PushKernelArg;
 use vortex_onpair::OnPair;
 
 use crate::CudaBufferExt;

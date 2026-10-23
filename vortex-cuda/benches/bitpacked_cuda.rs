@@ -19,7 +19,6 @@ use std::time::Duration;
 use criterion::BenchmarkId;
 use criterion::Criterion;
 use criterion::Throughput;
-use cudarc::driver::DeviceRepr;
 use futures::executor::block_on;
 use mimalloc::MiMalloc;
 use vortex::array::IntoArray;
@@ -42,6 +41,7 @@ use vortex_array::session::ArraySession;
 use vortex_cuda::CudaDispatchMode;
 use vortex_cuda::CudaSession;
 use vortex_cuda::executor::CudaArrayExt;
+use vortex_cuda_driver::DeviceRepr;
 use vortex_cuda_macros::cuda_available;
 use vortex_cuda_macros::cuda_not_available;
 

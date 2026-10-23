@@ -22,9 +22,11 @@ workspace = true
 [features]
 default = []
 f16 = ["dep:half"]
+i256 = ["dep:vortex-array"]
 
 [dependencies]
 half = { workspace = true, optional = true }
 libloading = { workspace = true }
 parking_lot = { workspace = true }
 smallvec = { workspace = true }
+vortex-array = { workspace = true, optional = true }
