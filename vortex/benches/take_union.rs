@@ -30,19 +30,23 @@ use mimalloc::MiMalloc;
 use rand::RngExt;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
-use vortex::VortexSessionDefault;
 use vortex::array::ArrayRef;
 use vortex::array::IntoArray;
 use vortex::array::RecursiveCanonical;
 use vortex::array::VortexSessionExecute;
+use vortex::array::aggregate_fn::session::AggregateFnSession;
 use vortex::array::arrays::ListViewArray;
 use vortex::array::arrays::PrimitiveArray;
 use vortex::array::arrays::UnionArray;
 use vortex::array::arrays::VarBinViewArray;
 use vortex::array::dtype::UnionVariants;
+use vortex::array::memory::MemorySession;
+use vortex::array::optimizer::kernels::KernelSession;
 use vortex::array::scalar::Scalar;
+use vortex::array::session::ArraySession;
 use vortex::array::validity::Validity;
 use vortex::buffer::Buffer;
+use vortex::encodings::sparse;
 use vortex::encodings::sparse::Sparse;
 use vortex_session::VortexSession;
 
@@ -54,7 +58,15 @@ fn main() {
     divan::main();
 }
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::default);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
+    let session = VortexSession::empty()
+        .with::<ArraySession>()
+        .with::<KernelSession>()
+        .with::<AggregateFnSession>()
+        .with::<MemorySession>();
+    sparse::initialize(&session);
+    session
+});
 
 const ARRAY_SIZE: usize = 100_000;
 

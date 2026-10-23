@@ -14,26 +14,18 @@ use rand::prelude::StdRng;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::aggregate_fn::session::AggregateFnSession;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::VarBinViewArray;
-use vortex_array::dtype::session::DTypeSession;
 use vortex_array::memory::MemorySession;
 use vortex_array::optimizer::kernels::KernelSession;
 use vortex_array::scalar_fn::fns::like::Like;
 use vortex_array::scalar_fn::fns::like::LikeOptions;
-use vortex_array::scalar_fn::session::ScalarFnSession;
-use vortex_array::session::ArraySession;
 use vortex_session::VortexSession;
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     VortexSession::empty()
-        .with::<ArraySession>()
         .with::<KernelSession>()
-        .with::<DTypeSession>()
-        .with::<ScalarFnSession>()
-        .with::<AggregateFnSession>()
         .with::<MemorySession>()
 });
 

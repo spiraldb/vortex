@@ -111,14 +111,9 @@ mod arrays {
     use vortex_array::ArrayRef;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::aggregate_fn::session::AggregateFnSession;
     use vortex_array::dtype::DecimalDType;
     use vortex_array::dtype::DecimalType;
-    use vortex_array::dtype::session::DTypeSession;
-    use vortex_array::memory::MemorySession;
     use vortex_array::optimizer::kernels::KernelSession;
-    use vortex_array::scalar_fn::session::ScalarFnSession;
-    use vortex_array::session::ArraySession;
     use vortex_array::validity::Validity;
     use vortex_buffer::buffer;
     use vortex_decimal_byte_parts::_benchmarking::assemble_decimal;
@@ -130,15 +125,8 @@ mod arrays {
     use crate::common::arrays::cases;
     use crate::common::arrays::decimal_array;
 
-    pub(super) static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-        VortexSession::empty()
-            .with::<ArraySession>()
-            .with::<KernelSession>()
-            .with::<DTypeSession>()
-            .with::<ScalarFnSession>()
-            .with::<AggregateFnSession>()
-            .with::<MemorySession>()
-    });
+    pub(super) static SESSION: LazyLock<VortexSession> =
+        LazyLock::new(|| VortexSession::empty().with::<KernelSession>());
 
     #[divan::bench(args = cases())]
     fn dbp_assemble(bencher: Bencher, (values_type, len): (DecimalType, usize)) {

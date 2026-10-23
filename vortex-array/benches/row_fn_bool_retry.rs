@@ -14,22 +14,18 @@ use divan::counter::ItemsCount;
 use mimalloc::MiMalloc;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::aggregate_fn::session::AggregateFnSession;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::dtype::DType;
-use vortex_array::dtype::session::DTypeSession;
 use vortex_array::memory::MemorySession;
 use vortex_array::optimizer::kernels::KernelSession;
 use vortex_array::scalar_fn::EmptyOptions;
 use vortex_array::scalar_fn::ScalarFnId;
 use vortex_array::scalar_fn::VecExecutionArgs;
-use vortex_array::scalar_fn::session::ScalarFnSession;
 use vortex_array::scalar_fn::unstable::row::RowFn;
 use vortex_array::scalar_fn::unstable::row::RowVisitor;
 use vortex_array::scalar_fn::unstable::row::execute_rows;
-use vortex_array::session::ArraySession;
 use vortex_array::validity::Validity;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
@@ -42,11 +38,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     VortexSession::empty()
-        .with::<ArraySession>()
         .with::<KernelSession>()
-        .with::<DTypeSession>()
-        .with::<ScalarFnSession>()
-        .with::<AggregateFnSession>()
         .with::<MemorySession>()
 });
 

@@ -18,11 +18,9 @@ use vortex_array::arrays::ListViewArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::dtype::Nullability::NonNullable;
 use vortex_array::dtype::PType::I32;
-use vortex_array::dtype::session::DTypeSession;
 use vortex_array::memory::MemorySession;
 use vortex_array::optimizer::kernels::KernelSession;
 use vortex_array::scalar::Scalar;
-use vortex_array::scalar_fn::session::ScalarFnSession;
 use vortex_array::session::ArraySession;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
@@ -42,8 +40,6 @@ static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     let session = VortexSession::empty()
         .with::<ArraySession>()
         .with::<KernelSession>()
-        .with::<DTypeSession>()
-        .with::<ScalarFnSession>()
         .with::<AggregateFnSession>()
         .with::<MemorySession>();
     vortex_sparse::initialize(&session);

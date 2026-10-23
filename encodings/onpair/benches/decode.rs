@@ -80,22 +80,14 @@ impl DecodeInputs {
         unsafe { onpair::decode_into(self.codes.as_slice(), self.dict(), out) }
     }
 }
-use vortex_array::aggregate_fn::session::AggregateFnSession;
-use vortex_array::dtype::session::DTypeSession;
-use vortex_array::memory::MemorySession;
 use vortex_array::optimizer::kernels::KernelSession;
-use vortex_array::scalar_fn::session::ScalarFnSession;
 use vortex_array::session::ArraySession;
 use vortex_onpair::onpair_compress;
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     let session = VortexSession::empty()
         .with::<ArraySession>()
-        .with::<KernelSession>()
-        .with::<DTypeSession>()
-        .with::<ScalarFnSession>()
-        .with::<AggregateFnSession>()
-        .with::<MemorySession>();
+        .with::<KernelSession>();
     vortex_onpair::initialize(&session);
     session
 });
