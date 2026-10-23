@@ -60,7 +60,7 @@ pub fn fsst_compress(
         compress_varbin_array(varbin, compressor, ctx)
     } else {
         vortex_bail!(
-            InvalidArgument: "fsst_compress requires VarBinView or VarBin encoding, got {}",
+            "fsst_compress requires VarBinView or VarBin encoding, got {}",
             array.encoding_id()
         )
     }
@@ -76,7 +76,7 @@ pub fn fsst_train_compressor(array: &ArrayRef, ctx: &mut ExecutionCtx) -> Vortex
         train_varbin_array(varbin, ctx)
     } else {
         vortex_bail!(
-            InvalidArgument: "fsst_train_compressor requires VarBinView or VarBin encoding, got {}",
+            "fsst_train_compressor requires VarBinView or VarBin encoding, got {}",
             array.encoding_id()
         )
     }

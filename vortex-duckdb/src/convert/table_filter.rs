@@ -101,7 +101,7 @@ pub fn try_from_table_filter(
             }
         }
         TableFilterClass::Bloom => {
-            vortex_bail!(InvalidArgument: "bloom filter table filter is not supported")
+            vortex_bail!("bloom filter table filter is not supported")
         }
     }))
 }
@@ -123,7 +123,7 @@ pub(super) fn dynamic_filter_expr(
             CompareOperator::Gte
         }
         _ => {
-            vortex_bail!(InvalidArgument: "unsupported dynamic filter operator {:?}", dynamic.operator)
+            vortex_bail!("unsupported dynamic filter operator {:?}", dynamic.operator)
         }
     };
     let data = dynamic.data;
@@ -145,14 +145,14 @@ pub(super) fn dynamic_filter_expr(
 fn nonnegative_number_from_value(value: &ValueRef) -> VortexResult<u64> {
     match value.extract() {
         ExtractedValue::BigInt(i) => {
-            u64::try_from(i).map_err(|_| vortex_err!(Overflow: "negative value: {i}"))
+            u64::try_from(i).map_err(|_| vortex_err!("negative value: {i}"))
         }
         ExtractedValue::Integer(i) => {
-            u64::try_from(i).map_err(|_| vortex_err!(Overflow: "negative value: {i}"))
+            u64::try_from(i).map_err(|_| vortex_err!("negative value: {i}"))
         }
         ExtractedValue::UBigInt(u) => Ok(u),
         ExtractedValue::UInteger(u) => Ok(u64::from(u)),
-        _ => vortex_bail!(MismatchedTypes: "unexpected value type"),
+        _ => vortex_bail!("unexpected value type"),
     }
 }
 

@@ -35,6 +35,6 @@ impl crate::LayoutStrategy for FailingStrategy {
         _eof: crate::sequence::SequencePointer,
         _session: &VortexSession,
     ) -> vortex_error::VortexResult<crate::LayoutRef> {
-        vortex_error::vortex_bail!(InvalidArgument: "{}", Self::MESSAGE)
+        vortex_error::vortex_bail!("{}", Self::MESSAGE)
     }
 }

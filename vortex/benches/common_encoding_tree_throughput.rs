@@ -111,7 +111,7 @@ mod setup {
         match array.references() {
             FoRReferences::Global(reference) => reference.clone(),
             FoRReferences::Blocked(_) => {
-                vortex_panic!(AssertionFailed: "FoR::encode uses a global reference")
+                vortex_panic!("FoR::encode uses a global reference")
             }
         }
     }

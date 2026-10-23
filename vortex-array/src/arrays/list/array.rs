@@ -205,13 +205,13 @@ impl ListData {
         // Offsets must have at least one element
         vortex_ensure!(
             !offsets.is_empty(),
-            InvalidArgument: "Offsets must have at least one element, [0] for an empty list"
+            "Offsets must have at least one element, [0] for an empty list"
         );
 
         // Offsets must be of integer type, and cannot go lower than 0.
         vortex_ensure!(
             offsets.dtype().is_int() && !offsets.dtype().is_nullable(),
-            InvalidArgument: "offsets have invalid type {}",
+            "offsets have invalid type {}",
             offsets.dtype()
         );
 
@@ -220,9 +220,9 @@ impl ListData {
 
         // Offsets must be sorted (but not strictly sorted, zero-length lists are allowed)
         if let Some(is_sorted) = offsets.statistics().compute_is_sorted(ctx) {
-            vortex_ensure!(is_sorted, InvalidArgument: "offsets must be sorted");
+            vortex_ensure!(is_sorted, "offsets must be sorted");
         } else {
-            vortex_bail!(InvalidArgument: "offsets must report is_sorted statistic");
+            vortex_bail!("offsets must report is_sorted statistic");
         }
 
         // Validate that offsets min is non-negative, and max does not exceed the length of
@@ -244,16 +244,16 @@ impl ListData {
 
                     vortex_ensure!(
                         min >= 0,
-                        InvalidArgument: "offsets minimum {min} outside valid range [0, {max}]"
+                        "offsets minimum {min} outside valid range [0, {max}]"
                     );
 
                     vortex_ensure!(
                         max <= P::try_from(elements.len()).unwrap_or_else(|_| vortex_panic!(
-                            Overflow: "Offsets type {} must be able to fit elements length {}",
+                            "Offsets type {} must be able to fit elements length {}",
                             <P as NativePType>::PTYPE,
                             elements.len()
                         )),
-                        InvalidArgument: "Max offset {max} is beyond the length of the elements array {}",
+                        "Max offset {max} is beyond the length of the elements array {}",
                         elements.len()
                     );
                 }
@@ -261,7 +261,7 @@ impl ListData {
         } else {
             // TODO(aduffy): fallback to slower validation pathway?
             vortex_bail!(
-                InvalidArgument: "offsets array with encoding {} must support min_max compute function",
+                "offsets array with encoding {} must support min_max compute function",
                 offsets.encoding_id()
             );
         };
@@ -271,7 +271,7 @@ impl ListData {
             vortex_ensure_eq!(
                 validity_len,
                 offsets.len() - 1,
-                InvalidArgument: "validity length does not match array size",
+                "validity length does not match array size",
             );
         }
 
@@ -301,7 +301,7 @@ pub trait ListArrayExt: ListArraySlotsExt {
     fn offset_at(&self, index: usize, ctx: &mut ExecutionCtx) -> VortexResult<usize> {
         vortex_ensure!(
             index <= self.len(),
-            OutOfBounds: "Index {index} out of bounds 0..={}",
+            "Index {index} out of bounds 0..={}",
             self.len()
         );
 
@@ -314,9 +314,7 @@ pub trait ListArrayExt: ListArraySlotsExt {
                 .execute_scalar(index, ctx)?
                 .as_primitive()
                 .as_::<usize>()
-                .ok_or_else(
-                    || vortex_error::vortex_err!(Overflow: "offset value does not fit in usize"),
-                )
+                .ok_or_else(|| vortex_error::vortex_err!("offset value does not fit in usize"))
         }
     }
 

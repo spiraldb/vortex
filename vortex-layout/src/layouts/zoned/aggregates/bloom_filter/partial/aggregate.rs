@@ -37,7 +37,7 @@ impl BloomPartial {
         vortex_ensure_eq!(
             self.len(),
             other.len(),
-            InvalidArgument: "bloom partial block count mismatch"
+            "bloom partial block count mismatch"
         );
 
         // One flat `u32` slice each: the compiler turns the flat OR into wide loads and stores,

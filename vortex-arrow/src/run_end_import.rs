@@ -36,7 +36,7 @@ where
     vortex_ensure_eq!(
         ends.len(),
         values.len(),
-        InvalidArgument: "Arrow run-end array must have one value per run end"
+        "Arrow run-end array must have one value per run end"
     );
 
     // Arrow slices a RunArray by adjusting the logical offset/length while keeping the full

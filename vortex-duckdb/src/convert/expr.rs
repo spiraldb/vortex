@@ -86,7 +86,7 @@ fn from_bound_str(value: &ExpressionRef) -> VortexResult<String> {
     match value.as_class().vortex_expect("unknown class") {
         BoundConstant(constant) => Ok(constant.value.as_string().as_str().to_owned()),
         _ => {
-            vortex_bail!(MismatchedTypes: "Expected string expression, got {:?}", value.as_class_id())
+            vortex_bail!("Expected string expression, got {:?}", value.as_class_id())
         }
     }
 }
@@ -602,7 +602,7 @@ fn try_from_expression_inner(
     Ok(Some(match class {
         BoundRef => {
             let Some(col) = ctx.col_sub else {
-                vortex_bail!(InvalidArgument: "BoundRef requested but no column supplied");
+                vortex_bail!("BoundRef requested but no column supplied");
             };
             col.clone()
         }
@@ -721,7 +721,7 @@ fn try_from_expression_inner(
                     or_collect(children).vortex_expect("cannot be empty")
                 }
                 _ => {
-                    vortex_bail!(AssertionFailed: "unexpected operator {:?} in bound conjunction", conj.op)
+                    vortex_bail!("unexpected operator {:?} in bound conjunction", conj.op)
                 }
             }
         }
@@ -765,7 +765,7 @@ impl TryFrom<DUCKDB_VX_EXPR_TYPE> for Operator {
     fn try_from(value: DUCKDB_VX_EXPR_TYPE) -> VortexResult<Self> {
         Ok(match value {
             DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_INVALID => {
-                vortex_bail!(InvalidArgument: "invalid expression")
+                vortex_bail!("invalid expression")
             }
             DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_COMPARE_EQUAL => Operator::Eq,
             DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_COMPARE_NOTEQUAL => Operator::NotEq,
@@ -773,7 +773,7 @@ impl TryFrom<DUCKDB_VX_EXPR_TYPE> for Operator {
             DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_COMPARE_GREATERTHAN => Operator::Gt,
             DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_COMPARE_LESSTHANOREQUALTO => Operator::Lte,
             DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_COMPARE_GREATERTHANOREQUALTO => Operator::Gte,
-            _ => vortex_bail!(MismatchedTypes: "cannot convert {:?}", value),
+            _ => vortex_bail!("cannot convert {:?}", value),
         })
     }
 }

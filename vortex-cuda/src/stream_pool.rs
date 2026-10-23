@@ -66,7 +66,7 @@ impl VortexCudaStreamPool {
         let stream = self.slots[slot_idx].get_or_try_init(|| {
             self.context
                 .new_stream()
-                .map_err(|e| vortex_err!(Io: "Failed to create CUDA stream: {}", e))
+                .map_err(|e| vortex_err!("Failed to create CUDA stream: {}", e))
         })?;
 
         Ok(VortexCudaStream(Arc::clone(stream)))
@@ -101,8 +101,8 @@ mod tests {
 
     #[crate::test]
     fn lazy_creation() -> VortexResult<()> {
-        let context = CudaContext::new(0)
-            .map_err(|e| vortex_err!(Io: "Failed to create CUDA context: {e}"))?;
+        let context =
+            CudaContext::new(0).map_err(|e| vortex_err!("Failed to create CUDA context: {e}"))?;
         let pool = VortexCudaStreamPool::new(context, 3);
 
         assert_eq!(pool.max_capacity(), 3);
@@ -118,8 +118,8 @@ mod tests {
 
     #[crate::test]
     fn round_robin_reuse() -> VortexResult<()> {
-        let context = CudaContext::new(0)
-            .map_err(|e| vortex_err!(Io: "Failed to create CUDA context: {e}"))?;
+        let context =
+            CudaContext::new(0).map_err(|e| vortex_err!("Failed to create CUDA context: {e}"))?;
         let pool = VortexCudaStreamPool::new(context, 3);
         let streams = (0..pool.max_capacity())
             .map(|_| pool.stream())
@@ -143,8 +143,8 @@ mod tests {
 
     #[crate::test]
     fn concurrent_initialization_respects_capacity() -> VortexResult<()> {
-        let context = CudaContext::new(0)
-            .map_err(|e| vortex_err!(Io: "Failed to create CUDA context: {e}"))?;
+        let context =
+            CudaContext::new(0).map_err(|e| vortex_err!("Failed to create CUDA context: {e}"))?;
         for capacity in [1, 4] {
             let pool = VortexCudaStreamPool::new(Arc::clone(&context), capacity);
             let barrier = Barrier::new(32);

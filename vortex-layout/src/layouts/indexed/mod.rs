@@ -186,26 +186,26 @@ impl IndexPartitioning {
     fn validate(&self, id: IndexId, data_row_count: u64, index_row_count: u64) -> VortexResult<()> {
         vortex_ensure!(
             self.partition_len > 0,
-            InvalidArgument: "Index {id} has a zero partition length"
+            "Index {id} has a zero partition length"
         );
         let expected = data_row_count.div_ceil(self.partition_len);
         vortex_ensure!(
             self.index_ends.len() as u64 == expected,
-            InvalidArgument: "Index {id} has {} partitions, expected {expected} for {data_row_count} rows at {} rows each",
+            "Index {id} has {} partitions, expected {expected} for {data_row_count} rows at {} rows each",
             self.index_ends.len(),
             self.partition_len
         );
         vortex_ensure!(
             self.index_ends.is_sorted(),
-            InvalidArgument: "Index {id} partition ends must be non-decreasing"
+            "Index {id} partition ends must be non-decreasing"
         );
         vortex_ensure!(
             self.index_ends.last().copied().unwrap_or(0) == index_row_count,
-            InvalidArgument: "Index {id} partition ends do not cover its {index_row_count}-row child"
+            "Index {id} partition ends do not cover its {index_row_count}-row child"
         );
         vortex_ensure!(
             self.declined.max().is_none_or(|p| u64::from(p) < expected),
-            InvalidArgument: "Index {id} declines a partition past its last"
+            "Index {id} declines a partition past its last"
         );
         Ok(())
     }
@@ -288,14 +288,14 @@ impl IndexedLayout {
     ) -> VortexResult<Self> {
         vortex_ensure!(
             index_layouts.len() == indexes.len(),
-            InvalidArgument: "IndexedLayout got {} index children for {} specs",
+            "IndexedLayout got {} index children for {} specs",
             index_layouts.len(),
             indexes.len()
         );
         for (layout, spec) in index_layouts.iter().zip(&indexes) {
             vortex_ensure!(
                 layout.dtype() == &spec.index_dtype,
-                MismatchedTypes: "Index child dtype {} does not match spec dtype {} for {}",
+                "Index child dtype {} does not match spec dtype {} for {}",
                 layout.dtype(),
                 spec.index_dtype,
                 spec.id
@@ -375,7 +375,7 @@ impl VTable for Indexed {
     ) -> VortexResult<Self::LayoutData> {
         vortex_ensure!(
             args.children.nchildren() == 1 + metadata.indexes.len(),
-            InvalidArgument: "IndexedLayout expects {} children (data + {} indexes), got {}",
+            "IndexedLayout expects {} children (data + {} indexes), got {}",
             1 + metadata.indexes.len(),
             metadata.indexes.len(),
             args.children.nchildren()
@@ -392,9 +392,7 @@ impl VTable for Indexed {
                     .as_ref()
                     .map(|dtype| DType::from_proto(dtype, args.session))
                     .transpose()?
-                    .ok_or_else(
-                        || vortex_err!(Serde: "Index spec {} is missing its dtype", spec.id),
-                    )?;
+                    .ok_or_else(|| vortex_err!("Index spec {} is missing its dtype", spec.id))?;
                 let id = IndexId::from(spec.id.as_str());
 
                 let partitioning = spec
@@ -442,7 +440,7 @@ impl VTable for Indexed {
             0 => Ok(layout.dtype().clone()),
             _ => {
                 let Some(spec) = layout.indexes.get(slot - 1) else {
-                    vortex_bail!(OutOfBounds: "Invalid child index: {}", slot);
+                    vortex_bail!("Invalid child index: {}", slot);
                 };
                 Ok(spec.index_dtype.clone())
             }
@@ -454,7 +452,7 @@ impl VTable for Indexed {
             0 => LayoutChildType::Transparent("data".into()),
             _ => match layout.indexes.get(slot - 1) {
                 Some(spec) => LayoutChildType::Auxiliary(format!("index:{}", spec.id).into()),
-                None => vortex_panic!(OutOfBounds: "Invalid child index: {}", slot),
+                None => vortex_panic!("Invalid child index: {}", slot),
             },
         }
     }
@@ -527,16 +525,16 @@ impl DeserializeMetadata for IndexedMetadata {
 
     fn deserialize(metadata: &[u8]) -> VortexResult<Self::Output> {
         let Some((&version, proto_bytes)) = metadata.split_first() else {
-            vortex_bail!(Serde: "Indexed metadata missing protobuf version");
+            vortex_bail!("Indexed metadata missing protobuf version");
         };
         vortex_ensure!(
             version == INDEXED_METADATA_VERSION,
-            Serde: "Unsupported indexed metadata version: {}",
+            "Unsupported indexed metadata version: {}",
             version
         );
 
         let proto = IndexedMetadataProto::decode(proto_bytes)
-            .map_err(|err| vortex_err!(Serde: "Failed to decode indexed metadata: {err}"))?;
+            .map_err(|err| vortex_err!("Failed to decode indexed metadata: {err}"))?;
         Ok(Self {
             indexes: proto.indexes.into(),
         })

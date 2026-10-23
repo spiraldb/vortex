@@ -156,7 +156,7 @@ fn ensure_arity<F: RowFn>(function: &F, actual: usize) -> VortexResult<()> {
     vortex_ensure_eq!(
         actual,
         expected,
-        InvalidArgument: "row function {} has the wrong arity",
+        "row function {} has the wrong arity",
         RowFn::id(function),
     );
 
@@ -394,7 +394,7 @@ mod tests {
         let error = match execute_rows(&function, &EmptyOptions, &args, &mut ctx) {
             Err(error) => error,
             Ok(_) => {
-                vortex_error::vortex_bail!(InvalidArgument: "dispatch must not change after planning")
+                vortex_error::vortex_bail!("dispatch must not change after planning")
             }
         };
         let message = error.to_string();
@@ -423,7 +423,7 @@ mod tests {
         let error = match execute_rows(&function, &EmptyOptions, &args, &mut ctx) {
             Err(error) => error,
             Ok(_) => {
-                vortex_error::vortex_bail!(AssertionFailed: "dispatch must preserve its planned element types")
+                vortex_error::vortex_bail!("dispatch must preserve its planned element types")
             }
         };
 

@@ -143,7 +143,7 @@ impl Array<ScalarFn> {
     #[inline]
     fn infer_len(slots: &[Option<ArrayRef>]) -> VortexResult<usize> {
         let Some(child) = slots.first().and_then(Option::as_ref) else {
-            vortex_bail!(InvalidArgument: "ScalarFnArray length cannot be inferred without children");
+            vortex_bail!("ScalarFnArray length cannot be inferred without children");
         };
         Ok(child.len())
     }
@@ -159,7 +159,7 @@ impl Array<ScalarFn> {
     pub(super) fn validate_not_literal(scalar_fn: &ScalarFnRef) -> VortexResult<()> {
         vortex_ensure!(
             !scalar_fn.is::<Literal>(),
-            InvalidArgument: "ScalarFnArray cannot wrap a literal, use ConstantArray instead"
+            "ScalarFnArray cannot wrap a literal, use ConstantArray instead"
         );
         Ok(())
     }
@@ -169,7 +169,7 @@ impl Array<ScalarFn> {
         let arity = scalar_fn.signature().arity();
         vortex_ensure!(
             arity.matches(child_count),
-            InvalidArgument: "ScalarFnArray requires {arity} children, got {child_count}"
+            "ScalarFnArray requires {arity} children, got {child_count}"
         );
         Ok(())
     }
@@ -179,7 +179,7 @@ impl Array<ScalarFn> {
         for child in slots.iter().flatten() {
             vortex_ensure!(
                 child.len() == len,
-                InvalidArgument: "ScalarFnArray must have children equal to the array length"
+                "ScalarFnArray must have children equal to the array length"
             );
         }
         Ok(())

@@ -234,14 +234,14 @@ impl<V: AggregateFnVTable> DynGroupedAccumulator for GroupedAccumulator<V> {
             DType::List(elem, _) => elem,
             DType::FixedSizeList(elem, ..) => elem,
             _ => vortex_bail!(
-                MismatchedTypes: "Input DType mismatch: expected List or FixedSizeList, got {}",
+                "Input DType mismatch: expected List or FixedSizeList, got {}",
                 groups.dtype()
             ),
         };
         vortex_ensure_eq!(
             elements_dtype.as_ref(),
             &self.dtypes.dtype,
-            MismatchedTypes: "Input DType mismatch"
+            "Input DType mismatch"
         );
 
         // We first execute the groups until it is a ListView or FixedSizeList, since we only
@@ -254,7 +254,7 @@ impl<V: AggregateFnVTable> DynGroupedAccumulator for GroupedAccumulator<V> {
             Canonical::List(groups) => self.accumulate_grouped_array(groups.into(), ctx),
             Canonical::FixedSizeList(groups) => self.accumulate_grouped_array(groups.into(), ctx),
             _ => {
-                vortex_panic!(AssertionFailed: "We checked the DType above, so this should never happen")
+                vortex_panic!("We checked the DType above, so this should never happen")
             }
         }
     }
@@ -276,7 +276,7 @@ impl<V: AggregateFnVTable> DynGroupedAccumulator for GroupedAccumulator<V> {
         vortex_ensure_eq!(
             results.dtype(),
             &self.dtypes.return_dtype,
-            AssertionFailed: "Return DType mismatch"
+            "Return DType mismatch"
         );
 
         Ok(results)
@@ -369,7 +369,7 @@ impl<V: AggregateFnVTable> GroupedAccumulator<V> {
         vortex_ensure_eq!(
             state.dtype(),
             &self.dtypes.partial_dtype,
-            AssertionFailed: "State DType mismatch"
+            "State DType mismatch"
         );
         self.partials.push(state);
         Ok(())

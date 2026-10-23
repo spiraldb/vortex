@@ -83,9 +83,8 @@ pub struct FSSTMetadata {
 
 impl FSSTMetadata {
     pub fn get_uncompressed_lengths_ptype(&self) -> VortexResult<PType> {
-        PType::try_from(self.uncompressed_lengths_ptype).map_err(
-            |_| vortex_err!(InvalidArgument: "Invalid PType {}", self.uncompressed_lengths_ptype),
-        )
+        PType::try_from(self.uncompressed_lengths_ptype)
+            .map_err(|_| vortex_err!("Invalid PType {}", self.uncompressed_lengths_ptype))
     }
 }
 
@@ -157,7 +156,7 @@ impl VTable for FSST {
                     .into_byte_buffer(),
             ),
             2 => array.codes_bytes_handle().clone(),
-            _ => vortex_panic!(OutOfBounds: "FSSTArray buffer index {idx} out of bounds"),
+            _ => vortex_panic!("FSSTArray buffer index {idx} out of bounds"),
         }
     }
 
@@ -166,7 +165,7 @@ impl VTable for FSST {
             0 => Some("symbols".to_string()),
             1 => Some("symbol_lengths".to_string()),
             2 => Some("compressed_codes".to_string()),
-            _ => vortex_panic!(OutOfBounds: "FSSTArray buffer_name index {idx} out of bounds"),
+            _ => vortex_panic!("FSSTArray buffer_name index {idx} out of bounds"),
         }
     }
 
@@ -175,7 +174,7 @@ impl VTable for FSST {
         array: ArrayView<'_, Self>,
         buffers: &[BufferHandle],
     ) -> VortexResult<ArrayParts<Self>> {
-        vortex_ensure_eq!(buffers.len(), 3, InvalidArgument);
+        vortex_ensure_eq!(buffers.len(), 3);
         let symbols = Buffer::<Symbol>::from_byte_buffer(buffers[0].clone().try_to_host_sync()?);
         let symbol_lengths = Buffer::<u8>::from_byte_buffer(buffers[1].clone().try_to_host_sync()?);
         let data = FSSTData::try_new(symbols, symbol_lengths, buffers[2].clone(), array.len())?;
@@ -280,7 +279,7 @@ impl VTable for FSST {
                 let validity = children.get(2, &Validity::DTYPE, len)?;
                 Validity::Array(validity)
             } else {
-                vortex_bail!(MismatchedTypes: "Expected 2 or 3 children, got {}", children.len());
+                vortex_bail!("Expected 2 or 3 children, got {}", children.len());
             };
 
             FSSTData::validate_parts(
@@ -310,7 +309,7 @@ impl VTable for FSST {
         }
 
         vortex_bail!(
-            MismatchedTypes: "InvalidArgument: Expected 2 or 3 buffers, got {}",
+            "InvalidArgument: Expected 2 or 3 buffers, got {}",
             buffers.len()
         );
     }
@@ -350,7 +349,7 @@ impl VTable for FSST {
         // canonicalize-then-append fallback — it would decode to a `VarBinView` only for
         // `VarBinView::append_to_builder` to reject the same remainder.
         let Some(builder) = builder.as_any_mut().downcast_mut::<VarBinViewBuilder>() else {
-            vortex_bail!(InvalidArgument: "append_to_builder for FSST requires a variable-binary builder")
+            vortex_bail!("append_to_builder for FSST requires a variable-binary builder")
         };
 
         // Decompress the whole block of data into a new buffer, which the builder adopts as a
@@ -511,13 +510,13 @@ impl FSSTSymbolTable {
         vortex_ensure!(
             padded_symbols.len() == FSST_SYMBOL_TABLE_LEN
                 && padded_symbol_lengths.len() == FSST_SYMBOL_TABLE_LEN,
-            InvalidArgument: "padded symbol table must have exactly {FSST_SYMBOL_TABLE_LEN} entries, found {} symbols and {} symbol lengths",
+            "padded symbol table must have exactly {FSST_SYMBOL_TABLE_LEN} entries, found {} symbols and {} symbol lengths",
             padded_symbols.len(),
             padded_symbol_lengths.len()
         );
         vortex_ensure!(
             n_symbols <= FSST_SYMBOL_TABLE_LEN,
-            InvalidArgument: "n_symbols must be <= {FSST_SYMBOL_TABLE_LEN}, found {n_symbols}"
+            "n_symbols must be <= {FSST_SYMBOL_TABLE_LEN}, found {n_symbols}"
         );
         Ok(Self {
             padded_symbols,
@@ -667,14 +666,14 @@ impl FSST {
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrayParts<Self>> {
         if children.len() != 2 {
-            vortex_bail!(InvalidArgument: "Expected 2 children, got {}", children.len());
+            vortex_bail!("Expected 2 children, got {}", children.len());
         }
         let codes = children.get(0, &DType::Binary(dtype.nullability()), len)?;
         let codes: VarBinArray = codes
             .as_opt::<VarBin>()
             .ok_or_else(|| {
                 vortex_err!(
-                    MismatchedTypes: "Expected VarBinArray for codes, got {}",
+                    "Expected VarBinArray for codes, got {}",
                     codes.encoding_id()
                 )
             })?
@@ -764,11 +763,11 @@ impl FSSTData {
         vortex_ensure_eq!(
             symbols.len(),
             symbol_lengths.len(),
-            InvalidArgument: "symbols and symbol_lengths arrays must have same length"
+            "symbols and symbol_lengths arrays must have same length"
         );
         vortex_ensure!(
             symbols.len() <= FSST_SYMBOL_TABLE_LEN,
-            InvalidArgument: "symbols array must have length <= {FSST_SYMBOL_TABLE_LEN}, found {}",
+            "symbols array must have length <= {FSST_SYMBOL_TABLE_LEN}, found {}",
             symbols.len()
         );
         let n_symbols = symbols.len();
@@ -817,15 +816,15 @@ impl FSSTData {
     ) -> VortexResult<()> {
         vortex_ensure!(
             matches!(dtype, DType::Binary(_) | DType::Utf8(_)),
-            MismatchedTypes: "FSST arrays must be Binary or Utf8, found {dtype}"
+            "FSST arrays must be Binary or Utf8, found {dtype}"
         );
 
         if symbols.len() > FSST_SYMBOL_TABLE_LEN {
-            vortex_bail!(InvalidArgument: "symbols array must have length <= {FSST_SYMBOL_TABLE_LEN}");
+            vortex_bail!("symbols array must have length <= {FSST_SYMBOL_TABLE_LEN}");
         }
 
         if symbols.len() != symbol_lengths.len() {
-            vortex_bail!(InvalidArgument: "symbols and symbol_lengths arrays must have same length");
+            vortex_bail!("symbols and symbol_lengths arrays must have same length");
         }
 
         Self::validate_symbol_lengths(symbol_lengths)?;
@@ -833,24 +832,30 @@ impl FSSTData {
         // codes_offsets.len() - 1 == number of elements
         let codes_len = codes_offsets.len().saturating_sub(1);
         if codes_len != len {
-            vortex_bail!(InvalidArgument: "codes must have same len as outer array");
+            vortex_bail!("codes must have same len as outer array");
         }
 
         if uncompressed_lengths.len() != len {
-            vortex_bail!(InvalidArgument: "uncompressed_lengths must be same len as codes");
+            vortex_bail!("uncompressed_lengths must be same len as codes");
         }
 
         if !uncompressed_lengths.dtype().is_int() || uncompressed_lengths.dtype().is_nullable() {
-            vortex_bail!(InvalidArgument: "uncompressed_lengths must have integer type and cannot be nullable, found {}", uncompressed_lengths.dtype());
+            vortex_bail!(
+                "uncompressed_lengths must have integer type and cannot be nullable, found {}",
+                uncompressed_lengths.dtype()
+            );
         }
 
         // Offsets must be non-nullable integer.
         if !codes_offsets.dtype().is_int() || codes_offsets.dtype().is_nullable() {
-            vortex_bail!(InvalidArgument: "codes offsets must be non-nullable integer type, found {}", codes_offsets.dtype());
+            vortex_bail!(
+                "codes offsets must be non-nullable integer type, found {}",
+                codes_offsets.dtype()
+            );
         }
 
         if codes_nullability != dtype.nullability() {
-            vortex_bail!(InvalidArgument: "codes nullability must match outer dtype nullability");
+            vortex_bail!("codes nullability must match outer dtype nullability");
         }
 
         Ok(())
@@ -870,7 +875,7 @@ impl FSSTData {
                 (&codes_offsets.execute_scalar(codes_offsets.len() - 1, ctx)?).try_into()?;
             vortex_ensure!(
                 last_offset <= codes_bytes.len(),
-                InvalidArgument: "Last codes offset {} exceeds codes bytes length {}",
+                "Last codes offset {} exceeds codes bytes length {}",
                 last_offset,
                 codes_bytes.len()
             );
@@ -883,12 +888,14 @@ impl FSSTData {
         let mut expected = 2;
         for (idx, &len) in symbol_lengths.iter().enumerate() {
             if len > 8 || len == 0 {
-                vortex_bail!(InvalidArgument: "symbol length at index {idx} must be between 1 and 8, found {len}");
+                vortex_bail!("symbol length at index {idx} must be between 1 and 8, found {len}");
             }
 
             if expected == 1 {
                 if len != 1 {
-                    vortex_bail!(InvalidArgument: "symbol length at index {idx} must be 1 after one-byte symbols begin, found {len}");
+                    vortex_bail!(
+                        "symbol length at index {idx} must be 1 after one-byte symbols begin, found {len}"
+                    );
                 }
             } else {
                 if len == 1 {
@@ -896,7 +903,9 @@ impl FSSTData {
                 }
 
                 if len < expected {
-                    vortex_bail!(InvalidArgument: "symbol length at index {idx} violates FSST symbol table ordering");
+                    vortex_bail!(
+                        "symbol length at index {idx} violates FSST symbol table ordering"
+                    );
                 }
                 expected = len;
             }
@@ -1100,7 +1109,7 @@ mod test {
         let sliced = fsst_array
             .slice(1..3)?
             .try_downcast::<FSST>()
-            .map_err(|_| vortex_err!(AssertionFailed: "slice must return an FSST array"))?;
+            .map_err(|_| vortex_err!("slice must return an FSST array"))?;
         let sliced_compressor_ptr = sliced.compressor() as *const Compressor;
 
         assert_eq!(compressor_ptr, sliced_compressor_ptr);
@@ -1204,7 +1213,7 @@ mod test {
         let padded = deserialized
             .clone()
             .try_downcast::<FSST>()
-            .map_err(|_| vortex_err!(Serde: "deserialize must return an FSST array"))?;
+            .map_err(|_| vortex_err!("deserialize must return an FSST array"))?;
         assert_eq!(padded.padded_symbols().len(), FSST_SYMBOL_TABLE_LEN);
         assert_eq!(padded.n_symbols(), fsst_array.symbols().len());
 

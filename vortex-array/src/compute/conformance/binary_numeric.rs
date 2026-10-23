@@ -140,7 +140,7 @@ pub fn test_binary_numeric_array(array: &ArrayRef, ctx: &mut ExecutionCtx) {
             test_binary_numeric_conformance_decimal(array, *decimal_dtype, ctx)
         }
         dtype => vortex_panic!(
-            NotImplemented: "Binary numeric tests are only supported for primitive and decimal types, got {dtype}",
+            "Binary numeric tests are only supported for primitive and decimal types, got {dtype}",
         ),
     }
 }
@@ -377,7 +377,7 @@ fn test_binary_numeric_edge_cases(array: &ArrayRef, ctx: &mut ExecutionCtx) {
             PType::F64 => test_binary_numeric_edge_cases_float::<f64>(array, ctx),
         },
         dtype => vortex_panic!(
-            NotImplemented: "Binary numeric edge case tests are only supported for primitive numeric types, got {dtype}"
+            "Binary numeric edge case tests are only supported for primitive numeric types, got {dtype}"
         ),
     }
 }

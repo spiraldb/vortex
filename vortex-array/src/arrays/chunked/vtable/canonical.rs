@@ -114,7 +114,7 @@ fn pack_variant_chunks(
             for chunk in &variant_chunks[1..] {
                 vortex_ensure!(
                     chunk.shredded().is_none(),
-                    NotImplemented: "cannot canonicalize ChunkedArray<Variant>: chunks disagree on shredded presence"
+                    "cannot canonicalize ChunkedArray<Variant>: chunks disagree on shredded presence"
                 );
             }
             None
@@ -127,13 +127,13 @@ fn pack_variant_chunks(
             for chunk in &variant_chunks[1..] {
                 let shredded = chunk.shredded().ok_or_else(|| {
                     vortex_err!(
-                        NotImplemented: "cannot canonicalize ChunkedArray<Variant>: chunks disagree on shredded presence"
+                        "cannot canonicalize ChunkedArray<Variant>: chunks disagree on shredded presence"
                     )
                 })?;
                 vortex_ensure_eq!(
                     shredded.dtype(),
                     &shredded_dtype,
-                    MismatchedTypes: "cannot canonicalize ChunkedArray<Variant>: shredded dtype mismatch",
+                    "cannot canonicalize ChunkedArray<Variant>: shredded dtype mismatch",
                 );
                 shredded_chunks.push(shredded.clone());
             }
@@ -367,7 +367,7 @@ mod tests {
         match canonical {
             Canonical::Variant(array) => Ok(array),
             other => {
-                vortex_bail!(MismatchedTypes: "expected Variant canonical array, got {other:?}")
+                vortex_bail!("expected Variant canonical array, got {other:?}")
             }
         }
     }
@@ -428,7 +428,7 @@ mod tests {
         let variant = into_variant(chunked.execute::<Canonical>(&mut ctx)?)?;
         let shredded = variant
             .shredded()
-            .ok_or_else(|| vortex_err!(InvalidArgument: "expected shredded child"))?;
+            .ok_or_else(|| vortex_err!("expected shredded child"))?;
 
         for (index, value) in [1, 2, 3].into_iter().enumerate() {
             assert_eq!(
@@ -552,7 +552,7 @@ mod tests {
         let fsl = match canonical {
             Canonical::FixedSizeList(fsl) => fsl,
             other => {
-                vortex_bail!(MismatchedTypes: "expected FixedSizeList canonical array, got {other:?}")
+                vortex_bail!("expected FixedSizeList canonical array, got {other:?}")
             }
         };
 

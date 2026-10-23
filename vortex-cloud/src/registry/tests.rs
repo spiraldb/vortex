@@ -265,7 +265,6 @@ async fn test_resolved_key_reaches_the_object(
     #[case] key: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use object_store::ObjectStoreExt;
-    use vortex_error::VortexErrorKind;
     use vortex_file::OpenOptionsSessionExt;
 
     let session = VortexSession::empty()
@@ -295,10 +294,8 @@ async fn test_resolved_key_reaches_the_object(
         panic!("the payload is not a Vortex file, so opening it must fail")
     };
     assert!(
-        err.kind() == VortexErrorKind::Serde
-            && err
-                .to_string()
-                .contains("Malformed file, invalid magic bytes, got [0, 0, 0, 0]"),
+        err.to_string()
+            .contains("Malformed file, invalid magic bytes, got [0, 0, 0, 0]"),
         "opening {key:?} must read the stored payload and reject its footer: {err}"
     );
     Ok(())

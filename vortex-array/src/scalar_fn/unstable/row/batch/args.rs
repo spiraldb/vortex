@@ -65,7 +65,7 @@ impl ExecutionArgs for BorrowedRowFnArgs<'_> {
     fn get(&self, index: usize) -> VortexResult<ArrayRef> {
         self.arrays.get(index).cloned().ok_or_else(|| {
             vortex_err!(
-                InvalidArgument: "row-function input index must be less than {}, got {index}",
+                "row-function input index must be less than {}, got {index}",
                 self.arrays.len(),
             )
         })

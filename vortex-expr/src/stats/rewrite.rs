@@ -91,7 +91,7 @@ fn ensure_predicate(expr: &BoundExpression) -> VortexResult<()> {
     let dtype = expr.dtype();
     vortex_ensure!(
         matches!(dtype, DType::Bool(_)),
-        MismatchedTypes: "Stats rewrites require a boolean predicate, got {dtype}",
+        "Stats rewrites require a boolean predicate, got {dtype}",
     );
     Ok(())
 }

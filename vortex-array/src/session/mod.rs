@@ -133,7 +133,7 @@ pub trait ArraySessionExt: SessionExt {
     fn array_serialize(&self, array: &ArrayRef) -> VortexResult<Option<ArraySerialization>> {
         let Some(plugin) = self.arrays().serializer(&array.encoding_id()) else {
             vortex_bail!(
-                Serde: "Array {} is not registered for serialization",
+                "Array {} is not registered for serialization",
                 array.encoding_id()
             );
         };
@@ -145,7 +145,7 @@ pub trait ArraySessionExt: SessionExt {
             plugin
                 .serialized_ids()
                 .contains(&serialization.serialized_id),
-            Serde: "array serializer {} produced undeclared serialized ID {}",
+            "array serializer {} produced undeclared serialized ID {}",
             array.encoding_id(),
             serialization.serialized_id,
         );

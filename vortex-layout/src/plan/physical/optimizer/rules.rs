@@ -106,12 +106,12 @@ impl PlanRuleSet {
                 vortex_ensure_eq!(
                     reduced.row_count(),
                     plan.row_count(),
-                    AssertionFailed: "Plan rewrite from {rule:?} changed row count"
+                    "Plan rewrite from {rule:?} changed row count"
                 );
                 vortex_ensure_eq!(
                     reduced.dtype(),
                     plan.dtype(),
-                    AssertionFailed: "Plan rewrite from {rule:?} changed dtype"
+                    "Plan rewrite from {rule:?} changed dtype"
                 );
             }
 
@@ -239,12 +239,12 @@ impl PlanParentRuleSet {
                 vortex_ensure_eq!(
                     reduced.row_count(),
                     parent.row_count(),
-                    AssertionFailed: "Plan rewrite from {rule:?} changed row count"
+                    "Plan rewrite from {rule:?} changed row count"
                 );
                 vortex_ensure_eq!(
                     reduced.dtype(),
                     parent.dtype(),
-                    AssertionFailed: "Plan rewrite from {rule:?} changed dtype"
+                    "Plan rewrite from {rule:?} changed dtype"
                 );
             }
 

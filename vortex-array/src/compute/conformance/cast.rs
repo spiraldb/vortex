@@ -172,7 +172,7 @@ fn test_cast_to_non_nullable(array: &ArrayRef, ctx: &mut ExecutionCtx) {
             .err()
             .unwrap_or_else(|| {
                 vortex_panic!(
-                    AssertionFailed: "arrays with nulls should error when casting to non-nullable {}",
+                    "arrays with nulls should error when casting to non-nullable {}",
                     array,
                 )
             });
@@ -273,7 +273,7 @@ fn test_cast_to_primitive(
         .err()
         .unwrap_or_else(|| {
             vortex_panic!(
-                AssertionFailed: "Cast must fail because some values are out of bounds. {} {:?} {:?} {} {}",
+                "Cast must fail because some values are out of bounds. {} {:?} {:?} {} {}",
                 target_ptype,
                 min,
                 max,

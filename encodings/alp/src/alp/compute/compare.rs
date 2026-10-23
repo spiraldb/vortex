@@ -45,7 +45,7 @@ impl CompareKernel for ALP {
         if let Some(const_scalar) = rhs.as_constant() {
             let pscalar = const_scalar.as_primitive_opt().ok_or_else(|| {
                 vortex_err!(
-                    InvalidArgument: "ALP Compare RHS had the wrong type {}, expected {}",
+                    "ALP Compare RHS had the wrong type {}, expected {}",
                     const_scalar,
                     const_scalar.dtype()
                 )
@@ -55,7 +55,7 @@ impl CompareKernel for ALP {
                 match pscalar.typed_value::<T>() {
                     Some(value) => return alp_scalar_compare(lhs, value, operator),
                     None => vortex_bail!(
-                        InvalidArgument: "Failed to convert scalar {:?} to ALP type {:?}",
+                        "Failed to convert scalar {:?} to ALP type {:?}",
                         pscalar,
                         pscalar.ptype()
                     ),

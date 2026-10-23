@@ -184,7 +184,7 @@ unsafe impl InputElement for FilterOnlyI64 {
         let values = <i64 as InputElement>::decode(array, ctx)?;
         vortex_ensure!(
             !values.as_slice().contains(&i64::MIN),
-            AssertionFailed: "test input contains an invalid payload",
+            "test input contains an invalid payload",
         );
 
         Ok(values)
@@ -192,7 +192,7 @@ unsafe impl InputElement for FilterOnlyI64 {
 
     fn decode_constant(array: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<Self::Constant> {
         let value = <i64 as InputElement>::decode_constant(array, ctx)?;
-        vortex_ensure!(value != i64::MIN, AssertionFailed: "test input contains an invalid payload",);
+        vortex_ensure!(value != i64::MIN, "test input contains an invalid payload",);
 
         Ok(value)
     }
@@ -347,7 +347,6 @@ impl RowFn for RepeatValue {
     ) -> VortexResult<V::VisitResult> {
         vortex_ensure!(
             u32::try_from(*width).is_ok(),
-            InvalidArgument:
             "test.repeat_value width must fit in the fixed-size-list u32 list size, got {width}",
         );
 
@@ -384,7 +383,7 @@ impl RowFn for DeferredAdd {
             |&(), (lhs, rhs)| lhs.overflowing_add(rhs),
             |overflowed| {
                 if overflowed {
-                    vortex_bail!(Overflow: "deferred addition overflowed");
+                    vortex_bail!("deferred addition overflowed");
                 }
 
                 Ok(())
@@ -459,7 +458,7 @@ impl RowFn for DenseRetryIncrement {
             |(value,)| value.overflowing_add(1),
             |overflowed| {
                 if overflowed {
-                    vortex_bail!(Overflow: "deferred increment overflowed");
+                    vortex_bail!("deferred increment overflowed");
                 }
 
                 Ok(())
@@ -487,7 +486,6 @@ impl RowFn for FilteredRepeat {
     ) -> VortexResult<V::VisitResult> {
         vortex_ensure!(
             u32::try_from(*width).is_ok(),
-            InvalidArgument:
             "test.filtered_repeat width must fit in u32, got {width}",
         );
 
@@ -563,8 +561,7 @@ fn test_fixed_size_list_sink_uses_runtime_width(
     let actual = execute_rows(&RepeatValue, &width, &args, &mut ctx)?;
     let expected = FixedSizeListArray::new(
         PrimitiveArray::from_iter(expected_elements).into_array(),
-        u32::try_from(width)
-            .map_err(|_| vortex_err!(InvalidArgument: "test width must fit in u32, got {width}"))?,
+        u32::try_from(width).map_err(|_| vortex_err!("test width must fit in u32, got {width}"))?,
         validity,
         row_count,
     )
@@ -637,7 +634,7 @@ impl<const MULTIVERSIONED: bool> RowFn for DeferredGreaterThan<MULTIVERSIONED> {
             |(lhs, rhs)| (lhs > rhs, lhs == i64::MIN),
             |failed| {
                 if failed {
-                    vortex_bail!(InvalidArgument: "deferred comparison failed");
+                    vortex_bail!("deferred comparison failed");
                 }
 
                 Ok(())
@@ -729,7 +726,7 @@ fn test_kernel_output_rejects_nulls_at_function_boundary() -> VortexResult<()> {
         Ok(output) => match output.execute::<PrimitiveArray>(&mut ctx) {
             Err(error) => error,
             Ok(_) => {
-                vortex_bail!(InvalidArgument: "an invalid row kernel output passed boundary validation")
+                vortex_bail!("an invalid row kernel output passed boundary validation")
             }
         },
     };
@@ -882,8 +879,7 @@ fn test_filtered_execution_preserves_runtime_sink_params(
     let actual = execute_rows(&FilteredRepeat, &width, &args, &mut ctx)?;
     let expected = FixedSizeListArray::new(
         PrimitiveArray::from_iter(expected_elements).into_array(),
-        u32::try_from(width)
-            .map_err(|_| vortex_err!(InvalidArgument: "test width must fit in u32, got {width}"))?,
+        u32::try_from(width).map_err(|_| vortex_err!("test width must fit in u32, got {width}"))?,
         validity,
         2,
     )
@@ -1032,7 +1028,7 @@ fn test_deferred_bool_output_reports_valid_row_failure() -> VortexResult<()> {
 
     let error = match execute_rows(&DeferredGreaterThan::<true>, &EmptyOptions, &args, &mut ctx) {
         Err(error) => error.to_string(),
-        Ok(_) => vortex_bail!(AssertionFailed: "a valid-row deferred failure was not reported"),
+        Ok(_) => vortex_bail!("a valid-row deferred failure was not reported"),
     };
 
     assert!(

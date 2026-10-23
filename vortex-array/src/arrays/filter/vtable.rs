@@ -82,7 +82,7 @@ impl VTable for Filter {
     ) -> VortexResult<()> {
         vortex_ensure!(
             slots[FilterSlots::CHILD].is_some(),
-            InvalidArgument: "FilterArray child slot must be present"
+            "FilterArray child slot must be present"
         );
         let child = slots[FilterSlots::CHILD]
             .as_ref()
@@ -90,17 +90,17 @@ impl VTable for Filter {
         vortex_ensure_eq!(
             child.dtype(),
             dtype,
-            MismatchedTypes: "FilterArray dtype does not match outer dtype",
+            "FilterArray dtype does not match outer dtype",
         );
         vortex_ensure_eq!(
             data.len(),
             len,
-            InvalidArgument: "FilterArray length does not match outer length",
+            "FilterArray length does not match outer length",
         );
         vortex_ensure_eq!(
             child.len(),
             data.mask.len(),
-            InvalidArgument: "FilterArray child length does not match mask length",
+            "FilterArray child length does not match mask length",
         );
         Ok(())
     }
@@ -110,7 +110,7 @@ impl VTable for Filter {
     }
 
     fn buffer(_array: ArrayView<'_, Self>, _idx: usize) -> BufferHandle {
-        vortex_panic!(OutOfBounds: "FilterArray has no buffers")
+        vortex_panic!("FilterArray has no buffers")
     }
 
     fn buffer_name(_array: ArrayView<'_, Self>, _idx: usize) -> Option<String> {
@@ -134,7 +134,7 @@ impl VTable for Filter {
         _session: &VortexSession,
     ) -> VortexResult<Option<Vec<u8>>> {
         // TODO(joe): make this configurable
-        vortex_bail!(Serde: "Filter array is not serializable")
+        vortex_bail!("Filter array is not serializable")
     }
 
     fn deserialize(
@@ -147,7 +147,7 @@ impl VTable for Filter {
         _children: &dyn ArrayChildren,
         _session: &VortexSession,
     ) -> VortexResult<ArrayParts<Self>> {
-        vortex_bail!(Serde: "Filter array is not serializable")
+        vortex_bail!("Filter array is not serializable")
     }
 
     fn execute(array: Array<Self>, ctx: &mut ExecutionCtx) -> VortexResult<ExecutionResult> {

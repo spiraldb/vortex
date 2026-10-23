@@ -32,7 +32,7 @@ pub(super) fn to_arrow_decimal(
 ) -> VortexResult<ArrowArrayRef> {
     vortex_ensure!(
         matches!(array.dtype(), DType::Decimal(..)),
-        MismatchedTypes: "Cannot convert Vortex array with dtype {} to an Arrow {} array",
+        "Cannot convert Vortex array with dtype {} to an Arrow {} array",
         array.dtype(),
         data_type
     );
@@ -68,27 +68,24 @@ fn to_arrow_decimal32(array: DecimalArray, ctx: &mut ExecutionCtx) -> VortexResu
             .buffer::<i64>()
             .into_iter()
             .map(|x| {
-                x.to_i32().ok_or_else(
-                    || vortex_err!(InvalidArgument: "i64 to i32 narrowing cannot be done safely"),
-                )
+                x.to_i32()
+                    .ok_or_else(|| vortex_err!("i64 to i32 narrowing cannot be done safely"))
             })
             .process_results(|iter| Buffer::from_trusted_len_iter(iter))?,
         DecimalType::I128 => array
             .buffer::<i128>()
             .into_iter()
             .map(|x| {
-                x.to_i32().ok_or_else(
-                    || vortex_err!(InvalidArgument: "i128 to i32 narrowing cannot be done safely"),
-                )
+                x.to_i32()
+                    .ok_or_else(|| vortex_err!("i128 to i32 narrowing cannot be done safely"))
             })
             .process_results(|iter| Buffer::from_trusted_len_iter(iter))?,
         DecimalType::I256 => array
             .buffer::<vortex_array::dtype::i256>()
             .into_iter()
             .map(|x| {
-                x.to_i32().ok_or_else(
-                    || vortex_err!(InvalidArgument: "i256 to i32 narrowing cannot be done safely"),
-                )
+                x.to_i32()
+                    .ok_or_else(|| vortex_err!("i256 to i32 narrowing cannot be done safely"))
             })
             .process_results(|iter| Buffer::from_trusted_len_iter(iter))?,
     };
@@ -123,18 +120,16 @@ fn to_arrow_decimal64(array: DecimalArray, ctx: &mut ExecutionCtx) -> VortexResu
             .buffer::<i128>()
             .into_iter()
             .map(|x| {
-                x.to_i64().ok_or_else(
-                    || vortex_err!(InvalidArgument: "i128 to i64 narrowing cannot be done safely"),
-                )
+                x.to_i64()
+                    .ok_or_else(|| vortex_err!("i128 to i64 narrowing cannot be done safely"))
             })
             .process_results(|iter| Buffer::from_trusted_len_iter(iter))?,
         DecimalType::I256 => array
             .buffer::<vortex_array::dtype::i256>()
             .into_iter()
             .map(|x| {
-                x.to_i64().ok_or_else(
-                    || vortex_err!(InvalidArgument: "i256 to i64 narrowing cannot be done safely"),
-                )
+                x.to_i64()
+                    .ok_or_else(|| vortex_err!("i256 to i64 narrowing cannot be done safely"))
             })
             .process_results(|iter| Buffer::from_trusted_len_iter(iter))?,
     };
@@ -172,9 +167,8 @@ fn to_arrow_decimal128(array: DecimalArray, ctx: &mut ExecutionCtx) -> VortexRes
             .buffer::<vortex_array::dtype::i256>()
             .into_iter()
             .map(|x| {
-                x.to_i128().ok_or_else(
-                    || vortex_err!(InvalidArgument: "i256 to i128 narrowing cannot be done safely"),
-                )
+                x.to_i128()
+                    .ok_or_else(|| vortex_err!("i256 to i128 narrowing cannot be done safely"))
             })
             .process_results(|iter| Buffer::from_trusted_len_iter(iter))?,
     };

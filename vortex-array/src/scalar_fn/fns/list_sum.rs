@@ -73,12 +73,12 @@ impl ScalarFnVTable for ListSum {
         let elem_dtype = match &arg_dtypes[0] {
             DType::List(elem, _) | DType::FixedSizeList(elem, ..) => elem.as_ref(),
             other => {
-                vortex_bail!(InvalidArgument: "list_sum() requires List or FixedSizeList, got {other}")
+                vortex_bail!("list_sum() requires List or FixedSizeList, got {other}")
             }
         };
-        SumV2.return_dtype(options, elem_dtype).ok_or_else(
-            || vortex_err!(MismatchedTypes: "list_sum() cannot sum elements of type {elem_dtype}"),
-        )
+        SumV2
+            .return_dtype(options, elem_dtype)
+            .ok_or_else(|| vortex_err!("list_sum() cannot sum elements of type {elem_dtype}"))
     }
 
     fn execute(
@@ -92,7 +92,7 @@ impl ScalarFnVTable for ListSum {
         let elem_dtype = match input.dtype() {
             DType::List(elem, _) | DType::FixedSizeList(elem, ..) => elem.as_ref().clone(),
             other => {
-                vortex_bail!(InvalidArgument: "list_sum() requires List or FixedSizeList, got {other}")
+                vortex_bail!("list_sum() requires List or FixedSizeList, got {other}")
             }
         };
 

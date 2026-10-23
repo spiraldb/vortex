@@ -100,10 +100,10 @@ pub(crate) fn multilinestring_storage_dtype(dim: Dimension, nullability: Nullabi
 /// Validate `dtype` is `List<List<coordinate-struct>>` and return its [`Dimension`].
 pub(crate) fn multilinestring_dimension(dtype: &DType) -> VortexResult<Dimension> {
     let DType::List(line, _) = dtype else {
-        vortex_bail!(MismatchedTypes: "multilinestring storage must be a List of line strings, was {dtype}");
+        vortex_bail!("multilinestring storage must be a List of line strings, was {dtype}");
     };
     let DType::List(coords, _) = line.as_ref() else {
-        vortex_bail!(MismatchedTypes: "multilinestring line storage must be a List of coordinates, was {line}");
+        vortex_bail!("multilinestring line storage must be a List of coordinates, was {line}");
     };
     coordinate_dimension(coords)
 }
@@ -127,10 +127,8 @@ pub(crate) fn multilinestring_geometries(
         .iter()
         .map(|geometry| -> VortexResult<Geometry<f64>> {
             Ok(geometry
-                .ok_or_else(
-                    || vortex_err!(InvalidArgument: "spatial: null geometry is not supported"),
-                )?
-                .map_err(|e| vortex_err!(Serde: "spatial: geometry access failed: {e}"))?
+                .ok_or_else(|| vortex_err!("spatial: null geometry is not supported"))?
+                .map_err(|e| vortex_err!("spatial: geometry access failed: {e}"))?
                 .to_geometry())
         })
         .collect()
@@ -148,7 +146,7 @@ fn multilinestring_array(
     let session = ctx.session().clone();
     let arrow = session.arrow().execute_arrow(storage.clone(), None, ctx)?;
     MultiLineStringArray::try_from((arrow.as_ref(), multilinestring_type))
-        .map_err(|e| vortex_err!(InvalidArgument: "failed to construct MultiLineStringArray: {e}"))
+        .map_err(|e| vortex_err!("failed to construct MultiLineStringArray: {e}"))
 }
 
 /// A validated `MultiLineString` array (`try_from` checks the extension type).
@@ -160,7 +158,7 @@ impl TryFrom<ExtensionArray> for MultiLineStringData {
     fn try_from(ext: ExtensionArray) -> Result<Self, Self::Error> {
         vortex_ensure!(
             ext.ext_dtype().is::<MultiLineString>(),
-            MismatchedTypes: "expected a MultiLineString extension array"
+            "expected a MultiLineString extension array"
         );
         Ok(MultiLineStringData(ext))
     }
@@ -239,13 +237,9 @@ impl ArrowExportVTable for MultiLineString {
                 .exporter(options)
                 .execute_arrow(storage, Some(&storage_field), ctx)?;
 
-        let multilinestrings = MultiLineStringArray::try_from((
-            arrow_storage.as_ref(),
-            multilinestring_meta,
-        ))
-        .map_err(
-            |e| vortex_err!(InvalidArgument: "failed to construct MultiLineStringArray: {e}"),
-        )?;
+        let multilinestrings =
+            MultiLineStringArray::try_from((arrow_storage.as_ref(), multilinestring_meta))
+                .map_err(|e| vortex_err!("failed to construct MultiLineStringArray: {e}"))?;
 
         Ok(ArrowExport::Exported(Arc::new(
             multilinestrings.into_arrow(),
@@ -265,40 +259,39 @@ impl ArrowImportVTable for MultiLineString {
         field: &Field,
         session: &ArrowSession,
     ) -> VortexResult<Option<DType>> {
-        let (dimension, metadata) = if let Ok(multilinestring_meta) =
-            field.try_extension_type::<MultiLineStringType>()
-        {
-            vortex_ensure!(
-                multilinestring_meta.coord_type() == CoordType::Separated,
-                NotImplemented: "geoarrow.multilinestring with interleaved coordinates is not supported; \
+        let (dimension, metadata) =
+            if let Ok(multilinestring_meta) = field.try_extension_type::<MultiLineStringType>() {
+                vortex_ensure!(
+                    multilinestring_meta.coord_type() == CoordType::Separated,
+                    "geoarrow.multilinestring with interleaved coordinates is not supported; \
              re-encode with separated (struct) coordinates"
-            );
-            (
-                multilinestring_meta.dimension().into(),
-                spatial_metadata_from_arrow(multilinestring_meta.metadata()),
-            )
-        } else {
-            // Literal: peel the two `List` layers to the coordinate struct and read its dimension
-            // from the field names (the canonical check rejects nullable coordinates).
-            if field.extension_type_name() != Some(MultiLineStringType::NAME) {
-                return Ok(None);
-            }
-            let Ok(DType::List(line, _)) =
-                session.from_arrow_datatype(field.data_type(), field.is_nullable().into())
-            else {
-                return Ok(None);
+                );
+                (
+                    multilinestring_meta.dimension().into(),
+                    spatial_metadata_from_arrow(multilinestring_meta.metadata()),
+                )
+            } else {
+                // Literal: peel the two `List` layers to the coordinate struct and read its dimension
+                // from the field names (the canonical check rejects nullable coordinates).
+                if field.extension_type_name() != Some(MultiLineStringType::NAME) {
+                    return Ok(None);
+                }
+                let Ok(DType::List(line, _)) =
+                    session.from_arrow_datatype(field.data_type(), field.is_nullable().into())
+                else {
+                    return Ok(None);
+                };
+                let DType::List(coords, _) = line.as_ref() else {
+                    return Ok(None);
+                };
+                let DType::Struct(fields, _) = coords.as_ref() else {
+                    return Ok(None);
+                };
+                let Ok(dimension) = Dimension::from_field_names(fields.names()) else {
+                    return Ok(None);
+                };
+                (dimension, SpatialMetadata::default())
             };
-            let DType::List(coords, _) = line.as_ref() else {
-                return Ok(None);
-            };
-            let DType::Struct(fields, _) = coords.as_ref() else {
-                return Ok(None);
-            };
-            let Ok(dimension) = Dimension::from_field_names(fields.names()) else {
-                return Ok(None);
-            };
-            (dimension, SpatialMetadata::default())
-        };
 
         let storage_dtype = multilinestring_storage_dtype(dimension, field.is_nullable().into());
         Ok(Some(DType::Extension(

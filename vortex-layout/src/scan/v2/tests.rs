@@ -595,10 +595,10 @@ async fn unordered_yields_before_the_split_finishes() -> VortexResult<()> {
         .await?;
     let blocked = *layout
         .slot(1)?
-        .ok_or_else(|| vortex_err!(AssertionFailed: "second chunk is missing"))?
+        .ok_or_else(|| vortex_err!("second chunk is missing"))?
         .segment_ids()
         .first()
-        .ok_or_else(|| vortex_err!(AssertionFailed: "second chunk has no segment"))?;
+        .ok_or_else(|| vortex_err!("second chunk has no segment"))?;
     let (release, gate) = oneshot::channel();
     let segments: Arc<dyn SegmentSource> = Arc::new(GatedSegments {
         inner: segments,
@@ -612,7 +612,7 @@ async fn unordered_yields_before_the_split_finishes() -> VortexResult<()> {
     let mut batches = scan.execute_stream()?;
     let first = batches.try_next().await;
     let _ = release.send(());
-    let first = first?.ok_or_else(|| vortex_err!(AssertionFailed: "first batch is missing"))?;
+    let first = first?.ok_or_else(|| vortex_err!("first batch is missing"))?;
     assert_arrays_eq!(
         first,
         PrimitiveArray::from_iter(0i32..i32::try_from(MAX_ROWS_PER_CHUNK)?),

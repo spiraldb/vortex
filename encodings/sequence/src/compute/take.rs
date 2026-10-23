@@ -48,7 +48,7 @@ fn take_inner<T: IntegerPType, O: SequenceValue>(
         AllOr::All => {
             if let Err(position) = indices.try_map_into(out, value_at) {
                 vortex_panic!(
-                    OutOfBounds: "index {} out of bounds from {} to {}",
+                    "index {} out of bounds from {} to {}",
                     indices[position].as_(),
                     0,
                     len
@@ -66,7 +66,7 @@ fn take_inner<T: IntegerPType, O: SequenceValue>(
         AllOr::Some(bits) => {
             if let Err(position) = indices.try_map_masked_into(bits, out, value_at) {
                 vortex_panic!(
-                    OutOfBounds: "index {} out of bounds from {} to {}",
+                    "index {} out of bounds from {} to {}",
                     indices[position].as_(),
                     0,
                     len

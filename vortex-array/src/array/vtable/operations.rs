@@ -85,7 +85,7 @@ impl<V: VTable> OperationsVTable<V> for NotSupported {
         _ctx: &mut ExecutionCtx,
     ) -> VortexResult<Scalar> {
         vortex_bail!(
-            InvalidArgument: "Legacy scalar_at operation is not supported for {} arrays",
+            "Legacy scalar_at operation is not supported for {} arrays",
             array.encoding_id()
         )
     }

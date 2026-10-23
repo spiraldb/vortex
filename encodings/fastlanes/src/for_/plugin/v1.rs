@@ -31,12 +31,12 @@ pub(super) fn deserialize(
 ) -> VortexResult<ArrayRef> {
     vortex_ensure!(
         parts.buffers.is_empty(),
-        InvalidArgument: "FoRArray expects 0 buffers, got {}",
+        "FoRArray expects 0 buffers, got {}",
         parts.buffers.len()
     );
     if parts.children.len() != 1 {
         vortex_bail!(
-            InvalidArgument: "Expected 1 child for FoR encoding, found {}",
+            "Expected 1 child for FoR encoding, found {}",
             parts.children.len()
         )
     }

@@ -93,7 +93,7 @@ fn take_with_piecewise_elements<I: IntegerPType, O: IntegerPType, OutOffset: Int
     let offsets_capacity = indices
         .len()
         .checked_add(1)
-        .ok_or_else(|| vortex_err!(Overflow: "List take offsets length overflow"))?;
+        .ok_or_else(|| vortex_err!("List take offsets length overflow"))?;
     let mut new_offsets = BufferMut::<OutOffset>::with_capacity(offsets_capacity);
     let mut element_starts = BufferMut::<u64>::with_capacity(indices.len());
     let mut element_lengths = BufferMut::<u64>::with_capacity(indices.len());
@@ -119,7 +119,7 @@ fn take_with_piecewise_elements<I: IntegerPType, O: IntegerPType, OutOffset: Int
 
         current_offset = current_offset
             .checked_add(length)
-            .ok_or_else(|| vortex_err!(Overflow: "List take output elements length overflow"))?;
+            .ok_or_else(|| vortex_err!("List take output elements length overflow"))?;
         new_offsets.push(new_offset_value::<OutOffset>(current_offset));
         element_starts.push(start as u64);
         element_lengths.push(length as u64);
@@ -324,13 +324,14 @@ where
     S: UnsignedPType,
     Offset: UnsignedPType,
 {
-    let computed_len = starts.len().checked_mul(length).ok_or_else(
-        || vortex_err!(Overflow: "PiecewiseSequenceArray output length overflows usize"),
-    )?;
+    let computed_len = starts
+        .len()
+        .checked_mul(length)
+        .ok_or_else(|| vortex_err!("PiecewiseSequenceArray output length overflows usize"))?;
     vortex_ensure_eq!(
         computed_len,
         output_len,
-        AssertionFailed: "PiecewiseSequenceArray expanded length does not match declared length",
+        "PiecewiseSequenceArray expanded length does not match declared length",
     );
     let all_valid = data_validity.all_true();
     let total_elements = if all_valid {
@@ -389,14 +390,14 @@ where
     let mut computed_len = 0usize;
     for &length in lengths {
         let length: usize = length.as_();
-        computed_len = computed_len.checked_add(length).ok_or_else(
-            || vortex_err!(Overflow: "PiecewiseSequenceArray output length overflows usize"),
-        )?;
+        computed_len = computed_len
+            .checked_add(length)
+            .ok_or_else(|| vortex_err!("PiecewiseSequenceArray output length overflows usize"))?;
     }
     vortex_ensure_eq!(
         computed_len,
         output_len,
-        AssertionFailed: "PiecewiseSequenceArray expanded length does not match declared length",
+        "PiecewiseSequenceArray expanded length does not match declared length",
     );
     let all_valid = data_validity.all_true();
     let total_elements = if all_valid {
@@ -471,7 +472,7 @@ where
         let element_end: usize = offset_range[length].as_();
         total = total
             .checked_add(element_end - element_start)
-            .ok_or_else(|| vortex_err!(Overflow: "List take output elements length overflow"))?;
+            .ok_or_else(|| vortex_err!("List take output elements length overflow"))?;
     }
     Ok(total)
 }
@@ -496,7 +497,7 @@ where
         let additional = valid_piece_elements_len(offsets, data_validity, start, length)?;
         total = total
             .checked_add(additional)
-            .ok_or_else(|| vortex_err!(Overflow: "List take output elements length overflow"))?;
+            .ok_or_else(|| vortex_err!("List take output elements length overflow"))?;
     }
     Ok(total)
 }
@@ -520,7 +521,7 @@ where
         let element_end: usize = offset_range[length].as_();
         total = total
             .checked_add(element_end - element_start)
-            .ok_or_else(|| vortex_err!(Overflow: "List take output elements length overflow"))?;
+            .ok_or_else(|| vortex_err!("List take output elements length overflow"))?;
     }
     Ok(total)
 }
@@ -543,7 +544,7 @@ where
         let additional = valid_piece_elements_len(offsets, data_validity, start, length)?;
         total = total
             .checked_add(additional)
-            .ok_or_else(|| vortex_err!(Overflow: "List take output elements length overflow"))?;
+            .ok_or_else(|| vortex_err!("List take output elements length overflow"))?;
     }
     Ok(total)
 }
@@ -567,7 +568,7 @@ where
         let element_end: usize = window[1].as_();
         total = total
             .checked_add(element_end - element_start)
-            .ok_or_else(|| vortex_err!(Overflow: "List take output elements length overflow"))?;
+            .ok_or_else(|| vortex_err!("List take output elements length overflow"))?;
     }
     Ok(total)
 }
@@ -587,7 +588,7 @@ where
 {
     let offsets_capacity = output_len
         .checked_add(1)
-        .ok_or_else(|| vortex_err!(Overflow: "List take offsets length overflow"))?;
+        .ok_or_else(|| vortex_err!("List take offsets length overflow"))?;
     let mut new_offsets = BufferMut::<OutOffset>::with_capacity(offsets_capacity);
     let mut element_starts = BufferMut::<u64>::with_capacity(starts.len());
     let mut element_lengths = BufferMut::<u64>::with_capacity(starts.len());
@@ -650,7 +651,7 @@ where
 {
     let offsets_capacity = output_len
         .checked_add(1)
-        .ok_or_else(|| vortex_err!(Overflow: "List take offsets length overflow"))?;
+        .ok_or_else(|| vortex_err!("List take offsets length overflow"))?;
     let mut gather = ValidPieceGather {
         new_offsets: BufferMut::<OutOffset>::with_capacity(offsets_capacity),
         element_starts: BufferMut::<u64>::with_capacity(output_len),
@@ -703,7 +704,7 @@ where
 {
     let offsets_capacity = output_len
         .checked_add(1)
-        .ok_or_else(|| vortex_err!(Overflow: "List take offsets length overflow"))?;
+        .ok_or_else(|| vortex_err!("List take offsets length overflow"))?;
     let mut new_offsets = BufferMut::<OutOffset>::with_capacity(offsets_capacity);
     let mut element_starts = BufferMut::<u64>::with_capacity(starts.len());
     let mut element_lengths = BufferMut::<u64>::with_capacity(lengths.len());
@@ -768,7 +769,7 @@ where
 {
     let offsets_capacity = output_len
         .checked_add(1)
-        .ok_or_else(|| vortex_err!(Overflow: "List take offsets length overflow"))?;
+        .ok_or_else(|| vortex_err!("List take offsets length overflow"))?;
     let mut gather = ValidPieceGather {
         new_offsets: BufferMut::<OutOffset>::with_capacity(offsets_capacity),
         element_starts: BufferMut::<u64>::with_capacity(output_len),

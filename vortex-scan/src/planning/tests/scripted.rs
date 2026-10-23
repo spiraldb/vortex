@@ -361,10 +361,8 @@ impl IoSource for RecordingIoSource {
                     Ok(IoResult::Bytes(BufferHandle::new_host(bytes.clone())))
                 }
                 Some(Canned::Size(size)) => Ok(IoResult::Size(*size)),
-                Some(Canned::Fail(message)) => Err(vortex_err!(Io: "{message}")),
-                None => {
-                    Err(vortex_err!(AssertionFailed: "no canned answer for {:?}", request.target))
-                }
+                Some(Canned::Fail(message)) => Err(vortex_err!("{message}")),
+                None => Err(vortex_err!("no canned answer for {:?}", request.target)),
             };
             self.ready.lock().push(Completion {
                 owner: work,
@@ -401,9 +399,7 @@ impl IoSource for RecordingIoSource {
             Order::Fifo => None,
             Order::Lifo => ready.pop(),
         };
-        completion.ok_or_else(
-            || vortex_err!(AssertionFailed: "RecordingIoSource: wait with nothing outstanding"),
-        )
+        completion.ok_or_else(|| vortex_err!("RecordingIoSource: wait with nothing outstanding"))
     }
 }
 

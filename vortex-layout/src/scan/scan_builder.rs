@@ -664,7 +664,7 @@ mod test {
             _expr: &BoundExpression,
             _mask: Mask,
         ) -> VortexResult<MaskFuture> {
-            vortex_bail!(NotImplemented: "not needed for this test");
+            vortex_bail!("not needed for this test");
         }
 
         fn filter_evaluation(
@@ -673,7 +673,7 @@ mod test {
             _expr: &BoundExpression,
             _mask: MaskFuture,
         ) -> VortexResult<MaskFuture> {
-            vortex_bail!(NotImplemented: "not needed for this test");
+            vortex_bail!("not needed for this test");
         }
 
         fn projection_evaluation(
@@ -792,22 +792,20 @@ mod test {
             _mask: MaskFuture,
         ) -> VortexResult<ArrayFuture> {
             if let Some(blocking_projection) = &self.blocking_projection {
-                blocking_projection.started.send(()).map_err(
-                    |_| vortex_err!(AssertionFailed: "test projection-start receiver dropped"),
-                )?;
+                blocking_projection
+                    .started
+                    .send(())
+                    .map_err(|_| vortex_err!("test projection-start receiver dropped"))?;
                 let _guard = blocking_projection.gate.lock();
             }
 
             let start = usize::try_from(row_range.start)
-                .map_err(|_| vortex_err!(Overflow: "row_range.start must fit in usize"))?;
+                .map_err(|_| vortex_err!("row_range.start must fit in usize"))?;
             let end = usize::try_from(row_range.end)
-                .map_err(|_| vortex_err!(Overflow: "row_range.end must fit in usize"))?;
+                .map_err(|_| vortex_err!("row_range.end must fit in usize"))?;
 
             let values: VortexResult<Vec<i32>> = (start..end)
-                .map(|v| {
-                    i32::try_from(v)
-                        .map_err(|_| vortex_err!(Overflow: "split value must fit in i32"))
-                })
+                .map(|v| i32::try_from(v).map_err(|_| vortex_err!("split value must fit in i32")))
                 .collect();
 
             let array = PrimitiveArray::from_iter(values?).into_array();
@@ -923,9 +921,8 @@ mod test {
             poll_result.is_ok_and(|poll_pending| poll_pending),
             "first poll must return while scan task construction is blocked"
         );
-        projection_started.map_err(
-            |_| vortex_err!(AssertionFailed: "stream construction did not begin in the background"),
-        )?;
+        projection_started
+            .map_err(|_| vortex_err!("stream construction did not begin in the background"))?;
         assert_eq!(calls.load(Ordering::Relaxed), 1);
 
         Ok(())
@@ -1244,7 +1241,7 @@ mod test {
             _expr: &BoundExpression,
             _mask: Mask,
         ) -> VortexResult<MaskFuture> {
-            vortex_bail!(NotImplemented: "not needed for this test");
+            vortex_bail!("not needed for this test");
         }
 
         fn filter_evaluation(
@@ -1253,7 +1250,7 @@ mod test {
             _expr: &BoundExpression,
             _mask: MaskFuture,
         ) -> VortexResult<MaskFuture> {
-            vortex_bail!(NotImplemented: "not needed for this test");
+            vortex_bail!("not needed for this test");
         }
 
         fn projection_evaluation(

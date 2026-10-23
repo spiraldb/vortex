@@ -128,7 +128,7 @@ impl ArrayBuilder for BoolBuilder {
         vortex_ensure_eq!(
             scalar.dtype(),
             self.dtype(),
-            MismatchedTypes: "BoolBuilder received a scalar with the wrong dtype"
+            "BoolBuilder received a scalar with the wrong dtype"
         );
 
         match scalar.as_bool().value() {

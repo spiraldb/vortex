@@ -7,8 +7,6 @@ use std::panic::catch_unwind;
 use std::ptr;
 use std::sync::Arc;
 
-use vortex::error::VortexError;
-use vortex::error::VortexErrorKind;
 use vortex::error::VortexResult;
 
 use crate::box_wrapper;
@@ -18,45 +16,12 @@ use crate::string::vx_view;
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum vx_error_code {
-    /// All other errors
+    /// An error returned by Vortex
     VX_ERROR_CODE_OTHER = 0,
-    /// Index out of bounds
-    VX_ERROR_CODE_OUT_OF_BOUNDS = 1,
-    // 2 is retired. It was VX_ERROR_CODE_COMPUTE, which classified an error by the code it came
-    // from rather than by what went wrong. Leaving the value unused keeps every code below stable.
-    /// An invalid argument was provided.
-    VX_ERROR_CODE_INVALID_ARGUMENT = 3,
-    /// Serialization/deserialization error
-    VX_ERROR_CODE_SERIALIZATION = 4,
-    /// Unimplemented function
-    VX_ERROR_CODE_NOT_IMPLEMENTED = 5,
-    /// Type mismatch
-    VX_ERROR_CODE_MISMATCHED_TYPES = 6,
-    /// Assertion failed
-    VX_ERROR_CODE_ASSERTION_FAILED = 7,
-    /// An IO operation, or a call into the operating system or a device driver, failed
-    VX_ERROR_CODE_IO = 8,
+    // 1 to 8, 10 and 11 are retired. They classified Vortex errors, which no longer carry a
+    // classification. Leaving them unused keeps VX_ERROR_CODE_PANIC stable.
     /// Panic inside FFI
     VX_ERROR_CODE_PANIC = 9,
-    /// A name was looked up and nothing was bound to it
-    VX_ERROR_CODE_NOT_FOUND = 10,
-    /// A numeric value does not fit its target type
-    VX_ERROR_CODE_OVERFLOW = 11,
-}
-
-fn error_code(error: &VortexError) -> vx_error_code {
-    match error.kind() {
-        VortexErrorKind::OutOfBounds => vx_error_code::VX_ERROR_CODE_OUT_OF_BOUNDS,
-        VortexErrorKind::NotFound => vx_error_code::VX_ERROR_CODE_NOT_FOUND,
-        VortexErrorKind::Overflow => vx_error_code::VX_ERROR_CODE_OVERFLOW,
-        VortexErrorKind::InvalidArgument => vx_error_code::VX_ERROR_CODE_INVALID_ARGUMENT,
-        VortexErrorKind::Serde => vx_error_code::VX_ERROR_CODE_SERIALIZATION,
-        VortexErrorKind::NotImplemented => vx_error_code::VX_ERROR_CODE_NOT_IMPLEMENTED,
-        VortexErrorKind::MismatchedTypes => vx_error_code::VX_ERROR_CODE_MISMATCHED_TYPES,
-        VortexErrorKind::AssertionFailed => vx_error_code::VX_ERROR_CODE_ASSERTION_FAILED,
-        VortexErrorKind::Io => vx_error_code::VX_ERROR_CODE_IO,
-        _ => vx_error_code::VX_ERROR_CODE_OTHER,
-    }
 }
 
 pub(crate) struct VortexFFIError {
@@ -120,7 +85,7 @@ pub fn try_or_default<T: Default>(
             value
         }
         Ok(Err(err)) => {
-            write_error_with_code(error_out, &err.to_string(), error_code(&err));
+            write_error(error_out, &err.to_string());
             T::default()
         }
         Err(payload) => {
@@ -149,7 +114,7 @@ pub fn try_or<T>(
             value
         }
         Ok(Err(err)) => {
-            write_error_with_code(error_out, &err.to_string(), error_code(&err));
+            write_error(error_out, &err.to_string());
             error_value
         }
         Err(payload) => {
@@ -192,17 +157,14 @@ mod tests {
     fn test_try_or_null_error_out() {
         // A null error_out must be tolerated on both the success and failure paths.
         assert_eq!(try_or(ptr::null_mut(), -1, || Ok(42)), 42);
-        assert_eq!(
-            try_or(ptr::null_mut(), -1, || Err(vortex_err!(Other: "boom"))),
-            -1
-        );
+        assert_eq!(try_or(ptr::null_mut(), -1, || Err(vortex_err!("boom"))), -1);
     }
 
     #[test]
     fn test_try_or_default_null_error_out() {
         assert_eq!(try_or_default(ptr::null_mut(), || Ok(42)), 42);
         assert_eq!(
-            try_or_default::<i32>(ptr::null_mut(), || Err(vortex_err!(Other: "boom"))),
+            try_or_default::<i32>(ptr::null_mut(), || Err(vortex_err!("boom"))),
             0
         );
     }
@@ -211,10 +173,7 @@ mod tests {
     fn test_try_or_writes_and_clears_error_out() {
         let mut error: *mut vx_error = ptr::null_mut();
 
-        assert_eq!(
-            try_or(&raw mut error, -1, || Err(vortex_err!(Other: "boom"))),
-            -1
-        );
+        assert_eq!(try_or(&raw mut error, -1, || Err(vortex_err!("boom"))), -1);
         assert!(!error.is_null());
         unsafe { vx_error_free(error) };
 
@@ -242,12 +201,16 @@ mod tests {
 
         assert_eq!(
             try_or(&raw mut error, -1, || Err::<i32, _>(vortex_err!(
-                OutOfBounds: "index {} out of bounds from {} to {}", 5, 0, 3))),
+                "index {} out of bounds from {} to {}",
+                5,
+                0,
+                3
+            ))),
             -1
         );
         assert_eq!(
             unsafe { vx_error_get_code(error) },
-            vx_error_code::VX_ERROR_CODE_OUT_OF_BOUNDS
+            vx_error_code::VX_ERROR_CODE_OTHER
         );
         unsafe { vx_error_free(error) };
 

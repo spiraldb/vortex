@@ -60,7 +60,7 @@ impl RLEData {
     pub fn try_new(offset: usize) -> VortexResult<Self> {
         vortex_ensure!(
             offset < 1024,
-            InvalidArgument: "Offset must be smaller than 1024, got {}",
+            "Offset must be smaller than 1024, got {}",
             offset
         );
         Ok(Self { offset })

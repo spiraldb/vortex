@@ -327,7 +327,6 @@ impl PrimitiveData {
             && buffer.len() != len
         {
             return Err(vortex_err!(
-                InvalidArgument:
                 "Buffer and validity length mismatch: buffer={}, validity={}",
                 buffer.len(),
                 len
@@ -531,7 +530,7 @@ impl PrimitiveData {
     pub fn to_buffer<T: NativePType>(&self) -> Buffer<T> {
         if T::PTYPE != self.ptype() {
             vortex_panic!(
-                MismatchedTypes: "Attempted to get buffer of type {} from array of type {}",
+                "Attempted to get buffer of type {} from array of type {}",
                 T::PTYPE,
                 self.ptype()
             )
@@ -543,7 +542,7 @@ impl PrimitiveData {
     pub fn into_buffer<T: NativePType>(self) -> Buffer<T> {
         if T::PTYPE != self.ptype() {
             vortex_panic!(
-                MismatchedTypes: "Attempted to get buffer of type {} from array of type {}",
+                "Attempted to get buffer of type {} from array of type {}",
                 T::PTYPE,
                 self.ptype()
             )
@@ -565,7 +564,7 @@ impl PrimitiveData {
     pub fn try_into_buffer_mut<T: NativePType>(self) -> Result<BufferMut<T>, Buffer<T>> {
         if T::PTYPE != self.ptype() {
             vortex_panic!(
-                MismatchedTypes: "Attempted to get buffer_mut of type {} from array of type {}",
+                "Attempted to get buffer_mut of type {} from array of type {}",
                 T::PTYPE,
                 self.ptype()
             )

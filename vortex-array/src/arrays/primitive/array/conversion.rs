@@ -43,7 +43,7 @@ impl PrimitiveArray {
     pub fn to_buffer<T: NativePType>(&self) -> Buffer<T> {
         if T::PTYPE != self.ptype() {
             vortex_panic!(
-                MismatchedTypes: "Attempted to get buffer of type {} from array of type {}",
+                "Attempted to get buffer of type {} from array of type {}",
                 T::PTYPE,
                 self.ptype()
             )

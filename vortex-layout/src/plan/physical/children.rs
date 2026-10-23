@@ -58,9 +58,10 @@ impl PlanChildren {
             return Ok(Some(child));
         }
 
-        let initializer = self.initializer.as_ref().ok_or_else(
-            || vortex_err!(AssertionFailed: "Plan child {index} was not initialized"),
-        )?;
+        let initializer = self
+            .initializer
+            .as_ref()
+            .ok_or_else(|| vortex_err!("Plan child {index} was not initialized"))?;
         Ok(Some(cell.get_or_try_init(|| initializer(index))?))
     }
 
@@ -68,7 +69,7 @@ impl PlanChildren {
     pub fn iter(&self) -> impl ExactSizeIterator<Item = VortexResult<PlanRef>> + '_ {
         (0..self.len()).map(|index| {
             self.get(index)?
-                .ok_or_else(|| vortex_err!(AssertionFailed: "Plan child {index} is absent"))
+                .ok_or_else(|| vortex_err!("Plan child {index} is absent"))
         })
     }
 
@@ -76,7 +77,7 @@ impl PlanChildren {
     pub(crate) fn iter_refs(&self) -> impl ExactSizeIterator<Item = VortexResult<&PlanRef>> + '_ {
         (0..self.len()).map(|index| {
             self.get_ref(index)?
-                .ok_or_else(|| vortex_err!(AssertionFailed: "Plan child {index} is absent"))
+                .ok_or_else(|| vortex_err!("Plan child {index} is absent"))
         })
     }
 

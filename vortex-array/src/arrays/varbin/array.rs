@@ -236,21 +236,21 @@ impl VarBinData {
         // Check offsets are non-nullable integer
         vortex_ensure!(
             offsets.dtype().is_int() && !offsets.dtype().is_nullable(),
-            MismatchedTypes: "expected type: non nullable int but instead got {}",
+            "expected type: non nullable int but instead got {}",
             offsets.dtype()
         );
 
         // Check dtype is Binary or Utf8
         vortex_ensure!(
             matches!(dtype, DType::Binary(_) | DType::Utf8(_)),
-            MismatchedTypes: "expected type: utf8 or binary but instead got {}",
+            "expected type: utf8 or binary but instead got {}",
             dtype
         );
 
         // Check nullability matches
         vortex_ensure!(
             dtype.is_nullable() != matches!(validity, Validity::NonNullable),
-            InvalidArgument: "incorrect validity {:?} for dtype {}",
+            "incorrect validity {:?} for dtype {}",
             validity,
             dtype
         );
@@ -258,7 +258,7 @@ impl VarBinData {
         // Check offsets has at least one element
         vortex_ensure!(
             !offsets.is_empty(),
-            InvalidArgument: "Offsets must have at least one element"
+            "Offsets must have at least one element"
         );
 
         // Check validity length
@@ -266,7 +266,7 @@ impl VarBinData {
             vortex_ensure_eq!(
                 validity_len,
                 offsets.len() - 1,
-                InvalidArgument: "Validity length doesn't match array length",
+                "Validity length doesn't match array length",
             );
         }
 
@@ -293,15 +293,15 @@ impl VarBinData {
     ) -> VortexResult<()> {
         // Offsets must be sorted (but not strictly sorted, empty values are allowed)
         let Some(is_sorted) = offsets.statistics().compute_is_sorted(ctx) else {
-            vortex_bail!(InvalidArgument: "offsets must report is_sorted statistic");
+            vortex_bail!("offsets must report is_sorted statistic");
         };
-        vortex_ensure!(is_sorted, InvalidArgument: "offsets must be sorted");
+        vortex_ensure!(is_sorted, "offsets must be sorted");
 
         // Validate that offsets min is non-negative, and max does not exceed the length of
         // the bytes buffer.
         let Some(min_max) = min_max(offsets, ctx, NumericalAggregateOpts::default())? else {
             vortex_bail!(
-                InvalidArgument: "offsets array with encoding {} must support min_max compute function",
+                "offsets array with encoding {} must support min_max compute function",
                 offsets.encoding_id()
             );
         };
@@ -322,13 +322,13 @@ impl VarBinData {
 
                 vortex_ensure!(
                     min >= 0,
-                    InvalidArgument: "offsets minimum {min} outside valid range [0, {max}]"
+                    "offsets minimum {min} outside valid range [0, {max}]"
                 );
 
                 // An offset type too narrow for the bytes length cannot exceed it.
                 vortex_ensure!(
                     P::try_from(bytes_len).ok().is_none_or(|len| max <= len),
-                    InvalidArgument: "Max offset {max} is beyond the length of the bytes buffer {bytes_len}"
+                    "Max offset {max} is beyond the length of the bytes buffer {bytes_len}"
                 );
             }
         });
@@ -346,7 +346,7 @@ impl VarBinData {
         let validate_at = |i: usize, start: usize, end: usize| -> VortexResult<()> {
             let string_bytes = bytes.get(start..end).ok_or_else(|| {
                 vortex_err!(
-                    InvalidArgument: "offsets {start}..{end} at index {i} are out of order or out of bounds for bytes of length {}",
+                    "offsets {start}..{end} at index {i} are out of order or out of bounds for bytes of length {}",
                     bytes.len()
                 )
             })?;
@@ -354,7 +354,7 @@ impl VarBinData {
                 #[expect(clippy::unwrap_used)]
                 // run validation using `compat` package to get more detailed error message
                 let err = simdutf8::compat::from_utf8(string_bytes).unwrap_err();
-                vortex_err!(InvalidArgument: "invalid utf-8: {err} at index {i}")
+                vortex_err!("invalid utf-8: {err} at index {i}")
             })?;
             Ok(())
         };
@@ -379,7 +379,7 @@ impl VarBinData {
             let last_offset: usize = offsets_slice[offsets_slice.len() - 1].as_();
             vortex_ensure!(
                 last_offset <= bytes.len(),
-                InvalidArgument: "Last offset {} exceeds bytes length {}",
+                "Last offset {} exceeds bytes length {}",
                 last_offset,
                 bytes.len()
             );

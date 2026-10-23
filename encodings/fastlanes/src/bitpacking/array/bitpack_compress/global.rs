@@ -58,7 +58,7 @@ pub fn bitpack_encode(
     if bit_width >= array.ptype().bit_width() as u8 {
         // Nothing we can do
         vortex_bail!(
-            InvalidArgument: "Cannot pack - specified bit width {bit_width} >= {}",
+            "Cannot pack - specified bit width {bit_width} >= {}",
             array.ptype().bit_width()
         )
     }
@@ -353,7 +353,7 @@ pub fn find_best_bit_width(ptype: PType, bit_width_freq: &[usize]) -> VortexResu
 )]
 fn best_bit_width(bit_width_freq: &[usize], bytes_per_exception: usize) -> VortexResult<u8> {
     if bit_width_freq.len() > u8::MAX as usize {
-        vortex_bail!(Overflow: "Too many bit widths");
+        vortex_bail!("Too many bit widths");
     }
 
     let len: usize = bit_width_freq.iter().sum();
@@ -434,7 +434,6 @@ mod test {
     use vortex_array::builders::ArrayBuilder;
     use vortex_array::builders::PrimitiveBuilder;
     use vortex_buffer::Buffer;
-    use vortex_error::VortexErrorKind;
     use vortex_error::vortex_err;
     use vortex_session::VortexSession;
 
@@ -493,8 +492,12 @@ mod test {
         assert!(array.ptype().is_signed_int());
 
         let err = BitPackedData::encode(&array.into_array(), 1024u32.ilog2() as u8, &mut ctx)
-            .unwrap_err();
-        assert_eq!(err.kind(), VortexErrorKind::InvalidArgument);
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("cannot bitpack array containing negative integers"),
+            "{err}"
+        );
     }
 
     #[test]
@@ -536,11 +539,11 @@ mod test {
 
         let patches = bitpacked
             .patches()
-            .ok_or_else(|| vortex_err!(InvalidArgument: "expected patches"))?;
+            .ok_or_else(|| vortex_err!("expected patches"))?;
         let chunk_offsets = patches
             .chunk_offsets()
             .as_ref()
-            .ok_or_else(|| vortex_err!(InvalidArgument: "expected chunk offsets"))?
+            .ok_or_else(|| vortex_err!("expected chunk offsets"))?
             .clone();
 
         // chunk 0 (0-1023): patches at 100, 200 -> starts at patch index 0
@@ -571,11 +574,11 @@ mod test {
 
         let patches = bitpacked
             .patches()
-            .ok_or_else(|| vortex_err!(InvalidArgument: "expected patches"))?;
+            .ok_or_else(|| vortex_err!("expected patches"))?;
         let chunk_offsets = patches
             .chunk_offsets()
             .as_ref()
-            .ok_or_else(|| vortex_err!(InvalidArgument: "expected chunk offsets"))?
+            .ok_or_else(|| vortex_err!("expected chunk offsets"))?
             .clone();
 
         assert_arrays_eq!(
@@ -602,11 +605,11 @@ mod test {
 
         let patches = bitpacked
             .patches()
-            .ok_or_else(|| vortex_err!(InvalidArgument: "expected patches"))?;
+            .ok_or_else(|| vortex_err!("expected patches"))?;
         let chunk_offsets = patches
             .chunk_offsets()
             .as_ref()
-            .ok_or_else(|| vortex_err!(InvalidArgument: "expected chunk offsets"))?
+            .ok_or_else(|| vortex_err!("expected chunk offsets"))?
             .clone();
 
         // chunk 0 (0-1023): patches at 100, 200 -> starts at patch index 0
@@ -638,11 +641,11 @@ mod test {
 
         let patches = bitpacked
             .patches()
-            .ok_or_else(|| vortex_err!(InvalidArgument: "expected patches"))?;
+            .ok_or_else(|| vortex_err!("expected patches"))?;
         let chunk_offsets = patches
             .chunk_offsets()
             .as_ref()
-            .ok_or_else(|| vortex_err!(InvalidArgument: "expected chunk offsets"))?
+            .ok_or_else(|| vortex_err!("expected chunk offsets"))?
             .clone();
 
         // Single chunk starting at patch index 0.

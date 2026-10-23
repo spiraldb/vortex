@@ -123,7 +123,7 @@ impl<'a> DecimalScalar<'a> {
                 }
             }
             _ => vortex_bail!(
-                MismatchedTypes: "Cannot cast decimal to {dtype}: decimal scalars can only be cast to decimal or primitive numeric types"
+                "Cannot cast decimal to {dtype}: decimal scalars can only be cast to decimal or primitive numeric types"
             ),
         }
     }
@@ -163,7 +163,7 @@ impl<'a> DecimalScalar<'a> {
         // We could have ops between different types but need to add rules for type inference.
         if self.decimal_type != other.decimal_type {
             vortex_bail!(
-                MismatchedTypes: "decimal types must match: {} vs {}",
+                "decimal types must match: {} vs {}",
                 self.decimal_type,
                 other.decimal_type
             );

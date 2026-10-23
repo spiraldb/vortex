@@ -93,7 +93,7 @@ impl Interleave {
     ) -> VortexResult<DType> {
         vortex_ensure!(
             values.len() >= 2,
-            InvalidArgument: "interleave requires at least 2 values, got {}",
+            "interleave requires at least 2 values, got {}",
             values.len()
         );
 
@@ -107,12 +107,12 @@ impl Interleave {
                 DType::Primitive(ptype, nullability) if ptype.is_unsigned_int() => {
                     vortex_ensure!(
                         !nullability.is_nullable(),
-                        InvalidArgument: "interleave {name} must be non-nullable, got {}",
+                        "interleave {name} must be non-nullable, got {}",
                         selector.dtype()
                     );
                 }
                 other => vortex_bail!(
-                    InvalidArgument: "interleave {name} must be a non-nullable unsigned integer, got {other}"
+                    "interleave {name} must be a non-nullable unsigned integer, got {other}"
                 ),
             }
         }
@@ -120,7 +120,7 @@ impl Interleave {
         vortex_ensure_eq!(
             array_indices.len(),
             row_indices.len(),
-            InvalidArgument: "interleave selectors must have equal length",
+            "interleave selectors must have equal length",
         );
 
         let base_dtype = values[0].dtype();
@@ -128,7 +128,7 @@ impl Interleave {
         for value in values {
             vortex_ensure!(
                 value.dtype().eq_ignore_nullability(base_dtype),
-                MismatchedTypes: "interleave values must share a dtype up to nullability: {} vs {}",
+                "interleave values must share a dtype up to nullability: {} vs {}",
                 base_dtype,
                 value.dtype()
             );
@@ -159,11 +159,11 @@ impl VTable for Interleave {
         vortex_ensure_eq!(
             slots.len(),
             data.num_values + InterleaveSlots::FIXED_COUNT,
-            InvalidArgument: "InterleaveArray expects values + array_indices + row_indices slots",
+            "InterleaveArray expects values + array_indices + row_indices slots",
         );
         vortex_ensure!(
             slots.iter().all(|s| s.is_some()),
-            InvalidArgument: "InterleaveArray slots must all be present"
+            "InterleaveArray slots must all be present"
         );
 
         let array_indices = slots[InterleaveSlots::ARRAY_INDICES]
@@ -183,12 +183,12 @@ impl VTable for Interleave {
         vortex_ensure_eq!(
             dtype,
             &expected_dtype,
-            MismatchedTypes: "InterleaveArray dtype does not match the dtype implied by its children",
+            "InterleaveArray dtype does not match the dtype implied by its children",
         );
         vortex_ensure_eq!(
             len,
             array_indices.len(),
-            InvalidArgument: "InterleaveArray length does not match array_indices length",
+            "InterleaveArray length does not match array_indices length",
         );
         Ok(())
     }
@@ -198,7 +198,7 @@ impl VTable for Interleave {
     }
 
     fn buffer(_array: ArrayView<'_, Self>, _idx: usize) -> BufferHandle {
-        vortex_panic!(OutOfBounds: "InterleaveArray has no buffers")
+        vortex_panic!("InterleaveArray has no buffers")
     }
 
     fn buffer_name(_array: ArrayView<'_, Self>, _idx: usize) -> Option<String> {
@@ -221,7 +221,7 @@ impl VTable for Interleave {
         _array: ArrayView<'_, Self>,
         _session: &VortexSession,
     ) -> VortexResult<Option<Vec<u8>>> {
-        vortex_bail!(Serde: "Interleave array is not serializable")
+        vortex_bail!("Interleave array is not serializable")
     }
 
     fn deserialize(
@@ -233,7 +233,7 @@ impl VTable for Interleave {
         _children: &dyn ArrayChildren,
         _session: &VortexSession,
     ) -> VortexResult<ArrayParts<Self>> {
-        vortex_bail!(Serde: "Interleave array is not serializable")
+        vortex_bail!("Interleave array is not serializable")
     }
 
     fn execute(array: Array<Self>, ctx: &mut ExecutionCtx) -> VortexResult<ExecutionResult> {

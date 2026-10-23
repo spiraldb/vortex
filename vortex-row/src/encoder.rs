@@ -93,13 +93,13 @@ impl RowEncoder {
     /// [`encode`](Self::encode) and [`row_sizes`](Self::row_sizes).
     fn prepare(&self, cols: &[ArrayRef]) -> VortexResult<(RowEncodingOptions, VecExecutionArgs)> {
         if cols.is_empty() {
-            vortex_bail!(InvalidArgument: "RowEncoder: at least one column is required");
+            vortex_bail!("RowEncoder: at least one column is required");
         }
         let options = match &self.options {
             Some(options) => {
                 if options.len() != cols.len() {
                     vortex_bail!(
-                        InvalidArgument: "RowEncoder: options describe {} columns but {} were provided",
+                        "RowEncoder: options describe {} columns but {} were provided",
                         options.len(),
                         cols.len()
                     );
@@ -113,7 +113,7 @@ impl RowEncoder {
             reject_extension_dtype(col.dtype())?;
             if col.len() != nrows {
                 vortex_bail!(
-                    InvalidArgument: "RowEncoder: column {} has length {} but expected {}",
+                    "RowEncoder: column {} has length {} but expected {}",
                     i,
                     col.len(),
                     nrows
@@ -128,7 +128,7 @@ fn reject_extension_dtype(dtype: &DType) -> VortexResult<()> {
     match dtype {
         DType::Extension(ext_dtype) => {
             vortex_bail!(
-                InvalidArgument: "row encoding does not support Extension arrays yet: {}",
+                "row encoding does not support Extension arrays yet: {}",
                 ext_dtype.id()
             )
         }

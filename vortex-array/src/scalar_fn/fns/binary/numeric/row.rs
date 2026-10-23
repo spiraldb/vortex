@@ -69,9 +69,10 @@ impl RowFn for NumericBinary {
         args: &[DType],
         visitor: V,
     ) -> VortexResult<V::VisitResult> {
-        let ptype = PType::try_from(args.first().ok_or_else(
-            || vortex_err!(InvalidArgument: "a numeric operator takes two operands, got none"),
-        )?)?;
+        let ptype = PType::try_from(
+            args.first()
+                .ok_or_else(|| vortex_err!("a numeric operator takes two operands, got none"))?,
+        )?;
 
         match_each_native_ptype!(ptype, |T| {
             match op {
@@ -130,5 +131,5 @@ where
 #[cold]
 #[inline(never)]
 fn numeric_error(message: &'static str) -> VortexError {
-    vortex_err!(InvalidArgument: "{message}")
+    vortex_err!("{message}")
 }

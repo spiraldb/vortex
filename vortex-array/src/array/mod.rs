@@ -306,10 +306,10 @@ impl<V: VTable> DynArrayData for ArrayData<V> {
             let view = unsafe { ArrayView::new_unchecked(this, &self.data) };
             let validity = <V::ValidityVTable as ValidityVTable<V>>::validity(view)?;
             if let Validity::Array(array) = &validity {
-                vortex_ensure_eq!(array.len(), this.len(), InvalidArgument: "Validity array length mismatch");
+                vortex_ensure_eq!(array.len(), this.len(), "Validity array length mismatch");
                 vortex_ensure!(
                     matches!(array.dtype(), DType::Bool(Nullability::NonNullable)),
-                    MismatchedTypes: "Validity array is not non-nullable boolean: {}",
+                    "Validity array is not non-nullable boolean: {}",
                     this.encoding_id(),
                 );
             }
@@ -327,7 +327,7 @@ impl<V: VTable> DynArrayData for ArrayData<V> {
     ) -> VortexResult<()> {
         if builder.dtype() != this.dtype() {
             vortex_panic!(
-                MismatchedTypes: "Builder dtype mismatch: expected {}, got {}",
+                "Builder dtype mismatch: expected {}, got {}",
                 this.dtype(),
                 builder.dtype(),
             );
@@ -452,7 +452,7 @@ impl<V: VTable> DynArrayData for ArrayData<V> {
         vortex_ensure_eq!(
             reduced.len(),
             this.len(),
-            AssertionFailed: "Reduced array length mismatch from {} to {}",
+            "Reduced array length mismatch from {} to {}",
             this.encoding_id(),
             reduced.encoding_id()
         );
@@ -461,7 +461,7 @@ impl<V: VTable> DynArrayData for ArrayData<V> {
             reduced.dtype() == this.dtype()
                 || (reduced.dtype().eq_ignore_nullability(this.dtype())
                     && !reduced.dtype().is_nullable()),
-            AssertionFailed: "Reduced array dtype mismatch from {} ({}) to {} ({})",
+            "Reduced array dtype mismatch from {} ({}) to {} ({})",
             this.encoding_id(),
             this.dtype(),
             reduced.encoding_id(),
@@ -484,14 +484,14 @@ impl<V: VTable> DynArrayData for ArrayData<V> {
         vortex_ensure_eq!(
             reduced.len(),
             parent.len(),
-            AssertionFailed: "Reduced array length mismatch from {} to {}",
+            "Reduced array length mismatch from {} to {}",
             parent.encoding_id(),
             reduced.encoding_id()
         );
         vortex_ensure_eq!(
             reduced.dtype(),
             parent.dtype(),
-            AssertionFailed: "Reduced array dtype mismatch from {} to {}",
+            "Reduced array dtype mismatch from {} to {}",
             parent.encoding_id(),
             reduced.encoding_id()
         );
@@ -510,13 +510,13 @@ impl<V: VTable> DynArrayData for ArrayData<V> {
                 vortex_ensure_eq!(
                     result.array().len(),
                     len,
-                    AssertionFailed: "Result length mismatch for {:?}",
+                    "Result length mismatch for {:?}",
                     self.vtable
                 );
                 vortex_ensure_eq!(
                     result.array().dtype(),
                     &dtype,
-                    AssertionFailed: "Executed canonical dtype mismatch for {:?}",
+                    "Executed canonical dtype mismatch for {:?}",
                     self.vtable
                 );
             }
@@ -533,7 +533,7 @@ impl<V: VTable> DynArrayData for ArrayData<V> {
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<ExecutionResult> {
         let typed = Array::<V>::try_from_array_ref(this)
-            .map_err(|_| vortex_err!(AssertionFailed: "Failed to downcast array for execute"))
+            .map_err(|_| vortex_err!("Failed to downcast array for execute"))
             .vortex_expect("Failed to downcast array for execute");
         V::execute(typed, ctx)
     }

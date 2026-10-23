@@ -101,7 +101,7 @@ impl FlatContainsDfa {
     ) -> VortexResult<Self> {
         if needle.len() > Self::MAX_NEEDLE_LEN {
             vortex_bail!(
-                InvalidArgument: "needle length {} exceeds maximum {} for flat contains DFA",
+                "needle length {} exceeds maximum {} for flat contains DFA",
                 needle.len(),
                 Self::MAX_NEEDLE_LEN
             );

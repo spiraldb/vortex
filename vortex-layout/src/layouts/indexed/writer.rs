@@ -182,7 +182,7 @@ impl<V: IndexVTable> PartitionBuilder for TypedPartitionBuilder<V> {
                 let array = vtable.encode(chunk, &options, &mut ctx)?;
                 vortex_ensure!(
                     array.dtype() == &index_dtype,
-                    MismatchedTypes: "Index {} encoded a chunk of dtype {}, but the index kind declared {index_dtype}",
+                    "Index {} encoded a chunk of dtype {}, but the index kind declared {index_dtype}",
                     vtable.id(),
                     array.dtype()
                 );
@@ -392,7 +392,7 @@ impl IndexContent {
                 // One spec records one options blob, so partitions may not disagree about it.
                 Some(first) => vortex_ensure!(
                     *first == partition_options,
-                    InvalidArgument: "Index {id} partition {partition} finished with different options than earlier partitions"
+                    "Index {id} partition {partition} finished with different options than earlier partitions"
                 ),
             }
             built.push((partition, content));
@@ -460,14 +460,14 @@ impl LayoutStrategy for IndexedStrategy {
             };
             let Some(block_len) = self.data_block_len.filter(|len| *len > 0) else {
                 vortex_bail!(
-                    InvalidArgument: "Index {} is partitioned every {partition_len} rows, which requires a non-zero \
+                    "Index {} is partitioned every {partition_len} rows, which requires a non-zero \
                      data block length (IndexedStrategy::with_data_block_len)",
                     config.vtable.id()
                 );
             };
             vortex_ensure!(
                 partition_len.get() % block_len == 0,
-                InvalidArgument: "Index {} partition length {partition_len} must be a multiple of the data block \
+                "Index {} partition length {partition_len} must be a multiple of the data block \
                  length {block_len}",
                 config.vtable.id()
             );

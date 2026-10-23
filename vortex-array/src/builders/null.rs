@@ -61,7 +61,7 @@ impl ArrayBuilder for NullBuilder {
         vortex_ensure_eq!(
             scalar.dtype(),
             self.dtype(),
-            MismatchedTypes: "NullBuilder received a scalar with the wrong dtype"
+            "NullBuilder received a scalar with the wrong dtype"
         );
 
         self.append_null();

@@ -140,7 +140,7 @@ unsafe extern "C" {
 fn page_size() -> VortexResult<usize> {
     // SAFETY: getpagesize has no preconditions.
     let page = usize::try_from(unsafe { getpagesize() })?;
-    vortex_ensure!(page.is_power_of_two(), AssertionFailed: "invalid page size {page}");
+    vortex_ensure!(page.is_power_of_two(), "invalid page size {page}");
     Ok(page)
 }
 
@@ -286,7 +286,7 @@ impl MappedFile {
             .attribute(
                 CUdevice_attribute::CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES,
             )
-            .map_err(|error| vortex_err!(Io: "Failed to query pageable memory access: {error}"))?;
+            .map_err(|error| vortex_err!("Failed to query pageable memory access: {error}"))?;
         if uses_host_page_tables != 1 {
             return Ok(None);
         }
@@ -350,7 +350,7 @@ impl MappedFile {
         self.stream
             .context()
             .bind_to_thread()
-            .map_err(|error| vortex_err!(Io: "Failed to bind CUDA context: {error}"))?;
+            .map_err(|error| vortex_err!("Failed to bind CUDA context: {error}"))?;
         // The guard records the queued copies as the output's write when this scope ends,
         // including on error, so frees and readers on other streams wait for them.
         let (base, write) = output.device_ptr_mut(&self.stream);
@@ -377,7 +377,7 @@ impl MappedFile {
             // SAFETY: The source range is mapped and in bounds, the target covers `pad + length`
             // bytes, and both share the same offset within 16 bytes, as the kernel requires.
             unsafe { launch.launch(config) }
-                .map_err(|error| vortex_err!(Io: "Failed to launch mapped copy: {error}"))?;
+                .map_err(|error| vortex_err!("Failed to launch mapped copy: {error}"))?;
         }
         drop(write);
         Ok(output)
@@ -503,7 +503,7 @@ impl PooledFileReadAt {
         let permit = Arc::clone(&self.read_slots)
             .acquire_owned()
             .await
-            .map_err(|error| vortex_err!(Io: "file read semaphore closed: {error}"))?;
+            .map_err(|error| vortex_err!("file read semaphore closed: {error}"))?;
         self.handle
             .spawn_blocking(move || {
                 // A started blocking read cannot be cancelled. Keep its permit and buffer owners
@@ -543,7 +543,7 @@ impl VortexReadAt for PooledFileReadAt {
         async move {
             vortex_ensure!(
                 offset.checked_add(u64::try_from(length)?).is_some(),
-                Overflow: "file read range overflow: offset={offset}, length={length}"
+                "file read range overflow: offset={offset}, length={length}"
             );
             if let Some(buffer) = reader.read_mapped(offset, length).await? {
                 return Ok(buffer);

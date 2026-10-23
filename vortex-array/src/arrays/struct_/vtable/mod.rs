@@ -63,13 +63,13 @@ impl VTable for Struct {
         slots: &[Option<ArrayRef>],
     ) -> VortexResult<()> {
         let DType::Struct(struct_dtype, nullability) = dtype else {
-            vortex_bail!(MismatchedTypes: "Expected struct dtype, found {:?}", dtype)
+            vortex_bail!("Expected struct dtype, found {:?}", dtype)
         };
 
         let expected_slots = struct_dtype.nfields() + 1;
         if slots.len() != expected_slots {
             vortex_bail!(
-                InvalidArgument: "StructArray has {} slots but expected {}",
+                "StructArray has {} slots but expected {}",
                 slots.len(),
                 expected_slots
             );
@@ -80,7 +80,7 @@ impl VTable for Struct {
             && validity_len != len
         {
             vortex_bail!(
-                InvalidArgument: "StructArray validity length {} does not match outer length {}",
+                "StructArray validity length {} does not match outer length {}",
                 validity_len,
                 len
             );
@@ -93,19 +93,19 @@ impl VTable for Struct {
 
         for (idx, (slot, field_dtype)) in field_slots.iter().zip(struct_dtype.fields()).enumerate()
         {
-            let field = slot.as_ref().ok_or_else(
-                || vortex_error::vortex_err!(NotFound: "StructArray missing field slot {idx}"),
-            )?;
+            let field = slot
+                .as_ref()
+                .ok_or_else(|| vortex_error::vortex_err!("StructArray missing field slot {idx}"))?;
             if field.len() != len {
                 vortex_bail!(
-                    InvalidArgument: "StructArray field {idx} has length {} but expected {}",
+                    "StructArray field {idx} has length {} but expected {}",
                     field.len(),
                     len
                 );
             }
             if field.dtype() != &field_dtype {
                 vortex_bail!(
-                    InvalidArgument: "StructArray field {idx} has dtype {} but expected {}",
+                    "StructArray field {idx} has dtype {} but expected {}",
                     field.dtype(),
                     field_dtype
                 );
@@ -116,11 +116,11 @@ impl VTable for Struct {
     }
 
     fn buffer(_array: ArrayView<'_, Self>, idx: usize) -> BufferHandle {
-        vortex_panic!(OutOfBounds: "StructArray buffer index {idx} out of bounds")
+        vortex_panic!("StructArray buffer index {idx} out of bounds")
     }
 
     fn buffer_name(_array: ArrayView<'_, Self>, idx: usize) -> Option<String> {
-        vortex_panic!(OutOfBounds: "StructArray buffer_name index {idx} out of bounds")
+        vortex_panic!("StructArray buffer_name index {idx} out of bounds")
     }
 
     fn with_buffers(
@@ -150,12 +150,12 @@ impl VTable for Struct {
     ) -> VortexResult<ArrayParts<Self>> {
         if !metadata.is_empty() {
             vortex_bail!(
-                InvalidArgument: "StructArray expects empty metadata, got {} bytes",
+                "StructArray expects empty metadata, got {} bytes",
                 metadata.len()
             );
         }
         let DType::Struct(struct_dtype, nullability) = dtype else {
-            vortex_bail!(MismatchedTypes: "Expected struct dtype, found {:?}", dtype)
+            vortex_bail!("Expected struct dtype, found {:?}", dtype)
         };
 
         let (validity, non_data_children) = if children.len() == struct_dtype.nfields() {
@@ -165,7 +165,7 @@ impl VTable for Struct {
             (Validity::Array(validity), 1_usize)
         } else {
             vortex_bail!(
-                InvalidArgument: "Expected {} or {} children, found {}",
+                "Expected {} or {} children, found {}",
                 struct_dtype.nfields(),
                 struct_dtype.nfields() + 1,
                 children.len()
@@ -211,7 +211,7 @@ impl VTable for Struct {
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<()> {
         let Some(builder) = builder.as_any_mut().downcast_mut::<StructBuilder>() else {
-            vortex_bail!(InvalidArgument: "append_to_builder for Struct requires a StructBuilder");
+            vortex_bail!("append_to_builder for Struct requires a StructBuilder");
         };
         builder.append_struct_array(&array.into_owned(), ctx)
     }

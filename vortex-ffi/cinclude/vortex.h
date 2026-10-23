@@ -211,49 +211,13 @@ typedef enum {
  */
 typedef enum {
     /**
-     * All other errors
+     * An error returned by Vortex
      */
     VX_ERROR_CODE_OTHER = 0,
-    /**
-     * Index out of bounds
-     */
-    VX_ERROR_CODE_OUT_OF_BOUNDS = 1,
-    /**
-     * An invalid argument was provided.
-     */
-    VX_ERROR_CODE_INVALID_ARGUMENT = 3,
-    /**
-     * Serialization/deserialization error
-     */
-    VX_ERROR_CODE_SERIALIZATION = 4,
-    /**
-     * Unimplemented function
-     */
-    VX_ERROR_CODE_NOT_IMPLEMENTED = 5,
-    /**
-     * Type mismatch
-     */
-    VX_ERROR_CODE_MISMATCHED_TYPES = 6,
-    /**
-     * Assertion failed
-     */
-    VX_ERROR_CODE_ASSERTION_FAILED = 7,
-    /**
-     * An IO operation, or a call into the operating system or a device driver, failed
-     */
-    VX_ERROR_CODE_IO = 8,
     /**
      * Panic inside FFI
      */
     VX_ERROR_CODE_PANIC = 9,
-    /**
-     * A name was looked up and nothing was bound to it
-     */
-    VX_ERROR_CODE_NOT_FOUND = 10,
-    /**
-     * A numeric value does not fit its target type
-     */
-    VX_ERROR_CODE_OVERFLOW = 11,
 } vx_error_code;
 
 /**

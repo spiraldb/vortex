@@ -184,7 +184,7 @@ pub fn check_expected_encodings(
 
     if !missing.is_empty() {
         vortex_bail!(
-            InvalidArgument: "fixture '{}' is missing expected encodings: {:?} (found: {:?})",
+            "fixture '{}' is missing expected encodings: {:?} (found: {:?})",
             fixture.name(),
             missing,
             found,

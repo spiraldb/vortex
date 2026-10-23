@@ -104,7 +104,7 @@ impl SparseStringParts {
                 .map(BufferString::into_inner),
             DType::Binary(_) => fill_scalar.as_binary().value().cloned(),
             dtype => {
-                vortex_bail!(MismatchedTypes: "Sparse string decode of non-string dtype {dtype}")
+                vortex_bail!("Sparse string decode of non-string dtype {dtype}")
             }
         };
         Ok(Self {
@@ -249,7 +249,7 @@ where
         }
         vortex_ensure!(
             previous <= row && row < len,
-            InvalidArgument: "Sparse patch indices must be ascending within the array length {len}"
+            "Sparse patch indices must be ascending within the array length {len}"
         );
         fill_run(builder, row - previous)?;
         if patch_validity.value(patch) {
@@ -349,7 +349,7 @@ pub(super) fn execute_sparse(parts: SparseParts, ctx: &mut ExecutionCtx) -> Vort
             execute_sparse_fixed_size_list(&patches, &fill_value, len, *nullability, ctx)?
         }
         DType::Map(..) => {
-            vortex_bail!(InvalidArgument: "Sparse canonicalization does not support Map arrays yet")
+            vortex_bail!("Sparse canonicalization does not support Map arrays yet")
         }
         DType::Struct(struct_fields, ..) => execute_sparse_struct(
             struct_fields,
@@ -359,14 +359,12 @@ pub(super) fn execute_sparse(parts: SparseParts, ctx: &mut ExecutionCtx) -> Vort
             len,
             ctx,
         )?,
-        DType::Union(..) => vortex_bail!(NotImplemented: "TODO(connor)[Union]: unimplemented"),
+        DType::Union(..) => vortex_bail!("TODO(connor)[Union]: unimplemented"),
         DType::Variant(_) => {
-            vortex_bail!(InvalidArgument: "Sparse canonicalization does not support Variant")
+            vortex_bail!("Sparse canonicalization does not support Variant")
         }
         DType::Extension(..) => {
-            vortex_bail!(
-                NotImplemented: "Sparse canonicalization does not support Extension arrays yet"
-            )
+            vortex_bail!("Sparse canonicalization does not support Extension arrays yet")
         }
     })
 }

@@ -195,7 +195,7 @@ impl AggregateFnVTable for NanCount {
             Columnar::Canonical(c) => match c {
                 Canonical::Primitive(p) => accumulate_primitive(partial, p, ctx),
                 _ => vortex_bail!(
-                    InvalidArgument: "Unsupported canonical type for nan_count: {}",
+                    "Unsupported canonical type for nan_count: {}",
                     batch.dtype()
                 ),
             },

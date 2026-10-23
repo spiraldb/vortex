@@ -172,7 +172,7 @@ impl DynLayout for ForeignLayout {
         _ctx: &crate::LayoutReaderContext,
     ) -> VortexResult<LayoutReaderRef> {
         vortex_bail!(
-            NotFound: "Cannot read unknown layout encoding '{}'",
+            "Cannot read unknown layout encoding '{}'",
             self.encoding.id()
         )
     }

@@ -99,18 +99,18 @@ fn validate_selectors<A: AsPrimitive<usize>, R: AsPrimitive<usize>>(
     vortex_ensure_eq!(
         rows.len(),
         len,
-        InvalidArgument: "interleave row_indices length does not match array_indices length",
+        "interleave row_indices length does not match array_indices length",
     );
 
     for i in 0..len {
         let branch = branches[i].as_();
         vortex_ensure!(
             branch < value_bits.len(),
-            OutOfBounds: "interleave array index out of bounds"
+            "interleave array index out of bounds"
         );
         vortex_ensure!(
             rows[i].as_() < value_bits[branch].len(),
-            OutOfBounds: "interleave row index out of bounds"
+            "interleave row index out of bounds"
         );
     }
 

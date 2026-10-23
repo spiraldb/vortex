@@ -66,7 +66,7 @@ impl ArrayPlugin for DecimalBytePartsPlugin {
     ) -> VortexResult<Option<ArraySerialization>> {
         let view = array.as_opt::<DecimalByteParts>().ok_or_else(|| {
             vortex_err!(
-                Serde: "DecimalByteParts plugin cannot serialize {}",
+                "DecimalByteParts plugin cannot serialize {}",
                 array.encoding_id()
             )
         })?;
@@ -89,7 +89,7 @@ impl ArrayPlugin for DecimalBytePartsPlugin {
             v2::deserialize(parts)?
         } else {
             vortex_bail!(
-                Serde: "DecimalByteParts plugin does not recognize serialized ID {}",
+                "DecimalByteParts plugin does not recognize serialized ID {}",
                 parts.serialized_id
             )
         };

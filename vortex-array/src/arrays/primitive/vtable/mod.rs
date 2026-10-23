@@ -112,12 +112,12 @@ impl VTable for Primitive {
         slots: &[Option<ArrayRef>],
     ) -> VortexResult<()> {
         let DType::Primitive(_, nullability) = dtype else {
-            vortex_bail!(MismatchedTypes: "Expected primitive dtype, got {dtype:?}");
+            vortex_bail!("Expected primitive dtype, got {dtype:?}");
         };
         vortex_ensure_eq!(
             data.len(),
             len,
-            InvalidArgument: "PrimitiveArray length does not match outer length",
+            "PrimitiveArray length does not match outer length",
         );
         let validity =
             crate::array::child_to_validity(slots[PrimitiveSlots::VALIDITY].as_ref(), *nullability);
@@ -125,7 +125,7 @@ impl VTable for Primitive {
             vortex_ensure_eq!(
                 validity_len,
                 len,
-                InvalidArgument: "PrimitiveArray validity len does not match outer length",
+                "PrimitiveArray validity len does not match outer length",
             );
         }
 
@@ -144,7 +144,7 @@ impl VTable for Primitive {
     ) -> VortexResult<ArrayParts<Self>> {
         if !metadata.is_empty() {
             vortex_bail!(
-                InvalidArgument: "PrimitiveArray expects empty metadata, got {} bytes",
+                "PrimitiveArray expects empty metadata, got {} bytes",
                 metadata.len()
             );
         }
@@ -156,12 +156,12 @@ impl VTable for Primitive {
 
         vortex_ensure!(
             buffer.is_aligned_to(Alignment::new(ptype.byte_width())),
-            InvalidArgument: "Misaligned buffer cannot be used to build PrimitiveArray of {ptype}"
+            "Misaligned buffer cannot be used to build PrimitiveArray of {ptype}"
         );
 
         if buffer.len() != ptype.byte_width() * len {
             vortex_bail!(
-                MismatchedTypes: "Buffer length {} does not match expected length {} for {}, {}",
+                "Buffer length {} does not match expected length {} for {}, {}",
                 buffer.len(),
                 ptype.byte_width() * len,
                 ptype.byte_width(),
@@ -200,7 +200,7 @@ impl VTable for Primitive {
             }
         });
 
-        vortex_bail!(InvalidArgument: "append_to_builder for Primitive requires a matching PrimitiveBuilder");
+        vortex_bail!("append_to_builder for Primitive requires a matching PrimitiveBuilder");
     }
 
     fn reduce_parent(

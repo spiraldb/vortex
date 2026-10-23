@@ -81,7 +81,7 @@ pub(crate) fn export_storage_to_target<T: ParquetVariantArrayExt>(
         };
         let Some(child) = child else {
             vortex_bail!(
-                InvalidArgument: "cannot export Parquet Variant storage field '{}' because source has no {} child",
+                "cannot export Parquet Variant storage field '{}' because source has no {} child",
                 field.name(),
                 field.name()
             );
@@ -128,16 +128,16 @@ pub(crate) fn parquet_variant_for_export(
         return Ok(executed);
     }
 
-    let variant = executed.as_opt::<Variant>().ok_or_else(
-        || vortex_err!(NotImplemented: "cannot export Variant without ParquetVariant storage"),
-    )?;
+    let variant = executed
+        .as_opt::<Variant>()
+        .ok_or_else(|| vortex_err!("cannot export Variant without ParquetVariant storage"))?;
     let core_storage = variant
         .core_storage()
         .clone()
         .execute_until::<ParquetVariant>(ctx)?;
-    let parquet_core = core_storage.as_opt::<ParquetVariant>().ok_or_else(
-        || vortex_err!(NotImplemented: "cannot export Variant without ParquetVariant core storage"),
-    )?;
+    let parquet_core = core_storage
+        .as_opt::<ParquetVariant>()
+        .ok_or_else(|| vortex_err!("cannot export Variant without ParquetVariant core storage"))?;
     let Some(shredded) = variant.shredded() else {
         return Ok(core_storage);
     };
@@ -211,13 +211,11 @@ impl ArrowExportVTable for ParquetVariant {
                 )?));
             }
             if has_value && !request_has_value {
-                vortex_bail!(
-                    InvalidArgument: "cannot export Parquet Variant storage without losing value child"
-                );
+                vortex_bail!("cannot export Parquet Variant storage without losing value child");
             }
             if has_typed_value && !request_has_typed_value {
                 vortex_bail!(
-                    InvalidArgument: "cannot export Parquet Variant storage without losing typed_value child"
+                    "cannot export Parquet Variant storage without losing typed_value child"
                 );
             }
 

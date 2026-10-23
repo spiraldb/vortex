@@ -147,7 +147,7 @@ fn relativize(range: &Range<u64>, idx: u64) -> usize {
         .and_then(|relative| usize::try_from(relative).ok())
         .unwrap_or_else(|| {
             vortex_panic!(
-                Overflow: "index {:?} is not a usize offset into range {:?}",
+                "index {:?} is not a usize offset into range {:?}",
                 idx,
                 range
             )

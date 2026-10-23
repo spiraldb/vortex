@@ -115,7 +115,7 @@ impl FloatStats {
             PType::F32 => typed_float_stats::<f32>(input, opts.count_distinct_values, ctx),
             PType::F64 => typed_float_stats::<f64>(input, opts.count_distinct_values, ctx),
             _ => {
-                vortex_panic!(MismatchedTypes: "cannot generate FloatStats from ptype {}", input.ptype())
+                vortex_panic!("cannot generate FloatStats from ptype {}", input.ptype())
             }
         }
     }
@@ -201,7 +201,7 @@ where
     let null_count = array
         .statistics()
         .compute_null_count(ctx)
-        .ok_or_else(|| vortex_err!(AssertionFailed: "Failed to compute null_count"))?;
+        .ok_or_else(|| vortex_err!("Failed to compute null_count"))?;
     let value_count = array.len() - null_count;
 
     // Keep a HashMap of T, then convert the keys into PValue afterward since value is

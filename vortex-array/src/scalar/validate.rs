@@ -112,7 +112,7 @@ impl Scalar {
         match Self::validate_detailed(dtype, value) {
             Err(err) => err,
             Ok(()) => vortex_err!(
-                AssertionFailed: "scalar validation fast path rejected value {value:?} for dtype {dtype}, but the \
+                "scalar validation fast path rejected value {value:?} for dtype {dtype}, but the \
                  detailed check accepted it"
             ),
         }
@@ -123,7 +123,7 @@ impl Scalar {
         let Some(value) = value else {
             vortex_ensure!(
                 dtype.is_nullable(),
-                InvalidArgument: "non-nullable dtype {dtype} cannot hold a null value",
+                "non-nullable dtype {dtype} cannot hold a null value",
             );
             return Ok(());
         };
@@ -131,17 +131,17 @@ impl Scalar {
         // From here onwards, we know that the value is not null.
         match dtype {
             DType::Null => {
-                vortex_bail!(InvalidArgument: "null dtype cannot hold a non-null value {value}");
+                vortex_bail!("null dtype cannot hold a non-null value {value}");
             }
             DType::Bool(_) => {
                 vortex_ensure!(
                     matches!(value, ScalarValue::Bool(_)),
-                    MismatchedTypes: "bool dtype expected Bool value, got {value}",
+                    "bool dtype expected Bool value, got {value}",
                 );
             }
             DType::Primitive(ptype, _) => {
                 let ScalarValue::Primitive(pvalue) = value else {
-                    vortex_bail!(MismatchedTypes: "primitive dtype {ptype} expected Primitive value, got {value}",);
+                    vortex_bail!("primitive dtype {ptype} expected Primitive value, got {value}",);
                 };
 
                 // Note that this is a backwards compatibility check for poor design in the
@@ -153,34 +153,34 @@ impl Scalar {
 
                 vortex_ensure!(
                     f16_backcompat_still_works || pvalue.ptype() == *ptype,
-                    MismatchedTypes: "primitive dtype {ptype} is not compatible with value {pvalue}",
+                    "primitive dtype {ptype} is not compatible with value {pvalue}",
                 );
             }
             DType::Decimal(dec_dtype, _) => {
                 let ScalarValue::Decimal(dvalue) = value else {
-                    vortex_bail!(MismatchedTypes: "decimal dtype expected Decimal value, got {value}");
+                    vortex_bail!("decimal dtype expected Decimal value, got {value}");
                 };
 
                 vortex_ensure!(
                     dvalue.fits_in_precision(*dec_dtype),
-                    Overflow: "decimal value {dvalue} does not fit in precision of {dec_dtype}",
+                    "decimal value {dvalue} does not fit in precision of {dec_dtype}",
                 );
             }
             DType::Utf8(_) => {
                 vortex_ensure!(
                     matches!(value, ScalarValue::Utf8(_)),
-                    MismatchedTypes: "utf8 dtype expected Utf8 value, got {value}",
+                    "utf8 dtype expected Utf8 value, got {value}",
                 );
             }
             DType::Binary(_) => {
                 vortex_ensure!(
                     matches!(value, ScalarValue::Binary(_)),
-                    MismatchedTypes: "binary dtype expected Binary value, got {value}",
+                    "binary dtype expected Binary value, got {value}",
                 );
             }
             DType::List(elem_dtype, _) => {
                 let ScalarValue::Tuple(elements) = value else {
-                    vortex_bail!(MismatchedTypes: "list dtype expected Tuple value, got {value}");
+                    vortex_bail!("list dtype expected Tuple value, got {value}");
                 };
 
                 for (i, element) in elements.iter().enumerate() {
@@ -190,14 +190,14 @@ impl Scalar {
             }
             DType::FixedSizeList(elem_dtype, size, _) => {
                 let ScalarValue::Tuple(elements) = value else {
-                    vortex_bail!(MismatchedTypes: "fixed-size list dtype expected Tuple value, got {value}",);
+                    vortex_bail!("fixed-size list dtype expected Tuple value, got {value}",);
                 };
 
                 let len = elements.len();
                 vortex_ensure_eq!(
                     len,
                     *size as usize,
-                    InvalidArgument: "fixed-size list scalar has the wrong number of elements",
+                    "fixed-size list scalar has the wrong number of elements",
                 );
 
                 for (i, element) in elements.iter().enumerate() {
@@ -208,24 +208,24 @@ impl Scalar {
             }
             DType::Map(map, _) => {
                 let ScalarValue::Tuple(entries) = value else {
-                    vortex_bail!(MismatchedTypes: "map dtype expected Tuple value, got {value}");
+                    vortex_bail!("map dtype expected Tuple value, got {value}");
                 };
                 let key_dtype = map.key_dtype();
                 let value_dtype = map.value_dtype();
 
                 for (index, entry) in entries.iter().enumerate() {
                     let entry = entry.as_ref().ok_or_else(|| {
-                        vortex_error::vortex_err!(InvalidArgument: "map entry at index {index} cannot be null")
+                        vortex_error::vortex_err!("map entry at index {index} cannot be null")
                     })?;
                     let ScalarValue::Tuple(values) = entry else {
                         vortex_bail!(
-                            MismatchedTypes: "map entry at index {index} expected Tuple value, got {entry}"
+                            "map entry at index {index} expected Tuple value, got {entry}"
                         );
                     };
                     vortex_ensure_eq!(
                         values.len(),
                         2,
-                        InvalidArgument: "map entry at index {index} has the wrong number of values",
+                        "map entry at index {index} has the wrong number of values",
                     );
 
                     Self::validate_detailed(&key_dtype, values[0].as_ref())
@@ -237,7 +237,7 @@ impl Scalar {
             }
             DType::Struct(fields, _) => {
                 let ScalarValue::Tuple(values) = value else {
-                    vortex_bail!(MismatchedTypes: "struct dtype expected Tuple value, got {value}");
+                    vortex_bail!("struct dtype expected Tuple value, got {value}");
                 };
 
                 let nfields = fields.nfields();
@@ -245,7 +245,7 @@ impl Scalar {
                 vortex_ensure_eq!(
                     nvalues,
                     nfields,
-                    InvalidArgument: "struct scalar has the wrong number of fields",
+                    "struct scalar has the wrong number of fields",
                 );
 
                 for (field, field_value) in fields.field_dtypes().zip(values.iter()) {
@@ -254,13 +254,13 @@ impl Scalar {
             }
             DType::Union(variants, _) => {
                 let ScalarValue::Union(union_value) = value else {
-                    vortex_bail!(MismatchedTypes: "union dtype expected Union value, got {value}");
+                    vortex_bail!("union dtype expected Union value, got {value}");
                 };
 
                 let type_id = union_value.type_id();
                 let Some(child_index) = variants.tag_to_child_index(type_id) else {
                     vortex_bail!(
-                        NotFound: "union value has unknown type ID {type_id}; expected one of {:?}",
+                        "union value has unknown type ID {type_id}; expected one of {:?}",
                         variants.type_ids()
                     );
                 };
@@ -279,13 +279,13 @@ impl Scalar {
             }
             DType::Variant(_) => {
                 let ScalarValue::Variant(inner) = value else {
-                    vortex_bail!(MismatchedTypes: "variant dtype expected Variant value, got {value}");
+                    vortex_bail!("variant dtype expected Variant value, got {value}");
                 };
 
                 Self::validate_detailed(inner.dtype(), inner.value())?;
                 vortex_ensure!(
                     !inner.is_null() || matches!(inner.dtype(), DType::Null),
-                    InvalidArgument: "variant nulls must use a nested null scalar, got {}",
+                    "variant nulls must use a nested null scalar, got {}",
                     inner.dtype(),
                 );
             }

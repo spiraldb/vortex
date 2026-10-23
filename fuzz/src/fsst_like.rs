@@ -139,7 +139,7 @@ pub fn run_fsst_like_fuzz(fuzz: FuzzFsstLike) -> VortexFuzzResult<bool> {
         if expected_val != actual_val {
             return Err(VortexFuzzError::VortexError(
                 vortex_error::vortex_err!(
-                    MismatchedTypes: "FSST LIKE mismatch at index {idx}:\n  \
+                    "FSST LIKE mismatch at index {idx}:\n  \
                      pattern:  {pattern:?}\n  \
                      string:   {:?}\n  \
                      expected: {expected_val}\n  \

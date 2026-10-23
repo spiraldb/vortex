@@ -202,7 +202,7 @@ impl<T: NativePType> ArrayBuilder for PrimitiveBuilder<T> {
         vortex_ensure_eq!(
             scalar.dtype(),
             self.dtype(),
-            MismatchedTypes: "PrimitiveBuilder received a scalar with the wrong dtype"
+            "PrimitiveBuilder received a scalar with the wrong dtype"
         );
 
         if let Some(pv) = scalar.as_primitive().pvalue() {

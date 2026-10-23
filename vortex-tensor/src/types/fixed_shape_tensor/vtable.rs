@@ -39,26 +39,26 @@ impl ExtVTable for FixedShapeTensor {
         let storage_dtype = ext_dtype.storage_dtype();
         let DType::FixedSizeList(element_dtype, list_size, _nullability) = storage_dtype else {
             vortex_bail!(
-                InvalidArgument: "FixedShapeTensor storage dtype must be a FixedSizeList, got {storage_dtype}"
+                "FixedShapeTensor storage dtype must be a FixedSizeList, got {storage_dtype}"
             );
         };
 
         // Note that these constraints may be relaxed in the future.
         vortex_ensure!(
             element_dtype.is_primitive(),
-            MismatchedTypes: "FixedShapeTensor element dtype must be primitive, got {element_dtype} \
+            "FixedShapeTensor element dtype must be primitive, got {element_dtype} \
              (may change in the future)"
         );
         vortex_ensure!(
             !element_dtype.is_nullable(),
-            InvalidArgument: "FixedShapeTensor element dtype must be non-nullable (may change in the future)"
+            "FixedShapeTensor element dtype must be non-nullable (may change in the future)"
         );
 
         let element_count: usize = ext_dtype.metadata().logical_shape().iter().product();
         vortex_ensure_eq!(
             element_count,
             *list_size as usize,
-            InvalidArgument: "FixedShapeTensor logical shape product must match FixedSizeList size"
+            "FixedShapeTensor logical shape product must match FixedSizeList size"
         );
 
         Ok(())

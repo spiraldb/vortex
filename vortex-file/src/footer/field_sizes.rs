@@ -72,7 +72,7 @@ impl CompressedFieldSizes {
         for (segment_id, path) in attribution {
             let segment = segments.get(*segment_id as usize).ok_or_else(|| {
                 vortex_err!(
-                    NotFound: "layout references missing segment {} (segment count: {})",
+                    "layout references missing segment {} (segment count: {})",
                     *segment_id,
                     segments.len()
                 )

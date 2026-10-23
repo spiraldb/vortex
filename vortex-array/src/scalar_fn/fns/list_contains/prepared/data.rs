@@ -94,15 +94,15 @@ impl PreparedSetData {
     pub(crate) fn try_from_literal(literal: ScalarFnRef) -> VortexResult<Self> {
         let (has_null_element, is_empty) = {
             let Some(list) = literal.as_opt::<Literal>() else {
-                vortex_bail!(InvalidArgument: "A prepared set needs a literal list");
+                vortex_bail!("A prepared set needs a literal list");
             };
             vortex_ensure!(
                 matches!(list.dtype(), DType::List(..)),
-                MismatchedTypes: "A prepared set needs a list, got {}",
+                "A prepared set needs a list, got {}",
                 list.dtype()
             );
             let Some(elements) = list.as_list().element_values() else {
-                vortex_bail!(InvalidArgument: "A prepared set needs a non-null list");
+                vortex_bail!("A prepared set needs a non-null list");
             };
             (elements.iter().any(Option::is_none), elements.is_empty())
         };
@@ -157,7 +157,7 @@ impl PreparedSetData {
     /// The dtype of the list's elements.
     fn element_dtype(&self) -> &DType {
         let DType::List(element_dtype, _) = self.list_dtype() else {
-            vortex_panic!(AssertionFailed: "A prepared set always holds a list");
+            vortex_panic!("A prepared set always holds a list");
         };
         element_dtype
     }
@@ -234,7 +234,7 @@ impl PreparedSetData {
         if let Some(len) = needle_validity.maybe_len() {
             vortex_ensure!(
                 len == bits.len(),
-                InvalidArgument: "Needle validity has {len} rows, but there are {} membership bits",
+                "Needle validity has {len} rows, but there are {} membership bits",
                 bits.len()
             );
         }
@@ -258,7 +258,7 @@ impl PreparedSetData {
         let element_dtype = self.element_dtype();
         if !element_dtype.eq_ignore_nullability(needle_dtype) {
             vortex_bail!(
-                MismatchedTypes: "Element type {} of list does not match search value {}",
+                "Element type {} of list does not match search value {}",
                 element_dtype,
                 needle_dtype,
             );

@@ -31,7 +31,7 @@ pub(super) fn execute(
         primitive::execute(array, ctx)
     } else {
         vortex_panic!(
-            NotImplemented: "interleave execution is not implemented for value dtype {}",
+            "interleave execution is not implemented for value dtype {}",
             array.dtype()
         )
     }
