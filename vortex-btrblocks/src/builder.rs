@@ -258,6 +258,7 @@ mod tests {
     use vortex_decimal_byte_parts::decimal_byte_parts_v1_id;
     use vortex_fastlanes::bitpacked_v1_id;
     use vortex_fastlanes::bitpacked_v2_id;
+    use vortex_fastlanes::for_v1_id;
     use vortex_fsst::FSST;
 
     use super::*;
@@ -287,6 +288,12 @@ mod tests {
         &integer::BITPACKING_V1,
         vec![bitpacked_v2_id(), Patched.id()],
         false
+    )]
+    #[case::for_without_bitpacked(&integer::FOR_V1, vec![for_v1_id()], false)]
+    #[case::for_with_bitpacked(
+        &integer::FOR_V1,
+        vec![for_v1_id(), bitpacked_v1_id(), Patched.id()],
+        true
     )]
     fn test_allowed_schemes(
         #[case] scheme: &'static dyn Scheme,
