@@ -1531,7 +1531,7 @@ fn legacy_stats_rewrite_to_zoned_over_converted_zones() -> VortexResult<()> {
         vec![max.to_string()]
     );
     let zones = pruning.zones_plan()?;
-    assert!(zones.is::<Eval>());
+    assert!(zones.is::<Pack>());
     assert_eq!(zones.dtype(), &zones_dtype);
     Ok(())
 }
@@ -1751,5 +1751,38 @@ fn zoned_pruning_plan_with_new_zones_proves_them_again() -> VortexResult<()> {
     );
     assert_eq!(rebuilt_proof.get(&falsifier, &SESSION)?, Some(updated));
     assert_eq!(proof.get(&falsifier, &SESSION)?, Some(original));
+    Ok(())
+}
+
+/// Eval($ > 5, Eval($.a, (...))) -> Eval($.a > 5, (...))
+#[test]
+fn test_eval_of_eval() -> VortexResult<()> {
+    let dtype = primitive(PType::I32, Nullability::NonNullable);
+    let values = vec![flat(3, dtype.clone(), 2)];
+    let fields = StructFields::from_iter([("a", dtype)]);
+    let struct_dtype = DType::Struct(fields, Nullability::NonNullable);
+    let layout = StructLayout::new(3, struct_dtype, values).into_layout();
+    let plan = make_eval(get_item("a", root()), make_plan(layout)?)?.into_plan();
+    let plan = make_eval(gt(root(), lit(5_i32)), plan)?.into_plan();
+    insta::assert_snapshot!(optimize(plan)?.display_tree(), @"
+    root: vortex.plan.eval(bool, rows=3) expr=($ > 5i32)
+      child: vortex.plan.filter(i32, rows=3)
+        child: vortex.plan.segment_scan(i32, rows=3)
+    ");
+    Ok(())
+}
+
+/// Eval(pack({0: $ > 0}, (...))) -> Pack({0: $ > 0}, (...))
+#[test]
+fn test_eval_of_pack() -> VortexResult<()> {
+    let expr = pack([("0", gt(root(), lit(0_i32)))], Nullability::NonNullable);
+    let plan = make_plan(flat(3, primitive(PType::I32, Nullability::NonNullable), 0))?;
+    let plan = make_eval(expr, plan)?.into_plan();
+    insta::assert_snapshot!(optimize(plan)?.display_tree(), @"
+    root: vortex.plan.pack({0=bool}, rows=3)
+      0: vortex.plan.eval(bool, rows=3) expr=($ > 0i32)
+        child: vortex.plan.filter(i32, rows=3)
+          child: vortex.plan.segment_scan(i32, rows=3)
+    ");
     Ok(())
 }

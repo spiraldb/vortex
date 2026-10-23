@@ -30,6 +30,8 @@ use super::plans::ExpressionTakeRule;
 use super::plans::ExpressionZonedRule;
 use super::plans::LegacyStatsRule;
 use super::plans::ZonedDataRule;
+use crate::plan::physical::plans::EvalEvalRule;
+use crate::plan::physical::plans::EvalPackRule;
 
 static EVAL_IDENTITY_RULE: PlanReduceRuleAdapter<Eval, EvalIdentityRule> =
     PlanReduceRuleAdapter::new(EvalIdentityRule);
@@ -40,8 +42,12 @@ static LEGACY_STATS_RULE: PlanReduceRuleAdapter<LegacyStats, LegacyStatsRule> =
 static ZONED_DATA_RULE: PlanReduceRuleAdapter<Zoned, ZonedDataRule> =
     PlanReduceRuleAdapter::new(ZonedDataRule);
 
-static PLAN_RULES: PlanRuleSet =
-    PlanRuleSet::new(&[&EVAL_IDENTITY_RULE, &LEGACY_STATS_RULE, &ZONED_DATA_RULE]);
+static PLAN_RULES: PlanRuleSet = PlanRuleSet::new(&[
+    &EVAL_IDENTITY_RULE,
+    &PlanReduceRuleAdapter::new(EvalPackRule),
+    &LEGACY_STATS_RULE,
+    &ZONED_DATA_RULE,
+]);
 
 static EXPRESSION_CONCAT_RULE: PlanParentReduceRuleAdapter<Concat, ExpressionConcatRule> =
     PlanParentReduceRuleAdapter::new(ExpressionConcatRule);
@@ -57,6 +63,7 @@ static EXPRESSION_LEGACY_STATS_RULE: PlanParentReduceRuleAdapter<
 > = PlanParentReduceRuleAdapter::new(ExpressionLegacyStatsRule);
 
 static PARENT_RULES: PlanParentRuleSet = PlanParentRuleSet::new(&[
+    &PlanParentReduceRuleAdapter::new(EvalEvalRule),
     &EXPRESSION_CONCAT_RULE,
     &EXPRESSION_TAKE_RULE,
     &EXPRESSION_PACK_RULE,
