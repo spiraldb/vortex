@@ -10,7 +10,6 @@ use rustc_hash::FxHashMap;
 use vortex_array::expr::BoundExpression;
 use vortex_array::expr::ExactBoundExpr;
 
-use super::io::SegmentRanges;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::pipeline::ValueCache;
 
@@ -18,7 +17,7 @@ use crate::plan::physical::pipeline::ValueCache;
 /// [`LayoutReader`](crate::LayoutReader) tree.
 ///
 /// Every scan otherwise lowers the layout into a fresh physical plan, optimizes its projection
-/// over it, indexes every segment's byte range, and decodes the dictionary values it needs. A scan
+/// over it, and decodes the dictionary values it needs. A scan
 /// that finds an entry here reuses it, and one that misses builds the entry and keeps it for later
 /// scans. The lowered plan keeps the children it has initialized, each distinct projection keeps
 /// its optimized plan, and dictionary values stay keyed by the cached plan that produced them.
@@ -35,7 +34,6 @@ struct Inner {
     /// Optimized plans of non-identity projections. Values are cached by the plan that produced
     /// them, so a projection must reuse its plan for its values to be found again.
     projections: Mutex<FxHashMap<ExactBoundExpr, PlanRef>>,
-    ranges: Mutex<Option<SegmentRanges>>,
     values: ValueCache,
 }
 
@@ -68,16 +66,6 @@ impl ScanCache {
             .entry(ExactBoundExpr(projection))
             .or_insert(plan)
             .clone()
-    }
-
-    /// The segment byte-range index an earlier scan kept.
-    pub(super) fn ranges(&self) -> Option<SegmentRanges> {
-        self.0.ranges.lock().clone()
-    }
-
-    /// Keeps `ranges`, returning the index already kept if another scan got there first.
-    pub(super) fn insert_ranges(&self, ranges: SegmentRanges) -> SegmentRanges {
-        Arc::clone(self.0.ranges.lock().get_or_insert(ranges))
     }
 
     pub(super) fn values(&self) -> ValueCache {

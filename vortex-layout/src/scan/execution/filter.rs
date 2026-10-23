@@ -4,6 +4,7 @@
 use std::sync::Arc;
 
 use bit_vec::BitVec;
+use rustc_hash::FxHashSet;
 use vortex_array::VortexSessionExecute;
 use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::expr::BoundExpression;
@@ -12,11 +13,10 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_ensure_eq;
 use vortex_expr::stats::rewrite::BoundExpressionPruneExt;
 use vortex_expr::transform::find_between;
-use vortex_io::request::IoConsumer;
-use vortex_io::request::IoIntent;
-use vortex_io::request::IoRequest;
-use vortex_io::request::IoRequestId;
-use vortex_io::request::IoResult;
+use vortex_io::segments::IoIntent;
+use vortex_io::segments::IoKey;
+use vortex_io::segments::IoRequest;
+use vortex_io::segments::SourceResult;
 use vortex_mask::Mask;
 use vortex_scan::planning::planner::Planner;
 use vortex_scan::planning::planner::PlannerOutput;
@@ -131,15 +131,13 @@ impl FilterPlanner {
     }
 }
 
-impl IoConsumer for FilterPlanner {
-    fn set_io_result(&mut self, request: IoRequestId, result: IoResult) {
+impl Planner for FilterPlanner {
+    fn deliver(&mut self, key: IoKey, result: SourceResult) {
         if let Some((_, _, adaptor)) = &mut self.active {
-            adaptor.set_io_result(request, result);
+            adaptor.set_result(key, result);
         }
     }
-}
 
-impl Planner for FilterPlanner {
     fn state(&self) -> State {
         if self.selected.is_none() {
             return State::Done;
@@ -156,6 +154,7 @@ impl Planner for FilterPlanner {
         };
         if !self.announced {
             self.announced = true;
+            let mut announced = FxHashSet::default();
             let mut batch = Vec::new();
             for plan in self
                 .filter
@@ -172,11 +171,13 @@ impl Planner for FilterPlanner {
                     &selected.mask,
                 )?;
                 for segment in segments {
-                    batch.push(IoRequest {
-                        intent: IoIntent::Announce,
-                        request: IoRequestId(u32::MAX - u32::try_from(batch.len())?),
-                        target: self.plans.locations[*segment as usize].target(),
-                    });
+                    // Plans share segments, and one announcement of each is enough.
+                    if announced.insert(segment) {
+                        batch.push(IoRequest::new(
+                            IoKey::segment(self.plans.source, *segment),
+                            IoIntent::Announce,
+                        ));
+                    }
                 }
             }
             if !batch.is_empty() {
@@ -252,7 +253,7 @@ impl Planner for FilterPlanner {
             self.active = Some((
                 index,
                 pruning,
-                ScanAdaptor::new(scan, Arc::clone(&self.plans.locations)),
+                ScanAdaptor::new(scan, Arc::clone(&self.plans.locations), self.plans.source),
             ));
             return Ok(PlannerOutput::Continue);
         }
