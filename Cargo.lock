@@ -11731,7 +11731,6 @@ dependencies = [
 name = "vortex-cuda"
 version = "0.1.0"
 dependencies = [
- "arc-swap",
  "arrow-schema 59.3.1",
  "async-trait",
  "bindgen",
@@ -11744,6 +11743,7 @@ dependencies = [
  "mimalloc",
  "num-traits",
  "object_store 0.13.2",
+ "once_cell",
  "parking_lot",
  "prost 0.14.4",
  "rstest",
