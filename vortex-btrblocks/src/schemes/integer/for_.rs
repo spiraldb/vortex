@@ -240,12 +240,9 @@ impl Scheme for FoRScheme {
         let biased_data =
             ArrayAndStats::new(biased.into_array(), compress_ctx.merged_stats_options());
         // Our own context, not a leaf one, so a v2 child's block offsets can cascade.
-        let compressed = self.bitpacking.compress(
-            compressor,
-            &biased_data,
-            compress_ctx.clone(),
-            exec_ctx,
-        )?;
+        let compressed =
+            self.bitpacking
+                .compress(compressor, &biased_data, compress_ctx.clone(), exec_ctx)?;
 
         // TODO(connor): This should really be `new_unchecked`.
         let for_compressed = match for_array.references() {
@@ -312,6 +309,9 @@ mod tests {
         #[values(&FOR_V1, &FOR_V2)] scheme: &'static dyn Scheme,
     ) {
         let refined = scheme.refine(&|id: &ArrayId| allow_v2 && *id == bitpacked_v2_id());
-        assert_eq!(refined.produced_encodings().contains(&bitpacked_v2_id()), allow_v2);
+        assert_eq!(
+            refined.produced_encodings().contains(&bitpacked_v2_id()),
+            allow_v2
+        );
     }
 }
