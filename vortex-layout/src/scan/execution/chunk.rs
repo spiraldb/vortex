@@ -36,15 +36,19 @@ pub(crate) const MAX_FILTERED_ROWS_PER_CHUNK: usize = 16 * MAX_ROWS_PER_CHUNK;
 /// The fewest rows of a filtered chunk.
 pub(crate) const MIN_FILTERED_ROWS_PER_CHUNK: usize = 4 * MAX_ROWS_PER_CHUNK;
 
-/// The rows of a filtered chunk of a scan over `partition_rows`: a quarter of them on the row
-/// grid, within the filtered bounds. A partition that is one chunk runs on one task from its
-/// first read to its last batch, and an engine's partitions straggle on uneven cores; cut into
-/// a few chunks, the ones after the first are spawned where the engine's runtime has room.
+/// The rows of a filtered chunk of a scan over `partition_rows`: a quarter of them, rounded up
+/// to the row grid so the partition is four chunks and not four and a sliver, within the
+/// filtered bounds. A partition that is one chunk runs on one task from its first read to its
+/// last batch, and an engine's partitions straggle on uneven cores; cut into a few chunks, the
+/// ones after the first are spawned where the engine's runtime has room.
 pub(crate) fn filtered_rows_per_chunk(partition_rows: u64) -> usize {
-    let quarter = usize::try_from(partition_rows / 4).unwrap_or(usize::MAX);
-    (quarter / ROW_BLOCK_SIZE * ROW_BLOCK_SIZE)
+    let quarter = usize::try_from(partition_rows.div_ceil(4)).unwrap_or(usize::MAX);
+    quarter
+        .div_ceil(ROW_BLOCK_SIZE)
+        .saturating_mul(ROW_BLOCK_SIZE)
         .clamp(MIN_FILTERED_ROWS_PER_CHUNK, MAX_FILTERED_ROWS_PER_CHUNK)
 }
+
 const TARGET_BYTES_PER_CHUNK: u64 = 8 * 1024 * 1024;
 
 /// Limit estimated bytes per chunk without changing the writer-aligned row granularity.

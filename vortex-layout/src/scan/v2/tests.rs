@@ -484,8 +484,8 @@ fn row_chunks_start_at_the_range(#[case] rows: Range<u64>, #[case] expected: Vec
 #[rstest]
 #[case::sf1_partition(430_000, 262_144)]
 #[case::below_minimum(100_000, 262_144)]
-#[case::on_grid(2_000_000, 499_712)]
-#[case::sf10_partition(5_000_000, 1_048_576)]
+#[case::rounded_up_to_the_grid(2_000_000, 507_904)]
+#[case::sf10_partition(1_064_960, 270_336)]
 #[case::whole_file(60_000_000, 1_048_576)]
 fn filtered_chunks_are_a_quarter_of_the_partition(#[case] rows: u64, #[case] expected: usize) {
     assert_eq!(filtered_rows_per_chunk(rows), expected);
