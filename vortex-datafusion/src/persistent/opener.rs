@@ -391,10 +391,12 @@ impl FileOpener for VortexOpener {
                 .as_ref()
                 .map(|range| -> DFResult<Range<u64>> {
                     Ok(Range {
-                        start: u64::try_from(range.start)
-                            .map_err(|_| exec_datafusion_err!("Vortex file range start is negative"))?,
-                        end: u64::try_from(range.end)
-                            .map_err(|_| exec_datafusion_err!("Vortex file range end is negative"))?,
+                        start: u64::try_from(range.start).map_err(|_| {
+                            exec_datafusion_err!("Vortex file range start is negative")
+                        })?,
+                        end: u64::try_from(range.end).map_err(|_| {
+                            exec_datafusion_err!("Vortex file range end is negative")
+                        })?,
                     })
                 })
                 .transpose()?;
@@ -465,7 +467,9 @@ impl FileOpener for VortexOpener {
                     Entry::Vacant(vacant_entry) => {
                         tracing::trace!("creating layout reader for {}", vacant_entry.key());
                         let reader = vxf.layout_reader().map_err(|e| {
-                            DataFusionError::Execution(format!("Failed to create layout reader: {e}"))
+                            DataFusionError::Execution(format!(
+                                "Failed to create layout reader: {e}"
+                            ))
                         })?;
                         vacant_entry.insert(Arc::downgrade(&reader));
 
