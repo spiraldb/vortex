@@ -272,7 +272,10 @@ impl ArrayRef {
             }
 
             let expected_len = current_array.len();
-            let expected_dtype = current_array.dtype().clone();
+            // `finalize_done` only reads the dtype back under debug assertions, and only the
+            // `Done` arm reads it at all. Cloning a nested dtype is a pair of refcount ops, so
+            // skip it on the `AppendChild` and `ExecuteSlot` iterations that discard it.
+            let expected_dtype = cfg!(debug_assertions).then(|| current_array.dtype().clone());
             let stats = current_array.statistics().to_owned();
             let encoding_id = current_array.encoding_id();
             trace_op!(record_execute_encoding(&current_array));
@@ -297,11 +300,15 @@ impl ArrayRef {
                 ExecutionStep::AppendChild(i) => {
                     if current_builder.is_none() {
                         trace_op!(record_builder_start(&array));
-                        current_builder = Some(builder_with_capacity_in(
-                            array.dtype(),
-                            array.len(),
-                            ctx.allocator(),
-                        ));
+                        let mut builder =
+                            builder_with_capacity_in(array.dtype(), array.len(), ctx.allocator());
+                        // The parent hands its children over one `AppendChild` at a time, so tell
+                        // the builder how many are coming. A nested builder keeps each appended
+                        // array as a chunk of its child, and without this every one of those chunk
+                        // lists grows incrementally: a 128-chunk array of 8-field structs pays 40
+                        // reallocations for what is eight reserves.
+                        builder.reserve_chunks(array.nchildren());
+                        current_builder = Some(builder);
                     }
                     let (parent, child) = unsafe { array.take_slot_unchecked(i) }?;
 
@@ -618,7 +625,7 @@ fn finalize_done(
     result: ArrayRef,
     mut builder: Option<Box<dyn ArrayBuilder>>,
     expected_len: usize,
-    expected_dtype: DType,
+    expected_dtype: Option<DType>,
     stats: StatsSet,
     encoding_id: ArrayId,
 ) -> VortexResult<(ArrayRef, Option<Box<dyn ArrayBuilder>>)> {
@@ -628,7 +635,7 @@ fn finalize_done(
         result
     };
 
-    if cfg!(debug_assertions) {
+    if let Some(expected_dtype) = expected_dtype {
         vortex_ensure_eq!(
             output.len(),
             expected_len,
@@ -815,6 +822,21 @@ impl ExecutionResult {
     pub fn done(result: impl IntoArray) -> Self {
         Self {
             array: result.into_array(),
+            step: ExecutionStep::Done,
+        }
+    }
+
+    /// Signal that execution is complete and the result is in the executor's active builder.
+    ///
+    /// Pass the consumed parent array: the executor discards it after finishing the builder,
+    /// avoiding an allocation for a placeholder result.
+    ///
+    /// Only valid once at least one [`ExecutionStep::AppendChild`] has been returned, which
+    /// guarantees that the executor has an active builder. The parent may have empty child slots
+    /// because its children have already been appended; it must not escape the executor.
+    pub fn done_into_builder(array: impl IntoArray) -> Self {
+        Self {
+            array: array.into_array(),
             step: ExecutionStep::Done,
         }
     }
