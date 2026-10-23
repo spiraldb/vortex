@@ -243,7 +243,7 @@ impl FileOpener for VortexOpener {
                 .with_metrics_registry(Arc::clone(&metrics_registry))
                 .with_labels(labels);
 
-            let cached_footer = file_metadata_cache
+            let cached = file_metadata_cache
                 .as_ref()
                 .and_then(|cache| cache.get(file.path()))
                 .filter(|entry| entry.is_valid_for(&file.object_meta))
@@ -252,9 +252,24 @@ impl FileOpener for VortexOpener {
                         .file_metadata
                         .as_any()
                         .downcast_ref::<CachedVortexMetadata>()
-                        .map(|vortex_metadata| vortex_metadata.footer().clone())
+                        .map(|vortex_metadata| {
+                            (
+                                vortex_metadata.footer().clone(),
+                                vortex_metadata.scan_cache().clone(),
+                            )
+                        })
                 });
-            let footer_cache_hit = cached_footer.is_some();
+            let footer_cache_hit = cached.is_some();
+            // The scan cache lives with the footer in the session's metadata cache, so later
+            // queries of the file find its plans and values; on a miss the partitions opening
+            // the file together share one, kept with the entry the first of them puts.
+            let (cached_footer, scan_cache) = match cached {
+                Some((footer, scan_cache)) => (Some(footer), scan_cache),
+                None => (
+                    None,
+                    shared_scan_cache(&scan_caches, &file.object_meta.location),
+                ),
+            };
 
             if let Some(footer) = cached_footer {
                 open_opts = open_opts.with_footer(footer);
@@ -273,7 +288,9 @@ impl FileOpener for VortexOpener {
                     file.path(),
                     CachedFileMetadataEntry::new(
                         file.object_meta.clone(),
-                        Arc::new(CachedVortexMetadata::new(&vxf)),
+                        Arc::new(
+                            CachedVortexMetadata::new(&vxf).with_scan_cache(scan_cache.clone()),
+                        ),
                     ),
                 );
             }
@@ -540,7 +557,7 @@ impl FileOpener for VortexOpener {
                     &file.object_meta.location,
                     scan_file.segments,
                 );
-                scan_file.cache = Some(shared_scan_cache(&scan_caches, &file.object_meta.location));
+                scan_file.cache = Some(scan_cache);
                 let mut builder = V2ScanBuilder::new(vxf.session().clone(), scan_file)
                     .with_projection(scan_projection)
                     .with_some_filter(native_filter)
