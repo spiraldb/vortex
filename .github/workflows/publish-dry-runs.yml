@@ -24,13 +24,21 @@ env:
 jobs:
   python-wheel-build:
     name: "Python (wheel build)"
-    runs-on: ubuntu-latest
+    runs-on: >-
+      ${{ github.repository == 'vortex-data/vortex'
+          && format('runs-on={0}/runner=amd64-ci-medium/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=python-wheel-build', github.run_id)
+          || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-      - uses: ./.github/actions/setup-rust
+      - parallel:
+          - uses: runs-on/action@v2
+            if: github.repository == 'vortex-data/vortex'
+            with:
+              sccache: s3
+          - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: ./.github/actions/setup-prebuild
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          enable-sccache: ${{ github.repository == 'vortex-data/vortex' && 'true' || 'false' }}
       - name: Rust Dependency Cache
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6  # v2
         with:
