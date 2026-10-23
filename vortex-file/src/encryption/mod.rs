@@ -17,8 +17,7 @@
 //! are not encrypted. Fields without their own key are encrypted with the footer key, or stored in
 //! plaintext.
 //!
-//! Segments are encrypted with AES-GCM, or with AES-CTR for data segments under
-//! [`EncryptionAlgorithm::AesGcmCtr`]. The additional authenticated data binds every segment to its
+//! Segments are encrypted with AES-GCM. The additional authenticated data binds every segment to its
 //! file, through random per-file bytes, and to its position in the file, so that segments cannot
 //! be swapped without failing decryption. An optional AAD prefix additionally binds the file to an
 //! application-defined identity, such as its path, so that a file cannot be replaced by another
@@ -221,10 +220,8 @@ impl FileEncryption {
         }
     }
 
-    /// Set the encryption algorithm. Defaults to [`EncryptionAlgorithm::AesGcm`].
-    ///
-    /// [`EncryptionAlgorithm::AesGcmCtr`] encrypts data segments with AES-CTR, which is faster but
-    /// does not detect modified data, and every other segment with AES-GCM.
+    /// Set the encryption algorithm. Defaults to, and currently only supports,
+    /// [`EncryptionAlgorithm::AesGcm`].
     pub fn with_algorithm(mut self, algorithm: EncryptionAlgorithm) -> Self {
         self.algorithm = algorithm;
         self
@@ -406,9 +403,6 @@ pub enum EncryptionAlgorithm {
     None,
     /// Every segment is encrypted with AES-GCM, which detects modified segments.
     AesGcm,
-    /// Data segments are encrypted with AES-CTR, which does not detect modified data, and every
-    /// other segment with AES-GCM.
-    AesGcmCtr,
 }
 
 /// Describes how a segment is encrypted, without the key itself.
@@ -455,7 +449,6 @@ impl EncryptionSpec {
         let algorithm = match fb.algorithm() {
             fb::EncryptionAlgorithm::None => EncryptionAlgorithm::None,
             fb::EncryptionAlgorithm::AesGcm => EncryptionAlgorithm::AesGcm,
-            fb::EncryptionAlgorithm::AesGcmCtr => EncryptionAlgorithm::AesGcmCtr,
             other => vortex_bail!("Unsupported encryption algorithm {}", other.0),
         };
         Ok(Self {
@@ -479,7 +472,6 @@ impl EncryptionSpec {
         let algorithm = match self.algorithm {
             EncryptionAlgorithm::None => fb::EncryptionAlgorithm::None,
             EncryptionAlgorithm::AesGcm => fb::EncryptionAlgorithm::AesGcm,
-            EncryptionAlgorithm::AesGcmCtr => fb::EncryptionAlgorithm::AesGcmCtr,
         };
         let key_metadata =
             (!self.key_metadata.is_empty()).then(|| fbb.create_vector(&self.key_metadata));

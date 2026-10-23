@@ -12046,7 +12046,6 @@ dependencies = [
  "async-trait",
  "bytes",
  "codspeed-divan-compat",
- "ctr",
  "flatbuffers",
  "futures",
  "getrandom 0.4.3",

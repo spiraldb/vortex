@@ -148,10 +148,6 @@ enum EncryptionAlgorithm: uint8 {
     /// little-endian uint32, the AAD prefix, `aad_file_unique`, and a module identifier that binds
     /// the ciphertext to its position in the file.
     AesGcm = 1,
-    /// Data segments of the segment map use unauthenticated AES in Counter Mode, stored as
-    /// `ciphertext || nonce (12 bytes)`, with a 16-byte IV of the nonce followed by a big-endian
-    /// 32-bit block counter starting at 1. Every other segment uses AES-GCM as in `AesGcm`.
-    AesGcmCtr = 2,
 }
 
 /// Definition of an encryption scheme.

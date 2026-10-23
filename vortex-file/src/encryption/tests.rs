@@ -177,7 +177,6 @@ fn spec_flatbuffer_roundtrip() -> VortexResult<()> {
         EncryptionKey::from([7; 32]),
         b"k".as_slice(),
     ))
-    .with_algorithm(EncryptionAlgorithm::AesGcmCtr)
     .with_aad_prefix(b"prefix".as_slice())
     .file_cipher(&KeyConfig::new(
         EncryptionKey::from([7; 16]),
@@ -240,22 +239,16 @@ async fn roundtrip_path() -> VortexResult<()> {
 }
 
 #[rstest]
-#[case::gcm_128(EncryptionAlgorithm::AesGcm, 16)]
-#[case::gcm_192(EncryptionAlgorithm::AesGcm, 24)]
-#[case::gcm_256(EncryptionAlgorithm::AesGcm, 32)]
-#[case::ctr_128(EncryptionAlgorithm::AesGcmCtr, 16)]
-#[case::ctr_192(EncryptionAlgorithm::AesGcmCtr, 24)]
-#[case::ctr_256(EncryptionAlgorithm::AesGcmCtr, 32)]
+#[case::aes_128(16)]
+#[case::aes_192(24)]
+#[case::aes_256(32)]
 #[tokio::test]
-async fn algorithms_and_key_lengths(
-    #[case] algorithm: EncryptionAlgorithm,
-    #[case] key_len: usize,
-) -> VortexResult<()> {
+async fn key_lengths_roundtrip(#[case] key_len: usize) -> VortexResult<()> {
     let key = EncryptionKey::generate(key_len)?;
-    let bytes = write(Some(
-        FileEncryption::new(KeyConfig::new(key.clone(), b"key".as_slice()))
-            .with_algorithm(algorithm),
-    ))
+    let bytes = write(Some(FileEncryption::new(KeyConfig::new(
+        key.clone(),
+        b"key".as_slice(),
+    ))))
     .await?;
     assert!(!contains(&bytes, SECRET.as_bytes()));
 
@@ -265,7 +258,7 @@ async fn algorithms_and_key_lengths(
             .encryption_specs()
             .iter()
             .skip(1)
-            .all(|spec| spec.algorithm() == algorithm)
+            .all(|spec| spec.algorithm() == EncryptionAlgorithm::AesGcm)
     );
     assert_reads_all(&file).await
 }

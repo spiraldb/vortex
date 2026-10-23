@@ -108,15 +108,12 @@ statistics, footer, and user metadata segments referenced by the postscript. The
   reader, for example by a key management service key id.
 - AES-128, AES-192, and AES-256 are supported, selected by the length of the key.
 
-### Algorithms
+### Algorithm
 
-- `AesGcm` encrypts every segment with AES-GCM, stored as `ciphertext || nonce || tag`, with a random 12-byte nonce and
-  a 16-byte tag. The ciphertext has the plaintext's length and starts at the segment's offset.
-- `AesGcmCtr` encrypts the data segments of the segment map with AES-CTR, stored as `ciphertext || nonce`, and every
-  other segment with AES-GCM. The 16-byte IV is the nonce followed by a big-endian 32-bit block counter starting at 1.
-  AES-CTR is faster, but does not detect modified data.
+`AesGcm` encrypts every segment with AES-GCM, stored as `ciphertext || nonce || tag`, with a random 12-byte nonce and a
+16-byte tag. The ciphertext has the plaintext's length and starts at the segment's offset.
 
-The additional authenticated data of AES-GCM is the length of the AAD prefix as a little-endian `uint32`, the AAD
+The additional authenticated data is the length of the AAD prefix as a little-endian `uint32`, the AAD
 prefix, the spec's random `aad_file_unique` bytes, and an identifier of the segment: its index in the segment map, the
 name of a footer segment, or the key of a metadata segment. A segment moved within or between files fails to decrypt.
 

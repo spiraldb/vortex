@@ -116,10 +116,7 @@ impl SegmentSink for BufferedSegmentSink {
             let plaintext_length = buffers.iter().map(|buffer| buffer.len()).sum::<usize>();
             let (length, encryption) = match cipher {
                 None => (plaintext_length, 0),
-                Some((cipher, encryption)) => (
-                    plaintext_length + cipher.overhead(SegmentRole::Data(0)),
-                    *encryption,
-                ),
+                Some((cipher, encryption)) => (plaintext_length + cipher.overhead(), *encryption),
             };
             let length = u32::try_from(length)
                 .map_err(|_| vortex_err!("segment buffer length exceeds maximum u32"))?;

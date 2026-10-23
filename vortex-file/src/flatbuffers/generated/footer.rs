@@ -105,13 +105,12 @@ impl ::flatbuffers::SimpleToVerifyInSlice for CompressionScheme {}
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 pub const ENUM_MIN_ENCRYPTION_ALGORITHM: u8 = 0;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
-pub const ENUM_MAX_ENCRYPTION_ALGORITHM: u8 = 2;
+pub const ENUM_MAX_ENCRYPTION_ALGORITHM: u8 = 1;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 #[allow(non_camel_case_types)]
-pub const ENUM_VALUES_ENCRYPTION_ALGORITHM: [EncryptionAlgorithm; 3] = [
+pub const ENUM_VALUES_ENCRYPTION_ALGORITHM: [EncryptionAlgorithm; 2] = [
   EncryptionAlgorithm::None,
   EncryptionAlgorithm::AesGcm,
-  EncryptionAlgorithm::AesGcmCtr,
 ];
 
 /// The key length (16, 24, or 32 bytes) selects AES-128, AES-192, or AES-256.
@@ -127,24 +126,18 @@ impl EncryptionAlgorithm {
   /// little-endian uint32, the AAD prefix, `aad_file_unique`, and a module identifier that binds
   /// the ciphertext to its position in the file.
   pub const AesGcm: Self = Self(1);
-  /// Data segments of the segment map use unauthenticated AES in Counter Mode, stored as
-  /// `ciphertext || nonce (12 bytes)`, with a 16-byte IV of the nonce followed by a big-endian
-  /// 32-bit block counter starting at 1. Every other segment uses AES-GCM as in `AesGcm`.
-  pub const AesGcmCtr: Self = Self(2);
 
   pub const ENUM_MIN: u8 = 0;
-  pub const ENUM_MAX: u8 = 2;
+  pub const ENUM_MAX: u8 = 1;
   pub const ENUM_VALUES: &'static [Self] = &[
     Self::None,
     Self::AesGcm,
-    Self::AesGcmCtr,
   ];
   /// Returns the variant's name or "" if unknown.
   pub fn variant_name(self) -> Option<&'static str> {
     match self {
       Self::None => Some("None"),
       Self::AesGcm => Some("AesGcm"),
-      Self::AesGcmCtr => Some("AesGcmCtr"),
       _ => None,
     }
   }

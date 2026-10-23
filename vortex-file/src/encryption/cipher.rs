@@ -13,12 +13,7 @@ use aes_gcm::KeyInit;
 use aes_gcm::Nonce;
 use aes_gcm::Tag;
 use aes_gcm::aead::consts::U12;
-use aes_gcm::aes::Aes128;
 use aes_gcm::aes::Aes192;
-use aes_gcm::aes::Aes256;
-use ctr::Ctr32BE;
-use ctr::cipher::KeyIvInit;
-use ctr::cipher::StreamCipher;
 use vortex_buffer::Alignment;
 use vortex_buffer::ByteBuffer;
 use vortex_buffer::ByteBufferMut;
@@ -27,7 +22,6 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
 
-use super::EncryptionAlgorithm;
 use super::EncryptionKey;
 use super::EncryptionSpec;
 use super::FileDecryption;
@@ -139,34 +133,10 @@ impl Aead {
     }
 }
 
-/// Apply the AES-CTR keystream for `nonce` to `buffer`. The 16-byte IV is the nonce followed by a
-/// 32-bit big-endian block counter starting at 1.
-fn apply_ctr(key: &EncryptionKey, nonce: &[u8; NONCE_LEN], buffer: &mut [u8]) -> VortexResult<()> {
-    let mut iv = [0u8; 16];
-    iv[..NONCE_LEN].copy_from_slice(nonce);
-    iv[15] = 1;
-    let bytes = key.as_bytes();
-    let invalid = |_| vortex_err!("Invalid AES key length {}", bytes.len());
-    match bytes.len() {
-        16 => Ctr32BE::<Aes128>::new_from_slices(bytes, &iv)
-            .map_err(invalid)?
-            .try_apply_keystream(buffer),
-        24 => Ctr32BE::<Aes192>::new_from_slices(bytes, &iv)
-            .map_err(invalid)?
-            .try_apply_keystream(buffer),
-        32 => Ctr32BE::<Aes256>::new_from_slices(bytes, &iv)
-            .map_err(invalid)?
-            .try_apply_keystream(buffer),
-        len => vortex_bail!("Invalid AES key length {len}"),
-    }
-    .map_err(|_| vortex_err!("Segment of {} bytes is too long for AES-CTR", buffer.len()))
-}
-
 /// Encrypts, decrypts and signs the segments of one [`EncryptionSpec`].
 #[derive(Clone)]
 pub(crate) struct SegmentCipher {
     spec: EncryptionSpec,
-    key: EncryptionKey,
     aead: Aead,
     /// The additional authenticated data shared by every segment, without the segment's role.
     aad: Arc<[u8]>,
@@ -189,7 +159,6 @@ impl SegmentCipher {
         Ok(Self {
             spec,
             aead: Aead::new(&key)?,
-            key,
             aad: aad.into(),
         })
     }
@@ -227,19 +196,9 @@ impl SegmentCipher {
         &self.spec
     }
 
-    /// Whether segments with `role` are encrypted with AES-CTR rather than AES-GCM.
-    fn uses_ctr(&self, role: SegmentRole<'_>) -> bool {
-        self.spec.algorithm == EncryptionAlgorithm::AesGcmCtr
-            && matches!(role, SegmentRole::Data(_))
-    }
-
-    /// The number of bytes an encrypted segment with `role` occupies beyond its plaintext.
-    pub(crate) fn overhead(&self, role: SegmentRole<'_>) -> usize {
-        if self.uses_ctr(role) {
-            NONCE_LEN
-        } else {
-            SIGNATURE_LEN
-        }
+    /// The number of bytes an encrypted segment occupies beyond its plaintext.
+    pub(crate) fn overhead(&self) -> usize {
+        SIGNATURE_LEN
     }
 
     fn aad(&self, role: SegmentRole<'_>) -> Vec<u8> {
@@ -251,8 +210,7 @@ impl SegmentCipher {
 
     /// Encrypt the concatenation of `buffers` into a single buffer aligned to `alignment`.
     ///
-    /// The result is `ciphertext || nonce || tag` for AES-GCM, and `ciphertext || nonce` for
-    /// AES-CTR, with a ciphertext of the plaintext's length.
+    /// The result is `ciphertext || nonce || tag`, with a ciphertext of the plaintext's length.
     pub(crate) fn encrypt(
         &self,
         role: SegmentRole<'_>,
@@ -260,37 +218,29 @@ impl SegmentCipher {
         alignment: Alignment,
     ) -> VortexResult<ByteBuffer> {
         let len = buffers.iter().map(ByteBuffer::len).sum::<usize>();
-        let mut out = ByteBufferMut::with_capacity_aligned(len + self.overhead(role), alignment);
+        let mut out = ByteBufferMut::with_capacity_aligned(len + self.overhead(), alignment);
         for buffer in buffers {
             out.extend_from_slice(buffer.as_slice());
         }
-
-        if self.uses_ctr(role) {
-            let mut nonce = [0u8; NONCE_LEN];
-            fill_random(&mut nonce)?;
-            apply_ctr(&self.key, &nonce, out.as_mut_slice())?;
-            out.extend_from_slice(&nonce);
-        } else {
-            let nonce_tag = self
-                .aead
-                .seal(&self.aad(role), out.as_mut_slice())
-                .map_err(|e| vortex_err!("Failed to encrypt {role:?} segment: {e}"))?;
-            out.extend_from_slice(&nonce_tag);
-        }
+        let nonce_tag = self
+            .aead
+            .seal(&self.aad(role), out.as_mut_slice())
+            .map_err(|e| vortex_err!("Failed to encrypt {role:?} segment: {e}"))?;
+        out.extend_from_slice(&nonce_tag);
         Ok(out.freeze())
     }
 
-    /// Decrypt an encrypted segment, returning a plaintext aligned to `alignment`.
+    /// Decrypt and authenticate an encrypted segment, returning a plaintext aligned to
+    /// `alignment`.
     ///
-    /// AES-GCM segments are authenticated. The ciphertext is decrypted in place when `encrypted`
-    /// is not shared.
+    /// The ciphertext is decrypted in place when `encrypted` is not shared.
     pub(crate) fn decrypt(
         &self,
         role: SegmentRole<'_>,
         encrypted: ByteBuffer,
         alignment: Alignment,
     ) -> VortexResult<ByteBuffer> {
-        let overhead = self.overhead(role);
+        let overhead = self.overhead();
         let Some(len) = encrypted.len().checked_sub(overhead) else {
             vortex_bail!(
                 "Encrypted {role:?} segment of {} bytes is shorter than the {overhead} bytes of \
@@ -299,7 +249,7 @@ impl SegmentCipher {
             );
         };
         let mut trailer = [0u8; SIGNATURE_LEN];
-        trailer[..overhead].copy_from_slice(&encrypted[len..]);
+        trailer.copy_from_slice(&encrypted[len..]);
 
         let mut plaintext = match encrypted.try_into_mut() {
             Ok(buffer) if buffer.alignment().is_aligned_to(alignment) => buffer,
@@ -307,21 +257,14 @@ impl SegmentCipher {
             Err(buffer) => ByteBufferMut::copy_from_aligned(buffer, alignment),
         };
         plaintext.truncate(len);
-
-        if self.uses_ctr(role) {
-            let mut nonce = [0u8; NONCE_LEN];
-            nonce.copy_from_slice(&trailer[..NONCE_LEN]);
-            apply_ctr(&self.key, &nonce, plaintext.as_mut_slice())?;
-        } else {
-            self.aead
-                .open(&self.aad(role), plaintext.as_mut_slice(), &trailer)
-                .map_err(|()| {
-                    vortex_err!(
-                        "Failed to decrypt {role:?} segment: the key or AAD prefix is wrong, or \
-                         the segment was modified"
-                    )
-                })?;
-        }
+        self.aead
+            .open(&self.aad(role), plaintext.as_mut_slice(), &trailer)
+            .map_err(|()| {
+                vortex_err!(
+                    "Failed to decrypt {role:?} segment: the key or AAD prefix is wrong, or the \
+                     segment was modified"
+                )
+            })?;
         Ok(plaintext.freeze())
     }
 
@@ -366,28 +309,23 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
+    use crate::encryption::EncryptionAlgorithm;
     use crate::encryption::KeyConfig;
 
-    fn cipher(algorithm: EncryptionAlgorithm, key_len: usize) -> VortexResult<SegmentCipher> {
+    fn cipher(key_len: usize) -> VortexResult<SegmentCipher> {
         KeyConfig::new(
             EncryptionKey::try_from_slice(&vec![7; key_len])?,
             b"key-1".as_slice(),
         )
-        .file_cipher(algorithm, None)
+        .file_cipher(EncryptionAlgorithm::AesGcm, None)
     }
 
     #[rstest]
-    #[case::gcm_128(EncryptionAlgorithm::AesGcm, 16)]
-    #[case::gcm_192(EncryptionAlgorithm::AesGcm, 24)]
-    #[case::gcm_256(EncryptionAlgorithm::AesGcm, 32)]
-    #[case::ctr_128(EncryptionAlgorithm::AesGcmCtr, 16)]
-    #[case::ctr_192(EncryptionAlgorithm::AesGcmCtr, 24)]
-    #[case::ctr_256(EncryptionAlgorithm::AesGcmCtr, 32)]
-    fn roundtrip(
-        #[case] algorithm: EncryptionAlgorithm,
-        #[case] key_len: usize,
-    ) -> VortexResult<()> {
-        let cipher = cipher(algorithm, key_len)?;
+    #[case::aes_128(16)]
+    #[case::aes_192(24)]
+    #[case::aes_256(32)]
+    fn roundtrip(#[case] key_len: usize) -> VortexResult<()> {
+        let cipher = cipher(key_len)?;
         let buffers = [
             ByteBuffer::copy_from(b"hello "),
             ByteBuffer::copy_from(b"world"),
@@ -396,7 +334,7 @@ mod tests {
 
         for role in [SegmentRole::Data(3), SegmentRole::Footer] {
             let encrypted = cipher.encrypt(role, &buffers, alignment)?;
-            assert_eq!(encrypted.len(), 11 + cipher.overhead(role));
+            assert_eq!(encrypted.len(), 11 + cipher.overhead());
             assert_ne!(&encrypted[..11], b"hello world");
 
             let decrypted = cipher.decrypt(role, encrypted, alignment)?;
@@ -407,34 +345,8 @@ mod tests {
     }
 
     #[test]
-    fn ctr_applies_to_data_segments_only() -> VortexResult<()> {
-        let cipher = cipher(EncryptionAlgorithm::AesGcmCtr, 32)?;
-        assert_eq!(cipher.overhead(SegmentRole::Data(0)), NONCE_LEN);
-        assert_eq!(cipher.overhead(SegmentRole::Footer), SIGNATURE_LEN);
-        assert_eq!(cipher.overhead(SegmentRole::Metadata("key")), SIGNATURE_LEN);
-        Ok(())
-    }
-
-    /// AES-CTR provides no integrity: a modified data segment decrypts to modified plaintext.
-    #[test]
-    fn ctr_is_not_authenticated() -> VortexResult<()> {
-        let cipher = cipher(EncryptionAlgorithm::AesGcmCtr, 32)?;
-        let encrypted = cipher.encrypt(
-            SegmentRole::Data(0),
-            &[ByteBuffer::copy_from(b"data")],
-            Alignment::none(),
-        )?;
-        let mut tampered = ByteBufferMut::copy_from(&encrypted);
-        tampered[0] ^= 1;
-        let decrypted =
-            cipher.decrypt(SegmentRole::Data(0), tampered.freeze(), Alignment::none())?;
-        assert_eq!(decrypted.as_slice(), b"eata");
-        Ok(())
-    }
-
-    #[test]
     fn rejects_other_role() -> VortexResult<()> {
-        let cipher = cipher(EncryptionAlgorithm::AesGcm, 32)?;
+        let cipher = cipher(32)?;
         let encrypted = cipher.encrypt(
             SegmentRole::Data(3),
             &[ByteBuffer::copy_from(b"data")],
@@ -450,13 +362,13 @@ mod tests {
     #[test]
     fn rejects_other_file() -> VortexResult<()> {
         // Same key and key metadata, but a different file, and so different per-file AAD bytes.
-        let encrypted = cipher(EncryptionAlgorithm::AesGcm, 32)?.encrypt(
+        let encrypted = cipher(32)?.encrypt(
             SegmentRole::Footer,
             &[ByteBuffer::copy_from(b"footer")],
             Alignment::none(),
         )?;
         assert!(
-            cipher(EncryptionAlgorithm::AesGcm, 32)?
+            cipher(32)?
                 .decrypt(SegmentRole::Footer, encrypted, Alignment::none())
                 .is_err()
         );
@@ -465,7 +377,7 @@ mod tests {
 
     #[test]
     fn rejects_wrong_key() -> VortexResult<()> {
-        let cipher = cipher(EncryptionAlgorithm::AesGcm, 32)?;
+        let cipher = cipher(32)?;
         let encrypted = cipher.encrypt(
             SegmentRole::Layout,
             &[ByteBuffer::copy_from(b"layout")],
@@ -482,7 +394,7 @@ mod tests {
 
     #[test]
     fn rejects_truncated_segment() -> VortexResult<()> {
-        let err = cipher(EncryptionAlgorithm::AesGcm, 32)?
+        let err = cipher(32)?
             .decrypt(
                 SegmentRole::DType,
                 ByteBuffer::copy_from([0u8; SIGNATURE_LEN - 1]),
@@ -495,7 +407,7 @@ mod tests {
 
     #[test]
     fn signature() -> VortexResult<()> {
-        let signer = cipher(EncryptionAlgorithm::AesGcm, 32)?;
+        let signer = cipher(32)?;
         let signature = signer.sign(SegmentRole::Footer, b"footer")?;
         signer.verify(SegmentRole::Footer, b"footer", &signature)?;
 
@@ -510,7 +422,7 @@ mod tests {
                 .is_err()
         );
         assert!(
-            cipher(EncryptionAlgorithm::AesGcm, 32)?
+            cipher(32)?
                 .verify(SegmentRole::Footer, b"footer", &signature)
                 .is_err()
         );
