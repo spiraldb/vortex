@@ -233,6 +233,7 @@ impl ScanBuilder {
         };
         let values = cache.values();
         tracing::debug!(
+            chunk_rows,
             root = u64::try_from(t_root).unwrap_or(u64::MAX),
             filter = u64::try_from(t_filter).unwrap_or(u64::MAX),
             projection = u64::try_from(t_projection).unwrap_or(u64::MAX),
