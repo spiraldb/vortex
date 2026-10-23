@@ -258,20 +258,21 @@ recording the minimum version.
 
 ## Compression
 
-The default BtrBlocks compressor excludes a scheme if any of its declared output wire IDs is
-forbidden. This filtering also applies to schemes used for child compression.
+The default BtrBlocks compressor uses only the schemes whose output it can write. A wire ID is
+allowed when the session registers it, the enabled editions permit it, and the compressor's preset
+does not exclude it. For example, the CUDA preset excludes some v2 IDs. The compressor excludes a
+scheme if any wire ID that the scheme declares is not allowed. Child arrays go through the same
+compressor. The writer still checks every serialized ID, so a forbidden ID in any child fails the
+write.
 
-The current decimal scheme produces only single-child arrays and declares the v1 wire ID, so values
-too wide for it remain in the standard uncompressed decimal representation. The multi-child
-serializer exists, but the default scheme does not construct those arrays and no declared edition
-permits their v2 ID.
-
-### Planned scheme configuration
-
-The planned improvement is to configure a scheme's behavior for the selected editions, allowing it
-to retain an older mode when its newer mode requires a forbidden format. That configuration needs to
-apply consistently to estimation, sampling, full compression, children, and fallbacks. General
-per-writer scheme configuration is not implemented, and its API is unsettled.
+A scheme can have variants that write different wire IDs. The compressor picks the variant from the
+allowed wire IDs, so callers do not choose it directly. For example, the decimal scheme uses its v2
+variant, which splits values too wide for one 64-bit child into several children, only when
+`vortex.decimal_byte_parts.v2` is allowed. Otherwise its v1 variant constructs only single-child
+arrays, and values too wide for one child remain in the standard uncompressed decimal
+representation. The v2 variant also writes the v1 ID for arrays that fit the v1 format, so allowing
+only the v2 ID excludes the scheme. No declared edition permits `vortex.decimal_byte_parts.v2` yet,
+so a writer that enforces editions writes only single-child decimal arrays.
 
 [^decimal-availability]:
     No declared edition currently permits the multi-child format. The

@@ -25,6 +25,7 @@ use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::DecimalDType;
 use vortex_array::dtype::Nullability;
+use vortex_array::optimizer::kernels::KernelSession;
 use vortex_array::validity::Validity;
 use vortex_buffer::BufferMut;
 use vortex_session::VortexSession;
@@ -36,6 +37,7 @@ use vortex_session::VortexSession;
 static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
+    LazyLock::force(&SESSION);
     divan::main();
 }
 
@@ -43,7 +45,8 @@ fn main() {
 // and to keep the CodSpeed simulation under 1ms per benchmark.
 const SIZES: &[usize] = &[16_384];
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::array_session);
+static SESSION: LazyLock<VortexSession> =
+    LazyLock::new(|| VortexSession::empty().with::<KernelSession>());
 
 /// Builds an `i64`-backed `Decimal(precision, scale)` array of `n` values that all fit in
 /// precision 10, optionally with ~50% nulls.

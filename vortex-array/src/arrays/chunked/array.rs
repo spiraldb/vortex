@@ -296,12 +296,14 @@ impl FromIterator<ArrayRef> for Array<Chunked> {
 
 #[cfg(test)]
 mod test {
+    use std::sync::LazyLock;
+
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
+    use vortex_session::VortexSession;
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::ChunkedArray;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::chunked::ChunkedArrayExt;
@@ -311,9 +313,11 @@ mod test {
     use crate::dtype::PType;
     use crate::validity::Validity;
 
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
+
     #[test]
     fn test_rechunk_one_chunk() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let chunked = ChunkedArray::try_new(
             vec![buffer![0u64].into_array()],
             DType::Primitive(PType::U64, Nullability::NonNullable),
@@ -327,7 +331,7 @@ mod test {
 
     #[test]
     fn test_rechunk_two_chunks() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let chunked = ChunkedArray::try_new(
             vec![buffer![0u64].into_array(), buffer![5u64].into_array()],
             DType::Primitive(PType::U64, Nullability::NonNullable),
@@ -342,7 +346,7 @@ mod test {
 
     #[test]
     fn test_rechunk_tiny_target_chunks() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let chunked = ChunkedArray::try_new(
             vec![
                 buffer![0u64, 1, 2, 3].into_array(),
@@ -361,7 +365,7 @@ mod test {
 
     #[test]
     fn test_rechunk_with_too_big_chunk() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let chunked = ChunkedArray::try_new(
             vec![
                 buffer![0u64, 1, 2].into_array(),
@@ -383,7 +387,7 @@ mod test {
 
     #[test]
     fn test_empty_chunks_all_valid() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         // Create chunks where some are empty but all non-empty chunks have all valid values
         let chunks = vec![
             PrimitiveArray::new(buffer![1u64, 2, 3], Validity::AllValid).into_array(),
@@ -404,7 +408,7 @@ mod test {
 
     #[test]
     fn test_empty_chunks_all_invalid() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         // Create chunks where some are empty but all non-empty chunks have all invalid values
         let chunks = vec![
             PrimitiveArray::new(buffer![1u64, 2], Validity::AllInvalid).into_array(),
@@ -425,7 +429,7 @@ mod test {
 
     #[test]
     fn test_empty_chunks_mixed_validity() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         // Create chunks with mixed validity including empty chunks
         let chunks = vec![
             PrimitiveArray::new(buffer![1u64, 2], Validity::AllValid).into_array(),

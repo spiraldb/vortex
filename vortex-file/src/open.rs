@@ -541,7 +541,7 @@ mod tests {
     use crate::footer::SegmentSpec;
 
     fn test_session() -> VortexSession {
-        let session = vortex_array::array_session()
+        let session = VortexSession::empty()
             .with::<LayoutSession>()
             .with::<RuntimeSession>();
         crate::register_default_encodings(&session);
@@ -605,7 +605,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_initial_read_size() {
-        let session = vortex_array::array_session()
+        let session = VortexSession::empty()
             .with::<LayoutSession>()
             .with::<RuntimeSession>();
 
@@ -667,7 +667,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_metadata_outside_initial_read_uses_targeted_read() -> VortexResult<()> {
-        let session = vortex_array::array_session()
+        let session = VortexSession::empty()
             .with::<LayoutSession>()
             .with::<RuntimeSession>();
         crate::register_default_encodings(&session);
@@ -741,7 +741,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_with_footer_include_metadata_open_buffer_resolves() -> VortexResult<()> {
-        let session = vortex_array::array_session()
+        let session = VortexSession::empty()
             .with::<LayoutSession>()
             .with::<RuntimeSession>();
         crate::register_default_encodings(&session);
@@ -782,7 +782,7 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[tokio::test]
     async fn test_open_path_uses_memory_session_allocator() {
-        let session = vortex_array::array_session()
+        let session = VortexSession::empty()
             .with::<LayoutSession>()
             .with::<RuntimeSession>();
 

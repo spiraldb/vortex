@@ -4,6 +4,7 @@
 use std::num::NonZeroUsize;
 use std::ops::Range;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -20,7 +21,6 @@ use vortex_array::ArrayContext;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::PrimitiveArray;
@@ -76,13 +76,15 @@ use crate::sequence::SequentialStreamAdapter;
 use crate::sequence::SequentialStreamExt as _;
 use crate::test::new_session;
 
+static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
+
 const CHUNK_ROWS: usize = 1000;
 const CHUNKS: usize = 4;
 
 /// A table chunk of `CHUNK_ROWS` rows starting at row `start`: an integer, a nullable string and a
 /// list column.
 fn table_chunk(start: usize) -> VortexResult<ArrayRef> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     let rows = start..start + CHUNK_ROWS;
     let ints = Buffer::from_iter(
         rows.clone()

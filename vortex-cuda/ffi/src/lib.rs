@@ -78,6 +78,17 @@ pub struct vx_cuda_scan_options {
     pub batch_rows: usize,
 }
 
+/// Release Vortex's cached file mappings that no open scan uses.
+///
+/// Scans keep their files mapped so later scans of the same file reuse filled page tables. The
+/// operating system cannot evict mapped pages from the page cache, so call this before evicting
+/// files, for example before a cold-cache measurement. Mappings still used by open streams stay
+/// mapped until those streams are released.
+#[unsafe(no_mangle)]
+pub extern "C-unwind" fn vx_cuda_release_file_mappings() {
+    vortex_cuda::release_file_mappings();
+}
+
 fn session_with_cuda(session: &VortexSession) -> &VortexSession {
     session.get::<CudaSession>();
     register_cuda_layout(session);
@@ -494,9 +505,6 @@ mod tests {
     use arrow_schema::DataType;
     use arrow_schema::Field;
     use arrow_schema::Schema;
-    use cudarc::driver::CudaContext;
-    use cudarc::driver::result;
-    use cudarc::driver::sys::CUevent;
     use futures::TryStreamExt;
     use tempfile::NamedTempFile;
     use vortex::VortexSessionDefault;
@@ -532,6 +540,9 @@ mod tests {
     use vortex_cuda::arrow::ArrowArray;
     use vortex_cuda::arrow::release_device_array;
     use vortex_cuda::arrow::release_schema;
+    use vortex_cuda_driver::CudaContext;
+    use vortex_cuda_driver::result;
+    use vortex_cuda_driver::sys::CUevent;
     use vortex_cuda_macros::cuda_not_available;
     use vortex_cuda_macros::test as cuda_test;
     use vortex_ffi::vx_array_free as free_test_array;

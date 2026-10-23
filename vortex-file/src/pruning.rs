@@ -18,9 +18,10 @@ use vortex_array::scalar_fn::fns::cast::Cast;
 use vortex_array::scalar_fn::fns::get_item::GetItem;
 use vortex_array::scalar_fn::fns::literal::Literal;
 use vortex_array::scalar_fn::internal::row_count::substitute_row_count;
-use vortex_array::stats::bind::StatBinder;
-use vortex_array::stats::bind::bind_stats;
 use vortex_error::VortexResult;
+use vortex_expr::stats::bind::StatBinder;
+use vortex_expr::stats::bind::bind_stats;
+use vortex_expr::stats::rewrite::BoundExpressionPruneExt;
 use vortex_session::VortexSession;
 
 use crate::FileStatistics;

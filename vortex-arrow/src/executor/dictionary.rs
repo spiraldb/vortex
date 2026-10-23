@@ -435,6 +435,7 @@ fn make_dict_array(
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::sync::LazyLock;
 
     use arrow_array::DictionaryArray as ArrowDictArray;
     use arrow_array::Float64Array;
@@ -451,7 +452,6 @@ mod tests {
     use rstest::rstest;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::BoolArray;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::arrays::VarBinViewArray;
@@ -463,10 +463,13 @@ mod tests {
     use vortex_error::VortexResult;
     use vortex_fastlanes::BitPackedArrayExt;
     use vortex_fastlanes::BitPackedData;
+    use vortex_session::VortexSession;
 
     use crate::ArrowArrayExecutor;
     use crate::executor::dictionary::ConstantArray;
     use crate::executor::dictionary::DictArray;
+
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     fn dict_type(codes: DataType, values: DataType) -> DataType {
         DataType::Dictionary(Box::new(codes), Box::new(values))
@@ -476,7 +479,7 @@ mod tests {
         array: vortex_array::ArrayRef,
         dt: &DataType,
     ) -> VortexResult<arrow_array::ArrayRef> {
-        array.execute_arrow(Some(dt), &mut array_session().create_execution_ctx())
+        array.execute_arrow(Some(dt), &mut SESSION.create_execution_ctx())
     }
 
     fn dict_basic_input() -> vortex_array::ArrayRef {
@@ -575,11 +578,8 @@ mod tests {
             .map(|i| (i % 13 != 4).then(|| i64::try_from(i * 7919 % max).unwrap_or(0)))
             .collect();
         let source = PrimitiveArray::from_option_iter(values.clone()).into_array();
-        let packed = BitPackedData::encode(
-            &source,
-            bit_width,
-            &mut array_session().create_execution_ctx(),
-        )?;
+        let packed =
+            BitPackedData::encode(&source, bit_width, &mut SESSION.create_execution_ctx())?;
         assert!(packed.patches().is_none());
 
         let actual = execute(packed.into_array(), &dict_type(codes_type, DataType::Int64))?;

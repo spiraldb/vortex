@@ -6,20 +6,23 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 
+use vortex_array::dtype::DType;
+use vortex_array::expr::BoundExpression;
+use vortex_array::scalar_fn::ScalarFnId;
+use vortex_array::scalar_fn::ScalarFnVTableExt;
+use vortex_array::scalar_fn::fns::binary::Binary;
+use vortex_array::scalar_fn::fns::operators::Operator;
 use vortex_error::VortexResult;
 use vortex_error::vortex_ensure;
 use vortex_session::VortexSession;
 use vortex_utils::iter::ReduceBalancedIterExt;
 
-use crate::dtype::DType;
-use crate::expr::BoundExpression;
-use crate::scalar_fn::ScalarFnId;
-use crate::scalar_fn::ScalarFnVTableExt;
-use crate::scalar_fn::fns::binary::Binary;
-use crate::scalar_fn::fns::operators::Operator;
 use crate::stats::session::StatsSessionExt;
 
 mod builtins;
+#[cfg(test)]
+mod fn_tests;
+mod like_variant;
 
 pub(crate) use builtins::register_builtins;
 
@@ -111,6 +114,25 @@ pub fn satisfy(
     rewrite(expr, session, StatsRewriteRule::satisfy)
 }
 
+/// Statistics-based pruning methods on [`BoundExpression`] predicates.
+pub trait BoundExpressionPruneExt {
+    /// Return an expression that proves this predicate is definitely false from statistics.
+    fn falsify(&self, session: &VortexSession) -> VortexResult<Option<BoundExpression>>;
+
+    /// Return an expression that proves this predicate is definitely true from statistics.
+    fn satisfy(&self, session: &VortexSession) -> VortexResult<Option<BoundExpression>>;
+}
+
+impl BoundExpressionPruneExt for BoundExpression {
+    fn falsify(&self, session: &VortexSession) -> VortexResult<Option<BoundExpression>> {
+        falsify(self, session)
+    }
+
+    fn satisfy(&self, session: &VortexSession) -> VortexResult<Option<BoundExpression>> {
+        satisfy(self, session)
+    }
+}
+
 fn rewrite(
     expr: &BoundExpression,
     session: &VortexSession,
@@ -143,21 +165,26 @@ fn rewrite(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
+    use vortex_array::dtype::DType;
+    use vortex_array::dtype::Nullability;
+    use vortex_array::dtype::PType;
+    use vortex_array::expr::BoundExpression;
+    use vortex_array::expr::lit;
+    use vortex_array::expr::not;
+    use vortex_array::expr::or;
+    use vortex_array::scalar_fn::ScalarFnId;
+    use vortex_array::scalar_fn::ScalarFnVTable;
+    use vortex_array::scalar_fn::fns::not::Not;
     use vortex_error::VortexResult;
     use vortex_session::VortexSession;
 
     use super::StatsRewriteRule;
-    use crate::dtype::DType;
-    use crate::dtype::Nullability;
-    use crate::dtype::PType;
-    use crate::expr::BoundExpression;
-    use crate::expr::lit;
-    use crate::expr::not;
-    use crate::expr::or;
-    use crate::scalar_fn::ScalarFnId;
-    use crate::scalar_fn::ScalarFnVTable;
-    use crate::scalar_fn::fns::not::Not;
+    use crate::stats::rewrite::BoundExpressionPruneExt;
     use crate::stats::session::StatsSessionExt;
+
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     #[derive(Debug)]
     struct StaticNotRule {
@@ -189,7 +216,7 @@ mod tests {
 
     #[test]
     fn combines_multiple_falsifiers_with_or() -> VortexResult<()> {
-        let session = crate::array_session();
+        let session = VortexSession::empty();
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
         session.stats().register_rewrite(StaticNotRule {
             falsifier: Some(lit(false).bind(&dtype)?),
@@ -209,7 +236,7 @@ mod tests {
 
     #[test]
     fn combines_multiple_satisfiers_with_or() -> VortexResult<()> {
-        let session = crate::array_session();
+        let session = VortexSession::empty();
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
         session.stats().register_rewrite(StaticNotRule {
             falsifier: None,
@@ -229,23 +256,21 @@ mod tests {
 
     #[test]
     fn unregistered_expression_has_no_rewrite() -> VortexResult<()> {
-        let session = crate::array_session();
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
 
         let expr = not(lit(true)).bind(&dtype)?;
-        assert_eq!(expr.falsify(&session)?, None);
-        assert_eq!(expr.satisfy(&session)?, None);
+        assert_eq!(expr.falsify(&SESSION)?, None);
+        assert_eq!(expr.satisfy(&SESSION)?, None);
         Ok(())
     }
 
     #[test]
     fn non_predicate_expression_errors() -> VortexResult<()> {
-        let session = crate::array_session();
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
 
         let expr = lit(7).bind(&dtype)?;
-        assert!(expr.falsify(&session).is_err());
-        assert!(expr.satisfy(&session).is_err());
+        assert!(expr.falsify(&SESSION).is_err());
+        assert!(expr.satisfy(&SESSION).is_err());
         Ok(())
     }
 }

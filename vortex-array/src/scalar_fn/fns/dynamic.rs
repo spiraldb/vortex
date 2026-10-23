@@ -140,6 +140,25 @@ pub struct DynamicComparisonExpr {
 }
 
 impl DynamicComparisonExpr {
+    /// The comparison applied between the input and the dynamic value.
+    pub fn operator(&self) -> CompareOperator {
+        self.operator
+    }
+
+    /// The result used while the dynamic value is not yet known.
+    pub fn default(&self) -> bool {
+        self.default
+    }
+
+    /// A comparison against the same dynamic value with a different operator and default.
+    pub fn with_operator(&self, operator: CompareOperator, default: bool) -> Self {
+        Self {
+            operator,
+            rhs: Arc::clone(&self.rhs),
+            default,
+        }
+    }
+
     pub fn scalar(&self) -> Option<Scalar> {
         (self.rhs.value)().map(|v| {
             Scalar::try_new(self.rhs.dtype.clone(), Some(v))
@@ -279,16 +298,17 @@ impl DynamicExprUpdates {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
     use std::sync::atomic::AtomicI32;
     use std::sync::atomic::Ordering;
 
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
+    use vortex_session::VortexSession;
 
     use super::*;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::assert_arrays_eq;
     use crate::dtype::DType;
@@ -296,6 +316,8 @@ mod tests {
     use crate::dtype::PType;
     use crate::expr::dynamic;
     use crate::expr::root;
+
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     #[test]
     fn is_not_strict() {
@@ -329,7 +351,7 @@ mod tests {
 
     #[test]
     fn execute_with_value() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let input = buffer![1i32, 5, 10].into_array();
         let expr = dynamic(
             CompareOperator::Lt,
@@ -345,7 +367,7 @@ mod tests {
 
     #[test]
     fn execute_without_value_default_true() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let input = buffer![1i32, 5, 10].into_array();
         let expr = dynamic(
             CompareOperator::Lt,
@@ -361,7 +383,7 @@ mod tests {
 
     #[test]
     fn execute_without_value_default_false() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let input = buffer![1i32, 5, 10].into_array();
         let expr = dynamic(
             CompareOperator::Lt,
@@ -381,7 +403,7 @@ mod tests {
 
     #[test]
     fn execute_value_flips() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let threshold = Arc::new(AtomicI32::new(5));
         let threshold_clone = Arc::clone(&threshold);
         let expr = dynamic(

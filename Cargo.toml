@@ -13,6 +13,7 @@ members = [
     "vortex-io",
     "vortex-cloud",
     "vortex-array",
+    "vortex-expr",
     "vortex-arrow",
     "vortex-row",
     "vortex-tensor",
@@ -29,6 +30,7 @@ members = [
     "vortex-duckdb",
     "vortex-cuda",
     "vortex-cuda/cub",
+    "vortex-cuda/driver",
     "vortex-cuda/ffi",
     "vortex-cuda/gpu-scan-cli",
     "vortex-cuda/macros",
@@ -130,12 +132,6 @@ clap = "4.5"
 criterion = { package = "codspeed-criterion-compat-walltime", version = "5.0.0" }
 crossbeam-channel = "0.5.16"
 crossterm = "0.29"
-cudarc = { version = "0.19.0", features = [
-    # The NSight Compute version available on lambda.ai hosts does not inject a symbol for
-    # several functions that cudarc expects to load when this is set to "cuda-12080". We
-    # don't use any CUDA 12.8 specific features currently so this is fine.
-    "cuda-12050",
-] }
 custom-labels = "0.4.4"
 dashmap = "6.2.1"
 datafusion = { version = "55.0.0", default-features = false, features = [
@@ -318,6 +314,7 @@ vortex-datetime-parts = { version = "0.1.0", path = "./encodings/datetime-parts"
 vortex-decimal-byte-parts = { version = "0.1.0", path = "encodings/decimal-byte-parts", default-features = false }
 vortex-edition = { version = "0.1.0", path = "./vortex-edition", default-features = false }
 vortex-error = { version = "0.1.0", path = "./vortex-error", default-features = false }
+vortex-expr = { version = "0.1.0", path = "./vortex-expr", default-features = false }
 vortex-fastlanes = { version = "0.1.0", path = "./encodings/fastlanes", default-features = false }
 vortex-file = { version = "0.1.0", path = "./vortex-file", default-features = false }
 vortex-fsst = { version = "0.1.0", path = "./encodings/fsst", default-features = false }
@@ -348,6 +345,7 @@ vortex-zstd = { version = "0.1.0", path = "./encodings/zstd", default-features =
 vortex-bench = { path = "./vortex-bench", default-features = false }
 vortex-bench-support = { path = "./benchmarks/bench-support" }
 vortex-cuda = { path = "./vortex-cuda", default-features = false }
+vortex-cuda-driver = { path = "./vortex-cuda/driver" }
 vortex-cuda-macros = { path = "./vortex-cuda/macros" }
 vortex-duckdb = { path = "./vortex-duckdb", default-features = false }
 vortex-tui = { path = "./vortex-tui" }

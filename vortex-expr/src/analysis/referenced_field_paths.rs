@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use vortex_array::dtype::Field;
+use vortex_array::dtype::FieldPath;
+use vortex_array::dtype::FieldPathSet;
+use vortex_array::expr::BoundExpression;
+use vortex_array::expr::traversal::FoldDownContext;
+use vortex_array::expr::traversal::FoldUp;
+use vortex_array::expr::traversal::NodeExt;
+use vortex_array::expr::traversal::NodeFolderContext;
+use vortex_array::scalar_fn::fns::get_item::GetItem;
+use vortex_array::scalar_fn::fns::select::Select;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
-
-use crate::dtype::Field;
-use crate::dtype::FieldPath;
-use crate::dtype::FieldPathSet;
-use crate::expr::BoundExpression;
-use crate::expr::traversal::FoldDownContext;
-use crate::expr::traversal::FoldUp;
-use crate::expr::traversal::NodeExt;
-use crate::expr::traversal::NodeFolderContext;
-use crate::scalar_fn::fns::get_item::GetItem;
-use crate::scalar_fn::fns::select::Select;
 
 /// Returns the rooted field paths referenced by an expression.
 ///
@@ -125,19 +124,19 @@ impl NodeFolderContext for ReferencedFieldPaths {
 
 #[cfg(test)]
 mod tests {
+    use vortex_array::dtype::DType;
+    use vortex_array::dtype::Nullability::NonNullable;
+    use vortex_array::dtype::PType::I32;
+    use vortex_array::dtype::StructFields;
+    use vortex_array::expr::Expression;
+    use vortex_array::expr::get_item;
+    use vortex_array::expr::pack;
+    use vortex_array::expr::root;
+    use vortex_array::expr::select;
+    use vortex_array::expr::select_exclude;
     use vortex_utils::aliases::hash_set::HashSet;
 
     use super::*;
-    use crate::dtype::DType;
-    use crate::dtype::Nullability::NonNullable;
-    use crate::dtype::PType::I32;
-    use crate::dtype::StructFields;
-    use crate::expr::Expression;
-    use crate::expr::get_item;
-    use crate::expr::pack;
-    use crate::expr::root;
-    use crate::expr::select;
-    use crate::expr::select_exclude;
 
     fn scope() -> DType {
         DType::Struct(

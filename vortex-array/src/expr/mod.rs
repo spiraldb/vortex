@@ -40,7 +40,6 @@
 //! [Apache Datafusion]: https://github.com/apache/datafusion/tree/5fac581efbaffd0e6a9edf931182517524526afd/datafusion/expr
 
 pub mod aliases;
-pub mod analysis;
 #[cfg(feature = "arbitrary")]
 pub mod arbitrary;
 pub mod bound_expression;
@@ -48,16 +47,13 @@ pub mod display;
 pub(crate) mod expression;
 mod exprs;
 pub(crate) mod field;
-pub mod forms;
 pub mod lambda;
 mod optimize;
 pub mod proto;
 pub mod scope;
 pub mod stats;
-pub mod transform;
 pub mod traversal;
 
-pub use analysis::*;
 pub use bound_expression::*;
 pub use expression::*;
 pub use exprs::and;

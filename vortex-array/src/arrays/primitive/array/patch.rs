@@ -132,13 +132,17 @@ pub fn patch_chunk<T, I, C>(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use vortex_buffer::buffer;
+    use vortex_session::VortexSession;
 
     use super::*;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::assert_arrays_eq;
     use crate::validity::Validity;
+
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     /// Regression: patch_chunk must not OOB when chunk_offsets (chunk granularity)
     /// reference more patches than patches_indices (element granularity) contains.
@@ -180,7 +184,7 @@ mod tests {
 
     #[test]
     fn patch_sliced() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let input = PrimitiveArray::new(buffer![2u32; 10], Validity::AllValid);
         let sliced = input.slice(2..8).unwrap();
         assert_arrays_eq!(

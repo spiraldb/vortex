@@ -247,7 +247,7 @@ mod tests {
     use crate::executor::list::ListViewArray;
 
     /// A shared session for these list-executor tests, used to create execution contexts.
-    static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::array_session);
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     #[test]
     fn test_to_arrow_list_i32() -> VortexResult<()> {

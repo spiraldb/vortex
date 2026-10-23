@@ -421,12 +421,13 @@ impl RunEndData {
     /// ```
     /// # use vortex_array::arrays::BoolArray;
     /// # use vortex_array::IntoArray;
+    /// # use vortex_session::VortexSession;
     /// # use vortex_array::VortexSessionExecute;
     /// # use vortex_buffer::buffer;
     /// # use vortex_error::VortexResult;
     /// # use vortex_runend::RunEnd;
     /// # fn main() -> VortexResult<()> {
-    /// let session = vortex_array::array_session();
+    /// let session = VortexSession::empty();
     /// vortex_runend::initialize(&session);
     /// let mut ctx = session.create_execution_ctx();
     /// let ends = buffer![2u8, 3u8].into_array();
@@ -597,7 +598,7 @@ mod tests {
     use crate::RunEnd;
 
     static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-        let session = vortex_array::array_session();
+        let session = VortexSession::empty();
         crate::initialize(&session);
         session
     });

@@ -4,19 +4,20 @@
 use std::fmt;
 use std::fmt::Display;
 use std::fmt::Formatter;
+use std::sync::LazyLock;
 
 use rstest::rstest;
 use vortex_buffer::buffer;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure;
+use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
 
 use crate::ArrayRef;
 use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
-use crate::array_session;
 use crate::arrays::PrimitiveArray;
 use crate::arrays::StructArray;
 use crate::assert_arrays_eq;
@@ -44,6 +45,8 @@ use crate::scalar_fn::ScalarFnId;
 use crate::scalar_fn::ScalarFnVTable;
 use crate::scalar_fn::ScalarFnVTableExt;
 use crate::scalar_fn::internal::row_count::RowCount;
+
+static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
 /// `apply(value, lambda)` gives the lambda's one parameter the value of `value`, row by row: the
 /// smallest function that takes a lambda.
@@ -145,7 +148,7 @@ fn rows() -> VortexResult<ArrayRef> {
 }
 
 fn assert_applies(expr: &Expression, expected: ArrayRef) -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     assert_arrays_eq!(rows()?.apply(expr)?, expected, &mut ctx);
     Ok(())
 }
@@ -309,7 +312,7 @@ fn evaluate_runs_the_bound_body() -> VortexResult<()> {
     let lambda =
         Lambda::new(["x"], checked_add(var("x"), lit(1_i32)))?.bind(&[i32_().as_nullable()])?;
     let x = PrimitiveArray::from_option_iter([Some(1_i32), None]).into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     assert_arrays_eq!(
         lambda.evaluate(vec![x], 2)?,
         PrimitiveArray::from_option_iter([Some(2_i32), None]).into_array(),

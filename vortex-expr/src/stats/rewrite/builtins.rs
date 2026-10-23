@@ -2,59 +2,57 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use std::cmp::Ordering;
-use std::sync::Arc;
 
-use vortex_array::stats::rewrite::falsify;
+use vortex_array::aggregate_fn::AggregateFnRef;
+use vortex_array::aggregate_fn::AggregateFnVTableExt;
+use vortex_array::aggregate_fn::EmptyOptions as AggregateEmptyOptions;
+use vortex_array::aggregate_fn::fns::all_nan::AllNan;
+use vortex_array::aggregate_fn::fns::all_non_nan::AllNonNan;
+use vortex_array::aggregate_fn::fns::all_non_null::AllNonNull;
+use vortex_array::aggregate_fn::fns::all_null::AllNull;
+use vortex_array::dtype::DType;
+use vortex_array::expr::BoundExpression;
+use vortex_array::expr::bound::and;
+use vortex_array::expr::bound::and_collect;
+use vortex_array::expr::bound::binary;
+use vortex_array::expr::bound::cast;
+use vortex_array::expr::bound::dynamic_with_options;
+use vortex_array::expr::bound::eq;
+use vortex_array::expr::bound::gt;
+use vortex_array::expr::bound::gt_eq;
+use vortex_array::expr::bound::lit;
+use vortex_array::expr::bound::lt;
+use vortex_array::expr::bound::lt_eq;
+use vortex_array::expr::bound::or;
+use vortex_array::expr::bound::or_collect;
+use vortex_array::expr::stats::Stat;
+use vortex_array::scalar::Scalar;
+use vortex_array::scalar::StringLike;
+use vortex_array::scalar_fn::EmptyOptions;
+use vortex_array::scalar_fn::ScalarFnId;
+use vortex_array::scalar_fn::ScalarFnVTable;
+use vortex_array::scalar_fn::ScalarFnVTableExt;
+use vortex_array::scalar_fn::fns::between::Between;
+use vortex_array::scalar_fn::fns::binary::Binary;
+use vortex_array::scalar_fn::fns::cast::Cast;
+use vortex_array::scalar_fn::fns::dynamic::DynamicComparison;
+use vortex_array::scalar_fn::fns::is_nan::IsNan;
+use vortex_array::scalar_fn::fns::is_not_null::IsNotNull;
+use vortex_array::scalar_fn::fns::is_null::IsNull;
+use vortex_array::scalar_fn::fns::like::Like;
+use vortex_array::scalar_fn::fns::list_contains::ListContains;
+use vortex_array::scalar_fn::fns::literal::Literal;
+use vortex_array::scalar_fn::fns::operators::CompareOperator;
+use vortex_array::scalar_fn::fns::operators::Operator;
+use vortex_array::scalar_fn::internal::row_count::RowCount;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_session::VortexSession;
 
-use crate::aggregate_fn::AggregateFnRef;
-use crate::aggregate_fn::AggregateFnVTableExt;
-use crate::aggregate_fn::EmptyOptions as AggregateEmptyOptions;
-use crate::aggregate_fn::fns::all_nan::AllNan;
-use crate::aggregate_fn::fns::all_non_nan::AllNonNan;
-use crate::aggregate_fn::fns::all_non_null::AllNonNull;
-use crate::aggregate_fn::fns::all_null::AllNull;
-use crate::dtype::DType;
-use crate::expr::BoundExpression;
-use crate::expr::bound::and;
-use crate::expr::bound::and_collect;
-use crate::expr::bound::binary;
-use crate::expr::bound::cast;
-use crate::expr::bound::dynamic_with_options;
-use crate::expr::bound::eq;
-use crate::expr::bound::gt;
-use crate::expr::bound::gt_eq;
-use crate::expr::bound::lit;
-use crate::expr::bound::lt;
-use crate::expr::bound::lt_eq;
-use crate::expr::bound::or;
-use crate::expr::bound::or_collect;
-use crate::expr::stats::Stat;
-use crate::scalar::Scalar;
-use crate::scalar::StringLike;
-use crate::scalar_fn::EmptyOptions;
-use crate::scalar_fn::ScalarFnId;
-use crate::scalar_fn::ScalarFnVTable;
-use crate::scalar_fn::ScalarFnVTableExt;
-use crate::scalar_fn::fns::between::Between;
-use crate::scalar_fn::fns::binary::Binary;
-use crate::scalar_fn::fns::cast::Cast;
-use crate::scalar_fn::fns::dynamic::DynamicComparison;
-use crate::scalar_fn::fns::dynamic::DynamicComparisonExpr;
-use crate::scalar_fn::fns::is_nan::IsNan;
-use crate::scalar_fn::fns::is_not_null::IsNotNull;
-use crate::scalar_fn::fns::is_null::IsNull;
-use crate::scalar_fn::fns::like::Like;
-use crate::scalar_fn::fns::like::LikeVariant;
-use crate::scalar_fn::fns::list_contains::ListContains;
-use crate::scalar_fn::fns::literal::Literal;
-use crate::scalar_fn::fns::operators::CompareOperator;
-use crate::scalar_fn::fns::operators::Operator;
-use crate::scalar_fn::internal::row_count::RowCount;
 use crate::stats::bound::stat;
 use crate::stats::rewrite::StatsRewriteRule;
+use crate::stats::rewrite::falsify;
+use crate::stats::rewrite::like_variant::LikeVariant;
 use crate::stats::session::StatsSession;
 
 /// Register built-in stats rewrite rules.
@@ -630,7 +628,7 @@ fn dynamic_comparison_falsify<P: NonNanProof>(
     let dynamic = expr.as_::<DynamicComparison>();
     let lhs = expr.child(0);
 
-    let Some((operator, lhs_stat)) = (match dynamic.operator {
+    let Some((operator, lhs_stat)) = (match dynamic.operator() {
         CompareOperator::Eq | CompareOperator::NotEq => None,
         CompareOperator::Gt => max(lhs).map(|lhs_stat| (CompareOperator::Lte, lhs_stat)),
         CompareOperator::Gte => max(lhs).map(|lhs_stat| (CompareOperator::Lt, lhs_stat)),
@@ -641,11 +639,7 @@ fn dynamic_comparison_falsify<P: NonNanProof>(
     };
 
     let value_predicate = dynamic_with_options(
-        DynamicComparisonExpr {
-            operator,
-            rhs: Arc::clone(&dynamic.rhs),
-            default: !dynamic.default,
-        },
+        dynamic.with_operator(operator, !dynamic.default()),
         lhs_stat,
     );
     with_non_nan_guards::<P>([lhs], value_predicate)
@@ -847,57 +841,56 @@ mod tests {
     use std::sync::atomic::AtomicUsize;
     use std::sync::atomic::Ordering;
 
+    use vortex_array::aggregate_fn::AggregateFnRef;
+    use vortex_array::aggregate_fn::AggregateFnVTableExt;
+    use vortex_array::aggregate_fn::EmptyOptions as AggregateEmptyOptions;
+    use vortex_array::aggregate_fn::fns::all_non_nan::AllNonNan;
+    use vortex_array::dtype::DType;
+    use vortex_array::dtype::Nullability;
+    use vortex_array::dtype::PType;
+    use vortex_array::dtype::StructFields;
+    use vortex_array::expr::BoundExpression;
+    use vortex_array::expr::Expression;
+    use vortex_array::expr::and;
+    use vortex_array::expr::between;
+    use vortex_array::expr::cast;
+    use vortex_array::expr::col;
+    use vortex_array::expr::dynamic;
+    use vortex_array::expr::eq;
+    use vortex_array::expr::get_item;
+    use vortex_array::expr::gt;
+    use vortex_array::expr::gt_eq;
+    use vortex_array::expr::is_nan;
+    use vortex_array::expr::is_not_null;
+    use vortex_array::expr::is_null;
+    use vortex_array::expr::like;
+    use vortex_array::expr::list_contains;
+    use vortex_array::expr::lit;
+    use vortex_array::expr::lt;
+    use vortex_array::expr::lt_eq;
+    use vortex_array::expr::or;
+    use vortex_array::expr::stats::Stat;
+    use vortex_array::scalar::Scalar;
+    use vortex_array::scalar_fn::EmptyOptions;
+    use vortex_array::scalar_fn::ScalarFnId;
+    use vortex_array::scalar_fn::ScalarFnVTable;
+    use vortex_array::scalar_fn::ScalarFnVTableExt;
+    use vortex_array::scalar_fn::fns::between::BetweenOptions;
+    use vortex_array::scalar_fn::fns::between::StrictComparison;
+    use vortex_array::scalar_fn::fns::binary::Binary;
+    use vortex_array::scalar_fn::fns::dynamic::DynamicComparison;
+    use vortex_array::scalar_fn::fns::operators::CompareOperator;
+    use vortex_array::scalar_fn::internal::row_count::RowCount;
     use vortex_error::VortexResult;
     use vortex_session::VortexSession;
 
-    use crate::aggregate_fn::AggregateFnRef;
-    use crate::aggregate_fn::AggregateFnVTableExt;
-    use crate::aggregate_fn::EmptyOptions as AggregateEmptyOptions;
-    use crate::aggregate_fn::fns::all_non_nan::AllNonNan;
-    use crate::array_session;
-    use crate::dtype::DType;
-    use crate::dtype::Nullability;
-    use crate::dtype::PType;
-    use crate::dtype::StructFields;
-    use crate::expr::BoundExpression;
-    use crate::expr::Expression;
-    use crate::expr::and;
-    use crate::expr::between;
-    use crate::expr::cast;
-    use crate::expr::col;
-    use crate::expr::dynamic;
-    use crate::expr::eq;
-    use crate::expr::get_item;
-    use crate::expr::gt;
-    use crate::expr::gt_eq;
-    use crate::expr::is_nan;
-    use crate::expr::is_not_null;
-    use crate::expr::is_null;
-    use crate::expr::like;
-    use crate::expr::list_contains;
-    use crate::expr::lit;
-    use crate::expr::lt;
-    use crate::expr::lt_eq;
-    use crate::expr::or;
-    use crate::expr::stats::Stat;
-    use crate::scalar::Scalar;
-    use crate::scalar_fn::EmptyOptions;
-    use crate::scalar_fn::ScalarFnId;
-    use crate::scalar_fn::ScalarFnVTable;
-    use crate::scalar_fn::ScalarFnVTableExt;
-    use crate::scalar_fn::fns::between::BetweenOptions;
-    use crate::scalar_fn::fns::between::StrictComparison;
-    use crate::scalar_fn::fns::binary::Binary;
-    use crate::scalar_fn::fns::dynamic::DynamicComparison;
-    use crate::scalar_fn::fns::dynamic::DynamicComparisonExpr;
-    use crate::scalar_fn::fns::operators::CompareOperator;
-    use crate::scalar_fn::internal::row_count::RowCount;
     use crate::stats::expr::StatFn;
     use crate::stats::expr::StatOptions;
+    use crate::stats::rewrite::BoundExpressionPruneExt;
     use crate::stats::rewrite::StatsRewriteRule;
     use crate::stats::session::StatsSessionExt;
 
-    static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     fn stat(expr: Expression, stat: Stat) -> Expression {
         let aggregate_fn = stat.aggregate_fn().expect("stat should have aggregate fn");
@@ -1047,7 +1040,7 @@ mod tests {
 
     #[test]
     fn or_chain_falsify_visits_each_node_once() -> VortexResult<()> {
-        let session = array_session();
+        let session = VortexSession::empty();
         let visits = Arc::new(AtomicUsize::new(0));
         session
             .stats()
@@ -1305,11 +1298,7 @@ mod tests {
         assert_rewrite_eq!(
             falsify(&expr)?,
             Some(DynamicComparison.new_expr(
-                DynamicComparisonExpr {
-                    operator: CompareOperator::Lte,
-                    rhs: Arc::clone(&dynamic.rhs),
-                    default: false,
-                },
+                dynamic.with_operator(CompareOperator::Lte, false),
                 [stat(col("a"), Stat::Max)],
             ))
         );

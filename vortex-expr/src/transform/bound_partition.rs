@@ -6,28 +6,28 @@ use std::fmt::Formatter;
 use std::hash::Hash;
 
 use itertools::Itertools;
+use vortex_array::dtype::DType;
+use vortex_array::dtype::FieldName;
+use vortex_array::dtype::FieldNames;
+use vortex_array::dtype::Nullability;
+use vortex_array::dtype::StructFields;
+use vortex_array::expr::BoundExpression;
+use vortex_array::expr::ExactBoundExpr;
+use vortex_array::expr::bound::get_item;
+use vortex_array::expr::bound::pack;
+use vortex_array::expr::traversal::NodeExt;
+use vortex_array::expr::traversal::NodeRewriter;
+use vortex_array::expr::traversal::Transformed;
+use vortex_array::expr::traversal::TraversalOrder;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_ensure_eq;
 use vortex_utils::aliases::hash_map::HashMap;
 
-use crate::dtype::DType;
-use crate::dtype::FieldName;
-use crate::dtype::FieldNames;
-use crate::dtype::Nullability;
-use crate::dtype::StructFields;
-use crate::expr::BoundExpression;
-use crate::expr::ExactBoundExpr;
-use crate::expr::analysis::Annotation;
-use crate::expr::analysis::AnnotationFn;
-use crate::expr::analysis::BoundAnnotations;
-use crate::expr::analysis::descendent_bound_annotations;
-use crate::expr::bound::get_item;
-use crate::expr::bound::pack;
-use crate::expr::traversal::NodeExt;
-use crate::expr::traversal::NodeRewriter;
-use crate::expr::traversal::Transformed;
-use crate::expr::traversal::TraversalOrder;
+use crate::analysis::Annotation;
+use crate::analysis::AnnotationFn;
+use crate::analysis::BoundAnnotations;
+use crate::analysis::descendent_bound_annotations;
 
 /// Partition an expression into sub-expressions that are uniquely associated with an annotation.
 /// A root expression is also returned that can be used to recombine the results of the partitions
@@ -290,21 +290,21 @@ fn replace_root_dtype(expr: BoundExpression, root_dtype: DType) -> VortexResult<
 mod tests {
     use rstest::fixture;
     use rstest::rstest;
+    use vortex_array::dtype::DType;
+    use vortex_array::dtype::Nullability::NonNullable;
+    use vortex_array::dtype::Nullability::Nullable;
+    use vortex_array::dtype::PType::I32;
+    use vortex_array::dtype::StructFields;
+    use vortex_array::expr::checked_add;
+    use vortex_array::expr::col;
+    use vortex_array::expr::get_item;
+    use vortex_array::expr::lit;
+    use vortex_array::expr::merge;
+    use vortex_array::expr::pack;
+    use vortex_array::expr::root;
 
     use super::*;
-    use crate::dtype::DType;
-    use crate::dtype::Nullability::NonNullable;
-    use crate::dtype::Nullability::Nullable;
-    use crate::dtype::PType::I32;
-    use crate::dtype::StructFields;
-    use crate::expr::analysis::make_bound_free_field_annotator;
-    use crate::expr::checked_add;
-    use crate::expr::col;
-    use crate::expr::get_item;
-    use crate::expr::lit;
-    use crate::expr::merge;
-    use crate::expr::pack;
-    use crate::expr::root;
+    use crate::analysis::make_bound_free_field_annotator;
 
     #[fixture]
     fn dtype() -> DType {

@@ -5,18 +5,17 @@
 
 use std::ptr;
 
+use vortex_array::expr::BoundExpression;
+use vortex_array::scalar_fn::ScalarFnVTableExt;
+use vortex_array::scalar_fn::fns::between::Between;
+use vortex_array::scalar_fn::fns::between::BetweenOptions;
+use vortex_array::scalar_fn::fns::between::StrictComparison;
+use vortex_array::scalar_fn::fns::binary::Binary;
+use vortex_array::scalar_fn::fns::get_item::GetItem;
+use vortex_array::scalar_fn::fns::literal::Literal;
+use vortex_array::scalar_fn::fns::operators::Operator;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
-
-use crate::expr::BoundExpression;
-use crate::scalar_fn::ScalarFnVTableExt;
-use crate::scalar_fn::fns::between::Between;
-use crate::scalar_fn::fns::between::BetweenOptions;
-use crate::scalar_fn::fns::between::StrictComparison;
-use crate::scalar_fn::fns::binary::Binary;
-use crate::scalar_fn::fns::get_item::GetItem;
-use crate::scalar_fn::fns::literal::Literal;
-use crate::scalar_fn::fns::operators::Operator;
 
 /// Merge pairs of range comparisons on the same column within any conjunction of `expr` into a
 /// single [`Between`].
@@ -216,33 +215,37 @@ impl<'a> RangeComparison<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use rstest::rstest;
+    use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
+    use vortex_array::arrays::BoolArray;
+    use vortex_array::arrays::StructArray;
+    use vortex_array::dtype::DType;
+    use vortex_array::dtype::Nullability;
+    use vortex_array::dtype::PType;
+    use vortex_array::dtype::StructFields;
+    use vortex_array::expr::Expression;
+    use vortex_array::expr::and;
+    use vortex_array::expr::between;
+    use vortex_array::expr::col;
+    use vortex_array::expr::gt;
+    use vortex_array::expr::gt_eq;
+    use vortex_array::expr::lit;
+    use vortex_array::expr::lt;
+    use vortex_array::expr::lt_eq;
+    use vortex_array::expr::or;
+    use vortex_array::scalar::Scalar;
+    use vortex_array::scalar_fn::fns::between::BetweenOptions;
+    use vortex_array::scalar_fn::fns::between::StrictComparison;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
+    use vortex_session::VortexSession;
 
     use super::find_between;
-    use crate::IntoArray;
-    use crate::VortexSessionExecute;
-    use crate::array_session;
-    use crate::arrays::BoolArray;
-    use crate::arrays::StructArray;
-    use crate::dtype::DType;
-    use crate::dtype::Nullability;
-    use crate::dtype::PType;
-    use crate::dtype::StructFields;
-    use crate::expr::Expression;
-    use crate::expr::and;
-    use crate::expr::between;
-    use crate::expr::col;
-    use crate::expr::gt;
-    use crate::expr::gt_eq;
-    use crate::expr::lit;
-    use crate::expr::lt;
-    use crate::expr::lt_eq;
-    use crate::expr::or;
-    use crate::scalar::Scalar;
-    use crate::scalar_fn::fns::between::BetweenOptions;
-    use crate::scalar_fn::fns::between::StrictComparison;
+
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     fn scope() -> DType {
         let i32_dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
@@ -376,8 +379,7 @@ mod tests {
     /// keeps a row false when the surviving comparison is false, so the rewrite cannot null it.
     #[test]
     fn null_literal_bound_is_value_preserving() -> VortexResult<()> {
-        let session = array_session();
-        let ctx = &mut session.create_execution_ctx();
+        let ctx = &mut SESSION.create_execution_ctx();
         let data = StructArray::from_fields(&[("x", buffer![10, 1].into_array())])?.into_array();
 
         let null_lit = lit(Scalar::null(DType::Primitive(

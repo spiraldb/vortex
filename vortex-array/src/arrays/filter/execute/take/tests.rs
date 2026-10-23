@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::sync::LazyLock;
+
 use vortex_buffer::buffer;
 use vortex_error::VortexResult;
 use vortex_mask::Mask;
+use vortex_session::VortexSession;
 
 use crate::IntoArray;
 use crate::VortexSessionExecute;
-use crate::array_session;
 use crate::arrays::BoolArray;
 use crate::arrays::DecimalArray;
 use crate::arrays::Dict;
@@ -27,6 +29,8 @@ use crate::dtype::FieldNames;
 use crate::executor::ExecutionCtx;
 use crate::kernel::ExecuteParentKernel;
 use crate::validity::Validity;
+
+static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
 fn execute_parent(
     child: &crate::ArrayRef,
@@ -59,7 +63,7 @@ fn test_take_execute_kernel_maps_indices_through_filter() -> VortexResult<()> {
         filter.clone(),
     )?
     .into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
 
     let result = execute_parent(&filter, &parent, 1, &mut ctx)?
         .expect("filter child should execute its take parent");
@@ -88,7 +92,7 @@ fn test_take_execute_kernel_nullable_fast_path_maps_indices_through_filter() -> 
         filter.clone(),
     )?
     .into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
 
     let result = execute_parent(&filter, &parent, 1, &mut ctx)?
         .expect("filter child should execute its take parent");
@@ -110,7 +114,7 @@ fn test_take_execute_kernel_fast_path_maps_indices_through_filter() -> VortexRes
     )
     .into_array();
     let parent = DictArray::try_new(buffer![2u64, 0, 3].into_array(), filter.clone())?.into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
 
     let result = execute_parent(&filter, &parent, 1, &mut ctx)?
         .expect("filter child should execute its take parent");
@@ -131,7 +135,7 @@ fn assert_take_execute_rejects_out_of_bounds_rank(
 ) -> VortexResult<()> {
     let filter = FilterArray::new(child, filter_mask).into_array();
     let parent = DictArray::try_new(codes, filter.clone())?.into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
 
     if let Err(err) = execute_parent(&filter, &parent, 1, &mut ctx) {
         assert!(
@@ -166,7 +170,7 @@ fn test_take_execute_kernel_rejects_random_mask_rank_past_filter_len() -> Vortex
 #[test]
 fn test_take_execute_kernel_rejects_non_contiguous_sequential_rank_past_filter_len()
 -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     assert_take_execute_rejects_out_of_bounds_rank(
         ListArray::try_new(
             buffer![10u32, 11, 20, 30, 31, 32, 40, 50, 51].into_array(),
@@ -182,7 +186,7 @@ fn test_take_execute_kernel_rejects_non_contiguous_sequential_rank_past_filter_l
 
 #[test]
 fn test_take_execute_kernel_rejects_translated_rank_past_filter_len() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     assert_take_execute_rejects_out_of_bounds_rank(
         ListArray::try_new(
             buffer![10u32, 11, 20, 30, 31, 32, 40, 50, 51].into_array(),
@@ -198,7 +202,7 @@ fn test_take_execute_kernel_rejects_translated_rank_past_filter_len() -> VortexR
 
 #[test]
 fn test_take_execute_kernel_handles_empty_sequential_take() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     let filter = FilterArray::new(
         ListArray::try_new(
             buffer![10u32, 11, 20, 30, 31, 32, 40, 50, 51].into_array(),
@@ -215,7 +219,7 @@ fn test_take_execute_kernel_handles_empty_sequential_take() -> VortexResult<()> 
         filter.clone(),
     )?
     .into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
 
     let result = execute_parent(&filter, &parent, 1, &mut ctx)?
         .expect("filter child should execute its take parent");
@@ -241,7 +245,7 @@ fn assert_take_execute_maps_child_dtype(
     let filter =
         FilterArray::new(child, Mask::from_iter([true, false, true, true, false])).into_array();
     let parent = DictArray::try_new(buffer![2u64, 0, 1].into_array(), filter.clone())?.into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
 
     let result = execute_parent(&filter, &parent, 1, &mut ctx)?
         .expect("filter child should execute its take parent");
@@ -258,7 +262,7 @@ fn test_take_execute_kernel_skips_bool_filter_child() -> VortexResult<()> {
     )
     .into_array();
     let parent = DictArray::try_new(buffer![2u64, 0, 1].into_array(), filter.clone())?.into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
 
     let result = execute_parent(&filter, &parent, 1, &mut ctx)?;
 
@@ -286,7 +290,7 @@ fn execute_primitive_take(
     .into_array();
     let indices = PrimitiveArray::from_iter((0..take_len).map(|idx| (idx % filtered_len) as u64));
     let parent = DictArray::try_new(indices.into_array(), filter.clone())?.into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
 
     let result = execute_parent(&filter, &parent, 1, &mut ctx)?;
     let actual = result.as_ref().unwrap_or(&parent);
@@ -356,7 +360,7 @@ fn test_take_execute_kernel_handles_nullable_primitive_filter_child() -> VortexR
     )
     .into_array();
     let parent = DictArray::try_new(buffer![2u64, 0, 1].into_array(), filter.clone())?.into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
 
     let result = execute_parent(&filter, &parent, 1, &mut ctx)?;
 
@@ -376,7 +380,7 @@ fn test_take_execute_kernel_preserves_nullable_all_valid_fixed_width_child() -> 
     )
     .into_array();
     let parent = DictArray::try_new(buffer![0u64, 1].into_array(), filter.clone())?.into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
 
     let result = execute_parent(&filter, &parent, 1, &mut ctx)?
         .expect("filter child should execute its take parent");
@@ -403,7 +407,7 @@ fn test_take_execute_kernel_handles_nullable_decimal_filter_child() -> VortexRes
     )
     .into_array();
     let parent = DictArray::try_new(buffer![2u64, 0, 1].into_array(), filter.clone())?.into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
 
     let result = execute_parent(&filter, &parent, 1, &mut ctx)?;
 
@@ -458,7 +462,7 @@ fn test_take_execute_kernel_handles_fixed_size_list_filter_child() -> VortexResu
 
 #[test]
 fn test_take_execute_kernel_handles_list_filter_child() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     assert_take_execute_maps_child_dtype(
         ListArray::try_new(
             buffer![10u32, 11, 20, 30, 31, 32, 40, 50, 51].into_array(),
@@ -497,7 +501,7 @@ fn test_take_execute_kernel_preserves_nullable_indices_dtype_fast_path() -> Vort
         filter.clone(),
     )?
     .into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
 
     let result = execute_parent(&filter, &parent, 1, &mut ctx)?
         .expect("filter child should execute its nullable take parent");

@@ -3,25 +3,24 @@
 
 //! Expression constructors for statistics backed by aggregate functions.
 
+use vortex_array::aggregate_fn::AggregateFnRef;
+use vortex_array::aggregate_fn::AggregateFnVTableExt;
+use vortex_array::aggregate_fn::EmptyOptions;
+use vortex_array::aggregate_fn::NumericalAggregateOpts;
+use vortex_array::aggregate_fn::fns::all_nan::AllNan;
+use vortex_array::aggregate_fn::fns::all_non_nan::AllNonNan;
+use vortex_array::aggregate_fn::fns::all_non_null::AllNonNull;
+use vortex_array::aggregate_fn::fns::all_null::AllNull;
+use vortex_array::aggregate_fn::fns::min_max::MinMax;
+use vortex_array::aggregate_fn::fns::nan_count::NanCount;
+use vortex_array::aggregate_fn::fns::null_count::NullCount;
+use vortex_array::aggregate_fn::fns::sum::Sum;
+use vortex_array::expr::BoundExpression;
+use vortex_array::expr::Expression;
+use vortex_array::scalar_fn::ScalarFnVTableExt;
+pub use vortex_array::scalar_fn::fns::stat::StatFn;
+pub use vortex_array::scalar_fn::fns::stat::StatOptions;
 use vortex_error::VortexExpect;
-
-use crate::aggregate_fn::AggregateFnRef;
-use crate::aggregate_fn::AggregateFnVTableExt;
-use crate::aggregate_fn::EmptyOptions;
-use crate::aggregate_fn::NumericalAggregateOpts;
-use crate::aggregate_fn::fns::all_nan::AllNan;
-use crate::aggregate_fn::fns::all_non_nan::AllNonNan;
-use crate::aggregate_fn::fns::all_non_null::AllNonNull;
-use crate::aggregate_fn::fns::all_null::AllNull;
-use crate::aggregate_fn::fns::min_max::MinMax;
-use crate::aggregate_fn::fns::nan_count::NanCount;
-use crate::aggregate_fn::fns::null_count::NullCount;
-use crate::aggregate_fn::fns::sum::Sum;
-use crate::expr::BoundExpression;
-use crate::expr::Expression;
-use crate::scalar_fn::ScalarFnVTableExt;
-pub use crate::scalar_fn::fns::stat::StatFn;
-pub use crate::scalar_fn::fns::stat::StatOptions;
 
 /// Creates an expression that reads a stored aggregate statistic for `expr`.
 ///
@@ -113,11 +112,11 @@ fn bound_nan_count(expr: BoundExpression) -> BoundExpression {
 
 /// Constructors for statistic expressions whose input has already been bound.
 ///
-/// These mirror the constructors in [`crate::stats`] and panic when the aggregate does not support
+/// These mirror the constructors in [`vortex_array::stats`] and panic when the aggregate does not support
 /// the input dtype.
 pub mod bound {
-    use crate::aggregate_fn::AggregateFnRef;
-    use crate::expr::BoundExpression;
+    use vortex_array::aggregate_fn::AggregateFnRef;
+    use vortex_array::expr::BoundExpression;
 
     /// Creates a bound expression that reads a stored aggregate statistic.
     pub fn stat(expr: BoundExpression, aggregate_fn: AggregateFnRef) -> BoundExpression {
@@ -169,6 +168,25 @@ pub mod bound {
 mod tests {
     use std::sync::LazyLock;
 
+    use vortex_array::Canonical;
+    use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
+    use vortex_array::arrays::Chunked;
+    use vortex_array::arrays::ChunkedArray;
+    use vortex_array::arrays::ConstantArray;
+    use vortex_array::arrays::PrimitiveArray;
+    use vortex_array::arrays::chunked::ChunkedArrayExt;
+    use vortex_array::assert_arrays_eq;
+    use vortex_array::dtype::DType;
+    use vortex_array::dtype::Nullability;
+    use vortex_array::dtype::PType;
+    use vortex_array::expr::bound as bound_expr;
+    use vortex_array::expr::root;
+    use vortex_array::expr::stats::Precision;
+    use vortex_array::expr::stats::Stat;
+    use vortex_array::scalar::Scalar;
+    use vortex_array::scalar::ScalarValue;
+    use vortex_array::validity::Validity;
     use vortex_buffer::buffer;
     use vortex_error::VortexExpect;
     use vortex_error::VortexResult;
@@ -182,28 +200,8 @@ mod tests {
     use super::null_count;
     use super::stat;
     use super::sum;
-    use crate::Canonical;
-    use crate::IntoArray;
-    use crate::VortexSessionExecute;
-    use crate::array_session;
-    use crate::arrays::Chunked;
-    use crate::arrays::ChunkedArray;
-    use crate::arrays::ConstantArray;
-    use crate::arrays::PrimitiveArray;
-    use crate::arrays::chunked::ChunkedArrayExt;
-    use crate::assert_arrays_eq;
-    use crate::dtype::DType;
-    use crate::dtype::Nullability;
-    use crate::dtype::PType;
-    use crate::expr::bound as bound_expr;
-    use crate::expr::root;
-    use crate::expr::stats::Precision;
-    use crate::expr::stats::Stat;
-    use crate::scalar::Scalar;
-    use crate::scalar::ScalarValue;
-    use crate::validity::Validity;
 
-    static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     #[test]
     fn bound_stats_constructor_preserves_child_and_dtype() -> VortexResult<()> {
@@ -216,7 +214,7 @@ mod tests {
             bound.dtype(),
             &DType::Primitive(PType::I64, Nullability::Nullable)
         );
-        assert_eq!(bound, sum(crate::expr::root()).bind(&input_dtype)?);
+        assert_eq!(bound, sum(vortex_array::expr::root()).bind(&input_dtype)?);
         Ok(())
     }
 

@@ -14,7 +14,6 @@ use vortex_session::VortexSession;
 use super::*;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
-use crate::array_session;
 use crate::arrays::FilterArray;
 use crate::arrays::List;
 use crate::arrays::PrimitiveArray;
@@ -28,7 +27,7 @@ use crate::scalar::Scalar;
 use crate::validity::Validity;
 
 /// A shared session for `List` tests, used to create execution contexts.
-static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
 #[test]
 fn test_empty_list_array() {
@@ -423,7 +422,7 @@ fn test_list_filter_variable_sizes() {
 
 #[test]
 fn test_offset_to_0() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     let mut builder = ListBuilder::<u32>::with_capacity_in(
         Arc::new(I32.into()),
         Nullability::NonNullable,
@@ -773,7 +772,7 @@ fn test_list_of_lists_nullable_outer() {
 
 #[test]
 fn test_list_of_lists_nullable_inner() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     // Create list of lists with non-nullable outer, nullable inner.
     // Structure: [[[1, 2], null, [3]], [[4, 5, 6]], [], [[null, 7]]]
     let data = vec![
@@ -963,7 +962,7 @@ fn test_non_integer_offsets() {
 
 #[test]
 fn test_offsets_constant() {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     let elements = buffer![1i32, 2, 3, 4, 5].into_array();
     let offsets = buffer![5u32, 5, 5, 5].into_array();
     let validity = Validity::AllValid;

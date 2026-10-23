@@ -81,6 +81,7 @@ pub struct ListSlots {
 /// use vortex_array::arrays::{ListArray, PrimitiveArray};
 /// use vortex_array::arrays::list::ListArrayExt;
 /// use vortex_array::validity::Validity;
+/// use vortex_session::VortexSession;
 /// use vortex_array::{IntoArray, VortexSessionExecute};
 /// use vortex_buffer::buffer;
 /// use std::sync::Arc;
@@ -89,7 +90,7 @@ pub struct ListSlots {
 /// let elements = buffer![1i32, 2, 3, 4, 5].into_array();
 /// let offsets = buffer![0u32, 2, 5, 5].into_array(); // 3 lists
 ///
-/// let mut ctx = vortex_array::array_session().create_execution_ctx();
+/// let mut ctx = VortexSession::empty().create_execution_ctx();
 /// let list_array = ListArray::try_new(
 ///     elements.into_array(),
 ///     offsets.into_array(),

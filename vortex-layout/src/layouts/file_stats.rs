@@ -534,23 +534,27 @@ impl FileStatsAccumulator {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use rstest::rstest;
     use vortex_array::IntoArray;
-    use vortex_array::array_session;
     use vortex_array::arrays::BoolArray;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::arrays::bool::BoolArrayExt;
     use vortex_array::builders::VarBinViewBuilder;
     use vortex_buffer::BitBuffer;
     use vortex_buffer::buffer;
+    use vortex_session::VortexSession;
 
     use super::*;
+
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     #[rstest]
     #[case(DType::Utf8(Nullability::NonNullable))]
     #[case(DType::Binary(Nullability::NonNullable))]
     fn truncates_accumulated_stats(#[case] dtype: DType) {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let mut builder = VarBinViewBuilder::with_capacity_in(
             dtype.clone(),
             2,
@@ -608,7 +612,7 @@ mod tests {
     #[case(DType::Utf8(Nullability::NonNullable))]
     #[case(DType::Binary(Nullability::NonNullable))]
     fn truncated_accumulated_stats_are_inexact(#[case] dtype: DType) {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let mut builder = VarBinViewBuilder::with_capacity_in(
             dtype,
             2,
@@ -630,7 +634,7 @@ mod tests {
 
     #[test]
     fn fixed_width_stats_omit_is_truncated_columns() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let array = buffer![0, 1, 2].into_array();
         let mut acc = StatsAccumulator::new(array.dtype(), &[Stat::Max, Stat::Min, Stat::Sum], 12);
         acc.push_chunk(&array, &mut ctx)
@@ -655,7 +659,7 @@ mod tests {
         #[case] chunks: Vec<Vec<Option<i64>>>,
         #[case] expected: Option<i64>,
     ) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let dtype = DType::Primitive(PType::I64, Nullability::Nullable);
         let mut acc = StatsAccumulator::new(&dtype, &[Stat::Sum], 12);
         for chunk in chunks {
