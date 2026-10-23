@@ -23,8 +23,12 @@ use std::sync::Arc;
 use std::sync::LazyLock;
 
 /// A string that can be used as an error message.
+///
+/// The message is boxed so that `ErrString` is a single pointer wide, keeping [`VortexError`]
+/// small. Errors are cold, so the extra allocation is cheaper than moving a larger
+/// `VortexResult` through every call on the hot path.
 #[derive(Debug)]
-pub struct ErrString(Cow<'static, str>);
+pub struct ErrString(Box<Cow<'static, str>>);
 
 #[expect(
     clippy::fallible_impl_from,
@@ -42,7 +46,7 @@ where
         if panic_on_err() {
             panic!("{}\nBacktrace:\n{}", msg.into(), Backtrace::capture());
         } else {
-            Self(msg.into())
+            Self(Box::new(msg.into()))
         }
     }
 }
@@ -79,7 +83,7 @@ impl From<Infallible> for VortexError {
     }
 }
 
-const _: () = assert!(size_of::<VortexError>() < 128);
+const _: () = assert!(size_of::<VortexError>() <= 40);
 
 /// The top-level error type for Vortex.
 #[non_exhaustive]
@@ -107,17 +111,17 @@ pub enum VortexError {
     /// A wrapper for shared errors that require cloning.
     Shared(Arc<VortexError>),
     /// A wrapper for errors from the Arrow library.
-    Arrow(arrow_schema::ArrowError, Box<Backtrace>),
+    Arrow(Box<arrow_schema::ArrowError>, Box<Backtrace>),
     /// A wrapper for errors from the FlatBuffers library.
     #[cfg(feature = "flatbuffers")]
-    FlatBuffers(flatbuffers::InvalidFlatbuffer, Box<Backtrace>),
+    FlatBuffers(Box<flatbuffers::InvalidFlatbuffer>, Box<Backtrace>),
     /// A wrapper for formatting errors.
     Fmt(fmt::Error, Box<Backtrace>),
     /// A wrapper for IO errors.
     Io(io::Error, Box<Backtrace>),
     /// A wrapper for errors from the Object Store library.
     #[cfg(feature = "object_store")]
-    ObjectStore(object_store::Error, Box<Backtrace>),
+    ObjectStore(Box<object_store::Error>, Box<Backtrace>),
     /// A wrapper for errors from the Jiff library.
     Jiff(jiff::Error, Box<Backtrace>),
     /// A wrapper for Tokio join error.
@@ -279,12 +283,12 @@ impl Error for VortexError {
             External(err, _) => Some(err.as_ref()),
             Context(_, inner) => inner.source(),
             Shared(inner) => inner.source(),
-            Arrow(err, _) => Some(err),
+            Arrow(err, _) => Some(err.as_ref()),
             #[cfg(feature = "flatbuffers")]
-            FlatBuffers(err, _) => Some(err),
+            FlatBuffers(err, _) => Some(err.as_ref()),
             Io(err, _) => Some(err),
             #[cfg(feature = "object_store")]
-            ObjectStore(err, _) => Some(err),
+            ObjectStore(err, _) => Some(err.as_ref()),
             Jiff(err, _) => Some(err),
             #[cfg(feature = "tokio")]
             Join(err, _) => Some(err),
@@ -533,14 +537,14 @@ macro_rules! vortex_panic {
 
 impl From<arrow_schema::ArrowError> for VortexError {
     fn from(value: arrow_schema::ArrowError) -> Self {
-        VortexError::Arrow(value, Box::new(Backtrace::capture()))
+        VortexError::Arrow(Box::new(value), Box::new(Backtrace::capture()))
     }
 }
 
 #[cfg(feature = "flatbuffers")]
 impl From<flatbuffers::InvalidFlatbuffer> for VortexError {
     fn from(value: flatbuffers::InvalidFlatbuffer) -> Self {
-        VortexError::FlatBuffers(value, Box::new(Backtrace::capture()))
+        VortexError::FlatBuffers(Box::new(value), Box::new(Backtrace::capture()))
     }
 }
 
@@ -553,7 +557,7 @@ impl From<io::Error> for VortexError {
 #[cfg(feature = "object_store")]
 impl From<object_store::Error> for VortexError {
     fn from(value: object_store::Error) -> Self {
-        VortexError::ObjectStore(value, Box::new(Backtrace::capture()))
+        VortexError::ObjectStore(Box::new(value), Box::new(Backtrace::capture()))
     }
 }
 
