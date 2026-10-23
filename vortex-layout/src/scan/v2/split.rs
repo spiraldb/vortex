@@ -4,6 +4,8 @@
 use std::future;
 use std::sync::Arc;
 
+use futures::SinkExt;
+use futures::channel::mpsc;
 use vortex_array::ArrayRef;
 use vortex_error::VortexResult;
 use vortex_io::request::IoService;
@@ -24,6 +26,31 @@ pub(super) struct SplitPlan {
 }
 
 impl SplitPlan {
+    /// Publishes mapped batches as they finish, bounding how far projection runs ahead of its
+    /// consumer. Unordered scans do not need to retain the whole split to sort its output.
+    pub(super) async fn run_unordered<A: Send + 'static>(
+        self,
+        io: Arc<dyn IoService>,
+        map: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
+        mut send: mpsc::Sender<VortexResult<A>>,
+    ) -> VortexResult<()> {
+        let mut run = Run::new();
+        run.admit(self.root, self.scope, io.session());
+        loop {
+            match run.advance()? {
+                Progress::Batch(batch) => {
+                    let batch = map(batch.array);
+                    let failed = batch.is_err();
+                    if send.send(batch).await.is_err() || failed {
+                        return Ok(());
+                    }
+                }
+                Progress::RootDone(_) | Progress::Idle => return Ok(()),
+                Progress::Waiting => future::poll_fn(|cx| run.poll_completion(cx)).await?,
+            }
+        }
+    }
+
     /// Runs the split on a planning run of its own, reading through a session of `io`, and
     /// returns its batches in row order.
     ///
