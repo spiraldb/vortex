@@ -344,7 +344,13 @@ mod tests {
         io.submit(IoOwnerId(0), batch)?;
         assert_eq!(
             *log.lock(),
-            ["register 0", "register 1", "register 2", "poll 0", "poll 1"]
+            [
+                "register SegmentId(0)",
+                "register SegmentId(1)",
+                "register SegmentId(2)",
+                "poll SegmentId(0)",
+                "poll SegmentId(1)",
+            ]
         );
         Ok(())
     }
