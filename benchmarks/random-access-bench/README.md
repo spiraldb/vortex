@@ -107,3 +107,50 @@ the variant runs from
 [`pr-bench-random-access-s3.yml`](../../.github/workflows/pr-bench-random-access-s3.yml)
 (label `action/bench-random-access-s3`) and from the `Random Access (S3)` matrix entry in
 `develop-bench.yml`.
+
+## Local object-store simulation
+
+`scripts/s3_simulator.py` serves the benchmark data through a read-only S3 HTTP
+subset, so Vortex, Parquet and Lance use their real S3 clients against the same
+transport. It supports range GET (including suffix ranges), HEAD, and LIST,
+ignores authentication, and binds only to loopback. Requests are path-style
+`/bucket/key` and are served from `--root/key`.
+
+Prepare the data, then start the simulator:
+
+```bash
+cargo build -p random-access-bench --profile release_debug --features lance
+target/release_debug/random-access-bench --prepare-data \
+  --datasets nested-structs --formats vortex,lance
+python3 benchmarks/random-access-bench/scripts/s3_simulator.py \
+  --root vortex-bench/data --latency-ms 20 --mib-per-second 100 \
+  --concurrency 32 --trace /tmp/s3-requests.jsonl
+```
+
+In another terminal, point the benchmark at it:
+
+```bash
+AWS_ACCESS_KEY_ID=simulated AWS_SECRET_ACCESS_KEY=simulated \
+AWS_DEFAULT_REGION=us-east-1 AWS_REGION=us-east-1 \
+AWS_ENDPOINT=http://127.0.0.1:9000 AWS_ALLOW_HTTP=true \
+target/release_debug/random-access-bench \
+  --remote-data-dir s3://bench/ --datasets nested-structs \
+  --formats vortex,lance --patterns correlated,uniform --open-mode reopen \
+  --time-limit 10 --display-format gh-json -o /tmp/s3-random.jsonl
+```
+
+The simulator charges a fixed latency per request (including HEAD and LIST),
+limits the number of active requests, and shares one bandwidth budget across all
+responses, with a 64 KiB burst to absorb scheduler oversleep. Its parameters are
+experimental assumptions, not measured S3 specifications. It does not model TLS,
+connection setup, service-side throttling, failures, or latency tails.
+
+The `--trace` file has one JSON line per request with its method, key, byte range,
+response size, status, and monotonic arrival, admission, and completion times.
+Keep cached and reopen results separate: cached mode warms the same selection
+repeatedly.
+
+For a take needing `N` requests, `D` serial request dependencies, `S` bytes,
+latency `L`, concurrency `C`, and bandwidth `B`, an optimistic transport lower
+bound is `max(D * L, ceil(N / C) * L, L + max(0, S - 65536) / B)` when `N > 0`.
+It excludes CPU time and assumes an idle link at the start.
