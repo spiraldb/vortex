@@ -272,7 +272,8 @@ impl FileEncryption {
     ///
     /// This registers `key` under `name`, as [`with_named_key`](Self::with_named_key) does. A
     /// reader without the key can still read every other field. The file-level statistics of the
-    /// field's top-level field are omitted, since the footer is not encrypted with its key.
+    /// field's top-level field are encrypted with the footer key, so readers with the footer key
+    /// can see them, and are omitted with a plaintext footer.
     ///
     /// With a custom strategy configure the field on the strategy instead; the write fails
     /// otherwise.

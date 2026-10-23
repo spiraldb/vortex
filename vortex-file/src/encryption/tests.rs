@@ -389,10 +389,9 @@ async fn field_key() -> VortexResult<()> {
         assert_eq!(segment.encryption, expected, "segment {index}");
     }
 
-    // The footer key can decrypt file statistics, so the secret column has none.
+    // File statistics are encrypted with the footer key, including the secret column's.
     let stats = footer.statistics().vortex_expect("file statistics");
-    assert!(stats.stats_sets()[0].is_empty());
-    assert!(!stats.stats_sets()[2].is_empty());
+    assert!(stats.stats_sets().iter().all(|stats| !stats.is_empty()));
 
     assert_reads_all(&file).await
 }

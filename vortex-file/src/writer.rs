@@ -169,10 +169,10 @@ impl VortexWriteOptions {
     /// Readers must be opened with a matching
     /// [`FileDecryption`](crate::encryption::FileDecryption).
     ///
-    /// File-level statistics live in the footer, so the writer omits those of fields that readers
-    /// of the footer cannot decrypt: fields with their own key, and with a plaintext footer every
-    /// encrypted field. With a custom strategy that encrypts fields with named keys, the writer
-    /// cannot tell which fields those are, so restrict the statistics with
+    /// File-level statistics are encrypted with the footer key, including those of fields with
+    /// their own key. With a plaintext footer they are readable by anyone, so the writer omits
+    /// those of every encrypted field. With a custom strategy that encrypts fields with named keys,
+    /// the writer cannot tell which fields those are, so restrict the statistics with
     /// [`with_file_statistics`](Self::with_file_statistics) if needed.
     pub fn with_encryption(mut self, encryption: FileEncryption) -> Self {
         self.encryption = Some(encryption);
@@ -446,13 +446,11 @@ enum EncryptedStats {
 impl EncryptedStats {
     fn new(encryption: Option<&FileEncryption>) -> Self {
         match encryption {
+            // An encrypted footer protects the statistics of every field with the footer key.
             None => Self::None,
+            Some(encryption) if !encryption.is_plaintext_footer() => Self::None,
             // A plaintext footer can be read without any key, but every field is encrypted.
-            Some(encryption)
-                if encryption.is_plaintext_footer() && !encryption.is_plaintext_fields() =>
-            {
-                Self::All
-            }
+            Some(encryption) if !encryption.is_plaintext_fields() => Self::All,
             Some(encryption) => Self::Fields(
                 encryption
                     .field_keys()

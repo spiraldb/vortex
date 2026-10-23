@@ -143,8 +143,9 @@ Fields can be encrypted with their own keys, each recorded as a separate `Encryp
 field, including its zone maps and dictionaries, uses the field's key. A reader without that key can still read every
 other field. Fields without their own key are encrypted with the footer key, or stored in plaintext.
 
-File-level statistics live in the statistics segment, which is protected by the footer key only. Writers omit the
-statistics of fields encrypted with their own key, and, with a plaintext footer, those of every encrypted field.
+File-level statistics live in the statistics segment, which is protected by the footer key only. With an encrypted
+footer, the statistics of every field are encrypted with the footer key, including those of fields with their own key.
+With a plaintext footer, writers omit the statistics of every encrypted field.
 
 ### Key management
 
