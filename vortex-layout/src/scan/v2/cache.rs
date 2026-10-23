@@ -6,10 +6,12 @@
 use std::sync::Arc;
 use std::sync::Weak;
 
+use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 use vortex_array::expr::BoundExpression;
 use vortex_array::expr::ExactBoundExpr;
+use vortex_error::VortexResult;
 
 use super::io::SegmentRanges;
 use crate::plan::physical::PlanRef;
@@ -35,81 +37,62 @@ pub struct ScanCache(Arc<Inner>);
 
 #[derive(Default)]
 struct Inner {
-    root: Mutex<Option<PlanRef>>,
-    /// Optimized plans of non-identity projections. Values are cached by the plan that produced
-    /// them, so a projection must reuse its plan for its values to be found again.
-    projections: Mutex<FxHashMap<ExactBoundExpr, PlanRef>>,
-    ranges: Mutex<Option<SegmentRanges>>,
+    root: OnceCell<PlanRef>,
+    /// Optimized plans of projections. Values are cached by the plan that produced them, so a
+    /// projection must reuse its plan for its values to be found again.
+    projections: Mutex<FxHashMap<ExactBoundExpr, Arc<OnceCell<PlanRef>>>>,
+    ranges: OnceCell<SegmentRanges>,
     /// Plans of filters, keyed by the exact filter expression. A proof plan remembers the zones it
     /// excluded, so sharing the plans proves a file's zones once for every scan of that filter.
-    filters: Mutex<FxHashMap<ExactBoundExpr, Arc<FilterPlans>>>,
+    filters: Mutex<FxHashMap<ExactBoundExpr, Arc<OnceCell<Arc<FilterPlans>>>>>,
     values: ValueCache,
 }
 
 impl ScanCache {
-    /// The lowered root plan an earlier scan kept.
-    pub(super) fn root(&self) -> Option<PlanRef> {
-        self.0.root.lock().clone()
+    /// The lowered root plan, lowered by `lower` unless an earlier scan kept it. Scans that miss
+    /// together wait for one of them to lower it.
+    pub(super) fn root_or_try_init(
+        &self,
+        lower: impl FnOnce() -> VortexResult<PlanRef>,
+    ) -> VortexResult<PlanRef> {
+        self.0.root.get_or_try_init(lower).cloned()
     }
 
-    /// Keeps `root`, returning the plan already kept if another scan got there first.
-    pub(super) fn insert_root(&self, root: PlanRef) -> PlanRef {
-        self.0.root.lock().get_or_insert(root).clone()
-    }
-
-    /// The optimized plan of `projection` an earlier scan kept.
-    pub(super) fn projection(&self, projection: &BoundExpression) -> Option<PlanRef> {
-        self.0
-            .projections
-            .lock()
-            .get(&ExactBoundExpr(projection.clone()))
+    /// The optimized plan of `projection`, planned by `plan` unless an earlier scan kept it.
+    pub(super) fn projection_or_try_init(
+        &self,
+        projection: &BoundExpression,
+        plan: impl FnOnce() -> VortexResult<PlanRef>,
+    ) -> VortexResult<PlanRef> {
+        cell(&self.0.projections, projection)
+            .get_or_try_init(plan)
             .cloned()
     }
 
-    /// Keeps the optimized plan of `projection`, returning the plan already kept if another scan
-    /// got there first.
-    pub(super) fn insert_projection(&self, projection: BoundExpression, plan: PlanRef) -> PlanRef {
-        self.0
-            .projections
-            .lock()
-            .entry(ExactBoundExpr(projection))
-            .or_insert(plan)
-            .clone()
-    }
-
-    /// The segment byte-range index an earlier scan kept.
-    pub(super) fn ranges(&self) -> Option<SegmentRanges> {
-        self.0.ranges.lock().clone()
-    }
-
-    /// Keeps `ranges`, returning the index already kept if another scan got there first.
-    pub(super) fn insert_ranges(&self, ranges: SegmentRanges) -> SegmentRanges {
-        Arc::clone(self.0.ranges.lock().get_or_insert(ranges))
+    /// The segment byte-range index, built by `index` unless an earlier scan kept it.
+    pub(super) fn ranges_or_init(&self, index: impl FnOnce() -> SegmentRanges) -> SegmentRanges {
+        Arc::clone(self.0.ranges.get_or_init(index))
     }
 
     /// The plans of `filter` an earlier scan kept.
+    #[cfg(test)]
     pub(super) fn filter_plans(&self, filter: &BoundExpression) -> Option<Arc<FilterPlans>> {
         self.0
             .filters
             .lock()
             .get(&ExactBoundExpr(filter.clone()))
-            .cloned()
+            .and_then(|plans| plans.get().cloned())
     }
 
-    /// Keeps the plans of `filter`, returning the plans already kept if another scan got there
-    /// first.
-    pub(super) fn insert_filter_plans(
+    /// The plans of `filter`, planned by `plan` unless an earlier scan kept them.
+    pub(super) fn filter_plans_or_try_init(
         &self,
-        filter: BoundExpression,
-        plans: Arc<FilterPlans>,
-    ) -> Arc<FilterPlans> {
-        Arc::clone(
-            self.0
-                .filters
-                .lock()
-                .entry(ExactBoundExpr(filter))
-                .or_insert(plans),
-        )
+        filter: &BoundExpression,
+        plan: impl FnOnce() -> VortexResult<FilterPlans>,
+    ) -> VortexResult<Arc<FilterPlans>> {
+        cell(&self.0.filters, filter)
+            .get_or_try_init(|| plan().map(Arc::new))
+            .cloned()
     }
 
     pub(super) fn values(&self) -> ValueCache {
@@ -120,6 +103,14 @@ impl ScanCache {
     pub fn downgrade(&self) -> WeakScanCache {
         WeakScanCache(Arc::downgrade(&self.0))
     }
+}
+
+/// The cell of `key` in `map`, so scans that miss together build its entry once.
+fn cell<T>(
+    map: &Mutex<FxHashMap<ExactBoundExpr, Arc<OnceCell<T>>>>,
+    key: &BoundExpression,
+) -> Arc<OnceCell<T>> {
+    Arc::clone(map.lock().entry(ExactBoundExpr(key.clone())).or_default())
 }
 
 /// A [`ScanCache`] handle that does not keep the cache alive. Engines that open a file once per
