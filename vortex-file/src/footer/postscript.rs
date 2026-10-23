@@ -28,6 +28,38 @@ pub(crate) struct Postscript {
     pub(crate) statistics: Option<PostscriptSegment>,
     pub(crate) footer: PostscriptSegment,
     pub(crate) metadata: Vec<PostscriptMetadata>,
+    pub(crate) encrypted_statistics: Vec<EncryptedStatistics>,
+}
+
+/// File-level statistics of some fields, stored in a segment encrypted with those fields' key.
+pub(crate) struct EncryptedStatistics {
+    pub(crate) fields: Vec<u32>,
+    pub(crate) segment: PostscriptSegment,
+}
+
+impl EncryptedStatistics {
+    fn write_flatbuffer<'fb>(
+        &self,
+        fbb: &mut FlatBufferBuilder<'fb>,
+    ) -> VortexResult<WIPOffset<fb::EncryptedStatistics<'fb>>> {
+        let fields = fbb.create_vector(&self.fields);
+        let segment = self.segment.write_flatbuffer(fbb)?;
+        Ok(fb::EncryptedStatistics::create(
+            fbb,
+            &fb::EncryptedStatisticsArgs {
+                fields: Some(fields),
+                segment: Some(segment),
+            },
+        ))
+    }
+
+    fn read_flatbuffer(fb: &fb::EncryptedStatistics<'_>) -> VortexResult<Self> {
+        // The FlatBuffers verifier enforces that `fields` and `segment` are present.
+        Ok(Self {
+            fields: fb.fields().iter().collect(),
+            segment: PostscriptSegment::read_flatbuffer(&fb.segment())?,
+        })
+    }
 }
 
 impl FlatBufferRoot for Postscript {}
@@ -70,6 +102,16 @@ impl Postscript {
             }
             Some(fbb.create_vector(metadata.as_slice()))
         };
+        let encrypted_statistics = if self.encrypted_statistics.is_empty() {
+            None
+        } else {
+            let entries = self
+                .encrypted_statistics
+                .iter()
+                .map(|entry| entry.write_flatbuffer(fbb))
+                .collect::<VortexResult<Vec<_>>>()?;
+            Some(fbb.create_vector(entries.as_slice()))
+        };
         Ok(fb::Postscript::create(
             fbb,
             &fb::PostscriptArgs {
@@ -78,6 +120,7 @@ impl Postscript {
                 statistics,
                 footer: Some(footer),
                 metadata,
+                encrypted_statistics,
             },
         ))
     }
@@ -130,6 +173,12 @@ impl ReadFlatBuffer for Postscript {
                     .ok_or_else(|| vortex_err!("Postscript missing footer segment"))?,
             )?,
             metadata,
+            encrypted_statistics: fb
+                .encrypted_statistics()
+                .iter()
+                .flat_map(|entries| entries.iter())
+                .map(|entry| EncryptedStatistics::read_flatbuffer(&entry))
+                .collect::<VortexResult<_>>()?,
         })
     }
 }
@@ -360,6 +409,7 @@ mod tests {
             statistics: None,
             footer: segment(1),
             metadata,
+            encrypted_statistics: Vec::new(),
         }
         .write_flatbuffer_bytes()
         .unwrap();
@@ -402,6 +452,7 @@ mod tests {
                     segment: segment(3),
                 },
             ],
+            encrypted_statistics: Vec::new(),
         };
 
         let read_err = read_postscript_error(&postscript);
@@ -425,6 +476,7 @@ mod tests {
                 key: String::new(),
                 segment: segment(2),
             }],
+            encrypted_statistics: Vec::new(),
         };
 
         let read_err = read_postscript_error(&postscript);
@@ -446,6 +498,7 @@ mod tests {
                 key,
                 segment: segment(2),
             }],
+            encrypted_statistics: Vec::new(),
         };
 
         for err in [
@@ -471,6 +524,7 @@ mod tests {
                     segment: segment(2 + idx as u64),
                 })
                 .collect(),
+            encrypted_statistics: Vec::new(),
         };
 
         for err in [

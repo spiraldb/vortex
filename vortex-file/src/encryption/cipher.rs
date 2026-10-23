@@ -52,6 +52,8 @@ pub(crate) enum SegmentRole<'a> {
     Footer,
     /// A user-defined metadata segment, by key.
     Metadata(&'a str),
+    /// The entry at this position of the postscript's encrypted statistics.
+    KeyStatistics(u16),
 }
 
 impl SegmentRole<'_> {
@@ -68,6 +70,10 @@ impl SegmentRole<'_> {
             SegmentRole::Metadata(key) => {
                 aad.push(5);
                 aad.extend_from_slice(key.as_bytes());
+            }
+            SegmentRole::KeyStatistics(key) => {
+                aad.push(6);
+                aad.extend_from_slice(&key.to_le_bytes());
             }
         }
     }

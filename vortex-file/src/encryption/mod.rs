@@ -234,8 +234,9 @@ impl FileEncryption {
     ///
     /// Readers without encryption support, or without the footer key, can then read the fields
     /// that are stored in plaintext, and readers with the footer key verify the signature. The
-    /// schema, layout tree, and file statistics are visible to anyone, except that the writer
-    /// omits the statistics of encrypted fields. User metadata segments stay encrypted.
+    /// schema and layout tree are visible to anyone, as are the file statistics of plaintext
+    /// fields; those of encrypted fields are encrypted with the field's key. User metadata segments
+    /// stay encrypted.
     pub fn with_plaintext_footer(mut self) -> Self {
         self.plaintext_footer = true;
         self
@@ -270,9 +271,8 @@ impl FileEncryption {
     /// with the default layout strategy.
     ///
     /// This registers `key` under `name`, as [`with_named_key`](Self::with_named_key) does. A
-    /// reader without the key can still read every other field. The file-level statistics of the
-    /// field's top-level field are encrypted with the footer key, so readers with the footer key
-    /// can see them, and are omitted with a plaintext footer.
+    /// reader without the key can still read every other field, and does not see the file-level
+    /// statistics of this one, which are encrypted with its key.
     ///
     /// With a custom strategy configure the field on the strategy instead; the write fails
     /// otherwise.
@@ -318,6 +318,25 @@ impl FileEncryption {
     /// Create the cipher of `key` for one file.
     pub(crate) fn file_cipher(&self, key: &KeyConfig) -> VortexResult<SegmentCipher> {
         key.file_cipher(self.algorithm, self.aad_prefix.as_deref())
+    }
+
+    /// Create the cipher of `key` for the segments of an existing file that use `spec`.
+    pub(crate) fn cipher_for_spec(
+        &self,
+        key: &KeyConfig,
+        spec: &EncryptionSpec,
+    ) -> VortexResult<SegmentCipher> {
+        if spec.requires_aad_prefix != self.aad_prefix.is_some() {
+            vortex_bail!(
+                "The file's encryption spec and the FileEncryption disagree on whether an AAD \
+                 prefix is used"
+            );
+        }
+        SegmentCipher::new(
+            spec.clone(),
+            key.key().clone(),
+            self.aad_prefix.as_deref().unwrap_or_default(),
+        )
     }
 }
 

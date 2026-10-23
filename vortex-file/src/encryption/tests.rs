@@ -353,6 +353,36 @@ async fn standalone_footer() -> VortexResult<()> {
     assert_reads_all(&file).await
 }
 
+/// A standalone footer keeps the statistics of a column-keyed field under that key.
+#[tokio::test]
+async fn standalone_footer_with_field_key() -> VortexResult<()> {
+    let encryption = with_column_key(FileEncryption::new(footer_key()));
+    let bytes = write(Some(encryption.clone())).await?;
+    let footer = open(bytes, Some(decryption()))?.footer().clone();
+
+    let footer_bytes = footer
+        .into_serializer()
+        .with_encryption(&encryption)?
+        .serialize()?
+        .iter()
+        .flat_map(|buffer| buffer.as_slice().iter().copied())
+        .collect::<Vec<u8>>();
+    for (with_column_key, expect_secret_stats) in [(true, true), (false, false)] {
+        let mut deserializer =
+            Footer::deserializer(ByteBuffer::copy_from(&footer_bytes), SESSION.clone())
+                .with_size(footer_bytes.len() as u64)
+                .with_decryption(FileDecryption::new(keys(with_column_key)));
+        let DeserializeStep::Done(footer) = deserializer.deserialize()? else {
+            vortex_bail!("standalone footer must deserialize in one step");
+        };
+        assert_eq!(footer.statistics_encryption().as_ref(), [(0, 2)]);
+        let stats = footer.statistics().vortex_expect("file statistics");
+        assert_eq!(!stats.stats_sets()[0].is_empty(), expect_secret_stats);
+        assert!(!stats.stats_sets()[2].is_empty());
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn field_key() -> VortexResult<()> {
     let bytes = write(Some(with_column_key(FileEncryption::new(footer_key())))).await?;
@@ -389,7 +419,8 @@ async fn field_key() -> VortexResult<()> {
         assert_eq!(segment.encryption, expected, "segment {index}");
     }
 
-    // File statistics are encrypted with the footer key, including the secret column's.
+    // The secret column's statistics are encrypted with its key, in a segment of their own.
+    assert_eq!(footer.statistics_encryption().as_ref(), [(0, 2)]);
     let stats = footer.statistics().vortex_expect("file statistics");
     assert!(stats.stats_sets().iter().all(|stats| !stats.is_empty()));
 
@@ -400,6 +431,11 @@ async fn field_key() -> VortexResult<()> {
 async fn column_key_unavailable() -> VortexResult<()> {
     let bytes = write(Some(with_column_key(FileEncryption::new(footer_key())))).await?;
     let file = open(bytes, Some(FileDecryption::new(keys(false))))?;
+
+    // Without the column key, the secret column's statistics are unavailable too.
+    let stats = file.footer().statistics().vortex_expect("file statistics");
+    assert!(stats.stats_sets()[0].is_empty());
+    assert!(!stats.stats_sets()[2].is_empty());
 
     // Columns encrypted with the footer key remain readable.
     let expected = StructArray::from_fields(&[("numbers", buffer![1u32, 2, 3, 4].into_array())])?;
@@ -493,10 +529,13 @@ async fn plaintext_footer() -> VortexResult<()> {
         file.metadata_segment("meta").map(ByteBuffer::as_slice),
         Some(SECRET.as_bytes())
     );
+    let stats = file.footer().statistics().vortex_expect("file statistics");
+    assert!(stats.stats_sets().iter().all(|stats| !stats.is_empty()));
     assert_reads_all(&file).await
 }
 
-/// With a plaintext footer and every field encrypted, the file statistics are omitted.
+/// With a plaintext footer and every field encrypted with the footer key, the file statistics
+/// are encrypted with the footer key.
 #[tokio::test]
 async fn plaintext_footer_with_encrypted_fields() -> VortexResult<()> {
     let bytes = write(Some(
@@ -507,12 +546,46 @@ async fn plaintext_footer_with_encrypted_fields() -> VortexResult<()> {
     assert!(!contains(&bytes, VISIBLE.as_bytes()));
 
     let file = SESSION.open_options().open_buffer(bytes.clone())?;
-    if let Some(stats) = file.footer().statistics() {
-        assert!(stats.stats_sets().iter().all(|stats| stats.is_empty()));
-    }
+    let stats = file.footer().statistics().vortex_expect("file statistics");
+    assert!(stats.stats_sets().iter().all(|stats| stats.is_empty()));
+    assert_eq!(
+        file.footer().statistics_encryption().as_ref(),
+        [(0, 1), (1, 1), (2, 1)]
+    );
     expect_err(read_field(&file, "numbers").await, "no FileDecryption");
 
-    assert_reads_all(&open(bytes, Some(decryption()))?).await
+    let file = open(bytes, Some(decryption()))?;
+    let stats = file.footer().statistics().vortex_expect("file statistics");
+    assert!(stats.stats_sets().iter().all(|stats| !stats.is_empty()));
+    assert_reads_all(&file).await
+}
+
+/// A custom strategy that encrypts a field with a named key gets the same statistics protection,
+/// since the keys are taken from the segments each field wrote.
+#[tokio::test]
+async fn custom_strategy_statistics_encryption() -> VortexResult<()> {
+    let strategy = WriteStrategyBuilder::from_session(&SESSION)
+        .with_field_encryption(FieldPath::from_name(SECRET_COLUMN), "pii")
+        .build();
+    let mut buf = ByteBufferMut::empty();
+    SESSION
+        .write_options()
+        .with_strategy(strategy)
+        .with_encryption(FileEncryption::new(footer_key()).with_named_key("pii", column_key()))
+        .write(&mut buf, array()?.to_array_stream())
+        .await?;
+    let bytes = buf.freeze();
+
+    let file = open(bytes.clone(), Some(FileDecryption::new(keys(false))))?;
+    assert_eq!(file.footer().statistics_encryption().as_ref(), [(0, 2)]);
+    let stats = file.footer().statistics().vortex_expect("file statistics");
+    assert!(stats.stats_sets()[0].is_empty());
+    assert!(!stats.stats_sets()[1].is_empty());
+
+    let file = open(bytes, Some(decryption()))?;
+    let stats = file.footer().statistics().vortex_expect("file statistics");
+    assert!(stats.stats_sets().iter().all(|stats| !stats.is_empty()));
+    assert_reads_all(&file).await
 }
 
 #[tokio::test]
