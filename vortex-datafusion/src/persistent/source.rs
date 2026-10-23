@@ -11,10 +11,12 @@ use datafusion_common::config::ConfigOptions;
 use datafusion_common::tree_node::TreeNodeRecursion;
 use datafusion_datasource::TableSchema;
 use datafusion_datasource::file::FileSource;
+use datafusion_datasource::file_groups::FileGroupPartitioner;
 use datafusion_datasource::file_scan_config::FileScanConfig;
 use datafusion_datasource::file_stream::FileOpener;
 use datafusion_execution::cache::cache_manager::FileMetadataCache;
 use datafusion_physical_expr::EquivalenceProperties;
+use datafusion_physical_expr::LexOrdering;
 use datafusion_physical_expr::PhysicalExprRef;
 use datafusion_physical_expr::PhysicalSortExpr;
 use datafusion_physical_expr::conjunction;
@@ -449,6 +451,29 @@ impl FileSource for VortexSource {
 
     fn supports_repartitioning(&self) -> bool {
         true
+    }
+
+    fn repartitioned(
+        &self,
+        target_partitions: usize,
+        repartition_file_min_size: usize,
+        output_ordering: Option<LexOrdering>,
+        config: &FileScanConfig,
+    ) -> DFResult<Option<FileScanConfig>> {
+        if config.file_compression_type.is_compressed() {
+            return Ok(None);
+        }
+        let Some(file_groups) = FileGroupPartitioner::new()
+            .with_target_partitions(target_partitions)
+            .with_repartition_file_min_size(repartition_file_min_size)
+            .with_preserve_order_within_groups(output_ordering.is_some())
+            .repartition_file_groups(&config.file_groups)
+        else {
+            return Ok(None);
+        };
+        let mut repartitioned = config.clone();
+        repartitioned.file_groups = file_groups;
+        Ok(Some(repartitioned))
     }
 
     fn try_pushdown_filters(

@@ -41,6 +41,7 @@ use vortex_array::ArrayRef;
 use vortex_array::VortexSessionExecute;
 use vortex_array::dtype::DType;
 use vortex_array::expr::BoundExpression;
+use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_io::request::IoService;
 use vortex_io::session::RuntimeSessionExt;
@@ -96,6 +97,22 @@ fn row_chunks(rows: Range<u64>, rows_per_chunk: usize) -> Vec<Range<u64>> {
             start.max(rows.start)..start.saturating_add(rows_per_chunk as u64).min(rows.end)
         })
         .collect()
+}
+
+/// The rows a byte range of the file stands for when an engine splits the file by bytes before
+/// opening it. Consecutive byte ranges give consecutive row ranges that tile the file, with
+/// boundaries on the grid's 8,192-row blocks so the executor's chunks stay block aligned.
+pub fn partition_row_range(bytes: Range<u64>, file_size: u64, row_count: u64) -> Range<u64> {
+    let row = |byte: u64| -> u64 {
+        if byte >= file_size {
+            return row_count;
+        }
+        let row = u128::from(byte) * u128::from(row_count) / u128::from(file_size);
+        let row = u64::try_from(row).vortex_expect("a row of the file fits u64");
+        row / ROW_BLOCK_SIZE as u64 * ROW_BLOCK_SIZE as u64
+    };
+    let start = row(bytes.start);
+    start..row(bytes.end).max(start)
 }
 
 /// The parts of a file the planner-driven executor reads through.

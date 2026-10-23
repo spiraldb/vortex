@@ -50,6 +50,7 @@ use vortex_session::VortexSession;
 
 use super::MAX_ROWS_PER_CHUNK;
 use super::PreparedScan;
+use super::ROW_BLOCK_SIZE;
 use super::ScanBuilder;
 use super::ScanCache;
 use super::ScanFile;
@@ -777,4 +778,26 @@ async fn repeated_projections_reuse_their_values() -> VortexResult<()> {
     }
     assert_eq!(reads, vec![4, 1, 1]);
     Ok(())
+}
+
+#[test]
+fn partition_rows_tile_the_file_on_row_blocks() {
+    let (file_size, row_count) = (1_000u64, 100_000u64);
+    let bytes = [0..300, 300..600, 600..1_000];
+    let rows: Vec<_> = bytes
+        .iter()
+        .map(|bytes| super::partition_row_range(bytes.clone(), file_size, row_count))
+        .collect();
+    assert_eq!(rows[0].start, 0);
+    assert_eq!(rows[2].end, row_count);
+    for pair in rows.windows(2) {
+        assert_eq!(pair[0].end, pair[1].start);
+        assert_eq!(pair[0].end % ROW_BLOCK_SIZE as u64, 0);
+    }
+    assert!(rows.iter().all(|rows| !rows.is_empty()));
+    assert_eq!(
+        super::partition_row_range(1..2, file_size, row_count),
+        0..0,
+        "a range inside one block owns no rows"
+    );
 }
