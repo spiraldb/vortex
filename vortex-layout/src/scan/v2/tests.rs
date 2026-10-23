@@ -60,6 +60,7 @@ use super::ROW_BLOCK_SIZE;
 use super::ScanBuilder;
 use super::ScanCache;
 use super::ScanFile;
+use super::filtered_rows_per_chunk;
 use super::rows_per_chunk;
 use crate::LayoutRef;
 use crate::LayoutStrategy;
@@ -478,6 +479,16 @@ async fn arrow_stream_projects_across_chunks() -> VortexResult<()> {
 #[case::near_max(u64::MAX - 3..u64::MAX, vec![u64::MAX - 3..u64::MAX])]
 fn row_chunks_start_at_the_range(#[case] rows: Range<u64>, #[case] expected: Vec<Range<u64>>) {
     assert_eq!(row_chunks(rows, 65_536), expected);
+}
+
+#[rstest]
+#[case::sf1_partition(430_000, 262_144)]
+#[case::below_minimum(100_000, 262_144)]
+#[case::on_grid(2_000_000, 499_712)]
+#[case::sf10_partition(5_000_000, 1_048_576)]
+#[case::whole_file(60_000_000, 1_048_576)]
+fn filtered_chunks_are_a_quarter_of_the_partition(#[case] rows: u64, #[case] expected: usize) {
+    assert_eq!(filtered_rows_per_chunk(rows), expected);
 }
 
 #[rstest]

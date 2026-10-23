@@ -13,8 +13,8 @@
 //! Import this module's [`ScanBuilder`] to prepare a V2 scan. It accepts a [`ScanFile`] directly
 //! and supports projection, filters, row ranges, and selections. Unsupported layouts return an
 //! error when the plan is prepared; limits are not part of this builder's API. Work is cut into
-//! chunks of up to 65,536 rows, or 1,048,576 rows for filtered scans, independently of the stored
-//! layout's chunk boundaries. Full-file projections use smaller 8,192-row multiples when
+//! chunks of up to 65,536 rows, or for filtered scans a quarter of the scanned rows between
+//! 262,144 and 1,048,576, independently of the stored layout's chunk boundaries. Full-file projections use smaller 8,192-row multiples when
 //! serialized bytes per row are high.
 //!
 //! A [`ScanFile`] carrying a [`ScanCache`] shares its lowered plan, filter plans and pruned
@@ -46,7 +46,6 @@ use crate::plan::physical::lower;
 use crate::plan::physical::optimize;
 use crate::plan::physical::plan_row_idx_expression;
 pub use crate::scan::execution::ChunkPlanner;
-use crate::scan::execution::FILTERED_ROWS_PER_CHUNK;
 pub use crate::scan::execution::FilterPlans;
 use crate::scan::execution::MAX_ROWS_PER_CHUNK;
 pub use crate::scan::execution::PreparedScan;
@@ -55,6 +54,7 @@ pub use crate::scan::execution::PrunePlanner;
 use crate::scan::execution::ROW_BLOCK_SIZE;
 use crate::scan::execution::ScanMetrics;
 pub use crate::scan::execution::SegmentLocation;
+use crate::scan::execution::filtered_rows_per_chunk;
 use crate::scan::execution::rows_per_chunk;
 use crate::scan::v2::io::segment_ranges;
 use crate::segments::SegmentSource;
@@ -205,7 +205,11 @@ impl ScanBuilder {
         })?;
         let t_projection = t_prepare.elapsed().as_micros();
         let chunk_rows = if filter.is_some() {
-            FILTERED_ROWS_PER_CHUNK
+            let partition_rows = self
+                .row_range
+                .as_ref()
+                .map_or(row_count, |rows| rows.end.saturating_sub(rows.start));
+            filtered_rows_per_chunk(partition_rows)
         } else if identity {
             rows_per_chunk(row_count, &file.locations)
         } else {
