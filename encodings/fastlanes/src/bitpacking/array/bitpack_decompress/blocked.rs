@@ -12,6 +12,7 @@ use num_traits::AsPrimitive;
 use vortex_array::ArrayRef;
 use vortex_array::ArrayView;
 use vortex_array::ExecutionCtx;
+use vortex_array::ProbeChildren;
 use vortex_array::arrays::Primitive;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::builders::ArrayBuilder;
@@ -21,12 +22,14 @@ use vortex_array::match_each_integer_ptype;
 use vortex_array::match_each_unsigned_integer_ptype;
 use vortex_array::scalar::Scalar;
 use vortex_buffer::Buffer;
+use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_ensure;
 
 use super::global::apply_patches_to_uninit_range;
 use crate::BitPacked;
 use crate::BitPackedArrayExt;
+use crate::BitPackedSlots;
 use crate::FL_CHUNK_SIZE;
 use crate::bitpacking::array::block_range;
 use crate::bitpacking::array::validate_primitive_offsets;
@@ -223,17 +226,8 @@ pub fn unpack_single_blocked(
         block + 1 < offsets.len(),
         "BitPacked index {index} has no block boundaries"
     );
-    let (base, start, end) = if let Some(primitive) = offsets.as_opt::<Primitive>()
-        && primitive.buffer_handle().is_on_host()
-    {
-        match_each_unsigned_integer_ptype!(primitive.ptype(), |I| {
-            let offsets = primitive.as_slice::<I>();
-            (
-                AsPrimitive::<u64>::as_(offsets[0]),
-                AsPrimitive::<u64>::as_(offsets[block]),
-                AsPrimitive::<u64>::as_(offsets[block + 1]),
-            )
-        })
+    let (base, start, end) = if let Some(bounds) = primitive_block_bounds(offsets, block) {
+        bounds
     } else {
         let base = u64::try_from(&offsets.execute_scalar(0, ctx)?)?;
         let start = if block == 0 {
@@ -251,6 +245,104 @@ pub fn unpack_single_blocked(
         array.dtype().as_ptype().bit_width() as u64,
         array.packed().len(),
     )?;
+    unpack_single_in_range(array, index_in_encoded, range)
+}
+
+/// Read only the selected block's boundaries through the parent's stable child slot.
+pub(crate) fn unpack_single_blocked_with_probes(
+    array: ArrayView<'_, BitPacked>,
+    offsets: &ArrayRef,
+    index: usize,
+    children: &mut ProbeChildren<'_, '_, BitPacked>,
+    mut cache: Option<&mut BlockProbeCache>,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<Scalar> {
+    let index_in_encoded = index + array.offset() as usize;
+    let block = index_in_encoded / FL_CHUNK_SIZE;
+    if let Some(cached) = cache.as_ref().and_then(|entry| entry.last)
+        && cached.block == block
+    {
+        return unpack_single_in_range(array, index_in_encoded, cached.start..cached.end);
+    }
+    vortex_ensure!(
+        block + 1 < offsets.len(),
+        "BitPacked index {index} has no block boundaries"
+    );
+    let (base, start, end) = if let Some(bounds) = primitive_block_bounds(offsets, block) {
+        bounds
+    } else {
+        let mut probe = children
+            .slot(BitPackedSlots::BLOCK_OFFSETS)?
+            .vortex_expect("blocked BitPacked must have block offsets");
+        let base = if let Some(base) = cache.as_ref().and_then(|entry| entry.base) {
+            base
+        } else {
+            let base = u64::try_from(&probe.execute_scalar(0, ctx)?)?;
+            if let Some(cache) = cache.as_deref_mut() {
+                cache.base = Some(base);
+            }
+            base
+        };
+        let start = if block == 0 {
+            base
+        } else {
+            u64::try_from(&probe.execute_scalar(block, ctx)?)?
+        };
+        let end = u64::try_from(&probe.execute_scalar(block + 1, ctx)?)?;
+        (base, start, end)
+    };
+    let range = block_range(
+        base,
+        start,
+        end,
+        array.dtype().as_ptype().bit_width() as u64,
+        array.packed().len(),
+    )?;
+    if let Some(cache) = cache {
+        cache.last = Some(ValidatedBlock {
+            block,
+            start: range.start,
+            end: range.end,
+        });
+    }
+    unpack_single_in_range(array, index_in_encoded, range)
+}
+
+/// Preparation retained for one immutable BitPacked array.
+#[derive(Default)]
+pub(crate) struct BlockProbeCache {
+    base: Option<u64>,
+    last: Option<ValidatedBlock>,
+}
+
+/// A validated byte range for one block of an immutable BitPacked array.
+#[derive(Clone, Copy)]
+struct ValidatedBlock {
+    block: usize,
+    start: usize,
+    end: usize,
+}
+
+fn primitive_block_bounds(offsets: &ArrayRef, block: usize) -> Option<(u64, u64, u64)> {
+    let primitive = offsets.as_opt::<Primitive>()?;
+    if !primitive.buffer_handle().is_on_host() {
+        return None;
+    }
+    Some(match_each_unsigned_integer_ptype!(primitive.ptype(), |I| {
+        let offsets = primitive.as_slice::<I>();
+        (
+            AsPrimitive::<u64>::as_(offsets[0]),
+            AsPrimitive::<u64>::as_(offsets[block]),
+            AsPrimitive::<u64>::as_(offsets[block + 1]),
+        )
+    }))
+}
+
+fn unpack_single_in_range(
+    array: ArrayView<'_, BitPacked>,
+    index_in_encoded: usize,
+    range: Range<usize>,
+) -> VortexResult<Scalar> {
     let bit_width = range.len() / 128;
     match_each_integer_ptype!(array.dtype().as_ptype(), |P| {
         let packed = array.packed_slice::<<P as PhysicalPType>::Physical>();
