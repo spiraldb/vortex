@@ -48,6 +48,7 @@ pub(crate) mod expression;
 mod exprs;
 pub(crate) mod field;
 pub mod lambda;
+mod lazy;
 mod optimize;
 pub mod proto;
 pub mod scope;
@@ -110,6 +111,7 @@ pub use exprs::var;
 pub use exprs::variant_get;
 pub use exprs::zip_expr;
 pub use lambda::*;
+pub use lazy::lazy;
 pub use scope::*;
 
 #[cfg(feature = "_test-harness")]

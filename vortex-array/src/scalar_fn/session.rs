@@ -164,11 +164,22 @@ pub trait ScalarFnSessionExt: SessionExt {
             reason = "interning a dynamic function name"
         )]
         let id = ScalarFnId::new(name);
+        self.scalar_fn_by_id(id, options)
+    }
+
+    /// Builds the scalar function registered under `id` with `options`, like
+    /// [`scalar_fn`](Self::scalar_fn) but for an already interned id.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no function is registered under `id`, or if `options` is not its
+    /// options type.
+    fn scalar_fn_by_id(&self, id: ScalarFnId, options: &dyn Any) -> VortexResult<ScalarFnRef> {
         let plugin = self
             .scalar_fns()
             .registry()
             .get(&id)
-            .ok_or_else(|| vortex_err!("unknown scalar function: {name}"))?;
+            .ok_or_else(|| vortex_err!("unknown scalar function: {id}"))?;
         plugin.bind_any(options)
     }
 
