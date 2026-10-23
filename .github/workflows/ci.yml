@@ -44,13 +44,32 @@ jobs:
           echo "DuckDB mirror failed; downstream builds would 404"
           exit 1
 
-  formatting:
-    name: "TOML, YAML and C/C++ (lint)"
-    runs-on: ubuntu-latest
+  lightweight-checks:
+    name: "Formatting, Python lint and script tests"
+    runs-on: >-
+      ${{ github.repository == 'vortex-data/vortex'
+          && format('runs-on={0}/runner=amd64-ci-small/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=lightweight-checks', github.run_id)
+          || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - parallel:
+          - uses: runs-on/action@v2
+            if: github.repository == 'vortex-data/vortex'
+          - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: spiraldb/actions/.github/actions/setup-uv@a746510eafaa926484c354541cfc49b2ec06cc63  # 0.18.6
+        with:
+          sync: false
+      - name: Install missing formatting tools
+        run: |
+          packages=()
+          command -v yamllint >/dev/null || packages+=(yamllint)
+          command -v clang-format >/dev/null || packages+=(clang-format)
+          if [ ${#packages[@]} -gt 0 ]; then
+            sudo apt-get update
+            sudo apt-get install -y "${packages[@]}"
+          fi
       - name: TOML Lint
+        if: "!cancelled()"
         uses: spiraldb/actions/.github/actions/lint-toml@a746510eafaa926484c354541cfc49b2ec06cc63  # 0.18.6
       - name: Validate YAML file
         if: "!cancelled()"
@@ -70,27 +89,33 @@ jobs:
             | grep -v 'kernels/src/bit_unpack_.*_lanes\.cuh$' \
             | xargs clang-format --dry-run --Werror --style=file
 
-  python-lint:
-    name: "Python (lint)"
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-      - uses: spiraldb/actions/.github/actions/setup-uv@a746510eafaa926484c354541cfc49b2ec06cc63  # 0.18.6
-        with:
-          sync: false
       # Use uvx for ruff to avoid building the Rust extension (saves ~4.5 min)
       - name: Python Lint - Format
+        if: "!cancelled()"
         run: uvx ruff format --check .
       - name: Python Lint - Ruff
+        if: "!cancelled()"
         run: uvx ruff check .
       # ty needs the Python dependencies for type information, but resolves the
       # vortex package itself from the in-tree sources and stubs, so skip the
       # Rust extension build entirely.
       - name: Python Lint - ty
+        if: "!cancelled()"
         run: |
           uv sync --all-packages --no-install-workspace
           uvx ty check vortex-python vortex-python-cuda vortex-ffi/cmake/tests scripts/tests
+
+      # Pins the measurement_id hash that scripts/post-ingest.py uses as the primary key of every
+      # benchmarks-database fact row. The golden vectors are a frozen artifact (see the note inside
+      # the JSON); this job fails if a change to scripts/_measurement_id.py drifts the hash, which
+      # would break ON CONFLICT idempotency against the rows already in production.
+      - name: Pytest - measurement_id, benchmark reporting and ingestion
+        if: "!cancelled()"
+        run: |
+          uv run --no-project --with pytest --with pandas --with numpy --with orjson \
+            --with tabulate --with xxhash \
+            pytest scripts/tests/test_measurement_id.py \
+              scripts/tests/test_benchmark_reporting.py scripts/tests/test_post_ingest.py
 
   python-test:
     name: "Python (test)"
@@ -204,28 +229,6 @@ jobs:
           assert round_tripped.column("b").to_pylist() == ["x", "y", "z"]
           print("vortex", vx.__version__, "round-tripped a file on Windows")
           PY
-
-  # Pins the measurement_id hash that scripts/post-ingest.py uses as the primary key of every
-  # benchmarks-database fact row. The golden vectors are a frozen artifact (see the note inside
-  # the JSON); this job fails if a change to scripts/_measurement_id.py drifts the hash, which
-  # would break ON CONFLICT idempotency against the rows already in production.
-  python-script-tests:
-    name: "Python script tests"
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-      # sync: false — the test runs via `uv run --no-project` and needs no workspace
-      # packages; the default `uv sync` builds the vortex-data Rust extension (~6 min).
-      - uses: spiraldb/actions/.github/actions/setup-uv@a746510eafaa926484c354541cfc49b2ec06cc63  # 0.18.6
-        with:
-          sync: false
-      - name: Pytest - measurement_id, benchmark reporting and ingestion
-        run: |
-          uv run --no-project --with pytest --with pandas --with numpy --with orjson \
-            --with tabulate --with xxhash \
-            pytest scripts/tests/test_measurement_id.py \
-              scripts/tests/test_benchmark_reporting.py scripts/tests/test_post_ingest.py
 
   python-cuda-test:
     name: "Python CUDA (test)"
