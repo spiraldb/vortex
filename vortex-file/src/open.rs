@@ -328,6 +328,47 @@ impl VortexOpenOptions {
             self.read_footer(&reader).await?
         };
 
+        let metrics = RequestMetrics::new(metrics_registry.as_ref(), self.labels.clone());
+
+        // Create a segment source backed by the VortexRead implementation.
+        let file_source: Arc<dyn SegmentSource> =
+            Arc::new(SharedSegmentSource::new(FileSegmentSource::open(
+                footer.segment_specs_with_metadata(),
+                reader,
+                self.session.handle(),
+                metrics,
+            )));
+
+        // Segments are decrypted after they leave the cache, so that it only holds ciphertext,
+        // unless the decryption asks for a plaintext cache. Then they are decrypted before,
+        // including the segments covered by the initial read.
+        let cache_plaintext = self
+            .decryption
+            .as_ref()
+            .is_some_and(|decryption| decryption.cache_plaintext);
+        let decrypting = if cache_plaintext {
+            DecryptingSegmentSource::new(
+                Arc::clone(&file_source),
+                &footer,
+                self.decryption.as_ref(),
+            )?
+        } else {
+            None
+        };
+        let (file_source, initial_segments) = match decrypting {
+            Some(decrypting) => {
+                let mut decrypted = HashMap::with_capacity(initial_segments.len());
+                for (id, buffer) in initial_segments {
+                    if let Some(buffer) = decrypting.decrypt_initial(id, buffer)? {
+                        decrypted.insert(id, buffer);
+                    }
+                }
+                (Arc::new(decrypting) as Arc<dyn SegmentSource>, decrypted)
+            }
+            // Either the cache holds ciphertext, or the file is not encrypted.
+            None => (file_source, initial_segments),
+        };
+
         // With a segment cache, also store the segments that the footer read covered, so that a
         // later open given this footer finds them there, instead of reading them again. Keep them
         // in the initial map too: the cache can evict them, or not admit them at all, and the
@@ -347,25 +388,14 @@ impl VortexOpenOptions {
             self.labels.clone(),
         ));
 
-        let metrics = RequestMetrics::new(metrics_registry.as_ref(), self.labels);
-
-        // Create a segment source backed by the VortexRead implementation.
-        let segment_source = Arc::new(SharedSegmentSource::new(FileSegmentSource::open(
-            footer.segment_specs_with_metadata(),
-            reader,
-            self.session.handle(),
-            metrics,
-        )));
-
         // Wrap up the segment source to first resolve segments from the initial read cache.
-        let segment_source = DecryptingSegmentSource::wrap(
-            Arc::new(SegmentCacheSourceAdapter::new(
-                segment_cache,
-                segment_source,
-            )),
-            &footer,
-            self.decryption.as_ref(),
-        )?;
+        let segment_source: Arc<dyn SegmentSource> =
+            Arc::new(SegmentCacheSourceAdapter::new(segment_cache, file_source));
+        let segment_source = if cache_plaintext {
+            segment_source
+        } else {
+            DecryptingSegmentSource::wrap(segment_source, &footer, self.decryption.as_ref())?
+        };
 
         let metadata = if self.include_metadata {
             resolve_metadata(&footer, Arc::clone(&segment_source)).await?

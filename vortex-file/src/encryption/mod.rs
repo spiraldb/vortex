@@ -234,6 +234,9 @@ impl FileEncryption {
     /// schema and layout tree are visible to anyone, as are the file statistics of plaintext
     /// fields; those of encrypted fields are encrypted with the field's key. User metadata segments
     /// stay encrypted.
+    ///
+    /// The layout tree reveals the row count, and the number and sizes of the segments, of every
+    /// field, encrypted ones included, which can hint at their cardinality or compressibility.
     pub fn with_plaintext_footer(mut self) -> Self {
         self.plaintext_footer = true;
         self
@@ -344,6 +347,7 @@ pub struct FileDecryption {
     pub(crate) aad_prefix: Option<Arc<[u8]>>,
     pub(crate) verify_footer: bool,
     pub(crate) allow_plaintext_files: bool,
+    pub(crate) cache_plaintext: bool,
 }
 
 impl FileDecryption {
@@ -354,6 +358,7 @@ impl FileDecryption {
             aad_prefix: None,
             verify_footer: true,
             allow_plaintext_files: false,
+            cache_plaintext: false,
         }
     }
 
@@ -375,6 +380,19 @@ impl FileDecryption {
         self
     }
 
+    /// Decrypt segments before they enter the segment cache, rather than after they leave it.
+    ///
+    /// By default the cache holds ciphertext, so every scan decrypts the segments it reads again.
+    /// With this option, repeated scans of a file find plaintext in the cache. The cache then
+    /// holds the file's plaintext, so only use it with a cache that is private to readers allowed
+    /// to see every key's data, such as one configured with
+    /// [`VortexOpenOptions::with_segment_cache`](crate::VortexOpenOptions::with_segment_cache)
+    /// for a single file.
+    pub fn with_plaintext_cache(mut self) -> Self {
+        self.cache_plaintext = true;
+        self
+    }
+
     /// Allow reading files that are not encrypted.
     ///
     /// By default, a reader configured for decryption rejects unencrypted files, so that an
@@ -391,6 +409,7 @@ impl Debug for FileDecryption {
             .field("aad_prefix", &self.aad_prefix)
             .field("verify_footer", &self.verify_footer)
             .field("allow_plaintext_files", &self.allow_plaintext_files)
+            .field("cache_plaintext", &self.cache_plaintext)
             .finish_non_exhaustive()
     }
 }

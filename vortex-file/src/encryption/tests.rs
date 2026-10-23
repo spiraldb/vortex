@@ -32,6 +32,8 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
 use vortex_io::session::RuntimeSession;
+use vortex_layout::segments::SegmentCache;
+use vortex_layout::segments::SegmentId;
 use vortex_layout::session::LayoutSession;
 use vortex_session::VortexSession;
 use vortex_utils::aliases::hash_map::HashMap;
@@ -204,13 +206,98 @@ async fn roundtrip() -> VortexResult<()> {
         assert!(!contains(&bytes, value.as_bytes()), "{value}");
     }
 
+    // The postscript stores the footer key's spec once, however many segments it protects.
+    assert_eq!(
+        bytes
+            .windows(FOOTER_KEY_METADATA.len())
+            .filter(|window| *window == FOOTER_KEY_METADATA)
+            .count(),
+        1
+    );
+
     let file = open(bytes, Some(decryption()))?;
-    assert!(file.footer().is_encrypted());
+    assert!(file.footer().uses_encryption());
     assert_eq!(
         file.metadata_segment("meta").map(ByteBuffer::as_slice),
         Some(SECRET.as_bytes())
     );
     assert_reads_all(&file).await
+}
+
+/// A segment cache recording what it holds.
+#[derive(Default)]
+struct RecordingCache {
+    segments: Mutex<HashMap<SegmentId, ByteBuffer>>,
+}
+
+#[async_trait::async_trait]
+impl SegmentCache for RecordingCache {
+    async fn get(&self, id: SegmentId) -> VortexResult<Option<ByteBuffer>> {
+        Ok(self.segments.lock().get(&id).cloned())
+    }
+
+    async fn put(&self, id: SegmentId, buffer: ByteBuffer) -> VortexResult<()> {
+        self.segments.lock().insert(id, buffer);
+        Ok(())
+    }
+}
+
+async fn open_with_cache(
+    bytes: ByteBuffer,
+    decryption: FileDecryption,
+) -> VortexResult<(VortexFile, Arc<RecordingCache>)> {
+    let cache = Arc::new(RecordingCache::default());
+    let file = SESSION
+        .open_options()
+        .with_decryption(decryption)
+        .with_segment_cache(Arc::clone(&cache) as _)
+        .open_read(bytes)
+        .await?;
+    Ok((file, cache))
+}
+
+/// By default the segment cache holds ciphertext; with a plaintext cache it holds plaintext.
+#[tokio::test]
+async fn plaintext_cache() -> VortexResult<()> {
+    let bytes = write(Some(with_column_key(FileEncryption::new(footer_key())))).await?;
+    let cached_data_segment = |file: &VortexFile, cache: &RecordingCache| {
+        let segment = file.footer().segment_map()[0];
+        let ciphertext = bytes.slice(
+            usize::try_from(segment.offset).vortex_expect("offset")
+                ..usize::try_from(segment.offset + u64::from(segment.length)).vortex_expect("end"),
+        );
+        let cached = cache
+            .segments
+            .lock()
+            .get(&SegmentId::from(0))
+            .cloned()
+            .vortex_expect("segment 0 cached");
+        (ciphertext, cached)
+    };
+
+    let (file, cache) = open_with_cache(bytes.clone(), decryption()).await?;
+    assert_reads_all(&file).await?;
+    let (ciphertext, cached) = cached_data_segment(&file, &cache);
+    assert_eq!(cached.as_slice(), ciphertext.as_slice());
+
+    let (file, cache) = open_with_cache(bytes.clone(), decryption().with_plaintext_cache()).await?;
+    assert_reads_all(&file).await?;
+    let (ciphertext, cached) = cached_data_segment(&file, &cache);
+    assert_eq!(cached.len() + SIGNATURE_LEN, ciphertext.len());
+    assert_ne!(cached.as_slice(), &ciphertext[..cached.len()]);
+    // A second scan is served from the plaintext cache.
+    assert_reads_all(&file).await?;
+
+    // Without the column key, its segments stay out of the plaintext cache and the other
+    // fields remain readable.
+    let (file, _) = open_with_cache(
+        bytes,
+        FileDecryption::new(keys(false)).with_plaintext_cache(),
+    )
+    .await?;
+    read_field(&file, "numbers").await?;
+    expect_err(read_field(&file, SECRET_COLUMN).await, "access denied");
+    Ok(())
 }
 
 #[tokio::test]

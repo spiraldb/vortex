@@ -37,13 +37,33 @@ pub(crate) struct EncryptedStatistics {
     pub(crate) segment: PostscriptSegment,
 }
 
+/// The `EncryptionSpec` tables already written to a postscript, by spec.
+#[derive(Default)]
+struct SharedSpecs<'fb>(Vec<(EncryptionSpec, WIPOffset<fb::EncryptionSpec<'fb>>)>);
+
+impl<'fb> SharedSpecs<'fb> {
+    fn offset(
+        &mut self,
+        fbb: &mut FlatBufferBuilder<'fb>,
+        spec: &EncryptionSpec,
+    ) -> WIPOffset<fb::EncryptionSpec<'fb>> {
+        if let Some((_, offset)) = self.0.iter().find(|(known, _)| known == spec) {
+            return *offset;
+        }
+        let offset = spec.write_flatbuffer(fbb);
+        self.0.push((spec.clone(), offset));
+        offset
+    }
+}
+
 impl EncryptedStatistics {
-    fn write_flatbuffer<'fb>(
+    fn write_flatbuffer_shared<'fb>(
         &self,
         fbb: &mut FlatBufferBuilder<'fb>,
+        specs: &mut SharedSpecs<'fb>,
     ) -> VortexResult<WIPOffset<fb::EncryptedStatistics<'fb>>> {
         let fields = fbb.create_vector(&self.fields);
-        let segment = self.segment.write_flatbuffer(fbb)?;
+        let segment = self.segment.write_flatbuffer_shared(fbb, specs)?;
         Ok(fb::EncryptedStatistics::create(
             fbb,
             &fb::EncryptedStatisticsArgs {
@@ -81,24 +101,27 @@ impl Postscript {
         &self,
         fbb: &mut FlatBufferBuilder<'fb>,
     ) -> VortexResult<WIPOffset<fb::Postscript<'fb>>> {
+        // Segments protected by the same key share one `EncryptionSpec` table, which the
+        // segments reference by offset, so key metadata is stored once per key.
+        let mut specs = SharedSpecs::default();
         let dtype = self
             .dtype
             .as_ref()
-            .map(|ps| ps.write_flatbuffer(fbb))
+            .map(|ps| ps.write_flatbuffer_shared(fbb, &mut specs))
             .transpose()?;
-        let layout = self.layout.write_flatbuffer(fbb)?;
+        let layout = self.layout.write_flatbuffer_shared(fbb, &mut specs)?;
         let statistics = self
             .statistics
             .as_ref()
-            .map(|ps| ps.write_flatbuffer(fbb))
+            .map(|ps| ps.write_flatbuffer_shared(fbb, &mut specs))
             .transpose()?;
-        let footer = self.footer.write_flatbuffer(fbb)?;
+        let footer = self.footer.write_flatbuffer_shared(fbb, &mut specs)?;
         let metadata = if self.metadata.is_empty() {
             None
         } else {
             let mut metadata = Vec::with_capacity(self.metadata.len());
             for entry in &self.metadata {
-                metadata.push(entry.write_flatbuffer(fbb)?);
+                metadata.push(entry.write_flatbuffer_shared(fbb, &mut specs)?);
             }
             Some(fbb.create_vector(metadata.as_slice()))
         };
@@ -108,7 +131,7 @@ impl Postscript {
             let entries = self
                 .encrypted_statistics
                 .iter()
-                .map(|entry| entry.write_flatbuffer(fbb))
+                .map(|entry| entry.write_flatbuffer_shared(fbb, &mut specs))
                 .collect::<VortexResult<Vec<_>>>()?;
             Some(fbb.create_vector(entries.as_slice()))
         };
@@ -242,17 +265,14 @@ pub(crate) struct PostscriptMetadata {
     pub(crate) segment: PostscriptSegment,
 }
 
-impl FlatBufferRoot for PostscriptMetadata {}
-
-impl WriteFlatBuffer for PostscriptMetadata {
-    type Target<'a> = fb::PostscriptMetadata<'a>;
-
-    fn write_flatbuffer<'fb>(
+impl PostscriptMetadata {
+    fn write_flatbuffer_shared<'fb>(
         &self,
         fbb: &mut FlatBufferBuilder<'fb>,
-    ) -> VortexResult<WIPOffset<Self::Target<'fb>>> {
+        specs: &mut SharedSpecs<'fb>,
+    ) -> VortexResult<WIPOffset<fb::PostscriptMetadata<'fb>>> {
         let key = fbb.create_string(&self.key);
-        let segment = self.segment.write_flatbuffer(fbb)?;
+        let segment = self.segment.write_flatbuffer_shared(fbb, specs)?;
         Ok(fb::PostscriptMetadata::create(
             fbb,
             &fb::PostscriptMetadataArgs {
@@ -288,19 +308,16 @@ pub struct PostscriptSegment {
     pub(crate) signature: Option<Arc<[u8]>>,
 }
 
-impl FlatBufferRoot for PostscriptSegment {}
-
-impl WriteFlatBuffer for PostscriptSegment {
-    type Target<'a> = fb::PostscriptSegment<'a>;
-
-    fn write_flatbuffer<'fb>(
+impl PostscriptSegment {
+    fn write_flatbuffer_shared<'fb>(
         &self,
         fbb: &mut FlatBufferBuilder<'fb>,
-    ) -> VortexResult<WIPOffset<Self::Target<'fb>>> {
+        specs: &mut SharedSpecs<'fb>,
+    ) -> VortexResult<WIPOffset<fb::PostscriptSegment<'fb>>> {
         let encryption = self
             .encryption
             .is_encrypted()
-            .then(|| self.encryption.write_flatbuffer(fbb));
+            .then(|| specs.offset(fbb, &self.encryption));
         let signature = self
             .signature
             .as_ref()

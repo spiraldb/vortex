@@ -304,8 +304,12 @@ impl Footer {
             })
     }
 
-    /// Returns whether any segment of the file is encrypted.
-    pub fn is_encrypted(&self) -> bool {
+    /// Returns whether the file was written with encryption.
+    ///
+    /// This holds even when every data segment is stored in plaintext, since the footer is then
+    /// still signed and user metadata encrypted with the footer key. Check the
+    /// [`segment_encryption`](Self::segment_encryption) of a segment to tell how it is stored.
+    pub fn uses_encryption(&self) -> bool {
         self.encryption_specs
             .iter()
             .any(EncryptionSpec::is_encrypted)

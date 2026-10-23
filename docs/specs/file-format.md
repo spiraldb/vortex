@@ -102,6 +102,7 @@ Vortex files support modular encryption, which operates on whole segments: data 
 statistics, footer, and user metadata segments referenced by the postscript. The postscript always remains in plaintext.
 
 - Each `PostscriptSegment` carries its `EncryptionSpec` inline, so the footer can be decrypted without a prior lookup.
+  Segments protected by the same key reference a single `EncryptionSpec` table, so key metadata is stored once per key.
 - Each `SegmentSpec` stores an index into the footer's `encryption_specs`. Index 0 always denotes a plaintext segment,
   so files written before encryption existed remain valid. Index 1 holds the footer key.
 - Keys are never stored in the file. The opaque `key_metadata` of an `EncryptionSpec` identifies the key to the
@@ -130,6 +131,7 @@ its length is 0.
   segments is signed with the footer key: its `PostscriptSegment` carries the footer key's `EncryptionSpec` and a
   `signature` of `nonce || tag`, computed with AES-GMAC over the segment's additional authenticated data, a `0xFF` byte,
   and the segment's bytes. Readers with the footer key verify the signatures. User metadata segments remain encrypted.
+  The layout tree reveals the row count, and the number and sizes of the segments, of encrypted fields too.
 
 ### Field keys
 
