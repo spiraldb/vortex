@@ -87,11 +87,17 @@ impl ScanSource {
         let slice = self.slice.clone().unwrap_or(0..row_count);
         if slice.start > slice.end
             || slice.end > row_count
-            || self.filter.as_ref().is_some_and(|mask| mask.len() != slice.len())
+            || self
+                .filter
+                .as_ref()
+                .is_some_and(|mask| mask.len() != slice.len())
         {
             return None;
         }
-        let selected = self.filter.as_ref().map_or(slice.len(), Mask::true_count);
+        let selected = self
+            .filter
+            .as_ref()
+            .map_or_else(|| slice.len(), Mask::true_count);
         if selected == 0 || selected > row_count / 8 {
             return None;
         }
@@ -166,31 +172,6 @@ impl Operator for ScanSource {
         let array = decode(&self.plan, bytes, cx.session())?;
         Ok(Step::Final(select(
             array,
-            self.slice.as_ref(),
-            self.filter.as_ref(),
-        )?))
-    }
-}
-
-/// Narrows a whole decoded segment, the one batch of a share's port, to a reader's rows.
-pub(crate) struct SelectStage {
-    slice: Option<Range<usize>>,
-    filter: Option<Mask>,
-}
-
-impl SelectStage {
-    pub(crate) fn new(slice: Option<Range<usize>>, filter: Option<Mask>) -> Self {
-        Self { slice, filter }
-    }
-}
-
-impl Operator for SelectStage {
-    fn compute(&mut self, input: Input, _cx: &mut Cx<'_>) -> VortexResult<Step> {
-        let Input::Batch(batch) = input else {
-            return Ok(Step::End);
-        };
-        Ok(Step::Final(select(
-            batch,
             self.slice.as_ref(),
             self.filter.as_ref(),
         )?))

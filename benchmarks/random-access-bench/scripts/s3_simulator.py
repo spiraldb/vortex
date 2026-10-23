@@ -10,6 +10,7 @@ This models transport costs, not S3's availability, TLS, retries, or tail latenc
 """
 
 import argparse
+import io
 import json
 import mmap
 import socket
@@ -25,7 +26,7 @@ class Server(ThreadingHTTPServer):
     daemon_threads = True
     request_queue_size = 256
 
-    def __init__(self, args):
+    def __init__(self, args: argparse.Namespace) -> None:
         super().__init__(("127.0.0.1", args.port), Handler)
         self.root = args.root.resolve()
         self.latency = args.latency_ms / 1000
@@ -36,7 +37,7 @@ class Server(ThreadingHTTPServer):
         self.trace = args.trace.open("w")
         self.files = {}
 
-    def file_range(self, path, start, end):
+    def file_range(self, path: Path, start: int, end: int) -> memoryview:
         # Benchmark objects are immutable. Stream mapped pages instead of copying an entire
         # large response before its headers, which would add size-dependent first-byte delay.
         with self.lock:
@@ -45,14 +46,16 @@ class Server(ThreadingHTTPServer):
                     self.files[path] = mmap.mmap(source.fileno(), 0, access=mmap.ACCESS_READ)
             return memoryview(self.files[path])[start:end]
 
-    def transmit(self, output, data):
+    def transmit(self, output: io.BufferedIOBase, data: memoryview) -> None:
         # Small quanta allow concurrent responses to share the same link.
         for offset in range(0, len(data), 65536):
             chunk = data[offset : offset + 65536]
             with self.lock:
                 # One quantum of credit absorbs scheduler oversleep. Without it, a single
                 # response runs below the configured rate while concurrent responses do not.
-                self.next_byte = max(time.monotonic() - 65536 / self.bandwidth, self.next_byte) + len(chunk) / self.bandwidth
+                self.next_byte = (
+                    max(time.monotonic() - 65536 / self.bandwidth, self.next_byte) + len(chunk) / self.bandwidth
+                )
                 ready = self.next_byte
             time.sleep(max(0, ready - time.monotonic()))
             output.write(chunk)
@@ -65,7 +68,7 @@ class Handler(BaseHTTPRequestHandler):
         super().setup()
         self.connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
-    def log_message(self, *_args):
+    def log_message(self, *_args: object) -> None:
         pass
 
     def do_HEAD(self):
@@ -74,14 +77,18 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.serve(head=False)
 
-    def send_response(self, code, message=None):
+    def send_response(self, code: int, message: str | None = None) -> None:
         self.trace_state["status"] = code
         super().send_response(code, message)
 
-    def serve(self, head):
+    def serve(self, head: bool) -> None:
         self.trace_state = dict(
-            method=self.command, path=self.path, range=self.headers.get("Range"),
-            start=0, bytes=0, arrived=time.monotonic(),
+            method=self.command,
+            path=self.path,
+            range=self.headers.get("Range"),
+            start=0,
+            bytes=0,
+            arrived=time.monotonic(),
         )
         try:
             self.serve_response(head)
@@ -91,7 +98,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.server.trace.write(json.dumps(self.trace_state) + "\n")
                 self.server.trace.flush()
 
-    def serve_response(self, head):
+    def serve_response(self, head: bool) -> None:
         with self.server.slots:
             self.trace_state["admitted"] = time.monotonic()
             time.sleep(self.server.latency)
@@ -116,9 +123,12 @@ class Handler(BaseHTTPRequestHandler):
                     relative = file.relative_to(self.server.root).as_posix()
                     if file.is_file() and relative.startswith(prefix):
                         entry = ET.SubElement(root, "Contents")
-                        for name, value in (("Key", relative), ("Size", str(file.stat().st_size)),
-                                            ("LastModified", "2026-01-01T00:00:00.000Z"),
-                                            ("ETag", '"simulated"')):
+                        for name, value in (
+                            ("Key", relative),
+                            ("Size", str(file.stat().st_size)),
+                            ("LastModified", "2026-01-01T00:00:00.000Z"),
+                            ("ETag", '"simulated"'),
+                        ):
                             ET.SubElement(entry, name).text = value
                         count += 1
                 ET.SubElement(root, "KeyCount").text = str(count)
@@ -160,7 +170,6 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             if not head:
                 self.server.transmit(self.wfile, data)
-
 
 
 if __name__ == "__main__":

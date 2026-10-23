@@ -237,8 +237,8 @@ mod tests {
     use flatbuffers::root;
     use vortex_error::VortexResult;
     use vortex_error::vortex_err;
+    use vortex_session::VortexSession;
 
-    use crate::array_session;
     use crate::dtype::DType;
     use crate::dtype::Nullability;
     use crate::dtype::PType;
@@ -266,7 +266,7 @@ mod tests {
         assert_eq!(fb.sum().expect("serialized sum").bytes(), expected_bytes);
 
         let dtype = DType::Primitive(PType::F64, Nullability::NonNullable);
-        let read = StatsSet::from_flatbuffer(&fb, &dtype, &array_session())?;
+        let read = StatsSet::from_flatbuffer(&fb, &dtype, &VortexSession::empty())?;
         Ok(read
             .get_as::<f64>(
                 Stat::Sum,

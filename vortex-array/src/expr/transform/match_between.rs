@@ -216,14 +216,16 @@ impl<'a> RangeComparison<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use rstest::rstest;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
+    use vortex_session::VortexSession;
 
     use super::find_between;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::arrays::StructArray;
     use crate::dtype::DType;
@@ -243,6 +245,8 @@ mod tests {
     use crate::scalar::Scalar;
     use crate::scalar_fn::fns::between::BetweenOptions;
     use crate::scalar_fn::fns::between::StrictComparison;
+
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     fn scope() -> DType {
         let i32_dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
@@ -376,8 +380,7 @@ mod tests {
     /// keeps a row false when the surviving comparison is false, so the rewrite cannot null it.
     #[test]
     fn null_literal_bound_is_value_preserving() -> VortexResult<()> {
-        let session = array_session();
-        let ctx = &mut session.create_execution_ctx();
+        let ctx = &mut SESSION.create_execution_ctx();
         let data = StructArray::from_fields(&[("x", buffer![10, 1].into_array())])?.into_array();
 
         let null_lit = lit(Scalar::null(DType::Primitive(

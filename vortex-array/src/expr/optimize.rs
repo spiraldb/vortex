@@ -122,14 +122,16 @@ impl BoundExpression {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use rstest::rstest;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
     use vortex_error::vortex_err;
+    use vortex_session::VortexSession;
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::arrays::StructArray;
     use crate::assert_arrays_eq;
@@ -155,6 +157,8 @@ mod tests {
     use crate::scalar::Scalar;
     use crate::scalar_fn::fns::literal::Literal;
 
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
+
     #[test]
     fn optimize_or_chain_correctness() -> VortexResult<()> {
         let expr = or(
@@ -176,7 +180,7 @@ mod tests {
         assert_arrays_eq!(
             actual,
             BoolArray::from_iter([false, true, true, false]),
-            &mut array_session().create_execution_ctx()
+            &mut SESSION.create_execution_ctx()
         );
         Ok(())
     }

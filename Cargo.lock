@@ -2606,9 +2606,9 @@ dependencies = [
 
 [[package]]
 name = "ctutils"
-version = "0.4.3"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03bb0e1cc970d482d121d9a1744999169b69a07470b3d644a7894e53fcaf4574"
+checksum = "12218662ccac37d9714f2191252553d67585b97df8c839cbe49e0bde278dc865"
 dependencies = [
  "cmov",
 ]
@@ -11005,15 +11005,15 @@ checksum = "8df9b6e13f2d32c91b9bd719c00d1958837bc7dec474d94952798cc8e69eeec3"
 
 [[package]]
 name = "tpcdsgen"
-version = "0.1.0-alpha.1"
+version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07cae4643a0296068b425716c22e16e5b639ef8c7f7717a513436b20b0a7924a"
+checksum = "e541a215c67a513706b921efd2cbaf41699720eb5036c7c058661942cfe30e15"
 
 [[package]]
 name = "tpcdsgen-arrow"
-version = "0.1.0-alpha.1"
+version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "153b9330d250e11eefbd79e6eed198ee8693e25019fd9299d0570bfd89201b29"
+checksum = "efe811ce4c7cf7877d6ed51e057fe6e89bb3f7d53eae8cf3a43bce9ba4c70d6c"
 dependencies = [
  "arrow 59.3.1",
  "tpcdsgen",
@@ -11021,15 +11021,15 @@ dependencies = [
 
 [[package]]
 name = "tpchgen"
-version = "3.0.0"
+version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e26c6d047694183517044ea72d2e0337b05b43d40809f0958f603a7e5a286855"
+checksum = "dc60dc766636c350180e7df4f430673b6ebd95ad4bc2ce298315e6f9eac73bcc"
 
 [[package]]
 name = "tpchgen-arrow"
-version = "3.0.0"
+version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c64c19d707b783f219883549268da8ea98f91e7aaec3b626563044a21c2b37aa"
+checksum = "04ff3310b8912141795ea51adbabb4f790ec5a389157acfc494b6f50aff1d402"
 dependencies = [
  "arrow 59.3.1",
  "tpchgen",
@@ -11648,6 +11648,7 @@ dependencies = [
  "vortex-file",
  "vortex-io",
  "vortex-layout",
+ "vortex-session",
  "vortex-utils",
 ]
 
@@ -11731,7 +11732,6 @@ dependencies = [
 name = "vortex-cuda"
 version = "0.1.0"
 dependencies = [
- "arc-swap",
  "arrow-schema 59.3.1",
  "async-trait",
  "bindgen",
@@ -11744,6 +11744,7 @@ dependencies = [
  "mimalloc",
  "num-traits",
  "object_store 0.13.2",
+ "once_cell",
  "parking_lot",
  "prost 0.14.4",
  "rstest",
@@ -11760,6 +11761,13 @@ dependencies = [
  "vortex-fsst",
  "vortex-nvcomp",
  "vortex-onpair",
+]
+
+[[package]]
+name = "vortex-cuda-driver"
+version = "0.1.0"
+dependencies = [
+ "libloading 0.8.9",
 ]
 
 [[package]]
@@ -11835,6 +11843,7 @@ dependencies = [
  "rstest",
  "vortex-array",
  "vortex-buffer",
+ "vortex-compute",
  "vortex-error",
  "vortex-mask",
  "vortex-session",
@@ -12426,6 +12435,7 @@ dependencies = [
  "smallvec",
  "vortex-array",
  "vortex-buffer",
+ "vortex-compute",
  "vortex-error",
  "vortex-mask",
  "vortex-session",

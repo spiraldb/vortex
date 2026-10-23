@@ -17,18 +17,22 @@ pub fn fixtures() -> Vec<Box<dyn FlatLayoutFixture>> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::assert_arrays_eq;
+    use vortex_session::VortexSession;
 
     use super::fixtures;
     use crate::adapter;
     use crate::fixtures::check_expected_encodings;
 
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
+
     #[test]
     fn roundtrip_fixtures_to_bytes() {
         for fixture in fixtures() {
-            let mut ctx = array_session().create_execution_ctx();
+            let mut ctx = SESSION.create_execution_ctx();
             let array = fixture.build(&mut ctx).unwrap();
             check_expected_encodings(&array, fixture.as_ref()).unwrap();
             let bytes = adapter::write_file_to_bytes(array.clone()).unwrap();

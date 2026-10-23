@@ -18,10 +18,17 @@ use std::sync::LazyLock;
 use divan::Bencher;
 use mimalloc::MiMalloc;
 use vortex_array::IntoArray;
+use vortex_array::aggregate_fn::session::AggregateFnSession;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::dtype::Field;
 use vortex_array::dtype::FieldMask;
+use vortex_array::dtype::session::DTypeSession;
+use vortex_array::memory::MemorySession;
+use vortex_array::optimizer::kernels::KernelSession;
+use vortex_array::scalar_fn::session::ScalarFnSession;
+use vortex_array::session::ArraySession;
+use vortex_array::stats::session::StatsSession;
 use vortex_btrblocks::BtrBlocksCompressorBuilder;
 use vortex_buffer::Buffer;
 use vortex_buffer::ByteBufferMut;
@@ -43,6 +50,7 @@ use vortex_utils::aliases::hash_map::HashMap;
 static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
+    LazyLock::force(&SESSION);
     divan::main();
 }
 
@@ -60,7 +68,14 @@ static RUNTIME: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     let _guard = RUNTIME.enter();
-    let session = vortex_array::array_session()
+    let session = VortexSession::empty()
+        .with::<ArraySession>()
+        .with::<KernelSession>()
+        .with::<DTypeSession>()
+        .with::<ScalarFnSession>()
+        .with::<AggregateFnSession>()
+        .with::<MemorySession>()
+        .with::<StatsSession>()
         .with::<LayoutSession>()
         .with::<RuntimeSession>()
         .with_tokio();

@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::sync::LazyLock;
+
 use rstest::rstest;
 use vortex_buffer::buffer;
 use vortex_error::VortexResult;
+use vortex_session::VortexSession;
 
 use super::all_non_distinct;
 use crate::ArrayRef;
 use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
-use crate::array_session;
 use crate::arrays::BoolArray;
 use crate::arrays::ChunkedArray;
 use crate::arrays::DecimalArray;
@@ -26,6 +28,8 @@ use crate::dtype::FieldNames;
 use crate::dtype::Nullability;
 use crate::dtype::PType;
 use crate::validity::Validity;
+
+static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
 /// Baseline oracle: compare two arrays element-wise using `execute_scalar`.
 /// Returns true iff every position has the same scalar (null == null is true).
@@ -43,7 +47,7 @@ fn scalar_baseline(a: &ArrayRef, b: &ArrayRef, ctx: &mut ExecutionCtx) -> Vortex
 
 /// Assert that `all_non_distinct` agrees with the scalar baseline.
 fn assert_matches_baseline(a: &ArrayRef, b: &ArrayRef) -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     let expected = scalar_baseline(a, b, &mut ctx)?;
     let actual = all_non_distinct(a, b, &mut ctx)?;
     assert_eq!(
@@ -88,7 +92,7 @@ fn bool_non_nullable(
 ) -> VortexResult<()> {
     let a = BoolArray::from_iter(a.iter().copied()).into_array();
     let b = BoolArray::from_iter(b.iter().copied()).into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     assert_eq!(all_non_distinct(&a, &b, &mut ctx)?, expected);
     assert_matches_baseline(&a, &b)
 }
@@ -121,7 +125,7 @@ fn bool_nullable(
 ) -> VortexResult<()> {
     let a = BoolArray::from_iter(a.iter().copied()).into_array();
     let b = BoolArray::from_iter(b.iter().copied()).into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     assert_eq!(all_non_distinct(&a, &b, &mut ctx)?, expected);
     assert_matches_baseline(&a, &b)
 }
@@ -140,7 +144,7 @@ fn primitive_i32(
 ) -> VortexResult<()> {
     let a = PrimitiveArray::from_iter(a).into_array();
     let b = PrimitiveArray::from_iter(b).into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     assert_eq!(all_non_distinct(&a, &b, &mut ctx)?, expected);
     assert_matches_baseline(&a, &b)
 }
@@ -206,7 +210,7 @@ fn primitive_nullable(
 ) -> VortexResult<()> {
     let a = PrimitiveArray::from_option_iter(a.iter().copied()).into_array();
     let b = PrimitiveArray::from_option_iter(b.iter().copied()).into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     assert_eq!(all_non_distinct(&a, &b, &mut ctx)?, expected);
     assert_matches_baseline(&a, &b)
 }
@@ -235,7 +239,7 @@ fn strings_non_nullable(
 ) -> VortexResult<()> {
     let a = VarBinViewArray::from_iter_str(a.iter().copied()).into_array();
     let b = VarBinViewArray::from_iter_str(b.iter().copied()).into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     assert_eq!(all_non_distinct(&a, &b, &mut ctx)?, expected);
     assert_matches_baseline(&a, &b)
 }
@@ -258,7 +262,7 @@ fn strings_nullable(
 ) -> VortexResult<()> {
     let a = VarBinViewArray::from_iter_nullable_str(a.iter().copied()).into_array();
     let b = VarBinViewArray::from_iter_nullable_str(b.iter().copied()).into_array();
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     assert_eq!(all_non_distinct(&a, &b, &mut ctx)?, expected);
     assert_matches_baseline(&a, &b)
 }
@@ -399,7 +403,7 @@ fn struct_nested_nullable_fields() -> VortexResult<()> {
 
 #[test]
 fn list_identical() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     let elements = buffer![1i32, 2, 3, 4].into_array();
     let a = ListViewArray::try_new(
         elements.clone(),
@@ -422,7 +426,7 @@ fn list_identical() -> VortexResult<()> {
 
 #[test]
 fn list_different_elements() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     let a = ListViewArray::try_new(
         buffer![1i32, 2, 3, 4].into_array(),
         buffer![0u32, 2].into_array(),
@@ -444,7 +448,7 @@ fn list_different_elements() -> VortexResult<()> {
 
 #[test]
 fn list_different_lengths() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     let a = ListViewArray::try_new(
         buffer![1i32, 2, 3].into_array(),
         buffer![0u32, 2].into_array(),
@@ -462,7 +466,7 @@ fn list_different_lengths() -> VortexResult<()> {
     )?
     .into_array();
     assert_matches_baseline(&a, &b)?;
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     assert!(all_non_distinct(&a, &b, &mut ctx)?);
     let different = ListViewArray::try_new(
         buffer![1i32, 2, 3].into_array(),
@@ -479,7 +483,7 @@ fn list_different_lengths() -> VortexResult<()> {
 
 #[test]
 fn list_nullable_ignores_garbage() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     let validity = Validity::from_iter([true, false]);
     let a = ListViewArray::try_new(
         buffer![1i32, 2, 3, 4].into_array(),
@@ -502,7 +506,7 @@ fn list_nullable_ignores_garbage() -> VortexResult<()> {
 
 #[test]
 fn list_different_offset_dtypes() -> VortexResult<()> {
-    let mut ctx = array_session().create_execution_ctx();
+    let mut ctx = SESSION.create_execution_ctx();
     let elements = buffer![1i32, 2, 3, 4].into_array();
     let a = ListViewArray::try_new(
         elements.clone(),

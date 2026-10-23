@@ -117,8 +117,10 @@ pub trait VortexReadAt: Send + Sync + 'static {
     ) -> BoxFuture<'_, VortexResult<(u64, BufferHandle)>> {
         async move {
             let size = self.size().await?;
-            let length = (length as u64).min(size) as usize;
-            let buffer = self.read_at(size - length as u64, length, alignment).await?;
+            let length = usize::try_from(size).map_or(length, |size| size.min(length));
+            let buffer = self
+                .read_at(size - length as u64, length, alignment)
+                .await?;
             Ok((size, buffer))
         }
         .boxed()

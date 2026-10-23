@@ -219,7 +219,7 @@ mod tests {
     use crate::executor::run_end::RunEnd;
 
     static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-        let session = vortex_array::array_session();
+        let session = VortexSession::empty();
         vortex_runend::initialize(&session);
         session
     });

@@ -33,8 +33,6 @@ use crate::plan::physical::operators::TakeSource;
 use crate::plan::physical::optimizer::PlanParentReduceRule;
 use crate::plan::physical::pipeline::Chain;
 use crate::plan::physical::pipeline::Compiler;
-use crate::plan::physical::pipeline::Reach;
-use crate::segments::SegmentId;
 
 const CODES: usize = 0;
 const VALUES: usize = 1;
@@ -171,18 +169,6 @@ impl PlanVTable for Take {
             TakeSource::capacity,
             source,
         )))
-    }
-
-    fn reach(
-        plan: &Plan<Self>,
-        rows: Range<u64>,
-        at: &Reach,
-        visit: &mut dyn FnMut(SegmentId, Range<u64>),
-    ) -> VortexResult<()> {
-        let values = plan.values()?;
-        let len = values.row_count();
-        values.reach(0..len, &at.fixed(&rows), visit)?;
-        plan.codes()?.reach(rows, at, visit)
     }
 }
 

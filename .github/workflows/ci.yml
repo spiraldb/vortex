@@ -181,6 +181,8 @@ jobs:
         env:
           # Keep this constant to avoid pyo3 invalidating itself
           PYO3_ENVIRONMENT_SIGNATURE: "cpython3"
+          # Also applies to host proc-macro links when Cargo receives an explicit target.
+          LINK: /Brepro
 
       # rust-test-windows excludes vortex-python, so this is the only check that the
       # win_amd64 wheel imports and can round-trip a file. Runs outside the checkout so
@@ -284,7 +286,7 @@ jobs:
     timeout-minutes: 30
     runs-on: >-
       ${{ github.repository == 'vortex-data/vortex'
-          && format('runs-on={0}/runner=amd64-ci-small/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=rust-docs', github.run_id)
+          && format('runs-on={0}/runner=amd64-ci-docs/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=rust-docs', github.run_id)
           || 'ubuntu-latest' }}
     steps:
       - parallel:
@@ -325,7 +327,7 @@ jobs:
             runner: amd64-ci-large
             args: "--all-targets"
           - name: "with tokio dispatcher"
-            runner: amd64-ci-small
+            runner: amd64-ci-medium
             # Only build the crates that have the tokio features, not re-building other crates with no-default-features
             args: "--no-default-features --features tokio --all-targets -p vortex -p vortex-io -p vortex-file -p vortex-layout"
           - name: "wasm32 with default features"
@@ -505,6 +507,9 @@ jobs:
 
   rust-test-windows:
     name: "Rust tests (windows-x64)"
+    env:
+      # Stable proc-macro DLL contents let dependent crates reuse sccache entries.
+      RUSTFLAGS: "-C link-arg=/Brepro"
     needs: duckdb-ready
     if: ${{ !cancelled() && needs.duckdb-ready.result == 'success' }}
     timeout-minutes: 30
@@ -556,7 +561,7 @@ jobs:
       !cancelled() && needs.duckdb-ready.result == 'success' &&
       github.repository == 'vortex-data/vortex'
     timeout-minutes: 30
-    runs-on: runs-on=${{ github.run_id }}/runner=arm64-medium/image=ubuntu24-full-arm64-pre-v2/extras=s3-cache/tag=rust-test-linux-arm64
+    runs-on: runs-on=${{ github.run_id }}/runner=arm64-ci-test/image=ubuntu24-full-arm64-pre-v2/extras=s3-cache/tag=rust-test-linux-arm64
     steps:
       - parallel:
           - uses: runs-on/action@v2
@@ -786,7 +791,7 @@ jobs:
     if: ${{ !cancelled() && needs.duckdb-ready.result == 'success' }}
     runs-on: >-
       ${{ github.repository == 'vortex-data/vortex'
-          && format('runs-on={0}/runner=amd64-ci-medium/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=sql-logic-test', github.run_id)
+          && format('runs-on={0}/runner=amd64-ci-sql-logic-test/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=sql-logic-test', github.run_id)
           || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:

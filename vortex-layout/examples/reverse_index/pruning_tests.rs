@@ -19,7 +19,6 @@ use object_store::memory::InMemory;
 use object_store::path::Path;
 use rstest::rstest;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::struct_::StructArrayExt;
@@ -105,11 +104,11 @@ static INDEXED_TEST_DECLARATION: EditionDeclaration = EditionDeclaration {
 /// A session that can write and read the `vortex.indexed` layout, with a [`ReverseIndex`]
 /// registered as an index kind.
 ///
-/// [`array_session`] already bundles everything [`vortex::VortexSessionDefault::default`] would
-/// (arrays, dtypes, scalar functions, stats, optimizer kernels, aggregate functions, and memory);
-/// this only adds the layout, runtime, and edition state that live in higher-level crates.
+/// [`VortexSession::empty`] creates vortex-array's session variables (arrays, dtypes, scalar
+/// functions, stats, optimizer kernels, aggregate functions, and memory) on first use; this only
+/// adds the layout, runtime, and edition state that live in higher-level crates.
 fn session_with_indexed_layout() -> anyhow::Result<VortexSession> {
-    let session = array_session()
+    let session = VortexSession::empty()
         .with::<LayoutSession>()
         .with::<RuntimeSession>()
         .with::<EditionSession>();
@@ -125,7 +124,7 @@ fn session_with_indexed_layout() -> anyhow::Result<VortexSession> {
 /// registered — the fallback path `IndexedReader::plan_probe` takes when an index kind's spec
 /// goes unclaimed.
 fn session_without_reverse_index() -> VortexSession {
-    let session = array_session()
+    let session = VortexSession::empty()
         .with::<LayoutSession>()
         .with::<RuntimeSession>()
         .with::<EditionSession>();

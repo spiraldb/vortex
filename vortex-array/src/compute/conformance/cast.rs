@@ -343,7 +343,6 @@ mod tests {
     use super::*;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::BoolArray;
     use crate::arrays::ListArray;
     use crate::arrays::NullArray;
@@ -354,7 +353,7 @@ mod tests {
     use crate::dtype::FieldNames;
     use crate::dtype::Nullability;
 
-    static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     #[test]
     fn test_cast_conformance_u32() {

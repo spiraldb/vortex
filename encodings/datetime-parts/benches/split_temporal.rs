@@ -12,9 +12,16 @@ use rand::SeedableRng as _;
 use rand::rngs::StdRng;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
+use vortex_array::aggregate_fn::session::AggregateFnSession;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::TemporalArray;
+use vortex_array::dtype::session::DTypeSession;
 use vortex_array::extension::datetime::TimeUnit;
+use vortex_array::memory::MemorySession;
+use vortex_array::optimizer::kernels::KernelSession;
+use vortex_array::scalar_fn::session::ScalarFnSession;
+use vortex_array::session::ArraySession;
+use vortex_array::stats::session::StatsSession;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
 use vortex_datetime_parts::split_temporal;
@@ -24,10 +31,20 @@ use vortex_session::VortexSession;
 static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
+    LazyLock::force(&SESSION);
     divan::main();
 }
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
+    VortexSession::empty()
+        .with::<ArraySession>()
+        .with::<KernelSession>()
+        .with::<DTypeSession>()
+        .with::<ScalarFnSession>()
+        .with::<AggregateFnSession>()
+        .with::<MemorySession>()
+        .with::<StatsSession>()
+});
 
 const BENCH_ARGS: &[(usize, TimeUnit)] = &[
     (65_536, TimeUnit::Seconds),

@@ -172,9 +172,7 @@ impl VortexRandomAccessor {
         name: impl Into<String>,
         format: Format,
     ) -> anyhow::Result<Self> {
-        let mut options = SESSION
-            .open_options()
-            .with_layout_reader_cache();
+        let mut options = SESSION.open_options().with_layout_reader_cache();
         let key = remote.key(path)?;
         // Reproduce the former HEAD + bounded footer GET for paired transport measurements.
         if std::env::var("VORTEX_BENCH_SIZE_THEN_READ").is_ok_and(|value| value == "1") {
@@ -205,7 +203,9 @@ impl RandomAccessor for VortexRandomAccessor {
         let array = if self.v2 {
             let stream = ScanBuilder::new(SESSION.clone(), self.file.scan_file())
                 .with_row_indices(indices.clone())
-                .with_subsegment_reads(!std::env::var("VORTEX_BENCH_SUBSEGMENTS").is_ok_and(|value| value == "0"))
+                .with_subsegment_reads(
+                    !std::env::var("VORTEX_BENCH_SUBSEGMENTS").is_ok_and(|value| value == "0"),
+                )
                 .into_stream()?;
             ArrayStreamAdapter::new(self.file.dtype().clone(), stream)
                 .read_all()
@@ -224,17 +224,26 @@ impl RandomAccessor for VortexRandomAccessor {
                 .with_row_indices(indices)
                 .with_subsegment_reads(false)
                 .into_stream()?;
-            Some(ArrayStreamAdapter::new(self.file.dtype().clone(), stream).read_all().await?)
+            Some(
+                ArrayStreamAdapter::new(self.file.dtype().clone(), stream)
+                    .read_all()
+                    .await?,
+            )
         } else {
             None
         };
         let mut ctx = SESSION.create_execution_ctx();
-        if reference.is_some() || std::env::var("VORTEX_BENCH_MATERIALIZE").is_ok_and(|value| value == "arrow") {
+        if reference.is_some()
+            || std::env::var("VORTEX_BENCH_MATERIALIZE").is_ok_and(|value| value == "arrow")
+        {
             let arrow = SESSION.arrow().execute_arrow(array, None, &mut ctx)?;
             let batch = RecordBatch::from(arrow.as_struct().clone());
             if let Some(reference) = reference {
                 let expected = SESSION.arrow().execute_arrow(reference, None, &mut ctx)?;
-                anyhow::ensure!(batch == RecordBatch::from(expected.as_struct().clone()), "Sparse read differs from whole-segment reference");
+                anyhow::ensure!(
+                    batch == RecordBatch::from(expected.as_struct().clone()),
+                    "Sparse read differs from whole-segment reference"
+                );
             }
             return Ok(RandomAccessorRet::RecordBatch(batch));
         }

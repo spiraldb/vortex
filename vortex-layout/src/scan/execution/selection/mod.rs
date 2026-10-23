@@ -25,6 +25,7 @@ use vortex_scan::selection::Selection;
 
 use super::ScanPlans;
 use super::SelectedRows;
+use super::filter::FilterPlanner;
 use super::projection::ProjectionPlanner;
 
 /// Advances the file's selection one work chunk at a time, emitting only selected projections.
@@ -161,10 +162,13 @@ fn plan_selection(
     selection: &Selection,
 ) -> Option<(WorkScope, Box<dyn Planner>)> {
     let selected = select_rows(scope, selection)?;
-    Some((
-        selected.scope.clone(),
-        Box::new(ProjectionPlanner::new(plans.clone(), selected)),
-    ))
+    let scope = selected.scope.clone();
+    let planner: Box<dyn Planner> = if plans.filter.is_some() {
+        Box::new(FilterPlanner::new(plans.clone(), selected))
+    } else {
+        Box::new(ProjectionPlanner::new(plans.clone(), selected))
+    };
+    Some((scope, planner))
 }
 
 fn select_rows(mut scope: WorkScope, selection: &Selection) -> Option<SelectedRows> {

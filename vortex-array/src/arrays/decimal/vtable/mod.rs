@@ -218,14 +218,16 @@ pub struct Decimal;
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use vortex_buffer::ByteBufferMut;
     use vortex_buffer::buffer;
+    use vortex_session::VortexSession;
     use vortex_session::registry::ReadContext;
 
     use crate::ArrayContext;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::Decimal;
     use crate::arrays::DecimalArray;
     use crate::assert_arrays_eq;
@@ -234,9 +236,10 @@ mod tests {
     use crate::serde::SerializedArray;
     use crate::validity::Validity;
 
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
+
     #[test]
     fn test_array_serde() {
-        let session = array_session();
         let array = DecimalArray::new(
             buffer![100i128, 200i128, 300i128, 400i128, 500i128],
             DecimalDType::new(10, 2),
@@ -247,7 +250,7 @@ mod tests {
         let array_ctx = ArrayContext::empty();
         let out = array
             .into_array()
-            .serialize(&array_ctx, &session, &SerializeOptions::default())
+            .serialize(&array_ctx, &SESSION, &SerializeOptions::default())
             .unwrap();
         // Concat into a single buffer
         let mut concat = ByteBufferMut::empty();
@@ -259,20 +262,19 @@ mod tests {
 
         let parts = SerializedArray::try_from(concat).unwrap();
         let decoded = parts
-            .decode(&dtype, 5, &ReadContext::new(array_ctx.to_ids()), &session)
+            .decode(&dtype, 5, &ReadContext::new(array_ctx.to_ids()), &SESSION)
             .unwrap();
         assert!(decoded.is::<Decimal>());
         assert_arrays_eq!(
             decoded,
             DecimalArray::from_iter([100i128, 200, 300, 400, 500], DecimalDType::new(10, 2)),
-            &mut session.create_execution_ctx()
+            &mut SESSION.create_execution_ctx()
         );
     }
 
     #[test]
     fn test_nullable_decimal_serde_roundtrip() {
-        let session = array_session();
-        let mut ctx = session.create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let array = DecimalArray::new(
             buffer![1234567i32, 0i32, -9999999i32],
             DecimalDType::new(7, 3),
@@ -285,7 +287,7 @@ mod tests {
         let out = array
             .clone()
             .into_array()
-            .serialize(&array_ctx, &session, &SerializeOptions::default())
+            .serialize(&array_ctx, &SESSION, &SerializeOptions::default())
             .unwrap();
         let mut concat = ByteBufferMut::empty();
         for buf in out {
@@ -294,7 +296,7 @@ mod tests {
 
         let parts = SerializedArray::try_from(concat.freeze()).unwrap();
         let decoded = parts
-            .decode(&dtype, len, &ReadContext::new(array_ctx.to_ids()), &session)
+            .decode(&dtype, len, &ReadContext::new(array_ctx.to_ids()), &SESSION)
             .unwrap();
 
         assert_arrays_eq!(decoded, array, &mut ctx);

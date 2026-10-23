@@ -352,20 +352,25 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
+    use vortex_session::VortexSession;
+
     use super::*;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::VarBinViewArray;
     use crate::arrays::dict::DictArray;
     use crate::assert_arrays_eq;
     use crate::dtype::Nullability::Nullable;
 
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
+
     const LONG: &str = "a string that is far too long to be inlined in a view";
 
     #[test]
     fn append_to_builder_gathers_through_the_dictionary() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let dict = DictArray::try_new(
             PrimitiveArray::from_option_iter([Some(0u32), Some(2), None, Some(1), Some(0)])
                 .into_array(),
@@ -389,7 +394,7 @@ mod tests {
     /// null and rows whose dictionary value is null.
     #[test]
     fn append_to_view_builder_gathers_through_the_dictionary() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let dict = DictArray::try_new(
             PrimitiveArray::from_option_iter([Some(0u32), Some(2), None, Some(1), Some(0)])
                 .into_array(),
@@ -424,7 +429,7 @@ mod tests {
     /// the dictionary's data buffers once.
     #[test]
     fn append_to_dedup_view_builder_adopts_the_dictionary_once() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let values = VarBinViewArray::from_iter([Some(LONG), Some("short")], DType::Utf8(Nullable));
         assert_eq!(values.data_buffers().len(), 1);
 
