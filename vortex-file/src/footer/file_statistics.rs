@@ -552,7 +552,6 @@ mod tests {
     use vortex_array::aggregate_fn::fns::max::Max;
     use vortex_array::aggregate_fn::fns::min::Min;
     use vortex_array::aggregate_fn::fns::null_count::NullCount;
-    use vortex_array::array_session;
     use vortex_array::arrays::VarBinViewArray;
     use vortex_array::dtype::FieldPath;
     use vortex_array::dtype::Nullability;
@@ -599,7 +598,7 @@ mod tests {
         let bytes = file_stats.write_flatbuffer_bytes()?;
         let fb = flatbuffers::root::<fb::FileStatistics>(bytes.as_ref())
             .vortex_expect("valid flatbuffer");
-        FileStatistics::from_flatbuffer(&fb, file_dtype, &array_session())
+        FileStatistics::from_flatbuffer(&fb, file_dtype, &VortexSession::empty())
     }
 
     #[test]
@@ -743,7 +742,7 @@ mod tests {
         let mut accumulator = bounded_max.accumulator(&field_dtype)?;
         accumulator.accumulate(
             &VarBinViewArray::from_iter_str(["a value past the bound"]).into_array(),
-            &mut array_session().create_execution_ctx(),
+            &mut VortexSession::empty().create_execution_ctx(),
         )?;
         let partial = accumulator.partial_scalar()?;
         let file_stats = FileStatistics::new_with_dtype(
@@ -821,7 +820,7 @@ mod tests {
 
     fn read_raw(bytes: &[u8], file_dtype: &DType) -> VortexResult<FileStatistics> {
         let fb = flatbuffers::root::<fb::FileStatistics>(bytes).vortex_expect("valid flatbuffer");
-        FileStatistics::from_flatbuffer(&fb, file_dtype, &array_session())
+        FileStatistics::from_flatbuffer(&fb, file_dtype, &VortexSession::empty())
     }
 
     /// The options of `min` and its partial state for `value`, length-prefixed as in `partials`.
@@ -947,7 +946,7 @@ mod tests {
         // Simulates a footer written before aggregate-based stats existed: `entry_sets` is
         // absent, and `field_stats` holds one entry per top-level
         // struct field.
-        let session = array_session();
+        let session = VortexSession::empty();
         let file_dtype = DType::struct_([("col", i32_dtype())], Nullability::NonNullable);
 
         let mut stats = StatsSet::default();

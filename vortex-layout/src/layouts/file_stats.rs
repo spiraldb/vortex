@@ -605,12 +605,12 @@ impl FileStatsAccumulator {
 #[cfg(test)]
 mod tests {
     use std::num::NonZeroUsize;
+    use std::sync::LazyLock;
 
     use rstest::rstest;
     use vortex_array::ArrayContext;
     use vortex_array::IntoArray;
     use vortex_array::aggregate_fn::AggregateFnVTable;
-    use vortex_array::array_session;
     use vortex_array::arrays::BoolArray;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::builders::ArrayBuilder;
@@ -625,6 +625,8 @@ mod tests {
     use vortex_utils::aliases::hash_set::HashSet;
 
     use super::*;
+
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     fn stats_set(acc: &StatsAccumulator) -> VortexResult<StatsSet> {
         Ok(acc.aggregate_stats(|_| true)?.to_stats_set())
@@ -658,7 +660,7 @@ mod tests {
         dtype: DType,
         #[case] values: &[&str],
     ) -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let max_bytes = NonZeroUsize::new(8).vortex_expect("non-zero");
         let bounded = [
             BoundedMax.bind(BoundedMaxOptions { max_bytes }),
@@ -704,7 +706,7 @@ mod tests {
     fn explicit_min_max_on_varlen_is_exact_and_untruncated() -> VortexResult<()> {
         // An explicit override applies literally: unlike the default, plain `Max`/`Min` on a
         // varlen dtype now computes the exact value with no byte-bound truncation.
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let dtype = DType::Utf8(Nullability::NonNullable);
         let mut builder = VarBinViewBuilder::with_capacity_in(
             dtype.clone(),
@@ -725,7 +727,7 @@ mod tests {
 
     #[test]
     fn aggregates_persist_across_multiple_chunks() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let dtype = i32_dtype();
         let mut acc = StatsAccumulator::new(
             &dtype,
@@ -877,7 +879,7 @@ mod tests {
         // Same shape as `postorder_layout_three_level_nesting_with_mixed_nullability`, but
         // exercises actual accumulation. The root is nullable, so every entry beneath it is left
         // empty; only the root's own null-count entry is recorded.
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
 
         let leaf_c = buffer![10i32, 20, 30].into_array();
         let b_validity = Validity::Array(BoolArray::from_iter([true, false, true]).into_array());
@@ -914,7 +916,7 @@ mod tests {
     #[test]
     fn children_of_nullable_struct_are_unrecorded() -> VortexResult<()> {
         // https://github.com/vortex-data/vortex/issues/9205
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
 
         let a = buffer![1i32, 999, 3].into_array();
         let s_validity = Validity::Array(BoolArray::from_iter([true, false, true]).into_array());
@@ -942,7 +944,7 @@ mod tests {
     #[test]
     fn nullable_children_of_non_nullable_struct_are_recorded() -> VortexResult<()> {
         // `s` is non-nullable, so `s.a`'s own validity is its full logical validity.
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
 
         let a = PrimitiveArray::from_option_iter([Some(1i32), None, Some(3)]).into_array();
         let s =
@@ -969,7 +971,7 @@ mod tests {
 
     #[test]
     fn nested_nullable_struct_accumulates_its_own_null_count() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
 
         let b = buffer![1i32, 2, 3].into_array();
         let inner_validity =
@@ -997,7 +999,7 @@ mod tests {
     fn legacy_aggregate_stats_cover_only_top_level_fields() -> VortexResult<()> {
         // The legacy accumulation must have exactly one entry per top-level field, built against
         // that field's own dtype without recursing into it, even though it's a nested struct.
-        let session = array_session();
+        let session = VortexSession::empty();
         let inner_dtype = DType::struct_([("b", i32_dtype())], Nullability::Nullable);
         let dtype = DType::struct_([("a", inner_dtype)], Nullability::NonNullable);
 
@@ -1036,7 +1038,7 @@ mod tests {
 
     #[test]
     fn legacy_aggregate_stats_of_nullable_root_are_unrecorded() -> VortexResult<()> {
-        let session = array_session();
+        let session = VortexSession::empty();
         let dtype = DType::struct_([("a", i32_dtype())], Nullability::Nullable);
 
         let acc = FileStatsAccumulator::try_new(
@@ -1070,7 +1072,7 @@ mod tests {
     ) -> VortexResult<()> {
         // Readers that predate nested stats reject a legacy layout without one entry per
         // top-level field, so excluding legacy stats keeps the entries and records nothing.
-        let session = array_session();
+        let session = VortexSession::empty();
         let acc = FileStatsAccumulator::try_new(
             &dtype,
             Some(Arc::from([agg(Stat::Min), agg(Stat::Max)])),
@@ -1103,7 +1105,7 @@ mod tests {
 
     #[test]
     fn bounded_max_partial_round_trips() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let dtype = DType::Utf8(Nullability::NonNullable);
         let max = BoundedMax.bind(BoundedMaxOptions {
             max_bytes: NonZeroUsize::new(8).vortex_expect("non-zero"),
@@ -1161,7 +1163,7 @@ mod tests {
 
     #[test]
     fn forbidden_aggregates_are_gated() -> VortexResult<()> {
-        let session = array_session();
+        let session = VortexSession::empty();
         let dtype = DType::struct_([("a", i32_dtype())], Nullability::NonNullable);
         let ctx = LayoutWriterContext::new(ArrayContext::empty())
             .with_allowed_aggregates(HashSet::from_iter([Min.id(), Max.id(), NanCount.id()]));
@@ -1213,7 +1215,7 @@ mod tests {
 
     #[test]
     fn defaults_do_not_record_sum() -> VortexResult<()> {
-        let session = array_session();
+        let session = VortexSession::empty();
         let dtype = DType::struct_([("a", i32_dtype())], Nullability::NonNullable);
         let acc = FileStatsAccumulator::try_new(
             &dtype,
@@ -1251,7 +1253,7 @@ mod tests {
         // An overflowing chunk saturates the sum's partial state, which stays saturated when
         // merged with later chunks, so the file sum is absent rather than the sum of the chunks
         // that didn't overflow.
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let dtype = DType::Primitive(PType::I64, Nullability::Nullable);
         let sum = agg(Stat::Sum);
         let mut acc = StatsAccumulator::new(&dtype, Some(std::slice::from_ref(&sum)));
