@@ -10,14 +10,19 @@ use std::hash::Hash;
 use std::sync::Arc;
 
 use itertools::Itertools;
+use vortex_error::VortexError;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_ensure;
+use vortex_error::vortex_err;
 
 use crate::dtype::DType;
+use crate::dtype::FieldName;
+use crate::expr::Lambda;
 use crate::expr::display::DisplayTreeExpr;
 use crate::expr::traversal::TraversalOrder;
 use crate::expr::traversal::pre_order_visit_down;
+use crate::higher_order_fn::HigherOrderFnRef;
 use crate::scalar_fn::ScalarFnRef;
 use crate::scalar_fn::ScalarFnVTable;
 
@@ -26,10 +31,13 @@ const NO_CHILDREN: &[Expression] = &[];
 
 /// A node in a Vortex expression tree.
 ///
-/// Most nodes are a scalar function applied to child expressions. [`Expression::Root`] is the scope
-/// itself: a language primitive rather than a registered function, because its dtype comes from the
-/// scope rather than from children and it is not executable. A [`ScalarFnVTable`] can answer neither
-/// of those, so `Root` is a variant instead.
+/// Most nodes are a scalar function applied to child expressions. A higher-order node applies a
+/// function that also takes lambdas, which it holds next to its children. The other two are leaves
+/// that name a value rather than compute one: [`Expression::Root`], the scope itself, and
+/// [`Expression::Variable`], a parameter of an enclosing lambda. They are language primitives
+/// rather than registered functions, because their dtype comes from where they appear rather than
+/// from children and they are not executable. A [`ScalarFnVTable`] can answer neither of those, so
+/// they are variants instead.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Expression {
     /// A scalar function applied to child expressions.
@@ -39,8 +47,22 @@ pub enum Expression {
         /// Any children of this expression.
         children: Arc<Vec<Expression>>,
     },
+    /// A higher-order function applied to value children and lambdas.
+    HigherOrder {
+        /// The function and its options.
+        function: HigherOrderFnRef,
+        /// The value children.
+        children: Arc<Vec<Expression>>,
+        /// The lambdas, as written.
+        lambdas: Arc<Vec<Lambda>>,
+    },
     /// The full scope of the expression evaluation.
     Root,
+    /// A parameter of the enclosing lambda, read by name.
+    ///
+    /// Binding a [`Lambda`] turns its variables into reads of the struct of
+    /// its inputs. Anywhere else a variable fails to bind, and it is not serializable yet.
+    Variable(FieldName),
 }
 
 impl Expression {
@@ -64,6 +86,45 @@ impl Expression {
         })
     }
 
+    /// Create a higher-order node from a function, its value children and its lambdas.
+    pub fn try_new_higher_order(
+        function: HigherOrderFnRef,
+        children: impl IntoIterator<Item = Expression>,
+        lambdas: impl IntoIterator<Item = Lambda>,
+    ) -> VortexResult<Self> {
+        let children = Vec::from_iter(children);
+        let lambdas = Vec::from_iter(lambdas);
+        vortex_ensure!(
+            function.arity().matches(children.len()),
+            "Expression arity mismatch: {} expects {} children but got {}",
+            function.id(),
+            function.arity(),
+            children.len()
+        );
+        vortex_ensure!(
+            lambdas.len() == function.lambda_count(),
+            "{} takes {} lambdas, got {}",
+            function.id(),
+            function.lambda_count(),
+            lambdas.len()
+        );
+        Ok(Self::HigherOrder {
+            function,
+            children: children.into(),
+            lambdas: lambdas.into(),
+        })
+    }
+
+    /// The higher-order function and its lambdas, if this is a higher-order node.
+    pub fn as_higher_order(&self) -> Option<(&HigherOrderFnRef, &[Lambda])> {
+        match self {
+            Self::HigherOrder {
+                function, lambdas, ..
+            } => Some((function, lambdas.as_slice())),
+            _ => None,
+        }
+    }
+
     /// Whether this expression is the scope root.
     pub fn is_root(&self) -> bool {
         matches!(self, Self::Root)
@@ -73,7 +134,7 @@ impl Expression {
     pub fn as_scalar(&self) -> Option<&ScalarFnRef> {
         match self {
             Self::Scalar { scalar_fn, .. } => Some(scalar_fn),
-            Self::Root => None,
+            Self::HigherOrder { .. } | Self::Root | Self::Variable(_) => None,
         }
     }
 
@@ -100,8 +161,10 @@ impl Expression {
     /// Returns the children of this expression.
     pub fn children(&self) -> &[Expression] {
         match self {
-            Self::Scalar { children, .. } => children.as_slice(),
-            Self::Root => NO_CHILDREN,
+            Self::Scalar { children, .. } | Self::HigherOrder { children, .. } => {
+                children.as_slice()
+            }
+            Self::Root | Self::Variable(_) => NO_CHILDREN,
         }
     }
 
@@ -125,6 +188,14 @@ impl Expression {
                 );
                 Ok(Self::Root)
             }
+            Self::Variable(name) => {
+                vortex_ensure!(
+                    children.is_empty(),
+                    "Expression arity mismatch: variable expects 0 children but got {}",
+                    children.len()
+                );
+                Ok(Self::Variable(name.clone()))
+            }
             Self::Scalar { scalar_fn, .. } => {
                 vortex_ensure!(
                     scalar_fn.signature().arity().matches(children.len()),
@@ -137,6 +208,9 @@ impl Expression {
                     children: children.into(),
                 })
             }
+            Self::HigherOrder {
+                function, lambdas, ..
+            } => Self::try_new_higher_order(function.clone(), children, lambdas.iter().cloned()),
         }
     }
 
@@ -144,6 +218,7 @@ impl Expression {
     pub fn return_dtype(&self, scope: &DType) -> VortexResult<DType> {
         match self {
             Self::Root => Ok(scope.clone()),
+            Self::Variable(name) => Err(unbound_variable(name)),
             Self::Scalar {
                 scalar_fn,
                 children,
@@ -153,6 +228,17 @@ impl Expression {
                     .map(|c| c.return_dtype(scope))
                     .try_collect()?;
                 scalar_fn.return_dtype(&dtypes)
+            }
+            Self::HigherOrder {
+                function,
+                children,
+                lambdas,
+            } => {
+                let dtypes: Vec<_> = children
+                    .iter()
+                    .map(|c| c.return_dtype(scope))
+                    .try_collect()?;
+                Ok(function.bind_node(&dtypes, lambdas)?.1)
             }
         }
     }
@@ -164,7 +250,11 @@ impl Expression {
     pub fn fmt_sql(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Root => write!(f, "$"),
+            Self::Variable(name) => write!(f, "@{name}"),
             Self::Scalar { scalar_fn, .. } => scalar_fn.fmt_sql(self, f),
+            Self::HigherOrder {
+                function, lambdas, ..
+            } => function.fmt_sql(self, lambdas, f),
         }
     }
 
@@ -249,6 +339,11 @@ impl Expression {
     }
 }
 
+/// The error for a variable that no enclosing lambda declares.
+pub(crate) fn unbound_variable(name: &FieldName) -> VortexError {
+    vortex_err!("variable @{name} is not a parameter of an enclosing lambda")
+}
+
 /// The default display implementation for expressions uses the 'SQL'-style format.
 impl Display for Expression {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -286,7 +381,7 @@ impl Drop for DropDepthGuard {
 
 impl Drop for Expression {
     fn drop(&mut self) {
-        let Self::Scalar { children, .. } = self else {
+        let (Self::Scalar { children, .. } | Self::HigherOrder { children, .. }) = self else {
             return;
         };
         let Some(children) = Arc::get_mut(children) else {
@@ -302,7 +397,8 @@ impl Drop for Expression {
             Some(_guard) => drop(children_to_drop),
             None => {
                 while let Some(mut child) = children_to_drop.pop() {
-                    if let Self::Scalar { children, .. } = &mut child
+                    if let Self::Scalar { children, .. } | Self::HigherOrder { children, .. } =
+                        &mut child
                         && let Some(expr_children) = Arc::get_mut(children)
                     {
                         children_to_drop.append(expr_children);

@@ -3,11 +3,13 @@
 
 use itertools::Itertools;
 use vortex_error::VortexResult;
+use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure;
 use vortex_error::vortex_err;
 use vortex_session::VortexSession;
 
 use crate::expr::Expression;
+use crate::expr::expression::unbound_variable;
 use crate::proto::expr as pb;
 use crate::scalar_fn::ForeignScalarFnVTable;
 use crate::scalar_fn::ScalarFnId;
@@ -24,6 +26,15 @@ pub(crate) const ROOT_ID: &str = "vortex.root";
 
 impl ExprSerializeProtoExt for Expression {
     fn serialize_proto(&self) -> VortexResult<pb::Expr> {
+        if let Expression::Variable(name) = self {
+            return Err(unbound_variable(name));
+        }
+        if let Some((function, _)) = self.as_higher_order() {
+            vortex_bail!(
+                "higher-order function {} is not serializable yet",
+                function.id()
+            );
+        }
         let Some(scalar_fn) = self.as_scalar() else {
             return Ok(pb::Expr {
                 id: ROOT_ID.to_string(),
