@@ -1498,7 +1498,7 @@ fn legacy_stats_rewrite_to_zoned_over_converted_zones() -> VortexResult<()> {
         vec![max.to_string()]
     );
     let zones = zoned.zones_plan()?;
-    assert!(zones.is::<Eval>());
+    assert!(zones.is::<Pack>());
     assert_eq!(zones.dtype(), &zones_dtype);
 
     let falsifier = gt(root(), lit(5_i32))
@@ -1510,7 +1510,7 @@ fn legacy_stats_rewrite_to_zoned_over_converted_zones() -> VortexResult<()> {
         .as_opt::<Zoned>()
         .ok_or_else(|| vortex_err!("legacy stats predicate did not become a pruning plan"))?;
     assert!(pruning.is_pruning());
-    assert!(pruning.zones_plan()?.is::<Eval>());
+    assert!(pruning.zones_plan()?.is::<Pack>());
     Ok(())
 }
 

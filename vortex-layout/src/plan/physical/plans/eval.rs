@@ -185,7 +185,8 @@ impl PlanParentReduceRule<Eval> for EvalEvalRule {
                 changed: true,
             })
         })?;
-        let expr = expr.into_inner().optimize_recursive()?;
+        // We want to fold repeated expressions like ($.a).b -> $.a.b.
+        let expr = expr.into_inner().optimize()?;
         let plan = EvalPlan::try_new(expr, child.child_plan()?)?;
         Ok(Some(plan.into_plan()))
     }
