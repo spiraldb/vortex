@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::StreamExt;
-use futures::future::try_join;
+use futures::future::join;
 use futures::future::try_join_all;
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
@@ -195,7 +195,11 @@ impl LayoutStrategy for ListLayoutStrategy {
             })
             .collect();
 
-        let (_, layouts) = try_join(fanout_fut, try_join_all(layout_futures)).await?;
+        // A child writer that fails drops its stream, which fails the transpose too. Report the
+        // child writer's error, which is the cause, ahead of the transpose's.
+        let (fanout, layouts) = join(fanout_fut, try_join_all(layout_futures)).await;
+        let layouts = layouts?;
+        fanout?;
         let mut layouts = layouts.into_iter();
         let elements_layout = layouts.next().vortex_expect("elements layout present");
         let offsets_layout = layouts.next().vortex_expect("offsets layout present");
@@ -342,6 +346,7 @@ mod tests {
     use crate::segments::TestSegments;
     use crate::sequence::SequentialArrayStreamExt;
     use crate::session::LayoutSession;
+    use crate::test::FailingStrategy;
 
     fn layout_test_session() -> VortexSession {
         array_session()
@@ -596,6 +601,20 @@ mod tests {
             ├── elements: vortex.flat, dtype: i32, segment: 2
             └── offsets: vortex.flat, dtype: u64, segment: 3
         ");
+        Ok(())
+    }
+
+    /// A child writer's own error is reported, not the transpose's failure to send it more chunks.
+    #[tokio::test]
+    async fn reports_child_writer_error() -> VortexResult<()> {
+        let strategy = flat_list_strategy().with_elements(Arc::new(FailingStrategy));
+        let chunks = (0..4)
+            .map(|_| create_basic_list(Validity::NonNullable))
+            .collect::<Vec<_>>();
+        let dtype = chunks[0].dtype().clone();
+        let array = ChunkedArray::try_new(chunks, dtype)?.into_array();
+        let err = write(&strategy, array).await.unwrap_err();
+        assert!(err.to_string().contains(FailingStrategy::MESSAGE), "{err}");
         Ok(())
     }
 }
