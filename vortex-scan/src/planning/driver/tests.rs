@@ -503,6 +503,7 @@ fn drain(run: &mut Run) -> VortexResult<Vec<String>> {
         events.push(match run.advance()? {
             Progress::Batch(batch) => format!("batch {:?} {:?}", batch.root, batch.scope.rows),
             Progress::RootDone(root) => format!("done {root:?}"),
+            Progress::Spawn(scope, _) => format!("spawn {:?}", scope.rows),
             Progress::Waiting => {
                 events.push("waiting".to_string());
                 return Ok(events);
@@ -809,5 +810,92 @@ fn polls_io_while_a_later_branch_keeps_computing() -> VortexResult<()> {
         .filter(|event| event.as_str() == "compute later")
         .count();
     assert!(later_visits > 0 && later_visits <= IO_POLL_INTERVAL);
+    Ok(())
+}
+
+fn prefetch(id: u32, offset: u64) -> IoRequest {
+    IoRequest {
+        intent: IoIntent::Prefetch,
+        request: IoRequestId(id),
+        target: IoTarget::range(offset, 4),
+    }
+}
+
+/// A planner that waits is asked what it will read later each time the run has nothing else to
+/// compute, and its answer goes to its root's session under its own id without ever being
+/// delivered to it.
+#[test]
+fn a_waiting_planner_speculates_once_per_wait() -> VortexResult<()> {
+    let log = Log::default();
+    let source = source();
+    let root = ScriptedPlanner::new(
+        "root",
+        vec![
+            PlannerStep::Io(vec![request(0, 0)]),
+            PlannerStep::Io(vec![request(1, 4)]),
+            PlannerStep::Done,
+        ],
+        &log,
+    )
+    .speculating(vec![vec![prefetch(7, 4)]]);
+    let mut run = Run::new().with_step_limit(1_000);
+    run.admit(
+        Box::new(root),
+        scope(0..1),
+        Arc::clone(&source) as Arc<dyn IoSource>,
+    );
+    assert_eq!(drain(&mut run)?, vec!["waiting"]);
+    run.complete(source.wait()?)?;
+    assert_eq!(drain(&mut run)?, vec!["waiting"]);
+    run.complete(source.wait()?)?;
+    assert_eq!(drain(&mut run)?, vec!["done RootId(0)", "idle"]);
+    assert_eq!(
+        log.events(),
+        vec![
+            "publish root",
+            "speculate root",
+            "deliver root 0 bytes",
+            "publish root",
+            "deliver root 1 bytes",
+            "compute root",
+        ]
+    );
+    let submissions = source.submissions();
+    let owner = submissions[0].0;
+    assert_eq!(
+        submissions,
+        vec![
+            (owner, request(0, 0)),
+            (owner, prefetch(7, 4)),
+            (owner, request(1, 4)),
+        ]
+    );
+    assert_eq!(
+        source.performed(),
+        vec![IoTarget::range(0, 4), IoTarget::range(4, 4)],
+        "a speculated read is registered, not performed as a fetch"
+    );
+    Ok(())
+}
+
+/// A speculated fetch could never be delivered, so the run refuses it.
+#[test]
+fn a_speculated_fetch_is_an_error() -> VortexResult<()> {
+    let log = Log::default();
+    let root = ScriptedPlanner::new(
+        "root",
+        vec![PlannerStep::Io(vec![request(0, 0)]), PlannerStep::Done],
+        &log,
+    )
+    .speculating(vec![vec![request(9, 4)]]);
+    let mut run = Run::new().with_step_limit(1_000);
+    run.admit(Box::new(root), scope(0..1), source());
+    let Err(error) = run.advance() else {
+        panic!("a speculated fetch is refused");
+    };
+    assert!(
+        error.to_string().contains("speculated fetch"),
+        "unexpected error: {error}"
+    );
     Ok(())
 }

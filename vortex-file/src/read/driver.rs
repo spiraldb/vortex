@@ -268,6 +268,11 @@ impl State {
                     continue;
                 }
 
+                // A request read on its own joins only others read on their own.
+                if req.alone != requests[0].alone {
+                    continue;
+                }
+
                 // Check if this request is within coalescing distance of our current range
                 let req_end = req_offset + req.length as u64;
                 if (req_offset <= current_end + window.distance && req_end >= current_start)
@@ -362,6 +367,7 @@ mod tests {
                 offset,
                 length,
                 alignment: Alignment::none(),
+                alone: false,
                 callback: tx,
             },
             rx,
@@ -559,6 +565,7 @@ mod tests {
             offset: 6,
             length: 5,
             alignment: Alignment::new(2),
+            alone: false,
             callback: tx1,
         };
         let req2 = ReadRequest {
@@ -566,6 +573,7 @@ mod tests {
             offset: 12,
             length: 1,
             alignment: Alignment::new(4),
+            alone: false,
             callback: tx2,
         };
 
@@ -635,6 +643,7 @@ mod tests {
             offset: 0,
             length: 10,
             alignment: Alignment::none(),
+            alone: false,
             callback: tx1,
         };
         let req2 = ReadRequest {
@@ -642,6 +651,7 @@ mod tests {
             offset: 100,
             length: 10,
             alignment: Alignment::none(),
+            alone: false,
             callback: tx2,
         };
 
@@ -671,6 +681,7 @@ mod tests {
             offset: 10,
             length: 4,
             alignment: Alignment::none(),
+            alone: false,
             callback: tx1,
         };
         state.on_event(ReadEvent::Request(req1));
@@ -685,6 +696,7 @@ mod tests {
             offset: 20,
             length: 8,
             alignment: Alignment::none(),
+            alone: false,
             callback: tx2,
         };
         state.on_event(ReadEvent::Request(req2));

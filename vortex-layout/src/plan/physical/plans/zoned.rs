@@ -46,10 +46,9 @@ use crate::plan::physical::operators::OnceSource;
 use crate::plan::physical::operators::UNBOUNDED;
 use crate::plan::physical::operators::WholeSource;
 use crate::plan::physical::optimizer::PlanParentReduceRule;
+use crate::plan::physical::optimizer::PlanReduceRule;
 use crate::plan::physical::pipeline::Chain;
 use crate::plan::physical::pipeline::Compiler;
-use crate::plan::physical::pipeline::Reach;
-use crate::segments::SegmentId;
 
 const DATA: usize = 0;
 const ZONES: usize = 1;
@@ -153,7 +152,8 @@ pub struct ZonedData {
 /// Its zone table has the aggregate schema of `vortex.zoned` layouts; legacy `vortex.stats`
 /// layouts reach it through [`LegacyStats`](crate::plan::physical::LegacyStats), which converts
 /// their tables. An expression containing abstract statistic functions can rewrite it into a
-/// pruning plan that retains only the zone-statistics child.
+/// pruning plan that retains only the zone-statistics child; a plan that reads the data is
+/// optimized to its data child alone.
 #[derive(Clone, Debug)]
 pub struct Zoned;
 
@@ -373,22 +373,6 @@ impl PlanVTable for Zoned {
         });
         Ok(Some(compiler.join_with(vec![chain], |_| UNBOUNDED, source)))
     }
-
-    fn reach(
-        plan: &Plan<Self>,
-        rows: Range<u64>,
-        at: &Reach,
-        visit: &mut dyn FnMut(SegmentId, Range<u64>),
-    ) -> VortexResult<()> {
-        if !plan.is_pruning() {
-            return match plan.data_plan()? {
-                Some(data) => data.reach(rows, at, visit),
-                None => Ok(()),
-            };
-        }
-        let zones = plan.zones_plan()?;
-        zones.reach(0..zones.row_count(), &at.fixed(&rows), visit)
-    }
 }
 
 /// The per-zone results kept on a pruning `plan`.
@@ -471,29 +455,46 @@ impl PlanParentReduceRule<Zoned> for ExpressionZonedRule {
         parent: &Plan<Eval>,
         _child_idx: usize,
     ) -> VortexResult<Option<PlanRef>> {
-        let mut contains_stat = false;
-        let mut contains_root = false;
-        parent.expression().clone().transform_down(|expression| {
-            if expression
-                .as_scalar()
-                .is_some_and(|scalar_fn| scalar_fn.is::<StatFn>())
-            {
-                contains_stat = true;
-                return Ok(Transformed {
-                    value: expression,
-                    order: TraversalOrder::Skip,
-                    changed: false,
-                });
-            }
-            contains_root |= expression.is_root();
-            Ok(Transformed::no(expression))
-        })?;
-        if !parent.dtype().is_boolean() || !contains_stat || contains_root {
+        if !is_zone_pruning(parent)? {
             return Ok(None);
         }
-
         Ok(child
             .with_pruning(parent.expression().clone())?
             .map(Plan::into_plan))
+    }
+}
+
+/// Whether `eval` is a boolean expression over abstract statistics alone, which a zone table can
+/// prune without reading the data it summarises.
+pub(crate) fn is_zone_pruning(eval: &Plan<Eval>) -> VortexResult<bool> {
+    let mut contains_stat = false;
+    let mut contains_root = false;
+    eval.expression().clone().transform_down(|expression| {
+        if expression
+            .as_scalar()
+            .is_some_and(|scalar_fn| scalar_fn.is::<StatFn>())
+        {
+            contains_stat = true;
+            return Ok(Transformed {
+                value: expression,
+                order: TraversalOrder::Skip,
+                changed: false,
+            });
+        }
+        contains_root |= expression.is_root();
+        Ok(Transformed::no(expression))
+    })?;
+    Ok(eval.dtype().is_boolean() && contains_stat && !contains_root)
+}
+
+/// Replaces a zoned data plan by its data: a scan reads the data through it and never its zone
+/// table. Pruning plans are derived from the filter over the lowered plan before this runs, so
+/// an optimized plan carries a zone table only where a pruning plan reads it.
+#[derive(Debug)]
+pub(crate) struct ZonedDataRule;
+
+impl PlanReduceRule<Zoned> for ZonedDataRule {
+    fn reduce(&self, plan: &Plan<Zoned>) -> VortexResult<Option<PlanRef>> {
+        plan.data_plan()
     }
 }

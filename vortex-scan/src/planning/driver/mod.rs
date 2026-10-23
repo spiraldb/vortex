@@ -65,6 +65,9 @@ pub enum Progress {
     Batch(Batch),
     /// Every item descended from the root has retired, and its IO session was cleared.
     RootDone(RootId),
+    /// A planner declared this child independent. The run has not queued it: the owner runs it,
+    /// on this run as another root through [`Run::admit`] or on a run of its own elsewhere.
+    Spawn(WorkScope, Box<dyn Planner>),
     /// Every live item waits for IO. Await [`Run::poll_completion`], or pass the next completion
     /// to [`Run::complete`].
     Waiting,
@@ -261,6 +264,11 @@ impl Run {
                 return Ok(event);
             }
             if self.visits_until_poll == 0 || self.queue.is_empty() {
+                // Parked planners speculate before the sources are polled, so what they read
+                // ahead is registered beside the reads they wait for and coalesces with them.
+                if self.queue.is_empty() && !self.parked.is_empty() {
+                    self.speculate()?;
+                }
                 self.take_completions()?;
                 self.visits_until_poll = IO_POLL_INTERVAL;
                 if self.queue.is_empty() {
@@ -406,6 +414,37 @@ impl Run {
         }
     }
 
+    /// Asks every parked planner what it will read later and registers the answers with its
+    /// root's session, so those reads go out while the run has nothing to compute.
+    fn speculate(&mut self) -> VortexResult<()> {
+        for work in self.parked.values_mut() {
+            let Item::Planner(planner) = &mut work.item else {
+                continue;
+            };
+            let Some(batch) = planner.speculate()? else {
+                continue;
+            };
+            if batch.is_empty() {
+                vortex_bail!("speculate() published an empty batch");
+            }
+            if let Some(fetch) = batch
+                .iter()
+                .find(|request| matches!(request.intent, IoIntent::Fetch | IoIntent::Urgent))
+            {
+                vortex_bail!(
+                    "work for scope {:?} speculated fetch {:?}, which is never delivered",
+                    work.scope,
+                    fetch.request
+                );
+            }
+            let Some(root) = self.roots.get(&work.root) else {
+                vortex_bail!("work {:?} outlived its root {:?}", work.id, work.root);
+            };
+            root.io.speculate(work.id, batch)?;
+        }
+        Ok(())
+    }
+
     /// Parks an item that waits for IO, which is a protocol error with no fetch outstanding.
     fn park(&mut self, work: Box<Work>) -> VortexResult<()> {
         if work.outstanding.is_empty() {
@@ -462,6 +501,10 @@ impl Run {
                 self.spawn(work.root, scope, Item::Morsel(morsel), path);
                 self.queue.insert(work);
             }
+            Output::Planner(PlannerOutput::Spawn(scope, child)) => {
+                self.events.push_back(Progress::Spawn(scope, child));
+                self.queue.insert(work);
+            }
             Output::Morsel(MorselOutput::Batch(array)) => {
                 if array.is_empty() {
                     vortex_bail!("morsel for scope {:?} returned an empty batch", work.scope);
@@ -483,7 +526,7 @@ impl Run {
             vortex_bail!("compute() published an empty batch");
         }
         for request in &batch {
-            if request.intent == IoIntent::Fetch
+            if matches!(request.intent, IoIntent::Fetch | IoIntent::Urgent)
                 && work
                     .outstanding
                     .insert(request.request, request.target)
@@ -527,7 +570,8 @@ impl Driver {
         }
     }
 
-    /// Runs `root` and everything it spawns, returning batches in emission order.
+    /// Runs `root` and everything it spawns, returning batches in emission order. A planner
+    /// spawned as independent runs as another root of the same run.
     pub fn run(&self, root: Box<dyn Planner>) -> VortexResult<Vec<Batch>> {
         let mut run = Run::new();
         run.step_limit = self.step_limit;
@@ -540,6 +584,10 @@ impl Driver {
         loop {
             match run.advance()? {
                 Progress::Batch(batch) => batches.push(batch),
+                Progress::Spawn(scope, child) => {
+                    run.admit(child, scope, Arc::clone(&self.io));
+                }
+                Progress::RootDone(_) if run.live_roots() > 0 => {}
                 Progress::RootDone(_) | Progress::Idle => return Ok(batches),
                 Progress::Waiting => run.complete(self.io.wait()?)?,
             }

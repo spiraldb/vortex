@@ -56,7 +56,7 @@ impl<R: BlockingRuntime + Send + Sync> IoSource for ReadAtIoSource<R> {
         self.queued.lock().extend(
             batch
                 .into_iter()
-                .filter(|request| request.intent == IoIntent::Fetch)
+                .filter(|request| matches!(request.intent, IoIntent::Fetch | IoIntent::Urgent))
                 .map(|request| (work, request)),
         );
         Ok(())

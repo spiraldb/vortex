@@ -63,11 +63,23 @@ pub(super) struct ScanAdaptor {
     failed: Option<VortexError>,
     /// The protocol id the next published request gets.
     next_id: u32,
+    /// Whether the scan's reads are published as urgent: read on their own, at once.
+    urgent: bool,
 }
 
 impl ScanAdaptor {
     /// Wraps a scan, numbering requests uniquely within this adaptor's lifetime.
     pub(super) fn new(scan: Scan, locations: Arc<[SegmentLocation]>) -> Self {
+        Self::numbered_from(scan, locations, 0)
+    }
+
+    /// Wraps a scan, numbering its requests from `first_id`, so an owner running several
+    /// adaptors at once can tell their requests apart.
+    pub(super) fn numbered_from(
+        scan: Scan,
+        locations: Arc<[SegmentLocation]>,
+        first_id: u32,
+    ) -> Self {
         Self {
             scan,
             pending: None,
@@ -76,8 +88,16 @@ impl ScanAdaptor {
             locations,
             outstanding: FxHashMap::default(),
             failed: None,
-            next_id: 0,
+            next_id: first_id,
+            urgent: false,
         }
+    }
+
+    /// Publishes the scan's reads as urgent: read on their own as soon as published, never
+    /// held to coalesce with data nearby, for the reads everything else waits on.
+    pub(super) fn urgent(mut self) -> Self {
+        self.urgent = true;
+        self
     }
 
     /// The owner's protocol state while the scan is running.
@@ -148,7 +168,11 @@ impl ScanAdaptor {
             .ok_or_else(|| vortex_err!("ScanAdaptor ran out of request ids"))?;
         self.outstanding.insert(id, (read, segment_id));
         Ok(request::IoRequest {
-            intent: IoIntent::Fetch,
+            intent: if self.urgent {
+                IoIntent::Urgent
+            } else {
+                IoIntent::Fetch
+            },
             request: request::IoRequestId(id),
             target: location.target(),
         })

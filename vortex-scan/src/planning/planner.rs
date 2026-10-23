@@ -51,6 +51,11 @@ pub enum PlannerOutput {
     NeedsIO(IoBatch),
     /// A child planner, with the scope it is responsible for.
     Planner(WorkScope, Box<dyn Planner>),
+    /// A child planner independent of this one, with the scope it is responsible for. The run
+    /// hands it to its owner as [`Progress::Spawn`](super::driver::Progress::Spawn) instead of
+    /// running it: the owner may run it anywhere, including on another thread, and this planner
+    /// continues at once.
+    Spawn(WorkScope, Box<dyn Planner>),
     /// A morsel authorised to produce arrays for the scope.
     Morsel(WorkScope, Box<dyn Morsel>),
 }
@@ -66,6 +71,15 @@ pub trait Planner: IoConsumer + Send {
 
     /// Advances CPU work. Only called when [`state`](Self::state) is `NeedsCompute`.
     fn compute(&mut self) -> VortexResult<PlannerOutput>;
+
+    /// Reads the planner expects to need later, asked for while it waits and nothing else in
+    /// its run can compute, so the reads go out while the ones it waits for are in flight.
+    /// Each call may return further reads; `None` when there is nothing more to speculate.
+    /// Speculated reads are never delivered: the run's source keeps each for the fetch that
+    /// needs it, so a batch may hold prefetches and announcements, never a fetch.
+    fn speculate(&mut self) -> VortexResult<Option<IoBatch>> {
+        Ok(None)
+    }
 }
 
 impl fmt::Debug for PlannerOutput {
@@ -75,6 +89,7 @@ impl fmt::Debug for PlannerOutput {
             Self::Continue => f.write_str("Continue"),
             Self::NeedsIO(batch) => f.debug_tuple("NeedsIO").field(batch).finish(),
             Self::Planner(scope, _) => f.debug_tuple("Planner").field(scope).finish(),
+            Self::Spawn(scope, _) => f.debug_tuple("Spawn").field(scope).finish(),
             Self::Morsel(scope, _) => f.debug_tuple("Morsel").field(scope).finish(),
         }
     }

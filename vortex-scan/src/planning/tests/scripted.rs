@@ -6,6 +6,7 @@
 //! A scripted object follows its script exactly and panics when the driver calls it against the
 //! protocol, so a driver bug becomes a test failure that names the script position.
 
+use std::collections::VecDeque;
 use std::ops::Range;
 use std::sync::Arc;
 use std::task::Context;
@@ -106,6 +107,8 @@ pub struct ScriptedPlanner {
     position: usize,
     /// What the step at `position` waits for, once it has published or received something.
     pending: Option<Pending>,
+    /// Batches handed out one per `speculate` call, in order.
+    speculations: VecDeque<IoBatch>,
     log: Log,
 }
 
@@ -116,8 +119,15 @@ impl ScriptedPlanner {
             script,
             position: 0,
             pending: None,
+            speculations: VecDeque::new(),
             log: log.clone(),
         }
+    }
+
+    /// Answers each `speculate` call with the next of `batches`, then with nothing.
+    pub fn speculating(mut self, batches: Vec<IoBatch>) -> Self {
+        self.speculations = batches.into();
+        self
     }
 
     /// A fresh scripted planner, boxed as the driver takes it.
@@ -154,6 +164,14 @@ impl IoConsumer for ScriptedPlanner {
 }
 
 impl Planner for ScriptedPlanner {
+    fn speculate(&mut self) -> VortexResult<Option<IoBatch>> {
+        let batch = self.speculations.pop_front();
+        if batch.is_some() {
+            self.log.push(format!("speculate {}", self.name));
+        }
+        Ok(batch)
+    }
+
     fn state(&self) -> State {
         match self.script.get(self.position) {
             None => State::Done,

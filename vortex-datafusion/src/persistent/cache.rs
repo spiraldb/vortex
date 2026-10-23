@@ -5,12 +5,18 @@ use datafusion_common::HashMap;
 use datafusion_execution::cache::cache_manager::FileMetadata;
 use vortex::file::Footer;
 use vortex::file::VortexFile;
+use vortex::layout::scan::v2::ScanCache;
 
 /// Cached Vortex file metadata for use with DataFusion's [`FileMetadataCache`].
 ///
 /// [`FileMetadataCache`]: datafusion_execution::cache::cache_manager::FileMetadataCache
 pub struct CachedVortexMetadata {
     footer: Footer,
+    /// What V2 scans of the file derived from its layout: the lowered plan, each projection's
+    /// and filter's optimized plans, the zones a filter has pruned and the dictionary values
+    /// read. Kept with the footer so later queries of the file plan nothing again. Its size
+    /// is not counted in [`FileMetadata::memory_size`], which is taken when the entry is put.
+    scan_cache: ScanCache,
 }
 
 impl CachedVortexMetadata {
@@ -19,7 +25,19 @@ impl CachedVortexMetadata {
         let footer = vortex_file.footer();
         Self {
             footer: footer.clone(),
+            scan_cache: ScanCache::default(),
         }
+    }
+
+    /// Keeps `scan_cache` with the entry, the one the partitions opening the file share.
+    pub fn with_scan_cache(mut self, scan_cache: ScanCache) -> Self {
+        self.scan_cache = scan_cache;
+        self
+    }
+
+    /// The scan cache of V2 scans of the file.
+    pub fn scan_cache(&self) -> &ScanCache {
+        &self.scan_cache
     }
 
     /// Get the cached footer.

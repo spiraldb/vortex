@@ -62,6 +62,10 @@ pub enum IoIntent {
     Prefetch,
     /// Coalescing interest only; never starts an independent read.
     Announce,
+    /// Required bytes delivered like a fetch, read on their own as soon as they are published:
+    /// coalesced only with other urgent requests, never held for data reads nearby. For the
+    /// small reads everything else waits on, such as a filter's zone maps.
+    Urgent,
 }
 
 /// One request: a consumer-chosen id and the target it names.
@@ -127,6 +131,13 @@ pub trait IoSource: Send + Sync {
     /// Registers a whole batch before any of its reads become eligible for dispatch.
     /// Registration does not perform IO and never blocks.
     fn submit(&self, owner: IoOwnerId, batch: IoBatch) -> VortexResult<()>;
+
+    /// Registers reads `owner` speculated it will need later: prefetches and announcements that
+    /// are never delivered to it. A source serving several scopes may hand a speculated read to
+    /// whichever scope fetches it first. By default they are submitted like any other batch.
+    fn speculate(&self, owner: IoOwnerId, batch: IoBatch) -> VortexResult<()> {
+        self.submit(owner, batch)
+    }
 
     /// Advances eligible IO without blocking and returns a required completion if ready.
     /// Optional successes stay in the source; any read failure fails the run.

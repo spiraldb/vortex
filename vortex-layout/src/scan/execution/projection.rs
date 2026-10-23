@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::sync::Arc;
+use std::time::Instant;
+use std::vec::IntoIter;
+
 use vortex_array::IntoArray;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::dtype::DType;
-use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_io::request::IoConsumer;
@@ -16,26 +19,54 @@ use vortex_scan::planning::morsel::MorselOutput;
 use vortex_scan::planning::planner::Planner;
 use vortex_scan::planning::planner::PlannerOutput;
 use vortex_scan::planning::planner::State;
+use vortex_scan::planning::planner::WorkScope;
 
 use crate::plan::physical::pipeline::Scan;
 use crate::plan::physical::pipeline::Split;
 use crate::plan::physical::selection::selected;
-use crate::scan::execution::ScanPlans;
+use crate::scan::execution::PreparedScan;
 use crate::scan::execution::SelectedRows;
 use crate::scan::execution::adaptor::AdaptorStep;
 use crate::scan::execution::adaptor::Piece;
 use crate::scan::execution::adaptor::ScanAdaptor;
 
-/// Hands one fixed-size work chunk to a projection morsel.
+const MAX_OUTPUT_ROWS: usize = 65_536;
+
+/// Keeps sparse selections together and subdivides dense selections to avoid large copies when
+/// converting chunked projection results to Arrow.
 pub(super) struct ProjectionPlanner {
-    work: Option<(ScanPlans, SelectedRows)>,
+    scan: Arc<PreparedScan>,
+    selected: IntoIter<SelectedRows>,
 }
 
 impl ProjectionPlanner {
     /// Creates a planner for `selected`.
-    pub(super) fn new(plans: ScanPlans, selected: SelectedRows) -> Self {
+    pub(super) fn new(scan: Arc<PreparedScan>, selected: SelectedRows) -> Self {
+        let selected = if selected.mask.true_count() <= MAX_OUTPUT_ROWS {
+            vec![selected]
+        } else {
+            (0..selected.mask.len())
+                .step_by(MAX_OUTPUT_ROWS)
+                .filter_map(|start| {
+                    let end = (start + MAX_OUTPUT_ROWS).min(selected.mask.len());
+                    let mask = selected.mask.slice(start..end);
+                    if mask.all_false() {
+                        return None;
+                    }
+                    Some(SelectedRows {
+                        scope: WorkScope {
+                            file_ordinal: selected.scope.file_ordinal,
+                            rows: selected.scope.rows.start + start as u64
+                                ..selected.scope.rows.start + end as u64,
+                        },
+                        mask,
+                    })
+                })
+                .collect()
+        };
         Self {
-            work: Some((plans, selected)),
+            scan,
+            selected: selected.into_iter(),
         }
     }
 }
@@ -46,7 +77,7 @@ impl IoConsumer for ProjectionPlanner {
 
 impl Planner for ProjectionPlanner {
     fn state(&self) -> State {
-        if self.work.is_some() {
+        if !self.selected.as_slice().is_empty() {
             State::NeedsCompute
         } else {
             State::Done
@@ -54,7 +85,7 @@ impl Planner for ProjectionPlanner {
     }
 
     fn compute(&mut self) -> VortexResult<PlannerOutput> {
-        let Some((plans, selected)) = self.work.take() else {
+        let Some(selected) = self.selected.next() else {
             return Ok(PlannerOutput::Done);
         };
         if selected.mask.all_false() {
@@ -62,7 +93,7 @@ impl Planner for ProjectionPlanner {
         }
         Ok(PlannerOutput::Morsel(
             selected.scope.clone(),
-            Box::new(ProjectionMorsel::new(plans, selected)),
+            Box::new(ProjectionMorsel::new(Arc::clone(&self.scan), selected)),
         ))
     }
 }
@@ -70,7 +101,10 @@ impl Planner for ProjectionPlanner {
 /// Runs the projection plan over a split's selected rows and returns them as one batch, in row
 /// order. A selection that projects to no rows finishes without a batch.
 struct ProjectionMorsel {
-    plans: Option<ScanPlans>,
+    started: Option<Instant>,
+    /// When the morsel's reads went out, until its first piece arrives.
+    reads_at: Option<Instant>,
+    scan: Arc<PreparedScan>,
     dtype: DType,
     selected: SelectedRows,
     adaptor: Option<ScanAdaptor>,
@@ -80,19 +114,32 @@ struct ProjectionMorsel {
 
 impl ProjectionMorsel {
     /// Creates a morsel projecting `selected`.
-    fn new(plans: ScanPlans, selected: SelectedRows) -> Self {
+    fn new(scan: Arc<PreparedScan>, selected: SelectedRows) -> Self {
         Self {
-            dtype: plans.projection.dtype().clone(),
-            plans: Some(plans),
+            dtype: scan.projection.dtype().clone(),
+            scan,
             selected,
             adaptor: None,
             pieces: Vec::new(),
             done: false,
+            started: None,
+            reads_at: None,
         }
     }
 
     fn finish(&mut self) -> VortexResult<MorselOutput> {
         self.done = true;
+        let metrics = &self.scan.metrics;
+        if let Some(started) = self.started {
+            metrics.projection_duration.update(started.elapsed());
+        }
+        metrics.batches.add(1);
+        metrics.projection_rows.add(
+            self.pieces
+                .iter()
+                .map(|piece| piece.array.len() as u64)
+                .sum(),
+        );
         self.pieces.sort_by_key(|piece| piece.rows.start);
         let mut arrays: Vec<_> = std::mem::take(&mut self.pieces)
             .into_iter()
@@ -133,14 +180,10 @@ impl Morsel for ProjectionMorsel {
             vortex_bail!("ProjectionMorsel: compute called after Done");
         }
         let Some(adaptor) = self.adaptor.as_mut() else {
-            let plans = self
-                .plans
-                .take()
-                .vortex_expect("an uncompiled projection still has its plans");
             let scan = Scan::try_new(
-                plans.session,
+                self.scan.session.clone(),
                 selected(
-                    plans.projection,
+                    self.scan.projection.clone(),
                     self.selected.scope.rows.clone(),
                     self.selected.mask.clone(),
                 ),
@@ -149,18 +192,45 @@ impl Morsel for ProjectionMorsel {
                     mask: Mask::new_true(self.selected.mask.len()),
                 }],
             )?
-            .with_row_offset(plans.row_offset)
-            .with_value_cache(plans.values);
-            self.adaptor = Some(ScanAdaptor::new(scan, plans.locations));
+            .with_row_offset(self.scan.row_offset)
+            .with_value_cache(self.scan.values.clone());
+            self.adaptor = Some(ScanAdaptor::new(scan, Arc::clone(&self.scan.locations)));
+            self.started = Some(Instant::now());
+            tracing::debug!(
+                row_start = self.selected.scope.rows.start,
+                row_end = self.selected.scope.rows.end,
+                selected_rows = self.selected.mask.true_count(),
+                "v2 projection started"
+            );
             return Ok(MorselOutput::Continue);
         };
         if adaptor.state() == State::Done {
+            tracing::debug!(
+                row_start = self.selected.scope.rows.start,
+                pieces = self.pieces.len(),
+                "v2 projection finished"
+            );
             return self.finish();
         }
         Ok(match adaptor.compute()? {
             AdaptorStep::Yield => MorselOutput::Continue,
-            AdaptorStep::NeedsIO(batch) => MorselOutput::NeedsIO(batch),
+            AdaptorStep::NeedsIO(batch) => {
+                self.reads_at.get_or_insert_with(Instant::now);
+                tracing::debug!(
+                    row_start = self.selected.scope.rows.start,
+                    requests = batch.len(),
+                    "v2 projection reads"
+                );
+                MorselOutput::NeedsIO(batch)
+            }
             AdaptorStep::Piece(piece) => {
+                if let Some(reads_at) = self.reads_at.take() {
+                    self.scan.metrics.projection_wait.update(reads_at.elapsed());
+                    tracing::debug!(
+                        row_start = self.selected.scope.rows.start,
+                        "v2 projection first piece"
+                    );
+                }
                 self.pieces.push(piece);
                 MorselOutput::Continue
             }

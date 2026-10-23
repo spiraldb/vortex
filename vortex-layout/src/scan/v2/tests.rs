@@ -9,6 +9,7 @@ use std::sync::atomic::Ordering;
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::Int32Type;
+use arrow_schema::Field;
 use futures::TryStreamExt;
 use futures::stream;
 use rstest::rstest;
@@ -24,9 +25,14 @@ use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinArray;
 use vortex_array::assert_arrays_eq;
 use vortex_array::dtype::DType;
+use vortex_array::expr::Expression;
+use vortex_array::expr::and;
+use vortex_array::expr::eq;
 use vortex_array::expr::get_item;
 use vortex_array::expr::gt;
+use vortex_array::expr::is_null;
 use vortex_array::expr::lit;
+use vortex_array::expr::lt;
 use vortex_array::expr::pack;
 use vortex_array::expr::root;
 use vortex_array::validity::Validity;
@@ -34,16 +40,27 @@ use vortex_arrow::ArrowSessionExt;
 use vortex_buffer::Alignment;
 use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
+use vortex_error::vortex_bail;
 use vortex_io::session::RuntimeSessionExt;
+use vortex_mask::Mask;
+use vortex_scan::planning::driver::Batch;
+use vortex_scan::planning::driver::Progress;
+use vortex_scan::planning::driver::Run;
+use vortex_scan::planning::planner::Planner;
+use vortex_scan::planning::planner::PlannerOutput;
+use vortex_scan::planning::planner::WorkScope;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
 
+use super::ChunkPlanner;
 use super::MAX_ROWS_PER_CHUNK;
 use super::PreparedScan;
+use super::PrunePlanner;
+use super::ROW_BLOCK_SIZE;
 use super::ScanBuilder;
 use super::ScanCache;
 use super::ScanFile;
-use super::row_chunks;
+use super::filtered_rows_per_chunk;
 use super::rows_per_chunk;
 use crate::LayoutRef;
 use crate::LayoutStrategy;
@@ -54,7 +71,9 @@ use crate::layouts::row_idx::row_idx;
 use crate::layouts::table::TableStrategy;
 use crate::layouts::zoned::writer::ZonedLayoutOptions;
 use crate::layouts::zoned::writer::ZonedStrategy;
+use crate::scan::arrow::to_record_batch;
 use crate::scan::execution::SegmentLocation;
+use crate::scan::execution::row_chunks;
 use crate::scan::scan_builder::ScanBuilder as V1ScanBuilder;
 use crate::segments::SegmentFuture;
 use crate::segments::SegmentId;
@@ -170,11 +189,74 @@ fn builder(
     session: &VortexSession,
     segments: &Arc<dyn SegmentSource>,
     layout: &LayoutRef,
-) -> VortexResult<ScanBuilder<ArrayRef>> {
+) -> VortexResult<ScanBuilder> {
     Ok(ScanBuilder::new(
         session.clone(),
         scan_file(segments, layout)?,
     ))
+}
+
+/// Composes a scan's planners the way an engine does: the pruning plans first when there is a filter,
+/// continuing into the chunks of the rows they keep.
+fn compose(scan: &Arc<PreparedScan>, rows: Range<u64>) -> Box<dyn Planner> {
+    let chunks = {
+        let scan = Arc::clone(scan);
+        let rows = rows.clone();
+        move |kept: Option<Mask>| -> Box<dyn Planner> {
+            let selection = scan.selection().clone();
+            Box::new(ChunkPlanner::new(scan, rows, selection, kept))
+        }
+    };
+    if scan.filter().is_some() {
+        Box::new(PrunePlanner::new(Arc::clone(scan), rows, Box::new(chunks)))
+    } else {
+        chunks(None)
+    }
+}
+
+/// Runs `rows` of a prepared scan on one planning run, every spawned chunk admitted to it, and
+/// returns its batches in row order, each with the rows it stands for.
+async fn run_batches(scan: &Arc<PreparedScan>, rows: Range<u64>) -> VortexResult<Vec<Batch>> {
+    let io = scan.io();
+    let mut run = Run::new();
+    run.admit(
+        compose(scan, rows.clone()),
+        WorkScope {
+            file_ordinal: 0,
+            rows,
+        },
+        io.session(),
+    );
+    let mut batches = Vec::new();
+    loop {
+        match run.advance()? {
+            Progress::Batch(batch) => batches.push(batch),
+            Progress::Spawn(scope, chunk) => {
+                run.admit(chunk, scope, io.session());
+            }
+            Progress::RootDone(_) if run.live_roots() > 0 => {}
+            Progress::RootDone(_) | Progress::Idle => break,
+            Progress::Waiting => std::future::poll_fn(|cx| run.poll_completion(cx)).await?,
+        }
+    }
+    batches.sort_by_key(|batch| batch.scope.rows.start);
+    Ok(batches)
+}
+
+/// Runs `rows` of a prepared scan and returns its arrays.
+async fn run_rows(scan: &Arc<PreparedScan>, rows: Range<u64>) -> VortexResult<Vec<ArrayRef>> {
+    Ok(run_batches(scan, rows)
+        .await?
+        .into_iter()
+        .map(|batch| batch.array)
+        .collect())
+}
+
+/// Prepares and runs a whole scan, returning its arrays.
+async fn run_scan(builder: ScanBuilder) -> VortexResult<Vec<ArrayRef>> {
+    let scan = Arc::new(builder.prepare()?);
+    let rows = scan.rows().clone();
+    run_rows(&scan, rows).await
 }
 
 async fn collect(
@@ -185,10 +267,15 @@ async fn collect(
     Ok(ChunkedArray::try_new(chunks, dtype)?.into_array())
 }
 
+/// Prepares and runs a whole scan, returning its rows as one chunked array.
+async fn collect_scan(dtype: DType, builder: ScanBuilder) -> VortexResult<ArrayRef> {
+    Ok(ChunkedArray::try_new(run_scan(builder).await?, dtype)?.into_array())
+}
+
 /// Runs `builder` on both executors and checks the planner-driven one returns the same rows.
 async fn assert_same_as_v1(
     session: &VortexSession,
-    make: impl Fn() -> VortexResult<ScanBuilder<ArrayRef>>,
+    make: impl Fn() -> VortexResult<ScanBuilder>,
 ) -> VortexResult<()> {
     let builder = make()?;
     let dtype = builder.dtype().clone();
@@ -200,15 +287,14 @@ async fn assert_same_as_v1(
     )?;
     let mut v1 = V1ScanBuilder::new(session.clone(), reader)
         .with_projection(builder.projection.clone())
+        .with_some_filter(builder.filter.clone())
         .with_selection(builder.selection.clone())
-        .with_row_offset(builder.row_offset)
-        .with_ordered(builder.ordered)
-        .with_concurrency(builder.concurrency);
+        .with_row_offset(builder.row_offset);
     if let Some(rows) = builder.row_range.clone() {
         v1 = v1.with_row_range(rows);
     }
     let expected = collect(dtype.clone(), v1.into_stream()?).await?;
-    let actual = collect(dtype, builder.into_stream()?).await?;
+    let actual = collect_scan(dtype, builder).await?;
     assert_arrays_eq!(actual, expected, &mut session.create_execution_ctx());
     Ok(())
 }
@@ -218,6 +304,74 @@ enum Strategy {
     Flat,
     Table,
     ZonedTable,
+}
+
+#[rstest]
+#[case::dense(-1)]
+#[case::sparse(200_000)]
+#[case::empty(300_000)]
+#[tokio::test]
+async fn large_filtered_chunks_match_v1(#[case] cutoff: i32) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let segments = Arc::new(TestSegments::default());
+    let (mut sequence, eof) = SequenceId::root().split();
+    let values = PrimitiveArray::from_iter(0i32..210_000).into_array();
+    let dtype = values.dtype().clone();
+    let layout = chunked_flat()
+        .write_stream(
+            ArrayContext::empty().into(),
+            Arc::<TestSegments>::clone(&segments),
+            SequentialStreamAdapter::new(
+                dtype.clone(),
+                stream::iter([Ok((sequence.advance(), values))]),
+            )
+            .sendable(),
+            eof,
+            &session,
+        )
+        .await?;
+    let segments: Arc<dyn SegmentSource> = segments;
+    assert_same_as_v1(&session, || {
+        Ok(builder(&session, &segments, &layout)?
+            .with_some_filter(Some(gt(root(), lit(cutoff)).bind(&dtype)?)))
+    })
+    .await
+}
+
+#[rstest]
+#[case::range(and(
+    gt(get_item("ints", root()), lit(995i32)),
+    lt(get_item("ints", root()), lit(2050i32))
+))]
+#[case::nullable(eq(get_item("strings", root()), lit("row 1001")))]
+#[case::nulls(is_null(get_item("strings", root())))]
+#[case::no_matches(gt(get_item("ints", root()), lit(10_000i32)))]
+#[case::row_index(gt(row_idx(), lit(1500u64)))]
+#[tokio::test]
+async fn filter_matches_v1(
+    #[values(Strategy::Flat, Strategy::Table, Strategy::ZonedTable)] strategy: Strategy,
+    #[case] filter: Expression,
+    #[values(false, true)] sparse: bool,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, strategy.get().as_ref()).await?;
+    assert_same_as_v1(&session, || {
+        let mut scan = builder(&session, &segments, &layout)?
+            .with_projection(
+                pack([("strings", get_item("strings", root()))], false.into())
+                    .bind(layout.dtype())?,
+            )
+            .with_some_filter(Some(filter.bind(layout.dtype())?))
+            .with_row_range(900..3100)
+            .with_row_offset(100);
+        if sparse {
+            scan = scan.with_row_indices(StrictSortedBuffer::try_new(Buffer::from_iter(
+                (0..4000u64).step_by(7),
+            ))?);
+        }
+        Ok(scan)
+    })
+    .await
 }
 
 impl Strategy {
@@ -291,8 +445,14 @@ async fn arrow_stream_projects_across_chunks() -> VortexResult<()> {
     let scan = builder(&session, &segments, &layout)?
         .with_projection(projection)
         .with_row_range(990..1010);
-    let schema = Arc::new(session.arrow().to_arrow_schema(scan.dtype())?);
-    let batches: Vec<_> = scan.into_record_batch_stream(schema)?.try_collect().await?;
+    let schema = session.arrow().to_arrow_schema(scan.dtype())?;
+    let field = Field::new_struct("", schema.fields().clone(), false);
+    let mut ctx = session.create_execution_ctx();
+    let batches = run_scan(scan)
+        .await?
+        .into_iter()
+        .map(|chunk| to_record_batch(chunk, &field, &mut ctx))
+        .collect::<VortexResult<Vec<_>>>()?;
     let values: Vec<_> = batches
         .iter()
         .flat_map(|batch| {
@@ -308,14 +468,27 @@ async fn arrow_stream_projects_across_chunks() -> VortexResult<()> {
     Ok(())
 }
 
+/// Chunks are cut from the range's own start, so a range shorter than a chunk is one chunk
+/// wherever it lies in the file.
 #[rstest]
 #[case::whole(0..150_000, vec![0..65_536, 65_536..131_072, 131_072..150_000])]
-#[case::unaligned(10..140_000, vec![10..65_536, 65_536..131_072, 131_072..140_000])]
+#[case::unaligned(10..140_000, vec![10..65_546, 65_546..131_082, 131_082..140_000])]
 #[case::boundary(65_536..131_072, vec![65_536..131_072])]
+#[case::short(1_000_000..1_040_000, vec![1_000_000..1_040_000])]
 #[case::empty(5..5, vec![])]
 #[case::near_max(u64::MAX - 3..u64::MAX, vec![u64::MAX - 3..u64::MAX])]
-fn fixed_row_chunks(#[case] rows: Range<u64>, #[case] expected: Vec<Range<u64>>) {
+fn row_chunks_start_at_the_range(#[case] rows: Range<u64>, #[case] expected: Vec<Range<u64>>) {
     assert_eq!(row_chunks(rows, 65_536), expected);
+}
+
+#[rstest]
+#[case::sf1_partition(430_000, 262_144)]
+#[case::below_minimum(100_000, 262_144)]
+#[case::rounded_up_to_the_grid(2_000_000, 507_904)]
+#[case::sf10_partition(1_064_960, 270_336)]
+#[case::whole_file(60_000_000, 1_048_576)]
+fn filtered_chunks_are_a_quarter_of_the_partition(#[case] rows: u64, #[case] expected: usize) {
+    assert_eq!(filtered_rows_per_chunk(rows), expected);
 }
 
 #[rstest]
@@ -332,14 +505,6 @@ fn chunk_byte_budget(#[case] rows: u64, #[case] bytes: u32, #[case] expected: us
         alignment: Alignment::none(),
     }];
     assert_eq!(rows_per_chunk(rows, &locations), expected);
-}
-
-#[test]
-fn smaller_chunks_keep_file_alignment() {
-    assert_eq!(
-        row_chunks(7500..33_000, 16_384),
-        [7500..16_384, 16_384..32_768, 32_768..33_000]
-    );
 }
 
 struct CountingSegments {
@@ -389,19 +554,20 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
         reads: AtomicUsize::new(0),
     });
     let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
-    let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?)?;
-    let splits = scan.split_plans();
+    let scan = Arc::new(builder(&session, &segments, &layout)?.prepare()?);
+    let chunks = row_chunks(scan.rows().clone(), scan.chunk_rows);
     assert_eq!(
-        splits.len(),
+        chunks.len(),
         (STORED_CHUNKS * STORED_CHUNK_ROWS).div_ceil(MAX_ROWS_PER_CHUNK)
     );
-    for (index, split) in splits.into_iter().enumerate() {
-        let rows = split.scope.rows.clone();
+    for (index, rows) in chunks.into_iter().enumerate() {
         let before = counted.reads.load(Ordering::Relaxed);
-        let arrays = split.run(Arc::clone(&scan.io)).await?;
+        let arrays = run_rows(&scan, rows.clone()).await?;
         let reads = counted.reads.load(Ordering::Relaxed) - before;
         let code_chunks =
             (rows.end - 1) / STORED_CHUNK_ROWS as u64 - rows.start / STORED_CHUNK_ROWS as u64 + 1;
+        // The first chunk reads every values chunk once for the whole scan; its codes are one of
+        // them, and the session shares that read. Later chunks read only their codes.
         assert_eq!(
             reads,
             if index == 0 {
@@ -427,10 +593,7 @@ async fn list_layouts_return_an_error() -> VortexResult<()> {
     let session = new_session().with_tokio();
     let strategy = TableStrategy::new(chunked_flat(), chunked_flat()).with_list_layout();
     let (segments, layout) = write(&session, &strategy).await?;
-    let builder = builder(&session, &segments, &layout)?;
-    let error = builder
-        .into_stream()?
-        .try_next()
+    let error = run_scan(builder(&session, &segments, &layout)?)
         .await
         .expect_err("V2 must reject an unsupported layout");
     assert!(error.to_string().contains("vortex.plan.list_pack"));
@@ -438,11 +601,22 @@ async fn list_layouts_return_an_error() -> VortexResult<()> {
 }
 
 #[tokio::test]
-async fn unordered_returns_every_row() -> VortexResult<()> {
+async fn projection_skips_unsupported_unselected_layouts() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let strategy = TableStrategy::new(chunked_flat(), chunked_flat()).with_list_layout();
+    let (segments, layout) = write(&session, &strategy).await?;
+    assert_same_as_v1(&session, || {
+        Ok(builder(&session, &segments, &layout)?
+            .with_projection(get_item("ints", root()).bind(layout.dtype())?))
+    })
+    .await
+}
+
+#[tokio::test]
+async fn every_row_is_returned() -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, table().as_ref()).await?;
-    let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?.with_ordered(false))?;
-    let chunks: Vec<ArrayRef> = scan.execute_stream()?.try_collect().await?;
+    let chunks = run_scan(builder(&session, &segments, &layout)?).await?;
     let rows: usize = chunks.iter().map(|chunk| chunk.len()).sum();
     assert_eq!(rows, CHUNKS * CHUNK_ROWS);
     Ok(())
@@ -453,14 +627,11 @@ async fn primitive_column() -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, table().as_ref()).await?;
     let dtype = layout.dtype().clone();
-    let scan = PreparedScan::try_new(
+    let actual = collect_scan(
+        DType::Primitive(vortex_array::dtype::PType::I32, false.into()),
         builder(&session, &segments, &layout)?
             .with_projection(get_item("ints", root()).bind(&dtype)?)
             .with_row_range(990..1010),
-    )?;
-    let actual = collect(
-        DType::Primitive(vortex_array::dtype::PType::I32, false.into()),
-        scan.execute_stream()?,
     )
     .await?;
     assert_arrays_eq!(
@@ -479,9 +650,12 @@ async fn work_chunks_ignore_layout_boundaries(
 ) -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, strategy.get().as_ref()).await?;
-    let scan = PreparedScan::try_new(builder(&session, &segments, &layout)?)?;
-    assert_eq!(scan.splits, vec![0..(CHUNKS * CHUNK_ROWS) as u64]);
-    let arrays: Vec<_> = scan.execute_stream()?.try_collect().await?;
+    let scan = Arc::new(builder(&session, &segments, &layout)?.prepare()?);
+    assert_eq!(
+        row_chunks(scan.rows().clone(), scan.chunk_rows),
+        vec![0..(CHUNKS * CHUNK_ROWS) as u64]
+    );
+    let arrays = run_rows(&scan, scan.rows().clone()).await?;
     assert_eq!(arrays.len(), 1);
     assert_eq!(arrays[0].len(), CHUNKS * CHUNK_ROWS);
     Ok(())
@@ -541,7 +715,7 @@ async fn scan_cache_reuses_values_between_scans(
         let before = counted.reads.load(Ordering::Relaxed);
         let scan = ScanBuilder::new(session.clone(), file.clone())
             .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(vec![12u64, 15]))?);
-        let actual = collect(layout.dtype().clone(), scan.into_stream()?).await?;
+        let actual = collect_scan(layout.dtype().clone(), scan).await?;
         assert_arrays_eq!(
             actual,
             PrimitiveArray::from_iter([12i32, 15]),
@@ -558,13 +732,22 @@ async fn scan_cache_reuses_values_between_scans(
 async fn selected_split_scope_is_bounded_before_projection() -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, table().as_ref()).await?;
-    let scan = PreparedScan::try_new(
+    let scan = Arc::new(
         builder(&session, &segments, &layout)?
-            .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(vec![7, 2001]))?),
-    )?;
-    let splits = scan.split_plans();
-    assert_eq!(splits.len(), 1);
-    assert_eq!(splits[0].scope.rows, 7..2002);
+            .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(vec![7, 2001]))?)
+            .prepare()?,
+    );
+    let mut chunks = ChunkPlanner::new(
+        Arc::clone(&scan),
+        scan.rows().clone(),
+        scan.selection().clone(),
+        None,
+    );
+    let PlannerOutput::Spawn(scope, _) = chunks.compute()? else {
+        vortex_bail!("the selected rows were not planned");
+    };
+    assert_eq!(scope.rows, 7..2002);
+    assert!(matches!(chunks.compute()?, PlannerOutput::Done));
     Ok(())
 }
 
@@ -592,7 +775,7 @@ async fn repeated_projections_reuse_their_values() -> VortexResult<()> {
         let scan = ScanBuilder::new(session.clone(), file.clone())
             .with_projection(projection.clone())
             .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(vec![12u64, 18]))?);
-        let actual = collect(projection.dtype().clone(), scan.into_stream()?).await?;
+        let actual = collect_scan(projection.dtype().clone(), scan).await?;
         assert_arrays_eq!(
             actual,
             vortex_array::arrays::BoolArray::from_iter([false, true]),
@@ -601,5 +784,97 @@ async fn repeated_projections_reuse_their_values() -> VortexResult<()> {
         reads.push(counted.reads.load(Ordering::Relaxed) - before);
     }
     assert_eq!(reads, vec![4, 1, 1]);
+    Ok(())
+}
+
+#[test]
+fn partition_rows_tile_the_file_on_row_blocks() {
+    let (file_size, row_count) = (1_000u64, 100_000u64);
+    let bytes = [0..300, 300..600, 600..1_000];
+    let rows: Vec<_> = bytes
+        .iter()
+        .map(|bytes| super::partition_row_range(bytes.clone(), file_size, row_count))
+        .collect();
+    assert_eq!(rows[0].start, 0);
+    assert_eq!(rows[2].end, row_count);
+    for pair in rows.windows(2) {
+        assert_eq!(pair[0].end, pair[1].start);
+        assert_eq!(pair[0].end % ROW_BLOCK_SIZE as u64, 0);
+    }
+    assert!(rows.iter().all(|rows| !rows.is_empty()));
+    assert_eq!(
+        super::partition_row_range(1..2, file_size, row_count),
+        0..0,
+        "a range inside one block owns no rows"
+    );
+}
+
+/// Pruning runs once before any chunk is planned: rows every pruning plan excludes are never
+/// given a chunk, and a scan whose zones all fail plans nothing.
+#[rstest]
+#[case::tail(2_999, Some(3_000..4_000))]
+#[case::nothing(10_000, None)]
+#[tokio::test]
+async fn pruned_rows_get_no_chunk(
+    #[case] above: i32,
+    #[case] expected: Option<Range<u64>>,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, zoned_table().as_ref()).await?;
+    let scan = Arc::new(
+        builder(&session, &segments, &layout)?
+            .with_some_filter(Some(
+                gt(get_item("ints", root()), lit(above)).bind(layout.dtype())?,
+            ))
+            .prepare()?,
+    );
+    let batches = run_batches(&scan, scan.rows().clone()).await?;
+    assert_eq!(
+        batches
+            .iter()
+            .map(|batch| batch.scope.rows.clone())
+            .collect::<Vec<_>>(),
+        expected.into_iter().collect::<Vec<_>>()
+    );
+    Ok(())
+}
+
+/// Scans of one file that share a cache share their filter plans, so the pruning plans run once:
+/// the second scan with the same filter re-reads the data it needs but never the zone maps, and
+/// never waits, so it speculates nothing.
+#[tokio::test]
+async fn shared_cache_prunes_zones_once() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, zoned_table().as_ref()).await?;
+    let counted = Arc::new(CountingSegments {
+        inner: segments,
+        reads: AtomicUsize::new(0),
+    });
+    let segments = Arc::clone(&counted) as Arc<dyn SegmentSource>;
+    let mut file = scan_file(&segments, &layout)?;
+    let cache = ScanCache::default();
+    file.cache = Some(cache.clone());
+    let filter = gt(get_item("ints", root()), lit(2_999i32)).bind(layout.dtype())?;
+    let projection = get_item("ints", root()).bind(layout.dtype())?;
+    assert!(cache.filter_plans(&filter).is_none());
+
+    let mut reads = Vec::new();
+    for _ in 0..2 {
+        let before = counted.reads.load(Ordering::Relaxed);
+        let scan = ScanBuilder::new(session.clone(), file.clone())
+            .with_projection(projection.clone())
+            .with_some_filter(Some(filter.clone()));
+        let actual = collect_scan(projection.dtype().clone(), scan).await?;
+        assert_eq!(actual.len(), 1_000);
+        reads.push(counted.reads.load(Ordering::Relaxed) - before);
+    }
+    let plans = cache
+        .filter_plans(&filter)
+        .expect("the first scan kept its filter plans");
+    assert_eq!(plans.pruning().count(), 1);
+    // The first scan reads the zone map and, speculated while it waits for it, the whole of
+    // the first chunk ahead: the file is one chunk of four segments. The second scan reads
+    // only the segment pruning keeps.
+    assert_eq!(reads, vec![5, 1]);
     Ok(())
 }

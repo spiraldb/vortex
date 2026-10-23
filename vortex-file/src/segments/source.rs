@@ -363,6 +363,16 @@ impl FileSegmentSource {
 
 impl SegmentSource for FileSegmentSource {
     fn request(&self, id: SegmentId) -> SegmentFuture {
+        self.request_read(id, false)
+    }
+
+    fn request_alone(&self, id: SegmentId) -> SegmentFuture {
+        self.request_read(id, true)
+    }
+}
+
+impl FileSegmentSource {
+    fn request_read(&self, id: SegmentId, alone: bool) -> SegmentFuture {
         // We eagerly register the read request here assuming the behaviour of [`FileSegmentSource`], where
         // coalescing becomes effective prior to the future being polled.
         let spec = *match self.segments.get(*id as usize) {
@@ -385,6 +395,7 @@ impl SegmentSource for FileSegmentSource {
             offset,
             length: length as usize,
             alignment,
+            alone,
             callback: send,
         });
 
@@ -581,6 +592,7 @@ mod tests {
             offset,
             length,
             alignment: Alignment::none(),
+            alone: false,
             callback,
         })
     }
