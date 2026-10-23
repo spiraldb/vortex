@@ -98,7 +98,8 @@ fn filtered_rows_per_chunk(
     let min_blocks = (MAX_ROWS_PER_CHUNK / ROW_BLOCK_SIZE) as u64;
     let by_bytes = blocks_per_target_bytes(projected_bytes, row_count).max(1);
     let by_threads = (rows / parallelism.max(1) as u64 / ROW_BLOCK_SIZE as u64).max(min_blocks);
-    by_bytes.min(by_threads).min(max_blocks) as usize * ROW_BLOCK_SIZE
+    let blocks = by_bytes.min(by_threads).min(max_blocks);
+    usize::try_from(blocks).vortex_expect("at most FILTERED_ROWS_PER_CHUNK blocks") * ROW_BLOCK_SIZE
 }
 
 /// The row blocks that hold [`TARGET_BYTES_PER_CHUNK`] when `bytes` spread over `row_count` rows.
