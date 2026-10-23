@@ -4,7 +4,7 @@
 //! The planner-driven scan executor.
 //!
 //! A V2 scan lowers the file's layout once into a physical plan and runs every split of it
-//! through the planning protocol: the [`Run`](vortex_scan::planning::driver::Run) driver advances
+//! through the planning protocol: the [`Run`] driver advances
 //! the split's planners and morsels, and every segment read is a protocol request served from the
 //! file's [`SegmentSource`]. The layout reader is never asked to evaluate anything.
 //!
@@ -15,22 +15,25 @@
 //! layout's chunk boundaries.
 //! Full-file projections use smaller 8,192-row multiples when serialized bytes per row are high.
 //!
-//! A [`ScanFile`] carrying a [`ScanCache`] shares its lowered plan, segment index, and dictionary
-//! values with every other scan of that file, like a cached layout reader does for V1 scans.
+//! A [`ScanFile`] carrying a [`ScanCache`] shares its lowered plan, filter plans and proved
+//! zones, segment index, and dictionary values with every other scan of that file, like a cached
+//! layout reader does for V1 scans.
 
 mod cache;
 mod io;
-mod split;
 #[cfg(test)]
 mod tests;
 
+use std::future;
 use std::ops::Range;
 use std::sync::Arc;
+use std::task::Poll;
 
 use arrow_array::RecordBatch;
 use arrow_schema::ArrowError;
 use arrow_schema::Field;
 use arrow_schema::SchemaRef;
+use futures::SinkExt;
 use futures::Stream;
 use futures::StreamExt;
 use futures::TryStreamExt;
@@ -43,8 +46,14 @@ use vortex_array::dtype::DType;
 use vortex_array::expr::BoundExpression;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
+use vortex_error::vortex_err;
 use vortex_io::request::IoService;
+use vortex_io::request::IoSource;
+use vortex_io::runtime::Handle;
 use vortex_io::session::RuntimeSessionExt;
+use vortex_scan::planning::driver::Progress;
+use vortex_scan::planning::driver::Run;
+use vortex_scan::planning::planner::Planner;
 use vortex_scan::planning::planner::WorkScope;
 use vortex_scan::selection::Selection;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
@@ -52,52 +61,22 @@ use vortex_session::VortexSession;
 use vortex_utils::parallelism::get_available_parallelism;
 
 pub use self::cache::ScanCache;
+pub use self::cache::WeakScanCache;
 use crate::LayoutRef;
 use crate::plan::physical::lower;
 use crate::plan::physical::optimize;
 use crate::plan::physical::plan_row_idx_expression;
 use crate::scan::arrow::to_record_batch;
+use crate::scan::execution::FILTERED_ROWS_PER_CHUNK;
 use crate::scan::execution::FilterPlans;
-use crate::scan::execution::ScanPlans;
+use crate::scan::execution::MAX_ROWS_PER_CHUNK;
+use crate::scan::execution::PreparedScan;
+use crate::scan::execution::ROW_BLOCK_SIZE;
 pub use crate::scan::execution::SegmentLocation;
-use crate::scan::execution::plan_selection;
+use crate::scan::execution::rows_per_chunk;
 use crate::scan::v2::io::SegmentScanIo;
 use crate::scan::v2::io::segment_ranges;
-use crate::scan::v2::split::SplitPlan;
 use crate::segments::SegmentSource;
-
-const ROW_BLOCK_SIZE: usize = 8192;
-const MAX_ROWS_PER_CHUNK: usize = 8 * ROW_BLOCK_SIZE;
-const FILTERED_ROWS_PER_CHUNK: usize = 16 * MAX_ROWS_PER_CHUNK;
-const TARGET_BYTES_PER_CHUNK: u64 = 8 * 1024 * 1024;
-
-/// Limit estimated bytes per task without changing the writer-aligned row granularity.
-fn rows_per_chunk(row_count: u64, locations: &[SegmentLocation]) -> usize {
-    if row_count <= MAX_ROWS_PER_CHUNK as u64 {
-        return MAX_ROWS_PER_CHUNK;
-    }
-    let bytes: u64 = locations
-        .iter()
-        .map(|location| u64::from(location.length))
-        .sum();
-    let bytes_per_row = bytes.div_ceil(row_count).max(1);
-    let blocks = TARGET_BYTES_PER_CHUNK / bytes_per_row / ROW_BLOCK_SIZE as u64;
-    blocks.clamp(1, 8) as usize * ROW_BLOCK_SIZE
-}
-
-/// Fixed boundaries in the file's row domain, clipped to the requested range.
-fn row_chunks(rows: Range<u64>, rows_per_chunk: usize) -> Vec<Range<u64>> {
-    if rows.is_empty() {
-        return Vec::new();
-    }
-    let first = rows.start / rows_per_chunk as u64 * rows_per_chunk as u64;
-    (first..rows.end)
-        .step_by(rows_per_chunk)
-        .map(|start| {
-            start.max(rows.start)..start.saturating_add(rows_per_chunk as u64).min(rows.end)
-        })
-        .collect()
-}
 
 /// The rows a byte range of the file stands for when an engine splits the file by bytes before
 /// opening it. Consecutive byte ranges give consecutive row ranges that tile the file, with
@@ -226,7 +205,7 @@ impl<A: 'static + Send> ScanBuilder<A> {
         self
     }
 
-    /// Sets the number of active splits per worker thread. Must be greater than zero.
+    /// Sets the number of chunks run at once per worker thread. Must be greater than zero.
     pub fn with_concurrency(mut self, concurrency: usize) -> Self {
         assert!(concurrency > 0);
         self.concurrency = concurrency;
@@ -259,7 +238,7 @@ impl<A: 'static + Send> ScanBuilder<A> {
         let handle = self.session.handle();
         Ok(stream::once(async move {
             handle
-                .spawn_cpu(move || PreparedScan::try_new(self)?.execute_stream())
+                .spawn_cpu(move || ScanRun::try_new(self)?.execute_stream())
                 .await
         })
         .try_flatten()
@@ -267,23 +246,25 @@ impl<A: 'static + Send> ScanBuilder<A> {
     }
 }
 
-/// A scan planned over its file, ready to run its splits.
-struct PreparedScan<A: 'static + Send> {
+/// A scan prepared over its file, ready to run.
+struct ScanRun<A: 'static + Send> {
     session: VortexSession,
-    plans: ScanPlans,
-    /// Serves the splits' reads.
+    scan: Arc<PreparedScan>,
+    /// Serves the scan's reads.
     io: Arc<dyn IoService>,
-    /// The scan's splits, over the root row domain, in row order.
-    splits: Vec<Range<u64>>,
+    /// The rows of the root row domain the scan covers.
+    rows: Range<u64>,
     selection: Selection,
     map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
     ordered: bool,
     concurrency: usize,
+    /// Held until the scan ends, so scans of the file that start meanwhile share it.
+    cache: ScanCache,
 }
 
-impl<A: 'static + Send> PreparedScan<A> {
-    /// Lowers the file's layout, plans the projection, and partitions the selected range into
-    /// fixed-size row chunks.
+impl<A: 'static + Send> ScanRun<A> {
+    /// Lowers the file's layout and plans the filter and the projection, from the file's cache
+    /// where an earlier scan planned them already. Touches no segment.
     fn try_new(builder: ScanBuilder<A>) -> VortexResult<Self> {
         let file = builder.file;
         let cache = file.cache.unwrap_or_default();
@@ -294,21 +275,25 @@ impl<A: 'static + Send> PreparedScan<A> {
         let row_count = root.row_count();
         let filter = builder
             .filter
-            .map(|filter| FilterPlans::new(filter, &root, &builder.session).map(Arc::new))
-            .transpose()?;
-        // An identity projection needs no rewrites. Keep the lowered children lazy, including
-        // statistics that a projection-only scan never reads.
-        let identity = builder.projection.is_root() && builder.projection.dtype() == root.dtype();
-        let projection = if identity {
-            root
-        } else {
-            match cache.projection(&builder.projection) {
-                Some(plan) => plan,
-                None => {
-                    let plan =
-                        optimize(plan_row_idx_expression(builder.projection.clone(), root)?)?;
-                    cache.insert_projection(builder.projection, plan)
+            .map(|filter| -> VortexResult<_> {
+                match cache.filter_plans(&filter) {
+                    Some(plans) => Ok(plans),
+                    None => {
+                        let plans =
+                            Arc::new(FilterPlans::new(filter.clone(), &root, &builder.session)?);
+                        Ok(cache.insert_filter_plans(filter, plans))
+                    }
                 }
+            })
+            .transpose()?;
+        // Optimizing drops the zone tables a projection never reads and keeps the chunks of a
+        // chunked column lazy, so an identity projection is optimized like any other.
+        let identity = builder.projection.is_root() && builder.projection.dtype() == root.dtype();
+        let projection = match cache.projection(&builder.projection) {
+            Some(plan) => plan,
+            None => {
+                let plan = optimize(plan_row_idx_expression(builder.projection.clone(), root)?)?;
+                cache.insert_projection(builder.projection, plan)
             }
         };
         let chunk_rows = if filter.is_some() {
@@ -318,7 +303,6 @@ impl<A: 'static + Send> PreparedScan<A> {
         } else {
             MAX_ROWS_PER_CHUNK
         };
-        let splits = row_chunks(builder.row_range.unwrap_or(0..row_count), chunk_rows);
         let ranges = match cache.ranges() {
             Some(ranges) => ranges,
             None => cache.insert_ranges(segment_ranges(&file.locations)),
@@ -326,87 +310,212 @@ impl<A: 'static + Send> PreparedScan<A> {
         let io = Arc::new(SegmentScanIo::new(file.segments, ranges));
         Ok(Self {
             session: builder.session.clone(),
-            plans: ScanPlans {
+            scan: Arc::new(PreparedScan {
                 session: builder.session,
                 locations: file.locations,
                 projection,
                 filter,
                 row_offset: builder.row_offset,
                 values: cache.values(),
-            },
+                chunk_rows,
+            }),
             io,
-            splits,
+            rows: builder.row_range.unwrap_or(0..row_count),
             selection: builder.selection,
             map_fn: builder.map_fn,
             ordered: builder.ordered,
             concurrency: builder.concurrency,
+            cache,
         })
     }
 
-    /// The splits with selected rows, each ready to be admitted to a planning run.
-    fn split_plans(&self) -> Vec<SplitPlan> {
-        self.splits
-            .iter()
-            .filter_map(|rows| {
-                let (scope, root) = plan_selection(
-                    &self.plans,
-                    WorkScope {
-                        file_ordinal: 0,
-                        rows: rows.clone(),
-                    },
-                    &self.selection,
-                )?;
-                Some(SplitPlan { scope, root })
-            })
-            .collect()
-    }
-
-    /// Runs every split as a task on the session's runtime and yields their mapped batches.
+    /// Runs the scan on planning runs the returned stream owns.
     ///
-    /// Like the default executor, up to `concurrency` splits per thread run at once, and their
-    /// batches are yielded in row order when the scan is ordered.
+    /// The scan's first planner runs on one run the stream drives as it is polled, each of its
+    /// CPU steps a [`Handle::spawn_cpu`] task. Every chunk it spawns runs on a run and a session
+    /// of its own, on one task of the runtime that drives the run to its end and awaits only its
+    /// reads, up to `concurrency` chunks per worker thread at once; a chunk is started only when
+    /// the consumer has room for its batches. Every read is a `spawn_io` task of the segment
+    /// source. The engine thread polling the stream does no scan work itself. Batches of an
+    /// unordered scan are yielded as morsels finish; an ordered scan yields them in row order
+    /// once every morsel has.
     fn execute_stream(self) -> VortexResult<BoxStream<'static, VortexResult<A>>> {
-        let concurrency = self.concurrency * get_available_parallelism().unwrap_or(1);
         let handle = self.session.handle();
-        let split_plans = self.split_plans();
+        let in_flight = self.concurrency * get_available_parallelism().unwrap_or(1);
+        let root = self.scan.planner(self.rows.clone(), self.selection);
+        let scope = WorkScope {
+            file_ordinal: 0,
+            rows: self.rows.clone(),
+        };
         let io = self.io;
         let map_fn = self.map_fn;
-        if !self.ordered
-            && split_plans.iter().any(|split| {
-                split.scope.rows.end - split.scope.rows.start > MAX_ROWS_PER_CHUNK as u64
+        let (chunk_handle, chunk_io, chunk_map) =
+            (handle.clone(), Arc::clone(&io), Arc::clone(&map_fn));
+        let inline = in_flight <= 1;
+        let batches = run_stream(handle, root, scope, io.session(), map_fn, inline)
+            .map_ok(move |yielded| match yielded {
+                Yielded::Batch(start, batch) => {
+                    stream::once(future::ready(Ok((start, batch)))).boxed()
+                }
+                Yielded::Spawn(scope, chunk) => chunk_stream(
+                    &chunk_handle,
+                    chunk,
+                    scope,
+                    chunk_io.session(),
+                    Arc::clone(&chunk_map),
+                ),
             })
-        {
-            let streams = stream::iter(split_plans).map(move |split| {
-                let (send, recv) = mpsc::channel(1);
-                let task =
-                    handle.spawn(split.run_unordered(Arc::clone(&io), Arc::clone(&map_fn), send));
-                let errors = stream::once(task)
-                    .filter_map(|result| std::future::ready(result.err().map(Err)));
-                stream::select(recv, errors)
-            });
-            return Ok(streams.flatten_unordered(concurrency).boxed());
+            .try_flatten_unordered(in_flight);
+        let cache = self.cache;
+        let batches = batches.chain(stream::poll_fn(move |_| {
+            let _ = &cache;
+            Poll::Ready(None)
+        }));
+        if !self.ordered {
+            return Ok(batches.map_ok(|(_, batch)| batch).boxed());
         }
-        // Spawned as the buffer pulls them, so at most `concurrency` splits read at once.
-        let tasks = stream::iter(split_plans).map(move |split| {
-            let io = Arc::clone(&io);
-            let map_fn = Arc::clone(&map_fn);
-            handle.spawn(async move {
-                split
-                    .run(io)
-                    .await?
-                    .into_iter()
-                    .map(|array| map_fn(array))
-                    .collect::<VortexResult<Vec<_>>>()
-            })
-        });
-        let batches = if self.ordered {
-            tasks.buffered(concurrency).boxed()
-        } else {
-            tasks.buffer_unordered(concurrency).boxed()
-        };
-        Ok(batches
-            .map_ok(|batches| stream::iter(batches.into_iter().map(Ok)))
-            .try_flatten()
-            .boxed())
+        Ok(stream::once(async move {
+            let mut held: Vec<(u64, A)> = batches.try_collect().await?;
+            // Morsels finish in whatever order their reads arrive.
+            held.sort_by_key(|(start, _)| *start);
+            VortexResult::Ok(stream::iter(held.into_iter().map(|(_, batch)| Ok(batch))))
+        })
+        .try_flatten()
+        .boxed())
     }
+}
+
+/// What the root run's stream yields: a mapped batch with the row it starts at, or a chunk a
+/// planner of the run spawned.
+enum Yielded<A> {
+    Batch(u64, A),
+    Spawn(WorkScope, Box<dyn Planner>),
+}
+
+/// One CPU step of a run, taken on a `spawn_cpu` task with the run.
+enum Step<A> {
+    Batch(u64, A),
+    Spawn(WorkScope, Box<dyn Planner>),
+    RootDone,
+    Idle,
+    Waiting,
+}
+
+/// The state of the root run's stream.
+struct RunState<A> {
+    handle: Handle,
+    /// Taken while a CPU step runs on its task and put back with its result.
+    run: Option<Run>,
+    io: Arc<dyn IoSource>,
+    map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
+    /// Whether a spawned chunk runs on this run, as another root, instead of being yielded.
+    inline: bool,
+}
+
+/// Runs `root` over `scope` on a planning run of its own, reading through `io`, each CPU step
+/// on a `spawn_cpu` task, and yields its mapped batches and, unless `inline`, the chunks it
+/// spawns. Inline, a spawned chunk runs on this run beside the others: the run's steps already
+/// interleave every chunk's work, and a run per chunk would only add a hand-off per chunk for
+/// parallelism the engine provides.
+fn run_stream<A: 'static + Send>(
+    handle: Handle,
+    root: Box<dyn Planner>,
+    scope: WorkScope,
+    io: Arc<dyn IoSource>,
+    map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
+    inline: bool,
+) -> BoxStream<'static, VortexResult<Yielded<A>>> {
+    let mut run = Run::new();
+    run.admit(root, scope, Arc::clone(&io));
+    let state = RunState {
+        handle,
+        run: Some(run),
+        io,
+        map_fn,
+        inline,
+    };
+    stream::try_unfold(state, |mut state| async move {
+        loop {
+            let run = state
+                .run
+                .take()
+                .ok_or_else(|| vortex_err!("the scan's run is missing"))?;
+            let map_fn = Arc::clone(&state.map_fn);
+            let (run, step) = state
+                .handle
+                .spawn_cpu(move || {
+                    let mut run = run;
+                    let step = run.advance().and_then(|progress| {
+                        Ok(match progress {
+                            Progress::Batch(batch) => {
+                                Step::Batch(batch.scope.rows.start, map_fn(batch.array)?)
+                            }
+                            Progress::Spawn(scope, child) => Step::Spawn(scope, child),
+                            Progress::RootDone(_) => Step::RootDone,
+                            Progress::Idle => Step::Idle,
+                            Progress::Waiting => Step::Waiting,
+                        })
+                    });
+                    (run, step)
+                })
+                .await;
+            let run = state.run.insert(run);
+            match step? {
+                Step::Batch(start, batch) => {
+                    return Ok(Some((Yielded::Batch(start, batch), state)));
+                }
+                Step::Spawn(scope, child) if state.inline => {
+                    run.admit(child, scope, Arc::clone(&state.io));
+                }
+                Step::Spawn(scope, child) => {
+                    return Ok(Some((Yielded::Spawn(scope, child), state)));
+                }
+                Step::RootDone if run.live_roots() > 0 => {}
+                Step::RootDone | Step::Idle => return Ok(None),
+                Step::Waiting => future::poll_fn(|cx| run.poll_completion(cx)).await?,
+            }
+        }
+    })
+    .boxed()
+}
+
+/// Runs a spawned chunk's `root` over `scope` on a planning run of its own, on one task that
+/// drives the run to its end and awaits only its reads, and yields its mapped batches with the
+/// row each starts at. A planner the chunk spawns in turn runs as another root of the same run.
+///
+/// One task per chunk, not one per step: a chunk's run waits for reads many times, and a task
+/// hop at each wait is latency on the chunk's critical path that no other chunk's work fills.
+fn chunk_stream<A: 'static + Send>(
+    handle: &Handle,
+    root: Box<dyn Planner>,
+    scope: WorkScope,
+    io: Arc<dyn IoSource>,
+    map_fn: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
+) -> BoxStream<'static, VortexResult<(u64, A)>> {
+    let (mut send, recv) = mpsc::channel(1);
+    let task = handle.spawn(async move {
+        let mut run = Run::new();
+        run.admit(root, scope, Arc::clone(&io));
+        loop {
+            match run.advance()? {
+                Progress::Batch(batch) => {
+                    let start = batch.scope.rows.start;
+                    let batch = map_fn(batch.array);
+                    let failed = batch.is_err();
+                    if send.send(batch.map(|batch| (start, batch))).await.is_err() || failed {
+                        return Ok(());
+                    }
+                }
+                Progress::Spawn(scope, child) => {
+                    run.admit(child, scope, Arc::clone(&io));
+                }
+                Progress::RootDone(_) if run.live_roots() > 0 => {}
+                Progress::RootDone(_) | Progress::Idle => return Ok(()),
+                Progress::Waiting => future::poll_fn(|cx| run.poll_completion(cx)).await?,
+            }
+        }
+    });
+    let errors = stream::once(task)
+        .filter_map(|result: VortexResult<()>| future::ready(result.err().map(Err)));
+    stream::select(recv, errors).boxed()
 }
