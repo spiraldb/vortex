@@ -15,6 +15,7 @@ use datafusion_datasource::file_groups::FileGroupPartitioner;
 use datafusion_datasource::file_scan_config::FileScanConfig;
 use datafusion_datasource::file_stream::FileOpener;
 use datafusion_execution::cache::cache_manager::FileMetadataCache;
+use datafusion_execution::object_store::ObjectStoreUrl;
 use datafusion_physical_expr::EquivalenceProperties;
 use datafusion_physical_expr::LexOrdering;
 use datafusion_physical_expr::PhysicalExprRef;
@@ -378,6 +379,7 @@ impl VortexSource {
             projection_pushdown: self.options.projection_pushdown,
             scan_concurrency: self.options.scan_concurrency,
             scan_v2: self.options.scan_v2,
+            chunks_read_ahead: chunks_read_ahead(&base_config.object_store_url),
             partitions: base_config.file_groups.len(),
         };
 
@@ -587,6 +589,19 @@ impl FileSource for VortexSource {
                 .chain(self.projection.iter().map(|expr| &expr.expr)),
             f,
         )
+    }
+}
+
+/// The chunks of a partition a V2 scan reads ahead of its chunks: every chunk of a local file,
+/// where early registration coalesces reads, and two of a file in an object store, which serves
+/// at limited bandwidth in the order asked: the engine's partitions start together, and with
+/// every chunk registered at once the last partitions' first chunks would queue behind the first
+/// partitions' last.
+fn chunks_read_ahead(store: &ObjectStoreUrl) -> usize {
+    if store.as_str().starts_with("file:") {
+        usize::MAX
+    } else {
+        2
     }
 }
 

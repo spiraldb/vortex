@@ -102,6 +102,8 @@ pub struct PreparedScan {
     pub(super) values: ValueCache,
     /// The rows of one chunk, the unit of work a chunk planner emits.
     pub(super) chunk_rows: usize,
+    /// The chunks of a partition whose reads start while its zone maps are read.
+    pub(super) chunks_read_ahead: usize,
     /// What the scan's stages did, for the engine's metrics.
     pub(super) metrics: Arc<ScanMetrics>,
 }

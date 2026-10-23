@@ -141,6 +141,9 @@ pub(crate) struct VortexOpener {
     /// How many partitions the engine runs the scan on, so a V2 scan parallelises inside a
     /// partition only as far as the engine has not.
     pub partitions: usize,
+    /// The chunks of a partition a V2 scan reads ahead while its zone maps are read: every
+    /// chunk of a local file, a few of a file in a store that serves at limited bandwidth.
+    pub chunks_read_ahead: usize,
 }
 
 impl FileOpener for VortexOpener {
@@ -179,6 +182,7 @@ impl FileOpener for VortexOpener {
         let file_schemas = Arc::clone(&self.file_schemas);
         let has_output_ordering = self.has_output_ordering;
         let scan_concurrency = self.scan_concurrency;
+        let chunks_read_ahead = self.chunks_read_ahead;
         let partitions = self.partitions.max(1);
         let scan_v2 = self.scan_v2;
 
@@ -447,6 +451,7 @@ impl FileOpener for VortexOpener {
                 let mut builder = V2ScanBuilder::new(vxf.session().clone(), scan_file)
                     .with_projection(scan_projection)
                     .with_some_filter(native_filter)
+                    .with_chunks_read_ahead(chunks_read_ahead)
                     .with_metrics_registry(Arc::clone(&metrics_registry), scan_labels);
                 if let Some(bytes) = byte_range {
                     // Every partition maps the same byte boundary to the same row boundary.
@@ -1171,6 +1176,7 @@ mod tests {
             projection_pushdown: false,
             scan_concurrency: None,
             scan_v2: false,
+            chunks_read_ahead: usize::MAX,
         }
     }
 
@@ -1581,6 +1587,7 @@ mod tests {
             projection_pushdown: false,
             scan_concurrency: None,
             scan_v2: false,
+            chunks_read_ahead: usize::MAX,
         };
 
         let filter = col("a").lt(lit(100_i32));
@@ -1673,6 +1680,7 @@ mod tests {
             projection_pushdown: false,
             scan_concurrency: None,
             scan_v2: false,
+            chunks_read_ahead: usize::MAX,
         };
 
         let stream = opener.open(file)?.await?;
@@ -1856,6 +1864,7 @@ mod tests {
             projection_pushdown: false,
             scan_concurrency: None,
             scan_v2: false,
+            chunks_read_ahead: usize::MAX,
         };
 
         // This should succeed and return the correctly projected and cast data
@@ -1921,6 +1930,7 @@ mod tests {
             projection_pushdown: false,
             scan_concurrency: None,
             scan_v2: false,
+            chunks_read_ahead: usize::MAX,
         }
     }
 
@@ -2137,6 +2147,7 @@ mod tests {
             projection_pushdown: false,
             scan_concurrency: None,
             scan_v2: false,
+            chunks_read_ahead: usize::MAX,
         };
 
         let file = PartitionedFile::new(file_path.to_string(), data_size);
