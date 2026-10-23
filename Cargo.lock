@@ -11473,6 +11473,7 @@ dependencies = [
  "mimalloc",
  "num-traits",
  "rstest",
+ "rustc-hash",
  "simdutf8",
  "tracing",
  "vortex-array",
