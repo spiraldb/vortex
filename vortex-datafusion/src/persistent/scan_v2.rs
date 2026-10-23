@@ -25,6 +25,7 @@ use futures::stream;
 use futures::stream::BoxStream;
 use vortex::array::ArrayRef;
 use vortex::error::VortexResult;
+use vortex::io::request::IoService;
 use vortex::io::request::IoSource;
 use vortex::io::runtime::Handle;
 use vortex::layout::scan::v2::PreparedScan;
@@ -123,7 +124,7 @@ impl ScanDriver {
             Arc::clone(&map),
             metrics.clone(),
         );
-        let batches = run_stream(self.handle, root, scope, io.session(), map, inline)
+        let batches = run_stream(self.handle, root, scope, io, map, inline)
             .map_ok(move |yielded| match yielded {
                 Yielded::Batch(start, batch) => {
                     stream::once(future::ready(Ok((start, batch)))).boxed()
@@ -196,19 +197,20 @@ enum Yielded {
 /// its end and awaits only its reads, and yields its batches and the chunks it spawns, those
 /// spawned between two hand-offs together. The first chunk the run spawns, and every chunk when
 /// `inline`, runs on this run as another root, so a partition of one chunk never hands it to a
-/// task of its own.
+/// task of its own. Every root gets a session of its own: the run clears a root's session when
+/// the root finishes, which would drop the reads of any other root sharing it.
 fn run_stream(
     handle: Handle,
     root: Box<dyn Planner>,
     scope: WorkScope,
-    io: Arc<dyn IoSource>,
+    io: Arc<dyn IoService>,
     map: MapBatch,
     inline: bool,
 ) -> BoxStream<'static, VortexResult<Yielded>> {
     let (mut send, recv) = mpsc::channel(1);
     let task = handle.spawn(async move {
         let mut run = Run::new();
-        run.admit(root, scope, Arc::clone(&io));
+        run.admit(root, scope, io.session());
         let mut admitted = 0;
         let mut spawned = Vec::new();
         loop {
@@ -218,7 +220,7 @@ fn run_stream(
                 }
                 Progress::Spawn(scope, child) if inline || admitted == 0 => {
                     admitted += 1;
-                    run.admit(child, scope, Arc::clone(&io));
+                    run.admit(child, scope, io.session());
                     continue;
                 }
                 Progress::Spawn(scope, child) => {
