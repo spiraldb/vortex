@@ -2364,11 +2364,9 @@ async fn file_sum_is_absent_when_a_chunk_overflows() -> VortexResult<()> {
 }
 
 #[tokio::test]
-async fn default_string_stats_are_exact_within_the_byte_bound_after_reopening() -> VortexResult<()>
-{
-    // The default string min/max are byte-bounded, and only exact when nothing was truncated.
-    // The footer stores partial states, which don't record that exactness, so it has to survive
-    // as the recorded aggregate itself.
+async fn default_string_stats_are_inexact_bounds_after_reopening() -> VortexResult<()> {
+    // The default string min/max are byte-bounded, and the footer doesn't record whether a bound
+    // was truncated, so even a value within the bound reads back as inexact.
     let long = "x".repeat(100);
     let array = StructArray::from_fields(&[
         (
@@ -2395,18 +2393,18 @@ async fn default_string_stats_are_exact_within_the_byte_bound_after_reopening() 
     let (short, _) = stats.get_by_path(&field_path!(short)).expect("short stats");
     assert_eq!(
         stat_value(short, Stat::Max),
-        Precision::exact(ScalarValue::from("banana"))
+        Precision::inexact(ScalarValue::from("banana"))
     );
     assert_eq!(
         stat_value(short, Stat::Min),
-        Precision::exact(ScalarValue::from("apple"))
+        Precision::inexact(ScalarValue::from("apple"))
     );
 
     let (long, _) = stats.get_by_path(&field_path!(long)).expect("long stats");
     assert!(stat_value(long, Stat::Max).as_inexact().is_some());
     assert_eq!(
         stat_value(long, Stat::Min),
-        Precision::exact(ScalarValue::from("a"))
+        Precision::inexact(ScalarValue::from("a"))
     );
 
     Ok(())

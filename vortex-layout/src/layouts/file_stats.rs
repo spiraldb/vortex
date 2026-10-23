@@ -10,7 +10,6 @@ use itertools::Itertools;
 use parking_lot::Mutex;
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
-use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::aggregate_fn::AccumulatorRef;
 use vortex_array::aggregate_fn::AggregateFnRef;
@@ -26,7 +25,6 @@ use vortex_array::aggregate_fn::fns::max::Max;
 use vortex_array::aggregate_fn::fns::min::Min;
 use vortex_array::aggregate_fn::fns::nan_count::NanCount;
 use vortex_array::aggregate_fn::fns::null_count::NullCount;
-use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::dtype::DType;
@@ -202,25 +200,13 @@ fn non_null(value: Precision<Scalar>) -> Precision<Scalar> {
 
 /// Accumulates write-time statistics for a single file column.
 struct StatsAccumulator {
-    dtype: DType,
-    aggregates: Vec<AggregateAccumulator>,
-}
-
-/// A requested aggregate and the accumulator computing it.
-struct AggregateAccumulator {
-    aggregate_fn: AggregateFnRef,
-    accumulator: AccumulatorRef,
-    /// For a bounded aggregate, the exact aggregate it stands in for (e.g. `Max` for
-    /// `BoundedMax`), which `accumulator` computes instead. The bounded value is derived from the
-    /// exact one when the stats are collected, which also tells whether the bound was truncated.
-    exact: Option<AggregateFnRef>,
+    aggregates: Vec<(AggregateFnRef, AccumulatorRef)>,
 }
 
 impl StatsAccumulator {
     /// An accumulator that records nothing.
     fn empty() -> Self {
         Self {
-            dtype: DType::Null,
             aggregates: Vec::new(),
         }
     }
@@ -247,88 +233,34 @@ impl StatsAccumulator {
             // A dtype that doesn't support a given aggregate simply fails to build an
             // accumulator, which is silently skipped, matching this stat's absence from the
             // result.
-            if aggregate_fn.accumulator(dtype).is_err() {
-                continue;
-            }
-            let exact = exact_counterpart(aggregate_fn);
-            if let Ok(accumulator) = exact.as_ref().unwrap_or(aggregate_fn).accumulator(dtype) {
-                aggregates.push(AggregateAccumulator {
-                    aggregate_fn: aggregate_fn.clone(),
-                    accumulator,
-                    exact,
-                });
+            if let Ok(accumulator) = aggregate_fn.accumulator(dtype) {
+                aggregates.push((aggregate_fn.clone(), accumulator));
             }
         }
 
-        Self {
-            dtype: dtype.clone(),
-            aggregates,
-        }
+        Self { aggregates }
     }
 
     fn push_chunk(&mut self, array: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<()> {
-        for aggregate in &mut self.aggregates {
-            aggregate.accumulator.accumulate(array, ctx)?;
+        for (_, accumulator) in &mut self.aggregates {
+            accumulator.accumulate(array, ctx)?;
         }
         Ok(())
     }
 
     /// Returns the accumulated aggregates that `allowed` permits.
-    ///
-    /// A bounded aggregate whose value didn't exceed its byte bound is recorded as the exact
-    /// aggregate it stands in for (e.g. `BoundedMax` as `Max`). The footer stores partial states,
-    /// which don't record that the bound wasn't truncated, so recording the exact aggregate is
-    /// what keeps it.
     fn aggregate_stats(
         &self,
         allowed: impl Fn(&AggregateFnRef) -> bool,
-        ctx: &mut ExecutionCtx,
     ) -> VortexResult<AggregateStats> {
-        let mut out = Vec::with_capacity(self.aggregates.len());
-        for aggregate in &self.aggregates {
-            let Some(exact) = &aggregate.exact else {
-                if allowed(&aggregate.aggregate_fn) {
-                    out.push(AggregateStat::from_accumulator(
-                        aggregate.aggregate_fn.clone(),
-                        &aggregate.accumulator,
-                    )?);
-                }
-                continue;
-            };
-
-            // The bounded aggregate over the whole column is its bound of the exact value.
-            let value = aggregate.accumulator.final_scalar()?;
-            let mut bounded = aggregate.aggregate_fn.accumulator(&self.dtype)?;
-            if !value.is_null() {
-                let value = ConstantArray::new(value.cast(&self.dtype)?, 1).into_array();
-                bounded.accumulate(&value, ctx)?;
-            }
-            let truncated = bounded.final_scalar()?.value() != value.value();
-
-            if !truncated && allowed(exact) {
-                out.push(AggregateStat::from_accumulator(
-                    exact.clone(),
-                    &aggregate.accumulator,
-                )?);
-            } else if allowed(&aggregate.aggregate_fn) {
-                out.push(AggregateStat::from_accumulator(
-                    aggregate.aggregate_fn.clone(),
-                    &bounded,
-                )?);
-            }
-        }
-        Ok(AggregateStats::new(out))
-    }
-}
-
-/// The exact aggregate a bounded aggregate approximates, if any.
-fn exact_counterpart(aggregate_fn: &AggregateFnRef) -> Option<AggregateFnRef> {
-    if aggregate_fn.is::<BoundedMax>() {
-        Some(Max.bind(NumericalAggregateOpts::skip_nans()))
-    } else if aggregate_fn.is::<BoundedMin>() {
-        Some(Min.bind(NumericalAggregateOpts::skip_nans()))
-    } else {
-        None
+        self.aggregates
+            .iter()
+            .filter(|(aggregate_fn, _)| allowed(aggregate_fn))
+            .map(|(aggregate_fn, accumulator)| {
+                AggregateStat::from_accumulator(aggregate_fn.clone(), accumulator)
+            })
+            .collect::<VortexResult<_>>()
+            .map(AggregateStats::new)
     }
 }
 
@@ -346,6 +278,8 @@ fn is_varlen_dtype(dtype: &DType) -> bool {
 /// their own `BoundedMax`/`BoundedMin` instead.
 fn default_pruning_aggregate_fns(dtype: &DType) -> Vec<AggregateFnRef> {
     let (max, min) = if is_varlen_dtype(dtype) {
+        // These read back as inexact even when nothing was truncated, until a V2 of the bounded
+        // aggregates records that in its partial state.
         let max_bytes = default_bounded_stat_max_bytes();
         (
             BoundedMax.bind(BoundedMaxOptions { max_bytes }),
@@ -526,7 +460,6 @@ impl StatsNode {
         &self,
         allowed: &impl Fn(&AggregateFnRef) -> bool,
         out: &mut Vec<AggregateStats>,
-        ctx: &mut ExecutionCtx,
     ) -> VortexResult<()> {
         match self {
             Self::Skipped => Ok(()),
@@ -535,14 +468,14 @@ impl StatsNode {
                 Ok(())
             }
             Self::Leaf(acc) => {
-                out.push(acc.aggregate_stats(allowed, ctx)?);
+                out.push(acc.aggregate_stats(allowed)?);
                 Ok(())
             }
             Self::Container { children, own } => {
                 for (_, child) in children {
-                    child.collect_aggregate_stats(allowed, out, ctx)?;
+                    child.collect_aggregate_stats(allowed, out)?;
                 }
-                own.collect_aggregate_stats(allowed, out, ctx)
+                own.collect_aggregate_stats(allowed, out)
             }
         }
     }
@@ -650,7 +583,7 @@ impl FileStatsAccumulator {
         let mut out = Vec::new();
         self.root
             .lock()
-            .collect_aggregate_stats(&allowed, &mut out, &mut self.ctx.lock())?;
+            .collect_aggregate_stats(&allowed, &mut out)?;
         Ok(out)
     }
 
@@ -661,11 +594,10 @@ impl FileStatsAccumulator {
     /// The legacy `ArrayStats` format has a fixed slot per [`Stat`] rather than open-ended
     /// aggregates, so it isn't restricted by the writer context.
     pub fn legacy_aggregate_stats(&self) -> VortexResult<Vec<AggregateStats>> {
-        let mut ctx = self.ctx.lock();
         self.legacy
             .lock()
             .iter()
-            .map(|acc| acc.aggregate_stats(|_| true, &mut ctx))
+            .map(|acc| acc.aggregate_stats(|_| true))
             .collect()
     }
 }
@@ -695,14 +627,12 @@ mod tests {
     use super::*;
 
     fn stats_set(acc: &StatsAccumulator) -> VortexResult<StatsSet> {
-        let mut ctx = array_session().create_execution_ctx();
-        Ok(acc.aggregate_stats(|_| true, &mut ctx)?.to_stats_set())
+        Ok(acc.aggregate_stats(|_| true)?.to_stats_set())
     }
 
     fn node_stats_sets(node: &StatsNode) -> VortexResult<Vec<StatsSet>> {
-        let mut ctx = array_session().create_execution_ctx();
         let mut aggregates = Vec::new();
-        node.collect_aggregate_stats(&|_| true, &mut aggregates, &mut ctx)?;
+        node.collect_aggregate_stats(&|_| true, &mut aggregates)?;
         Ok(aggregates
             .iter()
             .map(AggregateStats::to_stats_set)
@@ -714,19 +644,19 @@ mod tests {
             .vortex_expect("test only uses stats with an aggregate fn")
     }
 
+    /// The footer can't tell an untruncated bound from a truncated one, so bounded min/max are
+    /// inexact even when every value fits the bound.
     #[rstest]
-    #[case::all_within_bound(&["short", "shorter"], true, true)]
-    #[case::only_min_truncated(&["short", "a value longer than the bound"], true, false)]
-    #[case::both_truncated(&["zz value past the bound", "aa value past the bound"], false, false)]
-    fn bounded_varlen_min_max_exact_iff_extremum_fits_bound(
+    #[case::all_within_bound(&["short", "shorter"])]
+    #[case::only_min_truncated(&["short", "a value longer than the bound"])]
+    #[case::both_truncated(&["zz value past the bound", "aa value past the bound"])]
+    fn bounded_varlen_min_max_are_inexact(
         #[values(
             DType::Utf8(Nullability::NonNullable),
             DType::Binary(Nullability::NonNullable)
         )]
         dtype: DType,
         #[case] values: &[&str],
-        #[case] max_exact: bool,
-        #[case] min_exact: bool,
     ) -> VortexResult<()> {
         let mut ctx = array_session().create_execution_ctx();
         let max_bytes = NonZeroUsize::new(8).vortex_expect("non-zero");
@@ -735,7 +665,6 @@ mod tests {
             BoundedMin.bind(BoundedMinOptions { max_bytes }),
         ];
         let mut acc = StatsAccumulator::new(&dtype, Some(&bounded));
-        // One chunk per value, so exactness has to survive merging across chunks.
         for value in values {
             let mut builder = VarBinViewBuilder::with_capacity_in(
                 dtype.clone(),
@@ -747,8 +676,8 @@ mod tests {
         }
 
         let stats = stats_set(&acc)?;
-        assert_eq!(stats.get(Stat::Max).is_exact(), max_exact);
-        assert_eq!(stats.get(Stat::Min).is_exact(), min_exact);
+        assert!(matches!(stats.get(Stat::Max), Precision::Inexact(_)));
+        assert!(matches!(stats.get(Stat::Min), Precision::Inexact(_)));
         Ok(())
     }
 
@@ -998,7 +927,7 @@ mod tests {
         node.push_chunk(&root, &mut ctx)?;
 
         let mut aggregates = Vec::new();
-        node.collect_aggregate_stats(&|_| true, &mut aggregates, &mut ctx)?;
+        node.collect_aggregate_stats(&|_| true, &mut aggregates)?;
 
         // `s.a`, then `s`'s own null-count entry.
         assert_eq!(aggregates.len(), 2);
@@ -1172,77 +1101,33 @@ mod tests {
         builder.finish()
     }
 
-    #[rstest]
-    #[case::untruncated(&["short", "shorter"], true)]
-    #[case::truncated(&["a value longer than the bound"], false)]
-    fn exact_bounded_max_is_recorded_as_max(
-        #[case] values: &[&str],
-        #[case] exact: bool,
-    ) -> VortexResult<()> {
+    #[test]
+    fn bounded_max_partial_round_trips() -> VortexResult<()> {
         let mut ctx = array_session().create_execution_ctx();
-        let max_bytes = NonZeroUsize::new(8).vortex_expect("non-zero");
-        let mut acc = StatsAccumulator::new(
-            &DType::Utf8(Nullability::NonNullable),
-            Some(&[BoundedMax.bind(BoundedMaxOptions { max_bytes })]),
-        );
-        acc.push_chunk(&utf8_chunk(values), &mut ctx)?;
+        let dtype = DType::Utf8(Nullability::NonNullable);
+        let max = BoundedMax.bind(BoundedMaxOptions {
+            max_bytes: NonZeroUsize::new(8).vortex_expect("non-zero"),
+        });
+        let mut acc = StatsAccumulator::new(&dtype, Some(std::slice::from_ref(&max)));
+        acc.push_chunk(
+            &utf8_chunk(&["short", "a value longer than the bound"]),
+            &mut ctx,
+        )?;
 
-        let aggregates = acc.aggregate_stats(|_| true, &mut ctx)?;
+        let aggregates = acc.aggregate_stats(|_| true)?;
         let [recorded] = aggregates.iter().collect::<Vec<_>>()[..] else {
             vortex_panic!("expected one recorded aggregate");
         };
-        assert_eq!(recorded.aggregate_fn().is::<Max>(), exact);
-        assert_eq!(recorded.aggregate_fn().is::<BoundedMax>(), !exact);
-        // The stored partial must rebuild the same value on read.
+        assert!(recorded.aggregate_fn().is::<BoundedMax>());
         let partial = recorded
             .partial()
             .vortex_expect("accumulated aggregates have a partial");
         let rebuilt = AggregateStat::try_from_partial(
             recorded.aggregate_fn().clone(),
             partial.clone(),
-            &DType::Utf8(Nullability::NonNullable),
+            &dtype,
         )?;
         assert_eq!(rebuilt.value(), recorded.value());
-        Ok(())
-    }
-
-    #[test]
-    fn all_null_bounded_max_records_no_value() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
-        let dtype = DType::Utf8(Nullability::Nullable);
-        let max = BoundedMax.bind(BoundedMaxOptions {
-            max_bytes: NonZeroUsize::new(8).vortex_expect("non-zero"),
-        });
-        let mut acc = StatsAccumulator::new(&dtype, Some(std::slice::from_ref(&max)));
-        acc.push_chunk(
-            &ConstantArray::new(Scalar::null(dtype), 3).into_array(),
-            &mut ctx,
-        )?;
-
-        assert!(
-            acc.aggregate_stats(|_| true, &mut ctx)?
-                .get(&max)
-                .is_absent()
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn exact_bounded_max_stays_bounded_when_max_is_not_allowed() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
-        let max_bytes = NonZeroUsize::new(8).vortex_expect("non-zero");
-        let mut acc = StatsAccumulator::new(
-            &DType::Utf8(Nullability::NonNullable),
-            Some(&[BoundedMax.bind(BoundedMaxOptions { max_bytes })]),
-        );
-        acc.push_chunk(&utf8_chunk(&["short"]), &mut ctx)?;
-
-        let aggregates = acc.aggregate_stats(|aggregate_fn| !aggregate_fn.is::<Max>(), &mut ctx)?;
-        assert!(
-            aggregates
-                .iter()
-                .all(|stat| stat.aggregate_fn().is::<BoundedMax>())
-        );
         Ok(())
     }
 
@@ -1378,7 +1263,7 @@ mod tests {
         }
 
         assert_eq!(
-            acc.aggregate_stats(|_| true, &mut ctx)?.get(&sum),
+            acc.aggregate_stats(|_| true)?.get(&sum),
             expected.map_or(Precision::Absent, |sum| Precision::exact(Scalar::from(sum)))
         );
         Ok(())
