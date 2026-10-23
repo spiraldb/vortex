@@ -36,6 +36,10 @@ impl_plain!(
 #[cfg(feature = "f16")]
 impl_plain!(half::f16, half::bf16);
 
+#[cfg(feature = "i256")]
+// SAFETY: i256 transparently wraps Arrow's pair of 128-bit integers, matching the CUDA layout.
+unsafe impl DeviceRepr for vortex_array::dtype::i256 {}
+
 // SAFETY: Arrays of device values are laid out contiguously.
 unsafe impl<T: DeviceRepr, const N: usize> DeviceRepr for [T; N] {}
 // SAFETY: Arrays of values valid as zeros are valid as zeros.

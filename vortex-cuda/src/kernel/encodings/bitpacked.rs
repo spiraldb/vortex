@@ -5,10 +5,6 @@ use std::fmt::Debug;
 use std::ops::Range;
 
 use async_trait::async_trait;
-use cudarc::driver::CudaFunction;
-use cudarc::driver::DeviceRepr;
-use cudarc::driver::LaunchConfig;
-use cudarc::driver::PushKernelArg;
 use tracing::instrument;
 use vortex::array::ArrayRef;
 use vortex::array::ArrayVTable;
@@ -33,6 +29,10 @@ use vortex::error::VortexResult;
 use vortex::error::vortex_bail;
 use vortex::error::vortex_ensure;
 use vortex::error::vortex_err;
+use vortex_cuda_driver::CudaFunction;
+use vortex_cuda_driver::DeviceRepr;
+use vortex_cuda_driver::LaunchConfig;
+use vortex_cuda_driver::PushKernelArg;
 
 use crate::CudaBufferExt;
 use crate::CudaDeviceBuffer;

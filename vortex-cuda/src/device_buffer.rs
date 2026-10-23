@@ -10,12 +10,6 @@ use std::hash::Hasher;
 use std::ops::Range;
 use std::sync::Arc;
 
-use cudarc::driver::CudaSlice;
-use cudarc::driver::CudaView;
-use cudarc::driver::CudaViewMut;
-use cudarc::driver::DevicePtr;
-use cudarc::driver::DeviceRepr;
-use cudarc::driver::sys;
 use futures::executor::block_on;
 use futures::future::BoxFuture;
 use vortex::array::buffer::BufferHandle;
@@ -28,6 +22,12 @@ use vortex::error::VortexResult;
 use vortex::error::vortex_ensure;
 use vortex::error::vortex_err;
 use vortex::error::vortex_panic;
+use vortex_cuda_driver::CudaSlice;
+use vortex_cuda_driver::CudaView;
+use vortex_cuda_driver::CudaViewMut;
+use vortex_cuda_driver::DevicePtr;
+use vortex_cuda_driver::DeviceRepr;
+use vortex_cuda_driver::sys;
 
 use crate::stream::await_stream_callback;
 
@@ -60,13 +60,13 @@ mod private {
     use std::fmt::Debug;
     use std::sync::Arc;
 
-    use cudarc::driver::CudaSlice;
-    use cudarc::driver::CudaStream;
-    use cudarc::driver::CudaView;
-    use cudarc::driver::CudaViewMut;
-    use cudarc::driver::DeviceRepr;
     use vortex::buffer::Alignment;
     use vortex::error::VortexExpect;
+    use vortex_cuda_driver::CudaSlice;
+    use vortex_cuda_driver::CudaStream;
+    use vortex_cuda_driver::CudaView;
+    use vortex_cuda_driver::CudaViewMut;
+    use vortex_cuda_driver::DeviceRepr;
 
     pub trait DeviceAllocation: Debug + Send + Sync + 'static {
         /// Get the minimum alignment of the allocation.
@@ -407,8 +407,8 @@ impl DeviceBuffer for CudaDeviceBuffer {
     ) -> VortexResult<BoxFuture<'static, VortexResult<ByteBuffer>>> {
         let stream = self.allocation.stream();
         let source = self.as_view::<u8>();
-        // Use cudarc's read guard so this allocation stream waits for writes submitted on any
-        // other managed stream before scheduling the device-to-host copy.
+        // Use the read guard so this allocation stream waits for writes submitted on any
+        // other stream before scheduling the device-to-host copy.
         let (src_ptr, record_read) = source.device_ptr(stream);
 
         let mut host_buffer: ByteBufferMut =
@@ -512,13 +512,13 @@ impl DeviceBuffer for CudaDeviceBuffer {
 
 #[cfg(test)]
 mod tests {
-    use cudarc::driver::CudaContext;
-    use cudarc::driver::PushKernelArg;
     use vortex::buffer::Buffer;
     use vortex::dtype::PType;
     use vortex::error::VortexResult;
     use vortex::error::vortex_bail;
     use vortex::session::VortexSession;
+    use vortex_cuda_driver::CudaContext;
+    use vortex_cuda_driver::PushKernelArg;
 
     use super::*;
     use crate::CudaSession;
