@@ -31,6 +31,7 @@ use vortex_error::vortex_err;
 use vortex_mask::Mask;
 use vortex_session::registry::CachedId;
 
+use crate::plan::physical::ChildRows;
 use crate::plan::physical::Eval;
 use crate::plan::physical::EvalPlan;
 use crate::plan::physical::Plan;
@@ -46,8 +47,6 @@ use crate::plan::physical::operators::empty_struct;
 use crate::plan::physical::optimizer::PlanParentReduceRule;
 use crate::plan::physical::pipeline::Chain;
 use crate::plan::physical::pipeline::Compiler;
-use crate::plan::physical::pipeline::Reach;
-use crate::segments::SegmentId;
 
 /// Assembles a struct from one child per field, plus an optional trailing validity child.
 #[derive(Clone, Debug)]
@@ -252,16 +251,8 @@ impl PlanVTable for Pack {
         Ok(Some(compiler.join(chains, source)))
     }
 
-    fn reach(
-        plan: &Plan<Self>,
-        rows: Range<u64>,
-        at: &Reach,
-        visit: &mut dyn FnMut(SegmentId, Range<u64>),
-    ) -> VortexResult<()> {
-        for child in plan.children().iter_refs() {
-            child?.reach(rows.clone(), at, visit)?;
-        }
-        Ok(())
+    fn child_rows(plan: &Plan<Self>, _index: usize) -> ChildRows {
+        ChildRows::Rows(0..plan.row_count())
     }
 }
 

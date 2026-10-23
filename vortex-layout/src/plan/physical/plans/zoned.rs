@@ -34,6 +34,7 @@ use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
 
 use crate::layouts::zoned::zone_map::ZoneMap;
+use crate::plan::physical::ChildRows;
 use crate::plan::physical::Eval;
 use crate::plan::physical::Plan;
 use crate::plan::physical::PlanChildren;
@@ -48,8 +49,6 @@ use crate::plan::physical::operators::WholeSource;
 use crate::plan::physical::optimizer::PlanParentReduceRule;
 use crate::plan::physical::pipeline::Chain;
 use crate::plan::physical::pipeline::Compiler;
-use crate::plan::physical::pipeline::Reach;
-use crate::segments::SegmentId;
 
 const DATA: usize = 0;
 const ZONES: usize = 1;
@@ -374,20 +373,16 @@ impl PlanVTable for Zoned {
         Ok(Some(compiler.join_with(vec![chain], |_| UNBOUNDED, source)))
     }
 
-    fn reach(
-        plan: &Plan<Self>,
-        rows: Range<u64>,
-        at: &Reach,
-        visit: &mut dyn FnMut(SegmentId, Range<u64>),
-    ) -> VortexResult<()> {
-        if !plan.is_pruning() {
-            return match plan.data_plan()? {
-                Some(data) => data.reach(rows, at, visit),
-                None => Ok(()),
-            };
+    fn child_rows(plan: &Plan<Self>, index: usize) -> ChildRows {
+        // A pruning plan has one child, its zone table, read whole for any rows.
+        if plan.is_pruning() {
+            return ChildRows::Whole;
         }
-        let zones = plan.zones_plan()?;
-        zones.reach(0..zones.row_count(), &at.fixed(&rows), visit)
+        if index == DATA {
+            ChildRows::Rows(0..plan.row_count())
+        } else {
+            ChildRows::Opaque
+        }
     }
 }
 

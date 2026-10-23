@@ -18,6 +18,7 @@ use vortex_error::VortexResult;
 use vortex_mask::Mask;
 use vortex_session::registry::CachedId;
 
+use crate::plan::physical::ChildRows;
 use crate::plan::physical::Eval;
 use crate::plan::physical::EvalPlan;
 use crate::plan::physical::Plan;
@@ -33,8 +34,6 @@ use crate::plan::physical::operators::TakeSource;
 use crate::plan::physical::optimizer::PlanParentReduceRule;
 use crate::plan::physical::pipeline::Chain;
 use crate::plan::physical::pipeline::Compiler;
-use crate::plan::physical::pipeline::Reach;
-use crate::segments::SegmentId;
 
 const CODES: usize = 0;
 const VALUES: usize = 1;
@@ -173,16 +172,12 @@ impl PlanVTable for Take {
         )))
     }
 
-    fn reach(
-        plan: &Plan<Self>,
-        rows: Range<u64>,
-        at: &Reach,
-        visit: &mut dyn FnMut(SegmentId, Range<u64>),
-    ) -> VortexResult<()> {
-        let values = plan.values()?;
-        let len = values.row_count();
-        values.reach(0..len, &at.fixed(&rows), visit)?;
-        plan.codes()?.reach(rows, at, visit)
+    fn child_rows(plan: &Plan<Self>, index: usize) -> ChildRows {
+        if index == VALUES {
+            ChildRows::Whole
+        } else {
+            ChildRows::Rows(0..plan.row_count())
+        }
     }
 }
 

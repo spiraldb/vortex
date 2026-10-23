@@ -22,14 +22,13 @@ use vortex_error::vortex_ensure;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
 
+use crate::plan::physical::ChildRows;
 use crate::plan::physical::PlanChildren;
 use crate::plan::physical::PlanId;
 use crate::plan::physical::PlanVTable;
 use crate::plan::physical::display::PlanTreeDisplay;
 use crate::plan::physical::pipeline::Chain;
 use crate::plan::physical::pipeline::Compiler;
-use crate::plan::physical::pipeline::Reach;
-use crate::segments::SegmentId;
 
 /// The combined allocation behind [`PlanRef`].
 ///
@@ -156,18 +155,10 @@ impl PlanRef {
         self.dyn_plan().dyn_compile(self, rows, mask, compiler)
     }
 
-    /// Visits the segments compiling this plan over `rows` could read. See
-    /// [`PlanVTable::reach`].
-    pub fn reach(
-        &self,
-        rows: Range<u64>,
-        at: &Reach,
-        visit: &mut dyn FnMut(SegmentId, Range<u64>),
-    ) -> VortexResult<()> {
-        if rows.start >= rows.end {
-            return Ok(());
-        }
-        self.dyn_plan().dyn_reach(self, rows, at, visit)
+    /// How the rows of the child at `index` relate to this plan's rows. See
+    /// [`PlanVTable::child_rows`].
+    pub fn child_rows(&self, index: usize) -> ChildRows {
+        self.dyn_plan().dyn_child_rows(self, index)
     }
 
     /// Displays this plan and its descendants with the default plan extractors.
@@ -413,14 +404,8 @@ pub trait DynPlan: 'static + Send + Sync + Debug {
         compiler: &mut Compiler<'_>,
     ) -> VortexResult<Option<Chain>>;
 
-    /// Visits this operator's segments. See [`PlanVTable::reach`].
-    fn dyn_reach(
-        &self,
-        plan: &PlanRef,
-        rows: Range<u64>,
-        at: &Reach,
-        visit: &mut dyn FnMut(SegmentId, Range<u64>),
-    ) -> VortexResult<()>;
+    /// Relates a child's rows to this operator's. See [`PlanVTable::child_rows`].
+    fn dyn_child_rows(&self, plan: &PlanRef, index: usize) -> ChildRows;
 }
 
 impl<V: PlanVTable> DynPlan for PlanData<V> {
@@ -463,13 +448,7 @@ impl<V: PlanVTable> DynPlan for PlanData<V> {
         V::compile(plan.as_::<V>(), rows, mask, compiler)
     }
 
-    fn dyn_reach(
-        &self,
-        plan: &PlanRef,
-        rows: Range<u64>,
-        at: &Reach,
-        visit: &mut dyn FnMut(SegmentId, Range<u64>),
-    ) -> VortexResult<()> {
-        V::reach(plan.as_::<V>(), rows, at, visit)
+    fn dyn_child_rows(&self, plan: &PlanRef, index: usize) -> ChildRows {
+        V::child_rows(plan.as_::<V>(), index)
     }
 }
