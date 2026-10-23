@@ -762,7 +762,6 @@ impl WriteSummary {
 mod tests {
     use rstest::rstest;
     use vortex_array::VTable;
-    use vortex_array::array_session;
     use vortex_array::arrays::Bool;
     use vortex_array::arrays::Primitive;
     use vortex_buffer::ByteBuffer;
@@ -774,6 +773,7 @@ mod tests {
     use vortex_edition::EditionMember;
     use vortex_edition::EditionSession;
     use vortex_edition::EditionSessionExt;
+    use vortex_session::VortexSession;
     use vortex_session::registry::CachedId;
 
     use super::*;
@@ -789,7 +789,7 @@ mod tests {
             added: &[EditionMember::array(&"vortex.primitive")],
         };
 
-        let session = array_session().with::<EditionSession>();
+        let session = VortexSession::empty().with::<EditionSession>();
         session.register_edition(&DECLARATION)?;
         session.enable_edition(EDITION)?;
 
@@ -815,7 +815,7 @@ mod tests {
             ],
         };
 
-        let session = array_session().with::<EditionSession>();
+        let session = VortexSession::empty().with::<EditionSession>();
         session.register_edition(&DECLARATION)?;
         session.enable_edition(EDITION)?;
 
@@ -828,7 +828,7 @@ mod tests {
 
     #[test]
     fn disabling_editions_allows_all_registered_array_ids() {
-        let session = array_session();
+        let session = VortexSession::empty();
         let registered_ids = session
             .arrays()
             .registry()
@@ -851,7 +851,7 @@ mod tests {
             added: &[EditionMember::array(&"vortex.primitive")],
         };
 
-        let session = array_session().with::<EditionSession>();
+        let session = VortexSession::empty().with::<EditionSession>();
         session.register_edition(&ARRAYS_ONLY)?;
         session.enable_edition(EDITION)?;
         assert!(edition_filter(&session, ComponentKind::Layout).is_empty());
@@ -895,7 +895,7 @@ mod tests {
             added: &[EditionMember::dtype(&"vortex.date")],
         };
 
-        let session = array_session().with::<EditionSession>();
+        let session = VortexSession::empty().with::<EditionSession>();
         session.register_edition(&DECLARATION)?;
         session.enable_edition(EDITION)?;
 
@@ -916,10 +916,12 @@ mod tests {
     }
 
     fn write_options_with_keys(keys: &[String]) -> VortexWriteOptions {
-        array_session().write_options().with_metadata_segments(
-            keys.iter()
-                .map(|key| (key.clone(), ByteBuffer::copy_from(b"value"))),
-        )
+        VortexSession::empty()
+            .write_options()
+            .with_metadata_segments(
+                keys.iter()
+                    .map(|key| (key.clone(), ByteBuffer::copy_from(b"value"))),
+            )
     }
 
     #[rstest]

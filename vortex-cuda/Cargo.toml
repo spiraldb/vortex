@@ -21,7 +21,6 @@ default = []
 _test-harness = []
 
 [dependencies]
-arc-swap = { workspace = true }
 arrow-schema = { workspace = true, features = ["ffi"] }
 async-trait = { workspace = true }
 cudarc = { workspace = true, features = ["f16"] }
@@ -30,6 +29,7 @@ itertools = { workspace = true }
 kanal = { workspace = true }
 num-traits = { workspace = true }
 object_store = { workspace = true, features = ["fs"] }
+once_cell = { workspace = true }
 parking_lot = { workspace = true }
 prost = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }

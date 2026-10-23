@@ -158,6 +158,25 @@ pub trait ScalarFnVTable: 'static + Sized + Clone + Send + Sync {
     /// [`Expression::try_new`]: crate::expr::Expression::try_new
     fn return_dtype(&self, options: &Self::Options, args: &[DType]) -> VortexResult<DType>;
 
+    /// Bind whatever in the options depends on the argument dtypes, such as the body of a
+    /// [`Lambda`](crate::expr::Lambda), returning the bound options.
+    ///
+    /// This is called whenever a bound node is built and whenever a
+    /// [`ScalarFnArray`] is built from its children, before
+    /// [`return_dtype`](Self::return_dtype), so [`execute`](Self::execute) finds the options bound.
+    /// A rebuilt node calls it again, possibly with other dtypes: options that are already bound
+    /// must be checked against these dtypes, returning `None` if they fit and an error if they
+    /// don't. Return `None` to keep the options as they are, which the default does.
+    #[doc(hidden)]
+    fn bind_options(
+        &self,
+        options: &Self::Options,
+        args: &[DType],
+    ) -> VortexResult<Option<Self::Options>> {
+        _ = (options, args);
+        Ok(None)
+    }
+
     /// Execute the expression over the input arguments.
     ///
     /// Implementations are encouraged to check their inputs for constant arrays to perform

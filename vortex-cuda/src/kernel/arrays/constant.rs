@@ -189,6 +189,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use rstest::rstest;
     use vortex::array::IntoArray;
     use vortex::array::arrays::ConstantArray;
@@ -197,11 +199,14 @@ mod tests {
     use vortex::error::VortexExpect;
     use vortex::error::VortexResult;
     use vortex::scalar::Scalar;
+    use vortex::session::VortexSession;
     use vortex_array::VortexSessionExecute;
 
     use super::*;
     use crate::CanonicalCudaExt;
     use crate::session::CudaSession;
+
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     fn make_constant_array<T: NativePType + Into<Scalar>>(value: T, len: usize) -> ConstantArray {
         ConstantArray::new(value, len)
@@ -241,7 +246,7 @@ mod tests {
         #[case] constant_array: ConstantArray,
         #[case] expected: PrimitiveArray,
     ) -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -260,7 +265,7 @@ mod tests {
 
     #[crate::test]
     async fn test_cuda_constant_empty_array() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -280,7 +285,7 @@ mod tests {
 
     #[crate::test]
     async fn test_cuda_constant_small_array() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 

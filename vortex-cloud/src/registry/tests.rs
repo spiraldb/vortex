@@ -8,6 +8,7 @@ use object_store::ObjectStore;
 use object_store::path::Path;
 use object_store::registry::ObjectStoreRegistry;
 use url::Url;
+use vortex_session::VortexSession;
 
 use super::Registry;
 
@@ -267,7 +268,7 @@ async fn test_resolved_key_reaches_the_object(
     use vortex_error::VortexError;
     use vortex_file::OpenOptionsSessionExt;
 
-    let session = vortex_array::array_session()
+    let session = VortexSession::empty()
         .with::<vortex_layout::session::LayoutSession>()
         .with::<vortex_io::session::RuntimeSession>();
 

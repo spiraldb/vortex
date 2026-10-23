@@ -29,6 +29,7 @@ members = [
     "vortex-duckdb",
     "vortex-cuda",
     "vortex-cuda/cub",
+    "vortex-cuda/driver",
     "vortex-cuda/ffi",
     "vortex-cuda/gpu-scan-cli",
     "vortex-cuda/macros",
@@ -348,6 +349,7 @@ vortex-zstd = { version = "0.1.0", path = "./encodings/zstd", default-features =
 vortex-bench = { path = "./vortex-bench", default-features = false }
 vortex-bench-support = { path = "./benchmarks/bench-support" }
 vortex-cuda = { path = "./vortex-cuda", default-features = false }
+vortex-cuda-driver = { path = "./vortex-cuda/driver" }
 vortex-cuda-macros = { path = "./vortex-cuda/macros" }
 vortex-duckdb = { path = "./vortex-duckdb", default-features = false }
 vortex-tui = { path = "./vortex-tui" }

@@ -220,22 +220,26 @@ async fn validate_decompress_results(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use vortex::array::IntoArray;
     use vortex::array::arrays::PrimitiveArray;
     use vortex::array::arrays::VarBinViewArray;
     use vortex::array::assert_arrays_eq;
     use vortex::error::VortexExpect;
     use vortex::error::VortexResult;
+    use vortex::session::VortexSession;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
 
     use super::*;
     use crate::CanonicalCudaExt;
     use crate::session::CudaSession;
 
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
+
     #[crate::test]
     async fn test_cuda_zstd_buffers_decompression_primitive() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -254,7 +258,7 @@ mod tests {
 
     #[crate::test]
     async fn test_cuda_zstd_buffers_decompression_varbinview() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 

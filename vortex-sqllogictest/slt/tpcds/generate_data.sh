@@ -7,7 +7,7 @@
 # one Parquet file per table, converts every table to Vortex,
 # and checks that the Parquet and Vortex tables hold identical data before the
 # Vortex files are used by the SLT suite. Set VORTEX_SLT_PROFILE to reuse an
-# existing cargo profile for the parity test (CI uses `ci`).
+# existing cargo profile for conversion and the parity test (CI uses `ci`).
 
 set -e -o pipefail
 
@@ -34,7 +34,7 @@ rm -f "${DATA_DIR}"/dbgen_version.parquet
 # can read them.
 for f in "${DATA_DIR}"/*.parquet; do
   echo "Converting $(basename "$f") to Vortex..."
-  (cd "${CRATE_DIR}" && cargo run --release --package vortex-tui --bin vx -- convert "$f")
+  (cd "${CRATE_DIR}" && cargo run --profile "${VORTEX_SLT_PROFILE:-release}" --package vortex-tui --bin vx -- convert "$f")
 done
 
 # The parity test reads every table in both formats through DuckDB and fails if

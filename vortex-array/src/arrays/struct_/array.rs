@@ -64,7 +64,8 @@ pub struct StructSlots {
 /// use vortex_array::arrays::{StructArray, BoolArray};
 /// use vortex_array::validity::Validity;
 /// use vortex_array::dtype::FieldNames;
-/// use vortex_array::{IntoArray, VortexSessionExecute, array_session};
+/// use vortex_array::{IntoArray, VortexSessionExecute};
+/// use vortex_session::VortexSession;
 /// use vortex_buffer::buffer;
 ///
 /// // Create struct with all non-null fields but struct-level nulls
@@ -78,7 +79,7 @@ pub struct StructSlots {
 ///     2,
 ///     Validity::Array(BoolArray::from_iter([true, false]).into_array()), // row 1 is null
 /// ).unwrap();
-/// let mut ctx = array_session().create_execution_ctx();
+/// let mut ctx = VortexSession::empty().create_execution_ctx();
 ///
 /// // Row 0 is valid - returns a struct scalar with field values
 /// let row0 = struct_array.execute_scalar(0, &mut ctx).unwrap();
@@ -99,7 +100,8 @@ pub struct StructSlots {
 /// use vortex_array::arrays::struct_::StructArrayExt;
 /// use vortex_array::validity::Validity;
 /// use vortex_array::dtype::FieldNames;
-/// use vortex_array::{IntoArray, VortexSessionExecute, array_session};
+/// use vortex_array::{IntoArray, VortexSessionExecute};
+/// use vortex_session::VortexSession;
 /// use vortex_buffer::buffer;
 ///
 /// // Create struct with duplicate "data" field names
@@ -115,7 +117,7 @@ pub struct StructSlots {
 ///
 /// // field_by_name returns the FIRST "data" field
 /// let first_data = struct_array.unmasked_field_by_name("data").unwrap();
-/// let mut ctx = array_session().create_execution_ctx();
+/// let mut ctx = VortexSession::empty().create_execution_ctx();
 /// assert_eq!(first_data.execute_scalar(0, &mut ctx).unwrap(), 1i32.into());
 /// ```
 ///

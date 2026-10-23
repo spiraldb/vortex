@@ -31,7 +31,7 @@ use crate::PcoArrayExt;
 use crate::PcoData;
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-    let session = vortex_array::array_session();
+    let session = VortexSession::empty();
     session.arrays().register(Pco);
     session
 });

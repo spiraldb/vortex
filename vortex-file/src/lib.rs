@@ -275,18 +275,18 @@ pub(crate) fn enable_all_registered_array_encodings(session: &VortexSession) {
 #[cfg(test)]
 mod default_encoding_tests {
     use vortex_array::VTable as _;
-    use vortex_array::array_session;
     use vortex_array::arrays::Filter;
     use vortex_array::optimizer::kernels::ArrayKernelsExt as _;
     use vortex_array::session::ArraySessionExt as _;
     use vortex_fsst::FSST;
     use vortex_onpair::OnPair;
+    use vortex_session::VortexSession;
 
     use crate::register_default_encodings;
 
     #[test]
     fn register_default_encodings_registers_external_execute_parent_kernels() {
-        let session = array_session();
+        let session = VortexSession::empty();
 
         assert!(!session.arrays().registry().contains_key(&FSST.id()));
         assert!(!session.kernels().has_execute_parent(Filter.id(), FSST.id()));

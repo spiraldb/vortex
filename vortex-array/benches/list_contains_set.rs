@@ -10,6 +10,7 @@
 #![expect(clippy::unwrap_used)]
 
 use std::sync::Arc;
+use std::sync::LazyLock;
 
 use divan::Bencher;
 use mimalloc::MiMalloc;
@@ -19,6 +20,7 @@ use rand::prelude::StdRng;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
+use vortex_array::aggregate_fn::session::AggregateFnSession;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::ListArray;
@@ -27,15 +29,34 @@ use vortex_array::arrays::VarBinViewArray;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
+use vortex_array::dtype::session::DTypeSession;
 use vortex_array::expr::list_contains;
 use vortex_array::expr::lit;
 use vortex_array::expr::root;
+use vortex_array::memory::MemorySession;
+use vortex_array::optimizer::kernels::KernelSession;
 use vortex_array::scalar::Scalar;
+use vortex_array::scalar_fn::session::ScalarFnSession;
+use vortex_array::session::ArraySession;
+use vortex_array::stats::session::StatsSession;
+use vortex_session::VortexSession;
+
+static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
+    VortexSession::empty()
+        .with::<ArraySession>()
+        .with::<KernelSession>()
+        .with::<DTypeSession>()
+        .with::<ScalarFnSession>()
+        .with::<AggregateFnSession>()
+        .with::<MemorySession>()
+        .with::<StatsSession>()
+});
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
+    LazyLock::force(&SESSION);
     divan::main();
 }
 
@@ -63,7 +84,6 @@ fn random_i64(len: usize) -> (Vec<i64>, Vec<i64>) {
 }
 
 fn bench_in_set(bencher: Bencher, set: Scalar, needles: ArrayRef) {
-    let session = vortex_array::array_session();
     // Optimized as a scan optimizes it, so the set arrives normalized.
     let expr = list_contains(lit(set), root())
         .bind(needles.dtype())
@@ -74,7 +94,7 @@ fn bench_in_set(bencher: Bencher, set: Scalar, needles: ArrayRef) {
         .with_inputs(|| {
             (
                 needles.clone().apply_bound(&expr).unwrap(),
-                session.create_execution_ctx(),
+                SESSION.create_execution_ctx(),
             )
         })
         .bench_values(|(array, mut ctx)| array.execute::<BoolArray>(&mut ctx).unwrap());

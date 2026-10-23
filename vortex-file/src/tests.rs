@@ -20,7 +20,6 @@ use tempfile::tempdir;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::ConstantArray;
@@ -119,7 +118,7 @@ use crate::WriteOptionsSessionExt;
 use crate::flatbuffers::footer as fb;
 use crate::footer::SegmentSpec;
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-    let session = array_session()
+    let session = VortexSession::empty()
         .with::<LayoutSession>()
         .with::<RuntimeSession>();
 
@@ -251,7 +250,7 @@ async fn decimal_writer_uses_default_or_session_restrictions(
     #[case] custom_strategy: bool,
     #[case] explicit_compressor: bool,
 ) -> VortexResult<()> {
-    let session = array_session()
+    let session = VortexSession::empty()
         .with::<EditionSession>()
         .with::<LayoutSession>()
         .with::<RuntimeSession>();
@@ -1849,7 +1848,7 @@ async fn test_buffered_bytes_are_writer_scoped() -> VortexResult<()> {
 #[tokio::test]
 async fn test_encoding_registered_after_write_options() -> VortexResult<()> {
     // A session that does not know about ZigZag yet.
-    let session = array_session()
+    let session = VortexSession::empty()
         .with::<EditionSession>()
         .with::<LayoutSession>()
         .with::<RuntimeSession>();
@@ -2034,6 +2033,33 @@ async fn nested_list_of_list_roundtrip() -> VortexResult<()> {
 
     let result = write_read_roundtrip(st.clone()).await?;
     assert_arrays_eq!(result, st, &mut SESSION.create_execution_ctx());
+    Ok(())
+}
+
+#[rstest]
+#[case::empty_lists(Validity::NonNullable)]
+#[case::nullable_empty_lists(Validity::AllValid)]
+#[case::null_lists(Validity::AllInvalid)]
+#[case::mixed_empty_and_null(
+    Validity::Array(BoolArray::from_iter([true, false]).into_array())
+)]
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn nested_empty_list_roundtrip(#[case] validity: Validity) -> VortexResult<()> {
+    let mut ctx = SESSION.create_execution_ctx();
+    let inner = ListArray::try_new(
+        PrimitiveArray::new::<i32>(buffer![], Validity::NonNullable).into_array(),
+        buffer![0u32].into_array(),
+        Validity::NonNullable,
+        &mut ctx,
+    )?
+    .into_array();
+    let outer = ListArray::try_new(inner, buffer![0u32, 0, 0].into_array(), validity, &mut ctx)?
+        .into_array();
+    let array = StructArray::from_fields(&[("nested", outer)])?.into_array();
+
+    let result = write_read_roundtrip(array.clone()).await?;
+    assert_arrays_eq!(result, array, &mut SESSION.create_execution_ctx());
     Ok(())
 }
 

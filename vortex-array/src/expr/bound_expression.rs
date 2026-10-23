@@ -17,6 +17,7 @@ use vortex_session::VortexSession;
 use crate::dtype::DType;
 use crate::expr::Expression;
 use crate::expr::display::DisplayTreeExpr;
+use crate::expr::expression::unbound_variable;
 use crate::expr::scope::Scope;
 use crate::expr::traversal::TraversalOrder;
 use crate::expr::traversal::pre_order_visit_down;
@@ -138,6 +139,7 @@ impl BoundExpression {
             .iter()
             .map(|child| child.dtype().clone())
             .collect_vec();
+        let scalar_fn = scalar_fn.bind_options(&arg_dtypes)?;
         let dtype = scalar_fn.return_dtype(&arg_dtypes)?;
 
         Ok(Self::Scalar {
@@ -310,6 +312,9 @@ impl Expression {
         if self.is_root() {
             return Ok(BoundExpression::new_root(scope.root().clone()));
         }
+        if let Expression::Variable(name) = self {
+            return Err(unbound_variable(name));
+        }
 
         let children: Vec<_> = self
             .children()
@@ -318,7 +323,7 @@ impl Expression {
             .try_collect()?;
         let scalar_fn = self
             .as_scalar()
-            .vortex_expect("root was handled above, so this is a scalar node");
+            .vortex_expect("leaves were handled above, so this is a scalar node");
         BoundExpression::try_new(scalar_fn.clone(), children)
     }
 }

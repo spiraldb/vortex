@@ -210,6 +210,19 @@ impl TableGenerator {
         }
     }
 
+    fn estimated_rows(self, scale_factor: f64) -> i64 {
+        match self {
+            Self::Nation => 25,
+            Self::Region => 5,
+            Self::Part => PartGenerator::calculate_row_count(scale_factor, 1, 1),
+            Self::Supplier => SupplierGenerator::calculate_row_count(scale_factor, 1, 1),
+            Self::Customer => CustomerGenerator::calculate_row_count(scale_factor, 1, 1),
+            Self::PartSupp => PartSuppGenerator::calculate_row_count(scale_factor, 1, 1),
+            Self::Orders => OrderGenerator::calculate_row_count(scale_factor, 1, 1),
+            Self::LineItem => 4 * OrderGenerator::calculate_row_count(scale_factor, 1, 1),
+        }
+    }
+
     /// Number of files to split the table into at `scale_factor`.
     fn num_parts(self, scale_factor: f64) -> Result<usize> {
         let Some(bytes_sf1) = self.compressed_bytes_sf1() else {
@@ -292,11 +305,12 @@ fn generate_table_file(
 }
 
 /// Number of parts generated in parallel for a table written as one Parquet file.
-fn table_num_parts(generator: TableGenerator) -> usize {
-    match generator {
-        TableGenerator::Nation | TableGenerator::Region => 1,
-        _ => get_available_parallelism().unwrap_or(1),
-    }
+fn table_num_parts(generator: TableGenerator, scale_factor: f64) -> usize {
+    let rows = usize::try_from(generator.estimated_rows(scale_factor)).unwrap_or(1);
+    get_available_parallelism()
+        .unwrap_or(1)
+        .min(rows.div_ceil(ROW_GROUP_SIZE))
+        .max(1)
 }
 
 /// Write one part of a table as Parquet.
@@ -319,7 +333,9 @@ async fn write_parquet(
         .await?;
     }
 
-    write_parquet_parts(generator, options, table_num_parts(generator), output).await
+    let scale_factor = options.scale_factor.parse::<f64>()?;
+    let gen_parts = table_num_parts(generator, scale_factor);
+    write_parquet_parts(generator, options, gen_parts, output).await
 }
 
 async fn write_parquet_parts(

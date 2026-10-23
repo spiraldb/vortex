@@ -237,15 +237,16 @@ fn fill_null_canonical(
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::sync::LazyLock;
 
     use vortex_buffer::buffer;
     use vortex_error::VortexExpect;
+    use vortex_session::VortexSession;
 
     use super::*;
     use crate::Canonical;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::Chunked;
     use crate::arrays::ChunkedArray;
     use crate::arrays::Constant;
@@ -276,6 +277,8 @@ mod tests {
     use crate::scalar::Scalar;
     use crate::scalar_fn::fns::binary::Binary;
     use crate::scalar_fn::fns::operators::Operator;
+
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     /// A fill of `40 + 2` that is not a [`ConstantArray`] until it executes.
     fn lazy_fill_42(len: usize) -> VortexResult<ArrayRef> {
@@ -309,7 +312,7 @@ mod tests {
 
     #[test]
     fn evaluate() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let test_array =
             PrimitiveArray::from_option_iter([Some(1i32), None, Some(3), None, Some(5)])
                 .into_array();
@@ -330,7 +333,7 @@ mod tests {
 
     #[test]
     fn evaluate_lazy_constant_fill() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let input = PrimitiveArray::from_option_iter([Some(1i32), None, Some(3)]).into_array();
         let fill = lazy_fill_42(input.len())?;
         assert!(fill.as_constant().is_none());
@@ -349,7 +352,7 @@ mod tests {
 
     #[test]
     fn evaluate_lazy_fill_preserves_chunked_input() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let input = ChunkedArray::try_new(
             vec![
                 PrimitiveArray::from_option_iter([Some(1i32), None]).into_array(),
@@ -375,7 +378,7 @@ mod tests {
 
     #[test]
     fn non_constant_fill_declines_and_errors() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let varying = PrimitiveArray::from_iter([1i32, 2, 3]).into_array();
 
         let constant_input = ConstantArray::new(Scalar::null_native::<i32>(), 3).into_array();
@@ -417,7 +420,7 @@ mod tests {
     /// canonical array rather than a constant. Stacked fills over an empty chunk must still run.
     #[test]
     fn repeated_fill_over_empty_chunk() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let input = ChunkedArray::try_new(
             vec![
                 PrimitiveArray::from_option_iter(Vec::<Option<u16>>::new()).into_array(),
@@ -437,7 +440,7 @@ mod tests {
 
     #[test]
     fn evaluate_struct_field() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let test_array = StructArray::from_fields(&[(
             "a",
             PrimitiveArray::from_option_iter([Some(1i32), None, Some(3)]).into_array(),
@@ -457,7 +460,7 @@ mod tests {
 
     #[test]
     fn evaluate_non_nullable_input() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let test_array = buffer![1i32, 2, 3].into_array();
         let expr = fill_null(root(), lit(0i32));
         let result = test_array.apply(&expr).unwrap();
@@ -468,7 +471,7 @@ mod tests {
     /// accepts, so adding a kernel without updating `supports_dtype` fails here.
     #[test]
     fn supports_dtype_matches_kernels() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let i32_dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
         let dtypes = [
             DType::Bool(Nullability::Nullable),

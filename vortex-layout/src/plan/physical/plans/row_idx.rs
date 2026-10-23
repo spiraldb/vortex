@@ -38,9 +38,7 @@ use crate::plan::physical::check_child_count;
 use crate::plan::physical::operators::OnceSource;
 use crate::plan::physical::pipeline::Chain;
 use crate::plan::physical::pipeline::Compiler;
-use crate::plan::physical::pipeline::Reach;
 use crate::plan::physical::plans::pack::rewrite_partition_root;
-use crate::segments::SegmentId;
 
 const ROW_IDX_PARTITION_NAME: &str = "row_idx";
 const CHILD_PARTITION_NAME: &str = "child";
@@ -114,16 +112,6 @@ impl PlanVTable for RowIdx {
             indices.filter(mask.clone())?
         };
         Ok(Some(Chain::new(OnceSource::new(indices))))
-    }
-
-    fn reach(
-        plan: &Plan<Self>,
-        rows: Range<u64>,
-        at: &Reach,
-        visit: &mut dyn FnMut(SegmentId, Range<u64>),
-    ) -> VortexResult<()> {
-        let _ = (plan, rows, at, visit);
-        Ok(())
     }
 }
 
