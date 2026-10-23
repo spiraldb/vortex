@@ -130,9 +130,8 @@ public final class VortexScanBuilder
     /**
      * Prunes the columns to only include those specified in the required schema.
      *
-     * <p>Spark may also prune fields inside struct, array and map columns, but the native scan only projects top-level
-     * columns and returns each one whole. Required columns therefore keep their table type, so that
-     * {@link VortexScan#readSchema()} describes the data the reader returns.
+     * <p>Required columns keep their table type because the native scan returns whole top-level columns, even when
+     * Spark prunes nested fields.
      *
      * @param requiredSchema the schema specifying which columns are required
      */
