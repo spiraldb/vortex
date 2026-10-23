@@ -16,7 +16,7 @@ mod selection;
 use std::sync::Arc;
 
 use vortex_buffer::Alignment;
-use vortex_io::request::IoTarget;
+use vortex_io::segments::SegmentSourceId;
 use vortex_mask::Mask;
 use vortex_scan::planning::planner::WorkScope;
 use vortex_session::VortexSession;
@@ -37,17 +37,6 @@ pub struct SegmentLocation {
     pub alignment: Alignment,
 }
 
-impl SegmentLocation {
-    /// The byte range a read of the segment asks for.
-    fn target(&self) -> IoTarget {
-        IoTarget::Range {
-            offset: self.offset,
-            len: self.length as usize,
-            alignment: self.alignment,
-        }
-    }
-}
-
 /// What every split of a scan shares: the projection plan and where its segments live.
 #[derive(Clone)]
 pub(super) struct ScanPlans {
@@ -55,6 +44,8 @@ pub(super) struct ScanPlans {
     pub(super) session: VortexSession,
     /// The location of every segment, indexed by segment id.
     pub(super) locations: Arc<[SegmentLocation]>,
+    /// The file's id in the segment IO service its splits read through.
+    pub(super) source: SegmentSourceId,
     /// The optimized projection plan, over the scan's root row domain.
     pub(super) projection: PlanRef,
     pub(super) filter: Option<Arc<FilterPlans>>,
