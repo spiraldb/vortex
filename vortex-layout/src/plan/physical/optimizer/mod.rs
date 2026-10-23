@@ -15,9 +15,6 @@ pub use rules::PlanReduceRuleAdapter;
 pub use rules::PlanRuleSet;
 use vortex_error::VortexResult;
 
-use crate::plan::physical::plans::EvalEvalRule;
-use crate::plan::physical::plans::EvalPackRule;
-
 use super::Concat;
 use super::Eval;
 use super::LegacyStats;
@@ -32,6 +29,8 @@ use super::plans::ExpressionTakeRule;
 use super::plans::ExpressionZonedRule;
 use super::plans::LegacyStatsRule;
 use super::plans::ZonedLegacyStatsRule;
+use crate::plan::physical::plans::EvalEvalRule;
+use crate::plan::physical::plans::EvalPackRule;
 
 static EVAL_IDENTITY_RULE: PlanReduceRuleAdapter<Eval, EvalIdentityRule> =
     PlanReduceRuleAdapter::new(EvalIdentityRule);
