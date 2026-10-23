@@ -69,6 +69,8 @@ vortex-array = { workspace = true, features = ["_test-harness"] }
 [features]
 default = ["files", "parquet-variant", "wasm-bindgen", "zstd"]
 files = ["dep:vortex-file"]
+# The Linux io_uring runtime.
+io-uring = ["vortex-io/io-uring"]
 memmap2 = ["vortex-buffer/memmap2"]
 object_store = ["vortex-file?/object_store", "vortex-io/object_store"]
 # The URL -> ObjectStore registry, plus the cloud backends it resolves URLs to.

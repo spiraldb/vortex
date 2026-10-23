@@ -560,6 +560,45 @@ impl SegmentSource for BufferSegmentSource {
     }
 }
 
+/// A [`SegmentSource`] that reads each segment with its own [`VortexReadAt::read_at`], started
+/// when the returned future is first polled, on the task that polls it.
+///
+/// It has no driver task and does not coalesce, so the reads of every split run on the split's own
+/// thread. This suits readers whose reads are cheap to issue, such as a local file read through
+/// io_uring, where a central driver would serialize thousands of reads per scan.
+pub(crate) struct DirectSegmentSource<R> {
+    reader: R,
+    segments: Arc<[SegmentSpec]>,
+}
+
+impl<R: VortexReadAt> DirectSegmentSource<R> {
+    pub(crate) fn new(segments: Arc<[SegmentSpec]>, reader: R) -> Self {
+        Self { reader, segments }
+    }
+}
+
+impl<R: VortexReadAt> SegmentSource for DirectSegmentSource<R> {
+    fn request(&self, id: SegmentId) -> SegmentFuture {
+        let Some(spec) = self.segments.get(*id as usize) else {
+            return future::ready(Err(vortex_err!("Missing segment: {}", id))).boxed();
+        };
+
+        let length = spec.length as usize;
+        let read = self.reader.read_at(spec.offset, length, spec.alignment);
+        async move {
+            let buffer = read.await?;
+            if buffer.len() != length {
+                return Err(vortex_err!(
+                    "DirectSegmentSource: expected segment {id} of length {length} but received {}",
+                    buffer.len()
+                ));
+            }
+            Ok(buffer)
+        }
+        .boxed()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::panic::AssertUnwindSafe;

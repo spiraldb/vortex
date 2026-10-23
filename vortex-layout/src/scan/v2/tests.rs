@@ -395,7 +395,7 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
         splits.len(),
         (STORED_CHUNKS * STORED_CHUNK_ROWS).div_ceil(MAX_ROWS_PER_CHUNK)
     );
-    for (index, split) in splits.into_iter().enumerate() {
+    for (index, split) in splits.into_iter().flatten().enumerate() {
         let rows = split.scope.rows.clone();
         let before = counted.reads.load(Ordering::Relaxed);
         let arrays = split.run(Arc::clone(&scan.io)).await?;
@@ -564,7 +564,58 @@ async fn selected_split_scope_is_bounded_before_projection() -> VortexResult<()>
     )?;
     let splits = scan.split_plans();
     assert_eq!(splits.len(), 1);
-    assert_eq!(splits[0].scope.rows, 7..2002);
+    assert_eq!(splits[0].len(), 1);
+    assert_eq!(splits[0][0].scope.rows, 7..2002);
+    Ok(())
+}
+
+/// A sparse selection splits at stored chunk boundaries, grouping stored chunks smaller than a
+/// work chunk.
+#[rstest]
+#[tokio::test]
+async fn sparse_selections_split_at_stored_chunks(
+    #[values(Strategy::Flat, Strategy::Table, Strategy::ZonedTable)] strategy: Strategy,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, strategy.get().as_ref()).await?;
+    let scan = PreparedScan::try_new(
+        builder(&session, &segments, &layout)?
+            .with_row_range(500..3_500)
+            .with_row_indices(StrictSortedBuffer::try_new(Buffer::from(vec![
+                600u64, 1_200, 3_400,
+            ]))?),
+    )?;
+    // Every stored chunk is smaller than a work chunk, so they group into one split.
+    assert_eq!(scan.splits, vec![500..3_500]);
+    Ok(())
+}
+
+#[rstest]
+#[case::inside(&[0, 10, 20, 30], 5..25, 1, vec![5..10, 10..20, 20..25])]
+#[case::aligned(&[0, 10, 20], 0..20, 1, vec![0..10, 10..20])]
+#[case::empty(&[0, 10], 4..4, 1, vec![])]
+#[case::small_chunks_grouped(&[0, 4, 8, 12, 16, 20], 0..20, 8, vec![0..8, 8..16, 16..20])]
+#[case::large_chunks_alone(&[0, 30, 40, 70], 0..70, 8, vec![0..30, 30..40, 40..70])]
+fn boundary_chunks_clip_to_the_rows(
+    #[case] boundaries: &[u64],
+    #[case] rows: Range<u64>,
+    #[case] min_rows: u64,
+    #[case] expected: Vec<Range<u64>>,
+) {
+    assert_eq!(super::boundary_chunks(rows, boundaries, min_rows), expected);
+}
+
+/// Chunks nested below fields and transparent children count, at their absolute rows.
+#[tokio::test]
+async fn layout_boundaries_cover_every_stored_chunk() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    for strategy in [Strategy::Flat, Strategy::Table, Strategy::ZonedTable] {
+        let (_, layout) = write(&session, strategy.get().as_ref()).await?;
+        assert_eq!(
+            super::layout_boundaries(&layout)?,
+            (0..=CHUNKS).map(|chunk| (chunk * CHUNK_ROWS) as u64).collect::<Vec<_>>()
+        );
+    }
     Ok(())
 }
 
@@ -601,5 +652,108 @@ async fn repeated_projections_reuse_their_values() -> VortexResult<()> {
         reads.push(counted.reads.load(Ordering::Relaxed) - before);
     }
     assert_eq!(reads, vec![4, 1, 1]);
+    Ok(())
+}
+
+const WIDE_COLUMNS: usize = 4 * super::MIN_FIELDS_PER_GROUP;
+
+/// Writes `chunks` chunks of a table with `WIDE_COLUMNS` integer columns of `rows` rows each.
+async fn write_wide(
+    session: &VortexSession,
+    chunks: usize,
+    rows: usize,
+) -> VortexResult<(Arc<dyn SegmentSource>, LayoutRef)> {
+    let chunk = |start: usize| {
+        StructArray::from_fields(
+            &(0..WIDE_COLUMNS)
+                .map(|column| {
+                    let values = (start..start + rows)
+                        .map(|row| i32::try_from(row * WIDE_COLUMNS + column).unwrap_or(0));
+                    (format!("c{column}"), Buffer::from_iter(values).into_array())
+                })
+                .collect::<Vec<_>>(),
+        )
+        .map(IntoArray::into_array)
+    };
+    let segments = Arc::new(TestSegments::default());
+    let (mut sequence_id, eof) = SequenceId::root().split();
+    let arrays = (0..chunks)
+        .map(|index| Ok((sequence_id.advance(), chunk(index * rows)?)))
+        .collect::<Vec<_>>();
+    let layout = table()
+        .write_stream(
+            ArrayContext::empty().into(),
+            Arc::<TestSegments>::clone(&segments),
+            SequentialStreamAdapter::new(chunk(0)?.dtype().clone(), stream::iter(arrays))
+                .sendable(),
+            eof,
+            session,
+        )
+        .await?;
+    Ok((segments, layout))
+}
+
+#[test]
+fn column_groups_fill_the_threads_only_for_few_wide_row_chunks() {
+    // One row chunk on four threads: eight tasks, as far as the fields allow.
+    assert_eq!(super::column_group_count(10_000, 1, 4, 16), 8);
+    assert_eq!(super::column_group_count(64, 1, 4, 16), 4);
+    assert_eq!(super::column_group_count(64, 3, 4, 16), 3);
+    // Sparse selections accept narrower groups.
+    assert_eq!(super::column_group_count(19, 3, 4, 4), 3);
+    // Enough row chunks, or too few fields, leave the columns together.
+    assert_eq!(super::column_group_count(10_000, 8, 4, 16), 1);
+    assert_eq!(super::column_group_count(31, 1, 4, 16), 1);
+    assert_eq!(super::column_group_count(10_000, 0, 4, 16), 1);
+}
+
+#[rstest]
+#[case::whole(None, None)]
+#[case::row_range(Some(250..1_700), None)]
+#[case::row_indices(None, Some(&[0, 1, 499, 500, 1999][..]))]
+#[tokio::test]
+async fn wide_scans_split_by_column_match_v1(
+    #[case] row_range: Option<Range<u64>>,
+    #[case] rows: Option<&'static [u64]>,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write_wide(&session, 4, 500).await?;
+    let make = || {
+        let mut builder = builder(&session, &segments, &layout)?;
+        if let Some(row_range) = row_range.clone() {
+            builder = builder.with_row_range(row_range);
+        }
+        if let Some(rows) = rows {
+            builder =
+                builder.with_row_indices(StrictSortedBuffer::try_new(Buffer::copy_from(rows))?);
+        }
+        Ok(builder)
+    };
+    assert!(!PreparedScan::try_new(make()?)?.column_groups.is_empty());
+    assert_same_as_v1(&session, make).await
+}
+
+#[tokio::test]
+async fn wide_record_batches_zip_column_groups() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write_wide(&session, 2, 300).await?;
+    let builder = builder(&session, &segments, &layout)?;
+    let schema = Arc::new(session.arrow().to_arrow_schema(builder.dtype())?);
+    let batches: Vec<_> = builder
+        .into_record_batch_stream(Arc::clone(&schema))?
+        .try_collect()
+        .await?;
+    assert_eq!(batches.len(), 1);
+    assert_eq!(batches[0].schema(), schema);
+    assert_eq!(batches[0].num_rows(), 600);
+    for (column, array) in batches[0].columns().iter().enumerate() {
+        let values = array.as_primitive::<Int32Type>();
+        for row in [0, 299, 300, 599] {
+            assert_eq!(
+                values.value(row),
+                i32::try_from(row * WIDE_COLUMNS + column).unwrap_or(0)
+            );
+        }
+    }
     Ok(())
 }

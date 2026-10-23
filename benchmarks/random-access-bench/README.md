@@ -30,6 +30,34 @@ taken from that fragment directly, opened once like Vortex reuses an open `Vorte
 Parquet reuses its parsed footer. CI drives the full matrix via
 [`scripts/random-access-split.py`](../../scripts/random-access-split.py).
 
+## Runtime
+
+Vortex takes run as tasks on the runtime installed on the Vortex session, chosen by `--runtime`:
+`io-uring` (the default on Linux) is Vortex's own thread-per-core runtime, with one worker pinned
+to each core, each owning an io_uring it parks on when idle; `tokio` uses the benchmark's Tokio
+runtime, which every other format runs on. If the kernel refuses to create a ring, the run falls
+back to Tokio with a warning.
+
+`--vortex-reader` picks how Vortex reads local files:
+
+- `io-uring` (the default) has the io_uring runtime's workers perform reads on their own rings.
+  Each segment is read on its own by the task that needs it, without a shared driver task or
+  coalescing. Reads of 64 KiB or more are spread over every worker's ring, so each core copies
+  its share, and while fewer reads are in flight than there are rings, reads of 256 KiB or more
+  are also divided into up to one part per 256 KiB, which several rings copy at once. Read buffers are pooled per worker
+  and reused. Without the io_uring runtime this falls back to `blocking`.
+- `blocking` runs positional reads on the runtime's blocking pool, the reader `open_path` uses.
+- `mmap` memory-maps the file, as the Vortex Python bindings open local files. Segments are slices
+  of the page cache, so nothing is copied and no read is waited on.
+
+A take selects a few rows, so the scan splits it at the file's stored chunk boundaries: each
+stored chunk it touches is read and decoded by one task, rather than by every fixed-size row
+chunk that overlaps it.
+
+The files sit in the page cache after the warm-up, so a take mostly copies segment bytes out of
+the page cache. Ring reads do that on every core without a thread hop per read, which makes them
+faster than blocking reads; mapping the file avoids the copy altogether.
+
 ## Running locally
 
 ```bash

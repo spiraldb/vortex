@@ -332,6 +332,56 @@ impl PackPlan {
     }
 }
 
+impl PackPlan {
+    /// A non-nullable struct of the fields in `range`, assembled from this plan's own children.
+    ///
+    /// The new plan reads its children through this one's slots, so a child is lowered at most
+    /// once however many such plans share it, and none is lowered before it is first needed.
+    pub(crate) fn project_range(&self, range: Range<usize>) -> VortexResult<PlanRef> {
+        vortex_ensure!(
+            !self.dtype().is_nullable(),
+            "Cannot project fields out of a nullable Pack"
+        );
+        vortex_ensure!(
+            range.start <= range.end && range.end <= self.nfields(),
+            "Field range {range:?} is out of bounds for a Pack of {} fields",
+            self.nfields()
+        );
+        let fields = self.fields();
+        let names = range
+            .clone()
+            .map(|index| field_name(fields, index))
+            .collect::<VortexResult<FieldNames>>()?;
+        let dtypes = range
+            .clone()
+            .map(|index| {
+                fields
+                    .field_by_index(index)
+                    .ok_or_else(|| vortex_err!("Struct field {index} has no dtype"))
+            })
+            .collect::<VortexResult<Vec<_>>>()?;
+        let parent = self.children().clone();
+        let start = range.start;
+        let children = PlanChildren::lazy(range.len(), move |index| {
+            parent
+                .get(start + index)?
+                .ok_or_else(|| vortex_err!("Struct field {} has no plan", start + index))
+        });
+        // SAFETY: every child is this plan's own child for the same field, which it validated has
+        // the field's dtype and this plan's row count, and a non-nullable struct has no validity
+        // child.
+        Ok(unsafe {
+            Self::from_children_unchecked(
+                StructFields::new(names, dtypes),
+                Nullability::NonNullable,
+                self.row_count(),
+                children,
+            )
+        }
+        .into_plan())
+    }
+}
+
 /// Pushes an expression into the referenced fields of a [`Pack`], pruning the rest.
 #[derive(Debug)]
 pub(crate) struct ExpressionPackRule;

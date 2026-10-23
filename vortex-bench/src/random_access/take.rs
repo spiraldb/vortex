@@ -35,6 +35,7 @@ use vortex::array::stream::ArrayStreamExt;
 use vortex::buffer::Buffer;
 use vortex::file::OpenOptionsSessionExt;
 use vortex::file::VortexFile;
+use vortex::io::session::RuntimeSessionExt;
 use vortex::layout::scan::v2::ScanBuilder;
 use vortex::scan::strict_sorted_buffer::StrictSortedBuffer;
 
@@ -44,6 +45,7 @@ use crate::random_access::ARROW_ROW_OFFSETS_METADATA_KEY;
 use crate::random_access::RandomAccessor;
 use crate::random_access::RandomAccessorRet;
 use crate::random_access::RemoteDataDir;
+use crate::runtime;
 
 /// Random accessor for uncompressed Arrow IPC files.
 pub struct ArrowIpcRandomAccessor {
@@ -146,11 +148,8 @@ impl VortexRandomAccessor {
         name: impl Into<String>,
         format: Format,
     ) -> anyhow::Result<Self> {
-        let file = SESSION
-            .open_options()
-            .with_layout_reader_cache()
-            .open_path(path.as_ref())
-            .await?;
+        let file =
+            runtime::open_file(path, SESSION.open_options().with_layout_reader_cache()).await?;
         Ok(Self {
             name: name.into(),
             format,
@@ -190,17 +189,25 @@ impl RandomAccessor for VortexRandomAccessor {
 
     async fn take(&self, indices: &[u64]) -> anyhow::Result<RandomAccessorRet> {
         let indices = StrictSortedBuffer::try_new(Buffer::from(indices.to_vec()))?;
-        let stream = ScanBuilder::new(SESSION.clone(), self.file.scan_file())
-            .with_row_indices(indices)
-            .into_stream()?;
-        let array = ArrayStreamAdapter::new(self.file.dtype().clone(), stream)
-            .read_all()
-            .await?;
+        let file = self.file.clone();
+        // Run the whole take on the session's runtime, so the scan, its reads and the
+        // canonicalization stay on that runtime's workers.
+        let canonical = SESSION
+            .handle()
+            .spawn(async move {
+                let stream = ScanBuilder::new(SESSION.clone(), file.scan_file())
+                    .with_row_indices(indices)
+                    .into_stream()?;
+                let array = ArrayStreamAdapter::new(file.dtype().clone(), stream)
+                    .read_all()
+                    .await?;
 
-        // Keep the historical benchmark contract: canonicalize the outer array, leaving nested
-        // values lazy.
-        let mut ctx = SESSION.create_execution_ctx();
-        let canonical = array.execute::<Canonical>(&mut ctx)?.into_array();
+                // Keep the historical benchmark contract: canonicalize the outer array, leaving
+                // nested values lazy.
+                let mut ctx = SESSION.create_execution_ctx();
+                anyhow::Ok(array.execute::<Canonical>(&mut ctx)?.into_array())
+            })
+            .await?;
         Ok(RandomAccessorRet::ArrayRef(canonical))
     }
 }

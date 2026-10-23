@@ -17,6 +17,7 @@ use compress_bench::gpu::compressor as gpu_compressor;
 use compress_bench::parquet::ParquetCompressor;
 use compress_bench::parquet::arrow_uncompressed_size;
 use compress_bench::vortex::VortexCompressor;
+use compress_bench::vortex::VortexSource;
 use futures::FutureExt;
 use indicatif::ProgressBar;
 use itertools::Itertools;
@@ -52,6 +53,8 @@ use vortex_bench::public_bi::PBIDataset::CMSprovider;
 use vortex_bench::public_bi::PBIDataset::Euro2016;
 use vortex_bench::public_bi::PBIDataset::Food;
 use vortex_bench::public_bi::PBIDataset::HashTags;
+use vortex_bench::runtime::VortexReader;
+use vortex_bench::runtime::VortexRuntime;
 use vortex_bench::setup_logging_and_tracing_with_format;
 use vortex_bench::v3;
 
@@ -112,6 +115,19 @@ struct Args {
     /// get the same CPU budget. Defaults to one per available core.
     #[arg(long)]
     threads: Option<usize>,
+    /// Runtime that drives Vortex reads and writes.
+    ///
+    /// `io-uring` runs Vortex work on its own pool of `--threads` workers, each driving an
+    /// io_uring; Parquet and Arrow still run on the Tokio pool. Falls back to Tokio when the
+    /// kernel refuses to create a ring.
+    #[arg(long, value_enum, default_value_t)]
+    runtime: VortexRuntime,
+    /// Where Vortex decompression reads the compressed file from.
+    #[arg(long, value_enum, default_value_t)]
+    vortex_source: VortexSource,
+    /// How Vortex reads its file when `--vortex-source file` is set.
+    #[arg(long, value_enum, default_value_t)]
+    vortex_reader: VortexReader,
     #[arg(short, long, default_value_t, value_enum)]
     display_format: DisplayFormat,
     #[arg(short, long)]
@@ -142,10 +158,11 @@ fn main() -> anyhow::Result<()> {
         runtime.worker_threads(threads);
     }
     let runtime = runtime.build()?;
-    tracing::info!(
-        "Running with {} Tokio worker threads",
-        runtime.metrics().num_workers()
-    );
+    let workers = runtime.metrics().num_workers();
+    tracing::info!("Running with {workers} Tokio worker threads");
+
+    let _vortex_runtime = vortex_bench::runtime::install(args.runtime, workers);
+    vortex_bench::runtime::set_reader(args.vortex_reader);
     runtime.block_on(run(args))
 }
 
@@ -161,7 +178,9 @@ async fn run(args: Args) -> anyhow::Result<()> {
             direct_io: args.gpu_direct_io,
         })
     } else {
-        BenchMode::Cpu
+        BenchMode::Cpu(CpuOptions {
+            vortex_source: args.vortex_source,
+        })
     };
 
     let (formats, ops) = if mode.is_gpu() {
@@ -196,9 +215,16 @@ async fn run(args: Args) -> anyhow::Result<()> {
 #[derive(Clone, Copy, Debug)]
 enum BenchMode {
     /// The ordinary host suite.
-    Cpu,
+    Cpu(CpuOptions),
     /// Device decompression, configured by the `--gpu-*` flags.
     Gpu(GpuOptions),
+}
+
+/// How the host suite runs Vortex.
+#[derive(Clone, Copy, Debug)]
+struct CpuOptions {
+    /// Where decompression reads the Vortex file from.
+    vortex_source: VortexSource,
 }
 
 impl BenchMode {
@@ -210,13 +236,14 @@ impl BenchMode {
 
 /// Get a compressor for the given format.
 fn get_compressor(format: Format, mode: BenchMode) -> anyhow::Result<Box<dyn Compressor>> {
-    if let BenchMode::Gpu(options) = mode {
-        return gpu_compressor(format, options);
-    }
+    let options = match mode {
+        BenchMode::Gpu(options) => return gpu_compressor(format, options),
+        BenchMode::Cpu(options) => options,
+    };
 
     Ok(match format {
         Format::ArrowIpc => Box::new(ArrowIpcCompressor),
-        Format::OnDiskVortex => Box::new(VortexCompressor),
+        Format::OnDiskVortex => Box::new(VortexCompressor::new(options.vortex_source)),
         Format::Parquet => Box::new(ParquetCompressor::new()),
         #[cfg(feature = "lance")]
         Format::Lance => Box::new(LanceCompressor),
@@ -558,7 +585,7 @@ async fn run_benchmark_for_dataset(
         BenchMode::Gpu(options) => {
             push_gpu_ratio(&measurements_map, options, bench_name, &mut ratios)
         }
-        BenchMode::Cpu => calculate_ratios(
+        BenchMode::Cpu(_) => calculate_ratios(
             &measurements_map,
             &compressed_sizes,
             bench_name,

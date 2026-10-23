@@ -36,6 +36,8 @@ struct Inner {
     /// them, so a projection must reuse its plan for its values to be found again.
     projections: Mutex<FxHashMap<ExactBoundExpr, PlanRef>>,
     ranges: Mutex<Option<SegmentRanges>>,
+    /// The rows at which the stored layout starts a new chunk, ascending.
+    boundaries: Mutex<Option<Arc<[u64]>>>,
     values: ValueCache,
 }
 
@@ -78,6 +80,16 @@ impl ScanCache {
     /// Keeps `ranges`, returning the index already kept if another scan got there first.
     pub(super) fn insert_ranges(&self, ranges: SegmentRanges) -> SegmentRanges {
         Arc::clone(self.0.ranges.lock().get_or_insert(ranges))
+    }
+
+    /// The chunk boundaries of the stored layout an earlier scan kept.
+    pub(super) fn boundaries(&self) -> Option<Arc<[u64]>> {
+        self.0.boundaries.lock().clone()
+    }
+
+    /// Keeps `boundaries`, returning the boundaries already kept if another scan got there first.
+    pub(super) fn insert_boundaries(&self, boundaries: Arc<[u64]>) -> Arc<[u64]> {
+        Arc::clone(self.0.boundaries.lock().get_or_insert(boundaries))
     }
 
     pub(super) fn values(&self) -> ValueCache {
