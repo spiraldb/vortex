@@ -5,8 +5,9 @@
 //!
 //! A V2 scan lowers the file's layout once into a physical plan and runs every split of it
 //! through the planning protocol: the [`Run`](vortex_scan::planning::driver::Run) driver advances
-//! the split's planners and morsels, and every segment read is a protocol request served from the
-//! file's [`SegmentSource`]. The layout reader is never asked to evaluate anything.
+//! the split's planners and morsels, and every segment read is a request to the segment IO service
+//! the file is registered with, through a session per split. The layout reader is never asked to
+//! evaluate anything.
 //!
 //! Import this module's [`ScanBuilder`] to select V2 explicitly. It accepts a [`ScanFile`]
 //! directly and supports projection, filters, row ranges, and selections. Unsupported layouts return an
@@ -19,7 +20,6 @@
 //! values with every other scan of that file, like a cached layout reader does for V1 scans.
 
 mod cache;
-mod io;
 mod split;
 #[cfg(test)]
 mod tests;
@@ -43,7 +43,8 @@ use vortex_array::dtype::DType;
 use vortex_array::expr::BoundExpression;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
-use vortex_io::request::IoService;
+use vortex_io::segments::RegisteredSource;
+use vortex_io::segments::SegmentIoService;
 use vortex_io::session::RuntimeSessionExt;
 use vortex_scan::planning::planner::WorkScope;
 use vortex_scan::selection::Selection;
@@ -61,10 +62,7 @@ use crate::scan::execution::FilterPlans;
 use crate::scan::execution::ScanPlans;
 pub use crate::scan::execution::SegmentLocation;
 use crate::scan::execution::plan_selection;
-use crate::scan::v2::io::SegmentScanIo;
-use crate::scan::v2::io::segment_ranges;
 use crate::scan::v2::split::SplitPlan;
-use crate::segments::SegmentSource;
 
 const ROW_BLOCK_SIZE: usize = 8192;
 const MAX_ROWS_PER_CHUNK: usize = 8 * ROW_BLOCK_SIZE;
@@ -122,8 +120,9 @@ pub struct ScanFile {
     pub layout: LayoutRef,
     /// The location of every segment, indexed by segment id.
     pub locations: Arc<[SegmentLocation]>,
-    /// Fetches segment bytes by id.
-    pub segments: Arc<dyn SegmentSource>,
+    /// The file's registration with the segment IO service that serves its reads. The scan keeps
+    /// it alive while it runs.
+    pub segment_io: RegisteredSource,
     /// State shared by every scan of this file, or `None` to rebuild it for each scan.
     pub cache: Option<ScanCache>,
 }
@@ -271,8 +270,10 @@ impl<A: 'static + Send> ScanBuilder<A> {
 struct PreparedScan<A: 'static + Send> {
     session: VortexSession,
     plans: ScanPlans,
-    /// Serves the splits' reads.
-    io: Arc<dyn IoService>,
+    /// Serves the splits' reads, each through a session of its own.
+    io: Arc<dyn SegmentIoService>,
+    /// Keeps the file registered while splits read it.
+    registration: RegisteredSource,
     /// The scan's splits, over the root row domain, in row order.
     splits: Vec<Range<u64>>,
     selection: Selection,
@@ -319,22 +320,19 @@ impl<A: 'static + Send> PreparedScan<A> {
             MAX_ROWS_PER_CHUNK
         };
         let splits = row_chunks(builder.row_range.unwrap_or(0..row_count), chunk_rows);
-        let ranges = match cache.ranges() {
-            Some(ranges) => ranges,
-            None => cache.insert_ranges(segment_ranges(&file.locations)),
-        };
-        let io = Arc::new(SegmentScanIo::new(file.segments, ranges));
         Ok(Self {
             session: builder.session.clone(),
             plans: ScanPlans {
                 session: builder.session,
                 locations: file.locations,
+                source: file.segment_io.id(),
                 projection,
                 filter,
                 row_offset: builder.row_offset,
                 values: cache.values(),
             },
-            io,
+            io: Arc::clone(file.segment_io.service()),
+            registration: file.segment_io,
             splits,
             selection: builder.selection,
             map_fn: builder.map_fn,
@@ -370,6 +368,7 @@ impl<A: 'static + Send> PreparedScan<A> {
         let handle = self.session.handle();
         let split_plans = self.split_plans();
         let io = self.io;
+        let registration = self.registration;
         let map_fn = self.map_fn;
         if !self.ordered
             && split_plans.iter().any(|split| {
@@ -378,8 +377,12 @@ impl<A: 'static + Send> PreparedScan<A> {
         {
             let streams = stream::iter(split_plans).map(move |split| {
                 let (send, recv) = mpsc::channel(1);
-                let task =
-                    handle.spawn(split.run_unordered(Arc::clone(&io), Arc::clone(&map_fn), send));
+                let registration = registration.clone();
+                let run = split.run_unordered(Arc::clone(&io), Arc::clone(&map_fn), send);
+                let task = handle.spawn(async move {
+                    let _registration = registration;
+                    run.await
+                });
                 let errors = stream::once(task)
                     .filter_map(|result| std::future::ready(result.err().map(Err)));
                 stream::select(recv, errors)
@@ -389,8 +392,10 @@ impl<A: 'static + Send> PreparedScan<A> {
         // Spawned as the buffer pulls them, so at most `concurrency` splits read at once.
         let tasks = stream::iter(split_plans).map(move |split| {
             let io = Arc::clone(&io);
+            let registration = registration.clone();
             let map_fn = Arc::clone(&map_fn);
             handle.spawn(async move {
+                let _registration = registration;
                 split
                     .run(io)
                     .await?

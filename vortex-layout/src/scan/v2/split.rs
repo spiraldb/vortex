@@ -8,7 +8,7 @@ use futures::SinkExt;
 use futures::channel::mpsc;
 use vortex_array::ArrayRef;
 use vortex_error::VortexResult;
-use vortex_io::request::IoService;
+use vortex_io::segments::SegmentIoService;
 use vortex_scan::planning::driver::Progress;
 use vortex_scan::planning::driver::Run;
 use vortex_scan::planning::planner::Planner;
@@ -30,7 +30,7 @@ impl SplitPlan {
     /// consumer. Unordered scans do not need to retain the whole split to sort its output.
     pub(super) async fn run_unordered<A: Send + 'static>(
         self,
-        io: Arc<dyn IoService>,
+        io: Arc<dyn SegmentIoService>,
         map: Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>,
         mut send: mpsc::Sender<VortexResult<A>>,
     ) -> VortexResult<()> {
@@ -56,7 +56,7 @@ impl SplitPlan {
     ///
     /// The run advances inside this future, on whichever thread polls it, and the future awaits
     /// its reads between steps. Nothing is handed to another thread.
-    pub(super) async fn run(self, io: Arc<dyn IoService>) -> VortexResult<Vec<ArrayRef>> {
+    pub(super) async fn run(self, io: Arc<dyn SegmentIoService>) -> VortexResult<Vec<ArrayRef>> {
         let mut run = Run::new();
         run.admit(self.root, self.scope, io.session());
         let mut batches = Vec::new();
