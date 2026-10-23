@@ -72,7 +72,10 @@ impl PrunePlanner {
             .iter()
             .flat_map(|filter| filter.pruning().cloned())
             .collect();
-        let ahead = row_chunks(rows.clone(), scan.chunk_rows);
+        let ahead = row_chunks(rows.clone(), scan.chunk_rows)
+            .into_iter()
+            .take(scan.chunks_read_ahead)
+            .collect();
         Self {
             scan,
             rows,

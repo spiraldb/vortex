@@ -101,6 +101,7 @@ pub struct ScanBuilder {
     selection: Selection,
     row_offset: u64,
     metrics: Option<(Arc<dyn MetricsRegistry>, Vec<Label>)>,
+    chunks_read_ahead: usize,
 }
 
 impl ScanBuilder {
@@ -115,7 +116,18 @@ impl ScanBuilder {
             selection: Selection::default(),
             row_offset: 0,
             metrics: None,
+            chunks_read_ahead: usize::MAX,
         }
+    }
+
+    /// Starts the reads of the first `chunks` chunks of the scanned rows while the zone maps
+    /// are read; the later chunks read as they start. Every chunk by default, which suits a
+    /// local file. A few suit a store that serves at limited bandwidth in the order asked, so
+    /// an engine's partitions started together each get their first chunks before any gets
+    /// its last, and all of them progress.
+    pub fn with_chunks_read_ahead(mut self, chunks: usize) -> Self {
+        self.chunks_read_ahead = chunks.max(1);
+        self
     }
 
     /// Registers the scan's metrics with `registry` under `labels`.
@@ -240,6 +252,7 @@ impl ScanBuilder {
             row_offset: self.row_offset,
             values,
             chunk_rows,
+            chunks_read_ahead: self.chunks_read_ahead,
             metrics: Arc::new(match &self.metrics {
                 Some((registry, labels)) => ScanMetrics::new(registry.as_ref(), labels),
                 None => ScanMetrics::unregistered(),
