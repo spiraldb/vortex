@@ -469,7 +469,9 @@ impl FileOpener for VortexOpener {
                 scan_builder = scan_builder.with_limit(limit);
             }
 
-            if let Some(concurrency) = scan_concurrency {
+            // The V1 scan asserts a concurrency above zero; zero, for the V2 driver, runs a
+            // partition's chunks in the partition's own run.
+            if let Some(concurrency) = scan_concurrency.filter(|&concurrency| concurrency > 0) {
                 scan_builder = scan_builder.with_concurrency(concurrency);
             }
 
@@ -920,6 +922,7 @@ mod tests {
     use std::fmt;
     use std::sync::Arc;
     use std::sync::LazyLock;
+    use std::time::Duration;
 
     use arrow_array::record_batch;
     use arrow_schema::Field;
@@ -958,6 +961,8 @@ mod tests {
     use itertools::Itertools;
     use object_store::ObjectStore;
     use object_store::memory::InMemory;
+    use object_store::throttle::ThrottleConfig;
+    use object_store::throttle::ThrottledStore;
     use rstest::rstest;
     use vortex::VortexSessionDefault;
     use vortex::buffer::Buffer;
@@ -1325,6 +1330,50 @@ mod tests {
         let num_rows = data.iter().map(|rb| rb.num_rows()).sum::<usize>();
         assert_eq!((num_batches, num_rows), (0, 0));
 
+        Ok(())
+    }
+
+    /// With no concurrency every chunk of a partition runs as another root of the partition's
+    /// own run. Each root must have an IO session of its own: the run clears a root's session
+    /// when the root finishes, which dropped the in-flight reads of the chunks still running
+    /// when they shared it, and the scan failed waiting with no reads in flight.
+    #[tokio::test]
+    async fn test_inline_chunks_do_not_share_a_session() -> anyhow::Result<()> {
+        // Reads that take longer the larger they are, so a chunk's reads of its own segments
+        // are still in flight when another chunk finishes.
+        let object_store = Arc::new(ThrottledStore::new(
+            InMemory::new(),
+            ThrottleConfig {
+                wait_get_per_byte: Duration::from_nanos(10),
+                ..Default::default()
+            },
+        )) as Arc<dyn ObjectStore>;
+        let file_path = "file.vortex";
+        let rows = 300_000;
+        // A wide column, written as several segments, so chunks read segments of their own.
+        let strings = StringArray::from_iter_values(
+            (0..rows).map(|i| format!("{:016x}", (i as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15))),
+        );
+        let batch = RecordBatch::try_from_iter([
+            ("s", Arc::new(strings) as _),
+            ("a", Arc::new(Int32Array::from_iter_values(0..rows)) as _),
+        ])?;
+        let data_size =
+            write_arrow_to_vortex(Arc::clone(&object_store), file_path, batch.clone()).await?;
+        let file = PartitionedFile::new(file_path.to_string(), data_size);
+        let table_schema = TableSchema::builder(batch.schema()).build();
+
+        let mut opener = make_opener(Arc::clone(&object_store), table_schema, None);
+        opener.scan_v2 = true;
+        opener.scan_concurrency = Some(0);
+        let stream = opener.open(file).unwrap().await.unwrap();
+        let data = stream.try_collect::<Vec<_>>().await?;
+
+        assert!(data.len() > 1, "the file should scan as several chunks");
+        assert_eq!(
+            data.iter().map(|rb| rb.num_rows()).sum::<usize>(),
+            rows as usize
+        );
         Ok(())
     }
 
