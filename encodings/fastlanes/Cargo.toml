@@ -60,6 +60,10 @@ name = "bitpack_blocked_decompress"
 harness = false
 
 [[bench]]
+name = "bitpacked_probe"
+harness = false
+
+[[bench]]
 name = "canonicalize_bench"
 harness = false
 required-features = ["_test-harness"]

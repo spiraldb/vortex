@@ -3,37 +3,76 @@
 
 use vortex_array::ArrayView;
 use vortex_array::ExecutionCtx;
+use vortex_array::ProbeState;
 use vortex_array::scalar::Scalar;
 use vortex_array::vtable::OperationsVTable;
+use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 
 use crate::BitPacked;
+use crate::BitPackedSlots;
 use crate::BitWidthsView;
 use crate::bitpack_decompress;
 use crate::bitpacking::array::BitPackedArrayExt;
+use crate::bitpacking::array::PATCH_SLOTS;
+
 impl OperationsVTable<BitPacked> for BitPacked {
-    type ProbeState = ();
+    type ProbeState = BitPackedProbeState;
+
+    fn probe_scalar(
+        state: &mut ProbeState<'_, BitPacked>,
+        index: usize,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Scalar> {
+        if !state.is_valid(index, ctx)? {
+            return Ok(Scalar::null(state.array().dtype().clone()));
+        }
+        let array = state.array();
+        let (mut retained, mut children) = state.split();
+        let patch_idx = array
+            .patches()
+            .map(|patches| {
+                patches
+                    .search_index_with_probes(index, &mut children, PATCH_SLOTS, ctx)
+                    .map(|result| result.to_found())
+            })
+            .transpose()?
+            .flatten();
+        if let Some(patch_idx) = patch_idx {
+            return children
+                .slot(BitPackedSlots::PATCH_VALUES)?
+                .vortex_expect("patch values are present")
+                .execute_scalar(patch_idx, ctx)?
+                .cast(array.dtype());
+        }
+
+        match array.bit_widths() {
+            BitWidthsView::Global(_) => bitpack_decompress::unpack_single(array, index),
+            BitWidthsView::Blocked(offsets) => {
+                bitpack_decompress::unpack_single_blocked_with_probes(
+                    array,
+                    offsets,
+                    index,
+                    &mut children,
+                    retained.as_deref_mut().map(|state| &mut state.block_cache),
+                    ctx,
+                )
+            }
+        }
+    }
 
     fn scalar_at(
         array: ArrayView<'_, BitPacked>,
         index: usize,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<Scalar> {
-        Ok(
-            if let Some(patches) = array.patches()
-                && let Some(patch) = patches.get_patched(index, ctx)?
-            {
-                patch
-            } else {
-                match array.bit_widths() {
-                    BitWidthsView::Global(_) => bitpack_decompress::unpack_single(array, index)?,
-                    BitWidthsView::Blocked(offsets) => {
-                        bitpack_decompress::unpack_single_blocked(array, offsets, index, ctx)?
-                    }
-                }
-            },
-        )
+        Self::probe_scalar(&mut ProbeState::once(array), index, ctx)
     }
+}
+
+#[derive(Default)]
+pub struct BitPackedProbeState {
+    block_cache: bitpack_decompress::BlockProbeCache,
 }
 
 #[cfg(test)]
@@ -49,6 +88,7 @@ mod test {
     use vortex_array::assert_arrays_eq;
     use vortex_array::assert_nth_scalar;
     use vortex_array::buffer::BufferHandle;
+    use vortex_array::compute::conformance::consistency::test_scalar_probe_consistency;
     use vortex_array::dtype::DType;
     use vortex_array::dtype::Nullability;
     use vortex_array::dtype::PType;
@@ -59,10 +99,14 @@ mod test {
     use vortex_buffer::Buffer;
     use vortex_buffer::ByteBuffer;
     use vortex_buffer::buffer;
+    use vortex_error::VortexResult;
 
     use crate::BitPacked;
     use crate::BitPackedArray;
     use crate::BitPackedData;
+    use crate::FoR;
+    use crate::bitpack_compress::bitpack_encode;
+    use crate::bitpack_compress::bitpack_encode_blocked;
     use crate::bitpacking::array::BitPackedArrayExt;
     use crate::test::SESSION;
 
@@ -292,5 +336,152 @@ mod test {
 
         let expected = PrimitiveArray::from_iter(values.iter().copied());
         assert_arrays_eq!(packed, expected, &mut ctx);
+    }
+
+    #[test]
+    fn probe_global_signed_nulls_and_patches() -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let values = PrimitiveArray::from_option_iter((0..3072).map(|index| {
+            if index == 1024 {
+                None
+            } else if index % 64 == 0 {
+                Some(1000i32)
+            } else {
+                Some((index % 64) as i32)
+            }
+        }));
+        let encoded = bitpack_encode(&values, 6, None, &mut ctx)?.into_array();
+        test_scalar_probe_consistency(&encoded, &mut ctx);
+        let sliced = encoded.slice(511..3071)?.slice(500..2550)?;
+        test_scalar_probe_consistency(&sliced, &mut ctx);
+        let mut probe = sliced.repeated_probe();
+        for index in [13, 14, 1024, 13, 1537, 14] {
+            assert_eq!(
+                probe.execute_scalar(index, &mut ctx)?,
+                values.execute_scalar(index + 1011, &mut ctx)?
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn probe_blocked_encoded_offsets_and_patches() -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let widths = [4u8, 6, 7];
+        let values = PrimitiveArray::from_option_iter((0..3072).map(|index| {
+            if index == 1024 {
+                None
+            } else if index % 64 == 0 {
+                Some(1000u32)
+            } else {
+                Some((index as u32) & ((1u32 << widths[index / 1024]) - 1))
+            }
+        }));
+        let encoded = bitpack_encode_blocked(&values, &widths, None, &mut ctx)?;
+        let offsets = encoded.block_offsets().unwrap().clone();
+        let reference = Scalar::zero_value(offsets.dtype());
+        let offsets = FoR::try_new(offsets, reference)?.into_array();
+        let blocked = BitPacked::try_new_with_block_offsets(
+            encoded.packed().clone(),
+            PType::U32,
+            values.validity()?,
+            encoded.patches(),
+            offsets,
+            encoded.len(),
+            encoded.offset(),
+        )?
+        .into_array();
+        test_scalar_probe_consistency(&blocked, &mut ctx);
+        let mut probe = blocked.repeated_probe();
+        for index in [0, 1023, 1024, 1025, 2048, 1023, 64, 2048] {
+            assert_eq!(
+                probe.execute_scalar(index, &mut ctx)?,
+                values.execute_scalar(index, &mut ctx)?
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn probe_skips_invalid_unselected_block() -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let offsets = FoR::try_new(
+            PrimitiveArray::from_iter([0u64, 128, 0]).into_array(),
+            0u64.into(),
+        )?
+        .into_array();
+        let patches = Patches::new(
+            2048,
+            0,
+            PrimitiveArray::from_iter([1024u32]).into_array(),
+            PrimitiveArray::from_iter([999u32]).into_array(),
+            None,
+            &mut ctx,
+        )?;
+        let array = BitPacked::try_new_with_block_offsets(
+            BufferHandle::new_host(ByteBuffer::zeroed(128)),
+            PType::U32,
+            Validity::from_iter((0..2048).map(|index| index != 1025)),
+            Some(patches),
+            offsets,
+            2048,
+            0,
+        )?
+        .into_array();
+        let mut probe = array.repeated_probe();
+        assert_eq!(probe.execute_scalar(0, &mut ctx)?, Scalar::from(Some(0u32)));
+        assert_eq!(
+            probe.execute_scalar(1024, &mut ctx)?,
+            Scalar::from(Some(999u32))
+        );
+        assert_eq!(
+            probe.execute_scalar(1025, &mut ctx)?,
+            Scalar::null(array.dtype().clone())
+        );
+        assert!(probe.execute_scalar(1026, &mut ctx).is_err());
+        assert_eq!(probe.execute_scalar(0, &mut ctx)?, Scalar::from(Some(0u32)));
+        assert_eq!(
+            probe.execute_scalar(1024, &mut ctx)?,
+            Scalar::from(Some(999u32))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn probe_chunked_patches_after_double_slice() -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let len = 2052;
+        let values = PrimitiveArray::from_iter(vec![1u32; len]);
+        let encoded = bitpack_encode(&values, 1, None, &mut ctx)?;
+        let patches = Patches::new(
+            len,
+            0,
+            PrimitiveArray::from_iter([0u64, 1023, 1024, 2048, 2051]).into_array(),
+            PrimitiveArray::from_iter([999u32; 5]).into_array(),
+            Some(PrimitiveArray::from_iter([0u64, 2, 3]).into_array()),
+            &mut ctx,
+        )?;
+        let array = BitPacked::try_new(
+            encoded.packed().clone(),
+            PType::U32,
+            Validity::NonNullable,
+            Some(patches),
+            1,
+            len,
+            0,
+        )?
+        .into_array();
+        let sliced = array.slice(100..2052)?.slice(900..1952)?;
+        test_scalar_probe_consistency(&sliced, &mut ctx);
+        let mut probe = sliced.repeated_probe();
+        for index in [23, 24, 25, 1048, 1051, 23, 48, 1048] {
+            let expected = if [23, 24, 1048, 1051].contains(&index) {
+                999u32
+            } else {
+                1u32
+            };
+            assert_eq!(probe.execute_scalar(index, &mut ctx)?, Scalar::from(expected));
+        }
+        Ok(())
     }
 }

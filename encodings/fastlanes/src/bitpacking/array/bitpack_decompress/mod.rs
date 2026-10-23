@@ -9,6 +9,8 @@ pub(crate) use blocked::for_each_packed_block;
 pub use blocked::unpack_array_blocked;
 pub(crate) use blocked::unpack_into_primitive_builder_blocked;
 pub use blocked::unpack_single_blocked;
+pub(crate) use blocked::unpack_single_blocked_with_probes;
+pub(crate) use blocked::BlockProbeCache;
 pub use global::count_exceptions;
 pub use global::unpack_array;
 pub(crate) use global::unpack_into_primitive_builder;
