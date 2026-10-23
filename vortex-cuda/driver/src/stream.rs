@@ -118,6 +118,18 @@ impl CudaStream {
         self.context.bind_to_thread()
     }
 
+    /// Binds the context without returning recorded errors; see [`CudaContext::make_current`].
+    pub(crate) fn bind_current(&self) -> Result<(), DriverError> {
+        self.context.make_current()
+    }
+
+    /// Blocks until all work queued so far completes, leaving recorded errors in place.
+    pub(crate) fn synchronize_current(&self) -> Result<(), DriverError> {
+        self.bind_current()?;
+        // SAFETY: The stream is valid for this object's lifetime.
+        unsafe { sys::cuStreamSynchronize(self.stream) }.result()
+    }
+
     /// Blocks until all work queued so far completes.
     pub fn synchronize(&self) -> Result<(), DriverError> {
         self.bind()?;
@@ -170,7 +182,12 @@ impl CudaStream {
         unsafe { sys::cuEventRecord(event, self.stream) }.result()
     }
 
+    /// Allocates `bytes` bytes; zero bytes allocate nothing and return a null pointer, which
+    /// the driver would reject.
     pub(crate) fn alloc_raw(&self, bytes: usize) -> Result<sys::CUdeviceptr, DriverError> {
+        if bytes == 0 {
+            return Ok(0);
+        }
         self.bind()?;
         let mut pointer = 0;
         // SAFETY: The context is current; the driver writes the allocation.
@@ -186,7 +203,11 @@ impl CudaStream {
     }
 
     pub(crate) fn free_raw(&self, pointer: sys::CUdeviceptr) -> Result<(), DriverError> {
-        self.bind()?;
+        if pointer == 0 {
+            return Ok(());
+        }
+        // An unrelated recorded error must not leak the allocation.
+        self.bind_current()?;
         // SAFETY: Callers free an allocation of this context once, after its accesses were
         // ordered before this stream's queued work.
         unsafe {
@@ -205,6 +226,9 @@ impl CudaStream {
         value: u8,
         bytes: usize,
     ) -> Result<(), DriverError> {
+        if bytes == 0 {
+            return Ok(());
+        }
         self.bind()?;
         // SAFETY: Callers pass a range of `bytes` writable device bytes ordered for this stream.
         unsafe { sys::cuMemsetD8Async(pointer, value, bytes, self.stream) }.result()

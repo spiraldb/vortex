@@ -10,21 +10,29 @@ use crate::DevicePtrMut;
 use crate::DriverError;
 use crate::sys;
 
-/// A context and two streams, or `None` without a CUDA device.
-fn streams() -> Option<(Arc<CudaContext>, Arc<CudaStream>, Arc<CudaStream>)> {
+type Streams = (Arc<CudaContext>, Arc<CudaStream>, Arc<CudaStream>);
+
+/// A context and two streams, or `None` without a CUDA driver or device.
+///
+/// Fails if a device is present but cannot be set up, so tests do not pass without running.
+fn streams() -> Result<Option<Streams>, DriverError> {
     // SAFETY: Only probes for the driver library.
     if !unsafe { sys::is_culib_present() } {
-        return None;
+        return Ok(None);
     }
-    let context = CudaContext::new(0).ok()?;
-    let first = context.new_stream().ok()?;
-    let second = context.new_stream().ok()?;
-    Some((context, first, second))
+    match CudaContext::device_count() {
+        Ok(0) | Err(DriverError(sys::CUresult::CUDA_ERROR_NO_DEVICE)) => return Ok(None),
+        count => count?,
+    };
+    let context = CudaContext::new(0)?;
+    let first = context.new_stream()?;
+    let second = context.new_stream()?;
+    Ok(Some((context, first, second)))
 }
 
 #[test]
 fn host_device_round_trip() -> Result<(), DriverError> {
-    let Some((context, stream, _)) = streams() else {
+    let Some((context, stream, _)) = streams()? else {
         return Ok(());
     };
     let values: Vec<u32> = (0..100_000).collect();
@@ -37,7 +45,7 @@ fn host_device_round_trip() -> Result<(), DriverError> {
 /// A write on one stream is visible to reads on another, through views as well.
 #[test]
 fn cross_stream_reads_follow_writes() -> Result<(), DriverError> {
-    let Some((context, writer, reader)) = streams() else {
+    let Some((context, writer, reader)) = streams()? else {
         return Ok(());
     };
     for round in 0..50u8 {
@@ -58,7 +66,7 @@ fn cross_stream_reads_follow_writes() -> Result<(), DriverError> {
 /// allocation reuses is not overwritten under it.
 #[test]
 fn frees_follow_reads_on_other_streams() -> Result<(), DriverError> {
-    let Some((context, owner, reader)) = streams() else {
+    let Some((context, owner, reader)) = streams()? else {
         return Ok(());
     };
     let source = owner.clone_htod(&vec![7u8; 32 << 20])?;
@@ -81,7 +89,7 @@ fn frees_follow_reads_on_other_streams() -> Result<(), DriverError> {
 /// Same-stream accesses take no events; cross-stream ones reuse returned events.
 #[test]
 fn events_are_pooled() -> Result<(), DriverError> {
-    let Some((context, first, second)) = streams() else {
+    let Some((context, first, second)) = streams()? else {
         return Ok(());
     };
     for _ in 0..100 {
@@ -91,5 +99,94 @@ fn events_are_pooled() -> Result<(), DriverError> {
     }
     // One write event and one read event, reused for every buffer.
     assert!(context.pooled_events() <= 2);
+    context.check_err()
+}
+
+/// Empty allocations and copies succeed without driver calls the driver would reject.
+#[test]
+fn zero_length_allocations() -> Result<(), DriverError> {
+    let Some((context, first, second)) = streams()? else {
+        return Ok(());
+    };
+    let empty = first.clone_htod(&Vec::<u32>::new())?;
+    assert!(empty.is_empty());
+    let zeros = second.alloc_zeros::<u32>(0)?;
+    assert!(second.clone_dtoh(&empty)?.is_empty());
+    assert!(first.clone_dtoh(&zeros.try_clone()?)?.is_empty());
+    drop((empty, zeros));
+    context.check_err()
+}
+
+/// Reinterpreting more elements than fit is rejected, also when the byte count overflows.
+#[test]
+fn transmute_rejects_overflowing_lengths() -> Result<(), DriverError> {
+    let Some((context, stream, _)) = streams()? else {
+        return Ok(());
+    };
+    let mut device = stream.alloc_zeros::<u8>(16)?;
+    // SAFETY: Only the lengths are checked; no views are used.
+    unsafe {
+        assert!(device.transmute::<u64>(2).is_some());
+        assert!(device.transmute::<u64>(3).is_none());
+        assert!(device.transmute::<u64>(usize::MAX / 4 + 1).is_none());
+        assert!(
+            device
+                .as_view()
+                .transmute::<u64>(usize::MAX / 4 + 1)
+                .is_none()
+        );
+        assert!(device.transmute_mut::<u64>(usize::MAX / 4 + 1).is_none());
+        assert!(
+            device
+                .as_view_mut()
+                .transmute_mut::<u64>(usize::MAX / 4 + 1)
+                .is_none()
+        );
+    }
+    context.check_err()
+}
+
+/// Streams of another context are rejected instead of mixing the contexts' event pools.
+#[test]
+fn accesses_from_other_contexts_fail() -> Result<(), DriverError> {
+    let Some((context, stream, _)) = streams()? else {
+        return Ok(());
+    };
+    let other = CudaContext::new_non_primary(0, 0)?;
+    let foreign = other.new_stream()?;
+    let device = stream.clone_htod(&[1u32; 16])?;
+    let pooled = context.pooled_events();
+    let error = foreign.clone_dtoh(&device).expect_err("cross-context read");
+    assert_eq!(
+        error,
+        DriverError(sys::CUresult::CUDA_ERROR_INVALID_CONTEXT)
+    );
+    assert_eq!(other.pooled_events(), 0);
+    assert_eq!(context.pooled_events(), pooled);
+    drop(device);
+    // The read's guard records the rejection too, after the copy returned it.
+    assert_eq!(
+        other.check_err(),
+        Err(DriverError(sys::CUresult::CUDA_ERROR_INVALID_CONTEXT))
+    );
+    context.check_err()
+}
+
+/// The first error recorded is the one reported.
+#[test]
+fn record_err_keeps_the_first_error() -> Result<(), DriverError> {
+    let Some((context, ..)) = streams()? else {
+        return Ok(());
+    };
+    context.record_err(Err::<(), _>(DriverError(
+        sys::CUresult::CUDA_ERROR_NO_DEVICE,
+    )));
+    context.record_err(Err::<(), _>(DriverError(
+        sys::CUresult::CUDA_ERROR_INVALID_CONTEXT,
+    )));
+    assert_eq!(
+        context.check_err(),
+        Err(DriverError(sys::CUresult::CUDA_ERROR_NO_DEVICE))
+    );
     context.check_err()
 }

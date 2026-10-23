@@ -190,6 +190,14 @@ impl CudaContext {
         if self.error_state.load(Ordering::Relaxed) != 0 {
             self.check_err()?;
         }
+        self.make_current()
+    }
+
+    /// Makes this context current on the calling thread, leaving recorded errors in place.
+    ///
+    /// For work that must run even after an unrelated error was recorded, such as tracking an
+    /// access that is already enqueued.
+    pub(crate) fn make_current(&self) -> Result<(), DriverError> {
         let mut current = std::ptr::null_mut();
         // SAFETY: The driver writes the current context.
         unsafe { sys::cuCtxGetCurrent(&raw mut current) }.result()?;
@@ -203,6 +211,13 @@ impl CudaContext {
     /// Blocks until all work in the context completes.
     pub fn synchronize(&self) -> Result<(), DriverError> {
         self.bind_to_thread()?;
+        // SAFETY: The context is current.
+        unsafe { sys::cuCtxSynchronize() }.result()
+    }
+
+    /// Like [`synchronize`](Self::synchronize), leaving recorded errors in place.
+    pub(crate) fn synchronize_current(&self) -> Result<(), DriverError> {
+        self.make_current()?;
         // SAFETY: The context is current.
         unsafe { sys::cuCtxSynchronize() }.result()
     }
@@ -247,7 +262,7 @@ impl CudaContext {
         if let Some(event) = self.events.lock().pop() {
             return Ok(event);
         }
-        self.bind_to_thread()?;
+        self.make_current()?;
         let mut event = std::ptr::null_mut();
         // SAFETY: The context is current; the driver writes the new event.
         unsafe {
@@ -284,7 +299,13 @@ impl CudaContext {
     /// Keeps an error from a call that cannot return it, such as in `Drop`.
     pub fn record_err<T>(&self, result: Result<T, DriverError>) {
         if let Err(error) = result {
-            self.error_state.store(error.0.0, Ordering::Relaxed);
+            // Keep the first error, which later ones usually follow from.
+            let _ = self.error_state.compare_exchange(
+                0,
+                error.0.0,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            );
         }
     }
 }
