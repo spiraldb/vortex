@@ -145,6 +145,7 @@ impl LayoutReader for FlatReader {
             //  to evaluating the expression.
             let mut array = array.clone().await?;
             let mask = mask.await?;
+            let mut ctx = session.create_execution_ctx();
 
             // Slice the array based on the row mask.
             if row_range.start > 0 || row_range.end < array.len() {
@@ -158,14 +159,12 @@ impl LayoutReader for FlatReader {
                 // after this.
                 let array = array.apply_bound(&expr)?;
                 let array = array.filter(mask.clone())?;
-                let mut ctx = session.create_execution_ctx();
                 let array_mask = array.fill_null(false)?.execute::<Mask>(&mut ctx)?;
 
                 mask.intersect_by_rank(&array_mask)
             } else {
                 // Run over the full array, with a simpler bitand at the end.
                 let array = array.apply_bound(&expr)?;
-                let mut ctx = session.create_execution_ctx();
                 let array_mask = array.fill_null(false)?.execute::<Mask>(&mut ctx)?;
 
                 mask.bitand(&array_mask)
