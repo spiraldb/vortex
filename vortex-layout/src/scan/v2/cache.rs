@@ -8,6 +8,7 @@ use std::sync::Weak;
 
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
+use parking_lot::RwLock;
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
 use vortex_array::expr::BoundExpression;
@@ -52,7 +53,7 @@ struct Inner {
     /// Every expression a scan of the file was built with, one shared tree per distinct
     /// expression, so scans converting the same filter or projection on their own, as an
     /// engine's partitions do, share the plans, pruned zones and values keyed by its identity.
-    expressions: Mutex<FxHashSet<BoundExpression>>,
+    expressions: RwLock<FxHashSet<BoundExpression>>,
     values: ValueCache,
 }
 
@@ -61,7 +62,12 @@ impl ScanCache {
     /// structurally the same, else this one, kept for the next. Plans, pruned zones and values
     /// are keyed by a tree's identity, so scans share them only through the same tree.
     pub(super) fn intern(&self, expression: BoundExpression) -> BoundExpression {
-        let mut expressions = self.0.expressions.lock();
+        // Hashing a tree takes long enough that partitions opening together serialized on an
+        // exclusive lock, so readers probe concurrently and only a miss writes.
+        if let Some(shared) = self.0.expressions.read().get(&expression) {
+            return shared.clone();
+        }
+        let mut expressions = self.0.expressions.write();
         if let Some(shared) = expressions.get(&expression) {
             return shared.clone();
         }
