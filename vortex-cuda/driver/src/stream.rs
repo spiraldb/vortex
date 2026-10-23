@@ -100,6 +100,10 @@ impl CudaStream {
         })
     }
 
+    pub(crate) fn id(&self) -> StreamId {
+        self.id
+    }
+
     /// The raw stream handle; do not destroy it.
     pub fn cu_stream(&self) -> sys::CUstream {
         self.stream
@@ -164,6 +168,46 @@ impl CudaStream {
     pub(crate) fn record_raw(&self, event: sys::CUevent) -> Result<(), DriverError> {
         // SAFETY: Both handles belong to this stream's context and are valid.
         unsafe { sys::cuEventRecord(event, self.stream) }.result()
+    }
+
+    pub(crate) fn alloc_raw(&self, bytes: usize) -> Result<sys::CUdeviceptr, DriverError> {
+        self.bind()?;
+        let mut pointer = 0;
+        // SAFETY: The context is current; the driver writes the allocation.
+        unsafe {
+            if self.context.has_async_alloc() {
+                sys::cuMemAllocAsync(&raw mut pointer, bytes, self.stream)
+            } else {
+                sys::cuMemAlloc_v2(&raw mut pointer, bytes)
+            }
+        }
+        .result()?;
+        Ok(pointer)
+    }
+
+    pub(crate) fn free_raw(&self, pointer: sys::CUdeviceptr) -> Result<(), DriverError> {
+        self.bind()?;
+        // SAFETY: Callers free an allocation of this context once, after its accesses were
+        // ordered before this stream's queued work.
+        unsafe {
+            if self.context.has_async_alloc() {
+                sys::cuMemFreeAsync(pointer, self.stream).result()
+            } else {
+                sys::cuStreamSynchronize(self.stream).result()?;
+                sys::cuMemFree_v2(pointer).result()
+            }
+        }
+    }
+
+    pub(crate) fn memset_d8_raw(
+        &self,
+        pointer: sys::CUdeviceptr,
+        value: u8,
+        bytes: usize,
+    ) -> Result<(), DriverError> {
+        self.bind()?;
+        // SAFETY: Callers pass a range of `bytes` writable device bytes ordered for this stream.
+        unsafe { sys::cuMemsetD8Async(pointer, value, bytes, self.stream) }.result()
     }
 }
 

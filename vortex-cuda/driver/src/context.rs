@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! The device's primary context and deferred errors.
+//! The device's primary context, its event pool, and deferred errors.
 
 use std::ffi::CStr;
 use std::ffi::c_char;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
+
+use parking_lot::Mutex;
 
 use crate::module::CudaModule;
 use crate::result;
@@ -29,9 +31,12 @@ pub struct CudaContext {
     /// Whether the context is the device's primary context, released rather than destroyed.
     primary: bool,
     error_state: AtomicU32,
+    /// Timing-disabled events returned by finished accesses, reused to avoid creating and
+    /// destroying an event per access.
+    events: Mutex<Vec<sys::CUevent>>,
 }
 
-// SAFETY: The handles are driver handles usable from any thread.
+// SAFETY: The handles are driver handles usable from any thread; the pool is synchronized.
 unsafe impl Send for CudaContext {}
 // SAFETY: As above.
 unsafe impl Sync for CudaContext {}
@@ -55,6 +60,10 @@ impl Eq for CudaContext {}
 impl Drop for CudaContext {
     fn drop(&mut self) {
         self.record_err(self.bind_to_thread());
+        for event in std::mem::take(self.events.get_mut()) {
+            // SAFETY: Pooled events are owned by the pool and no longer in use.
+            self.record_err(unsafe { sys::cuEventDestroy_v2(event) }.result());
+        }
         // SAFETY: Releases the retain made by `new`, or destroys the context created by
         // `new_non_primary`, once.
         self.record_err(
@@ -116,6 +125,7 @@ impl CudaContext {
             has_async_alloc: pools > 0,
             primary,
             error_state: AtomicU32::new(0),
+            events: Mutex::new(Vec::new()),
         });
         context.bind_to_thread()?;
         Ok(context)
@@ -230,6 +240,37 @@ impl CudaContext {
     /// Loads a module from a cubin, fatbin or PTX image.
     pub fn load_module(self: &Arc<Self>, image: &[u8]) -> Result<Arc<CudaModule>, DriverError> {
         CudaModule::load(self, image)
+    }
+
+    /// A timing-disabled event from the pool, or a new one.
+    pub(crate) fn take_event(&self) -> Result<sys::CUevent, DriverError> {
+        if let Some(event) = self.events.lock().pop() {
+            return Ok(event);
+        }
+        self.bind_to_thread()?;
+        let mut event = std::ptr::null_mut();
+        // SAFETY: The context is current; the driver writes the new event.
+        unsafe {
+            sys::cuEventCreate(
+                &raw mut event,
+                sys::CUevent_flags::CU_EVENT_DISABLE_TIMING.0,
+            )
+        }
+        .result()?;
+        Ok(event)
+    }
+
+    /// Returns an event to the pool once no access will wait for it again.
+    ///
+    /// Waits already enqueued on it are unaffected by later records.
+    pub(crate) fn give_event(&self, event: sys::CUevent) {
+        self.events.lock().push(event);
+    }
+
+    /// The number of events waiting in the pool.
+    #[cfg(test)]
+    pub(crate) fn pooled_events(&self) -> usize {
+        self.events.lock().len()
     }
 
     /// The first error recorded where none could be returned, clearing it.

@@ -11766,7 +11766,10 @@ dependencies = [
 name = "vortex-cuda-driver"
 version = "0.1.0"
 dependencies = [
+ "half",
  "libloading 0.8.9",
+ "parking_lot",
+ "smallvec",
 ]
 
 [[package]]
