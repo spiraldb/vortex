@@ -14,13 +14,19 @@ use rand::rngs::StdRng;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
+use vortex_array::aggregate_fn::session::AggregateFnSession;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::ScalarFnArray;
+use vortex_array::dtype::session::DTypeSession;
+use vortex_array::memory::MemorySession;
+use vortex_array::optimizer::kernels::KernelSession;
 use vortex_array::scalar_fn::TypedScalarFnInstance;
 use vortex_array::scalar_fn::fns::binary::Binary;
 use vortex_array::scalar_fn::fns::operators::Operator;
+use vortex_array::scalar_fn::session::ScalarFnSession;
+use vortex_array::session::ArraySession;
+use vortex_array::stats::session::StatsSession;
 use vortex_session::VortexSession;
 
 #[global_allocator]
@@ -34,7 +40,16 @@ fn main() {
 const ARRAY_SIZE: usize = 100_000;
 const NUM_ACCESSES: usize = 50;
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
+    VortexSession::empty()
+        .with::<ArraySession>()
+        .with::<KernelSession>()
+        .with::<DTypeSession>()
+        .with::<ScalarFnSession>()
+        .with::<AggregateFnSession>()
+        .with::<MemorySession>()
+        .with::<StatsSession>()
+});
 
 /// evaluating ADD's validity is cheaper than evaluating ADD
 fn binary_add() -> ArrayRef {

@@ -364,7 +364,7 @@ mod tests {
     use crate::test_harness::to_int_indices;
     use crate::validity::Validity;
 
-    static SESSION: LazyLock<VortexSession> = LazyLock::new(crate::array_session);
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     const NON_STRICT: BetweenOptions = BetweenOptions {
         lower_strict: StrictComparison::NonStrict,

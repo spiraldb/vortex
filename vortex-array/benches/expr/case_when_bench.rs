@@ -12,7 +12,7 @@ use vortex_array::ArrayRef;
 use vortex_array::Canonical;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
+use vortex_array::aggregate_fn::session::AggregateFnSession;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::DecimalArray;
@@ -21,6 +21,7 @@ use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinViewArray;
 use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::dtype::DecimalDType;
+use vortex_array::dtype::session::DTypeSession;
 use vortex_array::expr::case_when;
 use vortex_array::expr::case_when_no_else;
 use vortex_array::expr::eq;
@@ -30,11 +31,16 @@ use vortex_array::expr::lit;
 use vortex_array::expr::lt;
 use vortex_array::expr::nested_case_when;
 use vortex_array::expr::root;
+use vortex_array::memory::MemorySession;
+use vortex_array::optimizer::kernels::KernelSession;
 use vortex_array::scalar::Scalar;
 use vortex_array::scalar_fn::ScalarFnVTableExt;
 use vortex_array::scalar_fn::fns::case_when::CaseWhen;
 use vortex_array::scalar_fn::fns::case_when::CaseWhenOptions;
 use vortex_array::scalar_fn::fns::operators::Operator;
+use vortex_array::scalar_fn::session::ScalarFnSession;
+use vortex_array::session::ArraySession;
+use vortex_array::stats::session::StatsSession;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
 use vortex_session::VortexSession;
@@ -42,7 +48,16 @@ use vortex_session::VortexSession;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
+    VortexSession::empty()
+        .with::<ArraySession>()
+        .with::<KernelSession>()
+        .with::<DTypeSession>()
+        .with::<ScalarFnSession>()
+        .with::<AggregateFnSession>()
+        .with::<MemorySession>()
+        .with::<StatsSession>()
+});
 
 fn main() {
     LazyLock::force(&SESSION);

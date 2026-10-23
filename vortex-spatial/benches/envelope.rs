@@ -42,6 +42,7 @@ use vortex_spatial::test_harness::spatial_session;
 static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
+    LazyLock::force(&SESSION);
     divan::main();
 }
 

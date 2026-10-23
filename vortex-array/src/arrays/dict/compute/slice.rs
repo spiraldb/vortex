@@ -89,12 +89,14 @@ pub(super) fn slice_constant_code(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
+    use vortex_session::VortexSession;
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::DictArray;
     use crate::arrays::PrimitiveArray;
     use crate::arrays::dict::compute::slice::ConstantArray;
@@ -104,9 +106,11 @@ mod tests {
     use crate::dtype::PType;
     use crate::scalar::Scalar;
 
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
+
     #[test]
     fn slice_constant_valid_code() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let dict = DictArray::new(
             ConstantArray::new(1u8, 5).into_array(),
             buffer![10i32, 20, 30].into_array(),
@@ -119,7 +123,7 @@ mod tests {
 
     #[test]
     fn slice_constant_null_code() -> VortexResult<()> {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let dict = DictArray::new(
             ConstantArray::new(Scalar::null(DType::Primitive(PType::U8, Nullable)), 5).into_array(),
             buffer![10i32, 20, 30].into_array(),

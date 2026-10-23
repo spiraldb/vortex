@@ -133,19 +133,23 @@ impl TakeExecute for Sequence {
 
 #[cfg(test)]
 mod test {
+    use std::sync::LazyLock;
+
     use rstest::rstest;
     use vortex_array::Canonical;
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::compute::conformance::take::test_take_conformance;
     use vortex_array::dtype::Nullability;
     use vortex_array::dtype::PType;
     use vortex_array::scalar::PValue;
+    use vortex_session::VortexSession;
 
     use crate::Sequence;
     use crate::SequenceArray;
+
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     #[rstest]
     #[case::basic_sequence(Sequence::try_new_typed(
@@ -218,10 +222,7 @@ mod test {
         500
     ).unwrap())]
     fn sequence_take_conformance(#[case] sequence: SequenceArray) {
-        test_take_conformance(
-            &sequence.into_array(),
-            &mut array_session().create_execution_ctx(),
-        );
+        test_take_conformance(&sequence.into_array(), &mut SESSION.create_execution_ctx());
     }
 
     #[test]
@@ -232,7 +233,7 @@ mod test {
         let _array = array
             .take(indices.into_array())
             .unwrap()
-            .execute::<Canonical>(&mut array_session().create_execution_ctx())
+            .execute::<Canonical>(&mut SESSION.create_execution_ctx())
             .unwrap();
     }
 }

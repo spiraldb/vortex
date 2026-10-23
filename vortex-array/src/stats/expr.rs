@@ -185,7 +185,6 @@ mod tests {
     use crate::Canonical;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::Chunked;
     use crate::arrays::ChunkedArray;
     use crate::arrays::ConstantArray;
@@ -203,7 +202,7 @@ mod tests {
     use crate::scalar::ScalarValue;
     use crate::validity::Validity;
 
-    static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     #[test]
     fn bound_stats_constructor_preserves_child_and_dtype() -> VortexResult<()> {

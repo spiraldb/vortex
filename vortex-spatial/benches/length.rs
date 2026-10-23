@@ -39,6 +39,7 @@ static SESSION: LazyLock<VortexSession> = LazyLock::new(spatial_session);
 const ROWS: usize = 512;
 
 fn main() {
+    LazyLock::force(&SESSION);
     divan::main();
 }
 

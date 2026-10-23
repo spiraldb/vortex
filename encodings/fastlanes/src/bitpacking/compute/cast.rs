@@ -147,7 +147,7 @@ mod tests {
     use crate::BitPackedData;
 
     static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
-        let session = vortex_array::array_session();
+        let session = VortexSession::empty();
         crate::initialize(&session);
         session
     });

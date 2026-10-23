@@ -151,5 +151,5 @@ pub fn initialize_cuda(session: &CudaSession) {
 /// Panics if CUDA device 0 cannot be initialized (the same contract as [`CudaSession::default`]).
 #[cfg(any(test, feature = "_test-harness"))]
 pub fn cuda_session() -> vortex::session::VortexSession {
-    vortex::array::array_session().with::<CudaSession>()
+    vortex::session::VortexSession::empty().with::<CudaSession>()
 }

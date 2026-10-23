@@ -22,6 +22,8 @@
 
 #![expect(clippy::unwrap_used)]
 
+use std::sync::LazyLock;
+
 use divan::Bencher;
 use divan::counter::ItemsCount;
 use mimalloc::MiMalloc;
@@ -33,6 +35,7 @@ use vortex_array::ArrayRef;
 use vortex_array::Canonical;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
+use vortex_array::aggregate_fn::session::AggregateFnSession;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::DecimalArray;
@@ -41,15 +44,34 @@ use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinViewArray;
 use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::dtype::DecimalDType;
+use vortex_array::dtype::session::DTypeSession;
+use vortex_array::memory::MemorySession;
+use vortex_array::optimizer::kernels::KernelSession;
 use vortex_array::scalar::Scalar;
 use vortex_array::scalar_fn::fns::operators::Operator;
+use vortex_array::scalar_fn::session::ScalarFnSession;
+use vortex_array::session::ArraySession;
+use vortex_array::stats::session::StatsSession;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
+use vortex_session::VortexSession;
+
+static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
+    VortexSession::empty()
+        .with::<ArraySession>()
+        .with::<KernelSession>()
+        .with::<DTypeSession>()
+        .with::<ScalarFnSession>()
+        .with::<AggregateFnSession>()
+        .with::<MemorySession>()
+        .with::<StatsSession>()
+});
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
+    LazyLock::force(&SESSION);
     divan::main();
 }
 
@@ -57,12 +79,11 @@ fn main() {
 const ARRAY_SIZE: usize = 8_192;
 
 fn bench_compare(bencher: Bencher, lhs: ArrayRef, rhs: ArrayRef, op: Operator) {
-    let session = vortex_array::array_session();
     let len = lhs.len();
 
     bencher
         .counter(ItemsCount::new(len))
-        .with_inputs(|| (&lhs, &rhs, session.create_execution_ctx()))
+        .with_inputs(|| (&lhs, &rhs, SESSION.create_execution_ctx()))
         .bench_refs(|input| {
             input
                 .0

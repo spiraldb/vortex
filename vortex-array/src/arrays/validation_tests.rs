@@ -9,15 +9,16 @@
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::sync::LazyLock;
 
     use vortex_buffer::Buffer;
     use vortex_buffer::ByteBuffer;
     use vortex_buffer::buffer;
     use vortex_error::VortexError;
+    use vortex_session::VortexSession;
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
-    use crate::array_session;
     use crate::arrays::ChunkedArray;
     use crate::arrays::DecimalArray;
     use crate::arrays::FixedSizeListArray;
@@ -31,6 +32,8 @@ mod tests {
     use crate::dtype::Nullability;
     use crate::dtype::PType;
     use crate::validity::Validity;
+
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
 
     #[test]
     fn test_chunked_array_validation_failure_mismatched_dtypes() {
@@ -65,7 +68,7 @@ mod tests {
 
     #[test]
     fn test_list_array_validation_failure_offsets_out_of_bounds() {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         // Invalid case: last offset exceeds elements length.
         let elements = buffer![1i32, 2, 3].into_array();
         let offsets = buffer![0i64, 2, 5].into_array(); // 5 > 3.
@@ -96,7 +99,7 @@ mod tests {
             Arc::new([]),
             DType::Utf8(Nullability::NonNullable),
             Validity::NonNullable,
-            &mut array_session().create_execution_ctx(),
+            &mut SESSION.create_execution_ctx(),
         );
         assert!(result.is_ok());
     }
@@ -116,7 +119,7 @@ mod tests {
             buffers,
             DType::Binary(Nullability::NonNullable),
             Validity::NonNullable,
-            &mut array_session().create_execution_ctx(),
+            &mut SESSION.create_execution_ctx(),
         );
 
         assert!(matches!(result, Err(VortexError::InvalidArgument(_, _))));
@@ -152,7 +155,7 @@ mod tests {
         #[case] validity: Validity,
         #[case] ok: bool,
     ) {
-        let mut ctx = array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let nullability = if matches!(validity, Validity::NonNullable) {
             Nullability::NonNullable
         } else {

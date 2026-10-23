@@ -13,7 +13,7 @@ use mimalloc::MiMalloc;
 use vortex_array::Canonical;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::array_session;
+use vortex_array::aggregate_fn::session::AggregateFnSession;
 use vortex_array::arrays::FixedSizeListArray;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::ListViewArray;
@@ -23,6 +23,12 @@ use vortex_array::arrays::VarBinViewArray;
 use vortex_array::arrays::listview::ListViewArraySlotsExt;
 use vortex_array::arrays::listview::ListViewRebuildMode;
 use vortex_array::dtype::FieldNames;
+use vortex_array::dtype::session::DTypeSession;
+use vortex_array::memory::MemorySession;
+use vortex_array::optimizer::kernels::KernelSession;
+use vortex_array::scalar_fn::session::ScalarFnSession;
+use vortex_array::session::ArraySession;
+use vortex_array::stats::session::StatsSession;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
 use vortex_session::VortexSession;
@@ -36,7 +42,16 @@ fn main() {
 }
 
 /// A shared session for the `ListView` rebuild benchmarks, used to create execution contexts.
-static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
+static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
+    VortexSession::empty()
+        .with::<ArraySession>()
+        .with::<KernelSession>()
+        .with::<DTypeSession>()
+        .with::<ScalarFnSession>()
+        .with::<AggregateFnSession>()
+        .with::<MemorySession>()
+        .with::<StatsSession>()
+});
 
 fn make_primitive_lv(num_lists: usize, list_size: usize, step: usize) -> ListViewArray {
     let mut ctx = SESSION.create_execution_ctx();

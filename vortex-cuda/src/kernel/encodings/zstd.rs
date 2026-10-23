@@ -351,11 +351,14 @@ async fn decode_zstd(array: ZstdArray, ctx: &mut CudaExecutionCtx) -> VortexResu
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use vortex::array::IntoArray;
     use vortex::array::arrays::VarBinViewArray;
     use vortex::array::assert_arrays_eq;
     use vortex::encodings::zstd::Zstd;
     use vortex::error::VortexResult;
+    use vortex::session::VortexSession;
     use vortex_array::VortexSessionExecute;
 
     use super::*;
@@ -363,9 +366,11 @@ mod tests {
     use crate::executor::CudaArrayExt;
     use crate::session::CudaSession;
 
+    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
+
     #[crate::test]
     async fn test_cuda_zstd_decompression_utf8() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -390,7 +395,7 @@ mod tests {
 
     #[crate::test]
     async fn test_cuda_zstd_decompression_multiple_frames() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -425,7 +430,7 @@ mod tests {
 
     #[crate::test]
     async fn test_cuda_zstd_decompression_sliced() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
@@ -464,7 +469,7 @@ mod tests {
     /// correct results instead of panicking.
     #[crate::test]
     async fn test_cuda_zstd_nullable_falls_back_to_cpu() -> VortexResult<()> {
-        let mut ctx = vortex_array::array_session().create_execution_ctx();
+        let mut ctx = SESSION.create_execution_ctx();
         let mut cuda_ctx = CudaSession::create_execution_ctx(&crate::cuda_session())
             .vortex_expect("failed to create execution context");
 
