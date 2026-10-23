@@ -98,10 +98,8 @@ shared or fetched from an external source.
 
 ## Encryption
 
-Vortex files support modular encryption with the same features as
-[Parquet modular encryption](https://parquet.apache.org/docs/file-format/data-pages/encryption/). Encryption operates on
-whole segments: data segments, and the `DType`, layout, statistics, footer, and user metadata segments referenced by the
-postscript. The postscript always remains in plaintext.
+Vortex files support modular encryption, which operates on whole segments: data segments, and the `DType`, layout,
+statistics, footer, and user metadata segments referenced by the postscript. The postscript always remains in plaintext.
 
 - Each `PostscriptSegment` carries its `EncryptionSpec` inline, so the footer can be decrypted without a prior lookup.
 - Each `SegmentSpec` stores an index into the footer's `encryption_specs`. Index 0 always denotes a plaintext segment,
@@ -118,15 +116,14 @@ postscript. The postscript always remains in plaintext.
   other segment with AES-GCM. The 16-byte IV is the nonce followed by a big-endian 32-bit block counter starting at 1.
   AES-CTR is faster, but does not detect modified data.
 
-The additional authenticated data of AES-GCM is the length of the AAD prefix as a little-endian `uint32`, the AAD prefix,
-the spec's random `aad_file_unique` bytes, and an identifier of the segment: its index in the segment map, the name of
-a footer segment, or the key of a metadata segment. A segment moved within or between files fails to decrypt.
+The additional authenticated data of AES-GCM is the length of the AAD prefix as a little-endian `uint32`, the AAD
+prefix, the spec's random `aad_file_unique` bytes, and an identifier of the segment: its index in the segment map, the
+name of a footer segment, or the key of a metadata segment. A segment moved within or between files fails to decrypt.
 
 The AAD prefix is optional and application-defined, such as the file's path, and binds the file to an identity the
 reader knows, so that it cannot be replaced by another file encrypted with the same key. It is never stored in the
 file: the writer sets `requires_aad_prefix`, and readers must supply the prefix to decrypt the file. Without a prefix,
-its length is 0. Unlike Parquet, which can also store the prefix, Vortex omits that mode, since a stored prefix only
-protects readers that already know the expected value.
+its length is 0.
 
 ### Footer modes
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Envelope encryption with a key management service (KMS), like Parquet's key tools.
+//! Envelope encryption with a key management service (KMS).
 //!
 //! Master keys never leave the KMS. Every [`EnvelopeEncryption::key_config`] generates a random
 //! data encryption key (DEK) and stores it, wrapped with a master key, as the key metadata of
@@ -69,7 +69,7 @@ pub trait KmsClient: Send + Sync {
     fn unwrap_key(&self, wrapped_key: &[u8], master_key_id: &str) -> VortexResult<Vec<u8>>;
 }
 
-/// Stores key material outside of the files it belongs to, like Parquet's external key material.
+/// Stores key material outside of the files it belongs to.
 pub trait KeyMaterialStore: Send + Sync {
     /// Store, or replace, the key material with `id`.
     fn put(&self, id: &str, material: &[u8]) -> VortexResult<()>;
@@ -130,7 +130,7 @@ pub struct EnvelopeEncryption {
 
 impl EnvelopeEncryption {
     /// Wrap keys with master keys held by `kms`, with double wrapping and 128-bit data keys by
-    /// default, as in Parquet.
+    /// default.
     pub fn new(kms: Arc<dyn KmsClient>) -> Self {
         Self {
             kms,

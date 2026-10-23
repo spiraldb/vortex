@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Segment-level encryption of Vortex files, modelled on Parquet modular encryption.
+//! Segment-level encryption of Vortex files.
 //!
 //! Encryption operates on whole segments: data segments, and the dtype, layout, statistics,
 //! footer, and user metadata segments referenced by the postscript. The postscript itself stays in
@@ -191,8 +191,7 @@ impl KeyConfig {
     }
 }
 
-/// Configures how a Vortex file is encrypted when it is written, like Parquet's
-/// `FileEncryptionProperties`.
+/// Configures how a Vortex file is encrypted when it is written.
 ///
 /// By default, every segment of the file, including the footer, is encrypted with AES-GCM under
 /// the footer key. Readers configure the matching [`FileDecryption`].
@@ -322,8 +321,7 @@ impl FileEncryption {
     }
 }
 
-/// Configures how an encrypted Vortex file is decrypted when it is read, like Parquet's
-/// `FileDecryptionProperties`.
+/// Configures how an encrypted Vortex file is decrypted when it is read.
 #[derive(Clone)]
 pub struct FileDecryption {
     pub(crate) keys: Arc<dyn KeyRetriever>,

@@ -133,8 +133,8 @@ impl Aead {
     }
 }
 
-/// Apply the AES-CTR keystream for `nonce` to `buffer`. As in Parquet, the 16-byte IV is the
-/// nonce followed by a 32-bit big-endian block counter starting at 1.
+/// Apply the AES-CTR keystream for `nonce` to `buffer`. The 16-byte IV is the nonce followed by a
+/// 32-bit big-endian block counter starting at 1.
 fn apply_ctr(key: &EncryptionKey, nonce: &[u8; NONCE_LEN], buffer: &mut [u8]) -> VortexResult<()> {
     let mut iv = [0u8; 16];
     iv[..NONCE_LEN].copy_from_slice(nonce);
