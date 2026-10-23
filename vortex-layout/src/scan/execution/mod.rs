@@ -3,12 +3,13 @@
 
 //! Scan execution over physical plans through the planner I/O and compute protocol.
 //!
-//! A `ProjectionPlanner` emits one `ProjectionMorsel` for each fixed-size work chunk. The morsel
-//! runs the physical projection plan over the chunk's selected rows through
+//! A `ProjectionPlanner` emits bounded `ProjectionMorsel`s for a work chunk's selected rows. Each
+//! morsel runs the physical projection plan through
 //! the pipeline [`Scan`](crate::plan::physical::pipeline::Scan). Every segment read is published
 //! through a `ScanAdaptor`, so the planning driver can advance other work while reads wait.
 
 mod adaptor;
+mod filter;
 mod projection;
 mod selection;
 
@@ -20,6 +21,7 @@ use vortex_mask::Mask;
 use vortex_scan::planning::planner::WorkScope;
 use vortex_session::VortexSession;
 
+pub(super) use self::filter::FilterPlans;
 pub(super) use self::selection::plan_selection;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::pipeline::ValueCache;
@@ -55,6 +57,7 @@ pub(super) struct ScanPlans {
     pub(super) locations: Arc<[SegmentLocation]>,
     /// The optimized projection plan, over the scan's root row domain.
     pub(super) projection: PlanRef,
+    pub(super) filter: Option<Arc<FilterPlans>>,
     /// The global row index of the root row domain's first row.
     pub(super) row_offset: u64,
     /// Whole values, such as dictionary values, shared by the splits of this scan. Their plans

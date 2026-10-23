@@ -6,10 +6,14 @@ use std::ops::Range;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::Int32Type;
+use futures::FutureExt;
 use futures::TryStreamExt;
+use futures::channel::oneshot;
+use futures::future::Shared;
 use futures::stream;
 use rstest::rstest;
 use vortex_array::ArrayContext;
@@ -24,9 +28,14 @@ use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinArray;
 use vortex_array::assert_arrays_eq;
 use vortex_array::dtype::DType;
+use vortex_array::expr::Expression;
+use vortex_array::expr::and;
+use vortex_array::expr::eq;
 use vortex_array::expr::get_item;
 use vortex_array::expr::gt;
+use vortex_array::expr::is_null;
 use vortex_array::expr::lit;
+use vortex_array::expr::lt;
 use vortex_array::expr::pack;
 use vortex_array::expr::root;
 use vortex_array::validity::Validity;
@@ -34,12 +43,14 @@ use vortex_arrow::ArrowSessionExt;
 use vortex_buffer::Alignment;
 use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
+use vortex_error::vortex_err;
 use vortex_io::session::RuntimeSessionExt;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex_session::VortexSession;
 
 use super::MAX_ROWS_PER_CHUNK;
 use super::PreparedScan;
+use super::ROW_BLOCK_SIZE;
 use super::ScanBuilder;
 use super::ScanCache;
 use super::ScanFile;
@@ -200,6 +211,7 @@ async fn assert_same_as_v1(
     )?;
     let mut v1 = V1ScanBuilder::new(session.clone(), reader)
         .with_projection(builder.projection.clone())
+        .with_some_filter(builder.filter.clone())
         .with_selection(builder.selection.clone())
         .with_row_offset(builder.row_offset)
         .with_ordered(builder.ordered)
@@ -218,6 +230,74 @@ enum Strategy {
     Flat,
     Table,
     ZonedTable,
+}
+
+#[rstest]
+#[case::dense(-1)]
+#[case::sparse(200_000)]
+#[case::empty(300_000)]
+#[tokio::test]
+async fn large_filtered_chunks_match_v1(#[case] cutoff: i32) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let segments = Arc::new(TestSegments::default());
+    let (mut sequence, eof) = SequenceId::root().split();
+    let values = PrimitiveArray::from_iter(0i32..210_000).into_array();
+    let dtype = values.dtype().clone();
+    let layout = chunked_flat()
+        .write_stream(
+            ArrayContext::empty().into(),
+            Arc::<TestSegments>::clone(&segments),
+            SequentialStreamAdapter::new(
+                dtype.clone(),
+                stream::iter([Ok((sequence.advance(), values))]),
+            )
+            .sendable(),
+            eof,
+            &session,
+        )
+        .await?;
+    let segments: Arc<dyn SegmentSource> = segments;
+    assert_same_as_v1(&session, || {
+        Ok(builder(&session, &segments, &layout)?
+            .with_some_filter(Some(gt(root(), lit(cutoff)).bind(&dtype)?)))
+    })
+    .await
+}
+
+#[rstest]
+#[case::range(and(
+    gt(get_item("ints", root()), lit(995i32)),
+    lt(get_item("ints", root()), lit(2050i32))
+))]
+#[case::nullable(eq(get_item("strings", root()), lit("row 1001")))]
+#[case::nulls(is_null(get_item("strings", root())))]
+#[case::no_matches(gt(get_item("ints", root()), lit(10_000i32)))]
+#[case::row_index(gt(row_idx(), lit(1500u64)))]
+#[tokio::test]
+async fn filter_matches_v1(
+    #[values(Strategy::Flat, Strategy::Table, Strategy::ZonedTable)] strategy: Strategy,
+    #[case] filter: Expression,
+    #[values(false, true)] sparse: bool,
+) -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let (segments, layout) = write(&session, strategy.get().as_ref()).await?;
+    assert_same_as_v1(&session, || {
+        let mut scan = builder(&session, &segments, &layout)?
+            .with_projection(
+                pack([("strings", get_item("strings", root()))], false.into())
+                    .bind(layout.dtype())?,
+            )
+            .with_some_filter(Some(filter.bind(layout.dtype())?))
+            .with_row_range(900..3100)
+            .with_row_offset(100);
+        if sparse {
+            scan = scan.with_row_indices(StrictSortedBuffer::try_new(Buffer::from_iter(
+                (0..4000u64).step_by(7),
+            ))?);
+        }
+        Ok(scan)
+    })
+    .await
 }
 
 impl Strategy {
@@ -402,12 +482,14 @@ async fn dictionary_values_are_reused_between_splits() -> VortexResult<()> {
         let reads = counted.reads.load(Ordering::Relaxed) - before;
         let code_chunks =
             (rows.end - 1) / STORED_CHUNK_ROWS as u64 - rows.start / STORED_CHUNK_ROWS as u64 + 1;
+        // The first split reads every values chunk once for the whole scan, plus its codes.
+        let code_chunks = usize::try_from(code_chunks)?;
         assert_eq!(
             reads,
             if index == 0 {
-                STORED_CHUNKS
+                STORED_CHUNKS + code_chunks
             } else {
-                usize::try_from(code_chunks)?
+                code_chunks
             }
         );
         let expected =
@@ -438,6 +520,18 @@ async fn list_layouts_return_an_error() -> VortexResult<()> {
 }
 
 #[tokio::test]
+async fn projection_skips_unsupported_unselected_layouts() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let strategy = TableStrategy::new(chunked_flat(), chunked_flat()).with_list_layout();
+    let (segments, layout) = write(&session, &strategy).await?;
+    assert_same_as_v1(&session, || {
+        Ok(builder(&session, &segments, &layout)?
+            .with_projection(get_item("ints", root()).bind(layout.dtype())?))
+    })
+    .await
+}
+
+#[tokio::test]
 async fn unordered_returns_every_row() -> VortexResult<()> {
     let session = new_session().with_tokio();
     let (segments, layout) = write(&session, table().as_ref()).await?;
@@ -445,6 +539,88 @@ async fn unordered_returns_every_row() -> VortexResult<()> {
     let chunks: Vec<ArrayRef> = scan.execute_stream()?.try_collect().await?;
     let rows: usize = chunks.iter().map(|chunk| chunk.len()).sum();
     assert_eq!(rows, CHUNKS * CHUNK_ROWS);
+    Ok(())
+}
+
+struct GatedSegments {
+    inner: Arc<dyn SegmentSource>,
+    blocked: SegmentId,
+    release: Shared<oneshot::Receiver<()>>,
+}
+
+impl SegmentSource for GatedSegments {
+    fn request(&self, id: SegmentId) -> SegmentFuture {
+        let bytes = self.inner.request(id);
+        if id != self.blocked {
+            return bytes;
+        }
+        let release = self.release.clone();
+        async move {
+            let _ = release.await;
+            bytes.await
+        }
+        .boxed()
+    }
+}
+
+#[rstest]
+#[timeout(Duration::from_secs(5))]
+#[tokio::test]
+async fn unordered_yields_before_the_split_finishes() -> VortexResult<()> {
+    let session = new_session().with_tokio();
+    let segments = Arc::new(TestSegments::default());
+    let (mut sequence, eof) = SequenceId::root().split();
+    let arrays = (0..2)
+        .map(|index| {
+            let start = i32::try_from(index * MAX_ROWS_PER_CHUNK)?;
+            Ok((
+                sequence.advance(),
+                PrimitiveArray::from_iter(start..start + i32::try_from(MAX_ROWS_PER_CHUNK)?)
+                    .into_array(),
+            ))
+        })
+        .collect::<VortexResult<Vec<_>>>()?;
+    let dtype = arrays[0].1.dtype().clone();
+    let layout = chunked_flat()
+        .write_stream(
+            ArrayContext::empty().into(),
+            Arc::<TestSegments>::clone(&segments),
+            SequentialStreamAdapter::new(dtype, stream::iter(arrays.into_iter().map(Ok)))
+                .sendable(),
+            eof,
+            &session,
+        )
+        .await?;
+    let blocked = *layout
+        .slot(1)?
+        .ok_or_else(|| vortex_err!("second chunk is missing"))?
+        .segment_ids()
+        .first()
+        .ok_or_else(|| vortex_err!("second chunk has no segment"))?;
+    let (release, gate) = oneshot::channel();
+    let segments: Arc<dyn SegmentSource> = Arc::new(GatedSegments {
+        inner: segments,
+        blocked,
+        release: gate.shared(),
+    });
+    let mut scan =
+        PreparedScan::try_new(builder(&session, &segments, &layout)?.with_ordered(false))?;
+    // Put both projection morsels in one split, as a dense filtered scan would.
+    scan.splits = std::iter::once(0..layout.row_count()).collect();
+    let mut batches = scan.execute_stream()?;
+    let first = batches.try_next().await;
+    let _ = release.send(());
+    let first = first?.ok_or_else(|| vortex_err!("first batch is missing"))?;
+    assert_arrays_eq!(
+        first,
+        PrimitiveArray::from_iter(0i32..i32::try_from(MAX_ROWS_PER_CHUNK)?),
+        &mut session.create_execution_ctx()
+    );
+    let rest: Vec<_> = batches.try_collect().await?;
+    assert_eq!(
+        rest.iter().map(|array| array.len()).sum::<usize>(),
+        MAX_ROWS_PER_CHUNK
+    );
     Ok(())
 }
 
@@ -602,4 +778,26 @@ async fn repeated_projections_reuse_their_values() -> VortexResult<()> {
     }
     assert_eq!(reads, vec![4, 1, 1]);
     Ok(())
+}
+
+#[test]
+fn partition_rows_tile_the_file_on_row_blocks() {
+    let (file_size, row_count) = (1_000u64, 100_000u64);
+    let bytes = [0..300, 300..600, 600..1_000];
+    let rows: Vec<_> = bytes
+        .iter()
+        .map(|bytes| super::partition_row_range(bytes.clone(), file_size, row_count))
+        .collect();
+    assert_eq!(rows[0].start, 0);
+    assert_eq!(rows[2].end, row_count);
+    for pair in rows.windows(2) {
+        assert_eq!(pair[0].end, pair[1].start);
+        assert_eq!(pair[0].end % ROW_BLOCK_SIZE as u64, 0);
+    }
+    assert!(rows.iter().all(|rows| !rows.is_empty()));
+    assert_eq!(
+        super::partition_row_range(1..2, file_size, row_count),
+        0..0,
+        "a range inside one block owns no rows"
+    );
 }

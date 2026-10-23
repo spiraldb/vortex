@@ -8,6 +8,7 @@
 
 use vortex_error::VortexResult;
 
+use crate::plan::physical::Concat;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::optimizer::reduce_parent;
 use crate::plan::physical::optimizer::reduce_plan;
@@ -26,6 +27,13 @@ fn reduce(plan: &PlanRef) -> VortexResult<Option<PlanRef>> {
 
 /// Optimizes `plan`, preserving its dtype and row domain.
 pub fn optimize(plan: PlanRef) -> VortexResult<PlanRef> {
+    // Concat has no local rewrites. Optimizing its independent chunks eagerly traverses the
+    // entire file even when a partition only scans a small row range.
+    if let Some(concat) = plan.as_opt::<Concat>() {
+        return Ok(concat
+            .map_chunks(plan.dtype().clone(), optimize)
+            .into_plan());
+    }
     if let Some(rewritten) = reduce(&plan)? {
         return optimize(rewritten);
     }

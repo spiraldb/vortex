@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::vec::IntoIter;
+
 use vortex_array::IntoArray;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::dtype::DType;
@@ -16,6 +18,7 @@ use vortex_scan::planning::morsel::MorselOutput;
 use vortex_scan::planning::planner::Planner;
 use vortex_scan::planning::planner::PlannerOutput;
 use vortex_scan::planning::planner::State;
+use vortex_scan::planning::planner::WorkScope;
 
 use crate::plan::physical::pipeline::Scan;
 use crate::plan::physical::pipeline::Split;
@@ -26,16 +29,43 @@ use crate::scan::execution::adaptor::AdaptorStep;
 use crate::scan::execution::adaptor::Piece;
 use crate::scan::execution::adaptor::ScanAdaptor;
 
-/// Hands one fixed-size work chunk to a projection morsel.
+const MAX_OUTPUT_ROWS: usize = 65_536;
+
+/// Keeps sparse selections together and subdivides dense selections to avoid large copies when
+/// converting chunked projection results to Arrow.
 pub(super) struct ProjectionPlanner {
-    work: Option<(ScanPlans, SelectedRows)>,
+    plans: ScanPlans,
+    selected: IntoIter<SelectedRows>,
 }
 
 impl ProjectionPlanner {
     /// Creates a planner for `selected`.
     pub(super) fn new(plans: ScanPlans, selected: SelectedRows) -> Self {
+        let selected = if selected.mask.true_count() <= MAX_OUTPUT_ROWS {
+            vec![selected]
+        } else {
+            (0..selected.mask.len())
+                .step_by(MAX_OUTPUT_ROWS)
+                .filter_map(|start| {
+                    let end = (start + MAX_OUTPUT_ROWS).min(selected.mask.len());
+                    let mask = selected.mask.slice(start..end);
+                    if mask.all_false() {
+                        return None;
+                    }
+                    Some(SelectedRows {
+                        scope: WorkScope {
+                            file_ordinal: selected.scope.file_ordinal,
+                            rows: selected.scope.rows.start + start as u64
+                                ..selected.scope.rows.start + end as u64,
+                        },
+                        mask,
+                    })
+                })
+                .collect()
+        };
         Self {
-            work: Some((plans, selected)),
+            plans,
+            selected: selected.into_iter(),
         }
     }
 }
@@ -46,7 +76,7 @@ impl IoConsumer for ProjectionPlanner {
 
 impl Planner for ProjectionPlanner {
     fn state(&self) -> State {
-        if self.work.is_some() {
+        if !self.selected.as_slice().is_empty() {
             State::NeedsCompute
         } else {
             State::Done
@@ -54,7 +84,7 @@ impl Planner for ProjectionPlanner {
     }
 
     fn compute(&mut self) -> VortexResult<PlannerOutput> {
-        let Some((plans, selected)) = self.work.take() else {
+        let Some(selected) = self.selected.next() else {
             return Ok(PlannerOutput::Done);
         };
         if selected.mask.all_false() {
@@ -62,7 +92,7 @@ impl Planner for ProjectionPlanner {
         }
         Ok(PlannerOutput::Morsel(
             selected.scope.clone(),
-            Box::new(ProjectionMorsel::new(plans, selected)),
+            Box::new(ProjectionMorsel::new(self.plans.clone(), selected)),
         ))
     }
 }

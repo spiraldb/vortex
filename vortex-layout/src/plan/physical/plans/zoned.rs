@@ -48,8 +48,6 @@ use crate::plan::physical::operators::WholeSource;
 use crate::plan::physical::optimizer::PlanParentReduceRule;
 use crate::plan::physical::pipeline::Chain;
 use crate::plan::physical::pipeline::Compiler;
-use crate::plan::physical::pipeline::Reach;
-use crate::segments::SegmentId;
 
 const DATA: usize = 0;
 const ZONES: usize = 1;
@@ -372,22 +370,6 @@ impl PlanVTable for Zoned {
             expand_zones(&zoned, &rows, &mask, &pruned)
         });
         Ok(Some(compiler.join_with(vec![chain], |_| UNBOUNDED, source)))
-    }
-
-    fn reach(
-        plan: &Plan<Self>,
-        rows: Range<u64>,
-        at: &Reach,
-        visit: &mut dyn FnMut(SegmentId, Range<u64>),
-    ) -> VortexResult<()> {
-        if !plan.is_pruning() {
-            return match plan.data_plan()? {
-                Some(data) => data.reach(rows, at, visit),
-                None => Ok(()),
-            };
-        }
-        let zones = plan.zones_plan()?;
-        zones.reach(0..zones.row_count(), &at.fixed(&rows), visit)
     }
 }
 
