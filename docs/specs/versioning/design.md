@@ -258,20 +258,21 @@ recording the minimum version.
 
 ## Compression
 
-The default BtrBlocks compressor excludes a scheme if any of its declared output wire IDs is
-forbidden. This filtering also applies to schemes used for child compression.
+The default BtrBlocks compressor uses only the schemes whose output it can write. A wire ID is
+allowed when the session registers it, the enabled editions permit it, and the compressor's preset
+does not exclude it. For example, the CUDA preset excludes the v2 IDs described below. The
+compressor excludes a scheme if any wire ID that the scheme declares is not allowed. Child arrays go
+through the same compressor, except that the frame-of-reference scheme always bit-packs its encoded
+child with the v1 bit-packing variant. The writer still checks every serialized ID, so a forbidden
+ID in any child fails the write.
 
-The current decimal scheme produces only single-child arrays and declares the v1 wire ID, so values
-too wide for it remain in the standard uncompressed decimal representation. The multi-child
-serializer exists, but the default scheme does not construct those arrays and no declared edition
-permits their v2 ID.
-
-### Planned scheme configuration
-
-The planned improvement is to configure a scheme's behavior for the selected editions, allowing it
-to retain an older mode when its newer mode requires a forbidden format. That configuration needs to
-apply consistently to estimation, sampling, full compression, children, and fallbacks. General
-per-writer scheme configuration is not implemented, and its API is unsettled.
+The decimal, bit-packing, and frame-of-reference schemes each have a v1 and a v2 variant. The
+compressor uses the v2 variant when the v2 wire ID is allowed and the v1 variant otherwise, so
+callers do not choose the variant directly. The v2 variant also writes the v1 ID for arrays that fit
+the v1 format, so allowing only the v2 ID excludes the scheme. The v1 decimal variant constructs
+only single-child arrays, so values too wide for one 64-bit child remain in the standard
+uncompressed decimal representation. No declared edition permits a v2 ID yet, so a writer that
+enforces editions writes only v1 for these encodings.
 
 [^decimal-availability]:
     No declared edition currently permits the multi-child format. The
