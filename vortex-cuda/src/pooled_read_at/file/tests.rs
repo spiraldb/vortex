@@ -119,7 +119,7 @@ impl FileReadBackend for FakeFileReadBackend {
 }
 
 fn file_byte(offset: u64) -> u8 {
-    // Unlike a repeating u8 counter, this distinguishes adjacent 4 MiB chunks.
+    // Unlike a repeating u8 counter, this distinguishes adjacent read chunks.
     (offset % 251) as u8
 }
 
