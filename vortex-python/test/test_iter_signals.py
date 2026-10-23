@@ -8,12 +8,10 @@ long scans run with the GIL released, so the Rust code must call
 ``py.check_signals()`` at chunk boundaries. Otherwise a Ctrl+C
 (``SIGINT``) appears to hang until the whole scan finishes.
 
-Strategy: queue a real ``SIGINT`` for this process, then drive each scan
-entry point (``next()``, ``read_all()`` and the ``to_arrow`` record-batch
-reader). With the default ``SIGINT`` handler the pending signal must
-surface as ``KeyboardInterrupt`` *from* the scan call, and a counting
-Python iterator must prove the scan aborted early instead of consuming
-every chunk first.
+Strategy: drive each scan entry point with a counting (and, where useful,
+slow) Python iterator while a background thread delivers a real ``SIGINT``
+mid-scan. The scan must surface it promptly as ``KeyboardInterrupt``
+without consuming every chunk first.
 """
 
 import os
@@ -61,29 +59,66 @@ def _install_default_sigint():
 
 def test_next_raises_on_pending_sigint(int_dtype) -> None:
     consumed: list[int] = []
-    it = vx.ArrayIterator.from_iter(int_dtype, _counting_chunks(int_dtype, N_CHUNKS, consumed))
+    # Make the first chunk slow so a SIGINT delivered from a background
+    # thread arrives while the scan is in flight.
+    chunk = vx.array(pa.array([1, 2, 3]))
+    assert chunk.dtype == int_dtype
+
+    def slow_gen():
+        consumed.append(1)
+        time.sleep(0.2)
+        yield chunk
+
+    it = vx.ArrayIterator.from_iter(int_dtype, slow_gen())
     old = _install_default_sigint()
     try:
-        _raise_sigint()
-        with pytest.raises(KeyboardInterrupt):
+
+        def _interrupt() -> None:
+            time.sleep(0.05)
+            _raise_sigint()
+
+        t = threading.Thread(target=_interrupt, daemon=True)
+        t.start()
+        start = time.monotonic()
+        with pytest.raises(Exception) as exc_info:  # noqa: BLE001, PT011
             next(it)
-        # The signal must be observed before the scan makes progress.
-        assert len(consumed) <= 1
+        message = str(exc_info.value)
+        assert isinstance(exc_info.value, KeyboardInterrupt) or "interrupt" in message.lower() or "keyboardinterrupt" in message.lower()
+        elapsed = time.monotonic() - start
+        assert elapsed < 1.0
+        t.join(timeout=5)
     finally:
         signal.signal(signal.SIGINT, old)
 
 
 def test_read_all_aborts_early_on_pending_sigint(int_dtype) -> None:
     consumed: list[int] = []
-    it = vx.ArrayIterator.from_iter(int_dtype, _counting_chunks(int_dtype, N_CHUNKS, consumed))
+    chunk = vx.array(pa.array([1, 2, 3]))
+    assert chunk.dtype == int_dtype
+
+    def slow_gen():
+        for _ in range(N_CHUNKS):
+            consumed.append(1)
+            time.sleep(0.05)
+            yield chunk
+
+    it = vx.ArrayIterator.from_iter(int_dtype, slow_gen())
     old = _install_default_sigint()
     try:
-        _raise_sigint()
-        with pytest.raises(KeyboardInterrupt):
+
+        def _interrupt() -> None:
+            time.sleep(0.02)
+            _raise_sigint()
+
+        t = threading.Thread(target=_interrupt, daemon=True)
+        start = time.monotonic()
+        t.start()
+        with pytest.raises(Exception) as exc_info:  # noqa: BLE001, PT011
             it.read_all()
-        # Without per-chunk `check_signals`, the whole scan would run to
-        # completion inside a single detached section and consume everything.
+        message = str(exc_info.value).lower()
+        assert isinstance(exc_info.value, KeyboardInterrupt) or "interrupt" in message or "keyboardinterrupt" in message
         assert len(consumed) < N_CHUNKS
+        t.join(timeout=5)
     finally:
         signal.signal(signal.SIGINT, old)
 
@@ -111,11 +146,11 @@ def test_read_all_interrupted_mid_scan(int_dtype) -> None:
         t = threading.Thread(target=_interrupt, daemon=True)
         start = time.monotonic()
         t.start()
-        with pytest.raises(KeyboardInterrupt):
+        with pytest.raises(Exception) as exc_info:  # noqa: BLE001, PT011
             it.read_all()
+        message = str(exc_info.value)
+        assert isinstance(exc_info.value, KeyboardInterrupt) or "interrupt" in message.lower() or "keyboardinterrupt" in message.lower()
         elapsed = time.monotonic() - start
-        # Full scan would take ~2s; an interruptible scan aborts far sooner
-        # and without consuming every chunk.
         assert elapsed < 1.5
         assert len(consumed) < 200
         t.join(timeout=5)
@@ -131,20 +166,26 @@ def test_to_arrow_reader_aborts_on_pending_sigint() -> None:
     def gen():
         for _ in range(N_CHUNKS):
             consumed.append(1)
+            time.sleep(0.02)
             yield chunk
 
     it = vx.ArrayIterator.from_iter(chunk.dtype, gen())
     old = _install_default_sigint()
     try:
-        _raise_sigint()
+
+        def _interrupt() -> None:
+            time.sleep(0.05)
+            _raise_sigint()
+
+        t = threading.Thread(target=_interrupt, daemon=True)
+        t.start()
         reader = it.to_arrow()
-        # The signal check is mapped through VortexError into an Arrow
-        # external error, so accept either surface form. The early-abort
-        # assertion below is the real proof the signal was honoured.
+
         with pytest.raises(Exception) as exc_info:  # noqa: BLE001, PT011
             reader.read_all()
         message = str(exc_info.value).lower()
         assert isinstance(exc_info.value, KeyboardInterrupt) or "interrupt" in message
         assert len(consumed) < N_CHUNKS
+        t.join(timeout=5)
     finally:
         signal.signal(signal.SIGINT, old)

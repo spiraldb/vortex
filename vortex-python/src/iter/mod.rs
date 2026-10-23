@@ -101,7 +101,7 @@ impl PyArrayIterator {
     /// Returns the next chunk from the iterator.
     fn __next__(&self, py: Python) -> PyVortexResult<Option<PyArrayRef>> {
         py.check_signals()?;
-        let next = py.detach(|| {
+        let next = py.detach(|| -> VortexResult<Option<PyArrayRef>> {
             Ok(self
                 .iter
                 .lock()
