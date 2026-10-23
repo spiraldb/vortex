@@ -15,6 +15,9 @@ pub use rules::PlanReduceRuleAdapter;
 pub use rules::PlanRuleSet;
 use vortex_error::VortexResult;
 
+use crate::plan::physical::plans::EvalEvalRule;
+use crate::plan::physical::plans::EvalPackRule;
+
 use super::Concat;
 use super::Eval;
 use super::LegacyStats;
@@ -36,7 +39,11 @@ static EVAL_IDENTITY_RULE: PlanReduceRuleAdapter<Eval, EvalIdentityRule> =
 static LEGACY_STATS_RULE: PlanReduceRuleAdapter<LegacyStats, LegacyStatsRule> =
     PlanReduceRuleAdapter::new(LegacyStatsRule);
 
-static PLAN_RULES: PlanRuleSet = PlanRuleSet::new(&[&EVAL_IDENTITY_RULE, &LEGACY_STATS_RULE]);
+static PLAN_RULES: PlanRuleSet = PlanRuleSet::new(&[
+    &EVAL_IDENTITY_RULE,
+    &PlanReduceRuleAdapter::new(EvalPackRule),
+    &LEGACY_STATS_RULE,
+]);
 
 static EXPRESSION_CONCAT_RULE: PlanParentReduceRuleAdapter<Concat, ExpressionConcatRule> =
     PlanParentReduceRuleAdapter::new(ExpressionConcatRule);
@@ -51,6 +58,7 @@ static ZONED_LEGACY_STATS_RULE: PlanParentReduceRuleAdapter<LegacyStats, ZonedLe
     PlanParentReduceRuleAdapter::new(ZonedLegacyStatsRule);
 
 static PARENT_RULES: PlanParentRuleSet = PlanParentRuleSet::new(&[
+    &PlanParentReduceRuleAdapter::new(EvalEvalRule),
     &EXPRESSION_CONCAT_RULE,
     &EXPRESSION_TAKE_RULE,
     &EXPRESSION_PACK_RULE,
