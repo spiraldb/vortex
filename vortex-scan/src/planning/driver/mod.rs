@@ -429,7 +429,7 @@ impl Run {
             }
             if let Some(fetch) = batch
                 .iter()
-                .find(|request| request.intent == IoIntent::Fetch)
+                .find(|request| matches!(request.intent, IoIntent::Fetch | IoIntent::Urgent))
             {
                 vortex_bail!(
                     "work for scope {:?} speculated fetch {:?}, which is never delivered",
@@ -526,7 +526,7 @@ impl Run {
             vortex_bail!("compute() published an empty batch");
         }
         for request in &batch {
-            if request.intent == IoIntent::Fetch
+            if matches!(request.intent, IoIntent::Fetch | IoIntent::Urgent)
                 && work
                     .outstanding
                     .insert(request.request, request.target)

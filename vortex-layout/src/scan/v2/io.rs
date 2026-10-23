@@ -217,11 +217,27 @@ impl IoSource for SegmentIoSource {
             }
             // A segment stays with the session once read, so a later stage or morsel of the
             // split that reads it again shares the read instead of starting another once the
-            // first has completed.
-            let bytes = prefetched
+            // first has completed. An urgent fetch is read on its own and started at once:
+            // everything else in the partition waits on it.
+            let urgent = request.intent == IoIntent::Urgent;
+            let read = prefetched
                 .entry(segment)
-                .or_insert_with(|| self.read(segment))
-                .clone()
+                .or_insert_with(|| {
+                    if urgent {
+                        self.segments
+                            .request_alone(segment)
+                            .map_err(Arc::new)
+                            .boxed()
+                            .shared()
+                    } else {
+                        self.read(segment)
+                    }
+                })
+                .clone();
+            if urgent {
+                Self::start(&read);
+            }
+            let bytes = read
                 .map_err(move |err| vortex_err!("read of segment {segment} failed: {err}"))
                 .boxed();
             let id = request.request;
@@ -254,7 +270,7 @@ impl IoSource for SegmentIoSource {
             .into_iter()
             .partition(|request| request.intent == IoIntent::Announce);
         for request in announced.into_iter().chain(batch) {
-            if request.intent == IoIntent::Fetch {
+            if matches!(request.intent, IoIntent::Fetch | IoIntent::Urgent) {
                 vortex_bail!("a speculated read is never delivered, so it cannot be a fetch");
             }
             let segment = self.segment(&request)?;
