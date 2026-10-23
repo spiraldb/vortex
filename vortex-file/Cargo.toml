@@ -18,6 +18,7 @@ all-features = true
 aes-gcm = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
+ctr = { workspace = true }
 flatbuffers = { workspace = true }
 futures = { workspace = true, features = ["std", "async-await"] }
 getrandom = { workspace = true }

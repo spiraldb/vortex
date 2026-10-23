@@ -52,7 +52,6 @@ use vortex_layout::LayoutContext;
 use vortex_layout::LayoutStrategy;
 use vortex_layout::LayoutWriterContext;
 use vortex_layout::layouts::file_stats::accumulate_stats;
-use vortex_layout::segments::EncryptionKeyName;
 use vortex_layout::sequence::SequenceId;
 use vortex_layout::sequence::SequentialStreamAdapter;
 use vortex_layout::sequence::SequentialStreamExt;
@@ -67,8 +66,9 @@ use crate::Footer;
 use crate::MAGIC_BYTES;
 use crate::WriteStrategyBuilder;
 use crate::counting::CountingVortexWrite;
-use crate::encryption::EncryptionConfig;
 use crate::encryption::EncryptionSpec;
+use crate::encryption::FileEncryption;
+use crate::encryption::SegmentCipher;
 use crate::footer::FileStatistics;
 use crate::footer::MAX_METADATA_KEY_BYTES;
 use crate::footer::MAX_METADATA_SEGMENTS;
@@ -92,10 +92,7 @@ pub struct VortexWriteOptions {
     max_variable_length_statistics_size: usize,
     file_statistics: Vec<Stat>,
     metadata: HashMap<String, ByteBuffer>,
-    encryption: Option<EncryptionConfig>,
-    aad_prefix: Option<Arc<[u8]>>,
-    encryption_keys: HashMap<EncryptionKeyName, EncryptionConfig>,
-    field_encryption: Vec<(FieldPath, EncryptionKeyName)>,
+    encryption: Option<FileEncryption>,
 }
 
 /// Extension trait for constructing [`VortexWriteOptions`] from a session.
@@ -120,9 +117,6 @@ impl VortexWriteOptions {
             max_variable_length_statistics_size: 64,
             metadata: HashMap::default(),
             encryption: None,
-            aad_prefix: None,
-            encryption_keys: HashMap::default(),
-            field_encryption: Vec::new(),
         }
     }
 
@@ -168,65 +162,21 @@ impl VortexWriteOptions {
         self
     }
 
-    /// Encrypt the file.
+    /// Encrypt the file as configured by `encryption`.
     ///
-    /// Every data segment, and the dtype, layout, statistics, footer, and user metadata segments,
-    /// is encrypted with AES-256-GCM. Only the postscript, which records segment locations and the
-    /// key metadata of the [`EncryptionConfig`], is stored in plaintext. Readers must be opened
-    /// with a matching [`KeyRetriever`](crate::encryption::KeyRetriever).
-    pub fn with_encryption(mut self, encryption: EncryptionConfig) -> Self {
+    /// By default every segment, including the footer, is encrypted with the footer key, and only
+    /// the postscript, which records segment locations and key metadata, is stored in plaintext.
+    /// Readers must be opened with a matching
+    /// [`FileDecryption`](crate::encryption::FileDecryption).
+    ///
+    /// File-level statistics live in the footer, so the writer omits those of fields that readers
+    /// of the footer cannot decrypt: fields with their own key, and with a plaintext footer every
+    /// encrypted field. With a custom strategy that encrypts fields with named keys, the writer
+    /// cannot tell which fields those are, so restrict the statistics with
+    /// [`with_file_statistics`](Self::with_file_statistics) if needed.
+    pub fn with_encryption(mut self, encryption: FileEncryption) -> Self {
         self.encryption = Some(encryption);
         self
-    }
-
-    /// Bind the encrypted segments of the file to an application-defined AAD prefix, such as the
-    /// file's path.
-    ///
-    /// The prefix is not stored in the file, so readers must supply it with
-    /// [`VortexOpenOptions::with_aad_prefix`](crate::VortexOpenOptions::with_aad_prefix). It
-    /// applies to every key of the file, and requires [`with_encryption`](Self::with_encryption).
-    pub fn with_aad_prefix(mut self, aad_prefix: impl Into<Arc<[u8]>>) -> Self {
-        self.aad_prefix = Some(aad_prefix.into());
-        self
-    }
-
-    /// Register a named encryption key, for segments that a layout strategy requires to be
-    /// encrypted with it, e.g. through [`WriteStrategyBuilder::with_field_encryption`].
-    ///
-    /// Named keys require [`with_encryption`](Self::with_encryption), whose key encrypts the
-    /// footer, so that the footer does not reveal the schema and statistics of encrypted fields.
-    /// A reader that can only resolve the footer key can still read every field not encrypted
-    /// with a named key.
-    pub fn with_encryption_key(
-        mut self,
-        name: impl Into<EncryptionKeyName>,
-        encryption: EncryptionConfig,
-    ) -> Self {
-        self.encryption_keys.insert(name.into(), encryption);
-        self
-    }
-
-    /// Encrypt a field with its own key when writing with the default layout strategy.
-    ///
-    /// This registers `encryption` under `name`, as [`with_encryption_key`] does, and encrypts the
-    /// field with it, as [`WriteStrategyBuilder::with_field_encryption`] does. The file-level
-    /// statistics of the field's top-level field are omitted, since the footer is only encrypted
-    /// with the footer key.
-    ///
-    /// With a custom strategy configure the field on the strategy instead; the write fails
-    /// otherwise. File-level statistics are then kept for every field, so restrict them with
-    /// [`with_file_statistics`](Self::with_file_statistics) if needed.
-    ///
-    /// [`with_encryption_key`]: Self::with_encryption_key
-    pub fn with_field_encryption(
-        mut self,
-        field: impl Into<FieldPath>,
-        name: impl Into<EncryptionKeyName>,
-        encryption: EncryptionConfig,
-    ) -> Self {
-        let name = name.into();
-        self.field_encryption.push((field.into(), name.clone()));
-        self.with_encryption_key(name, encryption)
     }
 
     /// Configure which statistics to compute at the file level.
@@ -310,22 +260,13 @@ impl VortexWriteOptions {
         stream: SendableArrayStream,
     ) -> VortexResult<WriteSummary> {
         validate_metadata_segments(&self.metadata)?;
-        if self.aad_prefix.is_some() && self.encryption.is_none() {
+        if let Some(encryption) = &self.encryption
+            && !encryption.field_keys().is_empty()
+            && self.strategy.is_some()
+        {
             vortex_bail!(
-                "An AAD prefix requires encryption, configured with \
-                 VortexWriteOptions::with_encryption"
-            );
-        }
-        if !self.encryption_keys.is_empty() && self.encryption.is_none() {
-            vortex_bail!(
-                "Named encryption keys require a footer key, configured with \
-                 VortexWriteOptions::with_encryption"
-            );
-        }
-        if !self.field_encryption.is_empty() && self.strategy.is_some() {
-            vortex_bail!(
-                "VortexWriteOptions::with_field_encryption applies to the default strategy only; \
-                 configure field encryption on the custom strategy instead"
+                "FileEncryption::with_field_key applies to the default strategy only; configure \
+                 field encryption on the custom strategy instead"
             );
         }
 
@@ -340,15 +281,7 @@ impl VortexWriteOptions {
         } else {
             ctx
         };
-        // The top-level fields that contain a field encrypted with its own key.
-        let encrypted_fields: Vec<FieldName> = self
-            .field_encryption
-            .iter()
-            .filter_map(|(path, _)| match path.parts().first() {
-                Some(Field::Name(name)) => Some(name.clone()),
-                _ => None,
-            })
-            .collect();
+        let encrypted_stats = EncryptedStats::new(self.encryption.as_ref());
         let strategy = match self.strategy {
             Some(strategy) => strategy,
             None => {
@@ -358,8 +291,12 @@ impl VortexWriteOptions {
                 }
                 let mut builder = WriteStrategyBuilder::from_session(&self.session)
                     .with_btrblocks_builder(compressor);
-                for (field, name) in self.field_encryption {
-                    builder = builder.with_field_encryption(field, name);
+                for (field, name) in self
+                    .encryption
+                    .iter()
+                    .flat_map(|encryption| encryption.field_keys())
+                {
+                    builder = builder.with_field_encryption(field.clone(), name.clone());
                 }
                 builder.build()
             }
@@ -392,30 +329,10 @@ impl VortexWriteOptions {
         // Create a channel to send buffers from the segment sink to the output stream.
         let (send, recv) = kanal::bounded_async(1);
 
-        let cipher = self
-            .encryption
-            .as_ref()
-            .map(|config| config.file_cipher(self.aad_prefix.as_deref()))
-            .transpose()?;
-        let mut segments = BufferedSegmentSink::new(send, position);
-        // Index 0 of the footer's encryption specs is reserved for plaintext segments.
-        let mut encryption_specs = vec![EncryptionSpec::plaintext()];
-        if let Some(cipher) = &cipher {
-            segments = segments.with_default_cipher(cipher.clone(), 1);
-            encryption_specs.push(cipher.spec().clone());
-        }
-        // Sort the named keys so that the footer is deterministic.
-        for (name, config) in self
-            .encryption_keys
-            .iter()
-            .sorted_unstable_by(|(left, _), (right, _)| left.cmp(right))
-        {
-            let named = config.file_cipher(self.aad_prefix.as_deref())?;
-            let index = u16::try_from(encryption_specs.len())
-                .map_err(|_| vortex_err!("Too many encryption keys"))?;
-            encryption_specs.push(named.spec().clone());
-            segments = segments.with_named_cipher(name.clone(), named, index);
-        }
+        let (segments, cipher, encryption_specs) = encrypting_sink(
+            BufferedSegmentSink::new(send, position),
+            self.encryption.as_ref(),
+        )?;
         let segments = Arc::new(segments);
 
         // We spawn the layout future so it is driven in the background while we write the
@@ -453,15 +370,7 @@ impl VortexWriteOptions {
             None
         } else {
             let mut stats_sets = file_stats.stats_sets();
-            // File statistics live in the footer, which readers without a field's key can decrypt,
-            // so drop the statistics of fields encrypted with their own key.
-            if let Some(fields) = dtype.as_struct_fields_opt() {
-                for name in &encrypted_fields {
-                    if let Some(index) = fields.find(name) {
-                        stats_sets[index] = StatsSet::default();
-                    }
-                }
-            }
+            encrypted_stats.omit(&mut stats_sets, &dtype);
             Some(FileStatistics::new_with_dtype(stats_sets.into(), &dtype))
         };
         let mut footer = Footer::new(
@@ -476,8 +385,8 @@ impl VortexWriteOptions {
 
         // Emit the footer buffers and EOF.
         let mut serializer = footer.clone().into_serializer();
-        if let Some(cipher) = cipher {
-            serializer = serializer.with_cipher(cipher);
+        if let (Some(encryption), Some(cipher)) = (&self.encryption, cipher) {
+            serializer = serializer.with_cipher(cipher, encryption.is_plaintext_footer());
         }
         let (footer_buffers, metadata, approx_byte_size) = serializer
             .with_layout_context(new_layout_context(&self.session, enforce_editions))
@@ -525,6 +434,86 @@ impl VortexWriteOptions {
             buffered_bytes,
         }
     }
+}
+
+/// Which top-level fields have file-level statistics that readers of the footer cannot decrypt.
+enum EncryptedStats {
+    None,
+    All,
+    Fields(Vec<FieldName>),
+}
+
+impl EncryptedStats {
+    fn new(encryption: Option<&FileEncryption>) -> Self {
+        match encryption {
+            None => Self::None,
+            // A plaintext footer can be read without any key, but every field is encrypted.
+            Some(encryption)
+                if encryption.is_plaintext_footer() && !encryption.is_plaintext_fields() =>
+            {
+                Self::All
+            }
+            Some(encryption) => Self::Fields(
+                encryption
+                    .field_keys()
+                    .iter()
+                    .filter_map(|(path, _)| match path.parts().first() {
+                        Some(Field::Name(name)) => Some(name.clone()),
+                        _ => None,
+                    })
+                    .collect(),
+            ),
+        }
+    }
+
+    /// Replace the statistics of the encrypted fields of `dtype` with empty ones.
+    fn omit(&self, stats_sets: &mut [StatsSet], dtype: &DType) {
+        match self {
+            Self::None => {}
+            Self::All => stats_sets.fill_with(StatsSet::default),
+            Self::Fields(names) => {
+                let Some(fields) = dtype.as_struct_fields_opt() else {
+                    return;
+                };
+                for name in names {
+                    if let Some(index) = fields.find(name) {
+                        stats_sets[index] = StatsSet::default();
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Configure `segments` to encrypt segments as `encryption` requires, returning it with the
+/// footer key's cipher and the footer's encryption specs.
+fn encrypting_sink(
+    mut segments: BufferedSegmentSink,
+    encryption: Option<&FileEncryption>,
+) -> VortexResult<(
+    BufferedSegmentSink,
+    Option<SegmentCipher>,
+    Vec<EncryptionSpec>,
+)> {
+    let Some(encryption) = encryption else {
+        return Ok((segments, None, Vec::new()));
+    };
+    let cipher = encryption.file_cipher(encryption.footer_key())?;
+    // Index 0 of the footer's encryption specs is reserved for plaintext segments, and index 1
+    // holds the footer key, even if no data segment uses it.
+    let mut encryption_specs = vec![EncryptionSpec::plaintext(), cipher.spec().clone()];
+    if !encryption.is_plaintext_fields() {
+        segments = segments.with_default_cipher(cipher.clone(), 1);
+    }
+    // The named keys are sorted, so that the footer is deterministic.
+    for (name, key) in encryption.named_keys() {
+        let named = encryption.file_cipher(key)?;
+        let index = u16::try_from(encryption_specs.len())
+            .map_err(|_| vortex_err!("Too many encryption keys"))?;
+        encryption_specs.push(named.spec().clone());
+        segments = segments.with_named_cipher(name.clone(), named, index);
+    }
+    Ok((segments, Some(cipher), encryption_specs))
 }
 
 fn new_array_context(session: &VortexSession, enforce_editions: bool) -> ArrayContext {

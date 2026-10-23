@@ -33,7 +33,7 @@ use crate::DeserializeStep;
 use crate::EOF_SIZE;
 use crate::MAX_POSTSCRIPT_SIZE;
 use crate::VortexFile;
-use crate::encryption::KeyRetriever;
+use crate::encryption::FileDecryption;
 use crate::footer::Footer;
 use crate::segments::BufferSegmentSource;
 use crate::segments::DecryptingSegmentSource;
@@ -77,10 +77,8 @@ pub struct VortexOpenOptions {
     labels: Vec<Label>,
     /// Whether to cache file's LayoutReader between scans
     cache_layout_reader: bool,
-    /// Resolves the keys of encrypted files.
-    key_retriever: Option<Arc<dyn KeyRetriever>>,
-    /// The AAD prefix an encrypted file is expected to be bound to.
-    aad_prefix: Option<Arc<[u8]>>,
+    /// Decrypts encrypted files.
+    decryption: Option<FileDecryption>,
 }
 
 /// Extension trait for constructing [`VortexOpenOptions`] from a session.
@@ -100,8 +98,7 @@ pub trait OpenOptionsSessionExt:
             metrics_registry: None,
             labels: Vec::default(),
             cache_layout_reader: false,
-            key_retriever: None,
-            aad_prefix: None,
+            decryption: None,
         }
     }
 }
@@ -212,22 +209,14 @@ impl VortexOpenOptions {
         self
     }
 
-    /// Configure the [`KeyRetriever`] that resolves the keys of an encrypted file.
+    /// Decrypt encrypted files with `decryption`.
     ///
-    /// Opening an encrypted file fails without one. Segments are decrypted as they are read, after
-    /// the segment cache, so that the cache only holds ciphertext.
-    pub fn with_key_retriever(mut self, key_retriever: Arc<dyn KeyRetriever>) -> Self {
-        self.key_retriever = Some(key_retriever);
-        self
-    }
-
-    /// Configure the AAD prefix an encrypted file is expected to be bound to, such as its path.
-    ///
-    /// This is required to open files written with
-    /// [`VortexWriteOptions::with_aad_prefix`](crate::VortexWriteOptions::with_aad_prefix), and
-    /// opening fails for files without a prefix. A wrong prefix fails decryption.
-    pub fn with_aad_prefix(mut self, aad_prefix: impl Into<Arc<[u8]>>) -> Self {
-        self.aad_prefix = Some(aad_prefix.into());
+    /// Opening a file with an encrypted footer fails without it. Segments are decrypted as they
+    /// are read, after the segment cache, so that the cache only holds ciphertext. Files that
+    /// are not encrypted are rejected, unless allowed by
+    /// [`FileDecryption::with_plaintext_files_allowed`].
+    pub fn with_decryption(mut self, decryption: FileDecryption) -> Self {
+        self.decryption = Some(decryption);
         self
     }
 
@@ -295,8 +284,7 @@ impl VortexOpenOptions {
                 footer.segment_specs_with_metadata(),
             )),
             &footer,
-            opts.key_retriever.as_deref(),
-            opts.aad_prefix.as_deref(),
+            opts.decryption.as_ref(),
         )?;
         let metadata = if include_metadata {
             block_on(resolve_metadata(&footer, Arc::clone(&segment_source)))?
@@ -376,8 +364,7 @@ impl VortexOpenOptions {
                 segment_source,
             )),
             &footer,
-            self.key_retriever.as_deref(),
-            self.aad_prefix.as_deref(),
+            self.decryption.as_ref(),
         )?;
 
         let metadata = if self.include_metadata {
@@ -418,8 +405,7 @@ impl VortexOpenOptions {
         let mut deserializer = Footer::deserializer(initial_read, self.session.clone())
             .with_size(file_size)
             .with_some_dtype(self.dtype.clone())
-            .with_some_key_retriever(self.key_retriever.clone())
-            .with_some_aad_prefix(self.aad_prefix.clone());
+            .with_some_decryption(self.decryption.clone());
 
         let footer = loop {
             match deserializer.deserialize()? {

@@ -105,38 +105,46 @@ impl ::flatbuffers::SimpleToVerifyInSlice for CompressionScheme {}
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 pub const ENUM_MIN_ENCRYPTION_ALGORITHM: u8 = 0;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
-pub const ENUM_MAX_ENCRYPTION_ALGORITHM: u8 = 1;
+pub const ENUM_MAX_ENCRYPTION_ALGORITHM: u8 = 2;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 #[allow(non_camel_case_types)]
-pub const ENUM_VALUES_ENCRYPTION_ALGORITHM: [EncryptionAlgorithm; 2] = [
+pub const ENUM_VALUES_ENCRYPTION_ALGORITHM: [EncryptionAlgorithm; 3] = [
   EncryptionAlgorithm::None,
-  EncryptionAlgorithm::Aes256Gcm,
+  EncryptionAlgorithm::AesGcm,
+  EncryptionAlgorithm::AesGcmCtr,
 ];
 
+/// The key length (16, 24, or 32 bytes) selects AES-128, AES-192, or AES-256.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 #[repr(transparent)]
 pub struct EncryptionAlgorithm(pub u8);
 #[allow(non_upper_case_globals)]
 impl EncryptionAlgorithm {
   pub const None: Self = Self(0);
-  /// AES-256 in Galois/Counter Mode. An encrypted segment is stored as
+  /// Every segment uses AES in Galois/Counter Mode, stored as
   /// `ciphertext || nonce (12 bytes) || tag (16 bytes)`, where the ciphertext has the length of
   /// the plaintext. The additional authenticated data is the length of the AAD prefix as a
   /// little-endian uint32, the AAD prefix, `aad_file_unique`, and a module identifier that binds
   /// the ciphertext to its position in the file.
-  pub const Aes256Gcm: Self = Self(1);
+  pub const AesGcm: Self = Self(1);
+  /// Data segments of the segment map use unauthenticated AES in Counter Mode, stored as
+  /// `ciphertext || nonce (12 bytes)`, with a 16-byte IV of the nonce followed by a big-endian
+  /// 32-bit block counter starting at 1. Every other segment uses AES-GCM as in `AesGcm`.
+  pub const AesGcmCtr: Self = Self(2);
 
   pub const ENUM_MIN: u8 = 0;
-  pub const ENUM_MAX: u8 = 1;
+  pub const ENUM_MAX: u8 = 2;
   pub const ENUM_VALUES: &'static [Self] = &[
     Self::None,
-    Self::Aes256Gcm,
+    Self::AesGcm,
+    Self::AesGcmCtr,
   ];
   /// Returns the variant's name or "" if unknown.
   pub fn variant_name(self) -> Option<&'static str> {
     match self {
       Self::None => Some("None"),
-      Self::Aes256Gcm => Some("Aes256Gcm"),
+      Self::AesGcm => Some("AesGcm"),
+      Self::AesGcmCtr => Some("AesGcmCtr"),
       _ => None,
     }
   }
@@ -746,6 +754,7 @@ impl<'a> PostscriptSegment<'a> {
   pub const VT_ALIGNMENT_EXPONENT: ::flatbuffers::VOffsetT = 8;
   pub const VT__COMPRESSION: ::flatbuffers::VOffsetT = 10;
   pub const VT_ENCRYPTION: ::flatbuffers::VOffsetT = 12;
+  pub const VT_SIGNATURE: ::flatbuffers::VOffsetT = 14;
 
   #[inline]
   pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
@@ -758,6 +767,7 @@ impl<'a> PostscriptSegment<'a> {
   ) -> ::flatbuffers::WIPOffset<PostscriptSegment<'bldr>> {
     let mut builder = PostscriptSegmentBuilder::new(_fbb);
     builder.add_offset(args.offset);
+    if let Some(x) = args.signature { builder.add_signature(x); }
     if let Some(x) = args.encryption { builder.add_encryption(x); }
     if let Some(x) = args._compression { builder.add__compression(x); }
     builder.add_length(args.length);
@@ -802,6 +812,16 @@ impl<'a> PostscriptSegment<'a> {
     // which contains a valid value in this slot
     unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<EncryptionSpec>>(PostscriptSegment::VT_ENCRYPTION, None)}
   }
+  /// With `encryption`, marks a segment stored in plaintext and signed with the encryption key,
+  /// rather than encrypted. The signature is `nonce (12 bytes) || tag (16 bytes)` of AES-GMAC
+  /// over the segment's additional authenticated data, a 0xFF byte, and the segment's bytes.
+  #[inline]
+  pub fn signature(&self) -> Option<::flatbuffers::Vector<'a, u8>> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u8>>>(PostscriptSegment::VT_SIGNATURE, None)}
+  }
 }
 
 impl ::flatbuffers::Verifiable for PostscriptSegment<'_> {
@@ -815,6 +835,7 @@ impl ::flatbuffers::Verifiable for PostscriptSegment<'_> {
      .visit_field::<u8>("alignment_exponent", Self::VT_ALIGNMENT_EXPONENT, false)?
      .visit_field::<::flatbuffers::ForwardsUOffset<CompressionSpec>>("_compression", Self::VT__COMPRESSION, false)?
      .visit_field::<::flatbuffers::ForwardsUOffset<EncryptionSpec>>("encryption", Self::VT_ENCRYPTION, false)?
+     .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u8>>>("signature", Self::VT_SIGNATURE, false)?
      .finish();
     Ok(())
   }
@@ -825,6 +846,7 @@ pub struct PostscriptSegmentArgs<'a> {
     pub alignment_exponent: u8,
     pub _compression: Option<::flatbuffers::WIPOffset<CompressionSpec<'a>>>,
     pub encryption: Option<::flatbuffers::WIPOffset<EncryptionSpec<'a>>>,
+    pub signature: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u8>>>,
 }
 impl<'a> Default for PostscriptSegmentArgs<'a> {
   #[inline]
@@ -835,6 +857,7 @@ impl<'a> Default for PostscriptSegmentArgs<'a> {
       alignment_exponent: 0,
       _compression: None,
       encryption: None,
+      signature: None,
     }
   }
 }
@@ -865,6 +888,10 @@ impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> PostscriptSegmentBuilder<'a, 
     self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<EncryptionSpec>>(PostscriptSegment::VT_ENCRYPTION, encryption);
   }
   #[inline]
+  pub fn add_signature(&mut self, signature: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , u8>>) {
+    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(PostscriptSegment::VT_SIGNATURE, signature);
+  }
+  #[inline]
   pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> PostscriptSegmentBuilder<'a, 'b, A> {
     let start = _fbb.start_table();
     PostscriptSegmentBuilder {
@@ -887,6 +914,7 @@ impl ::core::fmt::Debug for PostscriptSegment<'_> {
       ds.field("alignment_exponent", &self.alignment_exponent());
       ds.field("_compression", &self._compression());
       ds.field("encryption", &self.encryption());
+      ds.field("signature", &self.signature());
       ds.finish()
   }
 }

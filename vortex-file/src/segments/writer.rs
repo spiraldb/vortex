@@ -18,7 +18,6 @@ use vortex_layout::segments::SegmentWriteOptions;
 use vortex_layout::sequence::SequenceId;
 use vortex_utils::aliases::hash_map::HashMap;
 
-use crate::encryption::ENCRYPTION_OVERHEAD;
 use crate::encryption::SegmentCipher;
 use crate::encryption::SegmentRole;
 use crate::footer::SegmentSpec;
@@ -117,7 +116,10 @@ impl SegmentSink for BufferedSegmentSink {
             let plaintext_length = buffers.iter().map(|buffer| buffer.len()).sum::<usize>();
             let (length, encryption) = match cipher {
                 None => (plaintext_length, 0),
-                Some((_, encryption)) => (plaintext_length + ENCRYPTION_OVERHEAD, *encryption),
+                Some((cipher, encryption)) => (
+                    plaintext_length + cipher.overhead(SegmentRole::Data(0)),
+                    *encryption,
+                ),
             };
             let length = u32::try_from(length)
                 .map_err(|_| vortex_err!("segment buffer length exceeds maximum u32"))?;

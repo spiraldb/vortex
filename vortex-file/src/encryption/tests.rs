@@ -1,0 +1,756 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+use std::fs;
+use std::sync::Arc;
+use std::sync::LazyLock;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
+
+use flatbuffers::FlatBufferBuilder;
+use futures::TryStreamExt;
+use parking_lot::Mutex;
+use rstest::rstest;
+use tempfile::tempdir;
+use vortex_array::ArrayRef;
+use vortex_array::IntoArray;
+use vortex_array::VortexSessionExecute;
+use vortex_array::array_session;
+use vortex_array::arrays::ChunkedArray;
+use vortex_array::arrays::StructArray;
+use vortex_array::arrays::VarBinArray;
+use vortex_array::assert_arrays_eq;
+use vortex_array::dtype::FieldPath;
+use vortex_array::expr::root;
+use vortex_array::expr::select;
+use vortex_array::stream::ArrayStreamExt;
+use vortex_buffer::ByteBuffer;
+use vortex_buffer::ByteBufferMut;
+use vortex_buffer::buffer;
+use vortex_error::VortexExpect;
+use vortex_error::VortexResult;
+use vortex_error::vortex_bail;
+use vortex_error::vortex_err;
+use vortex_io::session::RuntimeSession;
+use vortex_layout::session::LayoutSession;
+use vortex_session::VortexSession;
+use vortex_utils::aliases::hash_map::HashMap;
+
+use super::envelope::EnvelopeEncryption;
+use super::envelope::InMemoryKeyMaterialStore;
+use super::envelope::KeyMaterialStore;
+use super::envelope::KmsClient;
+use super::*;
+use crate::DeserializeStep;
+use crate::Footer;
+use crate::OpenOptionsSessionExt;
+use crate::VortexFile;
+use crate::WriteOptionsSessionExt;
+use crate::WriteStrategyBuilder;
+
+static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
+    let session = array_session()
+        .with::<LayoutSession>()
+        .with::<RuntimeSession>();
+    crate::register_default_encodings(&session);
+    crate::enable_all_registered_array_encodings(&session);
+    session
+});
+
+const FOOTER_KEY_METADATA: &[u8] = b"kms://keys/footer";
+const COLUMN_KEY_METADATA: &[u8] = b"kms://keys/pii";
+const SECRET: &str = "a-secret-string-value";
+const SECRET_COLUMN: &str = "secret_column_name";
+const VISIBLE: &str = "a-visible-string-value";
+const AAD: &[u8] = b"s3://bucket/table/part-0.vortex";
+
+fn footer_key() -> KeyConfig {
+    KeyConfig::new(EncryptionKey::from([42; 32]), FOOTER_KEY_METADATA)
+}
+
+fn column_key() -> KeyConfig {
+    KeyConfig::new(EncryptionKey::from([7; 32]), COLUMN_KEY_METADATA)
+}
+
+/// Resolves the footer key, and the column key only if `with_column_key`.
+fn keys(with_column_key: bool) -> Arc<dyn KeyRetriever> {
+    Arc::new(move |key_metadata: &[u8]| match key_metadata {
+        FOOTER_KEY_METADATA => Ok(footer_key().key().clone()),
+        COLUMN_KEY_METADATA if with_column_key => Ok(column_key().key().clone()),
+        _ => vortex_bail!("access denied to key {key_metadata:?}"),
+    })
+}
+
+fn decryption() -> FileDecryption {
+    FileDecryption::new(keys(true))
+}
+
+fn array() -> VortexResult<ArrayRef> {
+    let secret = VarBinArray::from(vec![SECRET, "foo", SECRET, "bar"]).into_array();
+    let visible = VarBinArray::from(vec![VISIBLE, "baz", VISIBLE, "qux"]).into_array();
+    let numbers = buffer![1u32, 2, 3, 4].into_array();
+    Ok(StructArray::from_fields(&[
+        (SECRET_COLUMN, secret),
+        ("visible", visible),
+        ("numbers", numbers),
+    ])?
+    .into_array())
+}
+
+/// Encrypt the secret column with its own key.
+fn with_column_key(encryption: FileEncryption) -> FileEncryption {
+    encryption.with_field_key(FieldPath::from_name(SECRET_COLUMN), "pii", column_key())
+}
+
+async fn write(encryption: Option<FileEncryption>) -> VortexResult<ByteBuffer> {
+    let mut buf = ByteBufferMut::empty();
+    let mut options = SESSION
+        .write_options()
+        .with_metadata_segment("meta", ByteBuffer::copy_from(SECRET.as_bytes()));
+    if let Some(encryption) = encryption {
+        options = options.with_encryption(encryption);
+    }
+    options.write(&mut buf, array()?.to_array_stream()).await?;
+    Ok(buf.freeze())
+}
+
+fn open(bytes: ByteBuffer, decryption: Option<FileDecryption>) -> VortexResult<VortexFile> {
+    let mut options = SESSION.open_options().include_metadata();
+    if let Some(decryption) = decryption {
+        options = options.with_decryption(decryption);
+    }
+    options.open_buffer(bytes)
+}
+
+async fn read_all(file: &VortexFile) -> VortexResult<ArrayRef> {
+    let chunks: Vec<ArrayRef> = file.scan()?.into_array_stream()?.try_collect().await?;
+    Ok(ChunkedArray::try_new(chunks, file.dtype().clone())?.into_array())
+}
+
+async fn read_field(file: &VortexFile, field: &str) -> VortexResult<ArrayRef> {
+    let projection = select([field], root())
+        .bind(file.dtype())?
+        .optimize_recursive()?;
+    file.scan()?
+        .with_projection(projection)
+        .into_array_stream()?
+        .read_all()
+        .await
+}
+
+fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+    haystack
+        .windows(needle.len())
+        .any(|window| window == needle)
+}
+
+fn expect_err<T>(result: VortexResult<T>, expected: &str) {
+    match result {
+        Ok(_) => panic!("expected an error containing {expected:?}"),
+        Err(err) => assert!(err.to_string().contains(expected), "{err}"),
+    }
+}
+
+async fn assert_reads_all(file: &VortexFile) -> VortexResult<()> {
+    assert_arrays_eq!(
+        read_all(file).await?,
+        array()?,
+        &mut SESSION.create_execution_ctx()
+    );
+    Ok(())
+}
+
+#[test]
+fn key_lengths() -> VortexResult<()> {
+    for len in KEY_LENGTHS {
+        assert_eq!(EncryptionKey::generate(len)?.as_bytes().len(), len);
+    }
+    for len in [0, 15, 31, 33] {
+        assert!(EncryptionKey::try_from_slice(&vec![0; len]).is_err());
+    }
+    Ok(())
+}
+
+#[test]
+fn spec_flatbuffer_roundtrip() -> VortexResult<()> {
+    let spec = FileEncryption::new(KeyConfig::new(
+        EncryptionKey::from([7; 32]),
+        b"k".as_slice(),
+    ))
+    .with_algorithm(EncryptionAlgorithm::AesGcmCtr)
+    .with_aad_prefix(b"prefix".as_slice())
+    .file_cipher(&KeyConfig::new(
+        EncryptionKey::from([7; 16]),
+        b"k".as_slice(),
+    ))?
+    .spec()
+    .clone();
+    let mut fbb = FlatBufferBuilder::new();
+    let offset = spec.write_flatbuffer(&mut fbb);
+    fbb.finish_minimal(offset);
+    let read = EncryptionSpec::read_flatbuffer(&flatbuffers::root::<
+        crate::flatbuffers::footer::EncryptionSpec,
+    >(fbb.finished_data())?)?;
+    assert_eq!(read, spec);
+    assert!(read.requires_aad_prefix());
+    Ok(())
+}
+
+#[tokio::test]
+async fn roundtrip() -> VortexResult<()> {
+    let bytes = write(Some(FileEncryption::new(footer_key()))).await?;
+
+    // Neither the data, nor the schema, nor user metadata are stored in plaintext.
+    for value in [SECRET, SECRET_COLUMN, VISIBLE] {
+        assert!(!contains(&bytes, value.as_bytes()), "{value}");
+    }
+
+    let file = open(bytes, Some(decryption()))?;
+    assert!(file.footer().is_encrypted());
+    assert_eq!(
+        file.metadata_segment("meta").map(ByteBuffer::as_slice),
+        Some(SECRET.as_bytes())
+    );
+    assert_reads_all(&file).await
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn roundtrip_path() -> VortexResult<()> {
+    let dir = tempdir()?;
+    let path = dir.path().join("encrypted.vortex");
+    fs::write(
+        &path,
+        write(Some(FileEncryption::new(footer_key())))
+            .await?
+            .as_slice(),
+    )?;
+
+    let file = SESSION
+        .open_options()
+        .with_decryption(decryption())
+        .include_metadata()
+        .open_path(&path)
+        .await?;
+    assert_eq!(
+        file.metadata_segment("meta").map(ByteBuffer::as_slice),
+        Some(SECRET.as_bytes())
+    );
+    assert_reads_all(&file).await
+}
+
+#[rstest]
+#[case::gcm_128(EncryptionAlgorithm::AesGcm, 16)]
+#[case::gcm_192(EncryptionAlgorithm::AesGcm, 24)]
+#[case::gcm_256(EncryptionAlgorithm::AesGcm, 32)]
+#[case::ctr_128(EncryptionAlgorithm::AesGcmCtr, 16)]
+#[case::ctr_192(EncryptionAlgorithm::AesGcmCtr, 24)]
+#[case::ctr_256(EncryptionAlgorithm::AesGcmCtr, 32)]
+#[tokio::test]
+async fn algorithms_and_key_lengths(
+    #[case] algorithm: EncryptionAlgorithm,
+    #[case] key_len: usize,
+) -> VortexResult<()> {
+    let key = EncryptionKey::generate(key_len)?;
+    let bytes = write(Some(
+        FileEncryption::new(KeyConfig::new(key.clone(), b"key".as_slice()))
+            .with_algorithm(algorithm),
+    ))
+    .await?;
+    assert!(!contains(&bytes, SECRET.as_bytes()));
+
+    let file = open(bytes, Some(FileDecryption::new(Arc::new(key))))?;
+    assert!(
+        file.footer()
+            .encryption_specs()
+            .iter()
+            .skip(1)
+            .all(|spec| spec.algorithm() == algorithm)
+    );
+    assert_reads_all(&file).await
+}
+
+#[tokio::test]
+async fn none_algorithm_fails() -> VortexResult<()> {
+    let result = write(Some(
+        FileEncryption::new(footer_key()).with_algorithm(EncryptionAlgorithm::None),
+    ))
+    .await;
+    expect_err(result, "cannot be used to encrypt");
+    Ok(())
+}
+
+#[tokio::test]
+async fn requires_decryption() -> VortexResult<()> {
+    let bytes = write(Some(FileEncryption::new(footer_key()))).await?;
+    expect_err(open(bytes, None), "no FileDecryption");
+    Ok(())
+}
+
+#[tokio::test]
+async fn rejects_wrong_key() -> VortexResult<()> {
+    let bytes = write(Some(FileEncryption::new(footer_key()))).await?;
+    let wrong = FileDecryption::new(Arc::new(EncryptionKey::from([0; 32])));
+    expect_err(open(bytes, Some(wrong)), "Failed to decrypt");
+    Ok(())
+}
+
+#[tokio::test]
+async fn rejects_tampered_data_segment() -> VortexResult<()> {
+    let bytes = write(Some(FileEncryption::new(footer_key()))).await?;
+    let segment = open(bytes.clone(), Some(decryption()))?
+        .footer()
+        .segment_map()[0];
+
+    let mut tampered = ByteBufferMut::copy_from(&bytes);
+    tampered[usize::try_from(segment.offset)?] ^= 1;
+    let file = open(tampered.freeze(), Some(decryption()))?;
+    expect_err(read_all(&file).await, "Failed to decrypt");
+    Ok(())
+}
+
+#[tokio::test]
+async fn plaintext_files_are_rejected_unless_allowed() -> VortexResult<()> {
+    let bytes = write(None).await?;
+    expect_err(open(bytes.clone(), Some(decryption())), "not encrypted");
+
+    let file = open(bytes, Some(decryption().with_plaintext_files_allowed()))?;
+    assert_reads_all(&file).await
+}
+
+#[tokio::test]
+async fn standalone_footer() -> VortexResult<()> {
+    let encryption = FileEncryption::new(footer_key());
+    let bytes = write(Some(encryption.clone())).await?;
+    let footer = open(bytes.clone(), Some(decryption()))?.footer().clone();
+
+    expect_err(
+        footer.clone().into_serializer().serialize(),
+        "with_encryption",
+    );
+
+    // A standalone footer, encrypted under the same key, opens the file without reading its
+    // footer.
+    let footer_bytes = footer
+        .into_serializer()
+        .with_encryption(&encryption)?
+        .serialize()?
+        .iter()
+        .flat_map(|buffer| buffer.as_slice().iter().copied())
+        .collect::<Vec<u8>>();
+    let mut deserializer =
+        Footer::deserializer(ByteBuffer::copy_from(&footer_bytes), SESSION.clone())
+            .with_size(footer_bytes.len() as u64)
+            .with_decryption(decryption());
+    let DeserializeStep::Done(footer) = deserializer.deserialize()? else {
+        vortex_bail!("standalone footer must deserialize in one step");
+    };
+    let file = SESSION
+        .open_options()
+        .with_decryption(decryption())
+        .with_footer(footer)
+        .open_buffer(bytes)?;
+    assert_reads_all(&file).await
+}
+
+#[tokio::test]
+async fn field_key() -> VortexResult<()> {
+    let bytes = write(Some(with_column_key(FileEncryption::new(footer_key())))).await?;
+    for value in [SECRET, SECRET_COLUMN, VISIBLE] {
+        assert!(!contains(&bytes, value.as_bytes()), "{value}");
+    }
+
+    let file = open(bytes, Some(decryption()))?;
+    let footer = file.footer();
+    let key_metadata: Vec<&[u8]> = footer
+        .encryption_specs()
+        .iter()
+        .map(|spec| spec.key_metadata())
+        .collect();
+    assert_eq!(
+        key_metadata,
+        [b"".as_slice(), FOOTER_KEY_METADATA, COLUMN_KEY_METADATA]
+    );
+
+    // Every segment of the secret column, and only those, uses the column key.
+    // Slot 0 holds the struct validity, followed by the fields.
+    let secret_field = footer.layout().slot(1)?.vortex_expect("secret column");
+    let mut secret_segments = Vec::new();
+    for layout in secret_field.depth_first_traversal() {
+        secret_segments.extend(layout?.segment_ids().iter().map(|id| **id as usize));
+    }
+    assert!(!secret_segments.is_empty());
+    for (index, segment) in footer.segment_map().iter().enumerate() {
+        let expected = if secret_segments.contains(&index) {
+            2
+        } else {
+            1
+        };
+        assert_eq!(segment.encryption, expected, "segment {index}");
+    }
+
+    // The footer key can decrypt file statistics, so the secret column has none.
+    let stats = footer.statistics().vortex_expect("file statistics");
+    assert!(stats.stats_sets()[0].is_empty());
+    assert!(!stats.stats_sets()[2].is_empty());
+
+    assert_reads_all(&file).await
+}
+
+#[tokio::test]
+async fn column_key_unavailable() -> VortexResult<()> {
+    let bytes = write(Some(with_column_key(FileEncryption::new(footer_key())))).await?;
+    let file = open(bytes, Some(FileDecryption::new(keys(false))))?;
+
+    // Columns encrypted with the footer key remain readable.
+    let expected = StructArray::from_fields(&[("numbers", buffer![1u32, 2, 3, 4].into_array())])?;
+    assert_arrays_eq!(
+        read_field(&file, "numbers").await?,
+        expected,
+        &mut SESSION.create_execution_ctx()
+    );
+    expect_err(read_field(&file, SECRET_COLUMN).await, "access denied");
+    Ok(())
+}
+
+#[tokio::test]
+async fn unregistered_key_name_fails() -> VortexResult<()> {
+    let strategy = WriteStrategyBuilder::from_session(&SESSION)
+        .with_field_encryption(FieldPath::from_name(SECRET_COLUMN), "missing")
+        .build();
+    let result = SESSION
+        .write_options()
+        .with_strategy(strategy)
+        .with_encryption(FileEncryption::new(footer_key()))
+        .write(ByteBufferMut::empty(), array()?.to_array_stream())
+        .await;
+    expect_err(result, "No encryption key named missing");
+    Ok(())
+}
+
+#[tokio::test]
+async fn field_key_requires_default_strategy() -> VortexResult<()> {
+    let result = SESSION
+        .write_options()
+        .with_strategy(WriteStrategyBuilder::from_session(&SESSION).build())
+        .with_encryption(with_column_key(FileEncryption::new(footer_key())))
+        .write(ByteBufferMut::empty(), array()?.to_array_stream())
+        .await;
+    expect_err(result, "default strategy only");
+    Ok(())
+}
+
+/// Fields without their own key are stored in plaintext, while the footer stays encrypted.
+#[tokio::test]
+async fn plaintext_fields() -> VortexResult<()> {
+    let encryption = with_column_key(FileEncryption::new(footer_key()).with_plaintext_fields());
+    let bytes = write(Some(encryption)).await?;
+    assert!(contains(&bytes, VISIBLE.as_bytes()));
+    assert!(!contains(&bytes, SECRET.as_bytes()));
+    assert!(!contains(&bytes, SECRET_COLUMN.as_bytes()));
+
+    let file = open(bytes, Some(decryption()))?;
+    let footer = file.footer();
+    // Slot 2 holds the visible column.
+    let visible_field = footer.layout().slot(2)?.vortex_expect("visible column");
+    for layout in visible_field.depth_first_traversal() {
+        for id in layout?.segment_ids() {
+            assert_eq!(footer.segment_map()[*id as usize].encryption, 0);
+        }
+    }
+    assert_reads_all(&file).await
+}
+
+/// With a plaintext footer, readers without keys can read the plaintext fields, and readers with
+/// the footer key verify its signature.
+#[tokio::test]
+async fn plaintext_footer() -> VortexResult<()> {
+    let encryption = with_column_key(
+        FileEncryption::new(footer_key())
+            .with_plaintext_footer()
+            .with_plaintext_fields(),
+    );
+    let bytes = write(Some(encryption)).await?;
+    // The schema is visible, but not the data or user metadata of the encrypted column.
+    assert!(contains(&bytes, SECRET_COLUMN.as_bytes()));
+    assert!(contains(&bytes, VISIBLE.as_bytes()));
+    assert!(!contains(&bytes, SECRET.as_bytes()));
+
+    // A reader without encryption support reads the plaintext fields.
+    let file = SESSION.open_options().open_buffer(bytes.clone())?;
+    let stats = file.footer().statistics().vortex_expect("file statistics");
+    assert!(stats.stats_sets()[0].is_empty());
+    assert!(!stats.stats_sets()[2].is_empty());
+    let expected = StructArray::from_fields(&[("numbers", buffer![1u32, 2, 3, 4].into_array())])?;
+    assert_arrays_eq!(
+        read_field(&file, "numbers").await?,
+        expected,
+        &mut SESSION.create_execution_ctx()
+    );
+    expect_err(read_field(&file, SECRET_COLUMN).await, "no FileDecryption");
+
+    let file = open(bytes, Some(decryption()))?;
+    assert_eq!(
+        file.metadata_segment("meta").map(ByteBuffer::as_slice),
+        Some(SECRET.as_bytes())
+    );
+    assert_reads_all(&file).await
+}
+
+/// With a plaintext footer and every field encrypted, the file statistics are omitted.
+#[tokio::test]
+async fn plaintext_footer_with_encrypted_fields() -> VortexResult<()> {
+    let bytes = write(Some(
+        FileEncryption::new(footer_key()).with_plaintext_footer(),
+    ))
+    .await?;
+    assert!(contains(&bytes, SECRET_COLUMN.as_bytes()));
+    assert!(!contains(&bytes, VISIBLE.as_bytes()));
+
+    let file = SESSION.open_options().open_buffer(bytes.clone())?;
+    if let Some(stats) = file.footer().statistics() {
+        assert!(stats.stats_sets().iter().all(|stats| stats.is_empty()));
+    }
+    expect_err(read_field(&file, "numbers").await, "no FileDecryption");
+
+    assert_reads_all(&open(bytes, Some(decryption()))?).await
+}
+
+#[tokio::test]
+async fn plaintext_footer_signature() -> VortexResult<()> {
+    let bytes = write(Some(
+        FileEncryption::new(footer_key())
+            .with_plaintext_footer()
+            .with_plaintext_fields(),
+    ))
+    .await?;
+
+    // A wrong footer key fails verification, unless verification is disabled.
+    let wrong_keys: Arc<dyn KeyRetriever> = Arc::new(EncryptionKey::from([0; 32]));
+    let wrong = FileDecryption::new(wrong_keys);
+    expect_err(
+        open(bytes.clone(), Some(wrong.clone())),
+        "verify the signature",
+    );
+    let file = SESSION
+        .open_options()
+        .with_decryption(wrong.without_footer_verification())
+        .open_buffer(bytes.clone())?;
+    read_field(&file, "numbers").await?;
+
+    // A modified schema fails verification.
+    let offset = bytes
+        .windows(SECRET_COLUMN.len())
+        .position(|window| window == SECRET_COLUMN.as_bytes())
+        .vortex_expect("plaintext schema");
+    let mut tampered = ByteBufferMut::copy_from(&bytes);
+    tampered[offset] ^= 1;
+    expect_err(
+        open(tampered.freeze(), Some(decryption())),
+        "verify the signature",
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn aad_prefix() -> VortexResult<()> {
+    let encryption = with_column_key(FileEncryption::new(footer_key()).with_aad_prefix(AAD));
+    let bytes = write(Some(encryption)).await?;
+    assert!(!contains(&bytes, AAD));
+
+    let file = open(bytes.clone(), Some(decryption().with_aad_prefix(AAD)))?;
+    assert!(
+        file.footer()
+            .encryption_specs()
+            .iter()
+            .skip(1)
+            .all(|spec| spec.requires_aad_prefix())
+    );
+    assert_reads_all(&file).await?;
+
+    expect_err(
+        open(bytes.clone(), Some(decryption())),
+        "requires an AAD prefix",
+    );
+    expect_err(
+        open(
+            bytes,
+            Some(decryption().with_aad_prefix(b"s3://bucket/table/other.vortex".as_slice())),
+        ),
+        "Failed to decrypt",
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn aad_prefix_for_file_without_one_fails() -> VortexResult<()> {
+    let bytes = write(Some(FileEncryption::new(footer_key()))).await?;
+    expect_err(
+        open(bytes, Some(decryption().with_aad_prefix(AAD))),
+        "not bound to one",
+    );
+    Ok(())
+}
+
+/// A KMS with versioned master keys, counting its calls. Wrapped keys are the master key version
+/// followed by the AES-GCM encrypted key.
+#[derive(Default)]
+struct TestKms {
+    master_keys: Mutex<HashMap<String, Vec<Option<EncryptionKey>>>>,
+    wraps: AtomicUsize,
+    unwraps: AtomicUsize,
+}
+
+impl TestKms {
+    fn new(master_key_ids: &[&str]) -> Self {
+        let kms = Self::default();
+        for id in master_key_ids {
+            kms.rotate(id);
+        }
+        kms
+    }
+
+    /// Add a new version of the master key.
+    fn rotate(&self, master_key_id: &str) {
+        self.master_keys
+            .lock()
+            .entry(master_key_id.to_string())
+            .or_default()
+            .push(Some(
+                EncryptionKey::generate(32).vortex_expect("random key"),
+            ));
+    }
+
+    /// Destroy every version of the master key but the current one.
+    fn retire_old_versions(&self, master_key_id: &str) {
+        let mut master_keys = self.master_keys.lock();
+        let versions = master_keys
+            .get_mut(master_key_id)
+            .vortex_expect("master key");
+        let current = versions.len() - 1;
+        versions[..current].fill(None);
+    }
+}
+
+impl KmsClient for TestKms {
+    fn wrap_key(&self, key: &[u8], master_key_id: &str) -> VortexResult<Vec<u8>> {
+        self.wraps.fetch_add(1, Ordering::Relaxed);
+        let master_keys = self.master_keys.lock();
+        let versions = master_keys
+            .get(master_key_id)
+            .ok_or_else(|| vortex_err!("unknown master key {master_key_id}"))?;
+        let version = versions.len() - 1;
+        let master = versions[version].as_ref().vortex_expect("current version");
+        let mut wrapped = key.to_vec();
+        let nonce_tag = Aead::new(master)?.seal(master_key_id.as_bytes(), &mut wrapped)?;
+        wrapped.extend_from_slice(&nonce_tag);
+        wrapped.insert(0, u8::try_from(version)?);
+        Ok(wrapped)
+    }
+
+    fn unwrap_key(&self, wrapped_key: &[u8], master_key_id: &str) -> VortexResult<Vec<u8>> {
+        self.unwraps.fetch_add(1, Ordering::Relaxed);
+        let master_keys = self.master_keys.lock();
+        let (version, wrapped) = wrapped_key
+            .split_first()
+            .ok_or_else(|| vortex_err!("empty wrapped key"))?;
+        let master = master_keys
+            .get(master_key_id)
+            .and_then(|versions| versions.get(usize::from(*version)))
+            .and_then(Option::as_ref)
+            .ok_or_else(|| vortex_err!("master key {master_key_id} v{version} unavailable"))?;
+        let len = wrapped.len() - SIGNATURE_LEN;
+        let mut key = wrapped[..len].to_vec();
+        Aead::new(master)?
+            .open(master_key_id.as_bytes(), &mut key, &wrapped[len..])
+            .map_err(|()| vortex_err!("failed to unwrap key"))?;
+        Ok(key)
+    }
+}
+
+async fn write_envelope(envelope: &EnvelopeEncryption) -> VortexResult<ByteBuffer> {
+    let encryption = FileEncryption::new(envelope.key_config("footer-mek")?).with_field_key(
+        FieldPath::from_name(SECRET_COLUMN),
+        "pii",
+        envelope.key_config("pii-mek")?,
+    );
+    write(Some(encryption)).await
+}
+
+#[tokio::test]
+async fn envelope_double_wrapping() -> VortexResult<()> {
+    let kms = Arc::new(TestKms::new(&["footer-mek", "pii-mek"]));
+    let writer = EnvelopeEncryption::new(Arc::clone(&kms) as _);
+    let first = write_envelope(&writer).await?;
+    let second = write_envelope(&writer).await?;
+    // One key encryption key is wrapped per master key, however many files are written.
+    assert_eq!(kms.wraps.load(Ordering::Relaxed), 2);
+
+    let reader = Arc::new(EnvelopeEncryption::new(Arc::clone(&kms) as _));
+    for bytes in [first, second] {
+        let file = open(bytes, Some(FileDecryption::new(Arc::clone(&reader) as _)))?;
+        assert_reads_all(&file).await?;
+    }
+    // Key encryption keys are cached by id when reading.
+    assert_eq!(kms.unwraps.load(Ordering::Relaxed), 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn envelope_single_wrapping() -> VortexResult<()> {
+    let kms = Arc::new(TestKms::new(&["footer-mek", "pii-mek"]));
+    let envelope = Arc::new(
+        EnvelopeEncryption::new(Arc::clone(&kms) as _)
+            .with_single_wrapping()
+            .with_data_key_length(32),
+    );
+    assert_eq!(
+        envelope.key_config("footer-mek")?.key().as_bytes().len(),
+        32
+    );
+    let bytes = write_envelope(&envelope).await?;
+    assert_eq!(kms.wraps.load(Ordering::Relaxed), 3);
+
+    let file = open(bytes, Some(FileDecryption::new(envelope)))?;
+    assert_reads_all(&file).await
+}
+
+#[tokio::test]
+async fn envelope_master_key_rotation() -> VortexResult<()> {
+    let kms = Arc::new(TestKms::new(&["footer-mek", "pii-mek"]));
+    let store = Arc::new(InMemoryKeyMaterialStore::default());
+    let envelope = Arc::new(
+        EnvelopeEncryption::new(Arc::clone(&kms) as _)
+            .with_external_key_material(Arc::clone(&store) as _),
+    );
+    let bytes = write_envelope(&envelope).await?;
+    assert_eq!(store.ids()?.len(), 2);
+
+    // After rotating the master keys and retiring their old versions, a reader without cached
+    // keys can still read the file.
+    for id in ["footer-mek", "pii-mek"] {
+        kms.rotate(id);
+    }
+    assert_eq!(envelope.rotate_master_keys()?, 2);
+    for id in ["footer-mek", "pii-mek"] {
+        kms.retire_old_versions(id);
+    }
+    let reader = EnvelopeEncryption::new(Arc::clone(&kms) as _)
+        .with_external_key_material(Arc::clone(&store) as _);
+    let file = open(bytes.clone(), Some(FileDecryption::new(Arc::new(reader))))?;
+    assert_reads_all(&file).await?;
+
+    // The file only references the key material, so a reader needs the store.
+    let without_store = EnvelopeEncryption::new(Arc::clone(&kms) as _);
+    expect_err(
+        open(bytes, Some(FileDecryption::new(Arc::new(without_store)))),
+        "no key material store",
+    );
+    Ok(())
+}
+
+#[test]
+fn envelope_rotation_requires_external_key_material() {
+    let envelope = EnvelopeEncryption::new(Arc::new(TestKms::new(&["mek"])));
+    expect_err(envelope.rotate_master_keys(), "external key material");
+}

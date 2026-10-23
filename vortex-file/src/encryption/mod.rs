@@ -1,0 +1,487 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+//! Segment-level encryption of Vortex files, modelled on Parquet modular encryption.
+//!
+//! Encryption operates on whole segments: data segments, and the dtype, layout, statistics,
+//! footer, and user metadata segments referenced by the postscript. The postscript itself stays in
+//! plaintext, since it only records segment locations and the [`EncryptionSpec`] of each.
+//!
+//! Writers configure a [`FileEncryption`] with a footer key, and optionally keys for individual
+//! fields. Keys are never written to the file. Each key's opaque key metadata is stored instead,
+//! so that readers configured with a [`FileDecryption`] can resolve the key again through a
+//! [`KeyRetriever`]. The [`envelope`] module builds both from a key management service.
+//!
+//! The footer is either encrypted, which also hides the schema, or stored in plaintext and signed
+//! with the footer key, so that readers without encryption support can still read the fields that
+//! are not encrypted. Fields without their own key are encrypted with the footer key, or stored in
+//! plaintext.
+//!
+//! Segments are encrypted with AES-GCM, or with AES-CTR for data segments under
+//! [`EncryptionAlgorithm::AesGcmCtr`]. The additional authenticated data binds every segment to its
+//! file, through random per-file bytes, and to its position in the file, so that segments cannot
+//! be swapped without failing decryption. An optional AAD prefix additionally binds the file to an
+//! application-defined identity, such as its path, so that a file cannot be replaced by another
+//! file encrypted with the same key. The prefix is not stored in the file, so readers must supply
+//! it.
+
+mod cipher;
+pub mod envelope;
+
+use std::collections::BTreeMap;
+use std::fmt;
+use std::fmt::Debug;
+use std::fmt::Formatter;
+use std::sync::Arc;
+
+use flatbuffers::FlatBufferBuilder;
+use flatbuffers::WIPOffset;
+use vortex_array::dtype::FieldPath;
+use vortex_error::VortexResult;
+use vortex_error::vortex_bail;
+use vortex_error::vortex_err;
+pub use vortex_layout::segments::EncryptionKeyName;
+use zeroize::Zeroize;
+
+pub(crate) use self::cipher::*;
+use crate::flatbuffers::footer as fb;
+
+/// The supported AES key lengths in bytes: AES-128, AES-192, and AES-256.
+pub const KEY_LENGTHS: [usize; 3] = [16, 24, 32];
+const AAD_FILE_UNIQUE_LEN: usize = 16;
+
+/// An AES-128, AES-192, or AES-256 key used to encrypt and decrypt Vortex file segments.
+///
+/// The key bytes are zeroed on drop and are not printed by [`Debug`].
+#[derive(Clone)]
+pub struct EncryptionKey(Box<[u8]>);
+
+impl EncryptionKey {
+    /// Create a key from a slice of 16, 24, or 32 bytes.
+    pub fn try_from_slice(key: &[u8]) -> VortexResult<Self> {
+        if !KEY_LENGTHS.contains(&key.len()) {
+            vortex_bail!(
+                "Encryption key must be 16, 24, or 32 bytes, but got {} bytes",
+                key.len()
+            );
+        }
+        Ok(Self(key.into()))
+    }
+
+    /// Generate a random key of `len` bytes, which must be 16, 24, or 32.
+    pub fn generate(len: usize) -> VortexResult<Self> {
+        let mut key = vec![0u8; len];
+        fill_random(&mut key)?;
+        let result = Self::try_from_slice(&key);
+        key.zeroize();
+        result
+    }
+
+    /// The raw key bytes, e.g. to wrap the key with a key management service.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl From<[u8; 16]> for EncryptionKey {
+    fn from(key: [u8; 16]) -> Self {
+        Self(key.into())
+    }
+}
+
+impl From<[u8; 24]> for EncryptionKey {
+    fn from(key: [u8; 24]) -> Self {
+        Self(key.into())
+    }
+}
+
+impl From<[u8; 32]> for EncryptionKey {
+    fn from(key: [u8; 32]) -> Self {
+        Self(key.into())
+    }
+}
+
+impl Drop for EncryptionKey {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+impl Debug for EncryptionKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "EncryptionKey(<{} redacted bytes>)", self.0.len())
+    }
+}
+
+/// Resolves the [`EncryptionKey`] for the key metadata stored in an encrypted file.
+///
+/// Implementations typically look the key up in a key management service, and should cache keys
+/// since they are called for every distinct [`EncryptionSpec`] each time a file is opened. They
+/// must return an error if the key is unknown. A wrong key is detected when the first segment
+/// fails to decrypt.
+pub trait KeyRetriever: Send + Sync {
+    /// Return the key identified by `key_metadata`.
+    fn retrieve_key(&self, key_metadata: &[u8]) -> VortexResult<EncryptionKey>;
+}
+
+impl<F> KeyRetriever for F
+where
+    F: Fn(&[u8]) -> VortexResult<EncryptionKey> + Send + Sync,
+{
+    fn retrieve_key(&self, key_metadata: &[u8]) -> VortexResult<EncryptionKey> {
+        self(key_metadata)
+    }
+}
+
+/// A [`KeyRetriever`] that returns the same key for any key metadata.
+impl KeyRetriever for EncryptionKey {
+    fn retrieve_key(&self, _key_metadata: &[u8]) -> VortexResult<EncryptionKey> {
+        Ok(self.clone())
+    }
+}
+
+/// A key and the metadata that identifies it to readers.
+#[derive(Clone, Debug)]
+pub struct KeyConfig {
+    key: EncryptionKey,
+    key_metadata: Arc<[u8]>,
+}
+
+impl KeyConfig {
+    /// Configure `key`, identified by `key_metadata`.
+    ///
+    /// `key_metadata` is stored in plaintext in the file and passed to the reader's
+    /// [`KeyRetriever`] to resolve the key again, e.g. a key id in a key management service. It
+    /// must not contain the key itself.
+    pub fn new(key: EncryptionKey, key_metadata: impl Into<Arc<[u8]>>) -> Self {
+        Self {
+            key,
+            key_metadata: key_metadata.into(),
+        }
+    }
+
+    /// The key.
+    pub fn key(&self) -> &EncryptionKey {
+        &self.key
+    }
+
+    /// The metadata that identifies the key to readers.
+    pub fn key_metadata(&self) -> &[u8] {
+        &self.key_metadata
+    }
+
+    /// Create the cipher for one file, with fresh random per-file AAD bytes.
+    pub(crate) fn file_cipher(
+        &self,
+        algorithm: EncryptionAlgorithm,
+        aad_prefix: Option<&[u8]>,
+    ) -> VortexResult<SegmentCipher> {
+        if algorithm == EncryptionAlgorithm::None {
+            vortex_bail!("EncryptionAlgorithm::None cannot be used to encrypt a file");
+        }
+        let mut aad_file_unique = [0u8; AAD_FILE_UNIQUE_LEN];
+        fill_random(&mut aad_file_unique)?;
+        let spec = EncryptionSpec {
+            algorithm,
+            key_metadata: Arc::clone(&self.key_metadata),
+            aad_file_unique: Arc::from(aad_file_unique),
+            requires_aad_prefix: aad_prefix.is_some(),
+        };
+        SegmentCipher::new(spec, self.key.clone(), aad_prefix.unwrap_or_default())
+    }
+}
+
+/// Configures how a Vortex file is encrypted when it is written, like Parquet's
+/// `FileEncryptionProperties`.
+///
+/// By default, every segment of the file, including the footer, is encrypted with AES-GCM under
+/// the footer key. Readers configure the matching [`FileDecryption`].
+#[derive(Clone, Debug)]
+pub struct FileEncryption {
+    footer_key: KeyConfig,
+    algorithm: EncryptionAlgorithm,
+    plaintext_footer: bool,
+    plaintext_fields: bool,
+    aad_prefix: Option<Arc<[u8]>>,
+    named_keys: BTreeMap<EncryptionKeyName, KeyConfig>,
+    field_keys: Vec<(FieldPath, EncryptionKeyName)>,
+}
+
+impl FileEncryption {
+    /// Encrypt the file with `footer_key`, which encrypts or signs the footer, and encrypts every
+    /// field that has no key of its own.
+    pub fn new(footer_key: KeyConfig) -> Self {
+        Self {
+            footer_key,
+            algorithm: EncryptionAlgorithm::AesGcm,
+            plaintext_footer: false,
+            plaintext_fields: false,
+            aad_prefix: None,
+            named_keys: BTreeMap::new(),
+            field_keys: Vec::new(),
+        }
+    }
+
+    /// Set the encryption algorithm. Defaults to [`EncryptionAlgorithm::AesGcm`].
+    ///
+    /// [`EncryptionAlgorithm::AesGcmCtr`] encrypts data segments with AES-CTR, which is faster but
+    /// does not detect modified data, and every other segment with AES-GCM.
+    pub fn with_algorithm(mut self, algorithm: EncryptionAlgorithm) -> Self {
+        self.algorithm = algorithm;
+        self
+    }
+
+    /// Store the footer, layout, dtype, and statistics in plaintext, signed with the footer key.
+    ///
+    /// Readers without encryption support, or without the footer key, can then read the fields
+    /// that are stored in plaintext, and readers with the footer key verify the signature. The
+    /// schema, layout tree, and file statistics are visible to anyone, except that the writer
+    /// omits the statistics of encrypted fields. User metadata segments stay encrypted.
+    pub fn with_plaintext_footer(mut self) -> Self {
+        self.plaintext_footer = true;
+        self
+    }
+
+    /// Store fields without a key of their own in plaintext instead of encrypting them with the
+    /// footer key.
+    pub fn with_plaintext_fields(mut self) -> Self {
+        self.plaintext_fields = true;
+        self
+    }
+
+    /// Bind the encrypted segments of the file to an application-defined AAD prefix, such as the
+    /// file's path.
+    ///
+    /// The prefix is not stored in the file, so readers must supply it with
+    /// [`FileDecryption::with_aad_prefix`]. It applies to every key of the file.
+    pub fn with_aad_prefix(mut self, aad_prefix: impl Into<Arc<[u8]>>) -> Self {
+        self.aad_prefix = Some(aad_prefix.into());
+        self
+    }
+
+    /// Register a named key, for segments that a layout strategy requires to be encrypted with
+    /// it, e.g. through
+    /// [`WriteStrategyBuilder::with_field_encryption`](crate::WriteStrategyBuilder::with_field_encryption).
+    pub fn with_named_key(mut self, name: impl Into<EncryptionKeyName>, key: KeyConfig) -> Self {
+        self.named_keys.insert(name.into(), key);
+        self
+    }
+
+    /// Encrypt a field, including its statistics and nested fields, with its own key when writing
+    /// with the default layout strategy.
+    ///
+    /// This registers `key` under `name`, as [`with_named_key`](Self::with_named_key) does. A
+    /// reader without the key can still read every other field. The file-level statistics of the
+    /// field's top-level field are omitted, since the footer is not encrypted with its key.
+    ///
+    /// With a custom strategy configure the field on the strategy instead; the write fails
+    /// otherwise.
+    pub fn with_field_key(
+        mut self,
+        field: impl Into<FieldPath>,
+        name: impl Into<EncryptionKeyName>,
+        key: KeyConfig,
+    ) -> Self {
+        let name = name.into();
+        self.field_keys.push((field.into(), name.clone()));
+        self.with_named_key(name, key)
+    }
+
+    /// The footer key.
+    pub fn footer_key(&self) -> &KeyConfig {
+        &self.footer_key
+    }
+
+    /// The encryption algorithm.
+    pub fn algorithm(&self) -> EncryptionAlgorithm {
+        self.algorithm
+    }
+
+    /// Whether the footer is stored in plaintext and signed.
+    pub fn is_plaintext_footer(&self) -> bool {
+        self.plaintext_footer
+    }
+
+    /// Whether fields without a key of their own are stored in plaintext.
+    pub fn is_plaintext_fields(&self) -> bool {
+        self.plaintext_fields
+    }
+
+    pub(crate) fn named_keys(&self) -> &BTreeMap<EncryptionKeyName, KeyConfig> {
+        &self.named_keys
+    }
+
+    pub(crate) fn field_keys(&self) -> &[(FieldPath, EncryptionKeyName)] {
+        &self.field_keys
+    }
+
+    /// Create the cipher of `key` for one file.
+    pub(crate) fn file_cipher(&self, key: &KeyConfig) -> VortexResult<SegmentCipher> {
+        key.file_cipher(self.algorithm, self.aad_prefix.as_deref())
+    }
+}
+
+/// Configures how an encrypted Vortex file is decrypted when it is read, like Parquet's
+/// `FileDecryptionProperties`.
+#[derive(Clone)]
+pub struct FileDecryption {
+    pub(crate) keys: Arc<dyn KeyRetriever>,
+    pub(crate) aad_prefix: Option<Arc<[u8]>>,
+    pub(crate) verify_footer: bool,
+    pub(crate) allow_plaintext_files: bool,
+}
+
+impl FileDecryption {
+    /// Decrypt files with the keys resolved by `keys`.
+    pub fn new(keys: Arc<dyn KeyRetriever>) -> Self {
+        Self {
+            keys,
+            aad_prefix: None,
+            verify_footer: true,
+            allow_plaintext_files: false,
+        }
+    }
+
+    /// Supply the AAD prefix the file was bound to, such as its path.
+    ///
+    /// This is required to read files written with [`FileEncryption::with_aad_prefix`], and
+    /// reading fails for files without a prefix. A wrong prefix fails decryption.
+    pub fn with_aad_prefix(mut self, aad_prefix: impl Into<Arc<[u8]>>) -> Self {
+        self.aad_prefix = Some(aad_prefix.into());
+        self
+    }
+
+    /// Do not verify the signature of a plaintext footer.
+    ///
+    /// By default, the footer key of a file written with [`FileEncryption::with_plaintext_footer`]
+    /// is retrieved to verify that the footer was not modified.
+    pub fn without_footer_verification(mut self) -> Self {
+        self.verify_footer = false;
+        self
+    }
+
+    /// Allow reading files that are not encrypted.
+    ///
+    /// By default, a reader configured for decryption rejects unencrypted files, so that an
+    /// attacker cannot replace an encrypted file with a plaintext one.
+    pub fn with_plaintext_files_allowed(mut self) -> Self {
+        self.allow_plaintext_files = true;
+        self
+    }
+}
+
+impl Debug for FileDecryption {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FileDecryption")
+            .field("aad_prefix", &self.aad_prefix)
+            .field("verify_footer", &self.verify_footer)
+            .field("allow_plaintext_files", &self.allow_plaintext_files)
+            .finish_non_exhaustive()
+    }
+}
+
+/// The encryption algorithm of a segment.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum EncryptionAlgorithm {
+    /// The segment is stored in plaintext.
+    None,
+    /// Every segment is encrypted with AES-GCM, which detects modified segments.
+    AesGcm,
+    /// Data segments are encrypted with AES-CTR, which does not detect modified data, and every
+    /// other segment with AES-GCM.
+    AesGcmCtr,
+}
+
+/// Describes how a segment is encrypted, without the key itself.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct EncryptionSpec {
+    algorithm: EncryptionAlgorithm,
+    key_metadata: Arc<[u8]>,
+    aad_file_unique: Arc<[u8]>,
+    requires_aad_prefix: bool,
+}
+
+impl EncryptionSpec {
+    /// The spec of a plaintext segment.
+    pub fn plaintext() -> Self {
+        Self {
+            algorithm: EncryptionAlgorithm::None,
+            key_metadata: Arc::from([]),
+            aad_file_unique: Arc::from([]),
+            requires_aad_prefix: false,
+        }
+    }
+
+    /// The encryption algorithm.
+    pub fn algorithm(&self) -> EncryptionAlgorithm {
+        self.algorithm
+    }
+
+    /// The opaque metadata used to resolve the key with a [`KeyRetriever`].
+    pub fn key_metadata(&self) -> &[u8] {
+        &self.key_metadata
+    }
+
+    /// Whether readers must supply the AAD prefix the segments were encrypted with.
+    pub fn requires_aad_prefix(&self) -> bool {
+        self.requires_aad_prefix
+    }
+
+    /// Whether segments with this spec are encrypted.
+    pub fn is_encrypted(&self) -> bool {
+        self.algorithm != EncryptionAlgorithm::None
+    }
+
+    pub(crate) fn read_flatbuffer(fb: &fb::EncryptionSpec<'_>) -> VortexResult<Self> {
+        let algorithm = match fb.algorithm() {
+            fb::EncryptionAlgorithm::None => EncryptionAlgorithm::None,
+            fb::EncryptionAlgorithm::AesGcm => EncryptionAlgorithm::AesGcm,
+            fb::EncryptionAlgorithm::AesGcmCtr => EncryptionAlgorithm::AesGcmCtr,
+            other => vortex_bail!("Unsupported encryption algorithm {}", other.0),
+        };
+        Ok(Self {
+            algorithm,
+            key_metadata: fb
+                .key_metadata()
+                .map(|bytes| Arc::from(bytes.bytes()))
+                .unwrap_or_else(|| Arc::from([])),
+            aad_file_unique: fb
+                .aad_file_unique()
+                .map(|bytes| Arc::from(bytes.bytes()))
+                .unwrap_or_else(|| Arc::from([])),
+            requires_aad_prefix: fb.requires_aad_prefix(),
+        })
+    }
+
+    pub(crate) fn write_flatbuffer<'fb>(
+        &self,
+        fbb: &mut FlatBufferBuilder<'fb>,
+    ) -> WIPOffset<fb::EncryptionSpec<'fb>> {
+        let algorithm = match self.algorithm {
+            EncryptionAlgorithm::None => fb::EncryptionAlgorithm::None,
+            EncryptionAlgorithm::AesGcm => fb::EncryptionAlgorithm::AesGcm,
+            EncryptionAlgorithm::AesGcmCtr => fb::EncryptionAlgorithm::AesGcmCtr,
+        };
+        let key_metadata =
+            (!self.key_metadata.is_empty()).then(|| fbb.create_vector(&self.key_metadata));
+        let aad_file_unique =
+            (!self.aad_file_unique.is_empty()).then(|| fbb.create_vector(&self.aad_file_unique));
+        fb::EncryptionSpec::create(
+            fbb,
+            &fb::EncryptionSpecArgs {
+                algorithm,
+                key_metadata,
+                aad_file_unique,
+                requires_aad_prefix: self.requires_aad_prefix,
+            },
+        )
+    }
+}
+
+pub(crate) fn fill_random(bytes: &mut [u8]) -> VortexResult<()> {
+    getrandom::fill(bytes).map_err(|e| vortex_err!("Failed to generate random bytes: {e}"))
+}
+
+#[cfg(test)]
+mod tests;

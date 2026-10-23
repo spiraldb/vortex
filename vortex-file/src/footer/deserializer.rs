@@ -2,7 +2,6 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use std::borrow::Cow;
-use std::sync::Arc;
 
 use flatbuffers::root;
 use vortex_array::dtype::DType;
@@ -21,7 +20,7 @@ use crate::Footer;
 use crate::MAGIC_BYTES;
 use crate::VERSION;
 use crate::encryption::EncryptionSpec;
-use crate::encryption::KeyRetriever;
+use crate::encryption::FileDecryption;
 use crate::encryption::SegmentCipher;
 use crate::encryption::SegmentRole;
 use crate::footer::FileStatistics;
@@ -45,10 +44,8 @@ pub struct FooterDeserializer {
     session: VortexSession,
     // The DType, if provided externally.
     dtype: Option<DType>,
-    // Resolves the keys of encrypted footer segments.
-    keys: Option<Arc<dyn KeyRetriever>>,
-    // The AAD prefix the file is expected to be bound to.
-    aad_prefix: Option<Arc<[u8]>>,
+    // Decrypts encrypted footer segments, and verifies signed ones.
+    decryption: Option<FileDecryption>,
 
     // Internal state that we accumulate
 
@@ -65,37 +62,21 @@ impl FooterDeserializer {
             buffer: initial_read,
             session,
             dtype: None,
-            keys: None,
-            aad_prefix: None,
+            decryption: None,
             file_size: None,
             postscript: None,
         }
     }
 
-    /// Provide the [`KeyRetriever`] used to decrypt the footer of an encrypted file.
-    pub fn with_key_retriever(mut self, keys: Arc<dyn KeyRetriever>) -> Self {
-        self.keys = Some(keys);
+    /// Decrypt the footer of an encrypted file, or verify the signature of a plaintext footer.
+    pub fn with_decryption(mut self, decryption: FileDecryption) -> Self {
+        self.decryption = Some(decryption);
         self
     }
 
-    /// Provide or clear the [`KeyRetriever`] used to decrypt the footer of an encrypted file.
-    pub fn with_some_key_retriever(mut self, keys: Option<Arc<dyn KeyRetriever>>) -> Self {
-        self.keys = keys;
-        self
-    }
-
-    /// Provide the AAD prefix the encrypted file is bound to.
-    ///
-    /// This is required for files written with an AAD prefix. Deserialization fails if the file
-    /// is not bound to one.
-    pub fn with_aad_prefix(mut self, aad_prefix: impl Into<Arc<[u8]>>) -> Self {
-        self.aad_prefix = Some(aad_prefix.into());
-        self
-    }
-
-    /// Provide or clear the AAD prefix the encrypted file is bound to.
-    pub fn with_some_aad_prefix(mut self, aad_prefix: Option<Arc<[u8]>>) -> Self {
-        self.aad_prefix = aad_prefix;
+    /// Provide or clear the [`FileDecryption`] of the footer.
+    pub fn with_some_decryption(mut self, decryption: Option<FileDecryption>) -> Self {
+        self.decryption = decryption;
         self
     }
 
@@ -201,14 +182,15 @@ impl FooterDeserializer {
         }
 
         // Now we read our initial segments.
+        let verify = self
+            .decryption
+            .as_ref()
+            .is_some_and(|decryption| decryption.verify_footer);
         let segments = InitialSegments {
             initial_offset,
             initial_read: &self.buffer,
-            ciphers: resolve_postscript_ciphers(
-                postscript,
-                self.keys.as_deref(),
-                self.aad_prefix.as_deref(),
-            )?,
+            ciphers: resolve_postscript_ciphers(postscript, self.decryption.as_ref(), verify)?,
+            verify,
         };
         let dtype = dtype_segment
             .map(|segment| {
@@ -332,10 +314,12 @@ struct InitialSegments<'a> {
     initial_offset: u64,
     initial_read: &'a [u8],
     ciphers: Vec<SegmentCipher>,
+    /// Whether to verify the signatures of signed plaintext segments.
+    verify: bool,
 }
 
 impl<'a> InitialSegments<'a> {
-    /// Slice a segment out of the buffer, decrypting it if necessary.
+    /// Slice a segment out of the buffer, decrypting it or verifying its signature as necessary.
     fn read(
         &self,
         segment: &PostscriptSegment,
@@ -345,36 +329,49 @@ impl<'a> InitialSegments<'a> {
         if !segment.encryption.is_encrypted() {
             return Ok(Cow::Borrowed(bytes));
         }
+        if segment.signature.is_some() && !self.verify {
+            return Ok(Cow::Borrowed(bytes));
+        }
         let cipher = self
             .ciphers
             .iter()
             .find(|cipher| *cipher.spec() == segment.encryption)
             .vortex_expect("ciphers resolved for every postscript encryption spec");
+        if let Some(signature) = &segment.signature {
+            cipher.verify(role, bytes, signature)?;
+            return Ok(Cow::Borrowed(bytes));
+        }
         let plaintext = cipher.decrypt(role, ByteBuffer::copy_from(bytes), segment.alignment)?;
         Ok(Cow::Owned(plaintext.as_slice().to_vec()))
     }
 }
 
-/// Resolve a cipher for each distinct encryption spec of the postscript's segments.
+/// Resolve a cipher for each distinct encryption spec of the footer segments that must be
+/// decrypted, or verified if `verify`.
+///
+/// Metadata segments are read later through the file's segment source.
 fn resolve_postscript_ciphers(
     postscript: &Postscript,
-    keys: Option<&dyn KeyRetriever>,
-    aad_prefix: Option<&[u8]>,
+    decryption: Option<&FileDecryption>,
+    verify: bool,
 ) -> VortexResult<Vec<SegmentCipher>> {
     let segments = [&postscript.dtype, &postscript.statistics]
         .into_iter()
         .flatten()
-        .chain([&postscript.layout, &postscript.footer])
-        .chain(postscript.metadata.iter().map(|metadata| &metadata.segment));
+        .chain([&postscript.layout, &postscript.footer]);
     let mut specs: Vec<&EncryptionSpec> = Vec::new();
     for segment in segments {
-        if segment.encryption.is_encrypted() && !specs.contains(&&segment.encryption) {
+        let needs_cipher = segment.signature.is_none() || verify;
+        if segment.encryption.is_encrypted()
+            && needs_cipher
+            && !specs.contains(&&segment.encryption)
+        {
             specs.push(&segment.encryption);
         }
     }
     specs
         .into_iter()
-        .filter_map(|spec| SegmentCipher::resolve(spec, keys, aad_prefix).transpose())
+        .filter_map(|spec| SegmentCipher::resolve(spec, decryption).transpose())
         .collect()
 }
 
@@ -418,6 +415,7 @@ mod tests {
             length,
             alignment: FlatBuffer::alignment(),
             encryption: EncryptionSpec::plaintext(),
+            signature: None,
         }
     }
 

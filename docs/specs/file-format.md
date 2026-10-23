@@ -98,31 +98,64 @@ shared or fetched from an external source.
 
 ## Encryption
 
-Segments can be encrypted with AES-256-GCM. A writer configured with a key encrypts every data segment and every
-segment referenced by the postscript: the `DType`, layout, statistics, footer, and user metadata segments. Only the
-postscript remains in plaintext.
+Vortex files support modular encryption with the same features as
+[Parquet modular encryption](https://parquet.apache.org/docs/file-format/data-pages/encryption/). Encryption operates on
+whole segments: data segments, and the `DType`, layout, statistics, footer, and user metadata segments referenced by the
+postscript. The postscript always remains in plaintext.
 
 - Each `PostscriptSegment` carries its `EncryptionSpec` inline, so the footer can be decrypted without a prior lookup.
 - Each `SegmentSpec` stores an index into the footer's `encryption_specs`. Index 0 always denotes a plaintext segment,
-  so files written before encryption existed remain valid.
-- An encrypted segment is stored as `ciphertext || nonce || tag`, with a random 12-byte nonce and a 16-byte tag. The
-  ciphertext has the plaintext's length and starts at the segment's offset.
-- The additional authenticated data is the length of the AAD prefix as a little-endian `uint32`, the AAD prefix, the
-  spec's random `aad_file_unique` bytes, and an identifier of the segment: its index in the segment map, the name of a
-  footer segment, or the key of a metadata segment. A segment moved within or between files fails to decrypt.
-- The AAD prefix is optional and application-defined, such as the file's path, and binds the file to an identity the
-  reader knows, so that it cannot be replaced by another file encrypted with the same key. It is never stored in the
-  file: the writer sets `requires_aad_prefix`, and readers must supply the prefix to decrypt the file. Without a
-  prefix, its length is 0.
+  so files written before encryption existed remain valid. Index 1 holds the footer key.
 - Keys are never stored in the file. The opaque `key_metadata` of an `EncryptionSpec` identifies the key to the
   reader, for example by a key management service key id.
+- AES-128, AES-192, and AES-256 are supported, selected by the length of the key.
 
-A writer can also encrypt individual fields with their own keys, each recorded as a separate `EncryptionSpec`. Every
-segment of such a field, including its zone maps and dictionaries, uses the field's key, while the footer and all other
-segments use the footer key. A reader that can only resolve the footer key can still read every other field, and the
-writer omits the file-level statistics of fields with their own key, since those live in the footer.
+### Algorithms
 
-Readers without encryption support fail to parse an encrypted file's footer.
+- `AesGcm` encrypts every segment with AES-GCM, stored as `ciphertext || nonce || tag`, with a random 12-byte nonce and
+  a 16-byte tag. The ciphertext has the plaintext's length and starts at the segment's offset.
+- `AesGcmCtr` encrypts the data segments of the segment map with AES-CTR, stored as `ciphertext || nonce`, and every
+  other segment with AES-GCM. The 16-byte IV is the nonce followed by a big-endian 32-bit block counter starting at 1.
+  AES-CTR is faster, but does not detect modified data.
+
+The additional authenticated data of AES-GCM is the length of the AAD prefix as a little-endian `uint32`, the AAD prefix,
+the spec's random `aad_file_unique` bytes, and an identifier of the segment: its index in the segment map, the name of
+a footer segment, or the key of a metadata segment. A segment moved within or between files fails to decrypt.
+
+The AAD prefix is optional and application-defined, such as the file's path, and binds the file to an identity the
+reader knows, so that it cannot be replaced by another file encrypted with the same key. It is never stored in the
+file: the writer sets `requires_aad_prefix`, and readers must supply the prefix to decrypt the file. Without a prefix,
+its length is 0. Unlike Parquet, which can also store the prefix, Vortex omits that mode, since a stored prefix only
+protects readers that already know the expected value.
+
+### Footer modes
+
+- An encrypted footer hides the schema, layout, and statistics. Readers need the footer key to open the file.
+- A plaintext footer leaves the `DType`, layout, statistics, and footer segments readable, so that readers without
+  encryption support, or without keys, can open the file and read the fields stored in plaintext. Each of these
+  segments is signed with the footer key: its `PostscriptSegment` carries the footer key's `EncryptionSpec` and a
+  `signature` of `nonce || tag`, computed with AES-GMAC over the segment's additional authenticated data, a `0xFF` byte,
+  and the segment's bytes. Readers with the footer key verify the signatures. User metadata segments remain encrypted.
+
+### Field keys
+
+Fields can be encrypted with their own keys, each recorded as a separate `EncryptionSpec`. Every segment of such a
+field, including its zone maps and dictionaries, uses the field's key. A reader without that key can still read every
+other field. Fields without their own key are encrypted with the footer key, or stored in plaintext.
+
+File-level statistics live in the statistics segment, which is protected by the footer key only. Writers omit the
+statistics of fields encrypted with their own key, and, with a plaintext footer, those of every encrypted field.
+
+### Key management
+
+Writers may use envelope encryption, where each file uses fresh random data keys that are wrapped by master keys held
+in a key management service. The `key_metadata` then holds an `EnvelopeKeyMetadata` flatbuffer, with the wrapped key
+material or a reference to key material stored outside of the file. With double wrapping, data keys are wrapped locally
+with a key encryption key, which is itself wrapped by the key management service.
+
+:::{literalinclude} ../../vortex-file/flatbuffers/vortex-file/key_material.fbs
+:start-after: SPDX-FileCopyrightText
+:::
 
 ## Reified File Example
 

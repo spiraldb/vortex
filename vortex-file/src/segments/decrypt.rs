@@ -15,7 +15,7 @@ use vortex_layout::segments::SegmentSource;
 
 use crate::Footer;
 use crate::SegmentSpec;
-use crate::encryption::KeyRetriever;
+use crate::encryption::FileDecryption;
 use crate::encryption::SegmentCipher;
 use crate::encryption::SegmentRole;
 
@@ -40,30 +40,28 @@ impl DecryptingSegmentSource {
     pub(crate) fn wrap(
         inner: Arc<dyn SegmentSource>,
         footer: &Footer,
-        keys: Option<&dyn KeyRetriever>,
-        aad_prefix: Option<&[u8]>,
+        decryption: Option<&FileDecryption>,
     ) -> VortexResult<Arc<dyn SegmentSource>> {
         if !footer.is_encrypted() {
+            if decryption.is_some_and(|decryption| !decryption.allow_plaintext_files) {
+                vortex_bail!(
+                    "Vortex file is not encrypted, but decryption was configured; allow plaintext \
+                     files with FileDecryption::with_plaintext_files_allowed"
+                );
+            }
             return Ok(inner);
         }
-        if keys.is_none() {
-            vortex_bail!(
-                "Vortex file is encrypted, but no KeyRetriever was provided to \
-                 VortexOpenOptions::with_key_retriever"
-            );
-        }
         // A key that cannot be retrieved only fails reads of the segments encrypted with it, so
-        // that a reader without the key of an encrypted field can still read the other fields.
+        // that a reader without the key of an encrypted field, or without any keys for a file
+        // with a plaintext footer, can still read the other fields.
         let ciphers = footer
             .encryption_specs()
             .iter()
-            .map(
-                |spec| match SegmentCipher::resolve(spec, keys, aad_prefix) {
-                    Ok(None) => CipherSlot::Plaintext,
-                    Ok(Some(cipher)) => CipherSlot::Ready(Arc::new(cipher)),
-                    Err(err) => CipherSlot::Unavailable(Arc::from(err.to_string())),
-                },
-            )
+            .map(|spec| match SegmentCipher::resolve(spec, decryption) {
+                Ok(None) => CipherSlot::Plaintext,
+                Ok(Some(cipher)) => CipherSlot::Ready(Arc::new(cipher)),
+                Err(err) => CipherSlot::Unavailable(Arc::from(err.to_string())),
+            })
             .collect();
         Ok(Arc::new(Self {
             inner,
