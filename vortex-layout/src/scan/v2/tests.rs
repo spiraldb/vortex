@@ -673,6 +673,53 @@ async fn unordered_yields_before_the_split_finishes() -> VortexResult<()> {
     Ok(())
 }
 
+/// A dense chunk over one stored segment is projected by one morsel, a batch per output window.
+#[tokio::test]
+async fn dense_chunk_yields_a_batch_per_window() -> VortexResult<()> {
+    const ROWS: i32 = 150_000;
+    let session = new_session().with_tokio();
+    let segments = Arc::new(TestSegments::default());
+    let (mut sequence, eof) = SequenceId::root().split();
+    let array = PrimitiveArray::from_iter(0..ROWS).into_array();
+    let dtype = array.dtype().clone();
+    let layout = chunked_flat()
+        .write_stream(
+            ArrayContext::empty().into(),
+            Arc::<TestSegments>::clone(&segments),
+            SequentialStreamAdapter::new(dtype, stream::iter([Ok((sequence.advance(), array))]))
+                .sendable(),
+            eof,
+            &session,
+        )
+        .await?;
+    let segments: Arc<dyn SegmentSource> = segments;
+    let mut scan = ScanRun::try_new(builder(&session, &segments, &layout)?)?;
+    Arc::get_mut(&mut scan.scan)
+        .ok_or_else(|| vortex_err!("the prepared scan is not shared yet"))?
+        .chunk_rows = usize::try_from(ROWS)?;
+    let batches = run_batches(&scan, 0..layout.row_count()).await?;
+    assert_eq!(
+        batches
+            .iter()
+            .map(|batch| batch.array.len())
+            .collect::<Vec<_>>(),
+        [65_536, 65_536, 18_928]
+    );
+    let actual = ChunkedArray::try_new(
+        batches
+            .into_iter()
+            .map(|batch| batch.array)
+            .collect::<Vec<_>>(),
+        layout.dtype().clone(),
+    )?;
+    assert_arrays_eq!(
+        actual,
+        PrimitiveArray::from_iter(0..ROWS),
+        &mut session.create_execution_ctx()
+    );
+    Ok(())
+}
+
 #[tokio::test]
 async fn primitive_column() -> VortexResult<()> {
     let session = new_session().with_tokio();
