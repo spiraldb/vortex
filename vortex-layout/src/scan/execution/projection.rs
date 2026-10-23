@@ -7,6 +7,7 @@ use std::vec::IntoIter;
 use vortex_array::IntoArray;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::dtype::DType;
+use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_io::request::IoConsumer;
@@ -28,11 +29,13 @@ use crate::scan::execution::SelectedRows;
 use crate::scan::execution::adaptor::AdaptorStep;
 use crate::scan::execution::adaptor::Piece;
 use crate::scan::execution::adaptor::ScanAdaptor;
+use crate::scan::execution::chunk::row_chunks;
 
 const MAX_OUTPUT_ROWS: usize = 65_536;
 
 /// Keeps sparse selections together and subdivides dense selections to avoid large copies when
-/// converting chunked projection results to Arrow.
+/// converting chunked projection results to Arrow. Subdivisions lie on a fixed grid of the file's
+/// rows, so a writer chunk aligned to it is never split between two morsels.
 pub(super) struct ProjectionPlanner {
     scan: Arc<PreparedScan>,
     selected: IntoIter<SelectedRows>,
@@ -44,19 +47,21 @@ impl ProjectionPlanner {
         let selected = if selected.mask.true_count() <= MAX_OUTPUT_ROWS {
             vec![selected]
         } else {
-            (0..selected.mask.len())
-                .step_by(MAX_OUTPUT_ROWS)
-                .filter_map(|start| {
-                    let end = (start + MAX_OUTPUT_ROWS).min(selected.mask.len());
-                    let mask = selected.mask.slice(start..end);
+            let offset = |row: u64| {
+                usize::try_from(row - selected.scope.rows.start)
+                    .vortex_expect("a work chunk fits usize")
+            };
+            row_chunks(selected.scope.rows.clone(), MAX_OUTPUT_ROWS)
+                .into_iter()
+                .filter_map(|rows| {
+                    let mask = selected.mask.slice(offset(rows.start)..offset(rows.end));
                     if mask.all_false() {
                         return None;
                     }
                     Some(SelectedRows {
                         scope: WorkScope {
                             file_ordinal: selected.scope.file_ordinal,
-                            rows: selected.scope.rows.start + start as u64
-                                ..selected.scope.rows.start + end as u64,
+                            rows,
                         },
                         mask,
                     })

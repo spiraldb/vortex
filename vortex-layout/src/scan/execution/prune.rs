@@ -23,14 +23,12 @@ use vortex_scan::planning::planner::WorkScope;
 use vortex_session::VortexSession;
 
 use super::PreparedScan;
-use super::adaptor::AdaptorStep;
-use super::adaptor::ScanAdaptor;
+use super::filter::MaskScan;
+use super::filter::MaskStep;
 use super::filter::hint;
-use super::filter::piece_mask;
 use super::filter::segments_read;
 use crate::plan::physical::PlanRef;
 use crate::plan::physical::Zoned;
-use crate::plan::physical::pipeline::Scan;
 use crate::plan::physical::pipeline::Split;
 
 /// Whether every zone proof in `plan` has already been proved, so compiling it reads no zones.
@@ -62,8 +60,7 @@ pub(super) struct PrunePlanner {
     /// The rows no proof has excluded yet, over `rows`.
     mask: Mask,
     proofs: IntoIter<PlanRef>,
-    active: Option<ScanAdaptor>,
-    pieces: Vec<Mask>,
+    active: Option<MaskScan>,
     announced: bool,
     /// Ids for hints, counting down from `u32::MAX` so they never meet an adaptor's fetch ids.
     next_hint: u32,
@@ -85,7 +82,6 @@ impl PrunePlanner {
             mask: Mask::new_true(len),
             proofs: proofs.into_iter(),
             active: None,
-            pieces: Vec::new(),
             announced: false,
             next_hint: u32::MAX,
             done: false,
@@ -95,8 +91,8 @@ impl PrunePlanner {
 
 impl IoConsumer for PrunePlanner {
     fn set_io_result(&mut self, request: IoRequestId, result: IoResult) {
-        if let Some(adaptor) = &mut self.active {
-            adaptor.set_io_result(request, result);
+        if let Some(proof) = &mut self.active {
+            proof.set_io_result(request, result);
         }
     }
 }
@@ -107,8 +103,8 @@ impl Planner for PrunePlanner {
             return State::Done;
         }
         match &self.active {
-            Some(adaptor) if adaptor.state() != State::Done => adaptor.state(),
-            _ => State::NeedsCompute,
+            Some(proof) => proof.state(),
+            None => State::NeedsCompute,
         }
     }
 
@@ -146,19 +142,12 @@ impl Planner for PrunePlanner {
                 return Ok(PlannerOutput::NeedsIO(batch));
             }
         }
-        if let Some(adaptor) = &mut self.active {
-            if adaptor.state() != State::Done {
-                return Ok(match adaptor.compute()? {
-                    AdaptorStep::Yield => PlannerOutput::Continue,
-                    AdaptorStep::NeedsIO(batch) => PlannerOutput::NeedsIO(batch),
-                    AdaptorStep::Piece(piece) => {
-                        self.pieces.push(piece_mask(&self.scan.session, piece)?);
-                        PlannerOutput::Continue
-                    }
-                });
-            }
+        if let Some(proof) = &mut self.active {
+            let excluded = match proof.compute(&self.scan.session)? {
+                MaskStep::Running(output) => return Ok(output),
+                MaskStep::Finished(excluded) => excluded,
+            };
             let input = self.mask.true_count();
-            let excluded = Mask::concat(self.pieces.iter())?;
             vortex_ensure_eq!(excluded.len(), input);
             self.mask = self.mask.intersect_by_rank(&!excluded);
             tracing::debug!(
@@ -169,24 +158,20 @@ impl Planner for PrunePlanner {
                 "v2 zone proof evaluated"
             );
             self.active = None;
-            self.pieces.clear();
         }
         if self.mask.all_false() {
             self.done = true;
             return Ok(PlannerOutput::Done);
         }
         if let Some(proof) = self.proofs.next() {
-            let scan = Scan::try_new(
-                self.scan.session.clone(),
+            self.active = Some(MaskScan::new(
+                &self.scan,
                 proof,
-                vec![Split {
+                Split {
                     rows: self.rows.clone(),
                     mask: self.mask.clone(),
-                }],
-            )?
-            .with_row_offset(self.scan.row_offset)
-            .with_value_cache(self.scan.values.clone());
-            self.active = Some(ScanAdaptor::new(scan, Arc::clone(&self.scan.locations)));
+                },
+            )?);
             return Ok(PlannerOutput::Continue);
         }
         // Every proof has run: the planner this one continues into gets the kept rows.
