@@ -16,8 +16,10 @@ use datafusion::execution::runtime_env::RuntimeEnvBuilder;
 use datafusion::prelude::SessionConfig;
 use datafusion::prelude::SessionContext;
 use datafusion_common::GetExt;
+use object_store::ClientConfigKey;
 use object_store::ObjectStore;
 use object_store::aws::AmazonS3Builder;
+use object_store::aws::AmazonS3ConfigKey;
 use object_store::gcp::GoogleCloudStorageBuilder;
 use object_store::local::LocalFileSystem;
 use url::Url;
@@ -65,11 +67,18 @@ pub fn make_object_store(
     match source.scheme() {
         "s3" => {
             let bucket_name = &source[url::Position::BeforeHost..url::Position::AfterHost];
-            let s3 = Arc::new(
-                AmazonS3Builder::from_env()
-                    .with_bucket_name(bucket_name)
-                    .build()?,
-            );
+            // A scan's burst of reads opens a few hundred connections, and queries reusing
+            // them all from an unbounded idle pool alternate between a fast and a slow mode.
+            // A bounded pool keeps every query in the fast mode; `AWS_POOL_MAX_IDLE_PER_HOST`
+            // overrides it like the other `AWS_` client options.
+            let mut builder = AmazonS3Builder::from_env().with_bucket_name(bucket_name);
+            if std::env::var_os("AWS_POOL_MAX_IDLE_PER_HOST").is_none() {
+                builder = builder.with_config(
+                    AmazonS3ConfigKey::Client(ClientConfigKey::PoolMaxIdlePerHost),
+                    "32",
+                );
+            }
+            let s3 = Arc::new(builder.build()?);
             session.register_object_store(
                 &Url::parse(&format!("s3://{bucket_name}/"))?,
                 Arc::<object_store::aws::AmazonS3>::clone(&s3),
