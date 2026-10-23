@@ -2047,13 +2047,16 @@ async fn nested_list_of_list_roundtrip() -> VortexResult<()> {
 #[tokio::test]
 #[cfg_attr(miri, ignore)]
 async fn nested_empty_list_roundtrip(#[case] validity: Validity) -> VortexResult<()> {
+    let mut ctx = SESSION.create_execution_ctx();
     let inner = ListArray::try_new(
         PrimitiveArray::new::<i32>(buffer![], Validity::NonNullable).into_array(),
         buffer![0u32].into_array(),
         Validity::NonNullable,
+        &mut ctx,
     )?
     .into_array();
-    let outer = ListArray::try_new(inner, buffer![0u32, 0, 0].into_array(), validity)?.into_array();
+    let outer = ListArray::try_new(inner, buffer![0u32, 0, 0].into_array(), validity, &mut ctx)?
+        .into_array();
     let array = StructArray::from_fields(&[("nested", outer)])?.into_array();
 
     let result = write_read_roundtrip(array.clone()).await?;
