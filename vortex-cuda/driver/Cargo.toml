@@ -4,7 +4,7 @@
 [package]
 name = "vortex-cuda-driver"
 authors.workspace = true
-description = "Minimal CUDA driver API bindings for Vortex"
+description = "Minimal CUDA driver API bindings with cross-stream-only synchronization for Vortex"
 edition = { workspace = true }
 categories = { workspace = true }
 include = { workspace = true }
@@ -19,5 +19,12 @@ publish = false
 [lints]
 workspace = true
 
+[features]
+default = []
+f16 = ["dep:half"]
+
 [dependencies]
+half = { workspace = true, optional = true }
 libloading = { workspace = true }
+parking_lot = { workspace = true }
+smallvec = { workspace = true }
