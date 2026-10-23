@@ -48,8 +48,9 @@ use crate::arrays::Struct;
 use crate::arrays::struct_::compute::rules::struct_cast_reduce_parent;
 use crate::kernel::ExecuteParentKernel;
 use crate::matcher::Matcher;
+use crate::optimizer::rules::ArrayParentReduceRule;
 use crate::scalar_fn::ScalarFnVTable;
-use crate::scalar_fn::fns::cast::Cast;
+use crate::scalar_fn::builtin::cast::Cast;
 
 /// Shared hasher used to combine `(outer, child)` tuples into registry keys.
 static FN_HASHER: LazyLock<DefaultHashBuilder> = LazyLock::new(DefaultHashBuilder::default);
@@ -64,6 +65,37 @@ static FN_HASHER: LazyLock<DefaultHashBuilder> = LazyLock::new(DefaultHashBuilde
 /// required of static parent-reduce rules.
 pub type ReduceParentFn =
     fn(child: &ArrayRef, parent: &ArrayRef, child_idx: usize) -> VortexResult<Option<ArrayRef>>;
+
+/// Applies a typed [`ArrayParentReduceRule`] as a [`ReduceParentFn`] would, so a crate that defines
+/// a scalar function can register parent-reduce rules for encodings it does not own.
+///
+/// The rule applies when `child` is a `V` array and `parent` matches the rule's
+/// [`Parent`](ArrayParentReduceRule::Parent) matcher. Wrap it in a function to register it:
+///
+/// ```ignore
+/// fn constant_between(child: &ArrayRef, parent: &ArrayRef, idx: usize) -> VortexResult<Option<ArrayRef>> {
+///     apply_reduce_parent_rule(&BetweenReduceAdaptor(Constant), child, parent, idx)
+/// }
+/// session.kernels().register_reduce_parent(Between.id(), Constant.id(), &[constant_between]);
+/// ```
+pub fn apply_reduce_parent_rule<V, R>(
+    rule: &R,
+    child: &ArrayRef,
+    parent: &ArrayRef,
+    child_idx: usize,
+) -> VortexResult<Option<ArrayRef>>
+where
+    V: VTable,
+    R: ArrayParentReduceRule<V>,
+{
+    let Some(array) = child.as_opt::<V>() else {
+        return Ok(None);
+    };
+    let Some(parent) = <R::Parent as Matcher>::try_match(parent) else {
+        return Ok(None);
+    };
+    rule.reduce_parent(array, parent, child_idx)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 #[repr(transparent)]
@@ -386,7 +418,7 @@ mod tests {
     use crate::ArrayVTable;
     use crate::arrays::Bool;
     use crate::scalar_fn::ScalarFnVTable;
-    use crate::scalar_fn::fns::binary::Binary;
+    use crate::scalar_fn::builtin::binary::Binary;
 
     static SESSION: LazyLock<VortexSession> =
         LazyLock::new(|| VortexSession::empty().with::<KernelSession>());
