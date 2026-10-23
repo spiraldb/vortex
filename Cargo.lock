@@ -11763,6 +11763,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "vortex-cuda-driver"
+version = "0.1.0"
+dependencies = [
+ "libloading 0.8.9",
+]
+
+[[package]]
 name = "vortex-cuda-ffi"
 version = "0.1.0"
 dependencies = [
