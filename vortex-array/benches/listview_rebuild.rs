@@ -23,12 +23,8 @@ use vortex_array::arrays::VarBinViewArray;
 use vortex_array::arrays::listview::ListViewArraySlotsExt;
 use vortex_array::arrays::listview::ListViewRebuildMode;
 use vortex_array::dtype::FieldNames;
-use vortex_array::dtype::session::DTypeSession;
 use vortex_array::memory::MemorySession;
 use vortex_array::optimizer::kernels::KernelSession;
-use vortex_array::scalar_fn::session::ScalarFnSession;
-use vortex_array::session::ArraySession;
-use vortex_array::stats::session::StatsSession;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
 use vortex_session::VortexSession;
@@ -44,13 +40,9 @@ fn main() {
 /// A shared session for the `ListView` rebuild benchmarks, used to create execution contexts.
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     VortexSession::empty()
-        .with::<ArraySession>()
         .with::<KernelSession>()
-        .with::<DTypeSession>()
-        .with::<ScalarFnSession>()
         .with::<AggregateFnSession>()
         .with::<MemorySession>()
-        .with::<StatsSession>()
 });
 
 fn make_primitive_lv(num_lists: usize, list_size: usize, step: usize) -> ListViewArray {

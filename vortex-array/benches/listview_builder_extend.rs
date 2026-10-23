@@ -20,25 +20,17 @@ use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability::NonNullable;
 use vortex_array::dtype::Nullability::Nullable;
 use vortex_array::dtype::PType::I32;
-use vortex_array::dtype::session::DTypeSession;
 use vortex_array::memory::MemorySession;
 use vortex_array::optimizer::kernels::KernelSession;
-use vortex_array::scalar_fn::session::ScalarFnSession;
-use vortex_array::session::ArraySession;
-use vortex_array::stats::session::StatsSession;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
 use vortex_session::VortexSession;
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     VortexSession::empty()
-        .with::<ArraySession>()
         .with::<KernelSession>()
-        .with::<DTypeSession>()
-        .with::<ScalarFnSession>()
         .with::<AggregateFnSession>()
         .with::<MemorySession>()
-        .with::<StatsSession>()
 });
 
 #[global_allocator]

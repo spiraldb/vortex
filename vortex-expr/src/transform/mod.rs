@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Transformations for [`crate::expr::Expression`] and [`crate::expr::BoundExpression`] trees.
+//! Transformations for [`Expression`](vortex_array::expr::Expression) and
+//! [`BoundExpression`](vortex_array::expr::BoundExpression) trees.
 mod bound_partition;
 mod match_between;
 mod replace;

@@ -33,18 +33,16 @@ use vortex_array::dtype::DecimalDType;
 use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
 use vortex_array::dtype::StructFields;
-use vortex_array::dtype::session::DTypeSession;
 use vortex_array::memory::MemorySession;
 use vortex_array::optimizer::kernels::KernelSession;
-use vortex_array::scalar_fn::session::ScalarFnSession;
 use vortex_array::session::ArraySession;
 use vortex_array::session::ArraySessionExt;
-use vortex_array::stats::session::StatsSession;
 #[expect(
     deprecated,
     reason = "benchmark comparing deprecated method with new one"
 )]
 use vortex_arrow::ArrowArrayExecutor;
+use vortex_arrow::ArrowSession;
 use vortex_arrow::ArrowSessionExt;
 use vortex_fsst::fsst_compress;
 use vortex_fsst::fsst_train_compressor;
@@ -65,11 +63,9 @@ static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     let session = VortexSession::empty()
         .with::<ArraySession>()
         .with::<KernelSession>()
-        .with::<DTypeSession>()
-        .with::<ScalarFnSession>()
         .with::<AggregateFnSession>()
         .with::<MemorySession>()
-        .with::<StatsSession>();
+        .with::<ArrowSession>();
     vortex_fsst::initialize(&session);
     vortex_onpair::initialize(&session);
     session.arrays().register(Zstd);

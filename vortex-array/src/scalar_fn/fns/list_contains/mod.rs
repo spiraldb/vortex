@@ -846,19 +846,14 @@ mod tests {
     use crate::dtype::PType::I32;
     use crate::dtype::StructFields;
     use crate::expr::Expression;
-    use crate::expr::and;
     use crate::expr::bound;
     use crate::expr::col;
     use crate::expr::get_item;
-    use crate::expr::gt;
     use crate::expr::in_list;
     use crate::expr::list_contains;
     use crate::expr::list_contains_opts;
     use crate::expr::lit;
-    use crate::expr::lt;
-    use crate::expr::or;
     use crate::expr::root;
-    use crate::expr::stats::Stat;
     use crate::optimizer::ArrayOptimizer;
     use crate::scalar::PValue;
     use crate::scalar::Scalar;
@@ -867,18 +862,9 @@ mod tests {
     use crate::scalar_fn::fns::list_contains::PreparedSet;
     use crate::scalar_fn::fns::list_contains::PreparedSetData;
     use crate::scalar_fn::fns::literal::Literal;
-    use crate::stats::StatsSession;
-    use crate::stats::stat as stat_expr;
     use crate::validity::Validity;
 
     static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
-
-    static STATS_SESSION: LazyLock<VortexSession> =
-        LazyLock::new(|| VortexSession::empty().with::<StatsSession>());
-
-    fn stat(expr: Expression, stat: Stat) -> Expression {
-        stat_expr(expr, stat.aggregate_fn().unwrap())
-    }
 
     fn test_array() -> ArrayRef {
         let mut ctx = SESSION.create_execution_ctx();
@@ -1023,49 +1009,6 @@ mod tests {
             expr.return_dtype(&scope).unwrap(),
             DType::Bool(Nullability::Nullable)
         );
-    }
-
-    #[test]
-    pub fn list_falsification() -> VortexResult<()> {
-        let expr = list_contains(
-            lit(Scalar::list(
-                Arc::new(DType::Primitive(I32, Nullability::NonNullable)),
-                vec![1.into(), 2.into(), 3.into()],
-                Nullability::NonNullable,
-            )),
-            col("a"),
-        );
-        let scope = DType::Struct(
-            StructFields::new(
-                ["a"].into(),
-                vec![DType::Primitive(I32, Nullability::NonNullable)],
-            ),
-            Nullability::NonNullable,
-        );
-
-        assert_eq!(
-            expr.bind(&scope)?.falsify(&STATS_SESSION)?,
-            Some(
-                and(
-                    and(
-                        or(
-                            lt(stat(col("a"), Stat::Max), lit(1i32)),
-                            gt(stat(col("a"), Stat::Min), lit(1i32)),
-                        ),
-                        or(
-                            lt(stat(col("a"), Stat::Max), lit(2i32)),
-                            gt(stat(col("a"), Stat::Min), lit(2i32)),
-                        )
-                    ),
-                    or(
-                        lt(stat(col("a"), Stat::Max), lit(3i32)),
-                        gt(stat(col("a"), Stat::Min), lit(3i32)),
-                    )
-                )
-                .bind(&scope)?
-            )
-        );
-        Ok(())
     }
 
     #[test]
@@ -2030,16 +1973,15 @@ mod tests {
     #[test]
     fn options_round_trip_through_serde() -> VortexResult<()> {
         use crate::scalar_fn::ScalarFnVTable;
-        let session = VortexSession::empty();
         for options in [ListContainsOptions::default(), SQL] {
             let bytes = ListContains
                 .serialize(&options)?
                 .vortex_expect("serialized");
-            assert_eq!(ListContains.deserialize(&bytes, &session)?, options);
+            assert_eq!(ListContains.deserialize(&bytes, &SESSION)?, options);
         }
         // Files written before the option existed carry no bytes at all.
         assert_eq!(
-            ListContains.deserialize(&[], &session)?,
+            ListContains.deserialize(&[], &SESSION)?,
             ListContainsOptions::default()
         );
         Ok(())

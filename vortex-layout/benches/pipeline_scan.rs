@@ -12,18 +12,13 @@ use divan::Bencher;
 use mimalloc::MiMalloc;
 use vortex_array::ArrayContext;
 use vortex_array::IntoArray;
-use vortex_array::aggregate_fn::session::AggregateFnSession;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::buffer::BufferHandle;
 use vortex_array::dtype::Nullability;
 use vortex_array::dtype::StructFields;
-use vortex_array::dtype::session::DTypeSession;
-use vortex_array::memory::MemorySession;
 use vortex_array::optimizer::kernels::KernelSession;
-use vortex_array::scalar_fn::session::ScalarFnSession;
 use vortex_array::serde::SerializeOptions;
 use vortex_array::session::ArraySession;
-use vortex_array::stats::session::StatsSession;
 use vortex_buffer::Alignment;
 use vortex_buffer::ByteBufferMut;
 use vortex_layout::plan::physical::PackPlan;
@@ -33,7 +28,6 @@ use vortex_layout::plan::physical::pipeline::Scan;
 use vortex_layout::plan::physical::pipeline::Split;
 use vortex_layout::plan::physical::pipeline::Turn;
 use vortex_layout::segments::SegmentId;
-use vortex_layout::session::LayoutSession;
 use vortex_session::VortexSession;
 use vortex_session::registry::ReadContext;
 
@@ -41,12 +35,6 @@ static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     VortexSession::empty()
         .with::<ArraySession>()
         .with::<KernelSession>()
-        .with::<DTypeSession>()
-        .with::<ScalarFnSession>()
-        .with::<AggregateFnSession>()
-        .with::<MemorySession>()
-        .with::<StatsSession>()
-        .with::<LayoutSession>()
 });
 
 #[global_allocator]

@@ -24,14 +24,12 @@ mod benchmarks {
     use vortex_array::arrays::StructArray;
     use vortex_array::arrays::VarBinViewArray;
     use vortex_array::dtype::FieldNames;
-    use vortex_array::dtype::session::DTypeSession;
     use vortex_array::memory::MemorySession;
     use vortex_array::optimizer::kernels::KernelSession;
-    use vortex_array::scalar_fn::session::ScalarFnSession;
     use vortex_array::session::ArraySession;
-    use vortex_array::stats::session::StatsSession;
     use vortex_array::validity::Validity;
     use vortex_btrblocks::BtrBlocksCompressorBuilder;
+    use vortex_btrblocks::CompressionSession;
     use vortex_buffer::buffer_mut;
     use vortex_session::VortexSession;
 
@@ -42,11 +40,9 @@ mod benchmarks {
         VortexSession::empty()
             .with::<ArraySession>()
             .with::<KernelSession>()
-            .with::<DTypeSession>()
-            .with::<ScalarFnSession>()
             .with::<AggregateFnSession>()
             .with::<MemorySession>()
-            .with::<StatsSession>()
+            .with::<CompressionSession>()
     });
 
     const SHORT_STRINGS: &[&str] = &[

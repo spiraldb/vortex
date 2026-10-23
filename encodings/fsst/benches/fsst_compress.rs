@@ -15,7 +15,6 @@ use vortex_array::Canonical;
 use vortex_array::IntoArray;
 use vortex_array::RecursiveCanonical;
 use vortex_array::VortexSessionExecute;
-use vortex_array::aggregate_fn::session::AggregateFnSession;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::VarBinArray;
@@ -24,14 +23,11 @@ use vortex_array::builders::VarBinViewBuilder;
 use vortex_array::builtins::ArrayBuiltins;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability;
-use vortex_array::dtype::session::DTypeSession;
 use vortex_array::memory::MemorySession;
 use vortex_array::optimizer::kernels::KernelSession;
 use vortex_array::scalar::Scalar;
 use vortex_array::scalar_fn::fns::operators::Operator;
-use vortex_array::scalar_fn::session::ScalarFnSession;
 use vortex_array::session::ArraySession;
-use vortex_array::stats::session::StatsSession;
 use vortex_fsst::fsst_compress;
 use vortex_fsst::fsst_train_compressor;
 use vortex_session::VortexSession;
@@ -48,11 +44,7 @@ static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     let session = VortexSession::empty()
         .with::<ArraySession>()
         .with::<KernelSession>()
-        .with::<DTypeSession>()
-        .with::<ScalarFnSession>()
-        .with::<AggregateFnSession>()
-        .with::<MemorySession>()
-        .with::<StatsSession>();
+        .with::<MemorySession>();
     vortex_fsst::initialize(&session);
     session
 });

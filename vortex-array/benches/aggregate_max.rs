@@ -15,12 +15,7 @@ use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::VarBinViewArray;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability;
-use vortex_array::dtype::session::DTypeSession;
-use vortex_array::memory::MemorySession;
 use vortex_array::optimizer::kernels::KernelSession;
-use vortex_array::scalar_fn::session::ScalarFnSession;
-use vortex_array::session::ArraySession;
-use vortex_array::stats::session::StatsSession;
 use vortex_session::VortexSession;
 
 #[global_allocator]
@@ -36,13 +31,8 @@ const N: usize = 15_000;
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     VortexSession::empty()
-        .with::<ArraySession>()
         .with::<KernelSession>()
-        .with::<DTypeSession>()
-        .with::<ScalarFnSession>()
         .with::<AggregateFnSession>()
-        .with::<MemorySession>()
-        .with::<StatsSession>()
 });
 
 #[divan::bench]

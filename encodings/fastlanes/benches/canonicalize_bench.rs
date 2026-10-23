@@ -14,12 +14,9 @@ use vortex_array::aggregate_fn::session::AggregateFnSession;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::builders::ArrayBuilder;
 use vortex_array::builders::PrimitiveBuilder;
-use vortex_array::dtype::session::DTypeSession;
 use vortex_array::memory::MemorySession;
 use vortex_array::optimizer::kernels::KernelSession;
-use vortex_array::scalar_fn::session::ScalarFnSession;
 use vortex_array::session::ArraySession;
-use vortex_array::stats::session::StatsSession;
 use vortex_error::VortexExpect;
 use vortex_fastlanes::bitpack_compress::test_harness::make_array;
 use vortex_session::VortexSession;
@@ -50,11 +47,8 @@ static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     let session = VortexSession::empty()
         .with::<ArraySession>()
         .with::<KernelSession>()
-        .with::<DTypeSession>()
-        .with::<ScalarFnSession>()
         .with::<AggregateFnSession>()
-        .with::<MemorySession>()
-        .with::<StatsSession>();
+        .with::<MemorySession>();
     vortex_fastlanes::initialize(&session);
     session
 });
