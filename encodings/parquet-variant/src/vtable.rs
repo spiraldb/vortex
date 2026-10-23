@@ -410,6 +410,7 @@ mod tests {
         editions
             .declare_edition(Edition {
                 id: TEST_EDITION,
+                immutable: true,
                 min_library_version: None,
             })
             .map_err(|error| vortex_err!("{error}"))?;

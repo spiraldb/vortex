@@ -250,9 +250,9 @@ historical writing implementation.
 ## New formats
 
 A new format starts in a draft edition so it can be tested before its origin commits to reading it
-indefinitely. Drafts have no recorded minimum version or frozen guarantee. A format intended for
-`core` can progress from its own family to `preview` for broader testing, then to `core` for default
-use. Promotion preserves its wire ID and interpretation. The
+indefinitely. Drafts have no recorded minimum version or frozen guarantee, and their members can
+change or be removed. A format intended for `core` can progress to `preview` for broader testing,
+then to `core` for default use. Promotion preserves its wire ID and interpretation. The
 [registry instructions](editions.md#format-testing-and-promotion) cover promotion, freezing, and
 recording the minimum version.
 
@@ -261,10 +261,9 @@ recording the minimum version.
 The default BtrBlocks compressor excludes a scheme if any of its declared output wire IDs is
 forbidden. This filtering also applies to schemes used for child compression.
 
-The current decimal scheme produces only single-child arrays and declares the v1 wire ID, so values
-too wide for it remain in the standard uncompressed decimal representation. The multi-child
-serializer exists, but the default scheme does not construct those arrays and no declared edition
-permits their v2 ID.
+By default, the decimal scheme uses the v1 wire format, leaving values too wide for a single child
+in the standard uncompressed decimal representation. The default compressor uses its multi-child
+mode only when a selected draft edition permits the v2 format.
 
 ### Planned scheme configuration
 
@@ -274,5 +273,5 @@ apply consistently to estimation, sampling, full compression, children, and fall
 per-writer scheme configuration is not implemented, and its API is unsettled.
 
 [^decimal-availability]:
-    No declared edition currently permits the multi-child format. The
+    No frozen edition currently permits the multi-child format. The
     [compression section](#compression) describes what the default compressor produces today.
