@@ -1020,7 +1020,10 @@ mod tests {
                 );
                 assert_eq!(
                     concat_batches(&batch.schema(), &batches)?,
-                    batch.slice(rows.start as usize, (rows.end - rows.start) as usize),
+                    batch.slice(
+                        usize::try_from(rows.start)?,
+                        usize::try_from(rows.end - rows.start)?,
+                    ),
                 );
             }
             data.extend(batches);
