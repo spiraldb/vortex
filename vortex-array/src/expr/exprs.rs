@@ -149,6 +149,25 @@ pub fn bound_get_item(field: impl Into<FieldName>, child: BoundExpression) -> Bo
         .vortex_expect("get-item expressions must reference a field in the child dtype")
 }
 
+// ---- Variable ----
+
+/// Creates an expression that reads the parameter `name` of the enclosing lambda.
+///
+/// It is only meaningful in the body of a [`Lambda`](crate::expr::Lambda). Anywhere else it fails
+/// to bind.
+///
+/// ```rust
+/// # use vortex_array::dtype::{DType, Nullability, PType};
+/// # use vortex_array::expr::{checked_add, lit, var};
+/// let expr = checked_add(var("x"), lit(1_i32));
+/// assert_eq!(expr.to_string(), "(@x + 1i32)");
+/// // Outside a lambda body, nothing gives `x` a value.
+/// assert!(expr.bind(&DType::Primitive(PType::I32, Nullability::NonNullable)).is_err());
+/// ```
+pub fn var(name: impl Into<FieldName>) -> Expression {
+    Expression::Variable(name.into())
+}
+
 // ---- VariantGet ----
 
 /// Creates an expression that extracts a path from a Variant expression.
