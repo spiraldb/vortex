@@ -11351,6 +11351,7 @@ dependencies = [
  "vortex-fastlanes",
  "vortex-file",
  "vortex-fsst",
+ "vortex-functions",
  "vortex-io",
  "vortex-ipc",
  "vortex-layout",
@@ -11385,6 +11386,7 @@ dependencies = [
  "vortex-buffer",
  "vortex-error",
  "vortex-fastlanes",
+ "vortex-functions",
  "vortex-mask",
  "vortex-session",
 ]
@@ -11848,6 +11850,7 @@ dependencies = [
  "vortex-buffer",
  "vortex-compute",
  "vortex-error",
+ "vortex-functions",
  "vortex-mask",
  "vortex-session",
 ]
@@ -11867,6 +11870,7 @@ dependencies = [
  "vortex-bench-support",
  "vortex-buffer",
  "vortex-error",
+ "vortex-functions",
  "vortex-mask",
  "vortex-session",
 ]
@@ -11943,6 +11947,7 @@ dependencies = [
  "vortex-array",
  "vortex-buffer",
  "vortex-error",
+ "vortex-functions",
  "vortex-session",
  "vortex-utils",
 ]
@@ -11968,6 +11973,7 @@ dependencies = [
  "vortex-compute",
  "vortex-error",
  "vortex-fastlanes",
+ "vortex-functions",
  "vortex-mask",
  "vortex-session",
 ]
@@ -12030,6 +12036,7 @@ dependencies = [
  "vortex-expr",
  "vortex-fastlanes",
  "vortex-fsst",
+ "vortex-functions",
  "vortex-io",
  "vortex-layout",
  "vortex-mask",
@@ -12062,8 +12069,37 @@ dependencies = [
  "vortex-array",
  "vortex-buffer",
  "vortex-error",
+ "vortex-functions",
  "vortex-mask",
  "vortex-session",
+]
+
+[[package]]
+name = "vortex-functions"
+version = "0.1.0"
+dependencies = [
+ "arrow-buffer 59.3.1",
+ "codspeed-divan-compat",
+ "insta",
+ "itertools 0.14.0",
+ "jiff",
+ "memchr",
+ "mimalloc",
+ "num-traits",
+ "parking_lot",
+ "prost 0.14.4",
+ "rand 0.10.3",
+ "regex",
+ "regex-syntax",
+ "rstest",
+ "tracing",
+ "vortex-array",
+ "vortex-buffer",
+ "vortex-compute",
+ "vortex-error",
+ "vortex-mask",
+ "vortex-session",
+ "vortex-utils",
 ]
 
 [[package]]
@@ -12087,6 +12123,7 @@ dependencies = [
  "vortex-error",
  "vortex-file",
  "vortex-fsst",
+ "vortex-functions",
  "vortex-io",
  "vortex-mask",
  "vortex-row",
@@ -12182,6 +12219,7 @@ dependencies = [
  "vortex-arrow",
  "vortex-edition",
  "vortex-error",
+ "vortex-functions",
  "vortex-session",
 ]
 
@@ -12232,6 +12270,7 @@ dependencies = [
  "vortex-error",
  "vortex-expr",
  "vortex-file",
+ "vortex-functions",
  "vortex-io",
  "vortex-mask",
  "vortex-metrics",
@@ -12290,6 +12329,7 @@ dependencies = [
  "vortex-array",
  "vortex-buffer",
  "vortex-error",
+ "vortex-functions",
  "vortex-mask",
  "vortex-session",
 ]
@@ -12313,6 +12353,7 @@ dependencies = [
  "vortex-edition",
  "vortex-error",
  "vortex-file",
+ "vortex-functions",
  "vortex-io",
  "vortex-json",
  "vortex-layout",
@@ -12457,6 +12498,7 @@ dependencies = [
  "vortex-buffer",
  "vortex-compute",
  "vortex-error",
+ "vortex-functions",
  "vortex-mask",
  "vortex-session",
 ]
@@ -12486,6 +12528,7 @@ dependencies = [
  "vortex-arrow",
  "vortex-buffer",
  "vortex-error",
+ "vortex-functions",
  "vortex-mask",
  "vortex-session",
 ]
@@ -12511,6 +12554,7 @@ dependencies = [
  "vortex-edition",
  "vortex-error",
  "vortex-expr",
+ "vortex-functions",
  "vortex-layout",
  "vortex-mask",
  "vortex-session",
