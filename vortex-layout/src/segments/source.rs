@@ -16,4 +16,11 @@ pub type SegmentFuture = BoxFuture<'static, VortexResult<BufferHandle>>;
 pub trait SegmentSource: 'static + Send + Sync {
     /// Request a segment, returning a future that will eventually resolve to the segment data.
     fn request(&self, id: SegmentId) -> SegmentFuture;
+
+    /// Request a segment to be read on its own: a source that coalesces reads folds it only
+    /// with other segments requested this way, never into a data read nearby, so it arrives
+    /// as soon as it can. By default the same as [`request`](Self::request).
+    fn request_alone(&self, id: SegmentId) -> SegmentFuture {
+        self.request(id)
+    }
 }

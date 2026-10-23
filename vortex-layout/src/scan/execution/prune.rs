@@ -110,7 +110,8 @@ impl PrunePlanner {
                 .and_then(|index| index.checked_shl(IDS_PER_PLAN))
                 .ok_or_else(|| vortex_err!("too many pruning plans to number their requests"))?;
             let adaptor =
-                ScanAdaptor::numbered_from(scan, Arc::clone(&self.scan.locations), first_id);
+                ScanAdaptor::numbered_from(scan, Arc::clone(&self.scan.locations), first_id)
+                    .urgent();
             self.active.push((adaptor, Vec::new()));
         }
         Ok(())
