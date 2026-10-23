@@ -73,7 +73,7 @@
 //! │    Statistics flatbuffer   │  optional; file-level per-field statistics
 //! ├────────────────────────────┤
 //! │      Footer flatbuffer     │  required; dictionary-encoded segment map
-//! │                            │  and array/layout/compression/encryption specs
+//! │                            │  and array/layout/compression/encryption/sort specs
 //! ├────────────────────────────┤
 //! │         Postscript         │  locators for the footer and user-metadata segments;
 //! │                            │  at most 65528 bytes
@@ -113,6 +113,7 @@ mod pruning;
 mod read;
 /// Segment sources, caches, and sinks used by file readers and writers.
 pub mod segments;
+mod sort_key;
 mod strategy;
 #[cfg(test)]
 mod tests;
@@ -125,6 +126,8 @@ pub use file::*;
 pub use footer::*;
 pub use forever_constant::*;
 pub use open::*;
+pub use sort_key::SortKey;
+pub use sort_key::SortKeyRef;
 pub use strategy::*;
 use vortex_array::arrays::Patched;
 use vortex_array::arrays::patched::use_experimental_patches;
