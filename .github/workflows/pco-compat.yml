@@ -56,6 +56,10 @@ jobs:
           PCO_COMPAT_MODE: read
           PCO_COMPAT_DIR: ${{ runner.temp }}/pco-old-files
         run: cargo test --profile ci --locked -p vortex-file --test pco_logical_pages_compat
+      - name: Record actual public file sizes
+        run: |
+          mkdir -p "$RUNNER_TEMP/pco-resource-results"
+          wc -c "$RUNNER_TEMP"/pco-{new,old}-files/*.vortex > "$RUNNER_TEMP/pco-resource-results/public-file-sizes.txt"
       - name: Build matching optimized public resource harnesses
         run: |
           mkdir -p "$RUNNER_TEMP/pco-old-reader/vortex-file/examples"
