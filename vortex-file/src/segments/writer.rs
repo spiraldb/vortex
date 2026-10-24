@@ -6,6 +6,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 
 use async_trait::async_trait;
+use futures::channel::oneshot;
 use parking_lot::Mutex;
 use vortex_buffer::Alignment;
 use vortex_buffer::ByteBuffer;
@@ -22,8 +23,28 @@ use crate::encryption::SegmentCipher;
 use crate::encryption::SegmentRole;
 use crate::footer::SegmentSpec;
 
+/// A buffer sent from a [`BufferedSegmentSink`] to the file, in file order.
+pub(crate) enum PendingBuffer {
+    Ready(ByteBuffer),
+    /// A segment that is still being encrypted. It is sent in order before the encryption
+    /// starts, so that segments can be encrypted in parallel and still be written in order.
+    Encrypting(oneshot::Receiver<VortexResult<ByteBuffer>>),
+}
+
+impl PendingBuffer {
+    /// Wait for the buffer.
+    pub(crate) async fn resolve(self) -> VortexResult<ByteBuffer> {
+        match self {
+            PendingBuffer::Ready(buffer) => Ok(buffer),
+            PendingBuffer::Encrypting(receiver) => receiver
+                .await
+                .map_err(|_| vortex_err!("Segment encryption was cancelled"))?,
+        }
+    }
+}
+
 pub struct BufferedSegmentSink {
-    buffers: kanal::AsyncSender<ByteBuffer>,
+    buffers: kanal::AsyncSender<PendingBuffer>,
     byte_offset: AtomicU64,
     segment_specs: Mutex<Vec<SegmentSpec>>,
     /// The cipher for segments that require no particular key, and the index of its spec in the
@@ -34,7 +55,7 @@ pub struct BufferedSegmentSink {
 }
 
 impl BufferedSegmentSink {
-    pub fn new(send: kanal::AsyncSender<ByteBuffer>, byte_offset: u64) -> Self {
+    pub(crate) fn new(send: kanal::AsyncSender<PendingBuffer>, byte_offset: u64) -> Self {
         Self {
             buffers: send,
             byte_offset: AtomicU64::new(byte_offset),
@@ -143,26 +164,38 @@ impl SegmentSink for BufferedSegmentSink {
             }
         };
 
-        // The sequence id still orders this write after all earlier ones, so the encryption can
-        // happen outside the lock.
-        let buffers = match cipher {
-            None => buffers,
-            Some((cipher, _)) => {
-                let alignment = buffers
-                    .first()
-                    .map(|buffer| buffer.alignment())
-                    .unwrap_or_else(Alignment::none);
-                vec![cipher.encrypt(SegmentRole::Data(*segment_id), &buffers, alignment)?]
+        // The sequence id still orders this write after all earlier ones, so sending to the
+        // stream keeps the file order.
+        if let Some(padding) = padding_buffer {
+            let _ = self.buffers.send(PendingBuffer::Ready(padding)).await;
+        }
+        let Some((cipher, _)) = cipher else {
+            for buffer in buffers {
+                let _ = self.buffers.send(PendingBuffer::Ready(buffer)).await;
             }
+            return Ok(segment_id);
         };
 
-        if let Some(padding) = padding_buffer {
-            let _ = self.buffers.send(padding).await;
-        }
-        for buffer in buffers {
-            let _ = self.buffers.send(buffer).await;
-        }
+        // Reserve the segment's place in the stream, then release the ordering before
+        // encrypting, so that later segments, of this column or others, are not held up by it.
+        let (encrypted_tx, encrypted_rx) = oneshot::channel();
+        let _ = self
+            .buffers
+            .send(PendingBuffer::Encrypting(encrypted_rx))
+            .await;
+        drop(sequence_id);
 
-        Ok(segment_id)
+        let alignment = buffers
+            .first()
+            .map(|buffer| buffer.alignment())
+            .unwrap_or_else(Alignment::none);
+        let encrypted = cipher.encrypt(SegmentRole::Data(*segment_id), &buffers, alignment);
+        let failed = encrypted.as_ref().err().map(|err| vortex_err!("{err}"));
+        // The file writer dropping the receiver means it failed, and reports why itself.
+        drop(encrypted_tx.send(encrypted));
+        match failed {
+            Some(err) => Err(err),
+            None => Ok(segment_id),
+        }
     }
 }

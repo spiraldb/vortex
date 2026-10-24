@@ -62,6 +62,7 @@ use vortex_session::registry::Id;
 use vortex_session::registry::ReadContext;
 use vortex_utils::aliases::hash_map::HashMap;
 use vortex_utils::aliases::hash_set::HashSet;
+use vortex_utils::parallelism::get_available_parallelism;
 
 use crate::Footer;
 use crate::MAGIC_BYTES;
@@ -328,8 +329,15 @@ impl VortexWriteOptions {
         write.write_all(ByteBuffer::copy_from(MAGIC_BYTES)).await?;
         let mut position = MAGIC_BYTES.len() as u64;
 
-        // Create a channel to send buffers from the segment sink to the output stream.
-        let (send, recv) = kanal::bounded_async(1);
+        // Create a channel to send buffers from the segment sink to the output stream. Encrypted
+        // segments are sent before they are encrypted, so the channel's capacity bounds how many
+        // are encrypted in parallel.
+        let capacity = if self.encryption.is_some() {
+            get_available_parallelism().unwrap_or(1)
+        } else {
+            1
+        };
+        let (send, recv) = kanal::bounded_async(capacity);
 
         let EncryptingSink {
             segments,
@@ -363,6 +371,7 @@ impl VortexWriteOptions {
         let recv_stream = recv.into_stream();
         pin_mut!(recv_stream);
         while let Some(buffer) = recv_stream.next().await {
+            let buffer = buffer.resolve().await?;
             if buffer.is_empty() {
                 continue;
             }

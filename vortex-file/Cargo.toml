@@ -79,6 +79,10 @@ workspace = true
 name = "split_collection"
 harness = false
 
+[[bench]]
+name = "encrypted_write"
+harness = false
+
 [features]
 default = ["wasm-bindgen"]
 object_store = ["dep:object_store", "vortex-io/object_store", "tokio"]
