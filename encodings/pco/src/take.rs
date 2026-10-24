@@ -4,6 +4,7 @@
 //! Batched selection using compact request descriptors and one operation-owned page cache.
 
 use std::collections::BTreeSet;
+use std::ops::Range;
 
 use pco::data_types::Number;
 use pco::data_types::NumberType;
@@ -12,6 +13,7 @@ use vortex_array::ArrayRef;
 use vortex_array::ArrayView;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
+use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::PiecewiseSequence;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::dict::TakeExecute;
@@ -19,6 +21,7 @@ use vortex_array::arrays::piecewise_sequence::array::PiecewiseSequenceArraySlots
 use vortex_array::dtype::NativePType;
 use vortex_array::dtype::half;
 use vortex_array::match_each_integer_ptype;
+use vortex_array::scalar::Scalar;
 use vortex_array::validity::Validity;
 use vortex_buffer::BitBufferMut;
 use vortex_buffer::BufferMut;
@@ -45,6 +48,8 @@ impl TakeExecute for Pco {
         indices: &ArrayRef,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<Option<ArrayRef>> {
+        let compact = indices.as_opt::<PiecewiseSequence>().is_some();
+        let mut grouped = false;
         let runs = if let Some(sequence) = indices.as_opt::<PiecewiseSequence>() {
             let starts = sequence.starts().clone().execute::<PrimitiveArray>(ctx)?;
             let lengths = sequence.lengths().clone().execute::<PrimitiveArray>(ctx)?;
@@ -67,64 +72,175 @@ impl TakeExecute for Pco {
         } else {
             let indices = indices.clone().execute::<PrimitiveArray>(ctx)?;
             let mask = indices.validity()?.execute_mask(indices.len(), ctx)?;
+            let summary = match_each_integer_ptype!(indices.ptype(), |I| {
+                validate_primitive(indices.as_slice::<I>(), &mask, array.len())?
+            });
+            if summary.defined == 0 {
+                return Ok(Some(
+                    ConstantArray::new(Scalar::null(array.dtype().as_nullable()), indices.len())
+                        .into_array(),
+                ));
+            }
+            if let Some(result) = zero_page_take(array, indices.len(), ctx)? {
+                return Ok(Some(result));
+            }
+            grouped = !summary.contiguous;
+            if grouped && descriptor_bytes(summary.defined) >= canonical_bytes(array) {
+                return Ok(None);
+            }
+            if grouped
+                && match_each_integer_ptype!(indices.ptype(), |I| {
+                    prefer_canonical_primitive(
+                        array,
+                        indices.as_slice::<I>(),
+                        &mask,
+                        summary.defined,
+                    )?
+                })
+            {
+                return Ok(None);
+            }
             match_each_integer_ptype!(indices.ptype(), |I| {
                 primitive_runs(indices.as_slice::<I>(), &mask)?
             })
         };
         validate_runs(&runs, array.len(), indices.len())?;
-        // For broad scattered requests the ordinary canonical decoder plus native primitive
-        // take has less setup/decoded work than retaining almost every page separately.
-        if scattered(&runs) && prefer_canonical(array, &runs)? {
-            return Ok(None);
+        if compact {
+            if let Some(result) = zero_page_take(array, indices.len(), ctx)? {
+                return Ok(Some(result));
+            }
+            // Compact ranges/repeats remain compact. Only genuine strided requests carry
+            // per-position selection work; output cardinality alone is not setup work.
+            let random = runs
+                .iter()
+                .filter(|run| run.stride > 1)
+                .map(|run| run.length)
+                .sum();
+            if descriptor_bytes(random) >= canonical_bytes(array) && random != 0 {
+                return Ok(None);
+            }
         }
         let nullable = array.dtype().nullability() | indices.dtype().nullability();
         let result = match_number_enum!(number_type_from_ptype(array.dtype().as_ptype()), NumberType<T> => {
-            gather::<T>(array, &runs, indices.len(), nullable, ctx)?
+            gather::<T>(array, &runs, indices.len(), nullable, grouped, ctx)?
         });
         Ok(Some(result.into_array()))
     }
 }
 
-fn scattered(runs: &[Run]) -> bool {
-    runs.len() > 1 && runs.iter().all(|run| run.length <= 1 || run.stride != 1)
+struct PlainSummary {
+    defined: usize,
+    contiguous: bool,
 }
 
-/// Conservative work estimate in bytes: selected physical values plus request descriptors
-/// versus one full canonical values buffer. Stop as soon as canonical work wins, so broad
-/// requests do not first build a complete selected-page set. No source-sized scratch bitmap.
-fn prefer_canonical(array: ArrayView<'_, Pco>, runs: &[Run]) -> VortexResult<bool> {
-    let index = array.page_index()?;
-    let total = index.pages.last().map_or(0, |page| page.values.end);
-    let width = array.dtype().as_ptype().byte_width();
-    let full_bytes = total.saturating_mul(width);
-    let requests = runs.iter().map(|run| run.length).sum::<usize>();
-    let setup_bytes = requests.saturating_mul(std::mem::size_of::<(usize, usize)>());
-    if setup_bytes >= full_bytes {
-        return Ok(true);
+fn validate_primitive<I: Copy>(
+    indices: &[I],
+    mask: &Mask,
+    source_len: usize,
+) -> VortexResult<PlainSummary>
+where
+    usize: TryFrom<I>,
+{
+    let mut previous: Option<usize> = None;
+    let mut defined = 0usize;
+    let mut contiguous = true;
+    for (&index, valid) in indices.iter().zip(mask.iter()) {
+        if !valid {
+            contiguous = false;
+            continue;
+        }
+        let row = checked_index(index)?;
+        vortex_ensure!(
+            row < source_len,
+            "Pco take index {row} exceeds array length {source_len}"
+        );
+        if let Some(previous) = previous {
+            contiguous &= previous.checked_add(1) == Some(row);
+        }
+        previous = Some(row);
+        defined += 1;
     }
+    Ok(PlainSummary {
+        defined,
+        contiguous,
+    })
+}
+
+fn zero_page_take(
+    array: ArrayView<'_, Pco>,
+    len: usize,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<Option<ArrayRef>> {
+    if !array.page_index()?.pages.is_empty() {
+        return Ok(None);
+    }
+    let mask = array
+        .unsliced_validity()
+        .execute_mask(array.unsliced_n_rows(), ctx)?;
+    vortex_ensure_eq!(
+        mask.true_count(),
+        0,
+        "Pco zero-page source has defined rows"
+    );
+    Ok(Some(
+        ConstantArray::new(Scalar::null(array.dtype().as_nullable()), len).into_array(),
+    ))
+}
+
+fn canonical_bytes(array: ArrayView<'_, Pco>) -> usize {
+    // Fallback canonicalizes the visible array, not its potentially much larger owner.
+    array
+        .len()
+        .saturating_mul(array.dtype().as_ptype().byte_width())
+}
+
+fn descriptor_bytes(requests: usize) -> usize {
+    // Actual prospective sparse-path storage: coalesced Run upper bound, sorting pair,
+    // and resolved (page, compact index, repeated-request range). Output storage is common.
+    requests.saturating_mul(
+        std::mem::size_of::<Run>()
+            + std::mem::size_of::<(usize, usize)>()
+            + std::mem::size_of::<(usize, usize, Range<usize>)>(),
+    )
+}
+
+/// Borrow validated primitive inputs during planning. Broad requests stop once selected
+/// physical values plus prospective descriptors exceed the visible canonical values buffer.
+/// Only the chosen sparse strategy allocates Runs/sorting descriptors; no source-sized bitmap.
+fn prefer_canonical_primitive<I: Copy>(
+    array: ArrayView<'_, Pco>,
+    indices: &[I],
+    mask: &Mask,
+    requests: usize,
+) -> VortexResult<bool>
+where
+    usize: TryFrom<I>,
+{
+    let index = array.page_index()?;
     if !index.logical {
-        // With no logical page index, page coverage itself requires global validity rank.
-        // Use the page-count upper bound rather than spending arbitrary-request setup first.
         return Ok(requests >= index.pages.len());
     }
+    let full_bytes = canonical_bytes(array);
+    let setup = descriptor_bytes(requests);
+    let width = array.dtype().as_ptype().byte_width();
     let mut touched = BTreeSet::new();
     let mut selected = 0usize;
-    for run in runs {
-        let Some(start) = run.start else { continue };
-        for offset in 0..run.length {
-            let row = array.slice_start() + start + offset * run.stride;
+    for (&row, valid) in indices.iter().zip(mask.iter()) {
+        if !valid {
+            continue;
+        }
+        let row = array.slice_start() + checked_index(row)?;
+        let page = index
+            .pages
+            .partition_point(|page| page.rows.as_ref().is_some_and(|rows| rows.end <= row));
+        if touched.insert(page) {
             let page = index
                 .pages
-                .partition_point(|page| page.rows.as_ref().is_some_and(|rows| rows.end <= row));
-            if touched.insert(page) {
-                let selected_page = index
-                    .pages
-                    .get(page)
-                    .ok_or_else(|| vortex_err!("Pco selected row has no logical page"))?;
-                selected = selected.saturating_add(selected_page.values.len());
-                if setup_bytes.saturating_add(selected.saturating_mul(width)) >= full_bytes {
-                    return Ok(true);
-                }
+                .get(page)
+                .ok_or_else(|| vortex_err!("Pco selected row has no logical page"))?;
+            selected = selected.saturating_add(page.values.len());
+            if setup.saturating_add(selected.saturating_mul(width)) >= full_bytes {
+                return Ok(true);
             }
         }
     }
@@ -213,6 +329,7 @@ fn gather<T: Number + NativePType>(
     runs: &[Run],
     output_len: usize,
     nullability: vortex_array::dtype::Nullability,
+    grouped: bool,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<PrimitiveArray> {
     if array.page_index()?.pages.is_empty() {
@@ -230,12 +347,12 @@ fn gather<T: Number + NativePType>(
         ));
     }
     if nullability.is_nullable() {
-        if scattered(runs) {
+        if grouped {
             gather_grouped::<T, true>(array, runs, output_len, ctx)
         } else {
             gather_typed::<T, true>(array, runs, output_len, ctx)
         }
-    } else if scattered(runs) {
+    } else if grouped {
         gather_grouped::<T, false>(array, runs, output_len, ctx)
     } else {
         gather_typed::<T, false>(array, runs, output_len, ctx)
@@ -496,6 +613,6 @@ pub(crate) fn slice(
         stride: 1,
     }];
     match_number_enum!(number_type_from_ptype(array.dtype().as_ptype()), NumberType<T> => {
-        gather::<T>(array, &runs, array.len(), array.dtype().nullability(), ctx)
+        gather::<T>(array, &runs, array.len(), array.dtype().nullability(), false, ctx)
     })
 }

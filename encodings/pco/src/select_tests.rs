@@ -353,3 +353,47 @@ fn repeated_scattered_requests_preserve_order_and_nulls(
     );
     Ok(())
 }
+
+#[test]
+fn mixed_fragments_narrow_slices_and_compact_repeats() -> VortexResult<()> {
+    let mut ctx = SESSION.create_execution_ctx();
+    let input = PrimitiveArray::from_option_iter(
+        (0..32768i64).map(|row| (row % 5 != 0).then_some(row * 11)),
+    );
+    let encoded = Pco::from_primitive(input.as_view(), 3, 1024, &mut ctx)?.into_array();
+    let mixed = PrimitiveArray::from_iter(
+        (0..4096u64).map(|i| if i < 2 { i } else { (i * 104729) % 32768 }),
+    )
+    .into_array();
+    assert_arrays_eq!(encoded.take(mixed.clone())?, input.take(mixed)?, &mut ctx);
+    let repeated =
+        PrimitiveArray::from_iter((0..100000u64).map(|i| if i % 2 == 0 { 0 } else { 127 }))
+            .into_array();
+    assert_arrays_eq!(
+        encoded.slice(30000..30128)?.take(repeated.clone())?,
+        input.slice(30000..30128)?.take(repeated)?,
+        &mut ctx
+    );
+    let compact = PiecewiseSequenceArray::try_new(
+        PrimitiveArray::from_iter([1u64, 5]).into_array(),
+        PrimitiveArray::from_iter([500000u64, 500000]).into_array(),
+        PrimitiveArray::from_iter([0u64, 0]).into_array(),
+        1000000,
+    )?
+    .into_array();
+    let expected = PrimitiveArray::from_option_iter(
+        std::iter::repeat_n(Some(11i64), 500000).chain(std::iter::repeat_n(None, 500000)),
+    );
+    assert_arrays_eq!(encoded.take(compact)?, expected, &mut ctx);
+    let nulls = PrimitiveArray::new(vec![0i64; 100000], Validity::AllInvalid);
+    let encoded_nulls = Pco::from_primitive(nulls.as_view(), 3, 1024, &mut ctx)?.into_array();
+    let two = PrimitiveArray::from_iter([0u64, 99999]).into_array();
+    assert_arrays_eq!(encoded_nulls.take(two.clone())?, nulls.take(two)?, &mut ctx);
+    assert!(
+        encoded_nulls
+            .take(PrimitiveArray::from_iter([100000u64]).into_array())?
+            .execute::<PrimitiveArray>(&mut ctx)
+            .is_err()
+    );
+    Ok(())
+}
