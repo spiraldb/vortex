@@ -70,7 +70,8 @@ jobs:
           git -C "$RUNNER_TEMP/pco-old-reader" rev-parse HEAD > "$RUNNER_TEMP/pco-resource-results/baseline-source.txt"
           candidate=$(jq -r 'select(.reason == "compiler-artifact" and .target.name == "pco_access_profile") | .executable // empty' "$RUNNER_TEMP/pco-candidate-build.jsonl")
           baseline=$(jq -r 'select(.reason == "compiler-artifact" and .target.name == "pco_access_profile") | .executable // empty' "$RUNNER_TEMP/pco-baseline-build.jsonl")
-          for mode in write full slice take ranges probe-first probe; do
+          sha256sum "$candidate" "$baseline" > "$RUNNER_TEMP/pco-resource-results/executables.sha256"
+          for mode in write full slice slice-near-full take take-large take-repeated ranges open-only open-first probe-first probe; do
             for pattern in dense nullable all-null long-null compressed nullable-legacy; do
               # ABBA process order; every process retains all eight iterations including cold.
               order=0

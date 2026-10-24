@@ -148,6 +148,18 @@ fn main() -> VortexResult<()> {
         8192,
     )?
     .into_array();
+    let large_indices = PrimitiveArray::from_iter(
+        (0..rows / 8).map(|i| u64::try_from((i * 104729) % rows).vortex_expect("index fits u64")),
+    )
+    .into_array();
+    let repeated_indices =
+        PrimitiveArray::from_iter((0..rows / 8).map(|i| {
+            u64::try_from(((i % 16) * (rows / 17)) % rows).vortex_expect("index fits u64")
+        }))
+        .into_array();
+    let wire = session
+        .array_serialize(&encoded)?
+        .vortex_expect("prepared array serialization");
     let mut probe = encoded.repeated_probe();
     for iteration in 0..repetitions {
         let before = linux_accounting();
@@ -178,6 +190,51 @@ fn main() -> VortexResult<()> {
                     .execute::<PrimitiveArray>(&mut ctx)?
                     .into_array(),
             ),
+            "slice-near-full" => Some(
+                encoded
+                    .slice(1..rows - 1)?
+                    .execute::<PrimitiveArray>(&mut ctx)?
+                    .into_array(),
+            ),
+            "take-large" => Some(
+                encoded
+                    .take(large_indices.clone())?
+                    .execute::<PrimitiveArray>(&mut ctx)?
+                    .into_array(),
+            ),
+            "take-repeated" => Some(
+                encoded
+                    .take(repeated_indices.clone())?
+                    .execute::<PrimitiveArray>(&mut ctx)?
+                    .into_array(),
+            ),
+            "open-only" | "open-first" => {
+                // Array-plugin open with compressed buffers and the validity child already
+                // available: includes protobuf decode/validation/index preparation, no file IO.
+                let buffers = wire
+                    .buffers
+                    .iter()
+                    .cloned()
+                    .map(BufferHandle::new_host)
+                    .collect::<Vec<_>>();
+                let opened = ArrayPlugin::deserialize(
+                    &Pco,
+                    ArrayDeserialization::new(
+                        wire.serialized_id,
+                        encoded.dtype(),
+                        encoded.len(),
+                        &wire.metadata,
+                        &buffers,
+                        &wire.children,
+                    ),
+                    &session,
+                )?;
+                if mode == "open-first" {
+                    black_box(opened.execute_scalar(rows - 2048, &mut ctx)?);
+                }
+                black_box(opened);
+                None
+            }
             "probe-first" => {
                 black_box(encoded.probe().execute_scalar(rows - 2048, &mut ctx)?);
                 None
