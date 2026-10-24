@@ -1038,3 +1038,46 @@ async fn retrieves_each_key_once() -> VortexResult<()> {
     assert_eq!(counts.get(COLUMN_KEY_METADATA), Some(&1));
     Ok(())
 }
+
+/// Key material claiming a cached KEK under another master key must not be served from the
+/// cache, or a reader could use a master key the KMS would not let it use.
+#[tokio::test]
+async fn envelope_kek_cache_is_scoped_to_master_key() -> VortexResult<()> {
+    use crate::flatbuffers::key_material as km;
+
+    let kms = Arc::new(TestKms::new(&["mek-1", "mek-2"]));
+    let envelope = EnvelopeEncryption::new(Arc::clone(&kms) as _);
+    let key = envelope.key_config("mek-1").await?;
+    // The KEK of "mek-1" is now cached; unwrapping the genuine material needs no KMS call.
+    let unwraps = kms.unwraps.load(Ordering::Relaxed);
+    envelope.retrieve_key(key.key_metadata()).await?;
+    assert_eq!(kms.unwraps.load(Ordering::Relaxed), unwraps);
+
+    // Copy the material, but claim that "mek-2" wraps the KEK.
+    let forged = {
+        let metadata = flatbuffers::root::<km::EnvelopeKeyMetadata>(key.key_metadata())?;
+        let material = metadata.material().vortex_expect("inline key material");
+        let mut fbb = FlatBufferBuilder::new();
+        let args = km::KeyMaterialArgs {
+            master_key_id: Some(fbb.create_string("mek-2")),
+            wrapped_dek: Some(fbb.create_vector(material.wrapped_dek().bytes())),
+            kek_id: material.kek_id().map(|id| fbb.create_vector(id.bytes())),
+            wrapped_kek: material
+                .wrapped_kek()
+                .map(|kek| fbb.create_vector(kek.bytes())),
+        };
+        let material = km::KeyMaterial::create(&mut fbb, &args);
+        let metadata = km::EnvelopeKeyMetadata::create(
+            &mut fbb,
+            &km::EnvelopeKeyMetadataArgs {
+                material: Some(material),
+                external_id: None,
+            },
+        );
+        fbb.finish_minimal(metadata);
+        fbb.finished_data().to_vec()
+    };
+    expect_err(envelope.retrieve_key(&forged).await, "failed to unwrap key");
+    assert_eq!(kms.unwraps.load(Ordering::Relaxed), unwraps + 1);
+    Ok(())
+}

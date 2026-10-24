@@ -132,9 +132,16 @@ pub struct EnvelopeEncryption {
     store: Option<Arc<dyn KeyMaterialStore>>,
     /// KEKs used to wrap new data keys, by master key id.
     write_keks: Mutex<HashMap<String, Arc<Kek>>>,
-    /// Unwrapped KEKs, by KEK id.
-    read_keks: Mutex<HashMap<Vec<u8>, EncryptionKey>>,
+    /// Unwrapped KEKs, by the master key that wraps them and their KEK id.
+    ///
+    /// Key material comes from files, which may have been tampered with. Keying the cache by the
+    /// master key too means that material claiming a cached KEK under another master key misses
+    /// the cache, and the KMS decides whether the reader may use that master key.
+    read_keks: Mutex<HashMap<KekCacheKey, EncryptionKey>>,
 }
+
+/// A master key id and a KEK id.
+type KekCacheKey = (String, Vec<u8>);
 
 impl EnvelopeEncryption {
     /// Wrap keys with master keys held by `kms`, with double wrapping and 128-bit data keys by
@@ -263,7 +270,9 @@ impl EnvelopeEncryption {
         let mut id = vec![0u8; KEK_ID_LEN];
         fill_random(&mut id)?;
         let wrapped = self.kms.wrap_key(key.as_bytes(), master_key_id).await?;
-        self.read_keks.lock().insert(id.clone(), key.clone());
+        self.read_keks
+            .lock()
+            .insert((master_key_id.to_string(), id.clone()), key.clone());
         let kek = Arc::new(Kek { id, key, wrapped });
         // A concurrent call may have created a KEK meanwhile; keep the first one.
         Ok(Arc::clone(
@@ -285,7 +294,8 @@ impl EnvelopeEncryption {
             dek.zeroize();
             return key;
         };
-        let cached = self.read_keks.lock().get(kek_id).cloned();
+        let cache_key = (material.master_key_id.clone(), kek_id.clone());
+        let cached = self.read_keks.lock().get(&cache_key).cloned();
         let kek = match cached {
             Some(kek) => kek,
             None => {
@@ -296,7 +306,7 @@ impl EnvelopeEncryption {
                 let key = EncryptionKey::try_from_slice(&kek);
                 kek.zeroize();
                 let key = key?;
-                self.read_keks.lock().insert(kek_id.clone(), key.clone());
+                self.read_keks.lock().insert(cache_key, key.clone());
                 key
             }
         };
