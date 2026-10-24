@@ -130,7 +130,7 @@ fn compressed_validity_selection_oracle() -> VortexResult<()> {
 #[cfg(feature = "zstd")]
 #[tokio::test]
 async fn public_stock_size_attribution() -> VortexResult<()> {
-    use rand::Rng;
+    use rand::RngExt;
     use rand::SeedableRng;
     use rand::rngs::StdRng;
     use vortex_array::stream::ArrayStreamExt;

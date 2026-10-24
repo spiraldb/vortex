@@ -33,6 +33,7 @@ use vortex_error::vortex_err;
 use vortex_mask::Mask;
 
 use crate::Pco;
+use crate::PcoArrayExt;
 use crate::access::AccessState;
 use crate::array::number_type_from_ptype;
 
@@ -206,9 +207,7 @@ fn descriptor_bytes(requests: usize) -> usize {
     // Actual prospective sparse-path storage: coalesced Run upper bound, sorting pair,
     // and resolved (page, compact index, repeated-request range). Output storage is common.
     requests.saturating_mul(
-        std::mem::size_of::<Run>()
-            + std::mem::size_of::<(usize, usize)>()
-            + std::mem::size_of::<(usize, usize, Range<usize>)>(),
+        size_of::<Run>() + size_of::<(usize, usize)>() + size_of::<(usize, usize, Range<usize>)>(),
     )
 }
 

@@ -445,6 +445,6 @@ impl AccessState {
 pub(crate) struct PageSpan {
     pub page: usize,
     pub stop: usize,
-    pub values: std::ops::Range<usize>,
+    pub values: Range<usize>,
     pub mask: Mask,
 }
