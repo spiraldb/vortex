@@ -135,7 +135,7 @@ async fn public_stock_size_attribution() -> VortexResult<()> {
     use rand::rngs::StdRng;
     use vortex_array::stream::ArrayStreamExt;
     use vortex_btrblocks::BtrBlocksCompressorBuilder;
-    use vortex_file::strategy::WriteStrategyBuilder;
+    use vortex_file::WriteStrategyBuilder;
 
     if std::env::var_os("PCO_SIZE_DIAGNOSTICS").is_none() {
         return Ok(());
