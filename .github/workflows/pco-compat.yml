@@ -1,0 +1,54 @@
+name: PCO selective access compatibility
+
+on:
+  pull_request:
+    paths:
+      - 'encodings/pco/**'
+      - 'vortex-file/src/lib.rs'
+      - 'vortex-file/tests/pco_logical_pages_compat.rs'
+      - '.github/workflows/pco-compat.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  pco-compat:
+    runs-on: >-
+      ${{ github.repository == 'vortex-data/vortex'
+          && format('runs-on={0}/runner=amd64-medium/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=pco-compat', github.run_id)
+          || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    steps:
+      - uses: runs-on/action@v2
+        if: github.repository == 'vortex-data/vortex'
+        with:
+          sccache: s3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-prebuild
+        with:
+          enable-sccache: ${{ github.repository == 'vortex-data/vortex' && 'true' || 'false' }}
+      - name: PCO public semantics
+        run: cargo test --profile ci --locked -p vortex-pco
+      - name: Generate new files with current public writer
+        env:
+          PCO_COMPAT_MODE: write
+          PCO_COMPAT_DIR: ${{ runner.temp }}/pco-new-files
+        run: cargo test --profile ci --locked -p vortex-file --test pco_logical_pages_compat
+      - name: Read new files using unchanged pre-change reader; generate legacy files
+        env:
+          PCO_COMPAT_DIR: ${{ runner.temp }}/pco-new-files
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/pco-old-reader" 910f9933e8e2318c592c1eddcc2dfee8d24c6cd7
+          # Only the public test harness is added. The old reader/writer/library sources remain
+          # exactly the pinned pre-change revision and do not know the new metadata field.
+          cp vortex-file/tests/pco_logical_pages_compat.rs "$RUNNER_TEMP/pco-old-reader/vortex-file/tests/"
+          PCO_COMPAT_MODE=read cargo test --manifest-path "$RUNNER_TEMP/pco-old-reader/Cargo.toml" --profile ci --locked -p vortex-file --test pco_logical_pages_compat
+          PCO_COMPAT_MODE=write PCO_COMPAT_DIR="$RUNNER_TEMP/pco-old-files" cargo test --manifest-path "$RUNNER_TEMP/pco-old-reader/Cargo.toml" --profile ci --locked -p vortex-file --test pco_logical_pages_compat
+      - name: Read legacy files using current reader
+        env:
+          PCO_COMPAT_MODE: read
+          PCO_COMPAT_DIR: ${{ runner.temp }}/pco-old-files
+        run: cargo test --profile ci --locked -p vortex-file --test pco_logical_pages_compat

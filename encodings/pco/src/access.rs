@@ -57,16 +57,27 @@ impl RankMask {
         Self { mask, ranks }
     }
 
+    fn rank(&self, row: usize) -> usize {
+        match &self.mask {
+            Mask::AllTrue(_) => row,
+            Mask::AllFalse(_) => 0,
+            Mask::Values(values) => {
+                if row == self.mask.len() {
+                    return self.mask.true_count();
+                }
+                let block = row / RANK_STRIDE;
+                self.ranks[block] + values.bit_buffer().count_range(block * RANK_STRIDE, row)
+            }
+        }
+    }
+
     fn value_index(&self, row: usize) -> Option<usize> {
         match &self.mask {
             Mask::AllTrue(_) => Some(row),
             Mask::AllFalse(_) => None,
             Mask::Values(values) => {
                 let bits = values.bit_buffer();
-                bits.value(row).then(|| {
-                    let block = row / RANK_STRIDE;
-                    self.ranks[block] + bits.count_range(block * RANK_STRIDE, row)
-                })
+                bits.value(row).then(|| self.rank(row))
             }
         }
     }
@@ -145,6 +156,48 @@ impl AccessState {
         Ok(Some((page_idx, value - page.values.start)))
     }
 
+    /// Select a contiguous logical span within one indexed page. Validity is sliced only after
+    /// the complete page has been checked, so copies use one typed contiguous compact-value run.
+    pub fn span(
+        &mut self,
+        array: ArrayView<'_, Pco>,
+        row: usize,
+        stop: usize,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Option<PageSpan>> {
+        let index = array.page_index()?;
+        if !index.logical || index.pages.is_empty() {
+            return Ok(None);
+        }
+        let page_idx = index
+            .pages
+            .partition_point(|page| page.rows.as_ref().is_some_and(|range| range.end <= row));
+        let page = index
+            .pages
+            .get(page_idx)
+            .ok_or_else(|| vortex_err!("Pco logical page index does not cover span"))?;
+        let rows = page
+            .rows
+            .as_ref()
+            .ok_or_else(|| vortex_err!("Pco logical page range is missing"))?;
+        // Resolve performs whole-page validity validation, even when the first row is null.
+        self.resolve(array, row, ctx)?;
+        let cached = self
+            .pages
+            .get(&page_idx)
+            .and_then(|page| page.mask.as_ref())
+            .ok_or_else(|| vortex_err!("Pco page validity is missing"))?;
+        let end = stop.min(rows.end);
+        let start_in_page = row - rows.start;
+        let end_in_page = end - rows.start;
+        Ok(Some(PageSpan {
+            page: page_idx,
+            stop: end,
+            values: cached.rank(start_in_page)..cached.rank(end_in_page),
+            mask: cached.mask.slice(start_in_page..end_in_page),
+        }))
+    }
+
     pub fn values(
         &mut self,
         array: ArrayView<'_, Pco>,
@@ -178,4 +231,11 @@ impl AccessState {
             .as_ref()
             .ok_or_else(|| vortex_err!("Pco page decoding did not produce values"))
     }
+}
+
+pub(crate) struct PageSpan {
+    pub page: usize,
+    pub stop: usize,
+    pub values: std::ops::Range<usize>,
+    pub mask: Mask,
 }

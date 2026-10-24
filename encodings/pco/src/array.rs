@@ -326,16 +326,16 @@ pub(crate) fn number_type_from_ptype(ptype: PType) -> NumberType {
 fn collect_valid(
     parray: ArrayView<'_, Primitive>,
     ctx: &mut ExecutionCtx,
-) -> VortexResult<PrimitiveArray> {
+) -> VortexResult<(PrimitiveArray, vortex_mask::Mask)> {
     let mask = parray
         .array()
         .validity()?
         .execute_mask(parray.array().len(), ctx)?;
     let result = parray
         .array()
-        .filter(mask)?
+        .filter(mask.clone())?
         .execute::<PrimitiveArray>(ctx)?;
-    Ok(result)
+    Ok((result, mask))
 }
 
 pub(crate) fn vortex_err_from_pco(err: PcoError) -> VortexError {
@@ -558,7 +558,7 @@ impl PcoData {
             .with_compression_level(level)
             .with_paging_spec(PagingSpec::EqualPagesUpTo(values_per_page));
 
-        let values = collect_valid(parray, ctx)?;
+        let (values, mask) = collect_valid(parray, ctx)?;
         let n_values = values.len();
 
         let fc = FileCompressor::default();
@@ -599,7 +599,6 @@ impl PcoData {
             chunk_infos.push(PcoChunkInfo { pages: page_infos })
         }
 
-        let mask = parray.validity()?.execute_mask(parray.len(), ctx)?;
         let mut ends = Vec::with_capacity(page_buffers.len());
         let mut page_counts = chunk_infos.iter().flat_map(|chunk| &chunk.pages);
         let mut remaining = page_counts.next().map(|page| page.n_values as usize);

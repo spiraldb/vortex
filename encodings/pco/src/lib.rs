@@ -12,11 +12,10 @@
 //! To deserialize arrays manually, register the encoding in the array session:
 //!
 //! ```rust
-//! use vortex_array::session::ArraySessionExt;
 //! use vortex_session::VortexSession;
 //!
 //! let session = VortexSession::empty();
-//! session.arrays().register(vortex_pco::Pco);
+//! vortex_pco::initialize(&session);
 //! ```
 
 mod access;
@@ -95,5 +94,7 @@ pub fn initialize(session: &vortex_session::VortexSession) {
         .register_execute_parent_kernel(Dict.id(), Pco, TakeExecuteAdaptor(Pco));
 }
 
+#[cfg(test)]
+mod select_tests;
 #[cfg(test)]
 mod tests;

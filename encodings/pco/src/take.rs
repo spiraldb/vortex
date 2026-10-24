@@ -24,6 +24,7 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_ensure;
 use vortex_error::vortex_ensure_eq;
 use vortex_error::vortex_err;
+use vortex_mask::Mask;
 
 use crate::Pco;
 use crate::access::AccessState;
@@ -63,7 +64,7 @@ impl TakeExecute for Pco {
             runs
         } else {
             let indices = indices.clone().execute::<PrimitiveArray>(ctx)?;
-            let mut runs = Vec::with_capacity(indices.len());
+            let mut runs: Vec<Run> = Vec::with_capacity(indices.len());
             let mask = indices.validity()?.execute_mask(indices.len(), ctx)?;
             match_each_integer_ptype!(indices.ptype(), |I| {
                 for (&value, valid) in indices.as_slice::<I>().iter().zip(mask.iter()) {
@@ -74,6 +75,20 @@ impl TakeExecute for Pco {
                     } else {
                         None
                     };
+                    if let Some(previous) = runs.last_mut() {
+                        let contiguous = match (previous.start, start) {
+                            (Some(first), Some(next)) => {
+                                previous.stride == 1
+                                    && first.checked_add(previous.length) == Some(next)
+                            }
+                            (None, None) => true,
+                            _ => false,
+                        };
+                        if contiguous {
+                            previous.length += 1;
+                            continue;
+                        }
+                    }
                     runs.push(Run {
                         start,
                         length: 1,
@@ -146,6 +161,44 @@ fn gather<T: Number + NativePType>(
             valid.append_n(false, run.length);
             continue;
         };
+        if run.stride == 0 && run.length != 0 {
+            if let Some((page, value)) = state.resolve(array, array.slice_start() + start, ctx)? {
+                let value = state.values(array, page, ctx)?.as_slice::<T>()[value];
+                values.extend(std::iter::repeat_n(value, run.length));
+                valid.append_n(true, run.length);
+            } else {
+                valid.append_n(false, run.length);
+            }
+            continue;
+        }
+        if run.stride == 1 && run.length != 0 {
+            let mut row = array.slice_start() + start;
+            let stop = row + run.length;
+            while row < stop {
+                if let Some(span) = state.span(array, row, stop, ctx)? {
+                    if !span.values.is_empty() {
+                        values.extend_from_slice(
+                            &state.values(array, span.page, ctx)?.as_slice::<T>()[span.values],
+                        );
+                    }
+                    match &span.mask {
+                        Mask::AllTrue(n) => valid.append_n(true, *n),
+                        Mask::AllFalse(n) => valid.append_n(false, *n),
+                        Mask::Values(mask) => valid.append_buffer(mask.bit_buffer()),
+                    }
+                    row = span.stop;
+                } else {
+                    if let Some((page, value)) = state.resolve(array, row, ctx)? {
+                        values.push(state.values(array, page, ctx)?.as_slice::<T>()[value]);
+                        valid.append_true();
+                    } else {
+                        valid.append_false();
+                    }
+                    row += 1;
+                }
+            }
+            continue;
+        }
         for offset in 0..run.length {
             // The complete descriptor, including its output length and last element, was
             // checked before allocating output. The source slice itself is already validated.
