@@ -13,7 +13,7 @@ use vortex_array::IntoArray;
 use vortex_array::arrays::PiecewiseSequence;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::dict::TakeExecute;
-use vortex_array::arrays::piecewise_sequence::PiecewiseSequenceArraySlotsExt;
+use vortex_array::arrays::piecewise_sequence::array::PiecewiseSequenceArraySlotsExt;
 use vortex_array::dtype::NativePType;
 use vortex_array::dtype::half;
 use vortex_array::match_each_integer_ptype;
@@ -64,7 +64,7 @@ impl TakeExecute for Pco {
             runs
         } else {
             let indices = indices.clone().execute::<PrimitiveArray>(ctx)?;
-            let mut runs: Vec<Run> = Vec::with_capacity(indices.len());
+            let mut runs: Vec<Run> = Vec::with_capacity(indices.len().min(64));
             let mask = indices.validity()?.execute_mask(indices.len(), ctx)?;
             match_each_integer_ptype!(indices.ptype(), |I| {
                 for (&value, valid) in indices.as_slice::<I>().iter().zip(mask.iter()) {
