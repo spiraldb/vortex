@@ -216,7 +216,7 @@ async fn roundtrip() -> VortexResult<()> {
     );
 
     let file = open(bytes, Some(decryption()))?;
-    assert!(file.footer().uses_encryption());
+    assert!(!file.footer().encryption_specs().is_empty());
     assert_eq!(
         file.metadata_segment("meta").map(ByteBuffer::as_slice),
         Some(SECRET.as_bytes())

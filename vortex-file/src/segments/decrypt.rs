@@ -56,7 +56,8 @@ impl DecryptingSegmentSource {
         footer: &Footer,
         decryption: Option<&FileDecryption>,
     ) -> VortexResult<Option<Self>> {
-        if !footer.uses_encryption() {
+        // Writers only record encryption specs for files written with encryption.
+        if footer.encryption_specs().is_empty() {
             if decryption.is_some_and(|decryption| !decryption.allow_plaintext_files) {
                 vortex_bail!(
                     "Vortex file is not encrypted, but decryption was configured; allow plaintext \

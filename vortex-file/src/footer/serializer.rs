@@ -154,7 +154,7 @@ impl FooterSerializer {
     ) -> VortexResult<(Vec<ByteBuffer>, super::MetadataSegments, usize)> {
         let mut buffers = vec![];
 
-        if self.footer.uses_encryption() && self.cipher.is_none() {
+        if !self.footer.encryption_specs().is_empty() && self.cipher.is_none() {
             vortex_bail!(
                 "Footer describes encrypted segments; configure FooterSerializer::with_encryption \
                  to serialize it"

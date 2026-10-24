@@ -273,7 +273,10 @@ impl Footer {
 
     /// Returns the encryption specs indexed by [`SegmentSpec::encryption`].
     ///
-    /// Empty if the file contains no encrypted segments.
+    /// Empty if the file was written without encryption. Otherwise the first spec is the
+    /// plaintext one and the second the footer key's, even if every data segment is stored in
+    /// plaintext; check the [`segment_encryption`](Self::segment_encryption) of a segment to tell
+    /// how it is stored.
     pub fn encryption_specs(&self) -> &Arc<[EncryptionSpec]> {
         &self.encryption_specs
     }
@@ -302,17 +305,6 @@ impl Footer {
                     self.encryption_specs.len()
                 )
             })
-    }
-
-    /// Returns whether the file was written with encryption.
-    ///
-    /// This holds even when every data segment is stored in plaintext, since the footer is then
-    /// still signed and user metadata encrypted with the footer key. Check the
-    /// [`segment_encryption`](Self::segment_encryption) of a segment to tell how it is stored.
-    pub fn uses_encryption(&self) -> bool {
-        self.encryption_specs
-            .iter()
-            .any(EncryptionSpec::is_encrypted)
     }
 
     /// Returns the user-defined metadata segment locators stored in the postscript.
