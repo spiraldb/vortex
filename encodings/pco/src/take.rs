@@ -11,6 +11,7 @@ use pco::data_types::NumberType;
 use pco::match_number_enum;
 use vortex_array::ArrayRef;
 use vortex_array::ArrayView;
+use vortex_array::Canonical;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::arrays::ConstantArray;
@@ -48,8 +49,15 @@ impl TakeExecute for Pco {
         indices: &ArrayRef,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<Option<ArrayRef>> {
+        if indices.is_empty() {
+            let dtype = array
+                .dtype()
+                .clone()
+                .union_nullability(indices.dtype().nullability());
+            return Ok(Some(Canonical::empty(&dtype).into_array()));
+        }
         let compact = indices.as_opt::<PiecewiseSequence>().is_some();
-        let mut grouped = false;
+        let mut grouped = None;
         let runs = if let Some(sequence) = indices.as_opt::<PiecewiseSequence>() {
             let starts = sequence.starts().clone().execute::<PrimitiveArray>(ctx)?;
             let lengths = sequence.lengths().clone().execute::<PrimitiveArray>(ctx)?;
@@ -84,11 +92,11 @@ impl TakeExecute for Pco {
             if let Some(result) = zero_page_take(array, indices.len(), ctx)? {
                 return Ok(Some(result));
             }
-            grouped = !summary.contiguous;
-            if grouped && descriptor_bytes(summary.defined) >= canonical_bytes(array) {
+            grouped = (!summary.contiguous).then_some(summary.defined);
+            if grouped.is_some() && descriptor_bytes(summary.defined) >= canonical_bytes(array) {
                 return Ok(None);
             }
-            if grouped
+            if grouped.is_some()
                 && match_each_integer_ptype!(indices.ptype(), |I| {
                     prefer_canonical_primitive(
                         array,
@@ -329,7 +337,7 @@ fn gather<T: Number + NativePType>(
     runs: &[Run],
     output_len: usize,
     nullability: vortex_array::dtype::Nullability,
-    grouped: bool,
+    grouped: Option<usize>,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<PrimitiveArray> {
     if array.page_index()?.pages.is_empty() {
@@ -347,13 +355,13 @@ fn gather<T: Number + NativePType>(
         ));
     }
     if nullability.is_nullable() {
-        if grouped {
-            gather_grouped::<T, true>(array, runs, output_len, ctx)
+        if let Some(defined) = grouped {
+            gather_grouped::<T, true>(array, runs, output_len, defined, ctx)
         } else {
             gather_typed::<T, true>(array, runs, output_len, ctx)
         }
-    } else if grouped {
-        gather_grouped::<T, false>(array, runs, output_len, ctx)
+    } else if let Some(defined) = grouped {
+        gather_grouped::<T, false>(array, runs, output_len, defined, ctx)
     } else {
         gather_typed::<T, false>(array, runs, output_len, ctx)
     }
@@ -366,9 +374,10 @@ fn gather_grouped<T: Number + NativePType, const NULLABLE: bool>(
     array: ArrayView<'_, Pco>,
     runs: &[Run],
     output_len: usize,
+    defined: usize,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<PrimitiveArray> {
-    let mut requests = Vec::with_capacity(output_len);
+    let mut requests = Vec::with_capacity(defined);
     let mut output = 0usize;
     for run in runs {
         if let Some(start) = run.start {
@@ -613,6 +622,6 @@ pub(crate) fn slice(
         stride: 1,
     }];
     match_number_enum!(number_type_from_ptype(array.dtype().as_ptype()), NumberType<T> => {
-        gather::<T>(array, &runs, array.len(), array.dtype().nullability(), false, ctx)
+        gather::<T>(array, &runs, array.len(), array.dtype().nullability(), None, ctx)
     })
 }

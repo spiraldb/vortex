@@ -397,3 +397,35 @@ fn mixed_fragments_narrow_slices_and_compact_repeats() -> VortexResult<()> {
     );
     Ok(())
 }
+
+#[test]
+fn empty_take_dtype_and_mostly_null_request_storage() -> VortexResult<()> {
+    let mut ctx = SESSION.create_execution_ctx();
+    let input = PrimitiveArray::from_iter(0..32768i64);
+    let encoded = Pco::from_primitive(input.as_view(), 3, 1024, &mut ctx)?.into_array();
+    for source in [encoded.clone(), encoded.slice(0..0)?] {
+        for indices in [
+            PrimitiveArray::from_iter(std::iter::empty::<u64>()).into_array(),
+            PrimitiveArray::from_option_iter(std::iter::empty::<Option<u64>>()).into_array(),
+        ] {
+            let result = source
+                .take(indices.clone())?
+                .execute::<PrimitiveArray>(&mut ctx)?;
+            let expected = input
+                .slice(0..0)?
+                .take(indices)?
+                .execute::<PrimitiveArray>(&mut ctx)?;
+            assert_eq!(result.dtype(), expected.dtype());
+            assert_arrays_eq!(result, expected, &mut ctx);
+        }
+    }
+    let indices =
+        PrimitiveArray::from_option_iter((0..200000).map(|i| (i == 12345).then_some(1u64)))
+            .into_array();
+    let result = encoded.take(indices)?.execute::<PrimitiveArray>(&mut ctx)?;
+    let expected =
+        PrimitiveArray::from_option_iter((0..200000).map(|i| (i == 12345).then_some(1i64)));
+    assert_eq!(result.dtype(), expected.dtype());
+    assert_arrays_eq!(result, expected, &mut ctx);
+    Ok(())
+}
