@@ -133,6 +133,7 @@ async fn public_stock_size_attribution() -> VortexResult<()> {
     use rand::Rng;
     use rand::SeedableRng;
     use rand::rngs::StdRng;
+    use vortex_array::stream::ArrayStreamExt;
     use vortex_btrblocks::BtrBlocksCompressorBuilder;
     use vortex_file::strategy::WriteStrategyBuilder;
 
@@ -178,7 +179,11 @@ async fn public_stock_size_attribution() -> VortexResult<()> {
         u64::try_from(len).vortex_expect("file fits u64") - end,
         segments
             .iter()
-            .map(|segment| (segment.offset, segment.length, segment.alignment.as_usize()))
+            .map(|segment| vec![
+                segment.offset,
+                u64::from(segment.length),
+                u64::try_from(segment.alignment.as_usize()).vortex_expect("alignment fits u64")
+            ])
             .collect::<Vec<_>>()
     );
     let actual = file.scan()?.into_array_stream()?.read_all().await?;
