@@ -2,10 +2,10 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use num_traits::zero;
+use vortex_aggregates::is_sorted::IsSorted;
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::aggregate_fn::AggregateFnRef;
-use vortex_array::aggregate_fn::fns::is_sorted::IsSorted;
 use vortex_array::aggregate_fn::kernels::DynAggregateKernel;
 use vortex_array::match_each_native_ptype;
 use vortex_array::scalar::Scalar;
