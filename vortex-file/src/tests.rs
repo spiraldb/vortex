@@ -174,7 +174,8 @@ async fn test_eof_values() {
     feature = "zstd",
     case::compact(
         BtrBlocksCompressorBuilder::from_session(&SESSION).with_compact(),
-        55_344
+        // PCO's optional logical-page metadata adds 64 bytes to this compact fixture.
+        55_408
     )
 )]
 #[tokio::test]
