@@ -8,10 +8,10 @@ use std::sync::Arc;
 use futures::StreamExt;
 use itertools::Itertools;
 use parking_lot::Mutex;
+use vortex_aggregates::sum::sum;
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::VortexSessionExecute;
-use vortex_array::aggregate_fn::fns::sum::sum;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::builders::ArrayBuilder;
@@ -534,7 +534,6 @@ impl FileStatsAccumulator {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::LazyLock;
 
     use rstest::rstest;
     use vortex_array::IntoArray;
@@ -544,11 +543,9 @@ mod tests {
     use vortex_array::builders::VarBinViewBuilder;
     use vortex_buffer::BitBuffer;
     use vortex_buffer::buffer;
-    use vortex_session::VortexSession;
 
     use super::*;
-
-    static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
+    use crate::test::SESSION;
 
     #[rstest]
     #[case(DType::Utf8(Nullability::NonNullable))]
