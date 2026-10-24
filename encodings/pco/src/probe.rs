@@ -20,7 +20,6 @@ use crate::access::AccessState;
 #[derive(Default)]
 pub struct PcoProbeState {
     access: AccessState,
-    all_null: Option<Scalar>,
 }
 
 pub(crate) fn scalar_at(
@@ -29,32 +28,43 @@ pub(crate) fn scalar_at(
     state: Option<&mut PcoProbeState>,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<Scalar> {
-    // Retained probes must not construct/drop a fresh fallback cache on every hit.
-    let mut once;
-    let state = match state {
-        Some(state) => state,
-        None => {
-            once = PcoProbeState::default();
-            &mut once
-        }
+    let Some(state) = state else {
+        return scalar_at_once(array, index, ctx);
     };
-    if let Some(null) = &state.all_null {
+    if state.access.validated_all_null() {
         vortex_ensure!(
             index < array.len(),
             "Pco scalar index exceeds visible array bounds"
         );
-        return Ok(null.clone());
+        return Ok(Scalar::null(array.dtype().clone()));
     }
     let row = array.slice_start() + index;
     if let Some(value) = state.access.cached_scalar(array, row) {
         return Ok(value);
     }
+    scalar_at_uncached(array, row, state, ctx)
+}
+
+// Keep the large temporary cache out of the retained-probe hit frame. Stateless
+// probes and cache misses are ordinary workloads, so neither helper is cold.
+#[inline(never)]
+fn scalar_at_once(
+    array: ArrayView<'_, Pco>,
+    index: usize,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<Scalar> {
+    scalar_at(array, index, Some(&mut PcoProbeState::default()), ctx)
+}
+
+#[inline(never)]
+fn scalar_at_uncached(
+    array: ArrayView<'_, Pco>,
+    row: usize,
+    state: &mut PcoProbeState,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<Scalar> {
     let Some((page, value)) = state.access.resolve(array, row, ctx)? else {
-        let null = Scalar::null(array.dtype().clone());
-        if state.access.validated_all_null() {
-            state.all_null = Some(null.clone());
-        }
-        return Ok(null);
+        return Ok(Scalar::null(array.dtype().clone()));
     };
     let values = state.access.values(array, page, ctx)?;
     Ok(match_each_native_ptype!(values.ptype(), |T| {
