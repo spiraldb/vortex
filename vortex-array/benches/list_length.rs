@@ -131,7 +131,7 @@ fn run(bencher: Bencher, array: ArrayRef) {
         .bench_refs(|(array, ctx)| {
             array
                 .clone()
-                .apply(&expr)
+                .apply(&expr, &SESSION)
                 .unwrap()
                 .execute::<Canonical>(ctx)
                 .unwrap()

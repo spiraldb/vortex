@@ -16,15 +16,20 @@ use crate::ArrayRef;
 use crate::IntoArray;
 use crate::arrays::ScalarFnArray;
 use crate::expr::Expression;
+use crate::scalar_fn::ErasedOptions;
+use crate::scalar_fn::ForeignScalarFnOptions;
+use crate::scalar_fn::ForeignScalarFnVTable;
 use crate::scalar_fn::ScalarFnId;
 use crate::scalar_fn::ScalarFnPluginRef;
 use crate::scalar_fn::ScalarFnRef;
 use crate::scalar_fn::ScalarFnVTable;
+use crate::scalar_fn::ScalarFnVTableExt;
 use crate::scalar_fn::fns::between::Between;
 use crate::scalar_fn::fns::binary::Binary;
 use crate::scalar_fn::fns::byte_length::ByteLength;
 use crate::scalar_fn::fns::case_when::CaseWhen;
 use crate::scalar_fn::fns::cast::Cast;
+use crate::scalar_fn::fns::dynamic::DynamicComparison;
 use crate::scalar_fn::fns::ext_storage::ExtStorage;
 use crate::scalar_fn::fns::fill_null::FillNull;
 use crate::scalar_fn::fns::get_item::GetItem;
@@ -46,6 +51,7 @@ use crate::scalar_fn::fns::select::Select;
 use crate::scalar_fn::fns::stat::StatFn;
 use crate::scalar_fn::fns::variant_get::VariantGet;
 use crate::scalar_fn::fns::zip::Zip;
+use crate::scalar_fn::internal::row_count::RowCount;
 
 /// Registry of scalar function vtables.
 pub type ScalarFnRegistry = ArcSwapMap<Id, ScalarFnPluginRef>;
@@ -80,6 +86,7 @@ impl Default for ScalarFnSession {
         this.register(ByteLength);
         this.register(CaseWhen);
         this.register(Cast);
+        this.register(DynamicComparison);
         this.register(ExtStorage);
         this.register(FillNull);
         this.register(GetItem);
@@ -101,6 +108,8 @@ impl Default for ScalarFnSession {
         this.register(StatFn);
         this.register(VariantGet);
         this.register(Zip);
+        // Internal functions the scan replaces before execution still have to bind.
+        this.register(RowCount);
 
         this
     }
@@ -175,12 +184,41 @@ pub trait ScalarFnSessionExt: SessionExt {
     /// Returns an error if no function is registered under `id`, or if `options` is not its
     /// options type.
     fn scalar_fn_by_id(&self, id: ScalarFnId, options: &dyn Any) -> VortexResult<ScalarFnRef> {
-        let plugin = self
-            .scalar_fns()
+        self.scalar_fn_plugin(id)?.bind_any(options)
+    }
+
+    /// The plugin registered under `id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no function is registered under `id`.
+    fn scalar_fn_plugin(&self, id: ScalarFnId) -> VortexResult<ScalarFnPluginRef> {
+        self.scalar_fns()
             .registry()
             .get(&id)
-            .ok_or_else(|| vortex_err!("unknown scalar function: {id}"))?;
-        plugin.bind_any(options)
+            .ok_or_else(|| vortex_err!("unknown scalar function: {id}"))
+    }
+
+    /// Builds the scalar function an [`Expression`] node calls: the one registered under `id`,
+    /// with `options`.
+    ///
+    /// Options read for an id the session did not register, by
+    /// [`Expression::from_proto`] with unknown ids allowed, give the foreign placeholder
+    /// instead, which binds but cannot execute.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no function is registered under `id`, or if `options` is not its
+    /// options type.
+    fn resolve_scalar_fn(
+        &self,
+        id: ScalarFnId,
+        options: &ErasedOptions,
+    ) -> VortexResult<ScalarFnRef> {
+        if let Some(foreign) = options.downcast_ref::<ForeignScalarFnOptions>() {
+            return Ok(ForeignScalarFnVTable::new(id).bind(foreign.clone()));
+        }
+        self.scalar_fn_by_id(id, options.as_any())
     }
 
     /// Calls the scalar function registered under `name` with `options` on `args`.

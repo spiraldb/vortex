@@ -252,7 +252,7 @@ fn like_substr_high_match(bencher: Bencher) {
         .bench_refs(|(fsst_array, ctx)| {
             fsst_array
                 .clone()
-                .apply(&expr)
+                .apply(&expr, &SESSION)
                 .unwrap()
                 .execute::<RecursiveCanonical>(ctx)
                 .unwrap()
@@ -276,7 +276,7 @@ fn like_substr_low_match(bencher: Bencher) {
         .bench_refs(|(fsst_array, ctx)| {
             fsst_array
                 .clone()
-                .apply(&expr)
+                .apply(&expr, &SESSION)
                 .unwrap()
                 .execute::<RecursiveCanonical>(ctx)
                 .unwrap()

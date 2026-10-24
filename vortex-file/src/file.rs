@@ -289,7 +289,7 @@ impl VortexFile {
         };
 
         can_prune_file_stats(
-            &filter.bind(self.footer.dtype())?,
+            &filter.bind(self.footer.dtype(), &self.session)?,
             self.footer.row_count(),
             stats,
             fields,

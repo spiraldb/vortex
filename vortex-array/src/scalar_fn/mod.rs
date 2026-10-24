@@ -29,9 +29,6 @@ pub use plugin::*;
 mod foreign;
 pub use foreign::*;
 
-mod lazy;
-pub use lazy::*;
-
 mod typed;
 pub use typed::*;
 

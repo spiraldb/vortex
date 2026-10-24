@@ -142,7 +142,7 @@ fn case_when_simple(bencher: Bencher, size: usize) {
         .bench_refs(|(expr, array, ctx)| {
             array
                 .clone()
-                .apply(expr)
+                .apply(expr, &SESSION)
                 .unwrap()
                 .execute::<Canonical>(ctx)
                 .unwrap()
@@ -169,7 +169,7 @@ fn case_when_nary_3_conditions(bencher: Bencher, size: usize) {
         .bench_refs(|(expr, array, ctx)| {
             array
                 .clone()
-                .apply(expr)
+                .apply(expr, &SESSION)
                 .unwrap()
                 .execute::<Canonical>(ctx)
                 .unwrap()
@@ -197,7 +197,7 @@ fn case_when_nary_10_conditions(bencher: Bencher, size: usize) {
         .bench_refs(|(expr, array, ctx)| {
             array
                 .clone()
-                .apply(expr)
+                .apply(expr, &SESSION)
                 .unwrap()
                 .execute::<Canonical>(ctx)
                 .unwrap()
@@ -220,7 +220,7 @@ fn case_when_nary_equality_lookup(bencher: Bencher, size: usize) {
         .bench_refs(|(expr, array, ctx)| {
             array
                 .clone()
-                .apply(expr)
+                .apply(expr, &SESSION)
                 .unwrap()
                 .execute::<Canonical>(ctx)
                 .unwrap()
@@ -240,7 +240,7 @@ fn case_when_without_else(bencher: Bencher, size: usize) {
         .bench_refs(|(expr, array, ctx)| {
             array
                 .clone()
-                .apply(expr)
+                .apply(expr, &SESSION)
                 .unwrap()
                 .execute::<Canonical>(ctx)
                 .unwrap()
@@ -264,7 +264,7 @@ fn case_when_all_true(bencher: Bencher, size: usize) {
         .bench_refs(|(expr, array, ctx)| {
             array
                 .clone()
-                .apply(expr)
+                .apply(expr, &SESSION)
                 .unwrap()
                 .execute::<Canonical>(ctx)
                 .unwrap()
@@ -297,7 +297,7 @@ fn case_when_nary_early_dominant(bencher: Bencher, size: usize) {
         .bench_refs(|(expr, array, ctx)| {
             array
                 .clone()
-                .apply(expr)
+                .apply(expr, &SESSION)
                 .unwrap()
                 .execute::<Canonical>(ctx)
                 .unwrap()
@@ -321,7 +321,7 @@ fn case_when_all_false(bencher: Bencher, size: usize) {
         .bench_refs(|(expr, array, ctx)| {
             array
                 .clone()
-                .apply(expr)
+                .apply(expr, &SESSION)
                 .unwrap()
                 .execute::<Canonical>(ctx)
                 .unwrap()
@@ -348,7 +348,7 @@ fn case_when_fragmented(bencher: Bencher, size: usize) {
         .bench_refs(|(expr, array, ctx)| {
             array
                 .clone()
-                .apply(expr)
+                .apply(expr, &SESSION)
                 .unwrap()
                 .execute::<Canonical>(ctx)
                 .unwrap()
