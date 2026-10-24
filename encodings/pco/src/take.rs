@@ -159,6 +159,7 @@ fn gather<T: Number + NativePType>(
     for run in runs {
         let Some(start) = run.start else {
             valid.append_n(false, run.length);
+            values.extend(std::iter::repeat_n(T::default(), run.length));
             continue;
         };
         if run.stride == 0 && run.length != 0 {
@@ -168,6 +169,7 @@ fn gather<T: Number + NativePType>(
                 valid.append_n(true, run.length);
             } else {
                 valid.append_n(false, run.length);
+                values.extend(std::iter::repeat_n(T::default(), run.length));
             }
             continue;
         }
@@ -176,15 +178,34 @@ fn gather<T: Number + NativePType>(
             let stop = row + run.length;
             while row < stop {
                 if let Some(span) = state.span(array, row, stop, ctx)? {
-                    if !span.values.is_empty() {
-                        values.extend_from_slice(
-                            &state.values(array, span.page, ctx)?.as_slice::<T>()[span.values],
-                        );
-                    }
                     match &span.mask {
-                        Mask::AllTrue(n) => valid.append_n(true, *n),
-                        Mask::AllFalse(n) => valid.append_n(false, *n),
-                        Mask::Values(mask) => valid.append_buffer(mask.bit_buffer()),
+                        Mask::AllTrue(n) => {
+                            values.extend_from_slice(
+                                &state.values(array, span.page, ctx)?.as_slice::<T>()[span.values],
+                            );
+                            valid.append_n(true, *n);
+                        }
+                        Mask::AllFalse(n) => {
+                            values.extend(std::iter::repeat_n(T::default(), *n));
+                            valid.append_n(false, *n);
+                        }
+                        Mask::Values(mask) => {
+                            let source = state.values(array, span.page, ctx)?.as_slice::<T>();
+                            let source = &source[span.values];
+                            let mut logical = 0usize;
+                            let mut compact = 0usize;
+                            // Copy defined runs straight into the final output. Null gaps are
+                            // initialized once; no compact staging output is expanded afterward.
+                            for (start, stop) in mask.bit_buffer().set_slices() {
+                                values.extend(std::iter::repeat_n(T::default(), start - logical));
+                                let count = stop - start;
+                                values.extend_from_slice(&source[compact..compact + count]);
+                                compact += count;
+                                logical = stop;
+                            }
+                            values.extend(std::iter::repeat_n(T::default(), mask.len() - logical));
+                            valid.append_buffer(mask.bit_buffer());
+                        }
                     }
                     row = span.stop;
                 } else {
@@ -192,6 +213,7 @@ fn gather<T: Number + NativePType>(
                         values.push(state.values(array, page, ctx)?.as_slice::<T>()[value]);
                         valid.append_true();
                     } else {
+                        values.push(T::default());
                         valid.append_false();
                     }
                     row += 1;
@@ -207,6 +229,7 @@ fn gather<T: Number + NativePType>(
                 values.push(state.values(array, page, ctx)?.as_slice::<T>()[value]);
                 valid.append_true();
             } else {
+                values.push(T::default());
                 valid.append_false();
             }
         }
@@ -216,13 +239,7 @@ fn gather<T: Number + NativePType>(
     } else {
         Validity::NonNullable
     };
-    Ok(PrimitiveArray::from_values_byte_buffer(
-        values.freeze().into_byte_buffer(),
-        array.dtype().as_ptype(),
-        validity,
-        output_len,
-        ctx,
-    ))
+    Ok(PrimitiveArray::new(values.freeze(), validity))
 }
 
 pub(crate) fn slice(

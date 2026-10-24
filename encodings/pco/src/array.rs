@@ -878,6 +878,7 @@ impl OperationsVTable<Pco> for Pco {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
     use std::sync::LazyLock;
 
     use vortex_array::IntoArray;
@@ -886,7 +887,6 @@ mod tests {
     use vortex_array::assert_arrays_eq;
     use vortex_array::validity::Validity;
     use vortex_buffer::buffer;
-    use vortex_error::VortexExpect;
     use vortex_error::VortexResult;
     use vortex_session::VortexSession;
 
@@ -948,7 +948,8 @@ mod tests {
         let values = PrimitiveArray::from_iter([42u32]);
         let pco = Pco::from_primitive(values.as_view(), 0, 128, &mut ctx)?;
         let mut data = pco.data().clone();
-        data.metadata.chunks[0].pages[0].n_values = u32::try_from(VALUES_PER_CHUNK + 1)?;
+        Arc::make_mut(&mut data.metadata).chunks[0].pages[0].n_values =
+            u32::try_from(VALUES_PER_CHUNK + 1)?;
 
         assert!(
             data.validate(pco.dtype(), pco.len(), &Validity::NonNullable)
