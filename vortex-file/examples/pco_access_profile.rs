@@ -149,13 +149,14 @@ fn main() -> VortexResult<()> {
     )?
     .into_array();
     let large_indices = PrimitiveArray::from_iter(
-        (0..rows / 8).map(|i| u64::try_from((i * 104729) % rows).vortex_expect("index fits u64")),
+        (0..if mode == "take-large" { rows / 8 } else { 0 })
+            .map(|i| u64::try_from((i * 104729) % rows).vortex_expect("index fits u64")),
     )
     .into_array();
     let repeated_indices =
-        PrimitiveArray::from_iter((0..rows / 8).map(|i| {
-            u64::try_from(((i % 16) * (rows / 17)) % rows).vortex_expect("index fits u64")
-        }))
+        PrimitiveArray::from_iter((0..if mode == "take-repeated" { rows / 8 } else { 0 }).map(
+            |i| u64::try_from(((i % 16) * (rows / 17)) % rows).vortex_expect("index fits u64"),
+        ))
         .into_array();
     let wire = session
         .array_serialize(&encoded)?

@@ -58,6 +58,7 @@ jobs:
         run: cargo test --profile ci --locked -p vortex-file --test pco_logical_pages_compat
       - name: Build matching optimized public resource harnesses
         run: |
+          mkdir -p "$RUNNER_TEMP/pco-old-reader/vortex-file/examples"
           cp vortex-file/examples/pco_access_profile.rs "$RUNNER_TEMP/pco-old-reader/vortex-file/examples/"
           cargo build --profile bench --locked -p vortex-file --example pco_access_profile --message-format=json-render-diagnostics > "$RUNNER_TEMP/pco-candidate-build.jsonl"
           cargo build --manifest-path "$RUNNER_TEMP/pco-old-reader/Cargo.toml" --profile bench --locked -p vortex-file --example pco_access_profile --message-format=json-render-diagnostics > "$RUNNER_TEMP/pco-baseline-build.jsonl"
@@ -65,6 +66,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/pco-resource-results"
+          printf '%s\n' 'Wall timings exclude accounting and post-timing scalar inspection.' 'open-only/open-first include public array-plugin metadata decode/validation/index preparation with compressed buffers and validity children already available; no file IO.' 'probe-first starts with prepared metadata/index; probe retains touched pages across iterations.' 'CPU ticks are OS process user+system ticks; sub-tick readings are resolution-limited, not zero CPU.' 'RSS snapshots may miss transient peaks. GNU time maximum RSS is whole-process peak including fixtures/compression and post-timing inspection, not operation-only peak.' > "$RUNNER_TEMP/pco-resource-results/README.txt"
           getconf CLK_TCK > "$RUNNER_TEMP/pco-resource-results/clock-ticks-per-second.txt"
           git rev-parse HEAD > "$RUNNER_TEMP/pco-resource-results/candidate-source.txt"
           git -C "$RUNNER_TEMP/pco-old-reader" rev-parse HEAD > "$RUNNER_TEMP/pco-resource-results/baseline-source.txt"
