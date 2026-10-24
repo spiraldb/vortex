@@ -14,6 +14,9 @@ use vortex_array::ArrayView;
 use vortex_array::Canonical;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
+use vortex_array::aggregate_fn::NumericalAggregateOpts;
+use vortex_array::aggregate_fn::fns::min_max::MinMaxResult;
+use vortex_array::aggregate_fn::fns::min_max::min_max;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::PiecewiseSequence;
 use vortex_array::arrays::PrimitiveArray;
@@ -36,6 +39,7 @@ use crate::Pco;
 use crate::PcoArrayExt;
 use crate::access::AccessState;
 use crate::array::number_type_from_ptype;
+use crate::decoder::PageDecoder;
 
 /// Compact descriptor; null indices have no start. Zero-length runs consume no source rows.
 struct Run {
@@ -81,9 +85,19 @@ impl TakeExecute for Pco {
         } else {
             let indices = indices.clone().execute::<PrimitiveArray>(ctx)?;
             let mask = indices.validity()?.execute_mask(indices.len(), ctx)?;
-            let summary = match_each_integer_ptype!(indices.ptype(), |I| {
-                validate_primitive(indices.as_slice::<I>(), &mask, array.len())?
-            });
+            // Reuse native logical-null-aware extrema and their immutable-array stats cache.
+            // Numeric extrema prove every defined index is representable and in bounds.
+            let extrema = min_max(indices.array(), ctx, NumericalAggregateOpts::default())?;
+            let summary = if let Some(extrema) = extrema {
+                match_each_integer_ptype!(indices.ptype(), |I| {
+                    validate_extrema(indices.as_slice::<I>(), &mask, &extrema, array.len())?
+                })
+            } else {
+                PlainSummary {
+                    defined: 0,
+                    contiguous: false,
+                }
+            };
             if summary.defined == 0 {
                 return Ok(Some(
                     ConstantArray::new(Scalar::null(array.dtype().as_nullable()), indices.len())
@@ -142,35 +156,44 @@ struct PlainSummary {
     contiguous: bool,
 }
 
-fn validate_primitive<I: Copy>(
+fn validate_extrema<I: NativePType>(
     indices: &[I],
     mask: &Mask,
+    extrema: &MinMaxResult,
     source_len: usize,
 ) -> VortexResult<PlainSummary>
 where
     usize: TryFrom<I>,
 {
-    let mut previous: Option<usize> = None;
-    let mut defined = 0usize;
-    let mut contiguous = true;
-    for (&index, valid) in indices.iter().zip(mask.iter()) {
-        if !valid {
-            contiguous = false;
-            continue;
-        }
-        let row = checked_index(index)?;
-        vortex_ensure!(
-            row < source_len,
-            "Pco take index {row} exceeds array length {source_len}"
-        );
-        if let Some(previous) = previous {
-            contiguous &= previous.checked_add(1) == Some(row);
-        }
-        previous = Some(row);
-        defined += 1;
-    }
+    let min = extrema
+        .min
+        .as_primitive()
+        .try_typed_value::<I>()?
+        .ok_or_else(|| vortex_err!("Pco index minimum is null"))?;
+    let max = extrema
+        .max
+        .as_primitive()
+        .try_typed_value::<I>()?
+        .ok_or_else(|| vortex_err!("Pco index maximum is null"))?;
+    checked_index(min)?;
+    let max = checked_index(max)?;
+    vortex_ensure!(
+        max < source_len,
+        "Pco take index {max} exceeds array length {source_len}"
+    );
+    // Bounds/error category is guaranteed above. No contract chooses the first invalid row.
+    // Contiguous detection exits at the first mismatch; null physical values are never inspected.
+    let contiguous = match mask {
+        Mask::AllTrue(_) => indices.windows(2).all(|pair| {
+            checked_index(pair[0])
+                .ok()
+                .and_then(|row| row.checked_add(1))
+                == checked_index(pair[1]).ok()
+        }),
+        _ => false,
+    };
     Ok(PlainSummary {
-        defined,
+        defined: mask.true_count(),
         contiguous,
     })
 }
@@ -390,7 +413,7 @@ fn gather_grouped<T: Number + NativePType, const NULLABLE: bool>(
         output += run.length;
     }
     requests.sort_unstable();
-    let mut state = AccessState::default();
+    let mut state = AccessState::<true>::default();
     let mut resolved = Vec::with_capacity(requests.len().min(64));
     let mut cursor = 0;
     while cursor < requests.len() {
@@ -496,7 +519,7 @@ fn gather_typed<T: Number + NativePType, const NULLABLE: bool>(
     output_len: usize,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<PrimitiveArray> {
-    let mut state = AccessState::default();
+    let mut state = AccessState::<true>::default();
     let mut values = Output::<T, NULLABLE>::new(output_len, ctx);
     // The non-nullable monomorphization has no bitmap allocation or append work.
     let mut valid = BitBufferMut::with_capacity(if NULLABLE { output_len } else { 0 });
@@ -611,16 +634,96 @@ fn gather_typed<T: Number + NativePType, const NULLABLE: bool>(
     Ok(PrimitiveArray::new(values.values.freeze(), validity))
 }
 
+/// Contiguous selections stream pages into the final initialized values buffer and retain
+/// exact sliced source validity. No output validity copy or retained decoded-page cache.
+fn stream_slice<T: Number + NativePType>(
+    array: ArrayView<'_, Pco>,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<PrimitiveArray> {
+    let mut values = BufferMut::<T>::zeroed_in(array.len(), ctx.allocator().clone());
+    let mut scratch = BufferMut::<T>::with_capacity_in(0, ctx.allocator().clone());
+    let mut state = AccessState::<false>::default();
+    let mut decoder = PageDecoder::<T>::new(array.metadata.header.as_slice())?;
+    let stop = array.slice_start() + array.len();
+    let mut row = array.slice_start();
+    while row < stop {
+        let span = state
+            .span(array, row, stop, ctx)?
+            .ok_or_else(|| vortex_err!("Pco contiguous page span is missing"))?;
+        vortex_ensure!(
+            span.stop > row && span.stop <= stop,
+            "Pco contiguous span does not advance within bounds"
+        );
+        vortex_ensure_eq!(
+            span.mask.len(),
+            span.stop - row,
+            "Pco contiguous mask length mismatch"
+        );
+        vortex_ensure_eq!(
+            span.values.len(),
+            span.mask.true_count(),
+            "Pco contiguous value count mismatch"
+        );
+        let start = row - array.slice_start();
+        let output = values
+            .get_mut(start..start + span.mask.len())
+            .ok_or_else(|| vortex_err!("Pco contiguous output exceeds visible range"))?;
+        if !span.mask.all_false() {
+            let index = array.page_index()?;
+            let page = index
+                .pages
+                .get(span.page)
+                .ok_or_else(|| vortex_err!("Pco contiguous page is missing"))?;
+            let buffer = array
+                .pages
+                .get(span.page)
+                .ok_or_else(|| vortex_err!("Pco compressed page is missing"))?;
+            let chunk = array
+                .chunk_metas
+                .get(page.chunk)
+                .ok_or_else(|| vortex_err!("Pco chunk metadata is missing"))?;
+            let n = page.values.len();
+            if span.mask.all_true() && span.values == (0..n) {
+                decoder.read_into(page.chunk, chunk.as_slice(), n, buffer.as_slice(), output)?;
+            } else {
+                if scratch.len() < n {
+                    scratch.push_n(T::default(), n - scratch.len());
+                }
+                decoder.read_into(
+                    page.chunk,
+                    chunk.as_slice(),
+                    n,
+                    buffer.as_slice(),
+                    &mut scratch[..n],
+                )?;
+                let source = scratch
+                    .get(span.values)
+                    .ok_or_else(|| vortex_err!("Pco compact range exceeds page output"))?;
+                match &span.mask {
+                    Mask::AllTrue(_) => output.copy_from_slice(source),
+                    Mask::AllFalse(_) => {}
+                    Mask::Values(mask) => {
+                        let mut compact = 0;
+                        for (start, end) in mask.bit_buffer().set_slices() {
+                            let len = end - start;
+                            output[start..end].copy_from_slice(&source[compact..compact + len]);
+                            compact += len;
+                        }
+                    }
+                }
+            }
+        }
+        row = span.stop;
+    }
+    let validity = array.unsliced_validity().slice(array.slice_start()..stop)?;
+    Ok(PrimitiveArray::new(values.freeze(), validity))
+}
+
 pub(crate) fn slice(
     array: ArrayView<'_, Pco>,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<PrimitiveArray> {
-    let runs = [Run {
-        start: Some(0),
-        length: array.len(),
-        stride: 1,
-    }];
     match_number_enum!(number_type_from_ptype(array.dtype().as_ptype()), NumberType<T> => {
-        gather::<T>(array, &runs, array.len(), array.dtype().nullability(), None, ctx)
+        stream_slice::<T>(array, ctx)
     })
 }

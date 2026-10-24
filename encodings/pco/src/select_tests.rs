@@ -429,3 +429,70 @@ fn empty_take_dtype_and_mostly_null_request_storage() -> VortexResult<()> {
     assert_arrays_eq!(result, expected, &mut ctx);
     Ok(())
 }
+
+#[rstest]
+fn streamed_slices_preserve_float_bits_and_validity(
+    #[values(false, true)] dense: bool,
+) -> VortexResult<()> {
+    let mut ctx = SESSION.create_execution_ctx();
+    let bits = [
+        0u64,
+        1u64 << 63,
+        0x7ff8000000000042,
+        0x7ff0000000000000,
+        0xfff0000000000000,
+        0x3ff4000000000000,
+    ];
+    let values = (0..2048)
+        .map(|row| f64::from_bits(bits[row % bits.len()]))
+        .collect::<Vec<_>>();
+    let validity = if dense {
+        Validity::NonNullable
+    } else {
+        Validity::from_iter((0..2048).map(|row| row % 7 != 0))
+    };
+    let input = PrimitiveArray::new(values.clone(), validity);
+    let encoded = Pco::from_primitive(input.as_view(), 3, 31, &mut ctx)?.into_array();
+    for range in [1..2047, 89..129, 1000..1001] {
+        let actual = encoded
+            .slice(range.clone())?
+            .execute::<PrimitiveArray>(&mut ctx)?;
+        assert_eq!(actual.dtype(), input.dtype());
+        let mask = actual.validity()?.execute_mask(actual.len(), &mut ctx)?;
+        for (offset, &value) in actual.as_slice::<f64>().iter().enumerate() {
+            let row = range.start + offset;
+            assert_eq!(mask.value(offset), dense || row % 7 != 0);
+            if mask.value(offset) {
+                assert_eq!(value.to_bits(), values[row].to_bits());
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn logical_null_indices_ignore_invalid_physical_values() -> VortexResult<()> {
+    let mut ctx = SESSION.create_execution_ctx();
+    let input = PrimitiveArray::from_iter(0..128i64);
+    let encoded = Pco::from_primitive(input.as_view(), 3, 7, &mut ctx)?.into_array();
+    let indices = PrimitiveArray::new(
+        vec![i64::MIN, 4, i64::MAX],
+        Validity::from_iter([false, true, false]),
+    )
+    .into_array();
+    let expected = PrimitiveArray::from_option_iter([None, Some(4i64), None]);
+    assert_arrays_eq!(encoded.take(indices.clone())?, expected, &mut ctx);
+    // Reusing the immutable index array also exercises cached native extrema.
+    assert_arrays_eq!(
+        encoded.take(indices)?,
+        PrimitiveArray::from_option_iter([None, Some(4i64), None]),
+        &mut ctx
+    );
+    assert!(
+        encoded
+            .take(PrimitiveArray::from_iter([u64::MAX]).into_array())?
+            .execute::<PrimitiveArray>(&mut ctx)
+            .is_err()
+    );
+    Ok(())
+}

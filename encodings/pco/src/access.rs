@@ -30,7 +30,7 @@ use crate::page_index::PageIndex;
 const RANK_STRIDE: usize = 512;
 
 #[derive(Default)]
-pub(crate) struct AccessState {
+pub(crate) struct AccessState<const RETAIN_PAGES: bool = true> {
     legacy: Option<RankMask>,
     decoder: Option<Box<dyn Any>>,
     pages: BTreeMap<usize, CachedPage>,
@@ -114,7 +114,7 @@ impl RankMask {
     }
 }
 
-impl AccessState {
+impl<const RETAIN_PAGES: bool> AccessState<RETAIN_PAGES> {
     /// Read the last fully validated decoded page directly. A miss preserves all
     /// operation-owned cache state and follows the ordinary fallible resolver.
     pub fn cached_scalar(&self, array: ArrayView<'_, Pco>, row: usize) -> Option<Scalar> {
@@ -166,7 +166,9 @@ impl AccessState {
     }
 
     fn insert(&mut self, page: usize, cached: CachedPage) {
-        if let Some((previous, cached)) = self.last_page.replace((page, cached)) {
+        if let Some((previous, cached)) = self.last_page.replace((page, cached))
+            && RETAIN_PAGES
+        {
             self.pages.insert(previous, cached);
         }
     }
