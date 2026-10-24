@@ -32,6 +32,7 @@ const RANK_STRIDE: usize = 512;
 #[derive(Default)]
 pub(crate) struct AccessState<const RETAIN_PAGES: bool = true> {
     legacy: Option<RankMask>,
+    validated_all_null: bool,
     decoder: Option<Box<dyn Any>>,
     pages: BTreeMap<usize, CachedPage>,
     last_page: Option<(usize, CachedPage)>,
@@ -117,6 +118,7 @@ impl RankMask {
 impl<const RETAIN_PAGES: bool> AccessState<RETAIN_PAGES> {
     /// Read the last fully validated decoded page directly. A miss preserves all
     /// operation-owned cache state and follows the ordinary fallible resolver.
+    #[inline]
     pub fn cached_scalar(&self, array: ArrayView<'_, Pco>, row: usize) -> Option<Scalar> {
         if row >= array.unsliced_n_rows() {
             return None;
@@ -145,6 +147,10 @@ impl<const RETAIN_PAGES: bool> AccessState<RETAIN_PAGES> {
                 Scalar::primitive(decoded.as_slice::<T>()[value], array.dtype().nullability())
             }),
         })
+    }
+
+    pub fn validated_all_null(&self) -> bool {
+        self.validated_all_null
     }
 
     fn cached(&self, page: usize) -> Option<&CachedPage> {
@@ -263,11 +269,11 @@ impl<const RETAIN_PAGES: bool> AccessState<RETAIN_PAGES> {
         // Legacy or unknown optional metadata: execute/rank the full validity once per operation,
         // never once per requested index. Empty physical arrays also take this checked path.
         if self.legacy.is_none() {
-            self.legacy = Some(RankMask::new(
-                array
-                    .unsliced_validity()
-                    .execute_mask(array.unsliced_n_rows(), ctx)?,
-            ));
+            let mask = array
+                .unsliced_validity()
+                .execute_mask(array.unsliced_n_rows(), ctx)?;
+            self.validated_all_null = index.pages.is_empty() && mask.all_false();
+            self.legacy = Some(RankMask::new(mask));
         }
         let Some(value) = self
             .legacy
@@ -315,6 +321,7 @@ impl<const RETAIN_PAGES: bool> AccessState<RETAIN_PAGES> {
                     total,
                     "Pco validity count does not match stored values"
                 );
+                self.validated_all_null = index.pages.is_empty() && mask.all_false();
                 self.legacy = Some(RankMask::new(mask));
             }
             let mask = self
