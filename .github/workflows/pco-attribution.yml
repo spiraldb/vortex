@@ -1,0 +1,65 @@
+name: PCO attribution
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/pco-attribution.yml"
+  workflow_dispatch: { }
+
+permissions:
+  contents: read
+
+jobs:
+  profile:
+    runs-on: >-
+      ${{ github.repository == 'vortex-data/vortex'
+          && format('runs-on={0}/runner=amd64-medium/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=pco-profile', github.run_id)
+          || 'ubuntu-latest' }}
+    timeout-minutes: 25
+    steps:
+      - uses: runs-on/action@v2
+        if: github.repository == 'vortex-data/vortex'
+        with:
+          sccache: s3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-prebuild
+        with:
+          enable-sccache: ${{ github.repository == 'vortex-data/vortex' && 'true' || 'false' }}
+      - name: Build frozen adverse candidate and baseline
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/pco-profile-candidate" 9da3bb7f8fbfaad2dac0e2cd4541776bc9d31c4a
+          git worktree add --detach "$RUNNER_TEMP/pco-profile-base" 910f9933e8e2318c592c1eddcc2dfee8d24c6cd7
+          mkdir -p "$RUNNER_TEMP/pco-profile-base/vortex-file/examples"
+          cp "$RUNNER_TEMP/pco-profile-candidate/vortex-file/examples/pco_access_profile.rs" "$RUNNER_TEMP/pco-profile-base/vortex-file/examples/"
+          for engine in candidate base; do
+            cargo build --manifest-path "$RUNNER_TEMP/pco-profile-$engine/Cargo.toml" --profile bench --locked -p vortex-file --example pco_access_profile --message-format=json-render-diagnostics > "$RUNNER_TEMP/$engine-build.jsonl"
+          done
+      - name: Bounded software attribution, separate from timings
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/attribution"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq linux-tools-generic
+          perf=$(find /usr/lib/linux-tools -name perf -type f | sort | tail -1)
+          test -n "$perf"
+          for engine in base candidate; do
+            executable=$(jq -r 'select(.reason == "compiler-artifact" and .target.name == "pco_access_profile") | .executable // empty' "$RUNNER_TEMP/$engine-build.jsonl")
+            sha256sum "$executable" > "$RUNNER_TEMP/attribution/$engine-executable.sha256"
+            for mode in write probe take-large; do
+              repeats=64
+              if [ "$mode" = probe ]; then repeats=100000; fi
+              sudo "$perf" record -F 499 --call-graph dwarf,8192 -o "$RUNNER_TEMP/attribution/$engine-$mode.data" -- "$executable" "$mode" nullable 8388608 "$repeats" > "$RUNNER_TEMP/$engine-$mode.jsonl"
+              sudo "$perf" report -i "$RUNNER_TEMP/attribution/$engine-$mode.data" --stdio --no-children --percent-limit 0.5 > "$RUNNER_TEMP/attribution/$engine-$mode-flat.txt"
+              sudo "$perf" report -i "$RUNNER_TEMP/attribution/$engine-$mode.data" --stdio --children --percent-limit 1 > "$RUNNER_TEMP/attribution/$engine-$mode-callgraph.txt"
+              sudo rm "$RUNNER_TEMP/attribution/$engine-$mode.data"
+            done
+          done
+          printf '%s\n' 'Frozen 9da adverse candidate and develop910f. Software samples only; profiled times are not uninstrumented latency controls. Startup/fixture compression included: identify query loops by stack.' > "$RUNNER_TEMP/attribution/README.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
+        if: always()
+        with:
+          name: pco-attribution
+          path: ${{ runner.temp }}/attribution
+          if-no-files-found: ignore
