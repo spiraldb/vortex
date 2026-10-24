@@ -254,6 +254,13 @@ fn checked_metadata_and_touched_page_validity() -> VortexResult<()> {
             .is_err()
         );
     }
+    assert!(
+        with_wire_metadata(&encoded, |metadata| {
+            metadata.chunks[0].pages[0].n_values = u32::try_from(pco::DEFAULT_MAX_PAGE_N + 1)
+                .vortex_expect("invalid fixture count fits u32");
+        })
+        .is_err()
+    );
     let malformed = with_wire_metadata(&encoded, |metadata| {
         // Structurally valid but the first logical page has three valid rows, not two.
         metadata

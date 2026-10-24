@@ -878,7 +878,6 @@ impl OperationsVTable<Pco> for Pco {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
     use std::sync::LazyLock;
 
     use vortex_array::IntoArray;
@@ -890,7 +889,6 @@ mod tests {
     use vortex_error::VortexResult;
     use vortex_session::VortexSession;
 
-    use super::VALUES_PER_CHUNK;
     use crate::Pco;
 
     static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::empty);
@@ -939,22 +937,6 @@ mod tests {
 
         let result = data.decompress_values_typed::<u32>(&Validity::NonNullable, &mut ctx);
         assert!(result.is_err());
-        Ok(())
-    }
-
-    #[test]
-    fn test_validate_rejects_oversized_chunk() -> VortexResult<()> {
-        let mut ctx = SESSION.create_execution_ctx();
-        let values = PrimitiveArray::from_iter([42u32]);
-        let pco = Pco::from_primitive(values.as_view(), 0, 128, &mut ctx)?;
-        let mut data = pco.data().clone();
-        Arc::make_mut(&mut data.metadata).chunks[0].pages[0].n_values =
-            u32::try_from(VALUES_PER_CHUNK + 1)?;
-
-        assert!(
-            data.validate(pco.dtype(), pco.len(), &Validity::NonNullable)
-                .is_err()
-        );
         Ok(())
     }
 }
