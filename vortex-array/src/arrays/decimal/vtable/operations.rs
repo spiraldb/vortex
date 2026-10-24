@@ -19,13 +19,15 @@ impl OperationsVTable<Decimal> for Decimal {
         index: usize,
         _ctx: &mut ExecutionCtx,
     ) -> VortexResult<Scalar> {
-        Ok(match_each_decimal_value_type!(array.values_type(), |D| {
-            Scalar::decimal(
+        // The stored values are not guaranteed to fit the precision (for example, when read from a
+        // file), so return an error instead of panicking.
+        match_each_decimal_value_type!(array.values_type(), |D| {
+            Scalar::try_decimal(
                 DecimalValue::from(array.buffer::<D>()[index]),
                 array.decimal_dtype(),
                 array.dtype().nullability(),
             )
-        }))
+        })
     }
 }
 
@@ -100,6 +102,21 @@ mod tests {
                 DecimalDType::new(3, 2),
                 Nullability::NonNullable
             )
+        );
+    }
+
+    #[test]
+    fn test_scalar_at_value_outside_precision_errors() {
+        let array = DecimalArray::new(
+            buffer![100i8],
+            DecimalDType::new(2, 0),
+            Validity::NonNullable,
+        );
+
+        assert!(
+            array
+                .execute_scalar(0, &mut SESSION.create_execution_ctx())
+                .is_err()
         );
     }
 }

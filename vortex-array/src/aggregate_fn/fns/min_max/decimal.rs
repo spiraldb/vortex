@@ -44,7 +44,7 @@ where
             .validity()?
             .execute_mask(array.as_ref().len(), ctx)?
         {
-            Mask::AllTrue(_) => compute_min_max(array.buffer::<D>().iter(), array.decimal_dtype()),
+            Mask::AllTrue(_) => compute_min_max(array.buffer::<D>().iter(), array.decimal_dtype())?,
             Mask::AllFalse(_) => None,
             Mask::Values(v) => compute_min_max(
                 array
@@ -53,7 +53,7 @@ where
                     .zip(v.bit_buffer().iter())
                     .filter_map(|(v, m)| m.then_some(v)),
                 array.decimal_dtype(),
-            ),
+            )?,
         },
     )
 }
@@ -61,22 +61,24 @@ where
 fn compute_min_max<'a, T>(
     iter: impl Iterator<Item = &'a T>,
     decimal_dtype: DecimalDType,
-) -> Option<MinMaxResult>
+) -> VortexResult<Option<MinMaxResult>>
 where
     T: Into<DecimalValue> + NativeDecimalType + Ord + Copy + 'a,
 {
-    match iter.minmax_by(|a, b| a.cmp(b)) {
+    // The stored values are not guaranteed to fit the precision (for example, when read from a
+    // file), so return an error instead of panicking.
+    Ok(match iter.minmax_by(|a, b| a.cmp(b)) {
         itertools::MinMaxResult::NoElements => None,
         itertools::MinMaxResult::OneElement(&x) => {
-            let scalar = Scalar::decimal(x.into(), decimal_dtype, NonNullable);
+            let scalar = Scalar::try_decimal(x.into(), decimal_dtype, NonNullable)?;
             Some(MinMaxResult {
                 min: scalar.clone(),
                 max: scalar,
             })
         }
         itertools::MinMaxResult::MinMax(&min, &max) => Some(MinMaxResult {
-            min: Scalar::decimal(min.into(), decimal_dtype, NonNullable),
-            max: Scalar::decimal(max.into(), decimal_dtype, NonNullable),
+            min: Scalar::try_decimal(min.into(), decimal_dtype, NonNullable)?,
+            max: Scalar::try_decimal(max.into(), decimal_dtype, NonNullable)?,
         }),
-    }
+    })
 }
