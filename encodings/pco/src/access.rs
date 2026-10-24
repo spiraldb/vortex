@@ -5,6 +5,7 @@
 
 use std::any::Any;
 use std::collections::BTreeMap;
+use std::ops::Range;
 use std::sync::OnceLock;
 
 use pco::data_types::NumberType;
@@ -13,6 +14,8 @@ use vortex_array::ArrayView;
 use vortex_array::ExecutionCtx;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::dtype::half;
+use vortex_array::match_each_native_ptype;
+use vortex_array::scalar::Scalar;
 use vortex_error::VortexResult;
 use vortex_error::vortex_ensure;
 use vortex_error::vortex_ensure_eq;
@@ -35,6 +38,8 @@ pub(crate) struct AccessState {
 }
 
 struct CachedPage {
+    rows: Option<Range<usize>>,
+    values: Range<usize>,
     mask: Option<RankMask>,
     decoded: Option<PrimitiveArray>,
 }
@@ -110,6 +115,38 @@ impl RankMask {
 }
 
 impl AccessState {
+    /// Read the last fully validated decoded page directly. A miss preserves all
+    /// operation-owned cache state and follows the ordinary fallible resolver.
+    pub fn cached_scalar(&self, array: ArrayView<'_, Pco>, row: usize) -> Option<Scalar> {
+        if row >= array.unsliced_n_rows() {
+            return None;
+        }
+        let (_, cached) = self.last_page.as_ref()?;
+        let decoded = cached.decoded.as_ref()?;
+        let value = if let Some(rows) = &cached.rows {
+            if !rows.contains(&row) {
+                return None;
+            }
+            cached.mask.as_ref()?.value_index::<true>(row - rows.start)
+        } else {
+            let value = self.legacy.as_ref()?.value_index::<true>(row);
+            if let Some(value) = value {
+                if !cached.values.contains(&value) {
+                    return None;
+                }
+                Some(value - cached.values.start)
+            } else {
+                None
+            }
+        };
+        Some(match value {
+            None => Scalar::null(array.dtype().clone()),
+            Some(value) => match_each_native_ptype!(decoded.ptype(), |T| {
+                Scalar::primitive(decoded.as_slice::<T>()[value], array.dtype().nullability())
+            }),
+        })
+    }
+
     fn cached(&self, page: usize) -> Option<&CachedPage> {
         if let Some((last, cached)) = &self.last_page
             && *last == page
@@ -205,6 +242,8 @@ impl AccessState {
                 self.insert(
                     page_idx,
                     CachedPage {
+                        rows: Some(rows.clone()),
+                        values: page.values.clone(),
                         mask: Some(RankMask::new(mask)),
                         decoded: None,
                     },
@@ -243,6 +282,8 @@ impl AccessState {
             self.insert(
                 page_idx,
                 CachedPage {
+                    rows: None,
+                    values: page.values.clone(),
                     mask: None,
                     decoded: None,
                 },
@@ -317,6 +358,8 @@ impl AccessState {
                 self.insert(
                     page_idx,
                     CachedPage {
+                        rows: None,
+                        values: page.values.clone(),
                         mask: None,
                         decoded: None,
                     },

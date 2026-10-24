@@ -30,6 +30,9 @@ pub(crate) fn scalar_at(
     let mut once = PcoProbeState::default();
     let state = state.unwrap_or(&mut once);
     let row = array.slice_start() + index;
+    if let Some(value) = state.access.cached_scalar(array, row) {
+        return Ok(value);
+    }
     let Some((page, value)) = state.access.resolve(array, row, ctx)? else {
         return Ok(Scalar::null(array.dtype().clone()));
     };

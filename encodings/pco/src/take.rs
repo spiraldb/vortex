@@ -3,6 +3,8 @@
 
 //! Batched selection using compact request descriptors and one operation-owned page cache.
 
+use std::collections::BTreeSet;
+
 use pco::data_types::Number;
 use pco::data_types::NumberType;
 use pco::match_number_enum;
@@ -70,12 +72,63 @@ impl TakeExecute for Pco {
             })
         };
         validate_runs(&runs, array.len(), indices.len())?;
+        // For broad scattered requests the ordinary canonical decoder plus native primitive
+        // take has less setup/decoded work than retaining almost every page separately.
+        if scattered(&runs) && prefer_canonical(array, &runs)? {
+            return Ok(None);
+        }
         let nullable = array.dtype().nullability() | indices.dtype().nullability();
         let result = match_number_enum!(number_type_from_ptype(array.dtype().as_ptype()), NumberType<T> => {
             gather::<T>(array, &runs, indices.len(), nullable, ctx)?
         });
         Ok(Some(result.into_array()))
     }
+}
+
+fn scattered(runs: &[Run]) -> bool {
+    runs.len() > 1 && runs.iter().all(|run| run.length <= 1 || run.stride != 1)
+}
+
+/// Conservative work estimate in bytes: selected physical values plus request descriptors
+/// versus one full canonical values buffer. Stop as soon as canonical work wins, so broad
+/// requests do not first build a complete selected-page set. No source-sized scratch bitmap.
+fn prefer_canonical(array: ArrayView<'_, Pco>, runs: &[Run]) -> VortexResult<bool> {
+    let index = array.page_index()?;
+    let total = index.pages.last().map_or(0, |page| page.values.end);
+    let width = array.dtype().as_ptype().byte_width();
+    let full_bytes = total.saturating_mul(width);
+    let requests = runs.iter().map(|run| run.length).sum::<usize>();
+    let setup_bytes = requests.saturating_mul(std::mem::size_of::<(usize, usize)>());
+    if setup_bytes >= full_bytes {
+        return Ok(true);
+    }
+    if !index.logical {
+        // With no logical page index, page coverage itself requires global validity rank.
+        // Use the page-count upper bound rather than spending arbitrary-request setup first.
+        return Ok(requests >= index.pages.len());
+    }
+    let mut touched = BTreeSet::new();
+    let mut selected = 0usize;
+    for run in runs {
+        let Some(start) = run.start else { continue };
+        for offset in 0..run.length {
+            let row = array.slice_start() + start + offset * run.stride;
+            let page = index
+                .pages
+                .partition_point(|page| page.rows.as_ref().is_some_and(|rows| rows.end <= row));
+            if touched.insert(page) {
+                let selected_page = index
+                    .pages
+                    .get(page)
+                    .ok_or_else(|| vortex_err!("Pco selected row has no logical page"))?;
+                selected = selected.saturating_add(selected_page.values.len());
+                if setup_bytes.saturating_add(selected.saturating_mul(width)) >= full_bytes {
+                    return Ok(true);
+                }
+            }
+        }
+    }
+    Ok(false)
 }
 
 fn checked_index<I>(value: I) -> VortexResult<usize>
@@ -163,10 +216,86 @@ fn gather<T: Number + NativePType>(
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<PrimitiveArray> {
     if nullability.is_nullable() {
-        gather_typed::<T, true>(array, runs, output_len, ctx)
+        if scattered(runs) {
+            gather_grouped::<T, true>(array, runs, output_len, ctx)
+        } else {
+            gather_typed::<T, true>(array, runs, output_len, ctx)
+        }
+    } else if scattered(runs) {
+        gather_grouped::<T, false>(array, runs, output_len, ctx)
     } else {
         gather_typed::<T, false>(array, runs, output_len, ctx)
     }
+}
+
+/// Sort requests once, resolve each repeated logical position once, then invoke the native
+/// primitive gather once per physical page. Only the final scatter visits output positions;
+/// it does no page-index search, validity rank, decoder lookup, or cache lookup.
+fn gather_grouped<T: Number + NativePType, const NULLABLE: bool>(
+    array: ArrayView<'_, Pco>,
+    runs: &[Run],
+    output_len: usize,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<PrimitiveArray> {
+    let mut requests = Vec::with_capacity(output_len);
+    let mut output = 0usize;
+    for run in runs {
+        if let Some(start) = run.start {
+            for offset in 0..run.length {
+                requests.push((
+                    array.slice_start() + start + offset * run.stride,
+                    output + offset,
+                ));
+            }
+        }
+        output += run.length;
+    }
+    requests.sort_unstable();
+    let mut state = AccessState::default();
+    let mut resolved = Vec::with_capacity(requests.len().min(64));
+    let mut cursor = 0;
+    while cursor < requests.len() {
+        let row = requests[cursor].0;
+        let end = cursor + requests[cursor..].partition_point(|request| request.0 == row);
+        if let Some((page, value)) = state.resolve(array, row, ctx)? {
+            resolved.push((page, value, cursor..end));
+        }
+        cursor = end;
+    }
+    let mut values = BufferMut::<T>::zeroed_in(output_len, ctx.allocator().clone());
+    let mut valid = BitBufferMut::new_unset(if NULLABLE { output_len } else { 0 });
+    let mut cursor = 0;
+    while cursor < resolved.len() {
+        let page = resolved[cursor].0;
+        let end = cursor + resolved[cursor..].partition_point(|request| request.0 == page);
+        let compact = PrimitiveArray::from_iter(
+            resolved[cursor..end]
+                .iter()
+                .map(|request| {
+                    u64::try_from(request.1)
+                        .map_err(|_| vortex_err!("Pco compact index exceeds u64"))
+                })
+                .collect::<VortexResult<Vec<_>>>()?,
+        )
+        .into_array();
+        let decoded = state.values(array, page, ctx)?.clone();
+        let selected = decoded.take(compact)?.execute::<PrimitiveArray>(ctx)?;
+        for (request, &value) in resolved[cursor..end].iter().zip(selected.as_slice::<T>()) {
+            for &(_, output) in &requests[request.2.clone()] {
+                values[output] = value;
+                if NULLABLE {
+                    valid.set(output);
+                }
+            }
+        }
+        cursor = end;
+    }
+    let validity = if NULLABLE {
+        Validity::from(valid.freeze())
+    } else {
+        Validity::NonNullable
+    };
+    Ok(PrimitiveArray::new(values.freeze(), validity))
 }
 
 /// One initialized final output buffer. Nullable outputs leave null positions at the

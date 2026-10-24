@@ -315,3 +315,41 @@ fn large_public_compressor_selections() -> VortexResult<()> {
     );
     Ok(())
 }
+
+#[rstest]
+fn repeated_scattered_requests_preserve_order_and_nulls(
+    #[values(false, true)] legacy_format: bool,
+) -> VortexResult<()> {
+    let mut ctx = SESSION.create_execution_ctx();
+    let values = (0..32768i64)
+        .map(|row| (row % 7 != 0).then_some(row * 13))
+        .collect::<Vec<_>>();
+    let input = PrimitiveArray::from_option_iter(values.iter().copied());
+    let encoded = Pco::from_primitive(input.as_view(), 3, 1024, &mut ctx)?.into_array();
+    let encoded = if legacy_format {
+        legacy(&encoded, false)?
+    } else {
+        encoded
+    };
+    let requests = (0..1024usize)
+        .map(|i| (i % 11 != 0).then_some((i * 97) % 16))
+        .collect::<Vec<_>>();
+    let indices = PrimitiveArray::from_option_iter(
+        requests
+            .iter()
+            .map(|row| row.map(|row| u64::try_from(row).vortex_expect("small index"))),
+    )
+    .into_array();
+    let expected = PrimitiveArray::from_option_iter(
+        requests.iter().map(|row| row.and_then(|row| values[row])),
+    );
+    assert_arrays_eq!(encoded.take(indices)?, expected, &mut ctx);
+    let invalid = PrimitiveArray::from_iter([0i64, -1, 32768]).into_array();
+    assert!(
+        encoded
+            .take(invalid)?
+            .execute::<PrimitiveArray>(&mut ctx)
+            .is_err()
+    );
+    Ok(())
+}
