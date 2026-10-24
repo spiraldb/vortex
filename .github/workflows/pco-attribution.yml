@@ -32,7 +32,8 @@ jobs:
           git worktree add --detach "$RUNNER_TEMP/pco-profile-candidate" 9da3bb7f8fbfaad2dac0e2cd4541776bc9d31c4a
           git worktree add --detach "$RUNNER_TEMP/pco-profile-base" 910f9933e8e2318c592c1eddcc2dfee8d24c6cd7
           mkdir -p "$RUNNER_TEMP/pco-profile-base/vortex-file/examples"
-          cp "$RUNNER_TEMP/pco-profile-candidate/vortex-file/examples/pco_access_profile.rs" "$RUNNER_TEMP/pco-profile-base/vortex-file/examples/"
+          cp vortex-file/examples/pco_access_profile.rs "$RUNNER_TEMP/pco-profile-candidate/vortex-file/examples/"
+          cp vortex-file/examples/pco_access_profile.rs "$RUNNER_TEMP/pco-profile-base/vortex-file/examples/"
           for engine in candidate base; do
             cargo build --manifest-path "$RUNNER_TEMP/pco-profile-$engine/Cargo.toml" --profile bench --locked -p vortex-file --example pco_access_profile --message-format=json-render-diagnostics > "$RUNNER_TEMP/$engine-build.jsonl"
           done
@@ -42,11 +43,12 @@ jobs:
           mkdir -p "$RUNNER_TEMP/attribution"
           sudo apt-get update -qq
           sudo apt-get install -y -qq linux-tools-generic
-          perf=$(find /usr/lib/linux-tools -name perf -type f | sort | tail -1)
+          perf=$(find /usr/lib -path "*linux-tools*/perf" -type f | sort | tail -1)
           test -n "$perf"
           for engine in base candidate; do
             executable=$(jq -r 'select(.reason == "compiler-artifact" and .target.name == "pco_access_profile") | .executable // empty' "$RUNNER_TEMP/$engine-build.jsonl")
             sha256sum "$executable" > "$RUNNER_TEMP/attribution/$engine-executable.sha256"
+            "$executable" metadata dense 100000 1 > "$RUNNER_TEMP/attribution/$engine-metadata.json"
             for mode in write probe take-large; do
               repeats=64
               if [ "$mode" = probe ]; then repeats=100000; fi

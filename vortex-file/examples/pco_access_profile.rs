@@ -9,6 +9,7 @@ use std::hint::black_box;
 use std::time::Instant;
 
 use prost::Message;
+use vortex_array::ArrayContext;
 use vortex_array::ArrayDeserialization;
 use vortex_array::ArrayPlugin;
 use vortex_array::ArrayRef;
@@ -18,6 +19,7 @@ use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::PiecewiseSequenceArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::buffer::BufferHandle;
+use vortex_array::serde::SerializeOptions;
 use vortex_array::session::ArraySessionExt;
 use vortex_array::validity::Validity;
 use vortex_error::VortexExpect;
@@ -129,13 +131,46 @@ fn main() -> VortexResult<()> {
     let encoded = if mode == "write" {
         input.clone().into_array()
     } else {
-        Pco::from_primitive(input.as_view(), 3, 1024, &mut ctx)?.into_array()
+        Pco::from_primitive(
+            input.as_view(),
+            3,
+            if mode == "metadata" { 8192 } else { 1024 },
+            &mut ctx,
+        )?
+        .into_array()
     };
     let encoded = if legacy_format && mode != "write" {
         legacy(&encoded, &session)?
     } else {
         encoded
     };
+    if mode == "metadata" {
+        let wire = session
+            .array_serialize(&encoded)?
+            .vortex_expect("PCO metadata");
+        let stripped = LegacyMetadata::decode(wire.metadata.as_slice())?.encode_to_vec();
+        let legacy = legacy(&encoded, &session)?;
+        let context = ArrayContext::empty();
+        let options = SerializeOptions::default();
+        let current = encoded.serialize(&context, &session, &options)?;
+        let historical = legacy.serialize(&context, &session, &options)?;
+        println!(
+            "{{\"rows\":{rows},\"page_values_limit\":8192,\"metadata_bytes\":{},\"legacy_metadata_bytes\":{},\"serialized_bytes\":{},\"legacy_serialized_bytes\":{},\"serialized_buffer_sizes\":{:?},\"legacy_serialized_buffer_sizes\":{:?}}}",
+            wire.metadata.len(),
+            stripped.len(),
+            current.iter().map(|buffer| buffer.len()).sum::<usize>(),
+            historical.iter().map(|buffer| buffer.len()).sum::<usize>(),
+            current
+                .iter()
+                .map(|buffer| buffer.len())
+                .collect::<Vec<_>>(),
+            historical
+                .iter()
+                .map(|buffer| buffer.len())
+                .collect::<Vec<_>>()
+        );
+        return Ok(());
+    }
     let take_indices = PrimitiveArray::from_iter(
         (0..128usize).map(|i| u64::try_from((i * 104729) % rows).vortex_expect("index fits u64")),
     )
@@ -160,6 +195,33 @@ fn main() -> VortexResult<()> {
             |i| u64::try_from(((i % 16) * (rows / 17)) % rows).vortex_expect("index fits u64"),
         ))
         .into_array();
+    let mixed_indices = PrimitiveArray::from_iter(
+        (0..if mode == "take-mixed" { rows / 8 } else { 0 }).map(|i| {
+            u64::try_from(if i < 2 { i } else { (i * 104729) % rows })
+                .vortex_expect("index fits u64")
+        }),
+    )
+    .into_array();
+    let narrow_indices = PrimitiveArray::from_iter(
+        (0..if mode == "take-narrow" {
+            100000usize
+        } else {
+            0
+        })
+            .map(|i| if i % 2 == 0 { 0u64 } else { 127 }),
+    )
+    .into_array();
+    let repeated_spans = PiecewiseSequenceArray::try_new(
+        PrimitiveArray::from_iter([
+            1u64,
+            u64::try_from(rows - 1).vortex_expect("index fits u64"),
+        ])
+        .into_array(),
+        PrimitiveArray::from_iter([500000u64, 500000]).into_array(),
+        PrimitiveArray::from_iter([0u64, 0]).into_array(),
+        1000000,
+    )?
+    .into_array();
     let wire = session
         .array_serialize(&encoded)?
         .vortex_expect("prepared array serialization");
@@ -196,6 +258,37 @@ fn main() -> VortexResult<()> {
             "slice-near-full" => Some(
                 encoded
                     .slice(1..rows - 1)?
+                    .execute::<PrimitiveArray>(&mut ctx)?
+                    .into_array(),
+            ),
+            "take-mixed" => Some(
+                encoded
+                    .take(mixed_indices.clone())?
+                    .execute::<PrimitiveArray>(&mut ctx)?
+                    .into_array(),
+            ),
+            "take-narrow" => Some(
+                encoded
+                    .slice(rows - 128..rows)?
+                    .take(narrow_indices.clone())?
+                    .execute::<PrimitiveArray>(&mut ctx)?
+                    .into_array(),
+            ),
+            "take-spans" => Some(
+                encoded
+                    .take(repeated_spans.clone())?
+                    .execute::<PrimitiveArray>(&mut ctx)?
+                    .into_array(),
+            ),
+            "take-tiny" => Some(
+                encoded
+                    .take(
+                        PrimitiveArray::from_iter([
+                            0u64,
+                            u64::try_from(rows - 1).vortex_expect("index fits u64"),
+                        ])
+                        .into_array(),
+                    )?
                     .execute::<PrimitiveArray>(&mut ctx)?
                     .into_array(),
             ),
