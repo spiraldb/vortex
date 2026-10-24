@@ -970,6 +970,23 @@ mod tests {
     }
 
     #[test]
+    fn test_decimal_value_outside_precision_errors() {
+        // 100 does not fit in decimal(2, 0), and `DecimalArray::new` does not check the values.
+        for values in [buffer![100i8], buffer![1i8, 100i8]] {
+            let decimal = DecimalArray::new(values, DecimalDType::new(2, 0), Validity::NonNullable);
+            let mut ctx = SESSION.create_execution_ctx();
+            assert!(
+                min_max(
+                    &decimal.into_array(),
+                    &mut ctx,
+                    NumericalAggregateOpts::default(),
+                )
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
     fn list_and_fixed_size_list_return_dtype() {
         let element_dtype = DType::Primitive(PType::I32, Nullability::Nullable);
         let list_dtype = DType::List(Arc::new(element_dtype.clone()), Nullability::Nullable);
