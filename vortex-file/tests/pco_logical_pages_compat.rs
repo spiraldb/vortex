@@ -175,16 +175,18 @@ async fn public_stock_size_attribution() -> VortexResult<()> {
         .max()
         .unwrap_or(0);
     println!(
-        "{{\"stock_file_bytes\":{len},\"segment_payload_bytes\":{payload},\"last_segment_end\":{end},\"trailing_format_bytes\":{},\"segments\":{:?}}}",
+        "{{\"stock_file_bytes\":{len},\"segment_payload_bytes\":{payload},\"last_segment_end\":{end},\"trailing_format_bytes\":{},\"segments\":[{}]}}",
         u64::try_from(len).vortex_expect("file fits u64") - end,
         segments
             .iter()
-            .map(|segment| vec![
+            .map(|segment| format!(
+                "[{},{},{}]",
                 segment.offset,
-                u64::from(segment.length),
-                u64::try_from(segment.alignment.as_usize()).vortex_expect("alignment fits u64")
-            ])
+                segment.length,
+                segment.alignment.as_usize()
+            ))
             .collect::<Vec<_>>()
+            .join(",")
     );
     let actual = file.scan()?.into_array_stream()?.read_all().await?;
     assert_arrays_eq!(actual, input, &mut session.create_execution_ctx());

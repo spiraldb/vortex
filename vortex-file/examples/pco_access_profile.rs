@@ -155,19 +155,21 @@ fn main() -> VortexResult<()> {
         let current = encoded.serialize(&context, &session, &options)?;
         let historical = legacy.serialize(&context, &session, &options)?;
         println!(
-            "{{\"rows\":{rows},\"page_values_limit\":8192,\"metadata_bytes\":{},\"legacy_metadata_bytes\":{},\"serialized_bytes\":{},\"legacy_serialized_bytes\":{},\"serialized_buffer_sizes\":{:?},\"legacy_serialized_buffer_sizes\":{:?}}}",
+            "{{\"rows\":{rows},\"page_values_limit\":8192,\"metadata_bytes\":{},\"legacy_metadata_bytes\":{},\"serialized_bytes\":{},\"legacy_serialized_bytes\":{},\"serialized_buffer_sizes\":[{}],\"legacy_serialized_buffer_sizes\":[{}]}}",
             wire.metadata.len(),
             stripped.len(),
             current.iter().map(|buffer| buffer.len()).sum::<usize>(),
             historical.iter().map(|buffer| buffer.len()).sum::<usize>(),
             current
                 .iter()
-                .map(|buffer| buffer.len())
-                .collect::<Vec<_>>(),
+                .map(|buffer| buffer.len().to_string())
+                .collect::<Vec<_>>()
+                .join(","),
             historical
                 .iter()
-                .map(|buffer| buffer.len())
+                .map(|buffer| buffer.len().to_string())
                 .collect::<Vec<_>>()
+                .join(",")
         );
         return Ok(());
     }
