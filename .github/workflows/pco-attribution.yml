@@ -33,7 +33,7 @@ jobs:
           enable-sccache: ${{ github.repository == 'vortex-data/vortex' && 'true' || 'false' }}
       - name: Build frozen adverse candidate and baseline
         run: |
-          git worktree add --detach "$RUNNER_TEMP/pco-profile-candidate" bf5fecb6d3
+          git worktree add --detach "$RUNNER_TEMP/pco-profile-candidate" 9f468abe16dd070d2d8eed5df4f45709b50ae375
           git worktree add --detach "$RUNNER_TEMP/pco-profile-base" 910f9933e8e2318c592c1eddcc2dfee8d24c6cd7
           git worktree add --detach "$RUNNER_TEMP/pco-profile-latest" HEAD
           mkdir -p "$RUNNER_TEMP/pco-profile-base/vortex-file/examples"
@@ -55,7 +55,7 @@ jobs:
             executable=$(jq -r 'select(.reason == "compiler-artifact" and .target.name == "pco_access_profile") | .executable // empty' "$RUNNER_TEMP/$engine-build.jsonl")
             sha256sum "$executable" > "$RUNNER_TEMP/attribution/$engine-executable.sha256"
             git -C "$RUNNER_TEMP/pco-profile-$engine" rev-parse HEAD > "$RUNNER_TEMP/attribution/$engine-source.txt"
-            nm "$executable" | awk '/vortex_pco/ && /cached_scalar|5probe9scalar_at/ {print $NF}' > "$RUNNER_TEMP/attribution/$engine-symbols.txt"
+            nm "$executable" | awk '/vortex_pco/ && /cached_scalar|5probe9scalar_at|scalar_at_once|scalar_at_uncached/ {print $NF}' > "$RUNNER_TEMP/attribution/$engine-symbols.txt"
             while IFS= read -r symbol; do
               timeout --kill-after=5s 20s objdump --disassemble="$symbol" --no-show-raw-insn "$executable" >> "$RUNNER_TEMP/attribution/$engine-scalar-assembly.txt"
             done < "$RUNNER_TEMP/attribution/$engine-symbols.txt"
@@ -70,7 +70,7 @@ jobs:
               sudo rm -f "$stem.data"
             done
           done
-          printf '%s\n' 'Frozen bf5 adverse candidate, develop910f, and current CI merge source. Software flat samples and exact linked symbol assembly only; profiled times are not uninstrumented latency controls. Startup/fixture compression is included. Public stock/metadata byte attribution is retained in run40119098145; it is not repeated here.' > "$RUNNER_TEMP/attribution/README.txt"
+          printf '%s\n' 'Frozen 9f adverse candidate, develop910f, and current CI merge source. Software flat samples and exact linked symbol assembly only; profiled times are not uninstrumented latency controls. Startup/fixture compression is included. Public stock/metadata byte attribution is retained in run40119098145; it is not repeated here.' > "$RUNNER_TEMP/attribution/README.txt"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
         if: always()
         with:
