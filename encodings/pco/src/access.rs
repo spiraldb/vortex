@@ -5,6 +5,7 @@
 
 use std::any::Any;
 use std::collections::BTreeMap;
+use std::sync::OnceLock;
 
 use pco::data_types::NumberType;
 use pco::match_number_enum;
@@ -40,25 +41,30 @@ struct CachedPage {
 
 struct RankMask {
     mask: Mask,
-    ranks: Vec<usize>,
+    ranks: OnceLock<Vec<usize>>,
 }
 
 impl RankMask {
     fn new(mask: Mask) -> Self {
-        let ranks = match &mask {
+        Self {
+            mask,
+            ranks: OnceLock::new(),
+        }
+    }
+
+    fn boundary_rank(&self, row: usize) -> usize {
+        match &self.mask {
+            Mask::AllTrue(_) => row,
+            Mask::AllFalse(_) => 0,
             Mask::Values(values) => {
                 let bits = values.bit_buffer();
-                let mut ranks = Vec::with_capacity(bits.len().div_ceil(RANK_STRIDE));
-                let mut count = 0;
-                for start in (0..bits.len()).step_by(RANK_STRIDE) {
-                    ranks.push(count);
-                    count += bits.count_range(start, (start + RANK_STRIDE).min(bits.len()));
+                if row <= bits.len() - row {
+                    bits.count_range(0, row)
+                } else {
+                    self.mask.true_count() - bits.count_range(row, bits.len())
                 }
-                ranks
             }
-            _ => Vec::new(),
-        };
-        Self { mask, ranks }
+        }
     }
 
     fn rank(&self, row: usize) -> usize {
@@ -69,19 +75,35 @@ impl RankMask {
                 if row == self.mask.len() {
                     return self.mask.true_count();
                 }
+                let ranks = self.ranks.get_or_init(|| {
+                    let bits = values.bit_buffer();
+                    let mut ranks = Vec::with_capacity(bits.len().div_ceil(RANK_STRIDE));
+                    let mut count = 0;
+                    for start in (0..bits.len()).step_by(RANK_STRIDE) {
+                        ranks.push(count);
+                        count += bits.count_range(start, (start + RANK_STRIDE).min(bits.len()));
+                    }
+                    ranks
+                });
                 let block = row / RANK_STRIDE;
-                self.ranks[block] + values.bit_buffer().count_range(block * RANK_STRIDE, row)
+                ranks[block] + values.bit_buffer().count_range(block * RANK_STRIDE, row)
             }
         }
     }
 
-    fn value_index(&self, row: usize) -> Option<usize> {
+    fn value_index<const INDEXED: bool>(&self, row: usize) -> Option<usize> {
         match &self.mask {
             Mask::AllTrue(_) => Some(row),
             Mask::AllFalse(_) => None,
             Mask::Values(values) => {
                 let bits = values.bit_buffer();
-                bits.value(row).then(|| self.rank(row))
+                bits.value(row).then(|| {
+                    if INDEXED {
+                        self.rank(row)
+                    } else {
+                        self.boundary_rank(row)
+                    }
+                })
             }
         }
     }
@@ -146,6 +168,15 @@ impl AccessState {
         row: usize,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<Option<(usize, usize)>> {
+        self.resolve_impl::<true>(array, row, ctx)
+    }
+
+    fn resolve_impl<const INDEXED: bool>(
+        &mut self,
+        array: ArrayView<'_, Pco>,
+        row: usize,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Option<(usize, usize)>> {
         vortex_ensure!(
             row < array.unsliced_n_rows(),
             "Pco row exceeds array bounds"
@@ -184,7 +215,7 @@ impl AccessState {
                 .ok_or_else(|| vortex_err!("Pco selected page cache is missing"))?
                 .mask
                 .as_ref()
-                .and_then(|mask| mask.value_index(row - rows.start))
+                .and_then(|mask| mask.value_index::<INDEXED>(row - rows.start))
                 .map(|value| (page_idx, value)));
         }
 
@@ -197,7 +228,11 @@ impl AccessState {
                     .execute_mask(array.unsliced_n_rows(), ctx)?,
             ));
         }
-        let Some(value) = self.legacy.as_ref().and_then(|mask| mask.value_index(row)) else {
+        let Some(value) = self
+            .legacy
+            .as_ref()
+            .and_then(|mask| mask.value_index::<INDEXED>(row))
+        else {
             return Ok(None);
         };
         let page_idx = self.compact_page(index, value);
@@ -304,7 +339,7 @@ impl AccessState {
             .as_ref()
             .ok_or_else(|| vortex_err!("Pco logical page range is missing"))?;
         // Resolve performs whole-page validity validation, even when the first row is null.
-        self.resolve(array, row, ctx)?;
+        self.resolve_impl::<false>(array, row, ctx)?;
         let cached = self
             .cached(page_idx)
             .and_then(|page| page.mask.as_ref())
@@ -315,7 +350,7 @@ impl AccessState {
         Ok(Some(PageSpan {
             page: page_idx,
             stop: end,
-            values: cached.rank(start_in_page)..cached.rank(end_in_page),
+            values: cached.boundary_rank(start_in_page)..cached.boundary_rank(end_in_page),
             mask: cached.mask.slice(start_in_page..end_in_page),
         }))
     }

@@ -169,6 +169,59 @@ fn gather<T: Number + NativePType>(
     }
 }
 
+/// One initialized final output buffer. Nullable outputs leave null positions at the
+/// allocator's safe zero initialization instead of eagerly touching every null gap.
+struct Output<T: NativePType, const NULLABLE: bool> {
+    values: BufferMut<T>,
+    len: usize,
+}
+
+impl<T: NativePType, const NULLABLE: bool> Output<T, NULLABLE> {
+    fn new(len: usize, ctx: &ExecutionCtx) -> Self {
+        let values = if NULLABLE {
+            BufferMut::zeroed_in(len, ctx.allocator().clone())
+        } else {
+            BufferMut::with_capacity_in(len, ctx.allocator().clone())
+        };
+        Self { values, len: 0 }
+    }
+
+    fn push(&mut self, value: T) {
+        if NULLABLE {
+            self.values[self.len] = value;
+        } else {
+            self.values.push(value);
+        }
+        self.len += 1;
+    }
+
+    fn extend_from_slice(&mut self, values: &[T]) {
+        if NULLABLE {
+            self.values[self.len..self.len + values.len()].copy_from_slice(values);
+        } else {
+            self.values.extend_from_slice(values);
+        }
+        self.len += values.len();
+    }
+
+    fn repeat(&mut self, value: T, len: usize) {
+        if NULLABLE {
+            self.values[self.len..self.len + len].fill(value);
+        } else {
+            self.values.extend(std::iter::repeat_n(value, len));
+        }
+        self.len += len;
+    }
+
+    fn nulls(&mut self, len: usize) {
+        if NULLABLE {
+            self.len += len;
+        } else {
+            self.repeat(T::default(), len);
+        }
+    }
+}
+
 fn gather_typed<T: Number + NativePType, const NULLABLE: bool>(
     array: ArrayView<'_, Pco>,
     runs: &[Run],
@@ -176,7 +229,7 @@ fn gather_typed<T: Number + NativePType, const NULLABLE: bool>(
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<PrimitiveArray> {
     let mut state = AccessState::default();
-    let mut values = BufferMut::<T>::with_capacity_in(output_len, ctx.allocator().clone());
+    let mut values = Output::<T, NULLABLE>::new(output_len, ctx);
     // The non-nullable monomorphization has no bitmap allocation or append work.
     let mut valid = BitBufferMut::with_capacity(if NULLABLE { output_len } else { 0 });
     for run in runs {
@@ -184,13 +237,13 @@ fn gather_typed<T: Number + NativePType, const NULLABLE: bool>(
             if NULLABLE {
                 valid.append_n(false, run.length);
             }
-            values.extend(std::iter::repeat_n(T::default(), run.length));
+            values.nulls(run.length);
             continue;
         };
         if run.stride == 0 && run.length != 0 {
             if let Some((page, value)) = state.resolve(array, array.slice_start() + start, ctx)? {
                 let value = state.values(array, page, ctx)?.as_slice::<T>()[value];
-                values.extend(std::iter::repeat_n(value, run.length));
+                values.repeat(value, run.length);
                 if NULLABLE {
                     valid.append_n(true, run.length);
                 }
@@ -198,7 +251,7 @@ fn gather_typed<T: Number + NativePType, const NULLABLE: bool>(
                 if NULLABLE {
                     valid.append_n(false, run.length);
                 }
-                values.extend(std::iter::repeat_n(T::default(), run.length));
+                values.nulls(run.length);
             }
             continue;
         }
@@ -217,7 +270,7 @@ fn gather_typed<T: Number + NativePType, const NULLABLE: bool>(
                             }
                         }
                         Mask::AllFalse(n) => {
-                            values.extend(std::iter::repeat_n(T::default(), *n));
+                            values.nulls(*n);
                             if NULLABLE {
                                 valid.append_n(false, *n);
                             }
@@ -230,13 +283,13 @@ fn gather_typed<T: Number + NativePType, const NULLABLE: bool>(
                             // Copy defined runs straight into the final output. Null gaps are
                             // initialized once; no compact staging output is expanded afterward.
                             for (start, stop) in mask.bit_buffer().set_slices() {
-                                values.extend(std::iter::repeat_n(T::default(), start - logical));
+                                values.nulls(start - logical);
                                 let count = stop - start;
                                 values.extend_from_slice(&source[compact..compact + count]);
                                 compact += count;
                                 logical = stop;
                             }
-                            values.extend(std::iter::repeat_n(T::default(), mask.len() - logical));
+                            values.nulls(mask.len() - logical);
                             if NULLABLE {
                                 valid.append_buffer(mask.bit_buffer());
                             }
@@ -250,7 +303,7 @@ fn gather_typed<T: Number + NativePType, const NULLABLE: bool>(
                             valid.append_true();
                         }
                     } else {
-                        values.push(T::default());
+                        values.nulls(1);
                         if NULLABLE {
                             valid.append_false();
                         }
@@ -270,7 +323,7 @@ fn gather_typed<T: Number + NativePType, const NULLABLE: bool>(
                     valid.append_true();
                 }
             } else {
-                values.push(T::default());
+                values.nulls(1);
                 if NULLABLE {
                     valid.append_false();
                 }
@@ -282,7 +335,12 @@ fn gather_typed<T: Number + NativePType, const NULLABLE: bool>(
     } else {
         Validity::NonNullable
     };
-    Ok(PrimitiveArray::new(values.freeze(), validity))
+    vortex_ensure_eq!(
+        values.len,
+        output_len,
+        "Pco selected output length mismatch"
+    );
+    Ok(PrimitiveArray::new(values.values.freeze(), validity))
 }
 
 pub(crate) fn slice(
