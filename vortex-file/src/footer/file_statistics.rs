@@ -124,6 +124,75 @@ impl FileStatistics {
         }
     }
 
+    /// Creates empty [`FileStatistics`] for every field of `file_dtype`.
+    pub(crate) fn empty_with_dtype(file_dtype: &DType) -> Self {
+        let dtypes: Arc<[DType]> = match file_dtype {
+            DType::Struct(fields, _) => fields.fields().collect(),
+            _ => Arc::new([file_dtype.clone()]),
+        };
+        Self {
+            stats: dtypes.iter().map(|_| StatsSet::default()).collect(),
+            dtypes,
+        }
+    }
+
+    /// Creates [`FileStatistics`] from a flatbuffers [`fb::FileStatistics<'a>`] holding one entry
+    /// per dtype in `dtypes`.
+    pub(crate) fn from_flatbuffer_with_dtypes<'a>(
+        fb: &fb::FileStatistics<'a>,
+        dtypes: Arc<[DType]>,
+        session: &VortexSession,
+    ) -> VortexResult<Self> {
+        let field_stats = fb.field_stats().unwrap_or_default();
+        vortex_ensure_eq!(field_stats.len(), dtypes.len());
+        let stats: Arc<[StatsSet]> = field_stats
+            .into_iter()
+            .zip(dtypes.iter())
+            .map(|(array_stat, dtype)| StatsSet::from_flatbuffer(&array_stat, dtype, session))
+            .try_collect()?;
+        Ok(Self { stats, dtypes })
+    }
+
+    /// The statistics of the given fields, in order.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a field index is out of bounds.
+    pub(crate) fn subset(&self, fields: &[u32]) -> Self {
+        Self {
+            stats: fields
+                .iter()
+                .map(|&field| self.stats[field as usize].clone())
+                .collect(),
+            dtypes: fields
+                .iter()
+                .map(|&field| self.dtypes[field as usize].clone())
+                .collect(),
+        }
+    }
+
+    /// Replace the statistics of the given fields with `stats`, or with empty statistics if
+    /// `None`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a field index is out of bounds, or if `stats` has a different length.
+    pub(crate) fn with_field_stats(&self, fields: &[u32], stats: Option<&Self>) -> Self {
+        if let Some(stats) = stats {
+            assert_eq!(fields.len(), stats.stats.len());
+        }
+        let mut all = self.stats.to_vec();
+        for (position, &field) in fields.iter().enumerate() {
+            all[field as usize] = stats
+                .map(|stats| stats.stats[position].clone())
+                .unwrap_or_default();
+        }
+        Self {
+            stats: all.into(),
+            dtypes: Arc::clone(&self.dtypes),
+        }
+    }
+
     /// Returns a reference to the statistics sets.
     pub fn stats_sets(&self) -> &Arc<[StatsSet]> {
         &self.stats

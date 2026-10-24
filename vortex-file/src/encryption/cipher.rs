@@ -46,6 +46,13 @@ pub(crate) enum SegmentRole<'a> {
     Footer,
     /// A user-defined metadata segment, by key.
     Metadata(&'a str),
+    /// The entry at this position of the postscript's encrypted statistics, holding the
+    /// statistics of these fields. The fields are authenticated, since the postscript that lists
+    /// them is not, so that statistics cannot be attributed to other fields.
+    KeyStatistics {
+        position: u16,
+        fields: &'a [u32],
+    },
 }
 
 impl SegmentRole<'_> {
@@ -62,6 +69,13 @@ impl SegmentRole<'_> {
             SegmentRole::Metadata(key) => {
                 aad.push(5);
                 aad.extend_from_slice(key.as_bytes());
+            }
+            SegmentRole::KeyStatistics { position, fields } => {
+                aad.push(6);
+                aad.extend_from_slice(&position.to_le_bytes());
+                for field in *fields {
+                    aad.extend_from_slice(&field.to_le_bytes());
+                }
             }
         }
     }

@@ -7,12 +7,13 @@
 //! footer, and user metadata segments referenced by the postscript. The postscript itself stays in
 //! plaintext, since it only records segment locations and the [`EncryptionSpec`] of each.
 //!
-//! Writers configure a [`FileEncryption`] with a footer key. Keys are never written to the file.
-//! Each key's opaque key metadata is stored instead, so that readers configured with a
-//! [`FileDecryption`] can resolve the key again through a [`KeyRetriever`].
+//! Writers configure a [`FileEncryption`] with a footer key, and optionally keys for individual
+//! fields. Keys are never written to the file. Each key's opaque key metadata is stored instead,
+//! so that readers configured with a [`FileDecryption`] can resolve the key again through a
+//! [`KeyRetriever`].
 //!
-//! Every segment, including the footer, is encrypted with the footer key, which also hides the
-//! schema.
+//! The footer is encrypted with the footer key, which also hides the schema. Fields without their
+//! own key are encrypted with the footer key.
 //!
 //! Segments are encrypted with AES-GCM. The additional authenticated data binds every segment to its
 //! file, through random per-file bytes, and to its position in the file, so that segments cannot
@@ -24,6 +25,7 @@
 mod cipher;
 mod resolver;
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Debug;
 use std::fmt::Formatter;
@@ -32,9 +34,11 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use flatbuffers::FlatBufferBuilder;
 use flatbuffers::WIPOffset;
+use vortex_array::dtype::FieldPath;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
+pub use vortex_layout::segments::EncryptionKeyName;
 use zeroize::Zeroize;
 
 pub(crate) use self::cipher::*;
@@ -204,15 +208,20 @@ pub struct FileEncryption {
     footer_key: KeyConfig,
     algorithm: EncryptionAlgorithm,
     aad_prefix: Option<Arc<[u8]>>,
+    named_keys: BTreeMap<EncryptionKeyName, KeyConfig>,
+    field_keys: Vec<(FieldPath, EncryptionKeyName)>,
 }
 
 impl FileEncryption {
-    /// Encrypt every segment of the file, including the footer, with `footer_key`.
+    /// Encrypt the file with `footer_key`, which encrypts the footer and every field that has no
+    /// key of its own.
     pub fn new(footer_key: KeyConfig) -> Self {
         Self {
             footer_key,
             algorithm: EncryptionAlgorithm::AesGcm,
             aad_prefix: None,
+            named_keys: BTreeMap::new(),
+            field_keys: Vec::new(),
         }
     }
 
@@ -233,6 +242,34 @@ impl FileEncryption {
         self
     }
 
+    /// Register a named key, for segments that a layout strategy requires to be encrypted with
+    /// it, e.g. through
+    /// [`WriteStrategyBuilder::with_field_encryption`](crate::WriteStrategyBuilder::with_field_encryption).
+    pub fn with_named_key(mut self, name: impl Into<EncryptionKeyName>, key: KeyConfig) -> Self {
+        self.named_keys.insert(name.into(), key);
+        self
+    }
+
+    /// Encrypt a field, including its statistics and nested fields, with its own key when writing
+    /// with the default layout strategy.
+    ///
+    /// This registers `key` under `name`, as [`with_named_key`](Self::with_named_key) does. A
+    /// reader without the key can still read every other field, and does not see the file-level
+    /// statistics of this one, which are encrypted with its key.
+    ///
+    /// With a custom strategy configure the field on the strategy instead; the write fails
+    /// otherwise.
+    pub fn with_field_key(
+        mut self,
+        field: impl Into<FieldPath>,
+        name: impl Into<EncryptionKeyName>,
+        key: KeyConfig,
+    ) -> Self {
+        let name = name.into();
+        self.field_keys.push((field.into(), name.clone()));
+        self.with_named_key(name, key)
+    }
+
     /// The footer key.
     pub fn footer_key(&self) -> &KeyConfig {
         &self.footer_key
@@ -241,6 +278,14 @@ impl FileEncryption {
     /// The encryption algorithm.
     pub fn algorithm(&self) -> EncryptionAlgorithm {
         self.algorithm
+    }
+
+    pub(crate) fn named_keys(&self) -> &BTreeMap<EncryptionKeyName, KeyConfig> {
+        &self.named_keys
+    }
+
+    pub(crate) fn field_keys(&self) -> &[(FieldPath, EncryptionKeyName)] {
+        &self.field_keys
     }
 
     /// Create the cipher of `key` for one file.
