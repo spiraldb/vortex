@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::sync::Arc;
+
 use flatbuffers::FlatBufferBuilder;
 use flatbuffers::Follow;
 use flatbuffers::WIPOffset;
@@ -302,6 +304,8 @@ pub struct PostscriptSegment {
     pub(crate) length: u32,
     pub(crate) alignment: Alignment,
     pub(crate) encryption: EncryptionSpec,
+    /// Marks a plaintext segment signed with the `encryption` key, rather than encrypted.
+    pub(crate) signature: Option<Arc<[u8]>>,
 }
 
 impl PostscriptSegment {
@@ -314,6 +318,10 @@ impl PostscriptSegment {
             .encryption
             .is_encrypted()
             .then(|| specs.offset(fbb, &self.encryption));
+        let signature = self
+            .signature
+            .as_ref()
+            .map(|signature| fbb.create_vector(signature));
         Ok(fb::PostscriptSegment::create(
             fbb,
             &fb::PostscriptSegmentArgs {
@@ -322,6 +330,7 @@ impl PostscriptSegment {
                 alignment_exponent: self.alignment.exponent(),
                 _compression: None,
                 encryption,
+                signature,
             },
         ))
     }
@@ -345,6 +354,7 @@ impl ReadFlatBuffer for PostscriptSegment {
                 .map(|spec| EncryptionSpec::read_flatbuffer(&spec))
                 .transpose()?
                 .unwrap_or_else(EncryptionSpec::plaintext),
+            signature: fb.signature().map(|signature| Arc::from(signature.bytes())),
         })
     }
 }
@@ -365,6 +375,7 @@ mod tests {
             length: 1,
             alignment: Alignment::none(),
             encryption: EncryptionSpec::plaintext(),
+            signature: None,
         }
     }
 

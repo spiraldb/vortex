@@ -174,9 +174,10 @@ impl VortexWriteOptions {
     /// [`FileDecryption`](crate::encryption::FileDecryption).
     ///
     /// The file-level statistics of a field are protected like its segments: encrypted with the
-    /// field's own key when it has one, and with the footer key otherwise. A reader only sees the
-    /// statistics of the fields it can decrypt. This holds for custom strategies too, since the
-    /// keys are taken from the segments each field wrote.
+    /// field's own key when it has one, with the footer key otherwise, and stored in plaintext for
+    /// a plaintext field of a file with a plaintext footer. A reader only sees the statistics of
+    /// the fields it can decrypt. This holds for custom strategies too, since the keys are taken
+    /// from the segments each field wrote.
     pub fn with_encryption(mut self, encryption: FileEncryption) -> Self {
         self.encryption = Some(encryption);
         self
@@ -406,8 +407,10 @@ impl VortexWriteOptions {
 
         // Emit the footer buffers and EOF.
         let mut serializer = footer.clone().into_serializer();
-        if let Some(cipher) = cipher {
-            serializer = serializer.with_cipher(cipher).with_key_ciphers(key_ciphers);
+        if let (Some(encryption), Some(cipher)) = (&self.encryption, cipher) {
+            serializer = serializer
+                .with_cipher(cipher, encryption.is_plaintext_footer())
+                .with_key_ciphers(key_ciphers);
         }
         let (footer_buffers, metadata, approx_byte_size) = serializer
             .with_layout_context(new_layout_context(&self.session, enforce_editions))
@@ -470,7 +473,7 @@ struct StatisticsEncryption {
 impl StatisticsEncryption {
     /// Attribute every segment of the layout tree to its top-level field, and route each field's
     /// statistics by the keys of its segments: a field encrypted with the key that protects the
-    /// shared statistics segment keeps its statistics there.
+    /// shared statistics segment, or stored in plaintext, keeps its statistics there.
     fn new(
         encryption: Option<&FileEncryption>,
         layout: &LayoutRef,
@@ -481,11 +484,16 @@ impl StatisticsEncryption {
             keyed: Vec::new(),
             omitted: Vec::new(),
         };
-        let (Some(_), Some(fields)) = (encryption, dtype.as_struct_fields_opt()) else {
+        let (Some(encryption), Some(fields)) = (encryption, dtype.as_struct_fields_opt()) else {
             return Ok(result);
         };
-        // The shared statistics segment is protected by the footer key, at index 1.
-        let shared_key = 1;
+        // A plaintext footer leaves the shared statistics segment readable by anyone; an
+        // encrypted one protects it with the footer key, at index 1.
+        let shared_key = if encryption.is_plaintext_footer() {
+            0
+        } else {
+            1
+        };
 
         let mut field_keys: Vec<BTreeSet<u16>> = vec![BTreeSet::new(); fields.nfields()];
         for (segment_id, path) in attribute_segments(layout, |_| {})? {
@@ -553,7 +561,9 @@ fn encrypting_sink(
     // holds the footer key, even if no data segment uses it.
     let mut encryption_specs = vec![EncryptionSpec::plaintext(), cipher.spec().clone()];
     let mut key_ciphers = HashMap::from_iter([(1, cipher.clone())]);
-    segments = segments.with_default_cipher(cipher.clone(), 1);
+    if !encryption.is_plaintext_fields() {
+        segments = segments.with_default_cipher(cipher.clone(), 1);
+    }
     // The named keys are sorted, so that the footer is deterministic.
     for (name, key) in encryption.named_keys() {
         let named = encryption.file_cipher(key)?;
