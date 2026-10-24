@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   profile:
     runs-on: >-
@@ -29,7 +33,7 @@ jobs:
           enable-sccache: ${{ github.repository == 'vortex-data/vortex' && 'true' || 'false' }}
       - name: Build frozen adverse candidate and baseline
         run: |
-          git worktree add --detach "$RUNNER_TEMP/pco-profile-candidate" 9da3bb7f8fbfaad2dac0e2cd4541776bc9d31c4a
+          git worktree add --detach "$RUNNER_TEMP/pco-profile-candidate" bf5fecb6d3
           git worktree add --detach "$RUNNER_TEMP/pco-profile-base" 910f9933e8e2318c592c1eddcc2dfee8d24c6cd7
           mkdir -p "$RUNNER_TEMP/pco-profile-base/vortex-file/examples"
           cp vortex-file/examples/pco_access_profile.rs "$RUNNER_TEMP/pco-profile-candidate/vortex-file/examples/"
@@ -43,7 +47,8 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/attribution"
           for engine in base candidate; do
-            PCO_SIZE_DIAGNOSTICS=1 cargo test --manifest-path "$RUNNER_TEMP/pco-profile-$engine/Cargo.toml" --profile ci --locked -p vortex-file --features zstd --test pco_logical_pages_compat public_stock_size_attribution -- --nocapture > "$RUNNER_TEMP/attribution/$engine-stock-size.txt"
+            echo "Size diagnostic $engine"
+            timeout --kill-after=5s 180s env PCO_SIZE_DIAGNOSTICS=1 cargo test --manifest-path "$RUNNER_TEMP/pco-profile-$engine/Cargo.toml" --profile ci --locked -p vortex-file --features zstd --test pco_logical_pages_compat public_stock_size_attribution -- --nocapture > "$RUNNER_TEMP/attribution/$engine-stock-size.txt" 2>&1 || echo "Size diagnostic exit $?" >> "$RUNNER_TEMP/attribution/$engine-stock-size.txt"
           done
           sudo apt-get update -qq
           sudo apt-get install -y -qq linux-tools-generic
@@ -53,16 +58,22 @@ jobs:
             executable=$(jq -r 'select(.reason == "compiler-artifact" and .target.name == "pco_access_profile") | .executable // empty' "$RUNNER_TEMP/$engine-build.jsonl")
             sha256sum "$executable" > "$RUNNER_TEMP/attribution/$engine-executable.sha256"
             "$executable" metadata dense 100000 1 > "$RUNNER_TEMP/attribution/$engine-metadata.json"
-            for mode in write probe take-large; do
-              repeats=64
-              if [ "$mode" = probe ]; then repeats=100000; fi
-              sudo "$perf" record -e cpu-clock -F 499 --call-graph dwarf,8192 -o "$RUNNER_TEMP/attribution/$engine-$mode.data" -- "$executable" "$mode" nullable 8388608 "$repeats" > "$RUNNER_TEMP/$engine-$mode.jsonl"
-              sudo "$perf" report -i "$RUNNER_TEMP/attribution/$engine-$mode.data" --stdio --no-children --percent-limit 0.5 > "$RUNNER_TEMP/attribution/$engine-$mode-flat.txt"
-              sudo "$perf" report -i "$RUNNER_TEMP/attribution/$engine-$mode.data" --stdio --children --percent-limit 1 > "$RUNNER_TEMP/attribution/$engine-$mode-callgraph.txt"
-              sudo rm "$RUNNER_TEMP/attribution/$engine-$mode.data"
+            for request in write:nullable probe:nullable slice-near-full:dense slice-near-full:long-null; do
+              IFS=: read -r mode pattern <<< "$request"
+              repeats=32
+              if [ "$mode" = probe ]; then repeats=10000; fi
+              if [ "$pattern" = long-null ]; then repeats=4096; fi
+              stem="$RUNNER_TEMP/attribution/$engine-$mode-$pattern"
+              echo "Record $engine $mode $pattern"
+              timeout --signal=INT --kill-after=5s 25s sudo env DEBUGINFOD_URLS= "$perf" record -e cpu-clock -F 499 --call-graph dwarf,8192 -o "$stem.data" -- "$executable" "$mode" "$pattern" 8388608 "$repeats" > "$RUNNER_TEMP/$engine-$mode-$pattern.jsonl" || echo "Record exit $?" > "$stem-status.txt"
+              echo "Flat report $engine $mode $pattern"
+              timeout --kill-after=5s 20s sudo env DEBUGINFOD_URLS= "$perf" report -i "$stem.data" --stdio --no-children --call-graph none --percent-limit 0.5 > "$stem-flat.txt" || echo "Flat report exit $?" >> "$stem-status.txt"
+              echo "Caller report $engine $mode $pattern"
+              timeout --kill-after=5s 30s sudo env DEBUGINFOD_URLS= "$perf" report -i "$stem.data" --stdio --children --call-graph graph,2,caller --percent-limit 2 > "$stem-callgraph.txt" || echo "Caller report exit $?" >> "$stem-status.txt"
+              sudo rm -f "$stem.data"
             done
           done
-          printf '%s\n' 'Frozen 9da adverse candidate and develop910f. Software samples only; profiled times are not uninstrumented latency controls. Startup/fixture compression included: identify query loops by stack.' > "$RUNNER_TEMP/attribution/README.txt"
+          printf '%s\n' 'Frozen bf5 adverse candidate and develop910f. Software samples only; profiled times are not uninstrumented latency controls. Startup/fixture compression included: identify query loops by stack.' > "$RUNNER_TEMP/attribution/README.txt"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
         if: always()
         with:
