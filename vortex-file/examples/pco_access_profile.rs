@@ -108,13 +108,15 @@ fn main() -> VortexResult<()> {
         "dense" => Validity::NonNullable,
         "all-null" => Validity::AllInvalid,
         "long-null" => Validity::from_iter((0..rows).map(|i| i < 2048 || i > rows - 4096)),
-        "compressed" => Validity::Array(
-            RunEnd::encode(
-                BoolArray::from_iter((0..rows).map(|i| i % 65536 >= 32768)).into_array(),
-                &mut ctx,
-            )?
-            .into_array(),
-        ),
+        "compressed" => {
+            let runs = rows.div_ceil(32768);
+            let ends = PrimitiveArray::from_iter((0..runs).map(|run| {
+                u64::try_from(((run + 1) * 32768).min(rows)).vortex_expect("run end fits u64")
+            }))
+            .into_array();
+            let values = BoolArray::from_iter((0..runs).map(|run| run % 2 != 0)).into_array();
+            Validity::Array(RunEnd::try_new(ends, values, &mut ctx)?.into_array())
+        }
         "nullable" => Validity::from_iter((0..rows).map(|i| i % 7 != 0)),
         _ => return Err(vortex_err!("unknown pattern: {pattern}")),
     };

@@ -21,6 +21,7 @@ use vortex_mask::Mask;
 use crate::Pco;
 use crate::PcoArrayExt;
 use crate::array::number_type_from_ptype;
+use crate::page_index::PageIndex;
 
 const RANK_STRIDE: usize = 512;
 
@@ -29,6 +30,7 @@ pub(crate) struct AccessState {
     legacy: Option<RankMask>,
     decoder: Option<Box<dyn Any>>,
     pages: BTreeMap<usize, CachedPage>,
+    last_page: Option<(usize, CachedPage)>,
 }
 
 struct CachedPage {
@@ -86,6 +88,57 @@ impl RankMask {
 }
 
 impl AccessState {
+    fn cached(&self, page: usize) -> Option<&CachedPage> {
+        if let Some((last, cached)) = &self.last_page
+            && *last == page
+        {
+            Some(cached)
+        } else {
+            self.pages.get(&page)
+        }
+    }
+
+    fn cached_mut(&mut self, page: usize) -> Option<&mut CachedPage> {
+        if self.last_page.as_ref().map(|(last, _)| *last) != Some(page) {
+            let cached = self.pages.remove(&page)?;
+            self.insert(page, cached);
+        }
+        self.last_page.as_mut().map(|(_, cached)| cached)
+    }
+
+    fn insert(&mut self, page: usize, cached: CachedPage) {
+        if let Some((previous, cached)) = self.last_page.replace((page, cached)) {
+            self.pages.insert(previous, cached);
+        }
+    }
+
+    fn logical_page(&self, index: &PageIndex, row: usize) -> usize {
+        if let Some((last, _)) = &self.last_page
+            && index
+                .pages
+                .get(*last)
+                .and_then(|page| page.rows.as_ref())
+                .is_some_and(|range| range.contains(&row))
+        {
+            return *last;
+        }
+        index
+            .pages
+            .partition_point(|page| page.rows.as_ref().is_some_and(|range| range.end <= row))
+    }
+
+    fn compact_page(&self, index: &PageIndex, value: usize) -> usize {
+        if let Some((last, _)) = &self.last_page
+            && index
+                .pages
+                .get(*last)
+                .is_some_and(|page| page.values.contains(&value))
+        {
+            return *last;
+        }
+        index.pages.partition_point(|page| page.values.end <= value)
+    }
+
     /// Resolve an unsliced logical row to a physical page and compact within-page index.
     pub fn resolve(
         &mut self,
@@ -99,9 +152,7 @@ impl AccessState {
         );
         let index = array.page_index()?;
         if index.logical && !index.pages.is_empty() {
-            let page_idx = index
-                .pages
-                .partition_point(|page| page.rows.as_ref().is_some_and(|range| range.end <= row));
+            let page_idx = self.logical_page(index, row);
             let page = index
                 .pages
                 .get(page_idx)
@@ -110,7 +161,7 @@ impl AccessState {
                 .rows
                 .as_ref()
                 .ok_or_else(|| vortex_err!("Pco logical page range is missing"))?;
-            if let std::collections::btree_map::Entry::Vacant(entry) = self.pages.entry(page_idx) {
+            if self.cached(page_idx).is_none() {
                 let mask = array
                     .unsliced_validity()
                     .slice(rows.clone())?
@@ -120,12 +171,17 @@ impl AccessState {
                     page.values.len(),
                     "Pco logical page validity count does not match stored values"
                 );
-                entry.insert(CachedPage {
-                    mask: Some(RankMask::new(mask)),
-                    decoded: None,
-                });
+                self.insert(
+                    page_idx,
+                    CachedPage {
+                        mask: Some(RankMask::new(mask)),
+                        decoded: None,
+                    },
+                );
             }
-            return Ok(self.pages[&page_idx]
+            return Ok(self
+                .cached_mut(page_idx)
+                .ok_or_else(|| vortex_err!("Pco selected page cache is missing"))?
                 .mask
                 .as_ref()
                 .and_then(|mask| mask.value_index(row - rows.start))
@@ -144,14 +200,19 @@ impl AccessState {
         let Some(value) = self.legacy.as_ref().and_then(|mask| mask.value_index(row)) else {
             return Ok(None);
         };
-        let page_idx = index.pages.partition_point(|page| page.values.end <= value);
+        let page_idx = self.compact_page(index, value);
         let page = index.pages.get(page_idx).ok_or_else(|| {
             vortex_err!("Pco validity contains more valid rows than stored values")
         })?;
-        self.pages.entry(page_idx).or_insert(CachedPage {
-            mask: None,
-            decoded: None,
-        });
+        if self.cached(page_idx).is_none() {
+            self.insert(
+                page_idx,
+                CachedPage {
+                    mask: None,
+                    decoded: None,
+                },
+            );
+        }
         Ok(Some((page_idx, value - page.values.start)))
     }
 
@@ -192,9 +253,7 @@ impl AccessState {
                     mask: mask.mask.slice(row..stop),
                 }));
             }
-            let page_idx = index
-                .pages
-                .partition_point(|page| page.values.end <= start_value);
+            let page_idx = self.compact_page(index, start_value);
             let page = index
                 .pages
                 .get(page_idx)
@@ -219,10 +278,15 @@ impl AccessState {
                     .ok_or_else(|| vortex_err!("Pco legacy logical page end overflows usize"))?
             };
             let selected_mask = mask.mask.slice(row..end);
-            self.pages.entry(page_idx).or_insert(CachedPage {
-                mask: None,
-                decoded: None,
-            });
+            if self.cached(page_idx).is_none() {
+                self.insert(
+                    page_idx,
+                    CachedPage {
+                        mask: None,
+                        decoded: None,
+                    },
+                );
+            }
             return Ok(Some(PageSpan {
                 page: page_idx,
                 stop: end,
@@ -230,9 +294,7 @@ impl AccessState {
                 mask: selected_mask,
             }));
         }
-        let page_idx = index
-            .pages
-            .partition_point(|page| page.rows.as_ref().is_some_and(|range| range.end <= row));
+        let page_idx = self.logical_page(index, row);
         let page = index
             .pages
             .get(page_idx)
@@ -244,8 +306,7 @@ impl AccessState {
         // Resolve performs whole-page validity validation, even when the first row is null.
         self.resolve(array, row, ctx)?;
         let cached = self
-            .pages
-            .get(&page_idx)
+            .cached(page_idx)
             .and_then(|page| page.mask.as_ref())
             .ok_or_else(|| vortex_err!("Pco page validity is missing"))?;
         let end = stop.min(rows.end);
@@ -265,11 +326,12 @@ impl AccessState {
         page_idx: usize,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<&PrimitiveArray> {
-        let cached = self
-            .pages
-            .get_mut(&page_idx)
-            .ok_or_else(|| vortex_err!("Pco page must be resolved before decoding"))?;
-        if cached.decoded.is_none() {
+        let needs_decode = self
+            .cached(page_idx)
+            .ok_or_else(|| vortex_err!("Pco page must be resolved before decoding"))?
+            .decoded
+            .is_none();
+        if needs_decode {
             let index = array.page_index()?;
             let page = index
                 .pages
@@ -290,9 +352,12 @@ impl AccessState {
                     decoder.read(page.chunk, array.chunk_metas[page.chunk].as_slice(), page.values.len(), buffer.as_slice(), ctx)?
                 }
             );
-            cached.decoded = Some(decoded);
+            self.cached_mut(page_idx)
+                .ok_or_else(|| vortex_err!("Pco selected page cache is missing"))?
+                .decoded = Some(decoded);
         }
-        cached
+        self.cached_mut(page_idx)
+            .ok_or_else(|| vortex_err!("Pco selected page cache is missing"))?
             .decoded
             .as_ref()
             .ok_or_else(|| vortex_err!("Pco page decoding did not produce values"))

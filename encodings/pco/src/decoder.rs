@@ -4,6 +4,7 @@
 //! File and chunk decoding setup amortized over all selected pages in an operation.
 
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 
 use pco::data_types::Number;
 use pco::wrapped::ChunkDecompressor;
@@ -40,8 +41,8 @@ impl<T: Number + NativePType> PageDecoder<T> {
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<PrimitiveArray> {
         let chunk = match self.chunks.entry(chunk) {
-            std::collections::btree_map::Entry::Occupied(entry) => entry.into_mut(),
-            std::collections::btree_map::Entry::Vacant(entry) => {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => {
                 let (decoder, _) = self
                     .file
                     .chunk_decompressor::<T, _>(chunk_meta)

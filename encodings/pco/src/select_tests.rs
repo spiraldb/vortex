@@ -84,6 +84,13 @@ fn reordered_nullable_take(#[values(0, 1, 2)] format: usize) -> VortexResult<()>
     };
     let source = encoded.slice(17..4001)?.slice(13..3900)?;
     let input = input.slice(30..3917)?;
+    let mut probe = source.repeated_probe();
+    for index in [3000, 0, 127, 1, 3000, 128, 1000, 0] {
+        assert_eq!(
+            probe.execute_scalar(index, &mut ctx)?,
+            input.execute_scalar(index, &mut ctx)?
+        );
+    }
     let indices = PrimitiveArray::from_option_iter([
         Some(3000u32),
         Some(0),
