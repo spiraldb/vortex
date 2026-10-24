@@ -253,9 +253,10 @@ jobs:
           cat comment.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comment PR
-        if: inputs.mode == 'pr' && github.event.pull_request.head.repo.fork == false
+        if: inputs.mode == 'pr'
         uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b  # v3
         with:
+          pr-number: 10765  # EXPERIMENT: run by workflow_dispatch, which has no PR context
           file-path: comment.md
           # There is exactly one comment per comment-tag. If a comment with this tag already exists,
           # this action will *update* the comment instead of posting a new comment. The preset is
@@ -264,9 +265,10 @@ jobs:
           comment-tag: bench-pr-comment-${{ matrix.id }}-${{ inputs.matrix_preset }}
 
       - name: Comment PR on failure
-        if: failure() && inputs.mode == 'pr' && github.event.pull_request.head.repo.fork == false
+        if: failure() && inputs.mode == 'pr'
         uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b  # v3
         with:
+          pr-number: 10765  # EXPERIMENT: run by workflow_dispatch, which has no PR context
           message: |
             # 🚨🚨🚨❌❌❌ SQL BENCHMARK FAILED ❌❌❌🚨🚨🚨
 
