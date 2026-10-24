@@ -3,51 +3,23 @@
 
 //! PCO probes retain every decoded page and index the compacted, non-null value positions.
 
-use std::ops::Range;
-
-use pco::data_types::Number;
-use pco::data_types::NumberType;
-use pco::match_number_enum;
-use pco::wrapped::FileDecompressor;
 use vortex_array::ArrayView;
 use vortex_array::ExecutionCtx;
-use vortex_array::IntoArray;
-use vortex_array::arrays::PrimitiveArray;
-use vortex_array::dtype::NativePType;
-use vortex_array::dtype::half;
 use vortex_array::match_each_native_ptype;
 use vortex_array::scalar::Scalar;
-use vortex_array::validity::Validity;
-use vortex_buffer::BufferMut;
-use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
-use vortex_mask::Mask;
+use vortex_error::vortex_ensure;
 
 use crate::Pco;
-use crate::PcoArrayExt;
-use crate::array::number_type_from_ptype;
-use crate::array::vortex_err_from_pco;
-
-const RANK_STRIDE: usize = 512;
+use crate::access::AccessState;
 
 /// State retained by repeated PCO probes. Construction performs no allocation.
 ///
-/// The mask and rank index use unsliced logical rows; page boundaries use compacted value
-/// positions. Every page decoded so far is retained, so the state grows with the pages touched
-/// and never beyond the decompressed array.
+/// Decoded pages and their local validity are retained as touched, up to the full array.
+/// Legacy files additionally retain a full validity mask and its sparse rank index.
 #[derive(Default)]
 pub struct PcoProbeState {
-    validity: Option<Mask>,
-    rank: Vec<usize>,
-    pages: Vec<Page>,
-    /// The page the previous probe landed in, `None` until the first probe resolves one.
-    last_page: Option<usize>,
-}
-
-struct Page {
-    values: Range<usize>,
-    chunk: usize,
-    decoded: Option<PrimitiveArray>,
+    access: AccessState,
 }
 
 pub(crate) fn scalar_at(
@@ -57,110 +29,47 @@ pub(crate) fn scalar_at(
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<Scalar> {
     let Some(state) = state else {
-        let validity = array.unsliced_validity();
-        return array
-            ._slice(index, index + 1)
-            .decompress(&validity, ctx)?
-            .into_array()
-            .execute_scalar(0, ctx);
+        return scalar_at_once(array, index, ctx);
     };
-    let mask = match &mut state.validity {
-        Some(mask) => mask,
-        slot @ None => slot.insert(
-            array
-                .unsliced_validity()
-                .execute_mask(array.unsliced_n_rows(), ctx)?,
-        ),
-    };
-    let logical_index = array.slice_start() + index;
-
-    let value_index = match mask {
-        Mask::AllTrue(_) => logical_index,
-        Mask::AllFalse(_) => return Ok(Scalar::null(array.dtype().clone())),
-        Mask::Values(values) => {
-            let bits = values.bit_buffer();
-            if !bits.value(logical_index) {
-                return Ok(Scalar::null(array.dtype().clone()));
-            }
-            if state.rank.is_empty() {
-                state.rank.reserve(bits.len().div_ceil(RANK_STRIDE));
-                let mut count = 0;
-                for start in (0..bits.len()).step_by(RANK_STRIDE) {
-                    state.rank.push(count);
-                    count += bits.count_range(start, (start + RANK_STRIDE).min(bits.len()));
-                }
-            }
-            let block = logical_index / RANK_STRIDE;
-            state.rank[block] + bits.count_range(block * RANK_STRIDE, logical_index)
-        }
-    };
-
-    if state.pages.is_empty() {
-        let mut start = 0;
-        for (chunk, metadata) in array.metadata.chunks.iter().enumerate() {
-            for page in &metadata.pages {
-                let end = start + page.n_values as usize;
-                state.pages.push(Page {
-                    values: start..end,
-                    chunk,
-                    decoded: None,
-                });
-                start = end;
-            }
-        }
+    if state.access.validated_all_null() {
+        vortex_ensure!(
+            index < array.len(),
+            "Pco scalar index exceeds visible array bounds"
+        );
+        return Ok(Scalar::null(array.dtype().clone()));
     }
-    let page_index = match state.last_page {
-        Some(last) if state.pages[last].values.contains(&value_index) => last,
-        _ => state
-            .pages
-            .partition_point(|page| page.values.end <= value_index),
-    };
-    state.last_page = Some(page_index);
-    let page = state
-        .pages
-        .get_mut(page_index)
-        .vortex_expect("PCO pages cover every valid value index");
-    let values = match &mut page.decoded {
-        Some(decoded) => decoded,
-        slot @ None => {
-            let decoded = match_number_enum!(
-                number_type_from_ptype(array.dtype().as_ptype()),
-                NumberType<T> => {
-                    decode_page::<T>(array, page.chunk, page.values.len(), array.pages[page_index].as_slice(), ctx)?
-                }
-            );
-            slot.insert(decoded)
-        }
-    };
-    Ok(match_each_native_ptype!(values.ptype(), |T| {
-        Scalar::primitive(
-            values.as_slice::<T>()[value_index - page.values.start],
-            array.dtype().nullability(),
-        )
-    }))
+    let row = array.slice_start() + index;
+    if let Some(value) = state.access.cached_scalar(array, row) {
+        return Ok(value);
+    }
+    scalar_at_uncached(array, row, state, ctx)
 }
 
-fn decode_page<T: Number + NativePType>(
+// Keep the large temporary cache out of the retained-probe hit frame. Stateless
+// probes and cache misses are ordinary workloads, so neither helper is cold.
+#[inline(never)]
+fn scalar_at_once(
     array: ArrayView<'_, Pco>,
-    chunk: usize,
-    n_values: usize,
-    buffer: &[u8],
+    index: usize,
     ctx: &mut ExecutionCtx,
-) -> VortexResult<PrimitiveArray> {
-    let (file, _) =
-        FileDecompressor::new(array.metadata.header.as_slice()).map_err(vortex_err_from_pco)?;
-    let (mut chunk, _) = file
-        .chunk_decompressor::<T, _>(array.chunk_metas[chunk].as_ref())
-        .map_err(vortex_err_from_pco)?;
-    let mut decoder = chunk
-        .page_decompressor(buffer, n_values)
-        .map_err(vortex_err_from_pco)?;
-    let mut values = BufferMut::<T>::with_capacity_in(n_values, ctx.allocator().clone());
-    // SAFETY: the buffer reserves `n_values` elements, and the page decompressor was built for
-    // exactly that count, so `read` writes every element before anything observes it.
-    unsafe { values.set_len(n_values) };
-    decoder.read(&mut values).map_err(vortex_err_from_pco)?;
-    Ok(PrimitiveArray::new(values.freeze(), Validity::NonNullable))
+) -> VortexResult<Scalar> {
+    scalar_at(array, index, Some(&mut PcoProbeState::default()), ctx)
+}
+
+#[inline(never)]
+fn scalar_at_uncached(
+    array: ArrayView<'_, Pco>,
+    row: usize,
+    state: &mut PcoProbeState,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<Scalar> {
+    let Some((page, value)) = state.access.resolve(array, row, ctx)? else {
+        return Ok(Scalar::null(array.dtype().clone()));
+    };
+    let values = state.access.values(array, page, ctx)?;
+    Ok(match_each_native_ptype!(values.ptype(), |T| {
+        Scalar::primitive(values.as_slice::<T>()[value], array.dtype().nullability())
+    }))
 }
 
 #[cfg(test)]

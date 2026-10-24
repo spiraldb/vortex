@@ -1,0 +1,459 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+//! Operation-owned selected-page values and validity. No decoded state lives in array metadata.
+
+use std::any::Any;
+use std::collections::BTreeMap;
+use std::ops::Range;
+use std::sync::OnceLock;
+
+use pco::data_types::NumberType;
+use pco::match_number_enum;
+use vortex_array::ArrayView;
+use vortex_array::ExecutionCtx;
+use vortex_array::arrays::PrimitiveArray;
+use vortex_array::dtype::half;
+use vortex_array::match_each_native_ptype;
+use vortex_array::scalar::Scalar;
+use vortex_error::VortexResult;
+use vortex_error::vortex_ensure;
+use vortex_error::vortex_ensure_eq;
+use vortex_error::vortex_err;
+use vortex_mask::Mask;
+
+use crate::Pco;
+use crate::PcoArrayExt;
+use crate::array::number_type_from_ptype;
+use crate::page_index::PageIndex;
+
+const RANK_STRIDE: usize = 512;
+
+#[derive(Default)]
+pub(crate) struct AccessState<const RETAIN_PAGES: bool = true> {
+    legacy: Option<RankMask>,
+    validated_all_null: bool,
+    decoder: Option<Box<dyn Any>>,
+    pages: BTreeMap<usize, CachedPage>,
+    last_page: Option<(usize, CachedPage)>,
+}
+
+struct CachedPage {
+    rows: Option<Range<usize>>,
+    values: Range<usize>,
+    mask: Option<RankMask>,
+    decoded: Option<PrimitiveArray>,
+}
+
+struct RankMask {
+    mask: Mask,
+    ranks: OnceLock<Vec<usize>>,
+}
+
+impl RankMask {
+    fn new(mask: Mask) -> Self {
+        Self {
+            mask,
+            ranks: OnceLock::new(),
+        }
+    }
+
+    fn boundary_rank(&self, row: usize) -> usize {
+        match &self.mask {
+            Mask::AllTrue(_) => row,
+            Mask::AllFalse(_) => 0,
+            Mask::Values(values) => {
+                let bits = values.bit_buffer();
+                if row <= bits.len() - row {
+                    bits.count_range(0, row)
+                } else {
+                    self.mask.true_count() - bits.count_range(row, bits.len())
+                }
+            }
+        }
+    }
+
+    fn rank(&self, row: usize) -> usize {
+        match &self.mask {
+            Mask::AllTrue(_) => row,
+            Mask::AllFalse(_) => 0,
+            Mask::Values(values) => {
+                if row == self.mask.len() {
+                    return self.mask.true_count();
+                }
+                let ranks = self.ranks.get_or_init(|| {
+                    let bits = values.bit_buffer();
+                    let mut ranks = Vec::with_capacity(bits.len().div_ceil(RANK_STRIDE));
+                    let mut count = 0;
+                    for start in (0..bits.len()).step_by(RANK_STRIDE) {
+                        ranks.push(count);
+                        count += bits.count_range(start, (start + RANK_STRIDE).min(bits.len()));
+                    }
+                    ranks
+                });
+                let block = row / RANK_STRIDE;
+                ranks[block] + values.bit_buffer().count_range(block * RANK_STRIDE, row)
+            }
+        }
+    }
+
+    fn value_index<const INDEXED: bool>(&self, row: usize) -> Option<usize> {
+        match &self.mask {
+            Mask::AllTrue(_) => Some(row),
+            Mask::AllFalse(_) => None,
+            Mask::Values(values) => {
+                let bits = values.bit_buffer();
+                bits.value(row).then(|| {
+                    if INDEXED {
+                        self.rank(row)
+                    } else {
+                        self.boundary_rank(row)
+                    }
+                })
+            }
+        }
+    }
+}
+
+impl<const RETAIN_PAGES: bool> AccessState<RETAIN_PAGES> {
+    /// Read the last fully validated decoded page directly. A miss preserves all
+    /// operation-owned cache state and follows the ordinary fallible resolver.
+    #[inline]
+    pub fn cached_scalar(&self, array: ArrayView<'_, Pco>, row: usize) -> Option<Scalar> {
+        if row >= array.unsliced_n_rows() {
+            return None;
+        }
+        let (_, cached) = self.last_page.as_ref()?;
+        let decoded = cached.decoded.as_ref()?;
+        let value = if let Some(rows) = &cached.rows {
+            if !rows.contains(&row) {
+                return None;
+            }
+            cached.mask.as_ref()?.value_index::<true>(row - rows.start)
+        } else {
+            let value = self.legacy.as_ref()?.value_index::<true>(row);
+            if let Some(value) = value {
+                if !cached.values.contains(&value) {
+                    return None;
+                }
+                Some(value - cached.values.start)
+            } else {
+                None
+            }
+        };
+        Some(match value {
+            None => Scalar::null(array.dtype().clone()),
+            Some(value) => match_each_native_ptype!(decoded.ptype(), |T| {
+                Scalar::primitive(decoded.as_slice::<T>()[value], array.dtype().nullability())
+            }),
+        })
+    }
+
+    pub fn validated_all_null(&self) -> bool {
+        self.validated_all_null
+    }
+
+    fn cached(&self, page: usize) -> Option<&CachedPage> {
+        if let Some((last, cached)) = &self.last_page
+            && *last == page
+        {
+            Some(cached)
+        } else {
+            self.pages.get(&page)
+        }
+    }
+
+    fn cached_mut(&mut self, page: usize) -> Option<&mut CachedPage> {
+        if self.last_page.as_ref().map(|(last, _)| *last) != Some(page) {
+            let cached = self.pages.remove(&page)?;
+            self.insert(page, cached);
+        }
+        self.last_page.as_mut().map(|(_, cached)| cached)
+    }
+
+    fn insert(&mut self, page: usize, cached: CachedPage) {
+        if let Some((previous, cached)) = self.last_page.replace((page, cached))
+            && RETAIN_PAGES
+        {
+            self.pages.insert(previous, cached);
+        }
+    }
+
+    fn logical_page(&self, index: &PageIndex, row: usize) -> usize {
+        if let Some((last, _)) = &self.last_page
+            && index
+                .pages
+                .get(*last)
+                .and_then(|page| page.rows.as_ref())
+                .is_some_and(|range| range.contains(&row))
+        {
+            return *last;
+        }
+        index
+            .pages
+            .partition_point(|page| page.rows.as_ref().is_some_and(|range| range.end <= row))
+    }
+
+    fn compact_page(&self, index: &PageIndex, value: usize) -> usize {
+        if let Some((last, _)) = &self.last_page
+            && index
+                .pages
+                .get(*last)
+                .is_some_and(|page| page.values.contains(&value))
+        {
+            return *last;
+        }
+        index.pages.partition_point(|page| page.values.end <= value)
+    }
+
+    /// Resolve an unsliced logical row to a physical page and compact within-page index.
+    pub fn resolve(
+        &mut self,
+        array: ArrayView<'_, Pco>,
+        row: usize,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Option<(usize, usize)>> {
+        self.resolve_impl::<true>(array, row, ctx)
+    }
+
+    fn resolve_impl<const INDEXED: bool>(
+        &mut self,
+        array: ArrayView<'_, Pco>,
+        row: usize,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Option<(usize, usize)>> {
+        vortex_ensure!(
+            row < array.unsliced_n_rows(),
+            "Pco row exceeds array bounds"
+        );
+        let index = array.page_index()?;
+        if index.logical && !index.pages.is_empty() {
+            let page_idx = self.logical_page(index, row);
+            let page = index
+                .pages
+                .get(page_idx)
+                .ok_or_else(|| vortex_err!("Pco logical page index does not cover row"))?;
+            let rows = page
+                .rows
+                .as_ref()
+                .ok_or_else(|| vortex_err!("Pco logical page range is missing"))?;
+            if self.cached(page_idx).is_none() {
+                let mask = array
+                    .unsliced_validity()
+                    .slice(rows.clone())?
+                    .execute_mask(rows.len(), ctx)?;
+                vortex_ensure_eq!(
+                    mask.true_count(),
+                    page.values.len(),
+                    "Pco logical page validity count does not match stored values"
+                );
+                self.insert(
+                    page_idx,
+                    CachedPage {
+                        rows: Some(rows.clone()),
+                        values: page.values.clone(),
+                        mask: Some(RankMask::new(mask)),
+                        decoded: None,
+                    },
+                );
+            }
+            return Ok(self
+                .cached_mut(page_idx)
+                .ok_or_else(|| vortex_err!("Pco selected page cache is missing"))?
+                .mask
+                .as_ref()
+                .and_then(|mask| mask.value_index::<INDEXED>(row - rows.start))
+                .map(|value| (page_idx, value)));
+        }
+
+        // Legacy or unknown optional metadata: execute/rank the full validity once per operation,
+        // never once per requested index. Empty physical arrays also take this checked path.
+        if self.legacy.is_none() {
+            let mask = array
+                .unsliced_validity()
+                .execute_mask(array.unsliced_n_rows(), ctx)?;
+            self.validated_all_null = index.pages.is_empty() && mask.all_false();
+            self.legacy = Some(RankMask::new(mask));
+        }
+        let Some(value) = self
+            .legacy
+            .as_ref()
+            .and_then(|mask| mask.value_index::<INDEXED>(row))
+        else {
+            return Ok(None);
+        };
+        let page_idx = self.compact_page(index, value);
+        let page = index.pages.get(page_idx).ok_or_else(|| {
+            vortex_err!("Pco validity contains more valid rows than stored values")
+        })?;
+        if self.cached(page_idx).is_none() {
+            self.insert(
+                page_idx,
+                CachedPage {
+                    rows: None,
+                    values: page.values.clone(),
+                    mask: None,
+                    decoded: None,
+                },
+            );
+        }
+        Ok(Some((page_idx, value - page.values.start)))
+    }
+
+    /// Select a contiguous logical span within one indexed page. Validity is sliced only after
+    /// the complete page has been checked, so copies use one typed contiguous compact-value run.
+    pub fn span(
+        &mut self,
+        array: ArrayView<'_, Pco>,
+        row: usize,
+        stop: usize,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Option<PageSpan>> {
+        let index = array.page_index()?;
+        if !index.logical || index.pages.is_empty() {
+            if self.legacy.is_none() {
+                let mask = array
+                    .unsliced_validity()
+                    .execute_mask(array.unsliced_n_rows(), ctx)?;
+                let total = index.pages.last().map_or(0, |page| page.values.end);
+                vortex_ensure_eq!(
+                    mask.true_count(),
+                    total,
+                    "Pco validity count does not match stored values"
+                );
+                self.validated_all_null = index.pages.is_empty() && mask.all_false();
+                self.legacy = Some(RankMask::new(mask));
+            }
+            let mask = self
+                .legacy
+                .as_ref()
+                .ok_or_else(|| vortex_err!("Pco legacy validity is missing"))?;
+            let start_value = mask.rank(row);
+            let stop_value = mask.rank(stop);
+            if start_value == stop_value {
+                return Ok(Some(PageSpan {
+                    page: 0,
+                    stop,
+                    values: 0..0,
+                    mask: mask.mask.slice(row..stop),
+                }));
+            }
+            let page_idx = self.compact_page(index, start_value);
+            let page = index
+                .pages
+                .get(page_idx)
+                .ok_or_else(|| vortex_err!("Pco page does not cover compact value"))?;
+            let value_stop = stop_value.min(page.values.end);
+            let end = if value_stop == stop_value {
+                stop
+            } else {
+                let offset = match &mask.mask {
+                    Mask::AllTrue(_) => value_stop - start_value - 1,
+                    Mask::Values(values) => values
+                        .bit_buffer()
+                        .slice(row..stop)
+                        .select(value_stop - start_value - 1)
+                        .ok_or_else(|| vortex_err!("Pco legacy page rank is inconsistent"))?,
+                    Mask::AllFalse(_) => {
+                        return Err(vortex_err!("Pco all-null validity has compact values"));
+                    }
+                };
+                row.checked_add(offset)
+                    .and_then(|end| end.checked_add(1))
+                    .ok_or_else(|| vortex_err!("Pco legacy logical page end overflows usize"))?
+            };
+            let selected_mask = mask.mask.slice(row..end);
+            if self.cached(page_idx).is_none() {
+                self.insert(
+                    page_idx,
+                    CachedPage {
+                        rows: None,
+                        values: page.values.clone(),
+                        mask: None,
+                        decoded: None,
+                    },
+                );
+            }
+            return Ok(Some(PageSpan {
+                page: page_idx,
+                stop: end,
+                values: (start_value - page.values.start)..(value_stop - page.values.start),
+                mask: selected_mask,
+            }));
+        }
+        let page_idx = self.logical_page(index, row);
+        let page = index
+            .pages
+            .get(page_idx)
+            .ok_or_else(|| vortex_err!("Pco logical page index does not cover span"))?;
+        let rows = page
+            .rows
+            .as_ref()
+            .ok_or_else(|| vortex_err!("Pco logical page range is missing"))?;
+        // Resolve performs whole-page validity validation, even when the first row is null.
+        self.resolve_impl::<false>(array, row, ctx)?;
+        let cached = self
+            .cached(page_idx)
+            .and_then(|page| page.mask.as_ref())
+            .ok_or_else(|| vortex_err!("Pco page validity is missing"))?;
+        let end = stop.min(rows.end);
+        let start_in_page = row - rows.start;
+        let end_in_page = end - rows.start;
+        Ok(Some(PageSpan {
+            page: page_idx,
+            stop: end,
+            values: cached.boundary_rank(start_in_page)..cached.boundary_rank(end_in_page),
+            mask: cached.mask.slice(start_in_page..end_in_page),
+        }))
+    }
+
+    pub fn values(
+        &mut self,
+        array: ArrayView<'_, Pco>,
+        page_idx: usize,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<&PrimitiveArray> {
+        let needs_decode = self
+            .cached(page_idx)
+            .ok_or_else(|| vortex_err!("Pco page must be resolved before decoding"))?
+            .decoded
+            .is_none();
+        if needs_decode {
+            let index = array.page_index()?;
+            let page = index
+                .pages
+                .get(page_idx)
+                .ok_or_else(|| vortex_err!("Pco page is missing"))?;
+            let buffer = array
+                .pages
+                .get(page_idx)
+                .ok_or_else(|| vortex_err!("Pco compressed page is missing"))?;
+            let decoded = match_number_enum!(
+                number_type_from_ptype(array.dtype().as_ptype()),
+                NumberType<T> => {
+                    if self.decoder.is_none() {
+                        self.decoder = Some(Box::new(crate::decoder::PageDecoder::<T>::new(array.metadata.header.as_slice())?));
+                    }
+                    let decoder = self.decoder.as_mut().and_then(|decoder| decoder.downcast_mut::<crate::decoder::PageDecoder<T>>())
+                        .ok_or_else(|| vortex_err!("Pco operation decoder primitive type changed"))?;
+                    decoder.read(page.chunk, array.chunk_metas[page.chunk].as_slice(), page.values.len(), buffer.as_slice(), ctx)?
+                }
+            );
+            self.cached_mut(page_idx)
+                .ok_or_else(|| vortex_err!("Pco selected page cache is missing"))?
+                .decoded = Some(decoded);
+        }
+        self.cached_mut(page_idx)
+            .ok_or_else(|| vortex_err!("Pco selected page cache is missing"))?
+            .decoded
+            .as_ref()
+            .ok_or_else(|| vortex_err!("Pco page decoding did not produce values"))
+    }
+}
+
+pub(crate) struct PageSpan {
+    pub page: usize,
+    pub stop: usize,
+    pub values: Range<usize>,
+    pub mask: Mask,
+}

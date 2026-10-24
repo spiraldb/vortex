@@ -1,0 +1,100 @@
+name: PCO selective access compatibility
+
+on:
+  pull_request:
+    paths:
+      - "encodings/pco/**"
+      - "vortex-file/src/lib.rs"
+      - "vortex-file/tests/pco_logical_pages_compat.rs"
+      - ".github/workflows/pco-compat.yml"
+  workflow_dispatch: { }
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pco-compat:
+    runs-on: >-
+      ${{ github.repository == 'vortex-data/vortex'
+          && format('runs-on={0}/runner=amd64-medium/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=pco-compat', github.run_id)
+          || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    steps:
+      - uses: runs-on/action@v2
+        if: github.repository == 'vortex-data/vortex'
+        with:
+          sccache: s3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-prebuild
+        with:
+          enable-sccache: ${{ github.repository == 'vortex-data/vortex' && 'true' || 'false' }}
+      - name: PCO public semantics
+        run: cargo test --profile ci --locked -p vortex-pco
+      - name: Generate new files with current public writer
+        env:
+          PCO_COMPAT_MODE: write
+          PCO_COMPAT_DIR: ${{ runner.temp }}/pco-new-files
+        run: cargo test --profile ci --locked -p vortex-file --test pco_logical_pages_compat
+      - name: Read new files using unchanged pre-change reader; generate legacy files
+        env:
+          PCO_COMPAT_DIR: ${{ runner.temp }}/pco-new-files
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/pco-old-reader" 910f9933e8e2318c592c1eddcc2dfee8d24c6cd7
+          # Only the public test harness is added. The old reader/writer/library sources remain
+          # exactly the pinned pre-change revision and do not know the new metadata field.
+          cp vortex-file/tests/pco_logical_pages_compat.rs "$RUNNER_TEMP/pco-old-reader/vortex-file/tests/"
+          PCO_COMPAT_MODE=read cargo test --manifest-path "$RUNNER_TEMP/pco-old-reader/Cargo.toml" --profile ci --locked -p vortex-file --test pco_logical_pages_compat
+          PCO_COMPAT_MODE=write PCO_COMPAT_DIR="$RUNNER_TEMP/pco-old-files" cargo test --manifest-path "$RUNNER_TEMP/pco-old-reader/Cargo.toml" --profile ci --locked -p vortex-file --test pco_logical_pages_compat
+      - name: Read legacy files using current reader
+        env:
+          PCO_COMPAT_MODE: read
+          PCO_COMPAT_DIR: ${{ runner.temp }}/pco-old-files
+        run: cargo test --profile ci --locked -p vortex-file --test pco_logical_pages_compat
+      - name: Record actual public file sizes
+        run: |
+          mkdir -p "$RUNNER_TEMP/pco-resource-results"
+          wc -c "$RUNNER_TEMP"/pco-{new,old}-files/*.vortex > "$RUNNER_TEMP/pco-resource-results/public-file-sizes.txt"
+      - name: Build matching optimized public resource harnesses
+        run: |
+          mkdir -p "$RUNNER_TEMP/pco-old-reader/vortex-file/examples"
+          cp vortex-file/examples/pco_access_profile.rs "$RUNNER_TEMP/pco-old-reader/vortex-file/examples/"
+          cargo build --profile bench --locked -p vortex-file --example pco_access_profile --message-format=json-render-diagnostics > "$RUNNER_TEMP/pco-candidate-build.jsonl"
+          cargo build --manifest-path "$RUNNER_TEMP/pco-old-reader/Cargo.toml" --profile bench --locked -p vortex-file --example pco_access_profile --message-format=json-render-diagnostics > "$RUNNER_TEMP/pco-baseline-build.jsonl"
+      - name: Matched first and warmed resource controls
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/pco-resource-results"
+          printf '%s\n' 'Wall timings exclude accounting and post-timing scalar inspection.' 'open-only/open-first include public array-plugin metadata decode/validation/index preparation with compressed buffers and validity children already available; no file IO.' 'probe-first starts with prepared metadata/index; probe retains touched pages across iterations.' 'CPU ticks are OS process user+system ticks; sub-tick readings are resolution-limited, not zero CPU.' 'RSS snapshots may miss transient peaks. GNU time maximum RSS is whole-process peak including fixtures/compression and post-timing inspection, not operation-only peak.' > "$RUNNER_TEMP/pco-resource-results/README.txt"
+          getconf CLK_TCK > "$RUNNER_TEMP/pco-resource-results/clock-ticks-per-second.txt"
+          git rev-parse HEAD > "$RUNNER_TEMP/pco-resource-results/candidate-source.txt"
+          git -C "$RUNNER_TEMP/pco-old-reader" rev-parse HEAD > "$RUNNER_TEMP/pco-resource-results/baseline-source.txt"
+          candidate=$(jq -r 'select(.reason == "compiler-artifact" and .target.name == "pco_access_profile") | .executable // empty' "$RUNNER_TEMP/pco-candidate-build.jsonl")
+          baseline=$(jq -r 'select(.reason == "compiler-artifact" and .target.name == "pco_access_profile") | .executable // empty' "$RUNNER_TEMP/pco-baseline-build.jsonl")
+          sha256sum "$candidate" "$baseline" > "$RUNNER_TEMP/pco-resource-results/executables.sha256"
+          for mode in write full slice slice-near-full take take-large take-repeated take-mixed take-narrow take-spans take-tiny take-contiguous take-range ranges open-only open-first probe-first probe; do
+            for pattern in dense nullable all-null long-null compressed nullable-legacy; do
+              # ABBA process order; every process retains all eight iterations including cold.
+              order=0
+              for engine in baseline candidate candidate baseline; do
+                order=$((order + 1))
+                executable="$candidate"
+                if [ "$engine" = baseline ]; then
+                  executable="$baseline"
+                fi
+                stem="$RUNNER_TEMP/pco-resource-results/$mode-$pattern-$order-$engine"
+                /usr/bin/time -v "$executable" "$mode" "$pattern" 8388608 8 > "$stem.jsonl" 2> "$stem.time"
+              done
+            done
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
+        if: always()
+        with:
+          name: pco-resource-results
+          path: ${{ runner.temp }}/pco-resource-results
+          if-no-files-found: ignore

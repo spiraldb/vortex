@@ -1,0 +1,81 @@
+name: PCO attribution
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/pco-attribution.yml"
+  workflow_dispatch: { }
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  profile:
+    runs-on: >-
+      ${{ github.repository == 'vortex-data/vortex'
+          && format('runs-on={0}/runner=amd64-medium/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=pco-profile', github.run_id)
+          || 'ubuntu-latest' }}
+    timeout-minutes: 25
+    steps:
+      - uses: runs-on/action@v2
+        if: github.repository == 'vortex-data/vortex'
+        with:
+          sccache: s3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-prebuild
+        with:
+          enable-sccache: ${{ github.repository == 'vortex-data/vortex' && 'true' || 'false' }}
+      - name: Build frozen adverse candidate and baseline
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/pco-profile-candidate" 9f468abe16dd070d2d8eed5df4f45709b50ae375
+          git worktree add --detach "$RUNNER_TEMP/pco-profile-base" 910f9933e8e2318c592c1eddcc2dfee8d24c6cd7
+          git worktree add --detach "$RUNNER_TEMP/pco-profile-latest" HEAD
+          mkdir -p "$RUNNER_TEMP/pco-profile-base/vortex-file/examples"
+          cp vortex-file/examples/pco_access_profile.rs "$RUNNER_TEMP/pco-profile-candidate/vortex-file/examples/"
+          cp vortex-file/examples/pco_access_profile.rs "$RUNNER_TEMP/pco-profile-base/vortex-file/examples/"
+          for engine in candidate base latest; do
+            cp vortex-file/tests/pco_logical_pages_compat.rs "$RUNNER_TEMP/pco-profile-$engine/vortex-file/tests/"
+            cargo build --manifest-path "$RUNNER_TEMP/pco-profile-$engine/Cargo.toml" --profile bench --locked -p vortex-file --example pco_access_profile --message-format=json-render-diagnostics > "$RUNNER_TEMP/$engine-build.jsonl"
+          done
+      - name: Bounded software attribution, separate from timings
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/attribution"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq linux-tools-generic
+          perf=$(find /usr/lib -path "*linux-tools*/perf" -type f | sort | tail -1)
+          test -n "$perf"
+          for engine in base candidate latest; do
+            executable=$(jq -r 'select(.reason == "compiler-artifact" and .target.name == "pco_access_profile") | .executable // empty' "$RUNNER_TEMP/$engine-build.jsonl")
+            sha256sum "$executable" > "$RUNNER_TEMP/attribution/$engine-executable.sha256"
+            git -C "$RUNNER_TEMP/pco-profile-$engine" rev-parse HEAD > "$RUNNER_TEMP/attribution/$engine-source.txt"
+            nm "$executable" | awk '/vortex_pco/ && /cached_scalar|5probe9scalar_at|scalar_at_once|scalar_at_uncached/ {print $NF}' > "$RUNNER_TEMP/attribution/$engine-symbols.txt"
+            while IFS= read -r symbol; do
+              timeout --kill-after=5s 20s objdump --disassemble="$symbol" --no-show-raw-insn "$executable" >> "$RUNNER_TEMP/attribution/$engine-scalar-assembly.txt"
+            done < "$RUNNER_TEMP/attribution/$engine-symbols.txt"
+            for request in probe:dense probe:nullable probe:all-null; do
+              IFS=: read -r mode pattern <<< "$request"
+              repeats=100000
+              stem="$RUNNER_TEMP/attribution/$engine-$mode-$pattern"
+              echo "Record $engine $mode $pattern"
+              timeout --signal=INT --kill-after=5s 25s sudo env DEBUGINFOD_URLS= "$perf" record -e cpu-clock -F 499 -o "$stem.data" -- "$executable" "$mode" "$pattern" 8388608 "$repeats" > "$RUNNER_TEMP/$engine-$mode-$pattern.jsonl" || echo "Record exit $?" > "$stem-status.txt"
+              echo "Flat report $engine $mode $pattern"
+              timeout --kill-after=5s 20s sudo env DEBUGINFOD_URLS= "$perf" report -i "$stem.data" --stdio --no-children --call-graph none --percent-limit 0.5 > "$stem-flat.txt" || echo "Flat report exit $?" >> "$stem-status.txt"
+              sudo rm -f "$stem.data"
+            done
+          done
+          printf '%s\n' 'Frozen 9f adverse candidate, develop910f, and current CI merge source. Software flat samples and exact linked symbol assembly only; profiled times are not uninstrumented latency controls. Startup/fixture compression is included. Public stock/metadata byte attribution is retained in run40119098145; it is not repeated here.' > "$RUNNER_TEMP/attribution/README.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
+        if: always()
+        with:
+          name: pco-attribution
+          path: |
+            ${{ runner.temp }}/attribution
+            !${{ runner.temp }}/attribution/*.data
+          if-no-files-found: ignore
