@@ -215,6 +215,20 @@ fn gather<T: Number + NativePType>(
     nullability: vortex_array::dtype::Nullability,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<PrimitiveArray> {
+    if array.page_index()?.pages.is_empty() {
+        let mask = array
+            .unsliced_validity()
+            .execute_mask(array.unsliced_n_rows(), ctx)?;
+        vortex_ensure_eq!(
+            mask.true_count(),
+            0,
+            "Pco zero-page source has defined rows"
+        );
+        return Ok(PrimitiveArray::new(
+            BufferMut::<T>::zeroed_in(output_len, ctx.allocator().clone()).freeze(),
+            Validity::AllInvalid,
+        ));
+    }
     if nullability.is_nullable() {
         if scattered(runs) {
             gather_grouped::<T, true>(array, runs, output_len, ctx)
