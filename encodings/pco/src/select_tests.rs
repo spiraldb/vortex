@@ -496,3 +496,26 @@ fn logical_null_indices_ignore_invalid_physical_values() -> VortexResult<()> {
     );
     Ok(())
 }
+
+#[test]
+fn contiguous_take_preserves_nullable_index_dtype() -> VortexResult<()> {
+    let mut ctx = SESSION.create_execution_ctx();
+    let input = PrimitiveArray::from_iter(0..32768i64);
+    let encoded = Pco::from_primitive(input.as_view(), 3, 1024, &mut ctx)?.into_array();
+    let indices = PrimitiveArray::from_option_iter((1..32767u64).map(Some)).into_array();
+    let expected = input
+        .take(indices.clone())?
+        .execute::<PrimitiveArray>(&mut ctx)?;
+    let result = encoded.take(indices)?.execute::<PrimitiveArray>(&mut ctx)?;
+    assert_eq!(result.dtype(), expected.dtype());
+    assert_arrays_eq!(result, expected, &mut ctx);
+    let range = PiecewiseSequenceArray::try_new(
+        PrimitiveArray::from_iter([1u64]).into_array(),
+        PrimitiveArray::from_iter([32766u64]).into_array(),
+        PrimitiveArray::from_iter([1u64]).into_array(),
+        32766,
+    )?
+    .into_array();
+    assert_arrays_eq!(encoded.take(range)?, input.slice(1..32767)?, &mut ctx);
+    Ok(())
+}

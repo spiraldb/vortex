@@ -224,6 +224,23 @@ fn main() -> VortexResult<()> {
         1000000,
     )?
     .into_array();
+    let contiguous_indices = PrimitiveArray::from_iter(
+        (0..if mode == "take-contiguous" {
+            rows - 2
+        } else {
+            0
+        })
+            .map(|i| u64::try_from(i + 1).vortex_expect("index fits u64")),
+    )
+    .into_array();
+    let contiguous_range = PiecewiseSequenceArray::try_new(
+        PrimitiveArray::from_iter([1u64]).into_array(),
+        PrimitiveArray::from_iter([u64::try_from(rows - 2).vortex_expect("range fits u64")])
+            .into_array(),
+        PrimitiveArray::from_iter([1u64]).into_array(),
+        rows - 2,
+    )?
+    .into_array();
     let wire = session
         .array_serialize(&encoded)?
         .vortex_expect("prepared array serialization");
@@ -260,6 +277,18 @@ fn main() -> VortexResult<()> {
             "slice-near-full" => Some(
                 encoded
                     .slice(1..rows - 1)?
+                    .execute::<PrimitiveArray>(&mut ctx)?
+                    .into_array(),
+            ),
+            "take-contiguous" => Some(
+                encoded
+                    .take(contiguous_indices.clone())?
+                    .execute::<PrimitiveArray>(&mut ctx)?
+                    .into_array(),
+            ),
+            "take-range" => Some(
+                encoded
+                    .take(contiguous_range.clone())?
                     .execute::<PrimitiveArray>(&mut ctx)?
                     .into_array(),
             ),

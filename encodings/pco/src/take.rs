@@ -23,6 +23,7 @@ use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::dict::TakeExecute;
 use vortex_array::arrays::piecewise_sequence::array::PiecewiseSequenceArraySlotsExt;
 use vortex_array::dtype::NativePType;
+use vortex_array::dtype::Nullability;
 use vortex_array::dtype::half;
 use vortex_array::match_each_integer_ptype;
 use vortex_array::scalar::Scalar;
@@ -358,10 +359,20 @@ fn gather<T: Number + NativePType>(
     array: ArrayView<'_, Pco>,
     runs: &[Run],
     output_len: usize,
-    nullability: vortex_array::dtype::Nullability,
+    nullability: Nullability,
     grouped: Option<usize>,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<PrimitiveArray> {
+    if let [
+        Run {
+            start: Some(start),
+            length,
+            stride: 1,
+        },
+    ] = runs
+    {
+        return stream_range::<T>(array, *start..*start + *length, nullability, ctx);
+    }
     if array.page_index()?.pages.is_empty() {
         let mask = array
             .unsliced_validity()
@@ -636,16 +647,23 @@ fn gather_typed<T: Number + NativePType, const NULLABLE: bool>(
 
 /// Contiguous selections stream pages into the final initialized values buffer and retain
 /// exact sliced source validity. No output validity copy or retained decoded-page cache.
-fn stream_slice<T: Number + NativePType>(
+fn stream_range<T: Number + NativePType>(
     array: ArrayView<'_, Pco>,
+    range: Range<usize>,
+    nullability: Nullability,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<PrimitiveArray> {
-    let mut values = BufferMut::<T>::zeroed_in(array.len(), ctx.allocator().clone());
+    vortex_ensure!(
+        range.start <= range.end && range.end <= array.len(),
+        "Pco contiguous range exceeds visible bounds"
+    );
+    let global_start = array.slice_start() + range.start;
+    let mut values = BufferMut::<T>::zeroed_in(range.len(), ctx.allocator().clone());
     let mut scratch = BufferMut::<T>::with_capacity_in(0, ctx.allocator().clone());
     let mut state = AccessState::<false>::default();
     let mut decoder = PageDecoder::<T>::new(array.metadata.header.as_slice())?;
-    let stop = array.slice_start() + array.len();
-    let mut row = array.slice_start();
+    let stop = array.slice_start() + range.end;
+    let mut row = global_start;
     while row < stop {
         let span = state
             .span(array, row, stop, ctx)?
@@ -664,7 +682,7 @@ fn stream_slice<T: Number + NativePType>(
             span.mask.true_count(),
             "Pco contiguous value count mismatch"
         );
-        let start = row - array.slice_start();
+        let start = row - global_start;
         let output = values
             .get_mut(start..start + span.mask.len())
             .ok_or_else(|| vortex_err!("Pco contiguous output exceeds visible range"))?;
@@ -715,7 +733,10 @@ fn stream_slice<T: Number + NativePType>(
         }
         row = span.stop;
     }
-    let validity = array.unsliced_validity().slice(array.slice_start()..stop)?;
+    let validity = array
+        .unsliced_validity()
+        .slice(global_start..stop)?
+        .union_nullability(nullability);
     Ok(PrimitiveArray::new(values.freeze(), validity))
 }
 
@@ -724,6 +745,6 @@ pub(crate) fn slice(
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<PrimitiveArray> {
     match_number_enum!(number_type_from_ptype(array.dtype().as_ptype()), NumberType<T> => {
-        stream_slice::<T>(array, ctx)
+        stream_range::<T>(array, 0..array.len(), array.dtype().nullability(), ctx)
     })
 }
