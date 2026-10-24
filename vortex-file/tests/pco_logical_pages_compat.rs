@@ -124,3 +124,64 @@ fn compressed_validity_selection_oracle() -> VortexResult<()> {
     }
     Ok(())
 }
+
+/// Public byte-boundary diagnostic for the exact deterministic compact stock fixture.
+/// This reports format overhead; it is not a timing or topology assertion.
+#[cfg(feature = "zstd")]
+#[tokio::test]
+async fn public_stock_size_attribution() -> VortexResult<()> {
+    use rand::Rng;
+    use rand::SeedableRng;
+    use rand::rngs::StdRng;
+    use vortex_btrblocks::BtrBlocksCompressorBuilder;
+    use vortex_file::strategy::WriteStrategyBuilder;
+
+    if std::env::var_os("PCO_SIZE_DIAGNOSTICS").is_none() {
+        return Ok(());
+    }
+    let session = VortexSession::empty()
+        .with::<LayoutSession>()
+        .with::<RuntimeSession>();
+    vortex_file::register_default_encodings(&session);
+    common::enable_all_registered_array_encodings(&session);
+    let mut rng = StdRng::seed_from_u64(0);
+    let input = PrimitiveArray::from_iter((0..100000i64).map(|i| rng.random_range(i..=i + 10)))
+        .into_array();
+    let mut bytes = Vec::new();
+    session
+        .write_options()
+        .with_strategy(
+            WriteStrategyBuilder::from_session(&session)
+                .with_btrblocks_builder(
+                    BtrBlocksCompressorBuilder::from_session(&session).with_compact(),
+                )
+                .build(),
+        )
+        .write(&mut bytes, input.clone().to_array_stream())
+        .await?;
+    let len = bytes.len();
+    let file = session
+        .open_options()
+        .open_buffer(ByteBuffer::from(bytes))?;
+    let segments = file.footer().segment_map();
+    let payload = segments
+        .iter()
+        .map(|segment| u64::from(segment.length))
+        .sum::<u64>();
+    let end = segments
+        .iter()
+        .map(|segment| segment.offset + u64::from(segment.length))
+        .max()
+        .unwrap_or(0);
+    println!(
+        "{{\"stock_file_bytes\":{len},\"segment_payload_bytes\":{payload},\"last_segment_end\":{end},\"trailing_format_bytes\":{},\"segments\":{:?}}}",
+        u64::try_from(len).vortex_expect("file fits u64") - end,
+        segments
+            .iter()
+            .map(|segment| (segment.offset, segment.length, segment.alignment.as_usize()))
+            .collect::<Vec<_>>()
+    );
+    let actual = file.scan()?.into_array_stream()?.read_all().await?;
+    assert_arrays_eq!(actual, input, &mut session.create_execution_ctx());
+    Ok(())
+}
