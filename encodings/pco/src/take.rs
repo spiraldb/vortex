@@ -88,7 +88,7 @@ impl TakeExecute for Pco {
             let mask = indices.validity()?.execute_mask(indices.len(), ctx)?;
             // Reuse native logical-null-aware extrema and their immutable-array stats cache.
             // Numeric extrema prove every defined index is representable and in bounds.
-            let extrema = min_max(indices.array(), ctx, NumericalAggregateOpts::default())?;
+            let extrema = min_max(indices.as_array(), ctx, NumericalAggregateOpts::default())?;
             let summary = if let Some(extrema) = extrema {
                 match_each_integer_ptype!(indices.ptype(), |I| {
                     validate_extrema(indices.as_slice::<I>(), &mask, &extrema, array.len())?
