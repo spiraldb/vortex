@@ -64,39 +64,10 @@ impl TakeExecute for Pco {
             runs
         } else {
             let indices = indices.clone().execute::<PrimitiveArray>(ctx)?;
-            let mut runs: Vec<Run> = Vec::with_capacity(indices.len().min(64));
             let mask = indices.validity()?.execute_mask(indices.len(), ctx)?;
             match_each_integer_ptype!(indices.ptype(), |I| {
-                for (&value, valid) in indices.as_slice::<I>().iter().zip(mask.iter()) {
-                    let start = if valid {
-                        Some(usize::try_from(value).map_err(|_| {
-                            vortex_err!("Pco take index is negative or exceeds usize")
-                        })?)
-                    } else {
-                        None
-                    };
-                    if let Some(previous) = runs.last_mut() {
-                        let contiguous = match (previous.start, start) {
-                            (Some(first), Some(next)) => {
-                                previous.stride == 1
-                                    && first.checked_add(previous.length) == Some(next)
-                            }
-                            (None, None) => true,
-                            _ => false,
-                        };
-                        if contiguous {
-                            previous.length += 1;
-                            continue;
-                        }
-                    }
-                    runs.push(Run {
-                        start,
-                        length: 1,
-                        stride: 1,
-                    });
-                }
-            });
-            runs
+                primitive_runs(indices.as_slice::<I>(), &mask)?
+            })
         };
         validate_runs(&runs, array.len(), indices.len())?;
         let nullable = array.dtype().nullability() | indices.dtype().nullability();
@@ -107,14 +78,52 @@ impl TakeExecute for Pco {
     }
 }
 
+fn checked_index<I>(value: I) -> VortexResult<usize>
+where
+    usize: TryFrom<I>,
+{
+    usize::try_from(value).map_err(|_| vortex_err!("Pco take index is negative or exceeds usize"))
+}
+
+fn primitive_runs<I: Copy>(indices: &[I], mask: &Mask) -> VortexResult<Vec<Run>>
+where
+    usize: TryFrom<I>,
+{
+    let mut runs: Vec<Run> = Vec::with_capacity(indices.len().min(64));
+    for (&value, valid) in indices.iter().zip(mask.iter()) {
+        let start = if valid {
+            Some(checked_index(value)?)
+        } else {
+            None
+        };
+        if let Some(previous) = runs.last_mut() {
+            let contiguous = match (previous.start, start) {
+                (Some(first), Some(next)) => {
+                    previous.stride == 1 && first.checked_add(previous.length) == Some(next)
+                }
+                (None, None) => true,
+                _ => false,
+            };
+            if contiguous {
+                previous.length += 1;
+                continue;
+            }
+        }
+        runs.push(Run {
+            start,
+            length: 1,
+            stride: 1,
+        });
+    }
+    Ok(runs)
+}
+
 fn primitive_usizes(array: &PrimitiveArray) -> VortexResult<Vec<usize>> {
     match_each_integer_ptype!(array.ptype(), |I| {
         array
             .as_slice::<I>()
             .iter()
-            .map(|&value| {
-                usize::try_from(value).map_err(|_| vortex_err!("Pco take descriptor exceeds usize"))
-            })
+            .map(|&value| checked_index(value))
             .collect()
     })
 }

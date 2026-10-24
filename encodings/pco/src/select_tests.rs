@@ -168,8 +168,8 @@ fn rejects_invalid_indices_and_descriptors() -> VortexResult<()> {
     ] {
         assert!(
             encoded
-                .take(indices)?
-                .execute::<PrimitiveArray>(&mut ctx)
+                .take(indices)
+                .and_then(|array| array.execute::<PrimitiveArray>(&mut ctx))
                 .is_err()
         );
     }
@@ -187,8 +187,8 @@ fn rejects_invalid_indices_and_descriptors() -> VortexResult<()> {
         .into_array();
         assert!(
             encoded
-                .take(indices)?
-                .execute::<PrimitiveArray>(&mut ctx)
+                .take(indices)
+                .and_then(|array| array.execute::<PrimitiveArray>(&mut ctx))
                 .is_err()
         );
     }

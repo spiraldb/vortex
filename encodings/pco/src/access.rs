@@ -110,7 +110,7 @@ impl AccessState {
                 .rows
                 .as_ref()
                 .ok_or_else(|| vortex_err!("Pco logical page range is missing"))?;
-            if !self.pages.contains_key(&page_idx) {
+            if let std::collections::btree_map::Entry::Vacant(entry) = self.pages.entry(page_idx) {
                 let mask = array
                     .unsliced_validity()
                     .slice(rows.clone())?
@@ -120,13 +120,10 @@ impl AccessState {
                     page.values.len(),
                     "Pco logical page validity count does not match stored values"
                 );
-                self.pages.insert(
-                    page_idx,
-                    CachedPage {
-                        mask: Some(RankMask::new(mask)),
-                        decoded: None,
-                    },
-                );
+                entry.insert(CachedPage {
+                    mask: Some(RankMask::new(mask)),
+                    decoded: None,
+                });
             }
             return Ok(self.pages[&page_idx]
                 .mask

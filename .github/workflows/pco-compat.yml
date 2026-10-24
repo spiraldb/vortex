@@ -3,11 +3,15 @@ name: PCO selective access compatibility
 on:
   pull_request:
     paths:
-      - 'encodings/pco/**'
-      - 'vortex-file/src/lib.rs'
-      - 'vortex-file/tests/pco_logical_pages_compat.rs'
-      - '.github/workflows/pco-compat.yml'
-  workflow_dispatch: {}
+      - "encodings/pco/**"
+      - "vortex-file/src/lib.rs"
+      - "vortex-file/tests/pco_logical_pages_compat.rs"
+      - ".github/workflows/pco-compat.yml"
+  workflow_dispatch: { }
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -24,7 +28,7 @@ jobs:
         if: github.repository == 'vortex-data/vortex'
         with:
           sccache: s3
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup-prebuild
@@ -52,3 +56,38 @@ jobs:
           PCO_COMPAT_MODE: read
           PCO_COMPAT_DIR: ${{ runner.temp }}/pco-old-files
         run: cargo test --profile ci --locked -p vortex-file --test pco_logical_pages_compat
+      - name: Build matching optimized public resource harnesses
+        run: |
+          cp vortex-file/examples/pco_access_profile.rs "$RUNNER_TEMP/pco-old-reader/vortex-file/examples/"
+          cargo build --profile bench --locked -p vortex-file --example pco_access_profile --message-format=json-render-diagnostics > "$RUNNER_TEMP/pco-candidate-build.jsonl"
+          cargo build --manifest-path "$RUNNER_TEMP/pco-old-reader/Cargo.toml" --profile bench --locked -p vortex-file --example pco_access_profile --message-format=json-render-diagnostics > "$RUNNER_TEMP/pco-baseline-build.jsonl"
+      - name: Matched first and warmed resource controls
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/pco-resource-results"
+          getconf CLK_TCK > "$RUNNER_TEMP/pco-resource-results/clock-ticks-per-second.txt"
+          git rev-parse HEAD > "$RUNNER_TEMP/pco-resource-results/candidate-source.txt"
+          git -C "$RUNNER_TEMP/pco-old-reader" rev-parse HEAD > "$RUNNER_TEMP/pco-resource-results/baseline-source.txt"
+          candidate=$(jq -r 'select(.reason == "compiler-artifact" and .target.name == "pco_access_profile") | .executable // empty' "$RUNNER_TEMP/pco-candidate-build.jsonl")
+          baseline=$(jq -r 'select(.reason == "compiler-artifact" and .target.name == "pco_access_profile") | .executable // empty' "$RUNNER_TEMP/pco-baseline-build.jsonl")
+          for mode in write full slice take ranges probe-first probe; do
+            for pattern in dense nullable all-null long-null compressed nullable-legacy; do
+              # ABBA process order; every process retains all eight iterations including cold.
+              order=0
+              for engine in baseline candidate candidate baseline; do
+                order=$((order + 1))
+                executable="$candidate"
+                if [ "$engine" = baseline ]; then
+                  executable="$baseline"
+                fi
+                stem="$RUNNER_TEMP/pco-resource-results/$mode-$pattern-$order-$engine"
+                /usr/bin/time -v "$executable" "$mode" "$pattern" 8388608 8 > "$stem.jsonl" 2> "$stem.time"
+              done
+            done
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
+        if: always()
+        with:
+          name: pco-resource-results
+          path: ${{ runner.temp }}/pco-resource-results
+          if-no-files-found: ignore

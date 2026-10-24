@@ -13,7 +13,6 @@ use vortex_array::arrays::PrimitiveArray;
 use vortex_array::dtype::NativePType;
 use vortex_array::validity::Validity;
 use vortex_buffer::BufferMut;
-use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 
 use crate::array::vortex_err_from_pco;
@@ -40,17 +39,16 @@ impl<T: Number + NativePType> PageDecoder<T> {
         buffer: &[u8],
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<PrimitiveArray> {
-        if !self.chunks.contains_key(&chunk) {
-            let (decoder, _) = self
-                .file
-                .chunk_decompressor::<T, _>(chunk_meta)
-                .map_err(vortex_err_from_pco)?;
-            self.chunks.insert(chunk, decoder);
-        }
-        let chunk = self
-            .chunks
-            .get_mut(&chunk)
-            .vortex_expect("chunk decoder was inserted");
+        let chunk = match self.chunks.entry(chunk) {
+            std::collections::btree_map::Entry::Occupied(entry) => entry.into_mut(),
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                let (decoder, _) = self
+                    .file
+                    .chunk_decompressor::<T, _>(chunk_meta)
+                    .map_err(vortex_err_from_pco)?;
+                entry.insert(decoder)
+            }
+        };
         let mut decoder = chunk
             .page_decompressor(buffer, n_values)
             .map_err(vortex_err_from_pco)?;

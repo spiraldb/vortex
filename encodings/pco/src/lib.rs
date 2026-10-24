@@ -30,7 +30,7 @@ mod take;
 
 pub use array::*;
 
-#[derive(Clone, PartialEq, prost::Message)]
+#[derive(Clone, PartialEq, Eq, prost::Message)]
 /// Metadata for one Pco page.
 pub struct PcoPageInfo {
     // Since pco limits to 2^24 values per chunk, u32 is sufficient for the
@@ -42,7 +42,7 @@ pub struct PcoPageInfo {
 
 // We're calling this Info instead of Metadata because ChunkMeta refers to a specific
 // component of a Pco file.
-#[derive(Clone, PartialEq, prost::Message)]
+#[derive(Clone, PartialEq, Eq, prost::Message)]
 /// Metadata for one Pco chunk.
 pub struct PcoChunkInfo {
     /// Pages contained in this chunk.
@@ -50,7 +50,7 @@ pub struct PcoChunkInfo {
     pub pages: Vec<PcoPageInfo>,
 }
 
-#[derive(Clone, PartialEq, prost::Message)]
+#[derive(Clone, PartialEq, Eq, prost::Message)]
 /// Serialized metadata for a [`PcoArray`].
 pub struct PcoMetadata {
     // would be nice to reuse one header per vortex file, but it's really only 1 byte, so
@@ -67,7 +67,7 @@ pub struct PcoMetadata {
 }
 
 /// Versioned optional logical-row page index. Unknown versions retain legacy decoding.
-#[derive(Clone, PartialEq, prost::Message)]
+#[derive(Clone, PartialEq, Eq, prost::Message)]
 pub struct PcoLogicalPages {
     /// Index interpretation version; currently one.
     #[prost(uint32, tag = "1")]
