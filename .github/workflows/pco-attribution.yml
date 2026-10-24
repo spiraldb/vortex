@@ -52,7 +52,7 @@ jobs:
             for mode in write probe take-large; do
               repeats=64
               if [ "$mode" = probe ]; then repeats=100000; fi
-              sudo "$perf" record -F 499 --call-graph dwarf,8192 -o "$RUNNER_TEMP/attribution/$engine-$mode.data" -- "$executable" "$mode" nullable 8388608 "$repeats" > "$RUNNER_TEMP/$engine-$mode.jsonl"
+              sudo "$perf" record -e cpu-clock -F 499 --call-graph dwarf,8192 -o "$RUNNER_TEMP/attribution/$engine-$mode.data" -- "$executable" "$mode" nullable 8388608 "$repeats" > "$RUNNER_TEMP/$engine-$mode.jsonl"
               sudo "$perf" report -i "$RUNNER_TEMP/attribution/$engine-$mode.data" --stdio --no-children --percent-limit 0.5 > "$RUNNER_TEMP/attribution/$engine-$mode-flat.txt"
               sudo "$perf" report -i "$RUNNER_TEMP/attribution/$engine-$mode.data" --stdio --children --percent-limit 1 > "$RUNNER_TEMP/attribution/$engine-$mode-callgraph.txt"
               sudo rm "$RUNNER_TEMP/attribution/$engine-$mode.data"
