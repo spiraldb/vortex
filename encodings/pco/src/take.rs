@@ -153,12 +153,28 @@ fn gather<T: Number + NativePType>(
     nullability: vortex_array::dtype::Nullability,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<PrimitiveArray> {
+    if nullability.is_nullable() {
+        gather_typed::<T, true>(array, runs, output_len, ctx)
+    } else {
+        gather_typed::<T, false>(array, runs, output_len, ctx)
+    }
+}
+
+fn gather_typed<T: Number + NativePType, const NULLABLE: bool>(
+    array: ArrayView<'_, Pco>,
+    runs: &[Run],
+    output_len: usize,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<PrimitiveArray> {
     let mut state = AccessState::default();
     let mut values = BufferMut::<T>::with_capacity_in(output_len, ctx.allocator().clone());
-    let mut valid = BitBufferMut::with_capacity(output_len);
+    // The non-nullable monomorphization has no bitmap allocation or append work.
+    let mut valid = BitBufferMut::with_capacity(if NULLABLE { output_len } else { 0 });
     for run in runs {
         let Some(start) = run.start else {
-            valid.append_n(false, run.length);
+            if NULLABLE {
+                valid.append_n(false, run.length);
+            }
             values.extend(std::iter::repeat_n(T::default(), run.length));
             continue;
         };
@@ -166,9 +182,13 @@ fn gather<T: Number + NativePType>(
             if let Some((page, value)) = state.resolve(array, array.slice_start() + start, ctx)? {
                 let value = state.values(array, page, ctx)?.as_slice::<T>()[value];
                 values.extend(std::iter::repeat_n(value, run.length));
-                valid.append_n(true, run.length);
+                if NULLABLE {
+                    valid.append_n(true, run.length);
+                }
             } else {
-                valid.append_n(false, run.length);
+                if NULLABLE {
+                    valid.append_n(false, run.length);
+                }
                 values.extend(std::iter::repeat_n(T::default(), run.length));
             }
             continue;
@@ -183,11 +203,15 @@ fn gather<T: Number + NativePType>(
                             values.extend_from_slice(
                                 &state.values(array, span.page, ctx)?.as_slice::<T>()[span.values],
                             );
-                            valid.append_n(true, *n);
+                            if NULLABLE {
+                                valid.append_n(true, *n);
+                            }
                         }
                         Mask::AllFalse(n) => {
                             values.extend(std::iter::repeat_n(T::default(), *n));
-                            valid.append_n(false, *n);
+                            if NULLABLE {
+                                valid.append_n(false, *n);
+                            }
                         }
                         Mask::Values(mask) => {
                             let source = state.values(array, span.page, ctx)?.as_slice::<T>();
@@ -204,17 +228,23 @@ fn gather<T: Number + NativePType>(
                                 logical = stop;
                             }
                             values.extend(std::iter::repeat_n(T::default(), mask.len() - logical));
-                            valid.append_buffer(mask.bit_buffer());
+                            if NULLABLE {
+                                valid.append_buffer(mask.bit_buffer());
+                            }
                         }
                     }
                     row = span.stop;
                 } else {
                     if let Some((page, value)) = state.resolve(array, row, ctx)? {
                         values.push(state.values(array, page, ctx)?.as_slice::<T>()[value]);
-                        valid.append_true();
+                        if NULLABLE {
+                            valid.append_true();
+                        }
                     } else {
                         values.push(T::default());
-                        valid.append_false();
+                        if NULLABLE {
+                            valid.append_false();
+                        }
                     }
                     row += 1;
                 }
@@ -227,14 +257,18 @@ fn gather<T: Number + NativePType>(
             let row = array.slice_start() + start + offset * run.stride;
             if let Some((page, value)) = state.resolve(array, row, ctx)? {
                 values.push(state.values(array, page, ctx)?.as_slice::<T>()[value]);
-                valid.append_true();
+                if NULLABLE {
+                    valid.append_true();
+                }
             } else {
                 values.push(T::default());
-                valid.append_false();
+                if NULLABLE {
+                    valid.append_false();
+                }
             }
         }
     }
-    let validity = if nullability.is_nullable() {
+    let validity = if NULLABLE {
         Validity::from(valid.freeze())
     } else {
         Validity::NonNullable
