@@ -27,7 +27,7 @@ fn main() {
 }
 
 #[divan::bench(args = [100, 200, 350, 500])]
-fn pack_return_dtype(bencher: Bencher, num_fields: usize) {
+fn pack_bind(bencher: Bencher, num_fields: usize) {
     // struct with many columns
     let field_names: Vec<FieldName> = (0..num_fields)
         .map(|i| FieldName::from(format!("col_{}", i)))
@@ -46,7 +46,8 @@ fn pack_return_dtype(bencher: Bencher, num_fields: usize) {
     // pack(get_item(col) for col in cols)
     let pack_expr = pack(children, Nullability::Nullable);
 
-    // Binding should be fast, it is assumed cheap in some expression simplifiers
+    // Binding resolves every node and types it; it must stay cheap since scans bind before
+    // optimizing.
     bencher
         .with_inputs(|| (&pack_expr, &dtype))
         .bench_refs(|(pack_expr, dtype)| pack_expr.bind(dtype, &SESSION).unwrap());
