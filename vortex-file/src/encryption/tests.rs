@@ -23,6 +23,8 @@ use vortex_array::assert_arrays_eq;
 use vortex_array::dtype::FieldPath;
 use vortex_array::expr::root;
 use vortex_array::expr::select;
+use vortex_array::flatbuffers::ReadFlatBuffer;
+use vortex_array::flatbuffers::WriteFlatBufferExt;
 use vortex_array::stream::ArrayStreamExt;
 use vortex_buffer::ByteBuffer;
 use vortex_buffer::ByteBufferMut;
@@ -44,11 +46,13 @@ use super::envelope::KeyMaterialStore;
 use super::envelope::KmsClient;
 use super::*;
 use crate::DeserializeStep;
+use crate::EOF_SIZE;
 use crate::Footer;
 use crate::OpenOptionsSessionExt;
 use crate::VortexFile;
 use crate::WriteOptionsSessionExt;
 use crate::WriteStrategyBuilder;
+use crate::footer::postscript::Postscript;
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     let session = array_session()
@@ -138,6 +142,20 @@ async fn read_field(file: &VortexFile, field: &str) -> VortexResult<ArrayRef> {
         .into_array_stream()?
         .read_all()
         .await
+}
+
+/// Deserialize a standalone footer, retrieving its keys when asked to.
+async fn deserialize_footer(bytes: &[u8], decryption: FileDecryption) -> VortexResult<Footer> {
+    let mut deserializer = Footer::deserializer(ByteBuffer::copy_from(bytes), SESSION.clone())
+        .with_size(bytes.len() as u64)
+        .with_decryption(decryption);
+    loop {
+        match deserializer.deserialize()? {
+            DeserializeStep::NeedKeys => deserializer.resolve_keys().await?,
+            DeserializeStep::Done(footer) => return Ok(footer),
+            step => vortex_bail!("standalone footer needs no {step:?}"),
+        }
+    }
 }
 
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {
@@ -418,13 +436,7 @@ async fn standalone_footer() -> VortexResult<()> {
         .iter()
         .flat_map(|buffer| buffer.as_slice().iter().copied())
         .collect::<Vec<u8>>();
-    let mut deserializer =
-        Footer::deserializer(ByteBuffer::copy_from(&footer_bytes), SESSION.clone())
-            .with_size(footer_bytes.len() as u64)
-            .with_decryption(decryption());
-    let DeserializeStep::Done(footer) = deserializer.deserialize()? else {
-        vortex_bail!("standalone footer must deserialize in one step");
-    };
+    let footer = deserialize_footer(&footer_bytes, decryption()).await?;
     let file = SESSION
         .open_options()
         .with_decryption(decryption())
@@ -448,13 +460,8 @@ async fn standalone_footer_with_field_key() -> VortexResult<()> {
         .flat_map(|buffer| buffer.as_slice().iter().copied())
         .collect::<Vec<u8>>();
     for (with_column_key, expect_secret_stats) in [(true, true), (false, false)] {
-        let mut deserializer =
-            Footer::deserializer(ByteBuffer::copy_from(&footer_bytes), SESSION.clone())
-                .with_size(footer_bytes.len() as u64)
-                .with_decryption(FileDecryption::new(keys(with_column_key)));
-        let DeserializeStep::Done(footer) = deserializer.deserialize()? else {
-            vortex_bail!("standalone footer must deserialize in one step");
-        };
+        let footer =
+            deserialize_footer(&footer_bytes, FileDecryption::new(keys(with_column_key))).await?;
         assert_eq!(footer.statistics_encryption().as_ref(), [(0, 2)]);
         let stats = footer.statistics().vortex_expect("file statistics");
         assert_eq!(!stats.stats_sets()[0].is_empty(), expect_secret_stats);
@@ -784,8 +791,9 @@ impl TestKms {
     }
 }
 
+#[async_trait::async_trait]
 impl KmsClient for TestKms {
-    fn wrap_key(&self, key: &[u8], master_key_id: &str) -> VortexResult<Vec<u8>> {
+    async fn wrap_key(&self, key: &[u8], master_key_id: &str) -> VortexResult<Vec<u8>> {
         self.wraps.fetch_add(1, Ordering::Relaxed);
         let master_keys = self.master_keys.lock();
         let versions = master_keys
@@ -800,7 +808,7 @@ impl KmsClient for TestKms {
         Ok(wrapped)
     }
 
-    fn unwrap_key(&self, wrapped_key: &[u8], master_key_id: &str) -> VortexResult<Vec<u8>> {
+    async fn unwrap_key(&self, wrapped_key: &[u8], master_key_id: &str) -> VortexResult<Vec<u8>> {
         self.unwraps.fetch_add(1, Ordering::Relaxed);
         let master_keys = self.master_keys.lock();
         let (version, wrapped) = wrapped_key
@@ -821,10 +829,10 @@ impl KmsClient for TestKms {
 }
 
 async fn write_envelope(envelope: &EnvelopeEncryption) -> VortexResult<ByteBuffer> {
-    let encryption = FileEncryption::new(envelope.key_config("footer-mek")?).with_field_key(
+    let encryption = FileEncryption::new(envelope.key_config("footer-mek").await?).with_field_key(
         FieldPath::from_name(SECRET_COLUMN),
         "pii",
-        envelope.key_config("pii-mek")?,
+        envelope.key_config("pii-mek").await?,
     );
     write(Some(encryption)).await
 }
@@ -857,7 +865,12 @@ async fn envelope_single_wrapping() -> VortexResult<()> {
             .with_data_key_length(32),
     );
     assert_eq!(
-        envelope.key_config("footer-mek")?.key().as_bytes().len(),
+        envelope
+            .key_config("footer-mek")
+            .await?
+            .key()
+            .as_bytes()
+            .len(),
         32
     );
     let bytes = write_envelope(&envelope).await?;
@@ -876,14 +889,14 @@ async fn envelope_master_key_rotation() -> VortexResult<()> {
             .with_external_key_material(Arc::clone(&store) as _),
     );
     let bytes = write_envelope(&envelope).await?;
-    assert_eq!(store.ids()?.len(), 2);
+    assert_eq!(store.ids().await?.len(), 2);
 
     // After rotating the master keys and retiring their old versions, a reader without cached
     // keys can still read the file.
     for id in ["footer-mek", "pii-mek"] {
         kms.rotate(id);
     }
-    assert_eq!(envelope.rotate_master_keys()?, 2);
+    assert_eq!(envelope.rotate_master_keys().await?, 2);
     for id in ["footer-mek", "pii-mek"] {
         kms.retire_old_versions(id);
     }
@@ -901,8 +914,127 @@ async fn envelope_master_key_rotation() -> VortexResult<()> {
     Ok(())
 }
 
-#[test]
-fn envelope_rotation_requires_external_key_material() {
+#[tokio::test]
+async fn envelope_rotation_requires_external_key_material() {
     let envelope = EnvelopeEncryption::new(Arc::new(TestKms::new(&["mek"])));
-    expect_err(envelope.rotate_master_keys(), "external key material");
+    expect_err(envelope.rotate_master_keys().await, "external key material");
+}
+
+/// Rewrite the postscript of `bytes` with `edit`, as an attacker without keys could, since the
+/// postscript is not authenticated.
+fn edit_postscript(
+    bytes: &ByteBuffer,
+    edit: impl FnOnce(&mut Postscript),
+) -> VortexResult<ByteBuffer> {
+    let eof = bytes.len() - EOF_SIZE;
+    let ps_len = usize::from(u16::from_le_bytes([bytes[eof + 2], bytes[eof + 3]]));
+    let mut postscript = Postscript::read_flatbuffer_bytes(&bytes[eof - ps_len..eof])?;
+    edit(&mut postscript);
+    let edited = postscript.write_flatbuffer_bytes()?;
+    let mut out = ByteBufferMut::copy_from(&bytes[..eof - ps_len]);
+    out.extend_from_slice(&edited);
+    out.extend_from_slice(&bytes[eof..eof + 2]);
+    out.extend_from_slice(&u16::try_from(edited.len())?.to_le_bytes());
+    out.extend_from_slice(&bytes[eof + 4..]);
+    Ok(out.freeze())
+}
+
+/// Stripping the signatures of a plaintext footer would let an attacker modify the footer, so a
+/// reader configured for decryption rejects it.
+#[tokio::test]
+async fn rejects_stripped_footer_signatures() -> VortexResult<()> {
+    let bytes = write(Some(
+        FileEncryption::new(footer_key())
+            .with_plaintext_footer()
+            .with_plaintext_fields(),
+    ))
+    .await?;
+    let stripped = edit_postscript(&bytes, |postscript| {
+        for segment in [&mut postscript.layout, &mut postscript.footer]
+            .into_iter()
+            .chain(postscript.dtype.as_mut())
+            .chain(postscript.statistics.as_mut())
+        {
+            segment.encryption = EncryptionSpec::plaintext();
+            segment.signature = None;
+        }
+    })?;
+    expect_err(
+        open(stripped.clone(), Some(decryption())),
+        "not protected by its footer key",
+    );
+    // Signature verification can be skipped, but not the protection itself.
+    expect_err(
+        open(
+            stripped.clone(),
+            Some(decryption().without_footer_verification()),
+        ),
+        "not protected by its footer key",
+    );
+    // A reader without keys cannot tell, as for any plaintext footer it cannot verify.
+    SESSION.open_options().open_buffer(stripped)?;
+    Ok(())
+}
+
+/// Stripping the encryption of a metadata segment would let an attacker forge its value.
+#[tokio::test]
+async fn rejects_stripped_metadata_encryption() -> VortexResult<()> {
+    let bytes = write(Some(FileEncryption::new(footer_key()))).await?;
+    let stripped = edit_postscript(&bytes, |postscript| {
+        postscript.metadata[0].segment.encryption = EncryptionSpec::plaintext();
+    })?;
+    expect_err(open(stripped, Some(decryption())), "is not encrypted");
+    Ok(())
+}
+
+/// Swapping the fields of encrypted statistics would attribute one field's statistics to
+/// another, and prune wrongly.
+#[tokio::test]
+async fn rejects_swapped_statistics_fields() -> VortexResult<()> {
+    let encryption = FileEncryption::new(footer_key())
+        .with_field_key(FieldPath::from_name(SECRET_COLUMN), "pii", column_key())
+        .with_field_key(FieldPath::from_name("visible"), "pii", column_key());
+    let bytes = write(Some(encryption)).await?;
+    assert_eq!(
+        open(bytes.clone(), Some(decryption()))?
+            .footer()
+            .statistics_encryption()
+            .as_ref(),
+        [(0, 2), (1, 2)]
+    );
+    let swapped = edit_postscript(&bytes, |postscript| {
+        postscript.encrypted_statistics[0].fields.reverse();
+    })?;
+    expect_err(open(swapped, Some(decryption())), "Failed to decrypt");
+    Ok(())
+}
+
+/// A [`KeyRetriever`] counting the keys it retrieves.
+struct CountingKeys(Mutex<HashMap<Vec<u8>, usize>>);
+
+#[async_trait::async_trait]
+impl KeyRetriever for CountingKeys {
+    async fn retrieve_key(&self, key_metadata: &[u8]) -> VortexResult<EncryptionKey> {
+        *self.0.lock().entry(key_metadata.to_vec()).or_default() += 1;
+        keys(true).retrieve_key(key_metadata).await
+    }
+}
+
+/// The footer and the segments share key resolution, so each key is retrieved once per open.
+#[tokio::test]
+async fn retrieves_each_key_once() -> VortexResult<()> {
+    let bytes = write(Some(with_column_key(FileEncryption::new(footer_key())))).await?;
+    let counting = Arc::new(CountingKeys(Mutex::default()));
+    let file = SESSION
+        .open_options()
+        .with_decryption(FileDecryption::new(Arc::clone(&counting) as _))
+        .include_metadata()
+        .open_read(bytes)
+        .await?;
+    assert_reads_all(&file).await?;
+    assert_reads_all(&file).await?;
+    let counts = counting.0.lock();
+    assert_eq!(counts.get(FOOTER_KEY_METADATA), Some(&1));
+    assert_eq!(counts.get(COLUMN_KEY_METADATA), Some(&1));
+    Ok(())
 }

@@ -46,8 +46,13 @@ pub(crate) enum SegmentRole<'a> {
     Footer,
     /// A user-defined metadata segment, by key.
     Metadata(&'a str),
-    /// The entry at this position of the postscript's encrypted statistics.
-    KeyStatistics(u16),
+    /// The entry at this position of the postscript's encrypted statistics, holding the
+    /// statistics of these fields. The fields are authenticated, since the postscript that lists
+    /// them is not, so that statistics cannot be attributed to other fields.
+    KeyStatistics {
+        position: u16,
+        fields: &'a [u32],
+    },
 }
 
 impl SegmentRole<'_> {
@@ -65,9 +70,12 @@ impl SegmentRole<'_> {
                 aad.push(5);
                 aad.extend_from_slice(key.as_bytes());
             }
-            SegmentRole::KeyStatistics(key) => {
+            SegmentRole::KeyStatistics { position, fields } => {
                 aad.push(6);
-                aad.extend_from_slice(&key.to_le_bytes());
+                aad.extend_from_slice(&position.to_le_bytes());
+                for field in *fields {
+                    aad.extend_from_slice(&field.to_le_bytes());
+                }
             }
         }
     }
@@ -164,7 +172,7 @@ impl SegmentCipher {
     }
 
     /// Resolve the cipher for `spec`, or `None` if it describes plaintext segments.
-    pub(crate) fn resolve(
+    pub(crate) async fn resolve(
         spec: &EncryptionSpec,
         decryption: Option<&FileDecryption>,
     ) -> VortexResult<Option<Self>> {
@@ -188,7 +196,7 @@ impl SegmentCipher {
                 "Vortex file requires an AAD prefix, supplied with FileDecryption::with_aad_prefix"
             ),
         };
-        let key = decryption.keys.retrieve_key(&spec.key_metadata)?;
+        let key = decryption.keys.retrieve_key(&spec.key_metadata).await?;
         Ok(Some(Self::new(spec.clone(), key, aad_prefix)?))
     }
 

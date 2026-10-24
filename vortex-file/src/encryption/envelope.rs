@@ -21,10 +21,14 @@
 //! # use vortex_error::VortexResult;
 //! # use vortex_file::encryption::{FileDecryption, FileEncryption};
 //! # use vortex_file::encryption::envelope::{EnvelopeEncryption, KmsClient};
-//! # fn example(kms: Arc<dyn KmsClient>) -> VortexResult<()> {
+//! # async fn example(kms: Arc<dyn KmsClient>) -> VortexResult<()> {
 //! let envelope = Arc::new(EnvelopeEncryption::new(kms));
-//! let encryption = FileEncryption::new(envelope.key_config("footer-master-key")?)
-//!     .with_field_key(FieldPath::from_name("ssn"), "pii", envelope.key_config("pii-master-key")?);
+//! let encryption = FileEncryption::new(envelope.key_config("footer-master-key").await?)
+//!     .with_field_key(
+//!         FieldPath::from_name("ssn"),
+//!         "pii",
+//!         envelope.key_config("pii-master-key").await?,
+//!     );
 //! let decryption = FileDecryption::new(envelope);
 //! # Ok(())
 //! # }
@@ -35,6 +39,7 @@ use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use flatbuffers::FlatBufferBuilder;
 use flatbuffers::WIPOffset;
 use parking_lot::Mutex;
@@ -61,24 +66,26 @@ const EXTERNAL_ID_LEN: usize = 16;
 /// Implementations wrap and unwrap keys with a remote service, such as AWS KMS, Google Cloud KMS,
 /// or HashiCorp Vault, and should support master key rotation by unwrapping keys wrapped with any
 /// version of a master key.
+#[async_trait]
 pub trait KmsClient: Send + Sync {
     /// Wrap `key` with the current version of the master key `master_key_id`.
-    fn wrap_key(&self, key: &[u8], master_key_id: &str) -> VortexResult<Vec<u8>>;
+    async fn wrap_key(&self, key: &[u8], master_key_id: &str) -> VortexResult<Vec<u8>>;
 
     /// Unwrap a key wrapped with any version of the master key `master_key_id`.
-    fn unwrap_key(&self, wrapped_key: &[u8], master_key_id: &str) -> VortexResult<Vec<u8>>;
+    async fn unwrap_key(&self, wrapped_key: &[u8], master_key_id: &str) -> VortexResult<Vec<u8>>;
 }
 
 /// Stores key material outside of the files it belongs to.
+#[async_trait]
 pub trait KeyMaterialStore: Send + Sync {
     /// Store, or replace, the key material with `id`.
-    fn put(&self, id: &str, material: &[u8]) -> VortexResult<()>;
+    async fn put(&self, id: &str, material: &[u8]) -> VortexResult<()>;
 
     /// Return the key material with `id`.
-    fn get(&self, id: &str) -> VortexResult<Vec<u8>>;
+    async fn get(&self, id: &str) -> VortexResult<Vec<u8>>;
 
     /// Return the ids of all stored key material.
-    fn ids(&self) -> VortexResult<Vec<String>>;
+    async fn ids(&self) -> VortexResult<Vec<String>>;
 }
 
 /// A [`KeyMaterialStore`] in memory.
@@ -87,15 +94,16 @@ pub struct InMemoryKeyMaterialStore {
     materials: RwLock<HashMap<String, Vec<u8>>>,
 }
 
+#[async_trait]
 impl KeyMaterialStore for InMemoryKeyMaterialStore {
-    fn put(&self, id: &str, material: &[u8]) -> VortexResult<()> {
+    async fn put(&self, id: &str, material: &[u8]) -> VortexResult<()> {
         self.materials
             .write()
             .insert(id.to_string(), material.to_vec());
         Ok(())
     }
 
-    fn get(&self, id: &str) -> VortexResult<Vec<u8>> {
+    async fn get(&self, id: &str) -> VortexResult<Vec<u8>> {
         self.materials
             .read()
             .get(id)
@@ -103,7 +111,7 @@ impl KeyMaterialStore for InMemoryKeyMaterialStore {
             .ok_or_else(|| vortex_err!("No key material with id {id}"))
     }
 
-    fn ids(&self) -> VortexResult<Vec<String>> {
+    async fn ids(&self) -> VortexResult<Vec<String>> {
         Ok(self.materials.read().keys().cloned().collect())
     }
 }
@@ -168,19 +176,22 @@ impl EnvelopeEncryption {
     ///
     /// Use a fresh key for every file, so that no key encrypts more data than AES-GCM's random
     /// nonces allow.
-    pub fn key_config(&self, master_key_id: &str) -> VortexResult<KeyConfig> {
+    pub async fn key_config(&self, master_key_id: &str) -> VortexResult<KeyConfig> {
         let dek = EncryptionKey::generate(self.data_key_length)?;
+        let wrapping = self.wrap_dek(&dek, master_key_id).await?;
         let mut fbb = FlatBufferBuilder::new();
         let args = match &self.store {
             None => fb::EnvelopeKeyMetadataArgs {
-                material: Some(self.write_material(&mut fbb, &dek, master_key_id)?),
+                material: Some(write_material(&mut fbb, master_key_id, &wrapping)),
                 external_id: None,
             },
             Some(store) => {
                 let mut id = [0u8; EXTERNAL_ID_LEN];
                 fill_random(&mut id)?;
                 let id = hex(&id);
-                store.put(&id, &self.wrap(&dek, master_key_id)?)?;
+                store
+                    .put(&id, &material_bytes(master_key_id, &wrapping))
+                    .await?;
                 fb::EnvelopeKeyMetadataArgs {
                     material: None,
                     external_id: Some(fbb.create_string(&id)),
@@ -197,7 +208,7 @@ impl EnvelopeEncryption {
     ///
     /// The [`KmsClient`] must be able to unwrap keys wrapped with earlier master key versions.
     /// Files keep referencing the same key material, so they stay readable.
-    pub fn rotate_master_keys(&self) -> VortexResult<usize> {
+    pub async fn rotate_master_keys(&self) -> VortexResult<usize> {
         let Some(store) = &self.store else {
             vortex_bail!(
                 "Master key rotation requires external key material, configured with \
@@ -206,17 +217,15 @@ impl EnvelopeEncryption {
         };
         // New KEKs, wrapped with the current master key versions, replace the cached ones.
         self.write_keks.lock().clear();
-        let ids = store.ids()?;
+        let ids = store.ids().await?;
         for id in &ids {
-            let material = store.get(id)?;
-            let (master_key_id, dek) = {
-                let material = parse_key_material(&material)?;
-                (
-                    material.master_key_id().to_string(),
-                    self.unwrap(&material)?,
-                )
-            };
-            store.put(id, &self.wrap(&dek, &master_key_id)?)?;
+            let material = store.get(id).await?;
+            let material = Material::parse(&material)?;
+            let dek = self.unwrap(&material).await?;
+            let wrapping = self.wrap_dek(&dek, &material.master_key_id).await?;
+            store
+                .put(id, &material_bytes(&material.master_key_id, &wrapping))
+                .await?;
         }
         Ok(ids.len())
     }
@@ -227,55 +236,36 @@ impl EnvelopeEncryption {
         self.read_keks.lock().clear();
     }
 
-    /// Wrap `dek` into serialized key material.
-    fn wrap(&self, dek: &EncryptionKey, master_key_id: &str) -> VortexResult<Vec<u8>> {
-        let mut fbb = FlatBufferBuilder::new();
-        let material = self.write_material(&mut fbb, dek, master_key_id)?;
-        fbb.finish_minimal(material);
-        Ok(fbb.finished_data().to_vec())
-    }
-
-    /// Wrap `dek` into key material written to `fbb`.
-    fn write_material<'fb>(
-        &self,
-        fbb: &mut FlatBufferBuilder<'fb>,
-        dek: &EncryptionKey,
-        master_key_id: &str,
-    ) -> VortexResult<WIPOffset<fb::KeyMaterial<'fb>>> {
-        let args = if self.double_wrapping {
-            let kek = self.write_kek(master_key_id)?;
-            let mut wrapped_dek = dek.as_bytes().to_vec();
-            let nonce_tag = Aead::new(&kek.key)?.seal(&kek.id, &mut wrapped_dek)?;
-            wrapped_dek.extend_from_slice(&nonce_tag);
-            fb::KeyMaterialArgs {
-                master_key_id: Some(fbb.create_string(master_key_id)),
-                wrapped_dek: Some(fbb.create_vector(&wrapped_dek)),
-                kek_id: Some(fbb.create_vector(&kek.id)),
-                wrapped_kek: Some(fbb.create_vector(&kek.wrapped)),
-            }
-        } else {
-            let wrapped_dek = self.kms.wrap_key(dek.as_bytes(), master_key_id)?;
-            fb::KeyMaterialArgs {
-                master_key_id: Some(fbb.create_string(master_key_id)),
-                wrapped_dek: Some(fbb.create_vector(&wrapped_dek)),
-                kek_id: None,
-                wrapped_kek: None,
-            }
-        };
-        Ok(fb::KeyMaterial::create(fbb, &args))
+    /// Wrap `dek` with the master key `master_key_id`, through a KEK with double wrapping.
+    async fn wrap_dek(&self, dek: &EncryptionKey, master_key_id: &str) -> VortexResult<Wrapping> {
+        if !self.double_wrapping {
+            return Ok(Wrapping {
+                wrapped_dek: self.kms.wrap_key(dek.as_bytes(), master_key_id).await?,
+                kek: None,
+            });
+        }
+        let kek = self.write_kek(master_key_id).await?;
+        let mut wrapped_dek = dek.as_bytes().to_vec();
+        let nonce_tag = Aead::new(&kek.key)?.seal(&kek.id, &mut wrapped_dek)?;
+        wrapped_dek.extend_from_slice(&nonce_tag);
+        Ok(Wrapping {
+            wrapped_dek,
+            kek: Some(kek),
+        })
     }
 
     /// The KEK for new data keys wrapped with `master_key_id`, created on first use.
-    fn write_kek(&self, master_key_id: &str) -> VortexResult<Arc<Kek>> {
+    async fn write_kek(&self, master_key_id: &str) -> VortexResult<Arc<Kek>> {
         if let Some(kek) = self.write_keks.lock().get(master_key_id) {
             return Ok(Arc::clone(kek));
         }
         let key = EncryptionKey::generate(KEK_LEN)?;
         let mut id = vec![0u8; KEK_ID_LEN];
         fill_random(&mut id)?;
-        let wrapped = self.kms.wrap_key(key.as_bytes(), master_key_id)?;
+        let wrapped = self.kms.wrap_key(key.as_bytes(), master_key_id).await?;
         self.read_keks.lock().insert(id.clone(), key.clone());
         let kek = Arc::new(Kek { id, key, wrapped });
+        // A concurrent call may have created a KEK meanwhile; keep the first one.
         Ok(Arc::clone(
             self.write_keks
                 .lock()
@@ -285,28 +275,32 @@ impl EnvelopeEncryption {
     }
 
     /// Unwrap the data key of `material`.
-    fn unwrap(&self, material: &fb::KeyMaterial<'_>) -> VortexResult<EncryptionKey> {
-        let master_key_id = material.master_key_id();
-        let wrapped_dek = material.wrapped_dek().bytes();
-        let (Some(kek_id), Some(wrapped_kek)) = (material.kek_id(), material.wrapped_kek()) else {
-            let mut dek = self.kms.unwrap_key(wrapped_dek, master_key_id)?;
+    async fn unwrap(&self, material: &Material) -> VortexResult<EncryptionKey> {
+        let Some((kek_id, wrapped_kek)) = &material.kek else {
+            let mut dek = self
+                .kms
+                .unwrap_key(&material.wrapped_dek, &material.master_key_id)
+                .await?;
             let key = EncryptionKey::try_from_slice(&dek);
             dek.zeroize();
             return key;
         };
-        let kek_id = kek_id.bytes();
         let cached = self.read_keks.lock().get(kek_id).cloned();
         let kek = match cached {
             Some(kek) => kek,
             None => {
-                let mut kek = self.kms.unwrap_key(wrapped_kek.bytes(), master_key_id)?;
+                let mut kek = self
+                    .kms
+                    .unwrap_key(wrapped_kek, &material.master_key_id)
+                    .await?;
                 let key = EncryptionKey::try_from_slice(&kek);
                 kek.zeroize();
                 let key = key?;
-                self.read_keks.lock().insert(kek_id.to_vec(), key.clone());
+                self.read_keks.lock().insert(kek_id.clone(), key.clone());
                 key
             }
         };
+        let wrapped_dek = &material.wrapped_dek;
         let Some(len) = wrapped_dek.len().checked_sub(super::SIGNATURE_LEN) else {
             vortex_bail!(
                 "Wrapped data key of {} bytes is too short",
@@ -323,12 +317,76 @@ impl EnvelopeEncryption {
     }
 }
 
+/// A data key wrapped for key material.
+struct Wrapping {
+    wrapped_dek: Vec<u8>,
+    /// With double wrapping, the KEK the data key is wrapped with.
+    kek: Option<Arc<Kek>>,
+}
+
+/// Parsed key material, owned so that it can be held across KMS calls.
+struct Material {
+    master_key_id: String,
+    wrapped_dek: Vec<u8>,
+    /// With double wrapping, the KEK id and the KEK wrapped by the KMS.
+    kek: Option<(Vec<u8>, Vec<u8>)>,
+}
+
+impl Material {
+    fn parse(bytes: &[u8]) -> VortexResult<Self> {
+        Self::from_flatbuffer(
+            &flatbuffers::root::<fb::KeyMaterial>(bytes)
+                .map_err(|e| vortex_err!("Invalid key material: {e}"))?,
+        )
+    }
+
+    fn from_flatbuffer(material: &fb::KeyMaterial<'_>) -> VortexResult<Self> {
+        let kek = match (material.kek_id(), material.wrapped_kek()) {
+            (Some(id), Some(wrapped)) => Some((id.bytes().to_vec(), wrapped.bytes().to_vec())),
+            (None, None) => None,
+            _ => vortex_bail!("Key material must hold both or neither of a KEK id and wrapped KEK"),
+        };
+        Ok(Self {
+            master_key_id: material.master_key_id().to_string(),
+            wrapped_dek: material.wrapped_dek().bytes().to_vec(),
+            kek,
+        })
+    }
+}
+
+/// Write the key material of `wrapping` to `fbb`.
+fn write_material<'fb>(
+    fbb: &mut FlatBufferBuilder<'fb>,
+    master_key_id: &str,
+    wrapping: &Wrapping,
+) -> WIPOffset<fb::KeyMaterial<'fb>> {
+    let args = fb::KeyMaterialArgs {
+        master_key_id: Some(fbb.create_string(master_key_id)),
+        wrapped_dek: Some(fbb.create_vector(&wrapping.wrapped_dek)),
+        kek_id: wrapping.kek.as_ref().map(|kek| fbb.create_vector(&kek.id)),
+        wrapped_kek: wrapping
+            .kek
+            .as_ref()
+            .map(|kek| fbb.create_vector(&kek.wrapped)),
+    };
+    fb::KeyMaterial::create(fbb, &args)
+}
+
+/// Serialize the key material of `wrapping`.
+fn material_bytes(master_key_id: &str, wrapping: &Wrapping) -> Vec<u8> {
+    let mut fbb = FlatBufferBuilder::new();
+    let material = write_material(&mut fbb, master_key_id, wrapping);
+    fbb.finish_minimal(material);
+    fbb.finished_data().to_vec()
+}
+
+#[async_trait]
 impl KeyRetriever for EnvelopeEncryption {
-    fn retrieve_key(&self, key_metadata: &[u8]) -> VortexResult<EncryptionKey> {
+    async fn retrieve_key(&self, key_metadata: &[u8]) -> VortexResult<EncryptionKey> {
         let metadata = flatbuffers::root::<fb::EnvelopeKeyMetadata>(key_metadata)
             .map_err(|e| vortex_err!("Invalid envelope key metadata: {e}"))?;
-        match (metadata.material(), metadata.external_id()) {
-            (Some(material), None) => self.unwrap(&material),
+        let material = match (metadata.material(), metadata.external_id()) {
+            (Some(material), None) => Material::from_flatbuffer(&material)?,
             (None, Some(id)) => {
                 let Some(store) = &self.store else {
                     vortex_bail!(
@@ -336,10 +394,11 @@ impl KeyRetriever for EnvelopeEncryption {
                          configured with EnvelopeEncryption::with_external_key_material"
                     );
                 };
-                self.unwrap(&parse_key_material(&store.get(id)?)?)
+                Material::parse(&store.get(id).await?)?
             }
             _ => vortex_bail!("Envelope key metadata must hold either key material or its id"),
-        }
+        };
+        self.unwrap(&material).await
     }
 }
 
@@ -351,11 +410,6 @@ impl Debug for EnvelopeEncryption {
             .field("external_key_material", &self.store.is_some())
             .finish_non_exhaustive()
     }
-}
-
-fn parse_key_material(bytes: &[u8]) -> VortexResult<fb::KeyMaterial<'_>> {
-    flatbuffers::root::<fb::KeyMaterial>(bytes)
-        .map_err(|e| vortex_err!("Invalid key material: {e}"))
 }
 
 fn hex(bytes: &[u8]) -> String {

@@ -11,7 +11,7 @@
 mod field_sizes;
 mod file_layout;
 mod file_statistics;
-mod postscript;
+pub(crate) mod postscript;
 mod segment;
 
 use std::sync::Arc;
@@ -213,7 +213,7 @@ impl Footer {
             vortex_bail!("Segment offsets are not ordered");
         }
 
-        let mut encryption_specs: Vec<EncryptionSpec> = fb_footer
+        let encryption_specs: Vec<EncryptionSpec> = fb_footer
             .encryption_specs()
             .iter()
             .flat_map(|specs| specs.iter())
@@ -221,11 +221,15 @@ impl Footer {
             .try_collect()?;
 
         // Metadata segments carry their encryption spec inline in the postscript. Point them at
-        // the matching footer spec, which writers always include, or append one.
+        // the matching footer spec, which writers always include.
         let metadata: Arc<[(String, SegmentSpec)]> = metadata
             .into_iter()
             .map(|(key, mut segment, encryption)| {
-                segment.encryption = encryption_index(&mut encryption_specs, encryption)?;
+                segment.encryption = encryption_index(
+                    &encryption_specs,
+                    &encryption,
+                    &format!("metadata segment {key}"),
+                )?;
                 Ok((key, segment))
             })
             .collect::<VortexResult<_>>()?;
@@ -233,7 +237,11 @@ impl Footer {
         // Encrypted statistics segments carry their spec inline too.
         let mut statistics_encryption = Vec::new();
         for (fields, encryption) in encrypted_statistics {
-            let key = encryption_index(&mut encryption_specs, encryption)?;
+            let key = encryption_index(
+                &encryption_specs,
+                &encryption,
+                &format!("statistics of fields {fields:?}"),
+            )?;
             statistics_encryption.extend(fields.into_iter().map(|field| (field, key)));
         }
 
@@ -390,21 +398,31 @@ fn segments_with_metadata(
         .collect()
 }
 
-/// Find the index of `spec` in `specs`, appending it if missing.
-fn encryption_index(specs: &mut Vec<EncryptionSpec>, spec: EncryptionSpec) -> VortexResult<u16> {
-    if !spec.is_encrypted() {
+/// The index of a postscript segment's inline `spec` in the footer's `specs`.
+///
+/// The postscript is not authenticated, so an encrypted file's metadata and statistics segments
+/// must be encrypted with a spec the footer lists; otherwise an attacker could strip their
+/// encryption, or point them at a key of their choice.
+fn encryption_index(
+    specs: &[EncryptionSpec],
+    spec: &EncryptionSpec,
+    what: &str,
+) -> VortexResult<u16> {
+    if specs.is_empty() {
+        if spec.is_encrypted() {
+            vortex_bail!("The {what} is encrypted, but the footer lists no encryption specs");
+        }
         return Ok(0);
     }
-    if specs.is_empty() {
-        specs.push(EncryptionSpec::plaintext());
+    if !spec.is_encrypted() {
+        vortex_bail!("The {what} of an encrypted file is not encrypted");
     }
-    let index = match specs.iter().position(|candidate| *candidate == spec) {
-        Some(index) => index,
-        None => {
-            specs.push(spec);
-            specs.len() - 1
-        }
-    };
+    let index = specs
+        .iter()
+        .position(|candidate| candidate == spec)
+        .ok_or_else(|| {
+            vortex_err!("The {what} is encrypted with a spec the footer does not list")
+        })?;
     u16::try_from(index).map_err(|_| vortex_err!("Too many encryption specs for a u16 index"))
 }
 

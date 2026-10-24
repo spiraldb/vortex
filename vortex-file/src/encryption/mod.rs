@@ -26,6 +26,7 @@
 
 mod cipher;
 pub mod envelope;
+mod resolver;
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -33,6 +34,7 @@ use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use flatbuffers::FlatBufferBuilder;
 use flatbuffers::WIPOffset;
 use vortex_array::dtype::FieldPath;
@@ -43,6 +45,7 @@ pub use vortex_layout::segments::EncryptionKeyName;
 use zeroize::Zeroize;
 
 pub(crate) use self::cipher::*;
+pub(crate) use self::resolver::*;
 use crate::flatbuffers::footer as fb;
 
 /// The supported AES key lengths in bytes: AES-128, AES-192, and AES-256.
@@ -114,27 +117,36 @@ impl Debug for EncryptionKey {
 
 /// Resolves the [`EncryptionKey`] for the key metadata stored in an encrypted file.
 ///
-/// Implementations typically look the key up in a key management service, and should cache keys
-/// since they are called for every distinct [`EncryptionSpec`] each time a file is opened. They
-/// must return an error if the key is unknown. A wrong key is detected when the first segment
-/// fails to decrypt.
+/// Implementations typically look the key up in a key management service. Each key is retrieved
+/// at most once per opened file: the keys of the footer and of encrypted file statistics when the
+/// footer is read, and other keys when a segment encrypted with them is first read.
+/// Implementations must return an error if the key is unknown. A wrong key is detected when the
+/// first segment fails to decrypt.
+///
+/// The key metadata comes from the file, which may have been tampered with: only return keys
+/// that the file is allowed to be encrypted with, since a key that an attacker also holds lets
+/// them forge the file's content.
+#[async_trait]
 pub trait KeyRetriever: Send + Sync {
     /// Return the key identified by `key_metadata`.
-    fn retrieve_key(&self, key_metadata: &[u8]) -> VortexResult<EncryptionKey>;
+    async fn retrieve_key(&self, key_metadata: &[u8]) -> VortexResult<EncryptionKey>;
 }
 
+/// A [`KeyRetriever`] from a function that resolves keys without blocking.
+#[async_trait]
 impl<F> KeyRetriever for F
 where
     F: Fn(&[u8]) -> VortexResult<EncryptionKey> + Send + Sync,
 {
-    fn retrieve_key(&self, key_metadata: &[u8]) -> VortexResult<EncryptionKey> {
+    async fn retrieve_key(&self, key_metadata: &[u8]) -> VortexResult<EncryptionKey> {
         self(key_metadata)
     }
 }
 
 /// A [`KeyRetriever`] that returns the same key for any key metadata.
+#[async_trait]
 impl KeyRetriever for EncryptionKey {
-    fn retrieve_key(&self, _key_metadata: &[u8]) -> VortexResult<EncryptionKey> {
+    async fn retrieve_key(&self, _key_metadata: &[u8]) -> VortexResult<EncryptionKey> {
         Ok(self.clone())
     }
 }

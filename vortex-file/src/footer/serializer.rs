@@ -115,11 +115,19 @@ impl FooterSerializer {
                 );
             }
         }
+        // Readers require the footer segments to be protected by the footer's own footer key
+        // spec, so reuse it when the footer describes an encrypted file.
+        let footer_cipher = match key_ciphers.get(&1) {
+            Some(cipher) => cipher.clone(),
+            None if self.footer.encryption_specs().is_empty() => {
+                encryption.file_cipher(encryption.footer_key())?
+            }
+            None => vortex_bail!(
+                "The footer key of the FileEncryption does not match the footer's footer key"
+            ),
+        };
         Ok(self
-            .with_cipher(
-                encryption.file_cipher(encryption.footer_key())?,
-                encryption.is_plaintext_footer(),
-            )
+            .with_cipher(footer_cipher, encryption.is_plaintext_footer())
             .with_key_ciphers(key_ciphers))
     }
 
@@ -290,7 +298,10 @@ impl FooterSerializer {
                         &stats.subset(&fields),
                         Protection::Encrypt(
                             cipher,
-                            SegmentRole::KeyStatistics(u16::try_from(position)?),
+                            SegmentRole::KeyStatistics {
+                                position: u16::try_from(position)?,
+                                fields: &fields,
+                            },
                         ),
                     )?;
                     buffers.push(buffer);
