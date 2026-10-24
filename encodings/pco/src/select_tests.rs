@@ -3,24 +3,26 @@
 
 use std::sync::LazyLock;
 
+use prost::Message;
 use rstest::rstest;
 use vortex_array::ArrayContext;
+use vortex_array::ArrayDeserialization;
+use vortex_array::ArrayPlugin;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::PiecewiseSequenceArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::assert_arrays_eq;
+use vortex_array::buffer::BufferHandle;
 use vortex_array::serde::SerializeOptions;
 use vortex_array::session::ArraySessionExt;
 use vortex_array::validity::Validity;
+use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_session::VortexSession;
 
 use crate::Pco;
-use crate::PcoArray;
-use crate::PcoArrayExt;
-use crate::PcoData;
 use crate::PcoLogicalPages;
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
@@ -29,24 +31,44 @@ static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     session
 });
 
-fn legacy(array: &PcoArray, unknown: bool) -> VortexResult<PcoArray> {
-    let mut metadata = array.metadata.as_ref().clone();
-    metadata.logical_pages = unknown.then_some(PcoLogicalPages {
-        version: 999,
-        ends: vec![u64::MAX],
-    });
-    // SAFETY: The unchanged compressed buffers retain the historical metadata contract. The
-    // optional unknown version is deliberately ignored and Pco::try_new validates the result.
-    let data = unsafe {
-        PcoData::new_unchecked(
-            array.chunk_metas.to_vec(),
-            array.pages.to_vec(),
-            array.dtype().as_ptype(),
-            metadata,
+/// Build a wire fixture through the public serializer and deserialize its mutated protobuf
+/// metadata through the public plugin boundary. No private in-memory encoding fields are used.
+fn with_wire_metadata(
+    array: &ArrayRef,
+    mutate: impl FnOnce(&mut crate::PcoMetadata),
+) -> VortexResult<ArrayRef> {
+    let mut wire = SESSION
+        .array_serialize(array)?
+        .vortex_expect("PCO is serializable");
+    let mut metadata = crate::PcoMetadata::decode(wire.metadata.as_slice())?;
+    mutate(&mut metadata);
+    wire.metadata = metadata.encode_to_vec();
+    let buffers = wire
+        .buffers
+        .into_iter()
+        .map(BufferHandle::new_host)
+        .collect::<Vec<_>>();
+    ArrayPlugin::deserialize(
+        &Pco,
+        ArrayDeserialization::new(
+            wire.serialized_id,
+            array.dtype(),
             array.len(),
-        )
-    };
-    Pco::try_new(array.dtype().clone(), data, array.unsliced_validity())
+            &wire.metadata,
+            &buffers,
+            &wire.children,
+        ),
+        &SESSION,
+    )
+}
+
+fn legacy(array: &ArrayRef, unknown: bool) -> VortexResult<ArrayRef> {
+    with_wire_metadata(array, |metadata| {
+        metadata.logical_pages = unknown.then_some(PcoLogicalPages {
+            version: 999,
+            ends: vec![u64::MAX],
+        });
+    })
 }
 
 #[rstest]
@@ -54,13 +76,12 @@ fn reordered_nullable_take(#[values(0, 1, 2)] format: usize) -> VortexResult<()>
     let mut ctx = SESSION.create_execution_ctx();
     let input =
         PrimitiveArray::from_option_iter((0..4096i32).map(|i| (i % 7 != 0).then_some(i * 19)));
-    let encoded = Pco::from_primitive(input.as_view(), 3, 31, &mut ctx)?;
+    let encoded = Pco::from_primitive(input.as_view(), 3, 31, &mut ctx)?.into_array();
     let encoded = match format {
         0 => encoded,
         1 => legacy(&encoded, false)?,
         _ => legacy(&encoded, true)?,
-    }
-    .into_array();
+    };
     let source = encoded.slice(17..4001)?.slice(13..3900)?;
     let input = input.slice(30..3917)?;
     let indices = PrimitiveArray::from_option_iter([
@@ -224,45 +245,23 @@ fn registry_only_session_retains_legacy_take_fallback() -> VortexResult<()> {
 fn checked_metadata_and_touched_page_validity() -> VortexResult<()> {
     let mut ctx = SESSION.create_execution_ctx();
     let input = PrimitiveArray::from_option_iter((0..128i32).map(|i| (i % 2 == 0).then_some(i)));
-    let encoded = Pco::from_primitive(input.as_view(), 3, 2, &mut ctx)?;
-    for ends in [
-        vec![128u64],
-        vec![0; encoded.pages.len()],
-        vec![u64::MAX; encoded.pages.len()],
-    ] {
-        let mut metadata = encoded.metadata.as_ref().clone();
-        metadata.logical_pages = Some(PcoLogicalPages { version: 1, ends });
-        // SAFETY: Constructor is followed immediately by fallible validation; malformed metadata
-        // is never published as a valid array.
-        let data = unsafe {
-            PcoData::new_unchecked(
-                encoded.chunk_metas.to_vec(),
-                encoded.pages.to_vec(),
-                encoded.dtype().as_ptype(),
-                metadata,
-                encoded.len(),
-            )
-        };
-        assert!(Pco::try_new(encoded.dtype().clone(), data, encoded.unsliced_validity()).is_err());
+    let encoded = Pco::from_primitive(input.as_view(), 3, 2, &mut ctx)?.into_array();
+    for ends in [vec![128u64], vec![0; 32], vec![u64::MAX; 32]] {
+        assert!(
+            with_wire_metadata(&encoded, |metadata| {
+                metadata.logical_pages = Some(PcoLogicalPages { version: 1, ends });
+            })
+            .is_err()
+        );
     }
-    let mut metadata = encoded.metadata.as_ref().clone();
-    // Structurally valid but the first logical page contains three valid rows, not two.
-    metadata
-        .logical_pages
-        .as_mut()
-        .expect("writer emits logical ends")
-        .ends[0] = 5;
-    let data = unsafe {
-        PcoData::new_unchecked(
-            encoded.chunk_metas.to_vec(),
-            encoded.pages.to_vec(),
-            encoded.dtype().as_ptype(),
-            metadata,
-            encoded.len(),
-        )
-    };
-    let malformed =
-        Pco::try_new(encoded.dtype().clone(), data, encoded.unsliced_validity())?.into_array();
+    let malformed = with_wire_metadata(&encoded, |metadata| {
+        // Structurally valid but the first logical page has three valid rows, not two.
+        metadata
+            .logical_pages
+            .as_mut()
+            .vortex_expect("writer emits logical ends")
+            .ends[0] = 5;
+    })?;
     assert!(
         malformed
             .take(PrimitiveArray::from_iter([0u32]).into_array())?
@@ -273,20 +272,32 @@ fn checked_metadata_and_touched_page_validity() -> VortexResult<()> {
 }
 
 #[test]
-fn selections_cross_compression_chunks() -> VortexResult<()> {
+fn large_public_compressor_selections() -> VortexResult<()> {
     let mut ctx = SESSION.create_execution_ctx();
-    let input =
-        PrimitiveArray::from_option_iter((0..8192i64).map(|i| (i % 11 != 0).then_some(i * 37)));
-    let data =
-        PcoData::from_primitive_with_values_per_chunk(input.as_view(), 3, 257, 31, &mut ctx)?;
-    let encoded = Pco::try_new(input.dtype().clone(), data, input.validity()?)?.into_array();
-    let indices =
-        PrimitiveArray::from_iter([0u32, 900, 260, 3000, 259, 8191, 4095, 900]).into_array();
+    let len = pco::DEFAULT_MAX_PAGE_N + 257;
+    let input = PrimitiveArray::from_iter(
+        (0..len).map(|i| u32::try_from(i).vortex_expect("fixture fits u32")),
+    );
+    let encoded = Pco::from_primitive(input.as_view(), 0, 4096, &mut ctx)?.into_array();
+    let indices = PrimitiveArray::from_iter([
+        0u32,
+        900,
+        260,
+        3000,
+        u32::try_from(len - 1).vortex_expect("fixture fits u32"),
+        4095,
+        900,
+    ])
+    .into_array();
     assert_arrays_eq!(
         encoded.take(indices.clone())?,
         input.take(indices)?,
         &mut ctx
     );
-    assert_arrays_eq!(encoded.slice(233..7901)?, input.slice(233..7901)?, &mut ctx);
+    assert_arrays_eq!(
+        encoded.slice(len - 1000..len - 1)?,
+        input.slice(len - 1000..len - 1)?,
+        &mut ctx
+    );
     Ok(())
 }

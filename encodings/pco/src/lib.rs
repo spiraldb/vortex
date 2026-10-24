@@ -21,6 +21,7 @@
 mod access;
 mod array;
 mod compute;
+mod decoder;
 mod page_index;
 mod probe;
 mod rules;

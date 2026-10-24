@@ -51,6 +51,7 @@ use vortex_array::vtable::validity_to_child;
 use vortex_buffer::BufferMut;
 use vortex_buffer::ByteBuffer;
 use vortex_error::VortexError;
+use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure;
@@ -807,9 +808,12 @@ impl PcoData {
             let index = PageIndex::try_new(&self.metadata, self.unsliced_n_rows)?;
             // Concurrent first readers may prepare equivalent immutable descriptors. Only one
             // index is retained, and no decoded values or validity are cached in the array.
-            let _ = self.page_index.set(index);
+            drop(self.page_index.set(index));
         }
-        Ok(self.page_index.get().expect("page index was initialized"))
+        Ok(self
+            .page_index
+            .get()
+            .vortex_expect("page index was initialized"))
     }
 
     pub(crate) fn _slice(&self, start: usize, stop: usize) -> Self {
@@ -882,6 +886,7 @@ mod tests {
     use vortex_array::assert_arrays_eq;
     use vortex_array::validity::Validity;
     use vortex_buffer::buffer;
+    use vortex_error::VortexExpect;
     use vortex_error::VortexResult;
     use vortex_session::VortexSession;
 

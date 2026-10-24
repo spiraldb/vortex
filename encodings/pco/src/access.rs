@@ -3,6 +3,7 @@
 
 //! Operation-owned selected-page values and validity. No decoded state lives in array metadata.
 
+use std::any::Any;
 use std::collections::BTreeMap;
 
 use pco::data_types::NumberType;
@@ -26,6 +27,7 @@ const RANK_STRIDE: usize = 512;
 #[derive(Default)]
 pub(crate) struct AccessState {
     legacy: Option<RankMask>,
+    decoder: Option<Box<dyn Any>>,
     pages: BTreeMap<usize, CachedPage>,
 }
 
@@ -167,7 +169,69 @@ impl AccessState {
     ) -> VortexResult<Option<PageSpan>> {
         let index = array.page_index()?;
         if !index.logical || index.pages.is_empty() {
-            return Ok(None);
+            if self.legacy.is_none() {
+                let mask = array
+                    .unsliced_validity()
+                    .execute_mask(array.unsliced_n_rows(), ctx)?;
+                let total = index.pages.last().map_or(0, |page| page.values.end);
+                vortex_ensure_eq!(
+                    mask.true_count(),
+                    total,
+                    "Pco validity count does not match stored values"
+                );
+                self.legacy = Some(RankMask::new(mask));
+            }
+            let mask = self
+                .legacy
+                .as_ref()
+                .ok_or_else(|| vortex_err!("Pco legacy validity is missing"))?;
+            let start_value = mask.rank(row);
+            let stop_value = mask.rank(stop);
+            if start_value == stop_value {
+                return Ok(Some(PageSpan {
+                    page: 0,
+                    stop,
+                    values: 0..0,
+                    mask: mask.mask.slice(row..stop),
+                }));
+            }
+            let page_idx = index
+                .pages
+                .partition_point(|page| page.values.end <= start_value);
+            let page = index
+                .pages
+                .get(page_idx)
+                .ok_or_else(|| vortex_err!("Pco page does not cover compact value"))?;
+            let value_stop = stop_value.min(page.values.end);
+            let end = if value_stop == stop_value {
+                stop
+            } else {
+                let offset = match &mask.mask {
+                    Mask::AllTrue(_) => value_stop - start_value - 1,
+                    Mask::Values(values) => values
+                        .bit_buffer()
+                        .slice(row..stop)
+                        .select(value_stop - start_value - 1)
+                        .ok_or_else(|| vortex_err!("Pco legacy page rank is inconsistent"))?,
+                    Mask::AllFalse(_) => {
+                        return Err(vortex_err!("Pco all-null validity has compact values"));
+                    }
+                };
+                row.checked_add(offset)
+                    .and_then(|end| end.checked_add(1))
+                    .ok_or_else(|| vortex_err!("Pco legacy logical page end overflows usize"))?
+            };
+            let selected_mask = mask.mask.slice(row..end);
+            self.pages.entry(page_idx).or_insert(CachedPage {
+                mask: None,
+                decoded: None,
+            });
+            return Ok(Some(PageSpan {
+                page: page_idx,
+                stop: end,
+                values: (start_value - page.values.start)..(value_stop - page.values.start),
+                mask: selected_mask,
+            }));
         }
         let page_idx = index
             .pages
@@ -221,7 +285,12 @@ impl AccessState {
             let decoded = match_number_enum!(
                 number_type_from_ptype(array.dtype().as_ptype()),
                 NumberType<T> => {
-                    crate::probe::decode_page::<T>(array, page.chunk, page.values.len(), buffer.as_slice(), ctx)?
+                    if self.decoder.is_none() {
+                        self.decoder = Some(Box::new(crate::decoder::PageDecoder::<T>::new(array.metadata.header.as_slice())?));
+                    }
+                    let decoder = self.decoder.as_mut().and_then(|decoder| decoder.downcast_mut::<crate::decoder::PageDecoder<T>>())
+                        .ok_or_else(|| vortex_err!("Pco operation decoder primitive type changed"))?;
+                    decoder.read(page.chunk, array.chunk_metas[page.chunk].as_slice(), page.values.len(), buffer.as_slice(), ctx)?
                 }
             );
             cached.decoded = Some(decoded);

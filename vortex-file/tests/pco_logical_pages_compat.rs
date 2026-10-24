@@ -15,6 +15,7 @@ use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::assert_arrays_eq;
 use vortex_buffer::ByteBuffer;
+use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_file::OpenOptionsSessionExt;
 use vortex_file::WriteOptionsSessionExt;
@@ -54,7 +55,10 @@ async fn public_pco_compatibility() -> VortexResult<()> {
             .as_ref()
             .map(|directory| directory.join(format!("{name}.vortex")));
         let bytes = if mode == "read" {
-            std::fs::read(path.as_ref().expect("read mode requires PCO_COMPAT_DIR"))?
+            std::fs::read(
+                path.as_ref()
+                    .vortex_expect("read mode requires PCO_COMPAT_DIR"),
+            )?
         } else {
             let mut bytes = Vec::new();
             session
@@ -63,7 +67,7 @@ async fn public_pco_compatibility() -> VortexResult<()> {
                 .write(&mut bytes, data.to_array_stream())
                 .await?;
             if let Some(path) = &path {
-                std::fs::create_dir_all(path.parent().expect("fixture path has a parent"))?;
+                std::fs::create_dir_all(path.parent().vortex_expect("fixture path has a parent"))?;
                 std::fs::write(path, &bytes)?;
             }
             bytes
