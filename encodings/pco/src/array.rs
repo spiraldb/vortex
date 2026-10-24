@@ -600,21 +600,41 @@ impl PcoData {
         }
 
         let mut ends = Vec::with_capacity(page_buffers.len());
-        let mut page_counts = chunk_infos.iter().flat_map(|chunk| &chunk.pages);
-        let mut remaining = page_counts.next().map(|page| page.n_values as usize);
-        // Compression already visits all values; build logical boundaries in the same linear
-        // scale, without allocating one index per valid row.
-        for (row, valid) in mask.iter().enumerate() {
-            if valid && let Some(n) = remaining.as_mut() {
-                *n -= 1;
-                if *n == 0 {
-                    ends.push(u64::try_from(row + 1)?);
-                    remaining = page_counts.next().map(|page| page.n_values as usize);
+        match &mask {
+            vortex_mask::Mask::AllFalse(_) => {}
+            vortex_mask::Mask::AllTrue(_) => {
+                let mut end = 0usize;
+                for page in chunk_infos.iter().flat_map(|chunk| &chunk.pages) {
+                    end = end
+                        .checked_add(page.n_values as usize)
+                        .ok_or_else(|| vortex_err!("Pco logical page prefix overflows usize"))?;
+                    ends.push(u64::try_from(end)?);
                 }
             }
-        }
-        if let Some(last) = ends.last_mut() {
-            *last = u64::try_from(parray.len())?;
+            vortex_mask::Mask::Values(mask) => {
+                let bits = mask.bit_buffer();
+                let mut start = 0usize;
+                for page in chunk_infos.iter().flat_map(|chunk| &chunk.pages) {
+                    if ends.len() + 1 == page_buffers.len() {
+                        // No search through trailing nulls is necessary for the final page.
+                        ends.push(u64::try_from(parray.len())?);
+                        break;
+                    }
+                    // Existing bitmap select scans words only up to the next page boundary.
+                    // Advancing the suffix avoids rescanning prefixes or visiting every null row.
+                    let offset = bits
+                        .slice(start..)
+                        .select(page.n_values as usize - 1)
+                        .ok_or_else(|| {
+                            vortex_err!("Pco compression validity has too few valid rows")
+                        })?;
+                    start = start
+                        .checked_add(offset)
+                        .and_then(|end| end.checked_add(1))
+                        .ok_or_else(|| vortex_err!("Pco logical page end overflows usize"))?;
+                    ends.push(u64::try_from(start)?);
+                }
+            }
         }
         let metadata = PcoMetadata {
             header,
