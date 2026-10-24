@@ -39,7 +39,7 @@ async fn public_pco_compatibility() -> VortexResult<()> {
     common::enable_all_registered_array_encodings(&session);
     let mut ctx = session.create_execution_ctx();
     let original = PrimitiveArray::from_option_iter(
-        (0..131_072i64).map(|i| ((i < 1024 || i > 120_000) && i % 7 != 0).then_some(i * 19)),
+        (0..131_072i64).map(|i| (!(1024..=120_000).contains(&i) && i % 7 != 0).then_some(i * 19)),
     );
     let mode = std::env::var("PCO_COMPAT_MODE").unwrap_or_else(|_| "roundtrip".to_owned());
     let directory = std::env::var_os("PCO_COMPAT_DIR").map(std::path::PathBuf::from);

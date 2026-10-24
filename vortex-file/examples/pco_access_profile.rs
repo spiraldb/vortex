@@ -109,7 +109,7 @@ fn main() -> VortexResult<()> {
     let validity = match validity_pattern {
         "dense" => Validity::NonNullable,
         "all-null" => Validity::AllInvalid,
-        "long-null" => Validity::from_iter((0..rows).map(|i| i < 2048 || i > rows - 4096)),
+        "long-null" => Validity::from_iter((0..rows).map(|i| !(2048..=rows - 4096).contains(&i))),
         "compressed" => {
             let runs = rows.div_ceil(32768);
             let ends = PrimitiveArray::from_iter((0..runs).map(|run| {
